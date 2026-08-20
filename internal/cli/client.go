@@ -1114,6 +1114,16 @@ func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string)
 	return doJSON[model.AddRepoResult](ctx, c, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", model.AddRepoInput{Repo: repo, DoneState: doneState}, "add-repo response")
 }
 
+// ReposDoctor calls GET /api/v1/repos/doctor. An empty repo reports every
+// mapped repo. Admin-only on the server.
+func (c *Client) ReposDoctor(ctx context.Context, repo string) (model.ReposDoctorResponse, []byte, error) {
+	q := url.Values{}
+	if repo != "" {
+		q.Set("repo", repo)
+	}
+	return doJSON[model.ReposDoctorResponse](ctx, c, http.MethodGet, withQuery("/api/v1/repos/doctor", q), nil, "repos doctor")
+}
+
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
 // setting the terminal delivery state for an already-mapped repo.
 func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {

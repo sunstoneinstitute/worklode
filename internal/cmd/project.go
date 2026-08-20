@@ -20,7 +20,8 @@ func newProjectCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
 		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectFocusNoteCmd(),
-		newProjectDecisionCmd(), newProjectResolveCmd(), newProjectShowCmd())
+		newProjectDecisionCmd(), newProjectResolveCmd(), newProjectShowCmd(),
+		newProjectDoctorCmd())
 	return cmd
 }
 
@@ -461,6 +462,60 @@ func printCost(out io.Writer, cost model.CostReport, window string) {
 			fmt.Fprintf(out, "note: %s tokens from models with no price on file are excluded from the total.\n",
 				cli.HumanTokens(total.UnpricedTokens))
 		}
+	}
+}
+
+// newProjectDoctorCmd builds `lode project doctor [repo]`: is ingestion
+// working for this repo (operator view, admin token required).
+func newProjectDoctorCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "doctor [repo]",
+		Short: "Report webhook-ingestion health per mapped repo",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			repo := ""
+			if len(args) == 1 {
+				repo = args[0]
+			}
+			resp, raw, err := c.ReposDoctor(cmd.Context(), repo)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			for _, r := range resp.Repos {
+				app := "unchecked (no GitHub App configured)"
+				if r.AppInstalled != nil {
+					if *r.AppInstalled {
+						app = "installed"
+					} else {
+						app = "NOT INSTALLED (" + r.AppError + ")"
+					}
+				}
+				last := "never"
+				if r.LastEventAt != nil {
+					last = r.LastEventAt.Format(time.RFC3339)
+				}
+				cmd.Printf("%s (project %s)\n", r.Repo, r.Project)
+				cmd.Printf("  app:        %s\n", app)
+				cmd.Printf("  last event: %s (types: %s)\n", last, strings.Join(r.EventTypes, ", "))
+				cmd.Printf("  unapplied:  %d\n", r.UnappliedEvents)
+				if r.Stale {
+					cmd.Printf("  STALE: no delivery since mapping — run `lode reconcile --repo %s`\n", r.Repo)
+				}
+			}
+			for _, u := range resp.UnmappedSenders {
+				cmd.Printf("unmapped sender: %s (%d events, last %s)\n",
+					u.Repo, u.Events, u.LastEventAt.Format(time.RFC3339))
+			}
+			return nil
+		},
 	}
 }
 

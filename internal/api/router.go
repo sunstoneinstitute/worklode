@@ -202,6 +202,9 @@ var routeGuards = map[string]routeGuard{
 
 	// --- identity (spec 013) --------------------------------------------------
 	"GET /api/v1/whoami": guarded(permWhoAmI),
+
+	// --- reconciliation (spec 013) ---------------------------------------------
+	"GET /api/v1/repos/doctor": guarded(permReconcile),
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which

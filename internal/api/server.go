@@ -514,6 +514,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
 	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
 	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
+	r.api("GET /api/v1/repos/doctor", s.reposDoctor)
 
 	r.api("POST /api/v1/actors", s.createActor)
 	r.api("POST /api/v1/actors/{id}/tokens", s.createToken)
