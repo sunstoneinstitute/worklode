@@ -28,7 +28,7 @@ templ Board(v BoardView) {
 							<table>
 								<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
 								for _, f := range v.RecentFailures {
-									<tr><td class="mono">{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
+									<tr><td class="mono">{ fmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
 								}
 							</table>
 						}
@@ -83,7 +83,7 @@ templ boardRow(item model.BoardTask, variant string, blockedLabel bool) {
 				}
 				<span class="chip plain">{ item.Priority }</span>
 				if item.Holder != nil {
-					<span class="muted">&middot; Held by { item.Holder.ActorID } (expires { FmtTime(item.Holder.ExpiresAt) })</span>
+					<span class="muted">&middot; Held by { item.Holder.ActorID } (expires { fmtTime(item.Holder.ExpiresAt) })</span>
 				}
 				if item.Assignee != "" {
 					<span class="muted">&middot; Assignee { item.Assignee }</span>

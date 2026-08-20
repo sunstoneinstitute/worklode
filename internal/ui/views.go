@@ -182,9 +182,9 @@ type CockpitWork struct {
 	Blocked    []WorkRow
 }
 
-// Len is the total number of active work items across all four buckets — the
+// count is the total number of active work items across all four buckets — the
 // Active-work list renders an honest "no active work" line when it is zero.
-func (w CockpitWork) Len() int {
+func (w CockpitWork) count() int {
 	return len(w.InProgress) + len(w.InReview) + len(w.Ready) + len(w.Blocked)
 }
 
@@ -192,7 +192,7 @@ func (w CockpitWork) Len() int {
 // them: in progress, in review, ready, blocked. The bucket order is a fact of
 // the view, not of the markup, so the template walks one sequence.
 func (w CockpitWork) Rows() []WorkRow {
-	rows := make([]WorkRow, 0, w.Len())
+	rows := make([]WorkRow, 0, w.count())
 	for _, bucket := range [][]WorkRow{w.InProgress, w.InReview, w.Ready, w.Blocked} {
 		rows = append(rows, bucket...)
 	}
@@ -378,9 +378,9 @@ type DocEdgeRow struct {
 	URL    string
 }
 
-// DocStatusChip returns the .chip variant class for a document status
+// docStatusChip returns the .chip variant class for a document status
 // (025 §7's draft -> accepted -> superseded ladder).
-func DocStatusChip(status string) string {
+func docStatusChip(status string) string {
 	switch status {
 	case "accepted":
 		return "ok"
@@ -438,8 +438,8 @@ type NewDeliverableView struct {
 
 // --- presentation helpers ---------------------------------------------------
 
-// StateChip returns the .chip variant class for a task state.
-func StateChip(state string) string {
+// stateChip returns the .chip variant class for a task state.
+func stateChip(state string) string {
 	switch state {
 	case "blocked":
 		return "crit"
@@ -454,24 +454,10 @@ func StateChip(state string) string {
 	}
 }
 
-// PriorityChip returns the .chip variant class for a task priority.
-func PriorityChip(priority string) string {
-	switch priority {
-	case "critical", "urgent":
-		return "crit"
-	case "high":
-		return "warn"
-	case "medium":
-		return "info"
-	default:
-		return "plain"
-	}
-}
-
-// EvidenceChip maps an evidence category ("declared", "user_reported",
+// evidenceChip maps an evidence category ("declared", "user_reported",
 // "observed", "recommended") to its .chip evidence variant class. The
 // user_reported category uses the "user" chip class.
-func EvidenceChip(category string) string {
+func evidenceChip(category string) string {
 	switch category {
 	case "user_reported":
 		return "user"
@@ -482,9 +468,9 @@ func EvidenceChip(category string) string {
 	}
 }
 
-// EvidenceLabel returns the human display text for an evidence category,
+// evidenceLabel returns the human display text for an evidence category,
 // hyphenating user_reported ("User-reported", never "User reported").
-func EvidenceLabel(category string) string {
+func evidenceLabel(category string) string {
 	switch category {
 	case "declared":
 		return "Declared"
@@ -499,8 +485,8 @@ func EvidenceLabel(category string) string {
 	}
 }
 
-// StateLabel returns the human display text for a task state.
-func StateLabel(state string) string {
+// stateLabel returns the human display text for a task state.
+func stateLabel(state string) string {
 	switch state {
 	case "in_progress":
 		return "In progress"
@@ -515,10 +501,10 @@ func StateLabel(state string) string {
 	}
 }
 
-// ModeLabel returns the human display text for a cockpit lifecycle mode. Only
+// modeLabel returns the human display text for a cockpit lifecycle mode. Only
 // Operations is wired today; the other labels are ready for when their modes
 // are stored.
-func ModeLabel(mode string) string {
+func modeLabel(mode string) string {
 	switch mode {
 	case "operations":
 		return "Operations"
@@ -531,10 +517,10 @@ func ModeLabel(mode string) string {
 	}
 }
 
-// Initials returns up to two uppercase initials for a display name, for the
+// initials returns up to two uppercase initials for a display name, for the
 // avatar badges in the Active-work list and decision rail. An empty name
 // yields "" (a blank avatar), never a fabricated placeholder.
-func Initials(name string) string {
+func initials(name string) string {
 	out := make([]rune, 0, 2)
 	for _, field := range strings.Fields(name) {
 		// Fields never yields an empty string, so there is always a first rune.
@@ -547,30 +533,30 @@ func Initials(name string) string {
 	return string(out)
 }
 
-// WorkRowWhoClass returns the .who avatar wrapper class for a work row: an
+// workRowWhoClass returns the .who avatar wrapper class for a work row: an
 // agent delegate holding the lease renders as ".who agent" (the AI badge
 // styling), everything else as a plain ".who".
-func WorkRowWhoClass(item WorkRow) string {
+func workRowWhoClass(item WorkRow) string {
 	if item.Delegate != "" {
 		return "who agent"
 	}
 	return "who"
 }
 
-// WorkRowInitials returns the avatar initials for a work row: the delegated
+// workRowInitials returns the avatar initials for a work row: the delegated
 // agent's when one holds the lease, otherwise the human owner's, otherwise ""
 // (unassigned — a blank avatar, never invented).
-func WorkRowInitials(item WorkRow) string {
+func workRowInitials(item WorkRow) string {
 	if item.Delegate != "" {
-		return Initials(item.Delegate)
+		return initials(item.Delegate)
 	}
-	return Initials(item.Owner)
+	return initials(item.Owner)
 }
 
-// WorkRowActors renders a work row's who-line: the delegated agent acting on
+// workRowActors renders a work row's who-line: the delegated agent acting on
 // behalf of the accountable owner, an agent with no recorded owner, a lone
 // human owner, or an honest "Unassigned" when neither is known.
-func WorkRowActors(item WorkRow) string {
+func workRowActors(item WorkRow) string {
 	switch {
 	case item.Delegate != "" && item.Owner != "":
 		return item.Delegate + " · on behalf of " + item.Owner

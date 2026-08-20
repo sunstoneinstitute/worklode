@@ -248,7 +248,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 		}
 		if d.CreatedBy != "" {
 			var templ_7745c5c3_Var12 string
-			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs("by " + d.CreatedBy + " · " + FmtTime(d.CreatedAt))
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs("by " + d.CreatedBy + " · " + fmtTime(d.CreatedAt))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 70, Col: 58}
 			}
@@ -258,7 +258,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			}
 		} else {
 			var templ_7745c5c3_Var13 string
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(d.CreatedAt))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(d.CreatedAt))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 72, Col: 27}
 			}
