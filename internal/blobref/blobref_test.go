@@ -122,6 +122,31 @@ func TestLocalImages(t *testing.T) {
 	}
 }
 
+func TestRemoteImages(t *testing.T) {
+	body := "![a](https://x.example/y.png)\n\n![dup](https://x.example/y.png)\n\n" +
+		"![http](http://x.example/z.png)\n\n![local](./shot.png)\n\n" +
+		"![abs](/etc/passwd)\n\n![blob](/blob/" + strings.Repeat("d", 64) + ")\n\n" +
+		"![data](data:image/png;base64,AAAA)\n\n" +
+		"[link](https://x.example/not-an-image.png)\n"
+	got := blobref.RemoteImages(body)
+	want := []string{"https://x.example/y.png", "http://x.example/z.png"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("RemoteImages = %v, want %v (document order, deduped)", got, want)
+	}
+}
+
+// TestRemoteImagesIgnoresRawHTML pins the markdown-only contract: unlike
+// Extract, RemoteImages does not report raw-HTML sources, because
+// ReplaceDestination cannot rewrite them and mirroring one would leave
+// unreferenced bytes in the bucket.
+func TestRemoteImagesIgnoresRawHTML(t *testing.T) {
+	body := "<img src=\"https://x.example/y.png\">\n\n" +
+		"```\n![fenced](https://x.example/z.png)\n```\n"
+	if got := blobref.RemoteImages(body); got != nil {
+		t.Fatalf("RemoteImages = %v, want none", got)
+	}
+}
+
 func TestReplaceDestination(t *testing.T) {
 	body := "![a](./one.png)\n\n![b](./one.png)\n\n![c](./two.png)\n"
 	got, err := blobref.ReplaceDestination(body, map[string]string{

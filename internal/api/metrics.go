@@ -97,6 +97,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(blobGCObjectActions, ", ") +
 			"). A steady 'orphan' rate outside the upload path's expected partial-failure rate means something else is leaving objects with no index row.",
 	}, []string{"action"})
+	s.imageMirrors = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_image_mirrors_total",
+		Help: "Remote images in a promoted issue body that mirroring tried to turn into blobs, by outcome (" +
+			strings.Join(imageMirrorOutcomes, ", ") +
+			"). Each remote reference contributes exactly one outcome. Anything but 'mirrored' or 'deduplicated' leaves an off-site URL in a task body, which renders as nothing.",
+	}, []string{"outcome"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
 		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
@@ -143,7 +149,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.taskBlobRefs,
-		s.blobGCRuns, s.blobGCObjects,
+		s.blobGCRuns, s.blobGCObjects, s.imageMirrors,
 		s.kindAliasUses)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -196,6 +202,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, action := range blobGCObjectActions {
 		s.blobGCObjects.WithLabelValues(action)
+	}
+	for _, outcome := range imageMirrorOutcomes {
+		s.imageMirrors.WithLabelValues(outcome)
 	}
 	// Every alias on every surface, because the whole point of this counter is
 	// to prove nothing still sends the deprecated spelling before the alias is
@@ -455,6 +464,38 @@ var (
 	// deleted outside dry-run.
 	blobGCObjectActions = []string{"unreferenced", "orphan", "deleted"}
 )
+
+// imageMirrorOutcomes is the complete, bounded label set for
+// worklode_image_mirrors_total. The URL and its host are deliberately not
+// labels: both are chosen by whoever filed the issue, so either would be an
+// unbounded cardinality hole punched by an outsider. The URL is in the
+// warning log, which is where a specific failure is diagnosed.
+var imageMirrorOutcomes = []string{
+	mirrorStored,        // fetched, sniffed embeddable, stored, rewritten
+	mirrorDeduplicated,  // the hash was already indexed; no object write
+	mirrorFetchFailed,   // the SSRF guard, the origin, or the budget refused
+	mirrorNotEmbeddable, // fetched, but the bytes do not render in place
+	mirrorStoreFailed,   // the bucket or the index refused
+	mirrorRewriteFailed, // stored, but the body could not be rewritten
+}
+
+const (
+	mirrorStored        = "mirrored"
+	mirrorDeduplicated  = "deduplicated"
+	mirrorFetchFailed   = "fetch_failed"
+	mirrorNotEmbeddable = "not_embeddable"
+	mirrorStoreFailed   = "store_failed"
+	mirrorRewriteFailed = "rewrite_failed"
+)
+
+// observeImageMirror adds n remote image references resolved to the named
+// outcome. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeImageMirror(outcome string, n int) {
+	if s.imageMirrors == nil || n == 0 {
+		return
+	}
+	s.imageMirrors.WithLabelValues(outcome).Add(float64(n))
+}
 
 // observeBlobUpload records one POST /api/v1/blobs, called exactly once on
 // every exit path of uploadBlob. Nil-safe: tests build a *server directly

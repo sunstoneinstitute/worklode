@@ -320,6 +320,34 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .btnrow{display:flex;gap:10px;margin-top:22px}
 .btnrow .btn{width:auto;min-height:40px;padding:9px 18px}
 
+/* ---------- rendered task body (sanitised markdown) and attachments ---------- */
+/* .prose is the one subtree whose markup comes from an untrusted task body
+ * (internal/mdrender's allowlist), so it is styled by element: nothing in
+ * that body can carry a class of its own. */
+.prose > :first-child{margin-top:0}
+.prose > :last-child{margin-bottom:0}
+.prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose table{margin:0 0 12px}
+.prose h1,.prose h2,.prose h3,.prose h4{margin:18px 0 8px;font-size:15.5px}
+.prose h1{font-size:19px}
+.prose h2{font-size:17px}
+.prose ul,.prose ol{padding-left:20px}
+.prose code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 4px}
+.prose pre{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;overflow-x:auto}
+.prose pre code{background:none;border:0;padding:0}
+.prose blockquote{margin-left:0;padding-left:12px;border-left:3px solid var(--line-2);color:var(--ink-2)}
+/* Embedded blob media is author-sized and unbounded — a 100 MiB screen
+ * recording is in scope (spec 021 §5) — so it is constrained to the column
+ * rather than allowed to set the page width. */
+.prose img,.prose video{max-width:100%;height:auto;border-radius:9px}
+.prose table{border-collapse:collapse}
+.prose th,.prose td{border:1px solid var(--line);padding:5px 9px;text-align:left}
+.prose th{background:var(--surface-2);font-weight:600}
+
+.attachments{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.attachments li{display:flex;align-items:baseline;gap:9px;font-size:13px}
+.attachments a{overflow-wrap:anywhere}
+.attachments .meta{color:var(--ink-3);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+
 .railcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:13px 15px}
 .railcard .rt{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:7px}
 .exrow{display:flex;gap:9px;align-items:flex-start;font-size:12.5px}

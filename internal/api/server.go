@@ -31,6 +31,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
@@ -222,6 +223,11 @@ type server struct {
 	// answer 501 and nothing else changes.
 	blobs blobstore.Store
 
+	// mirrorFetcherForTest overrides the SSRF-guarded fetcher used by
+	// mirrorRemoteImages. Tests only; production leaves it nil so the host
+	// allowlist and IP checks apply.
+	mirrorFetcherForTest *safefetch.Fetcher
+
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
 
@@ -292,6 +298,15 @@ type server struct {
 	// on, by action. See blobgc.go and observeBlobGC.
 	blobGCRuns    *prometheus.CounterVec
 	blobGCObjects *prometheus.CounterVec
+
+	// imageMirrors counts remote issue images mirroring attempted to turn
+	// into blobs on promote, by outcome; see inbox_mirror.go and
+	// observeImageMirror. Distinct from blobUploads because this is the one
+	// blob path driven by an outbound fetch of an attacker-chosen URL:
+	// sustained fetch_failed is GitHub or the SSRF guard refusing, and every
+	// such failure leaves a remote reference in a body that §8 then renders
+	// as nothing.
+	imageMirrors *prometheus.CounterVec
 
 	// taskBlobRefs counts the explicit half of a task's blob reference graph
 	// changed by the attach/detach endpoints, by action; see blobs.go and

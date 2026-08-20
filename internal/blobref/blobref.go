@@ -139,6 +139,31 @@ func LocalImages(body string) []string {
 	return out
 }
 
+// RemoteImages returns the body's http(s) image destinations, deduplicated
+// in document order. These are what import mirrors into blobs (spec 021 §12).
+//
+// Markdown images only -- deliberately not the raw-HTML `<img src="https://…">`
+// that Extract also scans. ReplaceDestination moves *ast.Image destinations
+// and nothing else, so a raw-HTML URL returned here could be fetched and
+// stored but never referenced: bytes in the bucket that no body points at,
+// which is exactly what GC then has to clean up. Raw-HTML remote images stay
+// remote, and §8's renderer drops them rather than rendering a beacon.
+func RemoteImages(body string) []string {
+	var out []string
+	seen := map[string]bool{}
+	walkImages(body, func(dest string) {
+		if seen[dest] {
+			return
+		}
+		if !strings.HasPrefix(dest, "http://") && !strings.HasPrefix(dest, "https://") {
+			return
+		}
+		seen[dest] = true
+		out = append(out, dest)
+	})
+	return out
+}
+
 // embeddableTypes render in place in the web UI and terminal-adjacent
 // surfaces. Everything else is a download (spec 021 §5). Nothing is rejected
 // on type: a core dump is a legitimate attachment, and an allowlist buys
