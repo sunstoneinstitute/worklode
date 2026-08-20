@@ -1,7 +1,7 @@
 package mdrender_test
 
 import (
-	"html/template"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -228,12 +228,100 @@ func TestRoundTripDoesNotMutate(t *testing.T) {
 	}
 }
 
-// TestFallbackEscapes pins the escaping Body falls back on when goldmark
-// returns an error: every character that could open a tag or close an
-// attribute must come back as an entity.
+// TestLinkHrefSchemes covers spec 021 section 8.1's a[href] scheme list.
+// Protocol-relative "//host" has no scheme for bluemonday to check, so it
+// counts as relative and would otherwise survive; root-relative links must
+// keep working, since /blob/<hash> is one.
+func TestLinkHrefSchemes(t *testing.T) {
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"https", `<a href="https://example.com/x">t</a>`, `href="https://example.com/x"`},
+		{"http", `<a href="http://example.com/x">t</a>`, `href="http://example.com/x"`},
+		{"mailto", `<a href="mailto:x@example.com">t</a>`, `href="mailto:x@example.com"`},
+		{"fragment", `<a href="#sec-1">t</a>`, `href="#sec-1"`},
+		{"root relative", `<a href="/blob/` + validHash + `">t</a>`, `href="/blob/` + validHash + `"`},
+		{"uppercase scheme", `<a href="HTTPS://example.com/x">t</a>`, `href="https://example.com/x"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := string(mdrender.Body(tc.body)); !strings.Contains(got, tc.want) {
+				t.Fatalf("output missing %q:\n%s", tc.want, got)
+			}
+		})
+	}
+	for _, tc := range []struct{ name, body string }{
+		{"protocol relative", `<a href="//evil.example/x">t</a>`},
+		{"protocol relative markdown", `[t](//evil.example/x)`},
+		{"backslash protocol relative", `<a href="/\evil.example/x">t</a>`},
+		{"ftp", `<a href="ftp://evil.example/x">t</a>`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(mdrender.Body(tc.body))
+			if strings.Contains(got, "href=") || strings.Contains(got, "evil.example") {
+				t.Fatalf("off-origin href survived %q:\n%s", tc.body, got)
+			}
+		})
+	}
+}
+
+// TestFallbackEscapes drives Body into each of its three fallback paths and
+// pins that the body comes back as escaped source rather than as markup. All
+// three are reachable from a body an issue author controls, so this is the
+// coverage that matters, not that html/template escapes.
 func TestFallbackEscapes(t *testing.T) {
-	const want = `&lt;script&gt;alert(&#39;x&#39; &amp; &#34;y&#34;)&lt;/script&gt;`
-	if got := template.HTMLEscapeString(`<script>alert('x' & "y")</script>`); got != want {
-		t.Fatalf("HTMLEscapeString = %q, want %q", got, want)
+	const payload = `<script>alert('x' & "y")</script>`
+	const escaped = `&lt;script&gt;alert(&#39;x&#39; &amp; &#34;y&#34;)&lt;/script&gt;`
+
+	cases := []struct {
+		name string
+		body string
+	}{
+		// Over maxBody: goldmark is quadratic on some inline shapes, so
+		// oversize input is never handed to the parser.
+		{"over size", payload + strings.Repeat("x", 64<<10)},
+		// Over the parser's 512 open elements. 1.2 KB of plain markdown.
+		{"over nesting", payload + "\n\n" + strings.Repeat("> ", 600) + "x"},
+		// Over maxRendered: distinct titles defeat the Noah's Ark clause, so
+		// every following block re-opens all 400 formatting elements.
+		{"over rendered", payload + "\n\n" + amplifier(400, 4700)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(mdrender.Body(tc.body))
+			if !strings.Contains(got, escaped) {
+				t.Fatalf("fallback did not escape the source:\n%.500s", got)
+			}
+			if strings.Contains(got, "<script") || strings.Contains(got, "<p>") {
+				t.Fatalf("fallback emitted markup:\n%.500s", got)
+			}
+			if len(got) > 4<<20 {
+				t.Fatalf("fallback output is %d bytes", len(got))
+			}
+		})
+	}
+}
+
+// amplifier builds the balance() expansion bomb: opens formatting elements
+// with distinct attribute values, then blocks that each re-open all of them.
+func amplifier(tags, blocks int) string {
+	var b strings.Builder
+	for i := 0; i < tags; i++ {
+		fmt.Fprintf(&b, `<b title="t%d">`, i)
+	}
+	for i := 0; i < blocks; i++ {
+		b.WriteString("<div>y</div>")
+	}
+	return b.String()
+}
+
+// TestRenderedOutputIsBounded: the amplifier above is under maxBody and is
+// accepted by the parser, so only the maxRendered cap stops it.
+func TestRenderedOutputIsBounded(t *testing.T) {
+	body := amplifier(400, 4800)
+	if len(body) > 64<<10 {
+		t.Fatalf("fixture is %d bytes, over maxBody — it would take the wrong fallback", len(body))
+	}
+	if got := len(mdrender.Body(body)); got > 4<<20 {
+		t.Fatalf("rendered output is %d bytes", got)
 	}
 }

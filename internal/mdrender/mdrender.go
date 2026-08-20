@@ -8,6 +8,7 @@ package mdrender
 
 import (
 	"bytes"
+	"errors"
 	"html/template"
 	"regexp"
 
@@ -40,6 +41,22 @@ var (
 	mediaType    = regexp.MustCompile(`(?i)\A(audio|video|image)/[a-z0-9.+-]{1,64}\z`)
 	langTag      = regexp.MustCompile(`\A[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*\z`)
 )
+
+// linkHref is the only shape an a[href] may take: spec 021 section 8.1's three
+// schemes, an in-page fragment or query, or a root-relative path.
+//
+// bluemonday's own AllowRelativeURLs treats "//evil.example/x" as relative — it
+// has no scheme to check — so a protocol-relative URL points off-origin under
+// the page's own scheme. Rejecting a leading "//" (and "/\", which some parsers
+// treat the same way) is the point of this pattern.
+//
+// A scheme-less path that does not start with "/" is rejected too. It would
+// resolve against whatever cockpit path the reader happens to be on, which is
+// not a base an imported issue body knows anything about, and the spec's list
+// does not cover it. Leading whitespace is tolerated because bluemonday trims
+// it before parsing the URL, so matching on the untrimmed value would drop
+// links it would otherwise keep.
+var linkHref = regexp.MustCompile(`\A[\t\n\f\r ]*(?i:https?:|mailto:|[#?]|/(?:[^/\\]|\z))`)
 
 var md = goldmark.New(
 	goldmark.WithExtensions(extension.GFM),
@@ -77,7 +94,11 @@ func buildPolicy() *bluemonday.Policy {
 	// Parseable URLs, http/https/mailto or relative, rel=nofollow on links.
 	// Relative URLs must stay enabled: /blob/<hash> is one.
 	p.AllowStandardURLs()
-	p.AllowAttrs("href").OnElements("a")
+	// linkHref must be the ONLY policy registered for a[href]: bluemonday
+	// allows an attribute when any registered policy matches, so registering a
+	// bare AllowAttrs("href") alongside this one would make it dead code, the
+	// same trap buildPolicy exists to avoid.
+	p.AllowAttrs("href").Matching(linkHref).OnElements("a")
 
 	p.AllowElements(
 		"h1", "h2", "h3", "h4", "h5", "h6",
@@ -91,6 +112,14 @@ func buildPolicy() *bluemonday.Policy {
 	p.AllowAttrs("cite").OnElements("blockquote", "q")
 	p.AllowAttrs("open").Matching(openAttr).OnElements("details")
 	p.AllowLists()
+	// AllowTables brings two of bluemonday's own match-anything patterns with
+	// it: td/th "nowrap" uses `(?i)|nowrap`, whose empty alternation matches
+	// every value, and "scope" uses an unanchored `(?i)(?:row|col)(?:group)?`,
+	// so scope="colXXX" passes. Neither is a URL or a script sink and both are
+	// escaped by html.Render, so this is cosmetic. It cannot be tightened by
+	// adding a stricter Matching() on top — that would OR with the loose one,
+	// not replace it — so leave it alone unless the whole table allowlist is
+	// rewritten here.
 	p.AllowTables()
 
 	// Media, pinned to blobs served by this server.
@@ -111,6 +140,37 @@ func buildPolicy() *bluemonday.Policy {
 	return p
 }
 
+// maxRendered bounds what balance will emit.
+//
+// HTML5's "reconstruct the active formatting elements" step re-opens every
+// still-open formatting element inside each following block, so a body of a few
+// hundred <b> tags with distinct attributes (distinct values evade the Noah's
+// Ark three-copy clause) followed by a few thousand blocks expands by two to
+// three orders of magnitude: 64 KiB of input measured at 48 MB of output and
+// half a gigabyte of allocation. A browser parsing the unbalanced fragment
+// would build the same DOM, so the expansion is not new work for the client —
+// the harm is that balance turns it into a server-side string, recomputed on
+// every uncached page view. 1 MiB is 16x maxBody, far past anything ordinary
+// markdown expands to, and cheap enough to pay per view.
+const maxRendered = 1 << 20
+
+var errTooLarge = errors.New("mdrender: rendered output over maxRendered")
+
+// cappedWriter fails the render instead of letting the buffer grow past limit,
+// so the amplification above costs a bounded allocation rather than the full
+// expansion.
+type cappedWriter struct {
+	buf   bytes.Buffer
+	limit int
+}
+
+func (w *cappedWriter) Write(p []byte) (int, error) {
+	if w.buf.Len()+len(p) > w.limit {
+		return 0, errTooLarge
+	}
+	return w.buf.Write(p)
+}
+
 // balance re-parses sanitised HTML as a fragment and re-renders it, so the
 // result nests correctly on its own.
 //
@@ -119,33 +179,68 @@ func buildPolicy() *bluemonday.Policy {
 // body starting with "</div>" would close that container and let the rest of
 // the body sit in the page chrome; a body opening an <a> and never closing it
 // would turn the remainder of the page into one link to the author's URL.
-// Re-rendering is safe because the input has already been through the policy:
-// parsing cannot invent elements or attributes, and no raw-text element
-// (script, style, textarea, title) survives sanitising.
+//
+// LANDMINE: re-parsing sanitised output is the classic mutation-XSS setup, and
+// it is safe here only because of what the policy above happens to exclude.
+// bluemonday's output can never contain <svg>, <math> or <template>, so
+// ParseFragment never enters foreign content or a template content document,
+// where tokenisation rules differ and where essentially every classic mXSS
+// lives; and it can never contain a raw-text element (script, style, textarea,
+// title), so html.Render's literal-text path — which writes children through
+// unescaped — is unreachable. Both are emergent properties of the current
+// allowlist, not guarantees of this function. Adding <style>, <svg>, <math> or
+// <template> to buildPolicy turns balance into a live mXSS engine.
+//
+// Two error paths, both handled by falling back in Body: html.ParseFragment
+// gives up past 512 open elements (x/net/html parser.oe), which plain markdown
+// reaches with a few hundred nested blockquotes, and cappedWriter rejects
+// output over maxRendered.
 func balance(fragment []byte) ([]byte, error) {
 	ctx := &html.Node{Type: html.ElementNode, DataAtom: atom.Div, Data: "div"}
 	nodes, err := html.ParseFragment(bytes.NewReader(fragment), ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out bytes.Buffer
+	out := cappedWriter{limit: maxRendered}
 	for _, n := range nodes {
 		if err := html.Render(&out, n); err != nil {
 			return nil, err
 		}
 	}
-	return out.Bytes(), nil
+	return out.buf.Bytes(), nil
 }
 
+// maxBody is the largest body Body will parse.
+//
+// goldmark's inline parser is quadratic on some shapes — "[x](" repeated costs
+// seconds of CPU well before the input gets large — and nothing caches the
+// result, so this cap is the only thing bounding one page view. 64 KiB is
+// GitHub's own issue-body limit and therefore the largest body spec 020's
+// inbox import can produce; the API's 1 MiB request cap sizes a request, not a
+// body a human wrote. The cap does not make a hostile 64 KiB body cheap, it
+// only stops the cost from growing: caching the rendered HTML per revision is
+// the real fix.
+const maxBody = 64 << 10
+
 // Body renders an untrusted markdown body to sanitised HTML.
+//
+// Callers pass the result to templ.Raw, which takes a string, so the
+// template.HTML type is erased at that boundary: the safety contract is this
+// function, not the return type.
 func Body(body string) template.HTML {
+	if len(body) > maxBody {
+		return template.HTML(template.HTMLEscapeString(body))
+	}
 	var buf bytes.Buffer
 	if err := md.Convert([]byte(body), &buf); err != nil {
-		// Rendering is a nicety; never lose the body over it.
+		// Defensive: goldmark cannot fail writing into a bytes.Buffer. Kept so
+		// that a future sink which can fail does not lose the body.
 		return template.HTML(template.HTMLEscapeString(body))
 	}
 	out, err := balance(policy.SanitizeBytes(buf.Bytes()))
 	if err != nil {
+		// Escaped source reads badly, but it is the only safe fallback: the
+		// unbalanced fragment is exactly what balance exists to suppress.
 		return template.HTML(template.HTMLEscapeString(body))
 	}
 	return template.HTML(out)
