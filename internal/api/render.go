@@ -65,12 +65,13 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 
 // approvalsView maps the awaiting-approvals queue (029 §7.1) into the
 // Reviews page's view type; now is the reference point FmtAge renders each
-// row's age against. Read-only: no row carries a control, since the decide
-// route does not exist until spec 029 §7.2 lands.
+// row's age against. ID carries through because each row renders the decide
+// form that posts to /approvals/{id}/decide (029 §7.3).
 func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsView {
 	out := make([]ui.ApprovalRow, 0, len(rows))
 	for _, a := range rows {
 		row := ui.ApprovalRow{
+			ID:          a.ID,
 			EntityID:    a.EntityID,
 			PRTitle:     a.PRTitle,
 			PRURL:       a.PRURL,

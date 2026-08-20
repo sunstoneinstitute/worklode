@@ -380,6 +380,12 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .btnrow{display:flex;gap:10px;margin-top:22px}
 .btnrow .btn{width:auto;min-height:40px;padding:9px 18px}
 
+/* ---------- the decide form on a Reviews queue row (029 §7.3) ---------- */
+/* Three native submit buttons wrapping onto a second line on a narrow
+ * viewport rather than shrinking below WCAG 2.5.8's target size. */
+.decide{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.decide .btn{width:auto;min-height:40px;padding:9px 14px}
+
 /* ---------- rendered task body (sanitised markdown) and attachments ---------- */
 /* .prose is the one subtree whose markup comes from an untrusted task body
  * (internal/mdrender's allowlist), so it is styled by element: nothing in

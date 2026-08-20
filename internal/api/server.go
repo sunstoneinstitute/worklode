@@ -293,6 +293,12 @@ type server struct {
 	// authz.go and observeAuthz.
 	authzDecisions *prometheus.CounterVec
 
+	// approvalDecisions counts decisions submitted to POST
+	// /approvals/{id}/decide, by decision and outcome; see webform.go and
+	// observeApprovalDecision. The session refusal in front of the route is
+	// not counted here — worklode_authz_decisions_total already carries it.
+	approvalDecisions *prometheus.CounterVec
+
 	// doc sync (spec 025 §15.7): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
 
@@ -447,6 +453,13 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// where the body — the artifact itself — comes from a file.
 	r.web("GET /docs", s.navWrap("knowledge", s.docsPage))
 	r.web("GET /docs/{id}", s.navWrap("knowledge", s.docPage))
+	// Deciding an approval is a web-session act (029 §7.3): the session's
+	// group claims are at most as old as the login that stored them, a bearer
+	// token's are as old as the token, and an open instance has no identity to
+	// attribute a decision to. requireSession is applied here, at
+	// registration, so no other route can reach the handler without it — and
+	// there is deliberately no CLI verb and no /api/v1 route for it.
+	r.web("POST /approvals/{id}/decide", s.navWrap("approval_decide", s.requireSession(s.decideApproval)))
 	r.public("GET /assets/", s.assetHandler())
 	// The blob asset route (spec 021 §4). Neither an API route nor a web
 	// page: a browser <img> on a task page fetches it with a session cookie

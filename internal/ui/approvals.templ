@@ -1,14 +1,13 @@
 package ui
 
+import "strconv"
+
 // approvals.templ renders the Reviews destination (GET /reviews): the
 // awaiting-approvals queue (spec 029 §7.1), one row per PR-kind approval
-// still in state 'awaiting', oldest first. This is the tracer bullet — the
-// first page joining migration, store, and shell over real data — and it is
-// read-only: the decide route arrives with spec 029 §7.2, so no row here
-// renders a form or button pointing at it. The PR title jumps out to GitHub
-// (029 §7.3: GitHub stays the review surface); the project name and task id
-// stay in-app links. An empty queue states that honestly rather than
-// showing a fabricated record.
+// still in state 'awaiting', oldest first, each with the decide form (029
+// §7.3). The PR title jumps out to GitHub, which stays the review surface;
+// the project name and task id stay in-app links. An empty queue states that
+// honestly rather than showing a fabricated record.
 
 templ Approvals(v ApprovalsView) {
 	@Page(v.Page) {
@@ -48,5 +47,10 @@ templ approvalRow(row ApprovalRow) {
 			{ " · " }
 			{ row.Age }
 		</div>
+		<form method="post" action={ "/approvals/" + strconv.FormatInt(row.ID, 10) + "/decide" } class="decide">
+			<button type="submit" name="decision" value="approve" class="btn primary">Approve</button>
+			<button type="submit" name="decision" value="request_changes" class="btn">Request changes</button>
+			<button type="submit" name="decision" value="reject" class="btn ghost">Reject</button>
+		</form>
 	</li>
 }

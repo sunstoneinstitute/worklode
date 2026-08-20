@@ -170,12 +170,12 @@ const (
 	// act across every project's repos, not just the caller's own work.
 	permReconcile Permission = "reconcile"
 
-	// permApprovalDecide covers deciding a plan approval (spec 029 §7.3):
-	// POST /approvals/{id}/decide. Declared here but deliberately not in
-	// grants nor routeGuards yet — Task 8 registers the route and its grant
-	// together. Approving is additionally gated by requireSession, an
-	// authentication-method check that runs ahead of (and is orthogonal to)
-	// the role check this permission will drive.
+	// permApprovalDecide covers deciding an approval (spec 029 §7.3): POST
+	// /approvals/{id}/decide, the web surface's only decision act. The route
+	// is additionally gated by requireSession, an authentication-method check
+	// that runs ahead of and is orthogonal to this role check, and by the
+	// approval's own required_role, which is a per-row fact the store checks
+	// rather than a role in this table.
 	permApprovalDecide Permission = "approval.decide"
 )
 
@@ -262,6 +262,12 @@ var grants = map[Permission][]Role{
 	permWhoAmI: {RoleUser, RoleAdmin},
 
 	permReconcile: {RoleAdmin},
+
+	// Every authenticated actor, because who may decide a *given* approval is
+	// not a role question: 029 §7.1 gates it on the approval's own
+	// required_role against the decider's groups, checked in the store. This
+	// permission gates reaching the route at all.
+	permApprovalDecide: {RoleUser, RoleAdmin},
 }
 
 // authMethod records how a subject was identified, so a denial can say

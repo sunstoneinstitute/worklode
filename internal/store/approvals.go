@@ -107,6 +107,118 @@ func ResolveApproval(tx *sql.Tx, id int64, state string,
 	return nil
 }
 
+// DecideInput is one decision on an approval, as the web act submits it.
+// Groups is the decider's stored groups claim, carried from the session
+// subject: 029 §7.3 gates the act on a session precisely so it is no older
+// than the login that refreshed it.
+type DecideInput struct {
+	ApprovalID int64
+	Decision   string // approve | request_changes | reject
+	ActorID    string // the deciding actor; never "" (requireSession holds)
+	Groups     []string
+	Now        time.Time
+}
+
+// DecideApproval records a decision on an open approval, composing the pure
+// rules in approval_rules.go with ResolveApproval. It enforces, in order:
+// the row exists (ErrNotFound); it is open — awaiting or changes_requested
+// (ErrApprovalResolved); the decider holds the group required_role names
+// (ErrNotQualified); and, for entity_kind 'pr', the decider did not author
+// the pull request (ErrSelfApproval). Then it resolves the row.
+//
+// Self-approval is refused by default and unconditionally (029 §7.1); the
+// policy-permitted exception flow is not implemented. An unknown login on
+// either side proves nothing, so it does not refuse — see IsSelfApproval.
+//
+// The row is locked FOR UPDATE, so two concurrent decisions serialize and the
+// second sees the resolved state rather than overwriting it: ResolveApproval
+// itself has no state guard.
+func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
+	state, ok := DecisionState(in.Decision)
+	if !ok {
+		return nil, fmt.Errorf("%w: unknown decision %q", ErrInvalidInput, in.Decision)
+	}
+	if in.ActorID == "" {
+		return nil, fmt.Errorf("%w: a decision needs a deciding actor", ErrInvalidInput)
+	}
+
+	a, err := scanApproval(tx.QueryRow(
+		`SELECT `+approvalColumns+` FROM approvals WHERE id = $1 FOR UPDATE`,
+		in.ApprovalID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load approval %d: %w", in.ApprovalID, err)
+	}
+	if a.State != "awaiting" && a.State != "changes_requested" {
+		return nil, ErrApprovalResolved
+	}
+	if !QualifiedForRole(a.RequiredRole, in.Groups) {
+		return nil, ErrNotQualified
+	}
+	if a.EntityKind == "pr" {
+		author, err := prAuthorForEntity(tx, a.EntityID)
+		if err != nil {
+			return nil, err
+		}
+		decider, err := gitHubLoginForActor(tx, in.ActorID)
+		if err != nil {
+			return nil, err
+		}
+		if IsSelfApproval(author, decider) {
+			return nil, ErrSelfApproval
+		}
+	}
+
+	if err := ResolveApproval(tx, a.ID, state, &in.ActorID, in.Now); err != nil {
+		return nil, err
+	}
+	a.State = state
+	a.ResolvingActor = &in.ActorID
+	resolvedAt := in.Now.UTC()
+	a.ResolvedAt = &resolvedAt
+	return a, nil
+}
+
+// prEntityIDSQL renders a pull_requests row's approvals entity_id in SQL, the
+// spelling PREntityID and prEntityJoin both use.
+const prEntityIDSQL = `repo || '#' || number`
+
+// prAuthorForEntity returns the GitHub login that opened the pull request
+// entityID names; "" when the column is NULL (a row ingested before the
+// column existed) or no PR matches. "" never counts as a match, so an unknown
+// author cannot be read as self-approval.
+func prAuthorForEntity(tx *sql.Tx, entityID string) (string, error) {
+	var author string
+	err := tx.QueryRow(
+		`SELECT coalesce(author, '') FROM pull_requests WHERE `+prEntityIDSQL+` = $1`,
+		entityID).Scan(&author)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("pr author for %s: %w", entityID, err)
+	}
+	return author, nil
+}
+
+// gitHubLoginForActor returns actorID's expected_github_login; "" when the
+// actor names none. The inverse of ActorIDForGitHubLogin.
+func gitHubLoginForActor(tx *sql.Tx, actorID string) (string, error) {
+	var login string
+	err := tx.QueryRow(
+		`SELECT coalesce(expected_github_login, '') FROM actors WHERE id = $1`,
+		actorID).Scan(&login)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("github login for actor %s: %w", actorID, err)
+	}
+	return login, nil
+}
+
 // ReopenApproval flips changes_requested back to awaiting (029 §7.1's
 // re-request edge), clearing resolving_actor and resolved_at. No-op on any
 // other state, including approved.

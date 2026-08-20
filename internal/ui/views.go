@@ -77,8 +77,7 @@ type ProjectsView struct {
 // --- reviews (spec 029 §7.1) -------------------------------------------------
 
 // ApprovalsView is the /reviews queue: every PR-kind approval still awaiting
-// a decision, oldest first. Read-only until the decide route lands (spec 029
-// §7.2) — no row here renders a control that points at it.
+// a decision, oldest first. Each row carries the decide form (029 §7.3).
 type ApprovalsView struct {
 	Page PageProps
 	Rows []ApprovalRow
@@ -86,9 +85,11 @@ type ApprovalsView struct {
 
 // ApprovalRow is one awaiting-approval queue row: the PR it governs, the
 // task and project it belongs to, who it is awaiting (when known), and how
-// long it has waited. Age is pre-formatted (see FmtAge); RequiredActorName
-// is "" when the approval names no actor yet.
+// long it has waited. ID is the approvals row id the decide form posts to.
+// Age is pre-formatted (see FmtAge); RequiredActorName is "" when the
+// approval names no actor yet.
 type ApprovalRow struct {
+	ID                int64
 	EntityID          string
 	PRTitle, PRURL    string
 	TaskID, ProjectID string

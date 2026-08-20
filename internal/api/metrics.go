@@ -59,6 +59,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_authz_decisions_total",
 		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
 	}, []string{"permission", "outcome"})
+	s.approvalDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_approval_decisions_total",
+		Help: "Decisions submitted to POST /approvals/{id}/decide (029 §7.3), by decision (" +
+			strings.Join(approvalDecisionKinds, ", ") + ") and outcome (" +
+			strings.Join(approvalDecisionOutcomes, ", ") +
+			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
+	}, []string{"decision", "outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
 		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
@@ -161,6 +168,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
+		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
@@ -205,6 +213,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove"} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
+		}
+	}
+	// Every decision/outcome pair, so an instance where nobody has decided an
+	// approval reads as a flat zero rather than as no-data — the difference
+	// between "no decision was refused" and "refusals are not being counted".
+	for _, decision := range approvalDecisionKinds {
+		for _, outcome := range approvalDecisionOutcomes {
+			s.approvalDecisions.WithLabelValues(decision, outcome)
 		}
 	}
 	// Both blob families in full, so an instance with no bucket configured
@@ -447,6 +463,52 @@ func (s *server) observeAuthz(perm Permission, d Decision) {
 		outcome = "allow"
 	}
 	s.authzDecisions.WithLabelValues(string(perm), outcome).Inc()
+}
+
+// approvalDecisionKinds and approvalDecisionOutcomes are the bounded label
+// values of worklode_approval_decisions_total. decisionInvalid stands for
+// both a submission whose decision was not one of the three and one refused
+// before a decision could be read (a cross-origin POST, an unreadable body).
+var (
+	approvalDecisionKinds    = []string{"approve", "request_changes", "reject", decisionInvalid}
+	approvalDecisionOutcomes = []string{"resolved", "refused_self", "refused_role",
+		"conflict", "not_found", "invalid", "error"}
+)
+
+// decisionInvalid is the decision label for a submission that named no valid
+// decision, and the outcome label for refusing it.
+const decisionInvalid = "invalid"
+
+// observeApprovalDecision records one submitted approval decision, called
+// exactly once per POST /approvals/{id}/decide that gets past requireSession.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeApprovalDecision(decision, outcome string) {
+	if s.approvalDecisions == nil {
+		return
+	}
+	s.approvalDecisions.WithLabelValues(decision, outcome).Inc()
+}
+
+// approvalDecisionOutcome classifies a DecideApproval error for the outcome
+// label. It mirrors decideApproval's status mapping: the two are read
+// together, so a new sentinel cannot get a status without getting a label.
+func approvalDecisionOutcome(err error) string {
+	switch {
+	case err == nil:
+		return "resolved"
+	case errors.Is(err, store.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, store.ErrApprovalResolved):
+		return "conflict"
+	case errors.Is(err, store.ErrSelfApproval):
+		return "refused_self"
+	case errors.Is(err, store.ErrNotQualified):
+		return "refused_role"
+	case errors.Is(err, store.ErrInvalidInput):
+		return decisionInvalid
+	default:
+		return "error"
+	}
 }
 
 // observeFormSubmission records one web creation-form submission, called

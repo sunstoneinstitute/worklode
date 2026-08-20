@@ -1442,6 +1442,17 @@ nav.local a .cnt {
   min-height: 40px;
   padding: 9px 18px;
 }
+.decide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.decide .btn {
+  width: auto;
+  min-height: 40px;
+  padding: 9px 14px;
+}
 .prose {
   overflow-wrap: anywhere;
 }
