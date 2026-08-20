@@ -230,12 +230,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&detail=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&detail=.
 // state is repeatable and/or comma-separated; has_children=true narrows to
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
 // plan_doc narrows to the tasks minted from that plan document — the query
-// that is the plan's task set (025 §9.2, §1); detail=true adds "blocked" and
+// that is the plan's task set (025 §9.2, §1); about_doc narrows to the tasks
+// that reference that document (025 §15.4); detail=true adds "blocked" and
 // "edges" to each row (see model.TaskListDetail) at the cost of two extra
 // bulk queries.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
@@ -281,6 +282,16 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Same stance as plan_doc: a non-numeric about_doc is refused rather than
+	// silently ignored.
+	var aboutDoc int64
+	if raw := q.Get("about_doc"); raw != "" {
+		var err error
+		if aboutDoc, err = strconv.ParseInt(raw, 10, 64); err != nil || aboutDoc <= 0 {
+			writeErr(w, http.StatusBadRequest, "about_doc must be a positive integer")
+			return
+		}
+	}
 	tasks, err := s.st.ListTasks(r.Context(), store.TaskFilter{
 		Project:  q.Get("project"),
 		States:   states,
@@ -293,6 +304,7 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		HasChildren:  q.Get("has_children") == "true",
 		UpdatedSince: updatedSince,
 		PlanDoc:      planDoc,
+		AboutDoc:     aboutDoc,
 	})
 	if err != nil {
 		s.mapStoreErr(w, err)

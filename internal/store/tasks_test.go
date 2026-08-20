@@ -1140,6 +1140,162 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 	}
 }
 
+// TestCreateTaskAboutDoc verifies AboutDoc round-trips through CreateTask and
+// GetTask, and that a task created without one reads back 0 (025 §15.4).
+func TestCreateTaskAboutDoc(t *testing.T) {
+	s := openTaskStore(t)
+	seedDocsProject(t, s)
+
+	docID, err := insertDoc(t, s, "spec", 25, "spec-25")
+	if err != nil {
+		t.Fatalf("insert doc: %v", err)
+	}
+
+	in := defaultTaskInput()
+	in.Kind = "review"
+	in.AboutDoc = docID
+	created := createTask(t, s, taskTestNow, in)
+	if created.AboutDoc != docID {
+		t.Fatalf("created.AboutDoc = %d, want %d", created.AboutDoc, docID)
+	}
+
+	got, err := s.GetTask(t.Context(), created.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.AboutDoc != docID {
+		t.Errorf("GetTask about_doc = %d, want %d", got.AboutDoc, docID)
+	}
+
+	ordinary := createTask(t, s, taskTestNow, defaultTaskInput())
+	got, err = s.GetTask(t.Context(), ordinary.ID)
+	if err != nil {
+		t.Fatalf("GetTask ordinary: %v", err)
+	}
+	if got.AboutDoc != 0 {
+		t.Errorf("ordinary task about_doc = %d, want 0", got.AboutDoc)
+	}
+}
+
+// TestOpenTaskForDoc exercises the §5 suppression guard: an open task of the
+// matching kind referencing the doc is found; a different kind referencing
+// the same doc is not; once the matching task closes, the query finds none.
+func TestOpenTaskForDoc(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+	seedDocsProject(t, s)
+
+	docID, err := insertDoc(t, s, "spec", 26, "spec-26")
+	if err != nil {
+		t.Fatalf("insert doc: %v", err)
+	}
+
+	reviewIn := defaultTaskInput()
+	reviewIn.Kind = "review"
+	reviewIn.AboutDoc = docID
+	review := createTask(t, s, taskTestNow, reviewIn)
+
+	designIn := defaultTaskInput()
+	designIn.Kind = "design"
+	designIn.AboutDoc = docID
+	design := createTask(t, s, taskTestNow, designIn)
+
+	got, err := s.OpenTaskForDoc(ctx, docID, "review")
+	if err != nil {
+		t.Fatalf("OpenTaskForDoc review: %v", err)
+	}
+	if got != review.ID {
+		t.Fatalf("OpenTaskForDoc review = %q, want %q (the open design task about the same doc must not satisfy the review query)", got, review.ID)
+	}
+
+	// The design query is satisfied by the design task, not the review one.
+	got, err = s.OpenTaskForDoc(ctx, docID, "design")
+	if err != nil {
+		t.Fatalf("OpenTaskForDoc design: %v", err)
+	}
+	if got != design.ID {
+		t.Fatalf("OpenTaskForDoc design = %q, want %q", got, design.ID)
+	}
+
+	if err := transition(t, s, taskTestNow, review.ID, "ready", "abandoned"); err != nil {
+		t.Fatalf("abandon review task: %v", err)
+	}
+	got, err = s.OpenTaskForDoc(ctx, docID, "review")
+	if err != nil {
+		t.Fatalf("OpenTaskForDoc review after abandon: %v", err)
+	}
+	if got != "" {
+		t.Fatalf("OpenTaskForDoc review after abandon = %q, want none", got)
+	}
+}
+
+// TestListTasksFilterByAboutDoc mirrors TestListTasksFilterByPlanDoc:
+// TaskFilter.AboutDoc narrows to exactly the tasks referencing one document.
+func TestListTasksFilterByAboutDoc(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+	seedDocsProject(t, s)
+
+	docA, err := insertDoc(t, s, "spec", 27, "spec-27")
+	if err != nil {
+		t.Fatalf("insert doc a: %v", err)
+	}
+	docB, err := insertDoc(t, s, "spec", 28, "spec-28")
+	if err != nil {
+		t.Fatalf("insert doc b: %v", err)
+	}
+
+	inA1 := defaultTaskInput()
+	inA1.AboutDoc = docA
+	a1 := createTask(t, s, taskTestNow, inA1)
+
+	inA2 := defaultTaskInput()
+	inA2.AboutDoc = docA
+	a2 := createTask(t, s, taskTestNow, inA2)
+
+	inB := defaultTaskInput()
+	inB.AboutDoc = docB
+	b1 := createTask(t, s, taskTestNow, inB)
+
+	unrelated := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	idsOf := func(tasks []model.Task) []string {
+		var ids []string
+		for _, task := range tasks {
+			ids = append(ids, task.ID)
+		}
+		return ids
+	}
+	sortedIDs := func(ids ...string) []string {
+		slices.Sort(ids)
+		return ids
+	}
+
+	gotA, err := s.ListTasks(ctx, TaskFilter{AboutDoc: docA})
+	if err != nil {
+		t.Fatalf("ListTasks about_doc=A: %v", err)
+	}
+	if got := sortedIDs(idsOf(gotA)...); !reflect.DeepEqual(got, sortedIDs(a1.ID, a2.ID)) {
+		t.Fatalf("ListTasks about_doc=A: got %v, want [%s %s]", got, a1.ID, a2.ID)
+	}
+
+	gotB, err := s.ListTasks(ctx, TaskFilter{AboutDoc: docB})
+	if err != nil {
+		t.Fatalf("ListTasks about_doc=B: %v", err)
+	}
+	if got := idsOf(gotB); !reflect.DeepEqual(got, []string{b1.ID}) {
+		t.Fatalf("ListTasks about_doc=B: got %v, want [%s]", got, b1.ID)
+	}
+
+	all, err := s.ListTasks(ctx, TaskFilter{})
+	if err != nil {
+		t.Fatalf("ListTasks unfiltered: %v", err)
+	}
+	if got := sortedIDs(idsOf(all)...); !reflect.DeepEqual(got, sortedIDs(a1.ID, a2.ID, b1.ID, unrelated.ID)) {
+		t.Fatalf("ListTasks unfiltered: got %v, want all four tasks", got)
+	}
+}
+
 // TestListTasksFilterByUpdatedSince covers the incremental sync path: a
 // client (the Obsidian mirror) re-asks for what changed since the highest
 // updated_at it has seen, and gets that boundary row back with it.
