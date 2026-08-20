@@ -598,3 +598,216 @@ func assertRollupRows(t *testing.T, got, want []rollupRow) {
 		}
 	}
 }
+
+// --- TaskCost --------------------------------------------------------
+
+// TestTaskCostReportsUsage covers the basic per-task rollup: one session's
+// usage becomes one day/currency row and total, and Sessions counts the one
+// session that billed it.
+func TestTaskCostReportsUsage(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+
+	tokens := TokenCounts{Input: 1000, Output: 1000}
+	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: tokens},
+	})
+
+	// 1000*2.00 + 1000*10.00 per MTok = 12,000 micro-USD.
+	tc, err := s.TaskCost(ctx, lease.TaskID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if len(tc.Days) != 1 || len(tc.Totals) != 1 {
+		t.Fatalf("TaskCost shape: got %d days and %d totals, want 1 and 1", len(tc.Days), len(tc.Totals))
+	}
+	if tc.Days[0].Cost != "0.012000" || tc.Days[0].Tokens != tokens {
+		t.Fatalf("TaskCost day: got cost %s tokens %+v, want 0.012000 and %+v",
+			tc.Days[0].Cost, tc.Days[0].Tokens, tokens)
+	}
+	if tc.Totals[0].Currency != "USD" || tc.Totals[0].Cost != "0.012000" {
+		t.Fatalf("TaskCost total: got %s %s, want USD 0.012000", tc.Totals[0].Currency, tc.Totals[0].Cost)
+	}
+	if tc.Sessions != 1 {
+		t.Fatalf("Sessions: got %d, want 1", tc.Sessions)
+	}
+}
+
+// Two sessions on the same task on the same day fold into one row, but each
+// still counts toward Sessions.
+func TestTaskCostFoldsSameDaySessions(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/.worktrees/one")
+
+	for _, sid := range []string{"sess-1", "sess-2"} {
+		if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", sid, nil); err != nil {
+			t.Fatalf("touch %s: %v", sid, err)
+		}
+	}
+	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+	})
+	reportUsage(t, s, lease, "sess-2", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 3000}},
+	})
+
+	tc, err := s.TaskCost(ctx, lease.TaskID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if len(tc.Days) != 1 {
+		t.Fatalf("days: got %d, want 1", len(tc.Days))
+	}
+	if tc.Days[0].Tokens != (TokenCounts{Output: 4000}) || tc.Days[0].Cost != "0.040000" {
+		t.Fatalf("day: got tokens %+v cost %s, want Output 4000 cost 0.040000",
+			tc.Days[0].Tokens, tc.Days[0].Cost)
+	}
+	if tc.Sessions != 2 {
+		t.Fatalf("Sessions: got %d, want 2", tc.Sessions)
+	}
+}
+
+// An unknown task id is an error, not a silent zero: it is the guard against
+// reporting nothing for a typo'd id.
+func TestTaskCostUnknownTask(t *testing.T) {
+	s := openTaskStore(t)
+	_, err := s.TaskCost(t.Context(), "WL-9999", false, time.Time{}, time.Time{})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("got %v, want ErrNotFound", err)
+	}
+}
+
+// A task that exists but has never had a billed session reports an empty
+// report and zero sessions, not an error.
+func TestTaskCostNoSessions(t *testing.T) {
+	s := openTaskStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	tc, err := s.TaskCost(t.Context(), task.ID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if len(tc.Days) != 0 || len(tc.Totals) != 0 {
+		t.Fatalf("TaskCost: got %+v, want an empty report", tc)
+	}
+	if tc.Sessions != 0 {
+		t.Fatalf("Sessions: got %d, want 0", tc.Sessions)
+	}
+}
+
+// A container task holds no lease itself; its own cost is empty unless
+// includeChildren widens the scope to its child_of descendants.
+func TestTaskCostIncludeChildren(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	parent := leaseForTest(t, s, "host:/.worktrees/parent")
+	child := usageSession(t, s, "host:/.worktrees/child", "sess-child")
+
+	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, leaseTestNow, child.TaskID, parent.TaskID, "child_of", eventID)
+		}); err != nil {
+		t.Fatalf("AddEdge child_of: %v", err)
+	}
+
+	reportUsage(t, s, child, "sess-child", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+	})
+
+	without, err := s.TaskCost(ctx, parent.TaskID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost without children: %v", err)
+	}
+	if len(without.Days) != 0 || without.Sessions != 0 {
+		t.Fatalf("without children: got %+v, want empty (a child's usage must not leak in)", without)
+	}
+
+	with, err := s.TaskCost(ctx, parent.TaskID, true, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost with children: %v", err)
+	}
+	if len(with.Days) != 1 || with.Days[0].Cost != "0.010000" || with.Sessions != 1 {
+		t.Fatalf("with children: got %+v, want the child's day and 1 session", with)
+	}
+}
+
+// from/to clip which days count, on both the report and the session count.
+func TestTaskCostWindow(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+
+	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+		{Day: usageDay2.Add(13 * time.Hour), Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 2000}},
+	})
+
+	windows := []struct {
+		name     string
+		from, to time.Time
+		wantDays []string
+		wantCost string
+	}{
+		{"unbounded", time.Time{}, time.Time{}, []string{"2026-07-19", "2026-07-20"}, "0.030000"},
+		{"first day only", usageDay1, usageDay1, []string{"2026-07-19"}, "0.010000"},
+		{"second day only", usageDay2, usageDay2, []string{"2026-07-20"}, "0.020000"},
+		{"after the window", usageDay2.AddDate(0, 0, 1), time.Time{}, nil, ""},
+	}
+	for _, w := range windows {
+		t.Run(w.name, func(t *testing.T) {
+			tc, err := s.TaskCost(ctx, lease.TaskID, false, w.from, w.to)
+			if err != nil {
+				t.Fatalf("TaskCost: %v", err)
+			}
+			if len(tc.Days) != len(w.wantDays) {
+				t.Fatalf("days: got %d, want %d", len(tc.Days), len(w.wantDays))
+			}
+			for i, want := range w.wantDays {
+				if got := tc.Days[i].Day.Format(time.DateOnly); got != want {
+					t.Fatalf("day %d: got %s, want %s", i, got, want)
+				}
+			}
+			if w.wantCost == "" {
+				if len(tc.Totals) != 0 {
+					t.Fatalf("totals outside the window: got %+v, want none", tc.Totals)
+				}
+				return
+			}
+			if tc.Totals[0].Cost != w.wantCost {
+				t.Fatalf("window cost: got %s, want %s", tc.Totals[0].Cost, w.wantCost)
+			}
+		})
+	}
+}
+
+// A model with no rate on file lands its tokens in UnpricedTokens rather than
+// being billed at zero.
+func TestTaskCostUnpricedTokens(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+
+	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+		{Day: usageDay1, Model: "vendor-y-nightly", Tokens: TokenCounts{Input: 1000, Output: 500}},
+	})
+
+	tc, err := s.TaskCost(ctx, lease.TaskID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if len(tc.Totals) != 1 {
+		t.Fatalf("totals: got %d, want 1", len(tc.Totals))
+	}
+	if tc.Totals[0].Cost != "0.010000" {
+		t.Fatalf("cost: got %s, want 0.010000 (unpriced tokens must not be billed at zero)", tc.Totals[0].Cost)
+	}
+	if tc.Totals[0].UnpricedTokens != 1500 {
+		t.Fatalf("unpriced tokens: got %d, want 1500", tc.Totals[0].UnpricedTokens)
+	}
+	if tc.Sessions != 1 {
+		t.Fatalf("Sessions: got %d, want 1", tc.Sessions)
+	}
+}

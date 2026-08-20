@@ -105,8 +105,8 @@ func toTokenCountsJSON(t store.TokenCounts) model.TokenCounts {
 
 // toProjectCostJSON builds the wire form of a cost window, normalizing nil
 // slices to empty arrays so days and totals never serialize as null.
-func toProjectCostJSON(pc *store.ProjectCost) model.ProjectCost {
-	out := model.ProjectCost{
+func toProjectCostJSON(pc *store.CostReport) model.CostReport {
+	out := model.CostReport{
 		Days:   make([]model.CostDay, 0, len(pc.Days)),
 		Totals: make([]model.CostTotals, 0, len(pc.Totals)),
 	}
