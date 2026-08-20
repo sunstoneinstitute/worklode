@@ -136,6 +136,28 @@ func parseWebForm(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// beginFormPost runs the three gates every creation-form POST shares —
+// same origin, a resolvable project, a readable body — counting the refusal
+// under the named form. A false ok means the response is already written.
+func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form string) (ui.CockpitProject, bool) {
+	if !s.sameOriginForm(r) {
+		s.observeFormSubmission(form, "forbidden")
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return ui.CockpitProject{}, false
+	}
+	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.observeFormSubmission(form, formOutcome(err))
+		s.webStoreErr(w, err)
+		return ui.CockpitProject{}, false
+	}
+	if !parseWebForm(w, r) {
+		s.observeFormSubmission(form, "invalid")
+		return ui.CockpitProject{}, false
+	}
+	return project, true
+}
+
 // renderWeb writes one rendered page with the given status. Form pages use it
 // for the 422 re-render; the plain GET pages go through it too, so the
 // content type is set in one place.
@@ -165,19 +187,8 @@ func (s *server) newTaskPage(w http.ResponseWriter, r *http.Request) {
 // 303 to it, or re-render the form at 422 with the one thing to fix.
 func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.sameOriginForm(r) {
-		s.observeFormSubmission("task", "forbidden")
-		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
-		return
-	}
-	project, err := s.projectHeader(ctx, r.PathValue("id"))
-	if err != nil {
-		s.observeFormSubmission("task", formOutcome(err))
-		s.webStoreErr(w, err)
-		return
-	}
-	if !parseWebForm(w, r) {
-		s.observeFormSubmission("task", "invalid")
+	project, ok := s.beginFormPost(w, r, "task")
+	if !ok {
 		return
 	}
 
@@ -314,19 +325,8 @@ func (s *server) newDeliverablePage(w http.ResponseWriter, r *http.Request) {
 // the deliverable and 303 back to the list, or re-render at 422.
 func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !s.sameOriginForm(r) {
-		s.observeFormSubmission("deliverable", "forbidden")
-		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
-		return
-	}
-	project, err := s.projectHeader(ctx, r.PathValue("id"))
-	if err != nil {
-		s.observeFormSubmission("deliverable", formOutcome(err))
-		s.webStoreErr(w, err)
-		return
-	}
-	if !parseWebForm(w, r) {
-		s.observeFormSubmission("deliverable", "invalid")
+	project, ok := s.beginFormPost(w, r, "deliverable")
+	if !ok {
 		return
 	}
 
