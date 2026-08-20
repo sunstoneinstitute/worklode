@@ -132,7 +132,7 @@ func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 		}
 		replay, err := hooks.Replay(r.Context(), s.st, hooks.ReplayOptions{
 			Repo: req.Repo, Since: since, DryRun: req.DryRun,
-			ResolveBranch: resolveBranch, Metrics: s.hookMetrics,
+			Log: s.log, ResolveBranch: resolveBranch, Metrics: s.hookMetrics,
 		})
 		if err != nil {
 			s.mapStoreErr(w, err)
@@ -142,8 +142,14 @@ func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Engine 2 lands in a later plan in this series (not this one), which
-	// replaces this line with the poll call.
-	resp.PollSkipped = "github app auth not configured"
+	// replaces this block with the poll call. Keep the reason truthful about
+	// which gap is blocking it: an unconfigured App is a config gap, but a
+	// configured App still skips polling because engine 2 doesn't exist yet.
+	if s.appAuth == nil {
+		resp.PollSkipped = "github app auth not configured"
+	} else {
+		resp.PollSkipped = "poll engine not implemented yet"
+	}
 
 	writeJSON(w, http.StatusOK, resp)
 }

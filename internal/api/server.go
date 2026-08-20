@@ -190,8 +190,9 @@ type server struct {
 
 	// hookMetrics is the webhook/replay instrument set (internal/hooks),
 	// shared by the webhook handlers and POST /api/v1/reconcile's replay
-	// call. Never nil once initMetrics has run — the registration code sets
-	// it right after creating it.
+	// call. Set in registerRoutes, right after hooks.NewMetrics(reg); every
+	// *hooks.Metrics method is nil-safe (internal/hooks/metrics.go), so
+	// callers don't need it non-nil.
 	hookMetrics *hooks.Metrics
 
 	// embedder is nil unless an embedding provider is configured; recommend

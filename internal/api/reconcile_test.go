@@ -36,6 +36,30 @@ func TestWhoamiRequiresAuth(t *testing.T) {
 	}
 }
 
+// TestWhoamiNonAdmin: permWhoAmI is granted to {RoleUser, RoleAdmin}, not
+// admin-only — a non-admin token must still get 200 with admin: false, not
+// 403.
+func TestWhoamiNonAdmin(t *testing.T) {
+	st, h, token := newTestServer(t)
+	nonAdmin := makeNonAdminToken(t, st, h, token)
+
+	rec := doReq(t, h, http.MethodGet, "/api/v1/whoami", nonAdmin, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("whoami: %d %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		ID    string `json:"id"`
+		Kind  string `json:"kind"`
+		Admin bool   `json:"admin"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.ID != "dev" || got.Kind != "human" || got.Admin {
+		t.Fatalf("whoami = %+v; want the non-admin dev actor with admin: false", got)
+	}
+}
+
 func TestReposDoctor(t *testing.T) {
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "demo", "WL", "acme/app")
