@@ -29,6 +29,20 @@ type Event struct {
 	ReceivedAt time.Time
 }
 
+// eventColumns is the SELECT list scanEvent expects, in order.
+const eventColumns = `id, source, external_id, type, payload, received_at`
+
+// scanEvent reads one row selected with eventColumns, normalising the
+// timestamp to UTC the way every event reader wants it.
+func scanEvent(row rowScanner) (Event, error) {
+	var e Event
+	if err := row.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+		return Event{}, err
+	}
+	e.ReceivedAt = e.ReceivedAt.UTC()
+	return e, nil
+}
+
 // RecordEvent records one event and, on first sight of it, applies its
 // effect via apply — all inside a single transaction. (source, externalID)
 // identifies the event: if it has already been recorded, RecordEvent
@@ -59,14 +73,11 @@ func (s *Store) RecordEvent(
 		).Scan(&id)
 		if errors.Is(scanErr, sql.ErrNoRows) {
 			// Already recorded: look up the existing id and skip apply.
-			row := tx.QueryRowContext(ctx,
-				`SELECT id FROM events WHERE source = $1 AND external_id = $2`,
-				source, externalID,
-			)
-			if err := row.Scan(&id); err != nil {
-				return fmt.Errorf("look up existing event: %w", err)
+			existing, lookupErr := recordedEventID(ctx, tx, source, externalID)
+			if lookupErr != nil {
+				return lookupErr
 			}
-			inserted = false
+			id, inserted = existing, false
 			return nil
 		}
 		if scanErr != nil {
@@ -136,14 +147,11 @@ func (s *Store) RecordEventWithID(
 			reservedID, source, externalID, typ, payload, receivedAt,
 		).Scan(&id)
 		if errors.Is(scanErr, sql.ErrNoRows) {
-			row := tx.QueryRowContext(ctx,
-				`SELECT id FROM events WHERE source = $1 AND external_id = $2`,
-				source, externalID,
-			)
-			if err := row.Scan(&id); err != nil {
-				return fmt.Errorf("look up existing event: %w", err)
+			existing, lookupErr := recordedEventID(ctx, tx, source, externalID)
+			if lookupErr != nil {
+				return lookupErr
 			}
-			inserted = false
+			id, inserted = existing, false
 			return nil
 		}
 		if scanErr != nil {
@@ -164,6 +172,20 @@ func (s *Store) RecordEventWithID(
 	return id, inserted, nil
 }
 
+// recordedEventID reads back the id of the event (source, externalID) already
+// names, for the ON CONFLICT DO NOTHING path both RecordEvent forms take when
+// the insert finds the event was recorded earlier.
+func recordedEventID(ctx context.Context, tx *sql.Tx, source, externalID string) (int64, error) {
+	var id int64
+	if err := tx.QueryRowContext(ctx,
+		`SELECT id FROM events WHERE source = $1 AND external_id = $2`,
+		source, externalID,
+	).Scan(&id); err != nil {
+		return 0, fmt.Errorf("look up existing event: %w", err)
+	}
+	return id, nil
+}
+
 // GetEvent looks up one event by id. Returns ErrNotFound if it does not
 // exist.
 //
@@ -172,16 +194,14 @@ func (s *Store) RecordEventWithID(
 // RecordEvent/RecordEventWithID/Emit) would otherwise have to wait out the
 // commit horizon to read its own write back. Do not add the predicate here.
 func (s *Store) GetEvent(ctx context.Context, id int64) (Event, error) {
-	var e Event
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, source, external_id, type, payload, received_at FROM events WHERE id = $1`, id)
-	if err := row.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Event{}, ErrNotFound
-		}
+	e, err := scanEvent(s.db.QueryRowContext(ctx,
+		`SELECT `+eventColumns+` FROM events WHERE id = $1`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Event{}, ErrNotFound
+	}
+	if err != nil {
 		return Event{}, fmt.Errorf("get event %d: %w", id, err)
 	}
-	e.ReceivedAt = e.ReceivedAt.UTC()
 	return e, nil
 }
 
@@ -216,14 +236,8 @@ func (s *Store) ResetEventRead(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("reset event read for %s: %w", name, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("reset event read for %s: %w", name, err)
-	}
-	if n == 0 {
-		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "reset event read for "+name,
+		fmt.Errorf("event subscriber %s: %w", name, ErrNotFound))
 }
 
 // ReadEventBatch returns up to limit events after the subscriber's
@@ -244,7 +258,7 @@ func (s *Store) ReadEventBatch(ctx context.Context, name string, limit int) ([]E
 		}
 
 		rows, err := tx.QueryContext(ctx,
-			`SELECT id, source, external_id, type, payload, received_at
+			`SELECT `+eventColumns+`
 			   FROM events
 			  WHERE id > $1
 			    AND `+eventHorizon+`
@@ -255,18 +269,9 @@ func (s *Store) ReadEventBatch(ctx context.Context, name string, limit int) ([]E
 		if err != nil {
 			return fmt.Errorf("read events for %s: %w", name, err)
 		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var e Event
-			if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
-				return fmt.Errorf("scan event: %w", err)
-			}
-			e.ReceivedAt = e.ReceivedAt.UTC()
-			events = append(events, e)
-		}
-		if err := rows.Err(); err != nil {
-			return fmt.Errorf("read events for %s: %w", name, err)
+		events, err = collectRows(rows, fmt.Sprintf("read events for %s", name), scanEvent)
+		if err != nil {
+			return err
 		}
 
 		if len(events) == 0 {
@@ -330,21 +335,12 @@ func (s *Store) EventSubscribers(ctx context.Context) ([]EventSubscriber, error)
 	if err != nil {
 		return nil, fmt.Errorf("list event subscribers: %w", err)
 	}
-	defer rows.Close()
-
-	var out []EventSubscriber
-	for rows.Next() {
+	return collectRows(rows, "list event subscribers", func(r rowScanner) (EventSubscriber, error) {
 		var sub EventSubscriber
-		if err := rows.Scan(&sub.Name, &sub.LastRead, &sub.LastAcked, &sub.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("scan event subscriber: %w", err)
-		}
+		err := r.Scan(&sub.Name, &sub.LastRead, &sub.LastAcked, &sub.UpdatedAt)
 		sub.UpdatedAt = sub.UpdatedAt.UTC()
-		out = append(out, sub)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list event subscribers: %w", err)
-	}
-	return out, nil
+		return sub, err
+	})
 }
 
 // EventFilter narrows ListEvents. Zero values do not filter.
@@ -371,49 +367,34 @@ const MaxEventListLimit = 200
 // that later reads would order before.
 func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) {
 	where := eventHorizon
-	var args []any
+	var args sqlArgs
 	if f.Type != "" {
-		args = append(args, f.Type)
-		where += fmt.Sprintf(" AND type = $%d", len(args))
+		where += " AND type = " + args.next(f.Type)
 	}
 	if !f.Since.IsZero() {
-		args = append(args, f.Since.UTC())
-		where += fmt.Sprintf(" AND received_at >= $%d", len(args))
+		where += " AND received_at >= " + args.next(f.Since.UTC())
 	}
 	if f.After != 0 {
-		args = append(args, f.After)
-		where += fmt.Sprintf(" AND id > $%d", len(args))
+		where += " AND id > " + args.next(f.After)
 	}
 	limit := f.Limit
 	if limit <= 0 || limit > MaxEventListLimit {
 		limit = MaxEventListLimit
 	}
-	args = append(args, limit)
 
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(
-		`SELECT id, source, external_id, type, payload, received_at
+	// Bound before the call: args.next mutates args.vals, and the order of
+	// evaluation between a call operand and a plain one is unspecified.
+	limitArg := args.next(limit)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+eventColumns+`
 		   FROM events
-		  WHERE %s
+		  WHERE `+where+`
 		  ORDER BY id
-		  LIMIT $%d`, where, len(args)), args...)
+		  LIMIT `+limitArg, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Event
-	for rows.Next() {
-		var e Event
-		if err := rows.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
-			return nil, fmt.Errorf("scan event: %w", err)
-		}
-		e.ReceivedAt = e.ReceivedAt.UTC()
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list events: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list events", scanEvent)
 }
 
 // EventSubscriberStatus is the lode event subscribers row (025 §18): the
@@ -454,21 +435,12 @@ func (s *Store) EventSubscriberStatuses(ctx context.Context) ([]EventSubscriberS
 	if err != nil {
 		return nil, fmt.Errorf("event subscriber statuses: %w", err)
 	}
-	defer rows.Close()
-
-	var out []EventSubscriberStatus
-	for rows.Next() {
+	return collectRows(rows, "event subscriber statuses", func(r rowScanner) (EventSubscriberStatus, error) {
 		var st EventSubscriberStatus
-		if err := rows.Scan(&st.Name, &st.LastRead, &st.LastAcked, &st.UpdatedAt, &st.Lag, &st.HolderPID); err != nil {
-			return nil, fmt.Errorf("scan event subscriber status: %w", err)
-		}
+		err := r.Scan(&st.Name, &st.LastRead, &st.LastAcked, &st.UpdatedAt, &st.Lag, &st.HolderPID)
 		st.UpdatedAt = st.UpdatedAt.UTC()
-		out = append(out, st)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("event subscriber statuses: %w", err)
-	}
-	return out, nil
+		return st, err
+	})
 }
 
 // SeekEventSubscriber moves both offsets to the given position — the only
@@ -483,14 +455,8 @@ func (s *Store) SeekEventSubscriber(ctx context.Context, name string, to int64) 
 	if err != nil {
 		return fmt.Errorf("seek event subscriber %s: %w", name, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("seek event subscriber %s: %w", name, err)
-	}
-	if n == 0 {
-		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "seek event subscriber "+name,
+		fmt.Errorf("event subscriber %s: %w", name, ErrNotFound))
 }
 
 // SubscriberLock pins one pool connection holding the pg_try_advisory_lock
@@ -566,21 +532,12 @@ func (s *Store) StateLogForEntity(ctx context.Context, entityKind, entityID stri
 	if err != nil {
 		return nil, fmt.Errorf("state log for %s %s: %w", entityKind, entityID, err)
 	}
-	defer rows.Close()
-
-	var out []StateLogEntry
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("state log for %s %s", entityKind, entityID), func(r rowScanner) (StateLogEntry, error) {
 		var e StateLogEntry
-		if err := rows.Scan(&e.ID, &e.Change, &e.EventID, &e.At); err != nil {
-			return nil, fmt.Errorf("scan state log entry: %w", err)
-		}
+		err := r.Scan(&e.ID, &e.Change, &e.EventID, &e.At)
 		e.At = e.At.UTC()
-		out = append(out, e)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("state log for %s %s: %w", entityKind, entityID, err)
-	}
-	return out, nil
+		return e, err
+	})
 }
 
 // LogChange appends a row to state_log recording one field-level change to
@@ -642,18 +599,11 @@ func (s *Store) EventSubscriberLags(ctx context.Context) ([]SubscriberLag, error
 	if err != nil {
 		return nil, fmt.Errorf("event subscriber lags: %w", err)
 	}
-	defer rows.Close()
-
-	var out []SubscriberLag
-	for rows.Next() {
+	return collectRows(rows, "event subscriber lags", func(r rowScanner) (SubscriberLag, error) {
 		var l SubscriberLag
-		if err := rows.Scan(&l.Name, &l.Lag); err != nil {
-			return nil, fmt.Errorf("scan event subscriber lag: %w", err)
+		if err := r.Scan(&l.Name, &l.Lag); err != nil {
+			return SubscriberLag{}, err
 		}
-		out = append(out, l)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("event subscriber lags: %w", err)
-	}
-	return out, nil
+		return l, nil
+	})
 }

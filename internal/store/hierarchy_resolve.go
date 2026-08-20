@@ -129,19 +129,13 @@ func childStates(tx *sql.Tx, parentID string) ([]childState, error) {
 	if err != nil {
 		return nil, fmt.Errorf("children of %s: %w", parentID, err)
 	}
-	defer rows.Close()
-	var children []childState
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("children of %s", parentID), func(r rowScanner) (childState, error) {
 		var c childState
-		if err := rows.Scan(&c.State, &c.Closed); err != nil {
-			return nil, fmt.Errorf("scan child state of %s: %w", parentID, err)
+		if err := r.Scan(&c.State, &c.Closed); err != nil {
+			return childState{}, err
 		}
-		children = append(children, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("children of %s: %w", parentID, err)
-	}
-	return children, nil
+		return c, nil
+	})
 }
 
 // resolveParent rolls the task's parent, if it has one, up to the state its

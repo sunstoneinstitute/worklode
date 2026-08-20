@@ -42,19 +42,7 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 	if err != nil {
 		return nil, fmt.Errorf("tasks below frontier %s/%d: %w", repo, frontier, err)
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan task below frontier %s/%d: %w", repo, frontier, err)
-		}
-		out = append(out, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("tasks below frontier %s/%d: %w", repo, frontier, err)
-	}
-	return out, nil
+	return scanColumn[string](rows, fmt.Sprintf("tasks below frontier %s/%d", repo, frontier))
 }
 
 // ResolveDelivery advances taskID to the furthest delivery milestone the

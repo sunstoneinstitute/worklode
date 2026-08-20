@@ -97,20 +97,7 @@ func (s *Store) RuntimeEventsForArtifact(ctx context.Context, artifactID int64) 
 	if err != nil {
 		return nil, fmt.Errorf("runtime events for artifact %d: %w", artifactID, err)
 	}
-	defer rows.Close()
-
-	var out []RuntimeEvent
-	for rows.Next() {
-		re, err := scanRuntimeEvent(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan runtime event: %w", err)
-		}
-		out = append(out, *re)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("runtime events for artifact %d: %w", artifactID, err)
-	}
-	return out, nil
+	return collectRows(rows, fmt.Sprintf("runtime events for artifact %d", artifactID), byValue(scanRuntimeEvent))
 }
 
 // ListRuntimeEvents returns runtime events, newest first, optionally
@@ -121,30 +108,15 @@ func (s *Store) ListRuntimeEvents(ctx context.Context, cluster string, limit int
 		limit = defaultRuntimeEventLimit
 	}
 	q := `SELECT ` + runtimeEventColumns + ` FROM runtime_events`
-	var args []any
+	var args sqlArgs
 	if cluster != "" {
-		args = append(args, cluster)
-		q += fmt.Sprintf(` WHERE cluster = $%d`, len(args))
+		q += ` WHERE cluster = ` + args.next(cluster)
 	}
-	args = append(args, limit)
-	q += fmt.Sprintf(` ORDER BY occurred_at DESC, id DESC LIMIT $%d`, len(args))
+	q += ` ORDER BY occurred_at DESC, id DESC LIMIT ` + args.next(limit)
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, q, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list runtime events: %w", err)
 	}
-	defer rows.Close()
-
-	var out []RuntimeEvent
-	for rows.Next() {
-		re, err := scanRuntimeEvent(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan runtime event: %w", err)
-		}
-		out = append(out, *re)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list runtime events: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list runtime events", byValue(scanRuntimeEvent))
 }

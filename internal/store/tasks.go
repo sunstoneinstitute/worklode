@@ -121,12 +121,7 @@ func allStates() []string {
 		seen[pair[0]] = true
 		seen[pair[1]] = true
 	}
-	out := make([]string, 0, len(seen))
-	for s := range seen {
-		out = append(out, s)
-	}
-	slices.Sort(out)
-	return out
+	return slices.Sorted(maps.Keys(seen))
 }
 
 // containerForbiddenStates are the delivery states a task with children can
@@ -379,14 +374,8 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", id, err)
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("update task %s rows affected: %w", id, err)
-	}
-	if affected == 0 {
-		return fmt.Errorf("task %s: %w", id, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "update task "+id,
+		fmt.Errorf("task %s: %w", id, ErrNotFound))
 }
 
 // taskColumns is the SELECT list scanTask expects, in order. skills,
@@ -397,6 +386,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // 0027 and 0028), scanned into sql.NullInt64. prefixedTaskColumns below
 // requires each entry to be comma-free.
 const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc`
+
+// taskColumnsT is taskColumns under the `t` alias, for the queries that join
+// tasks against another table.
+var taskColumnsT = qualifyColumns(taskColumns, "t")
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -411,12 +404,8 @@ func scanTask(row rowScanner) (*model.Task, error) {
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc); err != nil {
 		return nil, err
 	}
-	if planDoc.Valid {
-		t.PlanDoc = planDoc.Int64
-	}
-	if aboutDoc.Valid {
-		t.AboutDoc = aboutDoc.Int64
-	}
+	t.PlanDoc = planDoc.Int64
+	t.AboutDoc = aboutDoc.Int64
 	t.Body = body.String
 	t.Concern = concern.String
 	t.Assignee = assignee.String
@@ -491,10 +480,8 @@ func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error 
 	if err != nil {
 		return fmt.Errorf("set task skills %s: %w", id, err)
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("task %s: %w", id, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "set task skills "+id,
+		fmt.Errorf("task %s: %w", id, ErrNotFound))
 }
 
 // SlugifyTitle turns a task title into a branch-name slug: lowercase, every
@@ -547,64 +534,46 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, error) {
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
-	var args []any
+	var args sqlArgs
 	if f.Project != "" {
-		args = append(args, f.Project)
-		conds = append(conds, fmt.Sprintf(`project_id = $%d`, len(args)))
+		conds = append(conds, `project_id = `+args.next(f.Project))
 	}
 	if len(f.States) > 0 {
-		var placeholders []string
-		for _, st := range f.States {
-			args = append(args, st)
-			placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
-		}
-		conds = append(conds, `state IN (`+strings.Join(placeholders, ", ")+`)`)
+		conds = append(conds, `state = ANY(`+args.next(f.States)+`)`)
 	}
 	if f.Priority != "" {
-		args = append(args, f.Priority)
-		conds = append(conds, fmt.Sprintf(`priority = $%d`, len(args)))
+		conds = append(conds, `priority = `+args.next(f.Priority))
 	}
 	if f.Kind != "" {
-		args = append(args, f.Kind)
-		conds = append(conds, fmt.Sprintf(`kind = $%d`, len(args)))
+		conds = append(conds, `kind = `+args.next(f.Kind))
 	}
 	if f.PlanDoc != 0 {
-		args = append(args, f.PlanDoc)
-		conds = append(conds, fmt.Sprintf(`plan_doc = $%d`, len(args)))
+		conds = append(conds, `plan_doc = `+args.next(f.PlanDoc))
 	}
 	if f.AboutDoc != 0 {
-		args = append(args, f.AboutDoc)
-		conds = append(conds, fmt.Sprintf(`about_doc = $%d`, len(args)))
+		conds = append(conds, `about_doc = `+args.next(f.AboutDoc))
 	}
 	if f.Assignee != "" {
-		args = append(args, f.Assignee)
-		conds = append(conds, fmt.Sprintf(`assignee = $%d`, len(args)))
+		conds = append(conds, `assignee = `+args.next(f.Assignee))
 	}
 	if f.Parent != "" {
-		args = append(args, f.Parent)
-		conds = append(conds, fmt.Sprintf(
-			`EXISTS (SELECT 1 FROM task_edges e
-			          WHERE e.from_task = tasks.id AND e.to_task = $%d AND e.type = 'child_of')`,
-			len(args)))
+		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges e
+		          WHERE e.from_task = tasks.id AND e.to_task = `+args.next(f.Parent)+` AND e.type = 'child_of')`)
 	}
 	if f.HasChildren {
 		conds = append(conds, `EXISTS (SELECT 1 FROM task_edges c
 		                              WHERE c.to_task = tasks.id AND c.type = 'child_of')`)
 	}
 	if f.Repo != "" {
-		args = append(args, f.Repo)
-		conds = append(conds, fmt.Sprintf(
-			`EXISTS (SELECT 1 FROM project_repos pr
-			          WHERE pr.repo = $%d AND pr.project_id = tasks.project_id)`,
-			len(args)))
+		conds = append(conds, `EXISTS (SELECT 1 FROM project_repos pr
+		          WHERE pr.repo = `+args.next(f.Repo)+` AND pr.project_id = tasks.project_id)`)
 	}
 	if !f.UpdatedSince.IsZero() {
 		// >=, never >: the caller sends the highest updated_at it has seen and
 		// re-receives that boundary row, which is cheap and idempotent. With >
 		// a second write landing in the same clock tick as the watermark would
 		// never be handed out again — a silently lost update.
-		args = append(args, f.UpdatedSince.UTC())
-		conds = append(conds, fmt.Sprintf(`updated_at >= $%d`, len(args)))
+		conds = append(conds, `updated_at >= `+args.next(f.UpdatedSince.UTC()))
 	}
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
@@ -618,24 +587,11 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	         ELSE 3
 	       END, split_part(id, '-', 1), CAST(split_part(id, '-', 2) AS INTEGER)`
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.db.QueryContext(ctx, q, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Task
-	for rows.Next() {
-		t, err := scanTask(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan task: %w", err)
-		}
-		out = append(out, *t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list tasks: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list tasks", byValue(scanTask))
 }
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
@@ -885,17 +841,21 @@ var deliveredStateSet = func() map[string]bool {
 	return m
 }()
 
+// deliveryRankArms is deliveryRank's WHEN list. Only the scrutinee varies
+// between call sites, so the arms are rendered once.
+var deliveryRankArms = func() string {
+	var b strings.Builder
+	for _, st := range slices.Sorted(maps.Keys(deliveryRanks)) {
+		fmt.Fprintf(&b, " WHEN '%s' THEN %d", st, deliveryRanks[st])
+	}
+	return b.String()
+}()
+
 // deliveryRank renders the SQL rank of a state expression. A task's state and
 // a repo's done_state both map through the same CASE, so the two are directly
 // comparable. Anything before merged ranks 0, below every done_state.
 func deliveryRank(expr string) string {
-	var b strings.Builder
-	b.WriteString("(CASE " + expr)
-	for _, st := range slices.Sorted(maps.Keys(deliveryRanks)) {
-		fmt.Fprintf(&b, " WHEN '%s' THEN %d", st, deliveryRanks[st])
-	}
-	b.WriteString(" ELSE 0 END)")
-	return b.String()
+	return "(CASE " + expr + deliveryRankArms + " ELSE 0 END)"
 }
 
 // taskClosed renders the "no longer blocks its dependents" predicate for the

@@ -111,26 +111,44 @@ func (s *Store) CreateProject(ctx context.Context, id, name, key string) error {
 	return nil
 }
 
-// GetProject looks up a project by id. Returns ErrNotFound if it does not exist.
-func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
+// projectColumnsP is projectColumns under the `p` alias, for the queries that
+// join projects against another table.
+var projectColumnsP = qualifyColumns(projectColumns, "p")
+
+// scanProject reads one row selected with projectColumns.
+func scanProject(row rowScanner) (*Project, error) {
 	var p Project
 	var focus []byte
 	var ext projectExtras
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+projectColumns+` FROM projects WHERE id = $1`, id)
 	if err := row.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("get project %s: %w", id, err)
+		return nil, err
 	}
 	f, err := scanProjectFocus(focus)
 	if err != nil {
-		return nil, fmt.Errorf("get project %s: %w", id, err)
+		return nil, fmt.Errorf("project %s focus: %w", p.ID, err)
 	}
 	p.Focus = f
 	ext.apply(&p)
 	return &p, nil
+}
+
+// projectRow runs a single-project query, mapping a missing row to
+// ErrNotFound and wrapping anything else under what.
+func (s *Store) projectRow(ctx context.Context, query, what string, args ...any) (*Project, error) {
+	p, err := scanProject(s.db.QueryRowContext(ctx, query, args...))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	return p, nil
+}
+
+// GetProject looks up a project by id. Returns ErrNotFound if it does not exist.
+func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
+	return s.projectRow(ctx, `SELECT `+projectColumns+` FROM projects WHERE id = $1`,
+		fmt.Sprintf("get project %s", id), id)
 }
 
 // ListProjects returns all projects.
@@ -139,28 +157,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Project
-	for rows.Next() {
-		var p Project
-		var focus []byte
-		var ext projectExtras
-		if err := rows.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
-			return nil, fmt.Errorf("scan project: %w", err)
-		}
-		f, err := scanProjectFocus(focus)
-		if err != nil {
-			return nil, fmt.Errorf("scan project %s: %w", p.ID, err)
-		}
-		p.Focus = f
-		ext.apply(&p)
-		out = append(out, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list projects: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list projects", byValue(scanProject))
 }
 
 // SetProjectFocus records the ordered list of concerns a project's ranking
@@ -198,14 +195,8 @@ func (s *Store) SetProjectFocus(ctx context.Context, projectID string, focus []s
 			if err != nil {
 				return fmt.Errorf("set focus for project %s: %w", projectID, err)
 			}
-			affected, err := res.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("set focus rows affected: %w", err)
-			}
-			if affected == 0 {
-				return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
-			}
-			return nil
+			return requireOneAffected(res, "set focus",
+				fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 		})
 	return err
 }
@@ -221,7 +212,7 @@ func (s *Store) PinProjectFocus(ctx context.Context, projectID, note, pinnedBy s
 	var noteVal, byVal, atVal any
 	if note != "" {
 		noteVal = note
-		byVal = nullIfEmpty(pinnedBy)
+		byVal = nullText(pinnedBy)
 		atVal = nullIfZeroTime(pinnedAt)
 	}
 	res, err := s.db.ExecContext(ctx,
@@ -231,14 +222,8 @@ func (s *Store) PinProjectFocus(ctx context.Context, projectID, note, pinnedBy s
 	if err != nil {
 		return fmt.Errorf("pin focus for project %s: %w", projectID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("pin focus rows affected: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "pin focus",
+		fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 }
 
 // SetProjectNextDecision sets (or clears) the cockpit's curated "Next decision"
@@ -252,8 +237,8 @@ func (s *Store) SetProjectNextDecision(ctx context.Context, projectID, title, ac
 	var titleVal, accVal, readyVal any
 	if title != "" {
 		titleVal = title
-		accVal = nullIfEmpty(accountable)
-		readyVal = nullIfEmpty(readiness)
+		accVal = nullText(accountable)
+		readyVal = nullText(readiness)
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE projects
@@ -262,14 +247,8 @@ func (s *Store) SetProjectNextDecision(ctx context.Context, projectID, title, ac
 	if err != nil {
 		return fmt.Errorf("set next decision for project %s: %w", projectID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("set next decision rows affected: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "set next decision",
+		fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 }
 
 // AddRepo maps repo ("owner/name") to projectID. A repo may belong to at
@@ -290,16 +269,13 @@ func (s *Store) AddRepo(ctx context.Context, projectID, repo string) error {
 // ProjectForRepo looks up the project a repo is mapped to. Returns
 // ErrNotFound if the repo is not mapped to any project.
 func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, error) {
-	var projectID string
-	row := s.db.QueryRowContext(ctx,
-		`SELECT project_id FROM project_repos WHERE repo = $1`, repo)
-	if err := row.Scan(&projectID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("look up project for repo %s: %w", repo, err)
-	}
-	return s.GetProject(ctx, projectID)
+	// One join rather than a repo lookup followed by GetProject: this runs on
+	// the GitHub webhook path, and an unmapped repo is ErrNotFound either way.
+	return s.projectRow(ctx,
+		`SELECT `+projectColumnsP+` FROM projects p
+		   JOIN project_repos pr ON pr.project_id = p.id
+		  WHERE pr.repo = $1`,
+		fmt.Sprintf("look up project for repo %s", repo), repo)
 }
 
 // DefaultDoneState is the project_repos.done_state schema default, used for
@@ -326,14 +302,8 @@ func (s *Store) SetRepoDoneState(ctx context.Context, repo, state string) error 
 	if err != nil {
 		return fmt.Errorf("set done_state for %s: %w", repo, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("set done_state rows affected: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("repo %s: %w", repo, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "set done_state",
+		fmt.Errorf("repo %s: %w", repo, ErrNotFound))
 }
 
 // ListRepos returns the repos mapped to a project, each with its done_state.
@@ -343,18 +313,11 @@ func (s *Store) ListRepos(ctx context.Context, projectID string) ([]model.RepoMa
 	if err != nil {
 		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
 	}
-	defer rows.Close()
-
-	var out []model.RepoMapping
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("list repos for project %s", projectID), func(r rowScanner) (model.RepoMapping, error) {
 		var m model.RepoMapping
-		if err := rows.Scan(&m.Repo, &m.DoneState); err != nil {
-			return nil, fmt.Errorf("scan repo: %w", err)
+		if err := r.Scan(&m.Repo, &m.DoneState); err != nil {
+			return model.RepoMapping{}, err
 		}
-		out = append(out, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list repos for project %s: %w", projectID, err)
-	}
-	return out, nil
+		return m, nil
+	})
 }

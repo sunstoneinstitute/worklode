@@ -48,26 +48,22 @@ func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 		builtAt = sql.NullTime{Time: a.BuiltAt.UTC(), Valid: true}
 	}
 
-	_, err := tx.Exec(
+	// DO UPDATE (unlike DO NOTHING) always produces a row, so RETURNING
+	// carries the id on both the insert and the conflict path — no follow-up
+	// SELECT.
+	var id int64
+	if err := tx.QueryRow(
 		`INSERT INTO artifacts (kind, name, version, digest, repo, source_sha, built_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (kind, name, version) DO UPDATE SET
 		   digest = excluded.digest,
 		   repo = excluded.repo,
 		   source_sha = excluded.source_sha,
-		   built_at = excluded.built_at`,
+		   built_at = excluded.built_at
+		 RETURNING id`,
 		a.Kind, a.Name, a.Version, digest, a.Repo, a.SourceSHA, builtAt,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("upsert artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
-	}
-
-	var id int64
-	if err := tx.QueryRow(
-		`SELECT id FROM artifacts WHERE kind = $1 AND name = $2 AND version = $3`,
-		a.Kind, a.Name, a.Version,
 	).Scan(&id); err != nil {
-		return 0, fmt.Errorf("look up artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
+		return 0, fmt.Errorf("upsert artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
 	}
 	return id, nil
 }
@@ -101,20 +97,7 @@ func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifac
 	if err != nil {
 		return nil, fmt.Errorf("artifacts by source sha %s: %w", sha, err)
 	}
-	defer rows.Close()
-
-	var out []Artifact
-	for rows.Next() {
-		a, err := scanArtifact(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan artifact: %w", err)
-		}
-		out = append(out, *a)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("artifacts by source sha %s: %w", sha, err)
-	}
-	return out, nil
+	return collectRows(rows, fmt.Sprintf("artifacts by source sha %s", sha), byValue(scanArtifact))
 }
 
 // ArtifactIDBySourceSHA looks up an artifact by source_sha inside the given
@@ -290,20 +273,7 @@ func (s *Store) DeploymentsForArtifact(ctx context.Context, artifactID int64) ([
 	if err != nil {
 		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
 	}
-	defer rows.Close()
-
-	var out []Deployment
-	for rows.Next() {
-		d, err := scanDeployment(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan deployment: %w", err)
-		}
-		out = append(out, *d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
-	}
-	return out, nil
+	return collectRows(rows, fmt.Sprintf("deployments for artifact %d", artifactID), byValue(scanDeployment))
 }
 
 // ListDeployments returns deployments, optionally filtered by environment
@@ -321,18 +291,5 @@ func (s *Store) ListDeployments(ctx context.Context, environment string) ([]Depl
 	if err != nil {
 		return nil, fmt.Errorf("list deployments: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Deployment
-	for rows.Next() {
-		d, err := scanDeployment(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan deployment: %w", err)
-		}
-		out = append(out, *d)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list deployments: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list deployments", byValue(scanDeployment))
 }

@@ -62,18 +62,8 @@ func ExistingIssueNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 // be triage_state='new' — anything else (already promoted, dismissed, or no
 // such issue) is an error. eventID is passed through to CreateTask.
 func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskInput, appliesToVersions []string, eventID int64) (*model.Task, error) {
-	var triageState string
-	err := tx.QueryRow(
-		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
-	).Scan(&triageState)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get issue %s#%d triage_state: %w", repo, number, err)
-	}
-	if triageState != "new" {
-		return nil, fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
+	if err := requireNewIssue(tx, repo, number); err != nil {
+		return nil, err
 	}
 
 	task, err := CreateTask(tx, now, in, eventID)
@@ -105,18 +95,8 @@ func PromoteIssue(tx *sql.Tx, now time.Time, repo string, number int64, in TaskI
 // "this issue has a task" is exactly what promoted means, so no new
 // triage_state value (and no migration) is needed. The task must exist.
 func LinkIssue(tx *sql.Tx, repo string, number int64, taskID string) error {
-	var triageState string
-	err := tx.QueryRow(
-		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
-	).Scan(&triageState)
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("issue %s#%d: %w", repo, number, ErrNotFound)
-	}
-	if err != nil {
-		return fmt.Errorf("get issue %s#%d triage_state: %w", repo, number, err)
-	}
-	if triageState != "new" {
-		return fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
+	if err := requireNewIssue(tx, repo, number); err != nil {
+		return err
 	}
 
 	exists, err := taskExists(tx, taskID)
@@ -142,6 +122,25 @@ func LinkIssue(tx *sql.Tx, repo string, number int64, taskID string) error {
 // currently be triage_state='new'. Returns ErrNotFound if no such issue
 // exists.
 func DismissIssue(tx *sql.Tx, repo string, number int64) error {
+	if err := requireNewIssue(tx, repo, number); err != nil {
+		return err
+	}
+	res, err := tx.Exec(
+		`UPDATE issues SET triage_state = 'dismissed'
+		 WHERE repo = $1 AND number = $2 AND triage_state = 'new'`,
+		repo, number,
+	)
+	if err != nil {
+		return fmt.Errorf("dismiss issue %s#%d: %w", repo, number, err)
+	}
+	return requireTriaged(res, repo, number)
+}
+
+// requireNewIssue refuses an issue that is not awaiting triage. It is the
+// read half of the rule requireTriaged enforces on the write: all three
+// triage outcomes open with it, so "already promoted", "already dismissed"
+// and "no such issue" report the same way whichever one the caller chose.
+func requireNewIssue(tx *sql.Tx, repo string, number int64) error {
 	var triageState string
 	err := tx.QueryRow(
 		`SELECT triage_state FROM issues WHERE repo = $1 AND number = $2`, repo, number,
@@ -155,15 +154,7 @@ func DismissIssue(tx *sql.Tx, repo string, number int64) error {
 	if triageState != "new" {
 		return fmt.Errorf("issue %s#%d is %s, not new: %w", repo, number, triageState, ErrBadTransition)
 	}
-	res, err := tx.Exec(
-		`UPDATE issues SET triage_state = 'dismissed'
-		 WHERE repo = $1 AND number = $2 AND triage_state = 'new'`,
-		repo, number,
-	)
-	if err != nil {
-		return fmt.Errorf("dismiss issue %s#%d: %w", repo, number, err)
-	}
-	return requireTriaged(res, repo, number)
+	return nil
 }
 
 // requireTriaged turns a triage UPDATE that matched no row into
@@ -247,18 +238,5 @@ func (s *Store) ListIssues(ctx context.Context, triageState, projectID string) (
 	if err != nil {
 		return nil, fmt.Errorf("list issues: %w", err)
 	}
-	defer rows.Close()
-
-	var out []model.Issue
-	for rows.Next() {
-		is, err := scanIssue(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan issue: %w", err)
-		}
-		out = append(out, *is)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list issues: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list issues", byValue(scanIssue))
 }

@@ -7,6 +7,38 @@ import (
 	"time"
 )
 
+// requireActor refuses an actor id that names no row in actors. Every path
+// that writes an actor into tasks.assignee checks this first: without it an
+// unknown actor surfaces as a raw foreign-key violation, which poisons the
+// caller's transaction instead of returning ErrNotFound.
+func requireActor(tx *sql.Tx, actorID string) error {
+	var one int
+	err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, actorID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("actor %s: %w", actorID, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("check actor %s: %w", actorID, err)
+	}
+	return nil
+}
+
+// lockTaskOwnership reads a task's state and assignee under a row lock, the
+// opening move of every ownership change in this file. A missing task is
+// ErrNotFound.
+func lockTaskOwnership(tx *sql.Tx, id string) (state, assignee string, err error) {
+	err = tx.QueryRow(
+		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&state, &assignee)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", fmt.Errorf("task %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("lock task %s: %w", id, err)
+	}
+	return state, assignee, nil
+}
+
 // AssignTask sets taskID's assignee to assignee inside the given
 // transaction, recording provenance via LogChange. assignee must name an
 // existing actor (ErrNotFound otherwise); a missing task is also
@@ -14,22 +46,13 @@ import (
 // deliveredStateSet), cannot be assigned (ErrInvalidInput) — a container's
 // ownership follows its children, and a closed task has nothing left to own.
 func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) error {
-	var one int
-	if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, assignee).Scan(&one); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("actor %s: %w", assignee, ErrNotFound)
-		}
-		return fmt.Errorf("check actor %s: %w", assignee, err)
+	if err := requireActor(tx, assignee); err != nil {
+		return err
 	}
 
-	var state, prev string
-	if err := tx.QueryRow(
-		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &prev); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("task %s: %w", id, ErrNotFound)
-		}
-		return fmt.Errorf("lock task %s: %w", id, err)
+	state, prev, err := lockTaskOwnership(tx, id)
+	if err != nil {
+		return err
 	}
 	container, err := hasChildren(tx, id)
 	if err != nil {
@@ -60,14 +83,9 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 // (e.g. left over from before the task took children) must not be blocked by
 // the very fact that needs cleaning up. A missing task is ErrNotFound.
 func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
-	var state, prev string
-	if err := tx.QueryRow(
-		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &prev); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("task %s: %w", id, ErrNotFound)
-		}
-		return fmt.Errorf("lock task %s: %w", id, err)
+	state, prev, err := lockTaskOwnership(tx, id)
+	if err != nil {
+		return err
 	}
 	if deliveredStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot unassign: %w", id, state, ErrInvalidInput)
@@ -97,22 +115,13 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 // settled on (actorID, whether it was already assigned or just
 // auto-assigned here), so a caller that auto-assigned can tell.
 func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (string, error) {
-	var one int
-	if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, actorID).Scan(&one); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("actor %s: %w", actorID, ErrNotFound)
-		}
-		return "", fmt.Errorf("check actor %s: %w", actorID, err)
+	if err := requireActor(tx, actorID); err != nil {
+		return "", err
 	}
 
-	var state, assignee string
-	if err := tx.QueryRow(
-		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &assignee); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", fmt.Errorf("task %s: %w", id, ErrNotFound)
-		}
-		return "", fmt.Errorf("lock task %s: %w", id, err)
+	state, assignee, err := lockTaskOwnership(tx, id)
+	if err != nil {
+		return "", err
 	}
 	container, err := hasChildren(tx, id)
 	if err != nil {
@@ -167,14 +176,9 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 // Release instead (ErrInvalidInput) — StopTask never touches a lease. A
 // missing task is ErrNotFound.
 func StopTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) error {
-	var state, assignee string
-	if err := tx.QueryRow(
-		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &assignee); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("task %s: %w", id, ErrNotFound)
-		}
-		return fmt.Errorf("lock task %s: %w", id, err)
+	state, assignee, err := lockTaskOwnership(tx, id)
+	if err != nil {
+		return err
 	}
 	if state != "in_progress" {
 		return fmt.Errorf("task %s is %s, not in_progress: %w", id, state, ErrInvalidInput)

@@ -233,20 +233,7 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 	if err != nil {
 		return nil, fmt.Errorf("PRs for task %s: %w", taskID, err)
 	}
-	defer rows.Close()
-
-	var out []PullRequest
-	for rows.Next() {
-		pr, err := scanPR(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan PR: %w", err)
-		}
-		out = append(out, *pr)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("PRs for task %s: %w", taskID, err)
-	}
-	return out, nil
+	return collectRows(rows, fmt.Sprintf("PRs for task %s", taskID), byValue(scanPR))
 }
 
 // CIRunsForSHA returns the CI runs recorded for (repo, headSHA), oldest
@@ -300,21 +287,14 @@ func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) (
 	if err != nil {
 		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
 	}
-	defer rows.Close()
-
-	var out []Review
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("reviews for %s#%d", repo, prNumber), func(r rowScanner) (Review, error) {
 		var rv Review
-		if err := rows.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &rv.SubmittedAt); err != nil {
-			return nil, fmt.Errorf("scan review: %w", err)
+		if err := r.Scan(&rv.Repo, &rv.PRNumber, &rv.Reviewer, &rv.State, &rv.SubmittedAt); err != nil {
+			return Review{}, err
 		}
 		rv.SubmittedAt = rv.SubmittedAt.UTC()
-		out = append(out, rv)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("reviews for %s#%d: %w", repo, prNumber, err)
-	}
-	return out, nil
+		return rv, nil
+	})
 }
 
 // UpsertCIRun inserts or, on redelivery, updates a CI run row. The natural
