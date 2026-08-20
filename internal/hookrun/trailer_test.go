@@ -4,77 +4,49 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// taskWorktree is a git repo shaped like a Worklode worktree — a real repo at
-// <tmp>/.worktrees/<id>-<slug> — so Layout.TaskID resolves an id from it the
-// way it does in the field.
-type taskWorktree struct {
-	t    *testing.T
-	root string
-}
-
-func newTaskWorktree(t *testing.T, dirName string) *taskWorktree {
+// newTaskWorktree builds a git repo shaped like a Worklode worktree — a real
+// repo at <tmp>/.worktrees/<id>-<slug> — so Layout.TaskID resolves an id from
+// it the way it does in the field.
+func newTaskWorktree(t *testing.T, dirName string) *gitRepo {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), ".worktrees", dirName)
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", root, err)
 	}
-	w := &taskWorktree{t: t, root: root}
+	w := &gitRepo{t: t, root: root}
 	w.git("-c", "init.defaultBranch=main", "init")
 	w.commit("README.md", "hello\n", "initial commit")
 	return w
 }
 
-func (w *taskWorktree) git(args ...string) string {
-	w.t.Helper()
-	c := exec.Command("git", append([]string{"-C", w.root, "-c", "commit.gpgsign=false"}, args...)...)
-	c.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-	out, err := c.CombinedOutput()
-	if err != nil {
-		w.t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func (w *taskWorktree) commit(name, content, msg string) {
-	w.t.Helper()
-	if err := os.WriteFile(filepath.Join(w.root, name), []byte(content), 0o644); err != nil {
-		w.t.Fatalf("write %s: %v", name, err)
-	}
-	w.git("add", name)
-	w.git("commit", "-m", msg)
-}
-
 // msg writes a commit message file and returns the path git would pass as $1:
 // relative to the top of the working tree, which is where git runs a hook.
-func (w *taskWorktree) msg(content string) string {
-	w.t.Helper()
+func (r *gitRepo) msg(content string) string {
+	r.t.Helper()
 	rel := filepath.Join(".git", "COMMIT_EDITMSG")
-	if err := os.WriteFile(filepath.Join(w.root, rel), []byte(content), 0o644); err != nil {
-		w.t.Fatalf("write commit message: %v", err)
+	if err := os.WriteFile(filepath.Join(r.root, rel), []byte(content), 0o644); err != nil {
+		r.t.Fatalf("write commit message: %v", err)
 	}
 	return rel
 }
 
-func (w *taskWorktree) readMsg(rel string) string {
-	w.t.Helper()
-	b, err := os.ReadFile(filepath.Join(w.root, rel))
+func (r *gitRepo) readMsg(rel string) string {
+	r.t.Helper()
+	b, err := os.ReadFile(filepath.Join(r.root, rel))
 	if err != nil {
-		w.t.Fatalf("read commit message: %v", err)
+		r.t.Fatalf("read commit message: %v", err)
 	}
 	return string(b)
 }
 
 // runCommitMsg drives the commit-msg event the way the installed hook does:
 // git's $1 in Args, the working directory on stdin.
-func runCommitMsg(t *testing.T, w *taskWorktree, msgFile string) string {
+func runCommitMsg(t *testing.T, w *gitRepo, msgFile string) string {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	code := Run(context.Background(), Options{
