@@ -1271,6 +1271,87 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 	return docs, gaps, nil
 }
 
+// BareSupersededSections returns the superseded specs and ADRs that have at
+// least one section nothing explains — 025 §6 rule 2's "bare superseded
+// section", read as a derived query rather than an accept-time gate (per the
+// decision recorded at 025 §3.3: section-level supersession stays derived).
+// project narrows the answer; "" answers over every project.
+//
+// A section counts as explained by a `replaces` edge that names it, at either
+// granularity doc_edges can express:
+//
+//   - a section-scoped edge (to_doc = this document, to_anchor = the section)
+//     explains exactly that section;
+//   - a document-scoped edge (to_doc = this document, to_anchor IS NULL)
+//     explains every section of the document — the successor supersedes it
+//     wholesale, so no per-section listing is owed.
+//
+// The successor's own status is deliberately not required: the edge itself is
+// the explanation 025 §3.3 asks for, and demanding an accepted successor would
+// report an explained section as bare. A `to_external` edge names no local
+// row and so explains nothing, whatever it once pointed at. Plans carry no
+// sections (025 §9), so the JOIN against doc_sections already excludes them
+// without a kind filter.
+//
+// Not answered here: rule 2's other branch, a `dct:description` saying why a
+// section went away. `0027_docs` has no free-text column on doc_sections or
+// doc_edges to read for that, on either the section or its explaining edge, so
+// it stays unmechanised — it lands with section-level supersession in the
+// graph (025 §3.3), tracked by WL-44 / WL-41. This mirrors NeedsPlanning's
+// WL-141 gap: a rule 025 states that today's schema cannot fully answer.
+func (s *Store) BareSupersededSections(ctx context.Context, project string) (
+	[]model.Doc, []model.DocSupersessionGap, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`WITH replaced_section AS (
+		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
+		       FROM doc_edges e
+		      WHERE e.type = 'replaces'
+		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		 ), replaced_doc AS (
+		     SELECT DISTINCT e.to_doc AS doc_id
+		       FROM doc_edges e
+		      WHERE e.type = 'replaces'
+		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NULL
+		 )
+		 SELECT `+qualifiedDocColumns("d")+`, count(*)::int,
+		        coalesce(json_agg(sec.anchor ORDER BY sec.position)
+		                 FILTER (WHERE rs.anchor IS NULL), '[]')::text
+		   FROM docs d
+		   JOIN doc_sections sec ON sec.doc_id = d.id
+		   LEFT JOIN replaced_section rs ON rs.doc_id = sec.doc_id AND rs.anchor = sec.anchor
+		  WHERE d.status = 'superseded'
+		    AND ($1 = '' OR d.project_id = $1)
+		    AND NOT EXISTS (SELECT 1 FROM replaced_doc rd WHERE rd.doc_id = d.id)
+		  GROUP BY d.id
+		 HAVING count(*) FILTER (WHERE rs.anchor IS NULL) > 0
+		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list bare superseded sections: %w", err)
+	}
+	defer rows.Close()
+
+	var docs []model.Doc
+	var gaps []model.DocSupersessionGap
+	for rows.Next() {
+		var gap model.DocSupersessionGap
+		var unexplainedJSON string
+		d, err := scanDoc(appendScan{rows, []any{&gap.Sections, &unexplainedJSON}})
+		if err != nil {
+			return nil, nil, fmt.Errorf("scan bare superseded doc: %w", err)
+		}
+		if err := json.Unmarshal([]byte(unexplainedJSON), &gap.Unexplained); err != nil {
+			return nil, nil, fmt.Errorf("decode unexplained anchors of doc %d: %w", d.ID, err)
+		}
+		gap.Doc = d.ID
+		docs = append(docs, *d)
+		gaps = append(gaps, gap)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("list bare superseded sections: %w", err)
+	}
+	return docs, gaps, nil
+}
+
 // NeedsExecution returns the accepted plans whose task set holds at least one
 // task that is not closed. project narrows the answer; "" answers over every
 // project. "Closed" is taskClosed's notion, shared with the ready set and the
