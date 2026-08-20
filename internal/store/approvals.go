@@ -163,3 +163,103 @@ func (s *Store) GetApproval(ctx context.Context, id int64) (*Approval, error) {
 	}
 	return a, nil
 }
+
+// prEntityJoin correlates an approvals row to its pull request the same way
+// the ingest wrote it: entity_id spelled as PREntityID renders it. Kept in
+// one place so ListAwaitingApprovals and ApprovalsAwaiting cannot drift onto
+// a hand-rolled spelling.
+const prEntityJoin = `JOIN pull_requests pr
+	ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number`
+
+// AwaitingApproval is one queue row: the approval plus what a person needs
+// to act on it. PR-kind only until another entity kind joins the queue.
+type AwaitingApproval struct {
+	Approval
+	PRTitle, PRURL    string
+	PRAuthor          string // "" when unknown (pre-column row)
+	TaskID, ProjectID string
+	ProjectName       string
+	RequiredActorName *string // display_name, for "awaiting <who>"
+}
+
+// scanAwaitingApproval reads one row selected with the SELECT list
+// ListAwaitingApprovals builds: approvalColumns qualified under "a", then
+// the PR/task/project/actor columns in the order below.
+func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
+	var aa AwaitingApproval
+	var title, url, author, actorName sql.NullString
+	err := row.Scan(&aa.ID, &aa.EntityKind, &aa.EntityID, &aa.SubjectRevision,
+		&aa.RequiredRole, &aa.RequiredActor, &aa.ResolvingActor, &aa.State,
+		&aa.CreatedAt, &aa.ResolvedAt,
+		&title, &url, &author, &aa.TaskID, &aa.ProjectID, &aa.ProjectName, &actorName)
+	if err != nil {
+		return nil, err
+	}
+	aa.PRTitle = title.String
+	aa.PRURL = url.String
+	aa.PRAuthor = author.String
+	if actorName.Valid {
+		aa.RequiredActorName = &actorName.String
+	}
+	return &aa, nil
+}
+
+// ListAwaitingApprovals returns every awaiting approval joined to its PR,
+// task, and project, oldest first. The join is per entity_kind; today that
+// is one branch ('pr' via pull_requests -> tasks -> projects).
+func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+qualifyColumns(approvalColumns, "a")+`,
+		        coalesce(pr.title, ''), coalesce(pr.url, ''), coalesce(pr.author, ''),
+		        t.id, t.project_id, p.name, ra.display_name
+		 FROM approvals a
+		 `+prEntityJoin+`
+		 JOIN tasks t ON t.id = pr.task_id
+		 JOIN projects p ON p.id = t.project_id
+		 LEFT JOIN actors ra ON ra.id = a.required_actor
+		 WHERE a.state = 'awaiting'
+		 ORDER BY a.created_at, a.id`)
+	if err != nil {
+		return nil, fmt.Errorf("list awaiting approvals: %w", err)
+	}
+	return collectRows(rows, "list awaiting approvals", byValue(scanAwaitingApproval))
+}
+
+// ApprovalCount is one project's tally of awaiting approvals that name an
+// actor, for the Home page's per-project badge.
+type ApprovalCount struct {
+	ProjectID string
+	Count     int
+}
+
+// ApprovalsAwaiting counts awaiting approvals whose required_actor is
+// actorID or whose required_role names a group actorID belongs to, grouped
+// by project. actorID == "" with no groups is the open-instance subject: it
+// matches nothing, by design — this is a security-relevant default refusal,
+// not an oversight, so it never falls through to "count everything".
+func (s *Store) ApprovalsAwaiting(ctx context.Context,
+	actorID string, groups []string) ([]ApprovalCount, error) {
+	if actorID == "" && len(groups) == 0 {
+		return nil, nil
+	}
+	if groups == nil {
+		groups = []string{}
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.project_id, count(*)
+		 FROM approvals a
+		 `+prEntityJoin+`
+		 JOIN tasks t ON t.id = pr.task_id
+		 WHERE a.state = 'awaiting'
+		   AND (a.required_actor = $1 OR a.required_role = ANY($2))
+		 GROUP BY t.project_id`,
+		actorID, groups)
+	if err != nil {
+		return nil, fmt.Errorf("approvals awaiting for %s: %w", actorID, err)
+	}
+	return collectRows(rows, "approvals awaiting", func(r rowScanner) (ApprovalCount, error) {
+		var c ApprovalCount
+		err := r.Scan(&c.ProjectID, &c.Count)
+		return c, err
+	})
+}
