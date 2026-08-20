@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -40,6 +41,19 @@ func Markdown(w io.Writer, body string) {
 		return
 	}
 	fmt.Fprintf(w, "%s\n", strings.TrimRight(out, "\n"))
+}
+
+// blobRef matches a root-relative blob destination in a markdown body.
+var blobRef = regexp.MustCompile(`\]\(/blob/([0-9a-f]{64})\)`)
+
+// MarkdownWithBase renders body, first rewriting root-relative /blob/ URLs
+// to absolute ones so they are complete and terminal-clickable. The web UI
+// resolves them itself; nothing else can.
+func MarkdownWithBase(w io.Writer, body, server string) {
+	if server != "" {
+		body = blobRef.ReplaceAllString(body, "]("+strings.TrimSuffix(server, "/")+"/blob/$1)")
+	}
+	Markdown(w, body)
 }
 
 // renderStyled renders body as ANSI-styled markdown wrapped at width. The

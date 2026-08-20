@@ -229,6 +229,18 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	if parent != nil {
 		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: parent.Title, State: parent.State}
 	}
+
+	blobs, err := s.st.ListTaskBlobs(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	resp.Blobs = make([]model.TaskBlob, 0, len(blobs))
+	for _, b := range blobs {
+		b.URL = "/blob/" + b.Hash
+		resp.Blobs = append(resp.Blobs, b)
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 

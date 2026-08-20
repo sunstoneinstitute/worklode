@@ -137,6 +137,59 @@ func TestTaskBlobAttachDetach(t *testing.T) {
 	}
 }
 
+// TestTaskBriefBlobsAreAbsolute checks GET /api/v1/tasks/{id}/brief returns
+// blob URLs absolutized against PublicURL, not the root-relative /blob/...
+// form the store and the plain task-detail/list-blobs endpoints use: an
+// agent fetching a brief is not same-origin with the server (021 §10).
+func TestTaskBriefBlobsAreAbsolute(t *testing.T) {
+	fake := blobstore.NewFake()
+	st, h, token := newTestServerWithConfig(t, api.Config{
+		WebOpen: true, BlobStoreForTest: fake, PublicURL: "https://wl.example",
+	})
+	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	up := postBlob(t, h, token, "", pngBytes)
+	var blob struct {
+		Hash string `json:"hash"`
+	}
+	json.Unmarshal(up.Body.Bytes(), &blob)
+
+	rec := doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+		"project":  "p",
+		"title":    "map flash",
+		"body":     "![shot](/blob/" + blob.Hash + ")",
+		"priority": "medium",
+		"kind":     "bug",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &created)
+
+	brief := doReq(t, h, http.MethodGet, "/api/v1/tasks/"+created.ID+"/brief?skills=false", token, nil)
+	if brief.Code != http.StatusOK {
+		t.Fatalf("brief: %d %s", brief.Code, brief.Body)
+	}
+	var got struct {
+		Blobs []struct {
+			Hash string `json:"hash"`
+			URL  string `json:"url"`
+		} `json:"blobs"`
+	}
+	json.Unmarshal(brief.Body.Bytes(), &got)
+	if len(got.Blobs) != 1 {
+		t.Fatalf("brief blobs = %+v, want 1", got.Blobs)
+	}
+	if want := "https://wl.example/blob/" + blob.Hash; got.Blobs[0].URL != want {
+		t.Fatalf("brief blob URL = %q, want %q", got.Blobs[0].URL, want)
+	}
+}
+
 // TestTaskBlobRefMetrics proves attach and detach each bump
 // worklode_task_blob_refs_total under their own action label, and that the
 // unused label is still pre-initialised to zero rather than absent.

@@ -414,7 +414,7 @@ func runTaskShow(cmd *cobra.Command, arg string) error {
 		printRaw(cmd, raw)
 		return nil
 	}
-	cli.TaskDetailRender(cmd.OutOrStdout(), t)
+	cli.TaskDetailRender(cmd.OutOrStdout(), t, cfg.ServerURL)
 	return nil
 }
 
