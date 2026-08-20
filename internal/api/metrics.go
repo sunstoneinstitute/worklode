@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -144,6 +145,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	if s.st != nil {
 		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
 	}
+	// The task-body render cache owns its own instruments (WL-222), so it is
+	// built here rather than in NewServer: this is where the registerer is.
+	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.localMerges,

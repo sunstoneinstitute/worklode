@@ -29,6 +29,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
@@ -227,6 +228,12 @@ type server struct {
 	// mirrorRemoteImages. Tests only; production leaves it nil so the host
 	// allowlist and IP checks apply.
 	mirrorFetcherForTest *safefetch.Fetcher
+
+	// mdcache memoises rendered task-body HTML on the body's content hash,
+	// so a hostile body costs one render per edit rather than one per view
+	// (WL-222). Nil in every test that builds a *server directly;
+	// *mdrender.Cache is nil-safe and renders each call when nil.
+	mdcache *mdrender.Cache
 
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
