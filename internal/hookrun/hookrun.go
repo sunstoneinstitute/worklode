@@ -100,11 +100,16 @@ type Options struct {
 	Event string
 	// Args is the triggering event's own positional arguments — git's, for
 	// the hooks that take any. commit-msg's $1 is the message file.
-	Args   []string
-	Next   []string // downstream command + argv after --next; nil ⇒ no chain
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
+	Args []string
+	// Harness names the harness whose payload shape is on stdin (empty ⇒
+	// claude-code, the default for every binding installed before this field
+	// existed). Used to normalize the payload before dispatch and as the
+	// agent name's fallback; see normalizePayload and agentName.
+	Harness string
+	Next    []string // downstream command + argv after --next; nil ⇒ no chain
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Stderr  io.Writer
 
 	NewClient func() (*cli.Client, error)
 	Now       func() time.Time
@@ -258,8 +263,7 @@ func EventNames() []string {
 func Run(ctx context.Context, opts Options) int {
 	raw, _ := io.ReadAll(opts.Stdin) // tolerate read errors / empty stdin
 
-	var payload Payload
-	_ = json.Unmarshal(raw, &payload) // tolerate empty / non-JSON stdin
+	payload := normalizePayload(opts.Harness, raw)
 
 	dir := resolveDir(payload)
 	l := layoutFor(opts, dir)
@@ -336,10 +340,9 @@ func runNext(opts Options, raw []byte) int {
 	return 0
 }
 
-// agentName is the coding agent reporting this hook. Claude Code is the only
-// integration today, so it is the default; other agents set LODE_AGENT. It is
-// an env var rather than a flag because `lode hook` disables flag parsing so
-// the --next argv passes through verbatim.
+// agentName is the agent recorded on agent_sessions rows: LODE_AGENT
+// overrides, then the --harness id, then claude-code (the default for every
+// binding installed before the flag existed).
 //
 // LODE_AGENT is hand-set, so it can name a harness the backbone has no id
 // for — a typo, or one worklode does not know yet. Sending it verbatim gets
@@ -347,14 +350,19 @@ func runNext(opts Options, raw []byte) int {
 // vocabulary the agent_sessions.agent CHECK constraint holds) and, because
 // every backbone failure here is downgraded to a warning so the user's tool
 // call still succeeds, the session would just vanish. Folding it onto "other"
-// keeps the session, and the warning says which id was not recognised.
-func agentName(opts Options) string {
+// keeps the session, and the warning says which id was not recognised. A
+// --harness id needs no such fold: it names an adapter worklode ships, and
+// every adapter id is in the vocabulary.
+func (o Options) agentName() string {
 	a := os.Getenv("LODE_AGENT")
 	if a == "" {
+		if o.Harness != "" {
+			return o.Harness
+		}
 		return "claude-code"
 	}
 	if norm := model.NormalizeAgent(a); norm != a {
-		warn(opts, "LODE_AGENT=%q is not a known agent, recording the session as %q instead (known: %s)",
+		warn(o, "LODE_AGENT=%q is not a known agent, recording the session as %q instead (known: %s)",
 			a, norm, strings.Join(model.KnownAgents, ", "))
 		return norm
 	}
@@ -389,7 +397,7 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, roo
 
 	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	sess, _, err := c.TouchAgentSession(sctx, taskID, agentName(opts), "", sessionID, usage)
+	sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, usage)
 	if err != nil {
 		warn(opts, "report agent session on %s: %v", taskID, err)
 		return
@@ -423,7 +431,7 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
 	if err := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
-		Agent: agentName(opts), SessionID: sessionID, Usage: usage,
+		Agent: opts.agentName(), SessionID: sessionID, Usage: usage,
 	}); err != nil {
 		warn(opts, "end agent session on %s: %v", taskID, err)
 	}

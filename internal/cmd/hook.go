@@ -9,13 +9,16 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/hookrun"
 )
 
 // This file wires `lode hook <event>` to the logic in internal/hookrun. It is
-// deliberately thin: it splits the event from an optional `--next <cmd>
-// [arg...]` daisy-chain and hands everything else off. Flag parsing is
-// disabled so the downstream command's own flags pass through verbatim.
+// deliberately thin: it splits the argv four ways — the event, an optional
+// `--harness <id>`, the hook's own positional arguments, and an optional
+// `--next <cmd> [arg...]` daisy-chain — and hands everything else off. Flag
+// parsing is disabled so the downstream command's own flags pass through
+// verbatim.
 
 func init() {
 	rootCmd.AddCommand(newHookCmd())
@@ -23,11 +26,13 @@ func init() {
 
 func newHookCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "hook <event> [--next <cmd> [arg...]] | hook --list",
+		Use:   "hook <event> [--harness <id>] [--next <cmd> [arg...]] | hook --list",
 		Short: "Run a Worklode lifecycle hook (--list shows every event)",
 		Long: "Backbone lifecycle hooks that keep a worktree's lease alive around a coding " +
 			"session. Reads the hook payload on stdin, does nothing outside a Worklode worktree, " +
-			"and never fails the triggering event. With --next, it also runs the " +
+			"and never fails the triggering event. --harness names the harness whose payload " +
+			"shape is on stdin (default claude-code), so its fields are normalized before any " +
+			"handler runs. With --next, it also runs the " +
 			"downstream command (composing with an existing hook), replaying the payload on " +
 			"its stdin and propagating its exit code.\n\n" +
 			"`lode hook --list` prints every supported event, what `lode install` binds it to, " +
@@ -45,17 +50,18 @@ func newHookCmd() *cobra.Command {
 				printHookEvents(cmd.OutOrStdout())
 				return nil
 			}
-			event, hookArgs, next, err := parseHookArgs(args)
+			event, harnessID, hookArgs, next, err := parseHookArgs(args)
 			if err != nil {
 				return err
 			}
 			code := hookrun.Run(cmd.Context(), hookrun.Options{
-				Event:  event,
-				Args:   hookArgs,
-				Next:   next,
-				Stdin:  cmd.InOrStdin(),
-				Stdout: cmd.OutOrStdout(),
-				Stderr: cmd.ErrOrStderr(),
+				Event:   event,
+				Args:    hookArgs,
+				Harness: harnessID,
+				Next:    next,
+				Stdin:   cmd.InOrStdin(),
+				Stdout:  cmd.OutOrStdout(),
+				Stderr:  cmd.ErrOrStderr(),
 			})
 			// A non-zero code is the daisy-chained child's exit code; propagate
 			// it. Worklode's own actions never produce a non-zero code.
@@ -67,26 +73,42 @@ func newHookCmd() *cobra.Command {
 	}
 }
 
-// parseHookArgs splits `<event> [arg...] [--next cmd arg...]` three ways: the
-// event, the hook's own arguments, and the downstream argv. Everything after
-// the literal "--next" is the downstream argv, taken verbatim; everything
-// before it is the hook's own (git's positional arguments, for the hooks that
-// read them — commit-msg's message file is $1).
-func parseHookArgs(argv []string) (event string, args, next []string, err error) {
+// parseHookArgs splits `<event> [arg...] [--harness <id>] [--next cmd
+// arg...]` four ways: the event, the harness id, the hook's own arguments,
+// and the downstream argv. Everything after the literal "--next" is the
+// downstream argv, taken verbatim and never interpreted — so a --harness
+// there belongs to the downstream command, not to this hook. Before --next,
+// a "--harness <id>" pair is consumed into harnessID and does not appear in
+// args; everything else before --next is the hook's own positional arguments
+// (git's, for the hooks that read them — commit-msg's message file is $1).
+func parseHookArgs(argv []string) (event, harnessID string, args, next []string, err error) {
 	if len(argv) == 0 {
-		return "", nil, nil, errors.New("hook requires an event argument")
+		return "", "", nil, nil, errors.New("hook requires an event argument")
 	}
 	event = argv[0]
-	for i, a := range argv[1:] {
-		if a == "--next" {
-			next = argv[1+i+1:]
+	rest := argv[1:]
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case "--next":
+			next = rest[i+1:]
 			if len(next) == 0 {
-				return "", nil, nil, errors.New("--next requires a command")
+				return "", "", nil, nil, errors.New("--next requires a command")
 			}
-			return event, argv[1 : 1+i], next, nil
+			return event, harnessID, args, next, nil
+		case "--harness":
+			// A value that looks like a flag is a caller mistake — an empty
+			// shell variable, most often — not a harness id. Swallowing it
+			// would eat the "--next" that follows and drop the chain.
+			if i+1 >= len(rest) || strings.HasPrefix(rest[i+1], "--") {
+				return "", "", nil, nil, errors.New("--harness requires a harness id")
+			}
+			harnessID = rest[i+1]
+			i++
+		default:
+			args = append(args, rest[i])
 		}
 	}
-	return event, argv[1:], nil, nil
+	return event, harnessID, args, nil, nil
 }
 
 // unboundTrigger labels an event nothing installs a binding for. It is not a
@@ -95,25 +117,28 @@ func parseHookArgs(argv []string) (event string, args, next []string, err error)
 const unboundTrigger = "(unbound — callable from scripts)"
 
 // hookTriggers maps each Worklode event to what a default `lode install` binds
-// it to. Derived from claudeBindings and from gitHooks — the same lists
-// installation walks — rather than restated, so the listing cannot drift from
-// what installation actually wires up.
+// it to. Derived from the harness registry and from gitHooks — the same
+// tables installation walks — rather than restated, so the listing cannot
+// drift from what installation actually wires up. Adapters are walked in
+// harness.IDs() order so an event several harnesses bind renders the same way
+// every run.
 func hookTriggers() map[string]string {
-	claude := map[string][]string{}
-	for _, b := range claudeBindings {
-		event := strings.TrimPrefix(b.Command, lodeHookPrefix)
-		name := b.Event
-		if b.Matcher != "" {
-			name += "[" + b.Matcher + "]"
+	byEvent := map[string][]string{}
+	for _, id := range harness.IDs() {
+		h, ok := harness.Get(id)
+		if !ok {
+			continue
 		}
-		claude[event] = append(claude[event], name)
+		for event, natives := range h.Events() {
+			byEvent[string(event)] = append(byEvent[string(event)], id+" "+strings.Join(natives, ", "))
+		}
 	}
 	triggers := map[string]string{}
 	for _, h := range gitHooks {
 		triggers[h.name] = "git " + h.name
 	}
-	for event, names := range claude {
-		triggers[event] = "Claude Code " + strings.Join(names, ", ")
+	for event, entries := range byEvent {
+		triggers[event] = strings.Join(entries, "; ")
 	}
 	return triggers
 }

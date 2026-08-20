@@ -854,6 +854,55 @@ func TestWorktreeCreateAutoResumesExpiredLease(t *testing.T) {
 	}
 }
 
+// TestSessionStartNormalizesHarnessPayload drives session-start with
+// Harness: "codex" and a camelCase payload (no cwd/session_id keys at all)
+// against a worktree whose lease has expired, and asserts it re-acquires the
+// lease and touches the session exactly as the Claude Code shape does — spec
+// 024 acceptance 3: same behaviour, same backbone rows, different payload on
+// stdin.
+func TestSessionStartNormalizesHarnessPayload(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Codex resume")
+	expireLease(t, st, taskID)
+
+	raw := []byte(fmt.Sprintf(`{"cwd":%q,"sessionId":"s9"}`, wtDir))
+	var outBuf, errBuf bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event:   "session-start",
+		Harness: "codex",
+		Stdin:   bytes.NewReader(raw),
+		Stdout:  &outBuf,
+		Stderr:  &errBuf,
+	})
+	if code != 0 {
+		t.Fatalf("session-start exit code = %d, want 0 (stderr: %s)", code, errBuf.String())
+	}
+	if !rec.hitAny("/claim") {
+		t.Fatalf("claim endpoint was not hit for auto-resume; paths: %v", rec.list())
+	}
+
+	after, _, err := c.GetTask(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("get task after auto-resume: %v", err)
+	}
+	if after.State != "in_progress" || after.Lease == nil {
+		t.Fatalf("task after auto-resume = state %q lease %+v, want in_progress/non-nil", after.State, after.Lease)
+	}
+
+	lease, err := st.ActiveLease(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	sess, err := st.AgentSession(context.Background(), lease.ID, "codex", "s9")
+	if err != nil {
+		t.Fatalf("agent session: %v", err)
+	}
+	if sess.EndedAt != nil {
+		t.Fatal("session should still be open")
+	}
+}
+
 func TestSessionMarkerHeartbeat(t *testing.T) {
 	root := initGitRepo(t)
 	base := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)

@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -292,7 +293,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: stamp task id in worktree git config: %v\n", err)
 	}
 
-	if err := propagateClaudeHooksToWorktree(root, dir); err != nil {
+	if err := (harness.ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: mirror Claude Code hooks into worktree: %v\n", err)
 	}
 
