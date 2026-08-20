@@ -1,17 +1,20 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -51,6 +54,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskBriefCmd(),
 		newTaskCostCmd(),
 		newTaskSkillsCmd(),
+		newTaskAttachCmd(),
+		newTaskDetachCmd(),
 	)
 	return cmd
 }
@@ -1061,4 +1066,120 @@ func newTaskDecomposeCmd() *cobra.Command {
 		`child title (repeatable; one per child, e.g. --into "A" --into "B" --into "C")`)
 	cmd.MarkFlagRequired("into")
 	return cmd
+}
+
+// newTaskAttachCmd is `lode task attach`: upload one or more files and
+// reference them from a task. Images and videos (blobref.Embeddable) are
+// appended to the body as markdown so they render inline; everything else is
+// attached only (spec 021 §3).
+func newTaskAttachCmd() *cobra.Command {
+	var noEmbed bool
+	cmd := &cobra.Command{
+		Use:   "attach <task-id> <file>...",
+		Short: "Upload files and attach them to a task",
+		Long: "Images and videos are appended to the task body as markdown so they render\n" +
+			"inline; every other type is attached only. Use - to read one blob from stdin,\n" +
+			"which pairs with a clipboard tool: pngpaste - | lode task attach WL-42 -",
+		Args: cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(ctx, args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+
+			task, _, err := c.GetTask(ctx, id)
+			if err != nil {
+				return err
+			}
+			body := task.Body
+			var appended bool
+
+			for _, path := range args[1:] {
+				var blob model.BlobResponse
+				name := filepath.Base(path)
+				if path == "-" {
+					data, err := io.ReadAll(cmd.InOrStdin())
+					if err != nil {
+						return fmt.Errorf("read stdin: %w", err)
+					}
+					if len(data) == 0 {
+						return fmt.Errorf("stdin is empty")
+					}
+					name = "pasted"
+					blob, err = c.UploadBlob(ctx, bytes.NewReader(data), int64(len(data)))
+					if err != nil {
+						return err
+					}
+				} else {
+					blob, err = c.UploadFile(ctx, path)
+					if err != nil {
+						return err
+					}
+				}
+
+				if !noEmbed && blobref.Embeddable(blob.MediaType) {
+					if body != "" && !strings.HasSuffix(body, "\n") {
+						body += "\n"
+					}
+					body += fmt.Sprintf("\n![%s](%s)\n", name, blob.URL)
+					appended = true
+					fmt.Fprintf(cmd.OutOrStdout(), "embedded %s (%s)\n", name, blob.Hash[:12])
+					continue
+				}
+				if err := c.AttachBlob(ctx, id, blob.Hash, name); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "attached %s (%s)\n", name, blob.Hash[:12])
+			}
+
+			if appended {
+				if _, _, err := c.EditTask(ctx, id, model.EditTaskInput{Body: &body}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&noEmbed, "no-embed", false,
+		"attach images without appending them to the body")
+	return cmd
+}
+
+// newTaskDetachCmd is `lode task detach`: clear an explicit reference from a
+// task to an already-uploaded blob. A row the body still embeds survives
+// with only its declared half cleared (spec 021 §3), so a still-embedded
+// hash gets a warning rather than a silent no-op.
+func newTaskDetachCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "detach <task-id> <hash>",
+		Short: "Remove an attached blob from a task",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			refs, err := c.ListTaskBlobs(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			for _, r := range refs {
+				if r.Hash == args[1] && r.Embedded {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"warning: the body still embeds %s; it stays until the body stops citing it\n",
+						args[1][:12])
+				}
+			}
+			return c.DetachBlob(cmd.Context(), id, args[1])
+		},
+	}
 }

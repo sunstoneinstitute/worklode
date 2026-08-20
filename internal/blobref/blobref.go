@@ -79,6 +79,32 @@ func LocalImages(body string) []string {
 	return out
 }
 
+// embeddableTypes render in place in the web UI and terminal-adjacent
+// surfaces. Everything else is a download (spec 021 §5). Nothing is rejected
+// on type: a core dump is a legitimate attachment, and an allowlist buys
+// nothing once non-embeddable types can only be served as attachments.
+var embeddableTypes = map[string]bool{
+	"image/png":     true,
+	"image/jpeg":    true,
+	"image/gif":     true,
+	"image/webp":    true,
+	"image/svg+xml": true,
+	"video/mp4":     true,
+	"video/webm":    true,
+}
+
+// Embeddable reports whether a media type renders inline. Sniffed types can
+// carry parameters (text/plain; charset=utf-8), so compare the bare type.
+// Shared by the server (serveBlob's Content-Disposition) and `lode task
+// attach` (whether to embed a freshly uploaded blob in the body), so both
+// read one copy of the list.
+func Embeddable(mediaType string) bool {
+	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+		mediaType = strings.TrimSpace(mediaType[:i])
+	}
+	return embeddableTypes[mediaType]
+}
+
 // ReplaceDestination rewrites image destinations according to mapping,
 // leaving unmapped destinations and every other token untouched. It edits
 // the source text by byte offset rather than re-rendering the AST, so

@@ -14,9 +14,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -161,29 +161,6 @@ func (f writerFunc) Write(p []byte) (int, error) {
 // comfortably inside it.
 const presignTTL = 5 * time.Minute
 
-// embeddableTypes render in place in the web UI and terminal-adjacent
-// surfaces. Everything else is a download (spec 021 §5). Nothing is rejected
-// on type: a core dump is a legitimate attachment, and an allowlist buys
-// nothing once non-embeddable types can only be served as attachments.
-var embeddableTypes = map[string]bool{
-	"image/png":     true,
-	"image/jpeg":    true,
-	"image/gif":     true,
-	"image/webp":    true,
-	"image/svg+xml": true,
-	"video/mp4":     true,
-	"video/webm":    true,
-}
-
-// embeddable reports whether a media type renders inline. Sniffed types can
-// carry parameters (text/plain; charset=utf-8), so compare the bare type.
-func embeddable(mediaType string) bool {
-	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
-		mediaType = strings.TrimSpace(mediaType[:i])
-	}
-	return embeddableTypes[mediaType]
-}
-
 // serveBlob handles GET /blob/{hash}: the caller is already authenticated and
 // authorized by eitherGuard, so this redirects to a short-lived presigned
 // URL. This is the GitHub and GitLab pattern -- the durable identifier lives
@@ -209,7 +186,7 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	disposition := "attachment"
-	if embeddable(b.MediaType) {
+	if blobref.Embeddable(b.MediaType) {
 		disposition = "inline"
 	}
 

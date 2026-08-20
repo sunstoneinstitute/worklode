@@ -68,3 +68,20 @@ func TestReplaceDestination(t *testing.T) {
 		t.Fatalf("both occurrences should be replaced:\n%s", got)
 	}
 }
+
+func TestEmbeddable(t *testing.T) {
+	cases := []struct {
+		mediaType string
+		want      bool
+	}{
+		{"image/png", true},
+		{"video/mp4", true},
+		{"text/plain; charset=utf-8", false},
+		{"image/png; charset=binary", true},
+	}
+	for _, c := range cases {
+		if got := blobref.Embeddable(c.mediaType); got != c.want {
+			t.Errorf("Embeddable(%q) = %v, want %v", c.mediaType, got, c.want)
+		}
+	}
+}
