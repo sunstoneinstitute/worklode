@@ -68,6 +68,7 @@ go test -trimpath ./internal/store -run TestClaim   # single test
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
 ./scripts/inlinespec.py             # regenerate docs/specs/inlined/
+./scripts/nsgen.py                  # regenerate internal/ns/gen.go from ns/concept.ttl
 ```
 
 Store tests need a reachable Postgres with **pgvector**

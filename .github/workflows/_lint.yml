@@ -73,6 +73,11 @@ jobs:
             echo "$out" >&2
           fi
           exit "${status:-0}"
+      # internal/ns/gen.go is generated from ns/concept.ttl, so a kind or a
+      # status added to the Turtle without a regenerate fails here. Stdlib
+      # only, so nothing to install.
+      - name: ns codegen drift
+        run: ./scripts/nsgen.py --check
       # Checks rather than rewrites here: CI has nothing to stage. The
       # pre-commit hook is the primary gate (docs-only PRs skip this workflow);
       # this catches a mixed PR whose author committed without hooks installed.
