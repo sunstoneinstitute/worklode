@@ -9,6 +9,7 @@ package api_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1006,5 +1007,148 @@ func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
 	resp := listDocs(t, h, token, "needs_planning=true&kind=spec&status=accepted&project=proj")
 	if len(resp.Docs) != 1 || resp.Docs[0].ID != spec.ID {
 		t.Fatalf("docs = %+v, want the spec alone", resp.Docs)
+	}
+}
+
+// eventPayload reads one event's decoded payload object out of the /api/v1/events
+// projection, failing the test if it carries none.
+func eventPayload(t *testing.T, ev map[string]any) map[string]any {
+	t.Helper()
+	p, ok := ev["payload"].(map[string]any)
+	if !ok {
+		t.Fatalf("event %v carries no payload object", ev)
+	}
+	return p
+}
+
+// checkPayloadProps fails for every property whose value is not what 025 §15.3
+// mandates, naming all of them rather than stopping at the first.
+func checkPayloadProps(t *testing.T, payload map[string]any, want map[string]string) {
+	t.Helper()
+	for k, v := range want {
+		if got := payload[k]; got != v {
+			t.Errorf("payload[%q] = %v, want %q", k, got, v)
+		}
+	}
+}
+
+// eventsOfType reads GET /api/v1/events?type=... without polling: for a type
+// whose rows this test has already observed, the horizon has passed them, so a
+// short read is a real absence.
+func eventsOfType(t *testing.T, h http.Handler, token, typ string) []any {
+	t.Helper()
+	rr := doReq(t, h, "GET", "/api/v1/events?type="+typ, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/events?type=%s status = %d, body %s", typ, rr.Code, rr.Body.String())
+	}
+	events, _ := decodeMap(t, rr)["events"].([]any)
+	return events
+}
+
+// TestAcceptDocEmitsTypedEvent: acceptance is one of the two events the
+// doc-lifecycle watcher consumes, so it is recorded in 025 §15.3's typed
+// JSON-LD form — wl:DocumentAccepted, with the deterministic external id that
+// makes a retry idempotent at the log — and not as the dotted doc.accepted the
+// other document verbs still write.
+func TestAcceptDocEmitsTypedEvent(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
+	})
+	if rr := doReq(t, h, "POST", docPath(spec.ID, "/accept"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("accept status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	events := pollEvents(t, h, token, "?type=wl:DocumentAccepted", 1)
+	if len(events) != 1 {
+		t.Fatalf("got %d wl:DocumentAccepted events, want exactly 1", len(events))
+	}
+	ev, _ := events[0].(map[string]any)
+	iri := store.DocIRI(spec)
+	wantExtID := "wl:DocumentAccepted:" + iri + ":" + strconv.Itoa(spec.Version)
+	if ev["external_id"] != wantExtID {
+		t.Errorf("external_id = %v, want %q", ev["external_id"], wantExtID)
+	}
+	payload := eventPayload(t, ev)
+	id, _ := ev["id"].(float64)
+	checkPayloadProps(t, payload, map[string]string{
+		"@type":                  "wl:DocumentAccepted",
+		"@id":                    fmt.Sprintf("wlid:event/%d", int64(id)),
+		"wl:subject":             iri,
+		"wl:fromStatus":          "wlc:draft",
+		"wl:toStatus":            "wlc:accepted",
+		"prov:wasAssociatedWith": "wlid:actor/alice",
+	})
+
+	if dotted := eventsOfType(t, h, token, "doc.accepted"); len(dotted) != 0 {
+		t.Errorf("doc.accepted events = %v, want none: accept is typed now", dotted)
+	}
+}
+
+// TestSubmitDoc walks POST /api/v1/docs/{id}/submit, 025 §15.4's "submission is
+// an event, not a status": the log gains a wl:DocumentSubmitted row and the
+// document itself does not move at all.
+func TestSubmitDoc(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
+	})
+
+	rr := doReq(t, h, "POST", docPath(spec.ID, "/submit"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("submit status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var submitted model.Doc
+	decodeInto(t, rr, &submitted)
+	if submitted.Status != "draft" {
+		t.Errorf("response status = %q, want draft: submission moves no column", submitted.Status)
+	}
+
+	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	var after model.DocDetail
+	decodeInto(t, rr, &after)
+	if after.Status != spec.Status || !after.UpdatedAt.Equal(spec.UpdatedAt) {
+		t.Errorf("doc after submit = %q/%v, want it unchanged at %q/%v",
+			after.Status, after.UpdatedAt, spec.Status, spec.UpdatedAt)
+	}
+
+	events := pollEvents(t, h, token, "?type=wl:DocumentSubmitted", 1)
+	if len(events) != 1 {
+		t.Fatalf("got %d wl:DocumentSubmitted events, want exactly 1", len(events))
+	}
+	ev, _ := events[0].(map[string]any)
+	iri := store.DocIRI(spec)
+	wantExtID := "wl:DocumentSubmitted:" + iri + ":" + strconv.Itoa(spec.Version)
+	if ev["external_id"] != wantExtID {
+		t.Errorf("external_id = %v, want %q", ev["external_id"], wantExtID)
+	}
+	payload := eventPayload(t, ev)
+	id, _ := ev["id"].(float64)
+	checkPayloadProps(t, payload, map[string]string{
+		"@type":                  "wl:DocumentSubmitted",
+		"@id":                    fmt.Sprintf("wlid:event/%d", int64(id)),
+		"wl:subject":             iri,
+		"prov:wasAssociatedWith": "wlid:actor/alice",
+	})
+
+	// Submitting the same version twice is one fact: the deterministic
+	// external id collapses the retry at the log, and the caller still gets a
+	// 200 rather than a conflict about a document that is exactly where it was.
+	if rr := doReq(t, h, "POST", docPath(spec.ID, "/submit"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("second submit status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if again := eventsOfType(t, h, token, "wl:DocumentSubmitted"); len(again) != 1 {
+		t.Errorf("wl:DocumentSubmitted events after a second submit = %d, want 1", len(again))
+	}
+
+	if rr := doReq(t, h, "POST", "/api/v1/docs/4711/submit", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown id status = %d, want 404", rr.Code)
+	}
+	if rr := doReq(t, h, "POST", "/api/v1/docs/025-x/submit", token, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("non-numeric id status = %d, want 400", rr.Code)
 	}
 }

@@ -1602,6 +1602,25 @@ func TestDocPlanTasksMintedMetricNilSafe(t *testing.T) {
 	m.planTasksMinted(3)
 }
 
+// TestRecordDocOpMetric: RecordDocOp is the exported way into
+// worklode_doc_operations_total for the handlers that record their event
+// through eventbus.Emit instead of RecordDocEvent (025 §15.3), so accept and
+// submit stay counted with every other document verb.
+func TestRecordDocOpMetric(t *testing.T) {
+	s := openDocStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+
+	s.RecordDocOp("submit", nil)
+	s.RecordDocOp("accept", errors.New("boom"))
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("submit", "ok")); got != 1 {
+		t.Errorf(`docOps{op=submit,outcome=ok} = %v, want 1`, got)
+	}
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("accept", "error")); got != 1 {
+		t.Errorf(`docOps{op=accept,outcome=error} = %v, want 1`, got)
+	}
+}
+
 // TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips an
 // accepted target in the same transaction (025 §3.3), and leaves a draft one
 // alone — 025 §7's ladder runs draft -> accepted -> superseded, and a draft

@@ -1086,6 +1086,14 @@ func (c *Client) ReplaceDocEdges(ctx context.Context, id int64) (model.DocDetail
 	return d, raw, nil
 }
 
+// SubmitDoc calls POST /api/v1/docs/{id}/submit: the document enters review.
+// Submission is an event, not a status (025 §15.4), so nothing about the
+// document changes and the response is the document as it stands. Submitting
+// the same version twice records one event and still answers 200.
+func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/submit"), nil)
+}
+
 // AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's assignee
 // may accept it (025 §7); anyone else gets 403. The response also carries the
 // tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
