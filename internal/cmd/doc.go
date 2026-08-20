@@ -139,7 +139,7 @@ func newDocNewCmd() *cobra.Command {
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind, status string
-	var needsPlanning, needsExecution bool
+	var needsPlanning, needsExecution, bareSuperseded bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List documents: specs, ADRs, and plans",
@@ -147,7 +147,7 @@ func newDocListCmd() *cobra.Command {
 			// Ahead of the client: a contradicting selector is an error
 			// whatever the server would say, and refusing it here costs no
 			// round trip.
-			if err := checkDocSelectors(kind, status, needsPlanning, needsExecution); err != nil {
+			if err := checkDocSelectors(kind, status, needsPlanning, needsExecution, bareSuperseded); err != nil {
 				return err
 			}
 			c, cfg, err := newAPIClientWithConfig()
@@ -160,7 +160,7 @@ func newDocListCmd() *cobra.Command {
 			}
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
 				Project: sc.Project, Kind: kind, Status: status,
-				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution,
+				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
 			})
 			if err != nil {
 				return err
@@ -169,11 +169,14 @@ func newDocListCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			if needsPlanning {
+			switch {
+			case needsPlanning:
 				cli.DocPlanningTable(cmd.OutOrStdout(), resp.Docs, resp.PlanningGaps)
-				return nil
+			case bareSuperseded:
+				cli.DocSupersessionTable(cmd.OutOrStdout(), resp.Docs, resp.SupersessionGaps)
+			default:
+				cli.DocTable(cmd.OutOrStdout(), resp.Docs)
 			}
-			cli.DocTable(cmd.OutOrStdout(), resp.Docs)
 			return nil
 		},
 	}
@@ -184,33 +187,43 @@ func newDocListCmd() *cobra.Command {
 		"accepted specs with a section no accepted plan covers")
 	cmd.Flags().BoolVar(&needsExecution, "needs-execution", false,
 		"accepted plans whose task set has an open task")
-	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution")
+	cmd.Flags().BoolVar(&bareSuperseded, "bare-superseded", false,
+		"superseded documents with a section nothing replaces")
+	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded")
 	return cmd
 }
 
 // checkDocSelectors refuses a --kind or --status that contradicts one of the
-// derived selectors (026 §2.1): each implies a kind and a status, so the
-// conjunction would always be empty and an empty result would read as
-// "nothing to plan". Restating the implied value is fine — only a
-// contradiction is refused. The server enforces the same rule for clients
-// that are not this one; the mutual exclusion of the two selectors themselves
-// is cobra's, declared on the command.
-func checkDocSelectors(kind, status string, needsPlanning, needsExecution bool) error {
+// derived selectors (026 §2.1, §2.4): each implies a status, and
+// needs-planning/needs-execution each imply a single kind while
+// bare-superseded implies one of two (spec or adr — a plan carries no
+// sections, 025 §6 rule 2). A contradicting restatement would make the
+// conjunction always empty, which would read as "nothing to plan"; only a
+// contradiction is refused, restating the implied value is fine. The server
+// enforces the same rule for clients that are not this one; the mutual
+// exclusion of the three selectors themselves is cobra's, declared on the
+// command.
+func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareSuperseded bool) error {
 	for _, c := range []struct {
-		on         bool
-		flag, kind string
+		on       bool
+		flag     string
+		status   string
+		kindOK   func(string) bool
+		kindWant string
 	}{
-		{needsPlanning, "--needs-planning", "spec"},
-		{needsExecution, "--needs-execution", "plan"},
+		{needsPlanning, "--needs-planning", "accepted", func(k string) bool { return k == "spec" }, "spec"},
+		{needsExecution, "--needs-execution", "accepted", func(k string) bool { return k == "plan" }, "plan"},
+		{bareSuperseded, "--bare-superseded", "superseded",
+			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
 	} {
 		if !c.on {
 			continue
 		}
-		if kind != "" && kind != c.kind {
-			return fmt.Errorf("%s implies --kind %s; drop --kind or pass %s", c.flag, c.kind, c.kind)
+		if kind != "" && !c.kindOK(kind) {
+			return fmt.Errorf("%s implies --kind %s; drop --kind or pass %s", c.flag, c.kindWant, c.kindWant)
 		}
-		if status != "" && status != "accepted" {
-			return fmt.Errorf("%s implies --status accepted; drop --status or pass accepted", c.flag)
+		if status != "" && status != c.status {
+			return fmt.Errorf("%s implies --status %s; drop --status or pass %s", c.flag, c.status, c.status)
 		}
 	}
 	return nil
