@@ -9,9 +9,6 @@ import (
 	"strings"
 	"text/tabwriter"
 	"time"
-	"unicode/utf8"
-
-	"golang.org/x/term"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -20,6 +17,23 @@ import (
 // in this package: 2 spaces of padding between columns.
 func newTabwriter(w io.Writer) *tabwriter.Writer {
 	return tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+}
+
+// dash renders an unset string as the "-" every view uses for "not set".
+func dash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+// docNumber renders a document's number, or "-" for a plan, which carries
+// none (025 §14.3).
+func docNumber(n int) string {
+	if n == 0 {
+		return "-"
+	}
+	return strconv.Itoa(n)
 }
 
 // localTime formats t in the local zone, or "-" for the zero value.
@@ -122,11 +136,7 @@ func TaskTable(w io.Writer, tasks []model.Task) {
 		titleColumn("TITLE"),
 	)
 	for _, t := range tasks {
-		assignee := t.Assignee
-		if assignee == "" {
-			assignee = "-"
-		}
-		tbl.add(t.ID, t.Priority, t.Kind, t.State, t.Project, assignee, t.Title)
+		tbl.add(t.ID, t.Priority, t.Kind, t.State, t.Project, dash(t.Assignee), t.Title)
 	}
 	tbl.flush(w)
 }
@@ -140,11 +150,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail) {
 	fmt.Fprintf(w, "  priority: %s\n", t.Priority)
 	fmt.Fprintf(w, "  kind:     %s\n", t.Kind)
 	fmt.Fprintf(w, "  state:    %s\n", t.State)
-	assignee := t.Assignee
-	if assignee == "" {
-		assignee = "-"
-	}
-	fmt.Fprintf(w, "  assignee: %s\n", assignee)
+	fmt.Fprintf(w, "  assignee: %s\n", dash(t.Assignee))
 	if t.Hierarchy.Parent != nil {
 		fmt.Fprintf(w, "  parent:   %s  %s (%s)\n",
 			t.Hierarchy.Parent.ID, t.Hierarchy.Parent.Title, t.Hierarchy.Parent.State)
@@ -205,11 +211,8 @@ func DocTable(w io.Writer, docs []model.Doc) {
 		column{header: "VERSION"},
 	)
 	for _, d := range docs {
-		number := "-"
-		if d.Number != 0 {
-			number = strconv.Itoa(d.Number)
-		}
-		tbl.add(strconv.FormatInt(d.ID, 10), d.Kind, number, d.Slug, d.Title, d.Status, strconv.Itoa(d.Version))
+		tbl.add(strconv.FormatInt(d.ID, 10), d.Kind, docNumber(d.Number), d.Slug, d.Title,
+			d.Status, strconv.Itoa(d.Version))
 	}
 	tbl.flush(w)
 }
@@ -225,29 +228,14 @@ func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap
 	for _, g := range gaps {
 		byDoc[g.Doc] = g
 	}
-	tbl := newTable(
-		column{header: "ID"},
-		column{header: "NUMBER"},
-		column{header: "SLUG"},
-		titleColumn("TITLE"),
-		column{header: "GAPS"},
-		column{header: "ANCHORS"},
-	)
-	for _, d := range docs {
+	docGapTable(w, "GAPS", "ANCHORS", docs, func(d model.Doc) (int, []string) {
 		g := byDoc[d.ID]
-		number := "-"
-		if d.Number != 0 {
-			number = strconv.Itoa(d.Number)
-		}
 		anchors := make([]string, len(g.Gaps))
 		for i, s := range g.Gaps {
 			anchors[i] = fmt.Sprintf("%s(%s)", s.Anchor, s.Coverage)
 		}
-		tbl.add(strconv.FormatInt(d.ID, 10), number, d.Slug, d.Title,
-			fmt.Sprintf("%d/%d", len(g.Gaps), g.Sections),
-			strings.Join(anchors, " "))
-	}
-	tbl.flush(w)
+		return g.Sections, anchors
+	})
 }
 
 // DocSupersessionTable prints the `lode doc list --bare-superseded` view: one
@@ -259,23 +247,31 @@ func DocSupersessionTable(w io.Writer, docs []model.Doc, gaps []model.DocSuperse
 	for _, g := range gaps {
 		byDoc[g.Doc] = g
 	}
+	docGapTable(w, "BARE", "UNEXPLAINED", docs, func(d model.Doc) (int, []string) {
+		g := byDoc[d.ID]
+		return g.Sections, g.Unexplained
+	})
+}
+
+// docGapTable is the shape both gap views share: the document's identity, the
+// undischarged-over-total ratio, and the anchors behind it. gapsOf returns the
+// document's section total and its outstanding anchors; a document with no gap
+// row renders as no gap rather than misaligning the table.
+func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc,
+	gapsOf func(model.Doc) (sections int, anchors []string)) {
 	tbl := newTable(
 		column{header: "ID"},
 		column{header: "NUMBER"},
 		column{header: "SLUG"},
 		titleColumn("TITLE"),
-		column{header: "BARE"},
-		column{header: "UNEXPLAINED"},
+		column{header: ratioHeader},
+		column{header: anchorHeader},
 	)
 	for _, d := range docs {
-		g := byDoc[d.ID]
-		number := "-"
-		if d.Number != 0 {
-			number = strconv.Itoa(d.Number)
-		}
-		tbl.add(strconv.FormatInt(d.ID, 10), number, d.Slug, d.Title,
-			fmt.Sprintf("%d/%d", len(g.Unexplained), g.Sections),
-			strings.Join(g.Unexplained, " "))
+		sections, anchors := gapsOf(d)
+		tbl.add(strconv.FormatInt(d.ID, 10), docNumber(d.Number), d.Slug, d.Title,
+			fmt.Sprintf("%d/%d", len(anchors), sections),
+			strings.Join(anchors, " "))
 	}
 	tbl.flush(w)
 }
@@ -295,11 +291,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if d.Issued != "" {
 		fmt.Fprintf(w, "  issued:   %s\n", d.Issued)
 	}
-	assignee := d.Assignee
-	if assignee == "" {
-		assignee = "-"
-	}
-	fmt.Fprintf(w, "  assignee: %s\n", assignee)
+	fmt.Fprintf(w, "  assignee: %s\n", dash(d.Assignee))
 	if d.Revision != nil {
 		fmt.Fprintf(w, "  open revision: by %s at %s\n", d.Revision.CreatedBy, localTime(d.Revision.CreatedAt))
 	}
@@ -388,7 +380,7 @@ func SkillTable(w io.Writer, skills []model.Skill) {
 func skillTable(w io.Writer, skills []model.Skill, width int) {
 	name := len("NAME")
 	for _, sk := range skills {
-		name = max(name, utf8.RuneCountInString(sk.Name))
+		name = max(name, displayWidth(sk.Name))
 	}
 	name = min(name, maxSkillNameWidth)
 	desc := max(width-name-2, minSkillDescWidth)
@@ -401,7 +393,7 @@ func skillTable(w io.Writer, skills []model.Skill, width int) {
 		}
 		// A name past the cap would push its own description right and break
 		// the column; give it the row to itself instead.
-		if utf8.RuneCountInString(sk.Name) > name {
+		if displayWidth(sk.Name) > name {
 			fmt.Fprintln(w, sk.Name)
 		} else {
 			fmt.Fprintf(w, "%-*s  %s\n", name, sk.Name, lines[0])
@@ -422,7 +414,7 @@ func wrapSkillDesc(s string, width int) []string {
 	var lines []string
 	var cur, curWidth = "", 0
 	for _, word := range strings.Fields(s) {
-		n := utf8.RuneCountInString(word)
+		n := displayWidth(word)
 		switch {
 		case cur == "":
 			cur, curWidth = word, n
@@ -444,12 +436,8 @@ func wrapSkillDesc(s string, width int) []string {
 // when w is one, else a conventional 80 so piped and captured output stays
 // stable.
 func tableWidth(w io.Writer) int {
-	fd, isTTY := terminalFd(w)
-	if !isTTY {
-		return defaultTableWidth
-	}
-	width, _, err := term.GetSize(fd)
-	if err != nil || width <= 0 {
+	width, isTTY := termWidth(w)
+	if !isTTY || width <= 0 {
 		return defaultTableWidth
 	}
 	return max(width, minTableWidth)
@@ -469,10 +457,22 @@ func BoardRender(w io.Writer, board model.BoardResponse) {
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintf(w, "== %s (%s) ==\n", p.Name, p.ID)
-		boardSection(w, "IN PROGRESS", p.InProgress)
-		boardSection(w, "IN REVIEW", p.InReview)
-		boardSection(w, "BLOCKED", p.Blocked)
-		boardSection(w, "READY", p.Ready)
+		// Blocked and ready tasks are never claimed, so a HOLDER column would
+		// be all dashes; show the task kind there instead. In progress tasks
+		// get both: HOLDER to see who's on it, KIND to see what it is.
+		for _, b := range []struct {
+			label  string
+			tasks  []model.BoardTask
+			holder bool
+			kind   bool
+		}{
+			{"IN PROGRESS", p.InProgress, true, true},
+			{"IN REVIEW", p.InReview, true, false},
+			{"BLOCKED", p.Blocked, false, true},
+			{"READY", p.Ready, false, true},
+		} {
+			boardSection(w, b.label, b.tasks, b.holder, b.kind)
+		}
 	}
 	if board.RecentFailures != nil {
 		fmt.Fprintln(w)
@@ -495,7 +495,7 @@ func BoardRender(w io.Writer, board model.BoardResponse) {
 	}
 }
 
-func boardSection(w io.Writer, label string, tasks []model.BoardTask) {
+func boardSection(w io.Writer, label string, tasks []model.BoardTask, hasHolders, hasKind bool) {
 	if len(tasks) == 0 {
 		return
 	}
@@ -506,29 +506,28 @@ func boardSection(w io.Writer, label string, tasks []model.BoardTask) {
 	// A child sorts at its parent's position in the incoming slice (rank 1),
 	// anything else at its own (rank 0), so grouping keeps a parent and its
 	// children adjacent without disturbing the server's priority ordering. A
-	// child whose parent is in another bucket keeps its own position.
-	anchor := func(t model.BoardTask) (int, int) {
-		if p, ok := pos[t.Parent]; ok {
-			return p, 1
-		}
-		return pos[t.ID], 0
+	// child whose parent is in another bucket keeps its own position. The key
+	// is computed once per row rather than per comparison.
+	type ranked struct {
+		task   model.BoardTask
+		anchor int
+		rank   int
 	}
-	rows := make([]model.BoardTask, len(tasks))
-	copy(rows, tasks)
-	sort.SliceStable(rows, func(i, j int) bool {
-		ai, ri := anchor(rows[i])
-		aj, rj := anchor(rows[j])
-		if ai != aj {
-			return ai < aj
+	rows := make([]ranked, len(tasks))
+	for i, t := range tasks {
+		r := ranked{task: t, anchor: pos[t.ID]}
+		if p, ok := pos[t.Parent]; ok {
+			r.anchor, r.rank = p, 1
 		}
-		return ri < rj
+		rows[i] = r
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].anchor != rows[j].anchor {
+			return rows[i].anchor < rows[j].anchor
+		}
+		return rows[i].rank < rows[j].rank
 	})
 
-	// Blocked and ready tasks are never claimed, so a HOLDER column would be
-	// all dashes; show the task kind there instead. In progress tasks get
-	// both: HOLDER to see who's on it, KIND to see what it is.
-	hasHolders := label == "IN PROGRESS" || label == "IN REVIEW"
-	hasKind := label == "IN PROGRESS" || !hasHolders
 	fmt.Fprintf(w, "\n%s\n", label)
 	cols := []column{
 		{header: "ID"},
@@ -543,9 +542,10 @@ func boardSection(w io.Writer, label string, tasks []model.BoardTask) {
 	}
 	tbl := newTable(cols...)
 	now := time.Now()
-	for _, t := range rows {
+	for _, r := range rows {
+		t := r.task
 		id := t.ID
-		if _, ok := pos[t.Parent]; ok {
+		if r.rank == 1 {
 			id = "└ " + id
 		}
 		row := []string{id, t.Priority, t.Title}
