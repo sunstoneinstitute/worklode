@@ -2,9 +2,11 @@ package hooks_test
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -118,6 +120,107 @@ func TestReplayProvenance(t *testing.T) {
 	last := entries[len(entries)-1]
 	if last.EventID != originalID {
 		t.Fatalf("transition event_id = %d; want the original event %d", last.EventID, originalID)
+	}
+}
+
+// TestReplayDoesNotRegressNewerFacts is the WL-198 shape: a live delivery
+// lands BETWEEN the backlogged .ignored event and the replay, so the replay
+// re-applies a payload older than the facts already stored. The backlogged
+// event is still replayed — correctness comes from the non-regressing upsert
+// guard (see store.UpsertPR), not from excluding the event.
+func TestReplayDoesNotRegressNewerFacts(t *testing.T) {
+	e := newUnmappedEnv(t)
+
+	const (
+		t1 = "2026-07-19T10:00:00Z" // the backlogged "opened"
+		t2 = "2026-07-19T12:00:00Z" // the live "closed as merged"
+	)
+
+	// Before the repo is mapped: pull_request.opened is recorded .ignored,
+	// its apply never runs.
+	rr := deliverBody(t, e.h, "pull_request", "d-open", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"pull_request": {
+			"number": 42, "title": "Fix crash on load", "state": "open", "merged": false,
+			"body": "Fixes the crash.",
+			"html_url": "https://github.com/sunstoneinstitute/demo/pull/42",
+			"created_at": "`+t1+`", "updated_at": "`+t1+`",
+			"merge_commit_sha": null, "merged_at": null,
+			"head": {"ref": "feature/x", "sha": "abc1230000000000000000000000000000000000"}
+		}
+	}`))
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
+		t.Fatalf("backlogged delivery: %d %s", rr.Code, rr.Body.String())
+	}
+
+	mapDemoRepo(t, e)
+
+	// Now mapped: the merge for the SAME PR arrives live and applies.
+	rr = deliverBody(t, e.h, "pull_request", "d-merged", []byte(`{
+		"action": "closed",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"pull_request": {
+			"number": 42, "title": "Fix crash on load", "state": "closed", "merged": true,
+			"body": "Fixes the crash.",
+			"html_url": "https://github.com/sunstoneinstitute/demo/pull/42",
+			"created_at": "`+t1+`", "updated_at": "`+t2+`",
+			"merge_commit_sha": "def4560000000000000000000000000000000000",
+			"merged_at": "`+t2+`",
+			"head": {"ref": "feature/x", "sha": "abc1230000000000000000000000000000000000"}
+		}
+	}`))
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
+		t.Fatalf("live merge delivery: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// Precondition: without a merged row first, the assertions below would
+	// pass vacuously.
+	assertPR42Merged(t, e, "before replay", t2)
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 || res.StillUnmapped != 0 {
+		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
+	}
+
+	assertPR42Merged(t, e, "after replay", t2)
+
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-open' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("replayed event applied_at set = %d rows, want 1", n)
+	}
+}
+
+// assertPR42Merged requires the demo PR #42 row to carry the merge facts and
+// the wantUpdated timestamp (RFC3339).
+func assertPR42Merged(t *testing.T, e *env, when, wantUpdated string) {
+	t.Helper()
+	var state string
+	var mergeSHA sql.NullString
+	var mergedAt, updatedAt sql.NullTime
+	if !e.rawQueryRow(t, []any{&state, &mergeSHA, &mergedAt, &updatedAt},
+		`SELECT state, merge_sha, merged_at, updated_at FROM pull_requests
+		 WHERE repo = $1 AND number = 42`, demoRepo) {
+		t.Fatalf("%s: no pull_requests row for %s#42", when, demoRepo)
+	}
+	if state != "merged" {
+		t.Fatalf("%s: state = %q, want merged (a stale payload regressed the row)", when, state)
+	}
+	if !mergeSHA.Valid || mergeSHA.String == "" {
+		t.Fatalf("%s: merge_sha = %v, want it kept (a stale payload cleared it)", when, mergeSHA)
+	}
+	if !mergedAt.Valid {
+		t.Fatalf("%s: merged_at is NULL, want it kept (a stale payload cleared it)", when)
+	}
+	want, err := time.Parse(time.RFC3339, wantUpdated)
+	if err != nil {
+		t.Fatalf("parse %q: %v", wantUpdated, err)
+	}
+	if !updatedAt.Valid || !updatedAt.Time.Equal(want) {
+		t.Fatalf("%s: updated_at = %v, want %v (a stale payload moved the clock back)", when, updatedAt, want)
 	}
 }
 
