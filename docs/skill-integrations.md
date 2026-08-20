@@ -53,22 +53,33 @@ is about to be deleted is worse than none. The authoring path in this repo is
 `lode doc new`; §5's deliverables still stand for the vendored skills
 themselves.
 
-**What `lode` gives us.** Spec 034's sync shipped (folded into 025 by the
-corpus consolidation):
+**What `lode` gives us.** Not the git → backbone sync this brief was drafted
+against: `lode doc sync` and `POST /api/v1/docs/sync` were deleted, and 025 §16
+and §5.1 are withdrawn. What shipped instead is 025's authoring surface, with
+the backbone — not git — as the place a document lives:
 
-- `lode doc sync` — one-way git → backbone bulk upsert, gated to the default
-  branch with a clean tree unless `--force`.
-- `lode doc list` — lists synced documents.
-- `lode show WL-SPEC-25#sec-9` — renders a section, resolving through
-  `designdoc.ResolveRef` against local files rather than the backbone.
-- API: `POST /api/v1/docs/sync`, `GET /api/v1/docs`, `GET /api/v1/docs/{id}`.
-  The single-doc GET returns `body`, `frontmatter`, `sections`, `edges`, and a
-  `version` integer.
+- `lode doc new` / `edit` / `submit` / `accept` / `revise` — create a spec, ADR
+  or plan in the backbone and move it through its lifecycle.
+- `lode doc list` / `lode doc get` — list documents, and read one back with its
+  body, sections and edges.
+- `lode doc import` — the one-shot, admin-gated corpus walker that seeded the
+  backbone from git. A migration, not a standing sync.
+- `lode show WL-SPEC-25#sec-9` — renders a section, resolving the ref against
+  the backbone rather than local files, so it works in a checkout holding no
+  documents on disk.
+- API: `POST /api/v1/docs`, `GET /api/v1/docs`, `GET /api/v1/docs/{id}`,
+  `PUT /api/v1/docs/{id}/body`, `POST /api/v1/docs/{id}/submit`,
+  `POST /api/v1/docs/{id}/accept`, `POST /api/v1/docs/{id}/revise`,
+  `PUT /api/v1/docs/{id}/revision`, `POST /api/v1/docs/{id}/revision/accept`,
+  plus the session-gated `/docs` cockpit pages. The single-doc GET returns
+  `body` (frontmatter included), `sections`, `edges` and a `version` integer.
 
-Two gaps follow. There is no CLI read path from the backbone —
-`GET /api/v1/docs/{id}` has no `lode` command in front of it. And there is no
-authoring path: the backbone is a projection of reviewed git, so "write a lode
-spec" today means "write a file and sync it". §5 says why that changes.
+Both gaps this brief named have since closed. There is a CLI read path from the
+backbone — `lode doc get`, and `lode show` reading through the same API — and
+there is an authoring path, so "write a lode spec" no longer means "write a
+file and sync it". What has *not* moved is the corpus of record: `docs/specs/`
+and `docs/plans/` are still where these documents are edited in this repo, so
+the backbone and the files coexist.
 
 ## 2. Skill inventory and conflicts
 
@@ -209,16 +220,16 @@ corpora.
   option and `.worklode/cache/` is the right place.
 
 **`lode doc fetch`** is the second case's CLI: a front end for
-`GET /api/v1/docs/{id}` (plus a `--all` bulk form) writing plain markdown into
+`GET /api/v1/docs/{id}`, with a `--all` form that enumerates through
+`GET /api/v1/docs` first, writing plain markdown into
 `.worklode/cache/docs/<KEY>-<TYPE>-<n>.md`, gitignored. It should refetch
 conditionally rather than unconditionally: every editable storage object
 carries a monotonic `version` (or `generation`) column, the client sends the
 one it holds, and the server answers with a not-modified equivalent. The doc
 type already has a `version` field, so this generalises to task and plan bodies
-as a single mechanism rather than a doc-specific optimisation. It should be
-declared once in `internal/model` per ADR 036; today it exists twice, as
-`store.Doc` and `cli.Doc`, which is the triplicate 036 is retiring rather than
-a home to build on.
+as a single mechanism rather than a doc-specific optimisation. The triplicate
+this brief warned about is gone — `model.Doc` is now the one declaration, per
+ADR 036 — so there is a home to build on. Specified in 037 §7.
 
 **Grilling writes back.** Confirmed: a settled design tree is exactly the input
 to a document, and losing it to the transcript is the current waste. The
@@ -249,12 +260,14 @@ and edited through `lode`, and `docs/specs/` and `docs/plans/` go away as the
 place work happens. This brief therefore designs against lode-first documents
 and does not preserve the file corpus.
 
-That has a sequencing consequence worth stating: 025 as written makes the
-backbone a projection of reviewed git — which is why `lode doc sync` refuses a
-dirty tree — so lode-first authoring needs that model amended and a write path
-built before these skills have anywhere to write. Track B is blocked on that
-work; track A is not. Nothing here should be read as scheduling track B ahead
-of it.
+The sequencing consequence this brief stated has since been discharged. 025 as
+written made the backbone a projection of reviewed git, so lode-first authoring
+needed that model amended and a write path built before these skills had
+anywhere to write. Both landed: the projection model is withdrawn with §16, and
+`lode doc new`/`edit`/`submit`/`accept`/`revise` is the write path. Track B is
+no longer blocked on `lode` — what remains is the vendoring itself, and the fact
+that this repo still edits its own corpus as files, so a skill writing only to
+the backbone would bypass the reviewed corpus rather than replace it.
 
 **The flow to rewire.** brainstorming → writing-plans → executing-plans /
 subagent-driven-development, plus using-git-worktrees, requesting-code-review
@@ -318,7 +331,8 @@ installed.
 
 ## 7. What `lode` has to grow
 
-Three server- or CLI-side changes this design depends on, none of which exist:
+Four server- or CLI-side changes this design depends on. The fourth has since
+shipped; the first three do not exist yet.
 
 1. **The skill registry must key on `plugin:skill`.** `0007_skills.up.sql`
    declares `CONSTRAINT skills_name_unique UNIQUE (name)`, and `skillsync`
@@ -336,8 +350,10 @@ Three server- or CLI-side changes this design depends on, none of which exist:
    `version`/`generation` column on editable storage objects.
 3. **`lode install` writes the suppression list** (§6) into
    `.claude/settings.local.json`, unconditionally and idempotently.
-4. **A lode-first document authoring path** (§5) — create and edit specs and
-   plans through the API, and the 025 amendment that permits it.
+4. ~~**A lode-first document authoring path** (§5) — create and edit specs and
+   plans through the API, and the 025 amendment that permits it.~~ Shipped:
+   `POST /api/v1/docs` and the lifecycle routes behind `lode doc new`/`edit`/
+   `submit`/`accept`/`revise`, with 025 §16 withdrawn.
 
 ## 8. Open questions
 
@@ -360,11 +376,8 @@ Three server- or CLI-side changes this design depends on, none of which exist:
 
 ## 9. Proposed spec split
 
-**037 is the next free ordinal** — 001–036 are all claimed in history, with 030
-used twice (`030-branch-and-worktree-naming.md` and a since-renamed
-`030-review-surface.md`). The review-surface work in `docs/review-design.md` is
-in flight and will claim ordinals too, so confirm the number at the moment of
-writing rather than reserving it now.
+**The first spec was written as 037** — `037-vendored-design-skills.md`, still
+`status: draft`. The second is unwritten.
 
 - **First spec — vendored design skills.** The vendoring mechanism and drift
   check, the §2.1 remixes, `lode install`'s version pinning and suppression
@@ -373,11 +386,12 @@ writing rather than reserving it now.
   refetch. Ships without the authoring path.
 - **Second spec — lode-first brainstorming and planning.** Track B: the
   vendored spec/plan/execution skills against lode-first documents, and
-  retiring the file corpus. Blocked on the 025 amendment and the authoring
-  path, so it should not be written until those are scheduled.
+  retiring the file corpus. The 025 amendment and the authoring path it was
+  gated on have both landed (§1); what still gates it is retiring the file
+  corpus in this repo.
 
-Two specs rather than one, because the first is shippable now and the second is
-gated on work that has not started.
+Two specs rather than one, because the first was shippable without the
+authoring path.
 
 ## 10. Sources
 
