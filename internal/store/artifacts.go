@@ -37,7 +37,9 @@ type Deployment struct {
 
 // CreateArtifact inserts a new artifact, or on redelivery (same kind, name,
 // version) updates digest and source_sha in place. Returns the artifact's
-// id either way.
+// id either way. The update is guarded on built_at so a stale delivery
+// cannot regress the row — see UpsertPR (changes.go) for the guard's
+// rationale.
 func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 	var digest sql.NullString
 	if a.Digest != nil {
@@ -48,11 +50,11 @@ func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 		builtAt = sql.NullTime{Time: a.BuiltAt.UTC(), Valid: true}
 	}
 
-	// DO UPDATE (unlike DO NOTHING) always produces a row, so RETURNING
-	// carries the id on both the insert and the conflict path — no follow-up
-	// SELECT.
+	// A guarded DO UPDATE produces no row when the guard rejects the write,
+	// so RETURNING yields ErrNoRows and the id has to be looked up — same
+	// shape as AppendMainCommit's DO NOTHING path (delivery.go).
 	var id int64
-	if err := tx.QueryRow(
+	err := tx.QueryRow(
 		`INSERT INTO artifacts (kind, name, version, digest, repo, source_sha, built_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (kind, name, version) DO UPDATE SET
@@ -60,9 +62,16 @@ func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 		   repo = excluded.repo,
 		   source_sha = excluded.source_sha,
 		   built_at = excluded.built_at
+		 WHERE coalesce(excluded.built_at, '-infinity') >= coalesce(artifacts.built_at, '-infinity')
 		 RETURNING id`,
 		a.Kind, a.Name, a.Version, digest, a.Repo, a.SourceSHA, builtAt,
-	).Scan(&id); err != nil {
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = tx.QueryRow(
+			`SELECT id FROM artifacts WHERE kind = $1 AND name = $2 AND version = $3`,
+			a.Kind, a.Name, a.Version).Scan(&id)
+	}
+	if err != nil {
 		return 0, fmt.Errorf("upsert artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
 	}
 	return id, nil
