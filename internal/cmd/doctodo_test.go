@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
@@ -51,8 +52,9 @@ Body.
 
 // todoServer counts what one `lode doc todo` run costs: the corpus is read
 // through GET /docs plus one GET /docs/{id} per document, and task closure
-// through a single GET /tasks.
-type todoServer struct{ listCalls, bodyCalls, taskCalls int }
+// through a single GET /tasks. The body fetches run concurrently, so the
+// counters are atomic.
+type todoServer struct{ listCalls, bodyCalls, taskCalls atomic.Int64 }
 
 // setupTodoCorpus stands up a repo and the backbone that serves its corpus:
 // specs and plans keyed by the corpus filename each document was imported
@@ -115,7 +117,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 	srv := &todoServer{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/docs", func(w http.ResponseWriter, r *http.Request) {
-		srv.listCalls++
+		srv.listCalls.Add(1)
 		// The real list blanks bodies (withoutDocBodies); a walk that leaned
 		// on them would pass here otherwise.
 		listed := make([]model.Doc, len(docs))
@@ -123,7 +125,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 		writeTestJSON(t, w, model.DocListResponse{Docs: listed})
 	})
 	mux.HandleFunc("GET /api/v1/docs/{id}", func(w http.ResponseWriter, r *http.Request) {
-		srv.bodyCalls++
+		srv.bodyCalls.Add(1)
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 		for _, d := range docs {
 			if d.ID != id {
@@ -136,7 +138,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 		w.WriteHeader(http.StatusNotFound)
 	})
 	mux.HandleFunc("GET /api/v1/tasks", func(w http.ResponseWriter, r *http.Request) {
-		srv.taskCalls++
+		srv.taskCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(tasks))
 	})
@@ -232,9 +234,10 @@ Body.
 	// One list, one body per document, one task list: the corpus costs a
 	// request per document because only GET /docs/{id} carries frontmatter,
 	// but closure is asked once for the whole project, never per plan.
-	if srv.listCalls != 1 || srv.bodyCalls != 3 || srv.taskCalls != 1 {
+	list, body, task := srv.listCalls.Load(), srv.bodyCalls.Load(), srv.taskCalls.Load()
+	if list != 1 || body != 3 || task != 1 {
 		t.Errorf("requests = %d list, %d body, %d task; want 1, 3, 1",
-			srv.listCalls, srv.bodyCalls, srv.taskCalls)
+			list, body, task)
 	}
 	// WL-1 is closed: its plan owes nothing and must not appear.
 	if strings.Contains(out, "001-1-first.md") {
