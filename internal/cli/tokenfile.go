@@ -8,18 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 )
 
 // tokenFilePath returns ~/.config/worklode/token.
 func tokenFilePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("find home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "worklode", "token"), nil
+	return homeFile(".config", "worklode", "token")
 }
 
 // FileTokenStore keeps tokens in a cleartext file, one `<server> <token>` line
@@ -75,22 +70,14 @@ func (f *FileTokenStore) load() (map[string]string, string, error) {
 	return tokens, path, nil
 }
 
-// save writes the map back, or removes the file when nothing is left — an
-// empty secret file is just litter. The write goes to a temp file in the same
-// directory and is renamed into place: rename is atomic, so a crash cannot
-// leave a truncated token, and the mode comes from the temp file, so an
-// existing file with looser permissions is replaced by a 0600 one rather than
-// being written through.
+// save writes the map back through writeFileAtomic, or removes the file when
+// nothing is left — an empty secret file is just litter.
 func (f *FileTokenStore) save(tokens map[string]string, path string) error {
 	if len(tokens) == 0 {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("remove %s: %w", path, err)
 		}
 		return nil
-	}
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
 	}
 	servers := make([]string, 0, len(tokens))
 	for server := range tokens {
@@ -101,27 +88,7 @@ func (f *FileTokenStore) save(tokens map[string]string, path string) error {
 	for _, server := range servers {
 		fmt.Fprintf(&b, "%s %s\n", server, tokens[server])
 	}
-	tmp, err := os.CreateTemp(dir, ".token-*")
-	if err != nil {
-		return fmt.Errorf("create temp token file: %w", err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName) // no-op once the rename succeeds
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return fmt.Errorf("chmod %s: %w", tmpName, err)
-	}
-	if _, err := tmp.WriteString(b.String()); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write %s: %w", tmpName, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close %s: %w", tmpName, err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
+	return writeFileAtomic(path, ".token-*", []byte(b.String()))
 }
 
 func (f *FileTokenStore) Get(server string) (string, error) {

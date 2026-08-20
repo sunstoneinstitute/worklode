@@ -1,5 +1,9 @@
 // Package cli implements the lode command-line client: configuration, the HTTP
 // client for the worklode API, and table rendering for its commands.
+//
+// Every typed client method returns (T, []byte, error): the decoded value for
+// the renderers and the server's own bytes for --json, which is emitted
+// verbatim rather than re-marshalled so the two can never drift.
 package cli
 
 import (
@@ -78,13 +82,54 @@ type Config struct {
 // keychain, or a 0600 file on a machine that has none.
 var tokenStore TokenStore = NewFallbackTokenStore()
 
-// configPath returns ~/.config/worklode/config.toml.
-func configPath() (string, error) {
+// homeFile joins parts under the user's home directory. The three files the
+// CLI keeps there — config.toml, the token fallback, the remote cache — all
+// resolve through it.
+func homeFile(parts ...string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("find home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "worklode", "config.toml"), nil
+	return filepath.Join(append([]string{home}, parts...)...), nil
+}
+
+// writeFileAtomic writes data to path through a 0600 temp file in the same
+// directory, renamed into place: rename is atomic, so a crash cannot leave a
+// truncated file, and the mode comes from the temp file, so an existing file
+// with looser permissions is replaced rather than written through. The
+// directory is created 0700 when missing. Both local files the CLI owns — the
+// token fallback and the remote cache — are written this way.
+func writeFileAtomic(path, tmpPattern string, data []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+	tmp, err := os.CreateTemp(dir, tmpPattern)
+	if err != nil {
+		return fmt.Errorf("create temp file in %s: %w", dir, err)
+	}
+	name := tmp.Name()
+	defer os.Remove(name) // no-op once the rename succeeds
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("chmod %s: %w", name, err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write %s: %w", name, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", name, err)
+	}
+	if err := os.Rename(name, path); err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	return nil
+}
+
+// configPath returns ~/.config/worklode/config.toml.
+func configPath() (string, error) {
+	return homeFile(".config", "worklode", "config.toml")
 }
 
 // repoConfigDirs are the per-repo config directory names, in the order they
@@ -434,14 +479,38 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 	}
 
 	if resp.StatusCode >= 400 {
-		msg := strings.TrimSpace(string(data))
-		var errBody model.ErrorResponse
-		if json.Unmarshal(data, &errBody) == nil && errBody.Error != "" {
-			msg = errBody.Error
-		}
-		return nil, &ClientError{Status: resp.StatusCode, Msg: msg}
+		return nil, apiError(resp.StatusCode, data)
 	}
 	return data, nil
+}
+
+// apiError builds the *ClientError for a non-2xx response: the server's
+// "error" field when the body decodes as our JSON envelope, the raw body
+// otherwise.
+func apiError(status int, body []byte) *ClientError {
+	msg := strings.TrimSpace(string(body))
+	var errBody model.ErrorResponse
+	if json.Unmarshal(body, &errBody) == nil && errBody.Error != "" {
+		msg = errBody.Error
+	}
+	return &ClientError{Status: status, Msg: msg}
+}
+
+// doJSON sends one request through do and decodes its JSON response into T,
+// returning the raw body too so callers can pass the server's bytes through
+// to --json unchanged. what names the shape in the decode error ("task",
+// "doc list"). A decode failure yields the zero T, never a half-filled one.
+func doJSON[T any](ctx context.Context, c *Client, method, path string, body any, what string) (T, []byte, error) {
+	var zero T
+	raw, err := c.do(ctx, method, path, body)
+	if err != nil {
+		return zero, nil, err
+	}
+	var v T
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return zero, nil, fmt.Errorf("decode %s: %w", what, err)
+	}
+	return v, raw, nil
 }
 
 // withQuery appends q to path as a query string, or returns path unchanged
@@ -457,15 +526,7 @@ func withQuery(path string, q url.Values) string {
 
 // CreateTask calls POST /api/v1/tasks.
 func (c *Client) CreateTask(ctx context.Context, in model.CreateTaskInput) (model.Task, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks", in)
-	if err != nil {
-		return model.Task{}, nil, err
-	}
-	var t model.Task
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/tasks", in, "task")
 }
 
 // TaskListFilter narrows ListTasks. Zero-valued fields do not filter.
@@ -518,28 +579,12 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskLis
 	if f.PlanDoc != 0 {
 		q.Set("plan_doc", strconv.FormatInt(f.PlanDoc, 10))
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/tasks", q), nil)
-	if err != nil {
-		return model.TaskListResponse{}, nil, err
-	}
-	var resp model.TaskListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.TaskListResponse{}, nil, fmt.Errorf("decode task list: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", q), nil, "task list")
 }
 
 // GetTask calls GET /api/v1/tasks/{id}.
 func (c *Client) GetTask(ctx context.Context, id string) (model.TaskDetail, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id), nil)
-	if err != nil {
-		return model.TaskDetail{}, nil, err
-	}
-	var t model.TaskDetail
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.TaskDetail{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.TaskDetail](ctx, c, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id), nil, "task")
 }
 
 // SetTaskSkills calls PUT /api/v1/tasks/{id}/skills, replacing the task's
@@ -557,15 +602,7 @@ func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Du
 	if ttl > 0 {
 		in.TTLSeconds = int(ttl.Seconds())
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/claim", in)
-	if err != nil {
-		return model.ClaimResponse{}, nil, err
-	}
-	var resp model.ClaimResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.ClaimResponse{}, nil, fmt.Errorf("decode claim response: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.ClaimResponse](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/claim", in, "claim response")
 }
 
 // ClaimNext calls POST /api/v1/tasks/claim-next: rank the ready set
@@ -573,20 +610,12 @@ func (c *Client) ClaimTask(ctx context.Context, id, worktree string, ttl time.Du
 // unless DryRun is set. A "no ready task" or dry-run result is a normal
 // (non-error) response — see model.ClaimNextResponse.
 func (c *Client) ClaimNext(ctx context.Context, in model.ClaimNextInput) (model.ClaimNextResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/claim-next", in)
-	if err != nil {
-		return model.ClaimNextResponse{}, nil, err
-	}
-	var resp model.ClaimNextResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.ClaimNextResponse{}, nil, fmt.Errorf("decode claim-next response: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.ClaimNextResponse](ctx, c, http.MethodPost, "/api/v1/tasks/claim-next", in, "claim-next response")
 }
 
 // Brief calls GET /api/v1/tasks/{id}/brief.
 func (c *Client) Brief(ctx context.Context, id string) (model.Brief, []byte, error) {
-	return c.brief(ctx, id, "")
+	return c.brief(ctx, id, nil)
 }
 
 // BriefWithoutSkills is Brief with skills=false: the server skips pin
@@ -594,35 +623,19 @@ func (c *Client) Brief(ctx context.Context, id string) (model.Brief, []byte, err
 // that only read the task row or the lease, where a pinned brief is hundreds
 // of kilobytes and up to a 2s round trip nobody reads.
 func (c *Client) BriefWithoutSkills(ctx context.Context, id string) (model.Brief, []byte, error) {
-	return c.brief(ctx, id, "?skills=false")
+	return c.brief(ctx, id, url.Values{"skills": {"false"}})
 }
 
-func (c *Client) brief(ctx context.Context, id, query string) (model.Brief, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id)+"/brief"+query, nil)
-	if err != nil {
-		return model.Brief{}, nil, err
-	}
-	var b model.Brief
-	if err := json.Unmarshal(raw, &b); err != nil {
-		return model.Brief{}, nil, fmt.Errorf("decode brief: %w", err)
-	}
-	return b, raw, nil
+func (c *Client) brief(ctx context.Context, id string, q url.Values) (model.Brief, []byte, error) {
+	return doJSON[model.Brief](ctx, c, http.MethodGet,
+		withQuery("/api/v1/tasks/"+url.PathEscape(id)+"/brief", q), nil, "brief")
 }
 
 // RebindWorktree calls POST /api/v1/tasks/{id}/lease/worktree: move the
 // caller's active lease on id to a new worktree identity. Returns the
 // updated lease.
 func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (model.Lease, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/lease/worktree",
-		model.RebindWorktreeInput{Worktree: worktree})
-	if err != nil {
-		return model.Lease{}, nil, err
-	}
-	var l model.Lease
-	if err := json.Unmarshal(raw, &l); err != nil {
-		return model.Lease{}, nil, fmt.Errorf("decode lease: %w", err)
-	}
-	return l, raw, nil
+	return doJSON[model.Lease](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/lease/worktree", model.RebindWorktreeInput{Worktree: worktree}, "lease")
 }
 
 // TouchAgentSession calls POST /api/v1/tasks/{id}/agent-session: report that
@@ -634,16 +647,7 @@ func (c *Client) RebindWorktree(ctx context.Context, id, worktree string) (model
 // reports them otherwise.
 func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion, sessionID string, usage []model.SessionUsageBucket) (model.AgentSession, []byte, error) {
 	in := model.AgentSessionInput{Agent: agent, AgentVersion: agentVersion, SessionID: sessionID, Usage: usage}
-	raw, err := c.do(ctx, http.MethodPost,
-		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session", in)
-	if err != nil {
-		return model.AgentSession{}, nil, err
-	}
-	var a model.AgentSession
-	if err := json.Unmarshal(raw, &a); err != nil {
-		return model.AgentSession{}, nil, fmt.Errorf("decode agent session: %w", err)
-	}
-	return a, raw, nil
+	return doJSON[model.AgentSession](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/agent-session", in, "agent session")
 }
 
 // EndAgentSession calls POST /api/v1/tasks/{id}/agent-session/end.
@@ -655,15 +659,7 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in model.EndAge
 
 // EditTask calls PATCH /api/v1/tasks/{id}, sending only the fields set on in.
 func (c *Client) EditTask(ctx context.Context, id string, in model.EditTaskInput) (model.Task, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), in)
-	if err != nil {
-		return model.Task{}, nil, err
-	}
-	var t model.Task
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.Task](ctx, c, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), in, "task")
 }
 
 // RenewLease calls POST /api/v1/tasks/{id}/renew.
@@ -672,15 +668,7 @@ func (c *Client) RenewLease(ctx context.Context, id string, ttl time.Duration) (
 	if ttl > 0 {
 		in.TTLSeconds = int(ttl.Seconds())
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/renew", in)
-	if err != nil {
-		return model.Lease{}, nil, err
-	}
-	var l model.Lease
-	if err := json.Unmarshal(raw, &l); err != nil {
-		return model.Lease{}, nil, fmt.Errorf("decode lease: %w", err)
-	}
-	return l, raw, nil
+	return doJSON[model.Lease](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/renew", in, "lease")
 }
 
 // ReleaseLease calls POST /api/v1/tasks/{id}/release (204, no body).
@@ -719,16 +707,7 @@ func (c *Client) DoneTask(ctx context.Context, id string) (model.Task, []byte, e
 // repo's default branch carrying the work of these tasks. repo may be any git
 // remote URL form; the server normalizes it.
 func (c *Client) ReportMerge(ctx context.Context, repo, sha string, tasks []string) (model.MergeReport, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/merges",
-		model.MergeReportRequest{Repo: repo, SHA: sha, Tasks: tasks})
-	if err != nil {
-		return model.MergeReport{}, nil, err
-	}
-	var out model.MergeReport
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return model.MergeReport{}, nil, fmt.Errorf("decode merge report: %w", err)
-	}
-	return out, raw, nil
+	return doJSON[model.MergeReport](ctx, c, http.MethodPost, "/api/v1/merges", model.MergeReportRequest{Repo: repo, SHA: sha, Tasks: tasks}, "merge report")
 }
 
 // AbandonTask calls POST /api/v1/tasks/{id}/abandon.
@@ -763,16 +742,7 @@ func (c *Client) SubmitTask(ctx context.Context, id string) (model.Task, []byte,
 // AssignTask calls POST /api/v1/tasks/{id}/assign: sets the task's assignee.
 // An empty assignee assigns the task to the calling actor.
 func (c *Client) AssignTask(ctx context.Context, id, assignee string) (model.Task, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/assign",
-		model.AssignInput{Assignee: assignee})
-	if err != nil {
-		return model.Task{}, nil, err
-	}
-	var t model.Task
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/assign", model.AssignInput{Assignee: assignee}, "task")
 }
 
 // UnassignTask calls POST /api/v1/tasks/{id}/unassign: clears the task's
@@ -795,28 +765,11 @@ func (c *Client) StopTask(ctx context.Context, id string) (model.Task, []byte, e
 }
 
 func (c *Client) patchTaskState(ctx context.Context, id, state string) (model.Task, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id),
-		model.EditTaskInput{State: &state})
-	if err != nil {
-		return model.Task{}, nil, err
-	}
-	var t model.Task
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.Task](ctx, c, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), model.EditTaskInput{State: &state}, "task")
 }
 
 func (c *Client) taskAction(ctx context.Context, id, action string) (model.Task, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/"+action, nil)
-	if err != nil {
-		return model.Task{}, nil, err
-	}
-	var t model.Task
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/"+action, nil, "task")
 }
 
 // Block calls POST /api/v1/tasks/{id}/edges to record that by blocks id.
@@ -858,16 +811,7 @@ func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, err
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
 // parent and files titles as new children under it.
 func (c *Client) Decompose(ctx context.Context, id string, titles []string) (model.DecomposeResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/decompose",
-		model.DecomposeInput{Into: titles})
-	if err != nil {
-		return model.DecomposeResponse{}, nil, err
-	}
-	var resp model.DecomposeResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.DecomposeResponse{}, nil, fmt.Errorf("decode decompose response: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.DecomposeResponse](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/decompose", model.DecomposeInput{Into: titles}, "decompose response")
 }
 
 // --- inbox ------------------------------------------------------------
@@ -882,28 +826,12 @@ func (c *Client) ListIssues(ctx context.Context, state, project string) (model.I
 	if project != "" {
 		q.Set("project", project)
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/inbox", q), nil)
-	if err != nil {
-		return model.IssueListResponse{}, nil, err
-	}
-	var resp model.IssueListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.IssueListResponse{}, nil, fmt.Errorf("decode issue list: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.IssueListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/inbox", q), nil, "issue list")
 }
 
 // PromoteIssue calls POST /api/v1/inbox/promote.
 func (c *Client) PromoteIssue(ctx context.Context, in model.PromoteInput) (model.Task, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/promote", in)
-	if err != nil {
-		return model.Task{}, nil, err
-	}
-	var t model.Task
-	if err := json.Unmarshal(raw, &t); err != nil {
-		return model.Task{}, nil, fmt.Errorf("decode task: %w", err)
-	}
-	return t, raw, nil
+	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/inbox/promote", in, "task")
 }
 
 // DismissIssue calls POST /api/v1/inbox/dismiss (204, no body).
@@ -920,15 +848,7 @@ func (c *Client) LinkIssue(ctx context.Context, repo string, number int64, taskI
 
 // ImportInbox calls POST /api/v1/inbox/import.
 func (c *Client) ImportInbox(ctx context.Context, in model.ImportInput) (model.ImportResult, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/inbox/import", in)
-	if err != nil {
-		return model.ImportResult{}, nil, err
-	}
-	var out model.ImportResult
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return model.ImportResult{}, nil, fmt.Errorf("decode import response: %w", err)
-	}
-	return out, raw, nil
+	return doJSON[model.ImportResult](ctx, c, http.MethodPost, "/api/v1/inbox/import", in, "import response")
 }
 
 // --- docs ---------------------------------------------------------------
@@ -937,15 +857,7 @@ func (c *Client) ImportInbox(ctx context.Context, in model.ImportInput) (model.I
 // in.Body, frontmatter included: the server parses it, so the body is the
 // authority for the document's title, issued date, sections and edges.
 func (c *Client) CreateDoc(ctx context.Context, in model.CreateDocInput) (model.Doc, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/docs", in)
-	if err != nil {
-		return model.Doc{}, nil, err
-	}
-	var d model.Doc
-	if err := json.Unmarshal(raw, &d); err != nil {
-		return model.Doc{}, nil, fmt.Errorf("decode doc: %w", err)
-	}
-	return d, raw, nil
+	return doJSON[model.Doc](ctx, c, http.MethodPost, "/api/v1/docs", in, "doc")
 }
 
 // DocListFilter narrows ListDocs. Zero-valued fields do not filter.
@@ -966,43 +878,31 @@ type DocListFilter struct {
 // ListDocs calls GET /api/v1/docs.
 func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListResponse, []byte, error) {
 	q := url.Values{}
-	for key, value := range map[string]string{
-		"project": f.Project, "kind": f.Kind, "status": f.Status,
-	} {
-		if value != "" {
-			q.Set(key, value)
-		}
+	if f.Project != "" {
+		q.Set("project", f.Project)
 	}
-	for key, on := range map[string]bool{
-		"needs_planning": f.NeedsPlanning, "needs_execution": f.NeedsExecution, "bare_superseded": f.BareSuperseded,
-	} {
-		if on {
-			q.Set(key, "true")
-		}
+	if f.Kind != "" {
+		q.Set("kind", f.Kind)
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/docs", q), nil)
-	if err != nil {
-		return model.DocListResponse{}, nil, err
+	if f.Status != "" {
+		q.Set("status", f.Status)
 	}
-	var resp model.DocListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.DocListResponse{}, nil, fmt.Errorf("decode doc list: %w", err)
+	if f.NeedsPlanning {
+		q.Set("needs_planning", "true")
 	}
-	return resp, raw, nil
+	if f.NeedsExecution {
+		q.Set("needs_execution", "true")
+	}
+	if f.BareSuperseded {
+		q.Set("bare_superseded", "true")
+	}
+	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
 }
 
 // GetDoc calls GET /api/v1/docs/{id}: the document plus its sections, its
 // edges in both directions, and its open candidate revision if it has one.
 func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, docPath(id, ""), nil)
-	if err != nil {
-		return model.DocDetail{}, nil, err
-	}
-	var d model.DocDetail
-	if err := json.Unmarshal(raw, &d); err != nil {
-		return model.DocDetail{}, nil, fmt.Errorf("decode doc: %w", err)
-	}
-	return d, raw, nil
+	return doJSON[model.DocDetail](ctx, c, http.MethodGet, docPath(id, ""), nil, "doc")
 }
 
 // UpdateDocBody calls PUT /api/v1/docs/{id}/body: an in-place edit, which the
@@ -1019,15 +919,7 @@ func (c *Client) UpdateDocBody(ctx context.Context, id int64, body string) (mode
 // permission. Nothing else about the document changes; the response is the
 // same detail GET serves, so the caller reads back the resolved edge set.
 func (c *Client) ReplaceDocEdges(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPut, docPath(id, "/edges"), nil)
-	if err != nil {
-		return model.DocDetail{}, nil, err
-	}
-	var d model.DocDetail
-	if err := json.Unmarshal(raw, &d); err != nil {
-		return model.DocDetail{}, nil, fmt.Errorf("decode doc: %w", err)
-	}
-	return d, raw, nil
+	return doJSON[model.DocDetail](ctx, c, http.MethodPut, docPath(id, "/edges"), nil, "doc")
 }
 
 // SubmitDoc calls POST /api/v1/docs/{id}/submit: the document enters review.
@@ -1043,15 +935,7 @@ func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, er
 // tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
 // ADR.
 func (c *Client) AcceptDoc(ctx context.Context, id int64) (model.AcceptDocResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, docPath(id, "/accept"), nil)
-	if err != nil {
-		return model.AcceptDocResponse{}, nil, err
-	}
-	var resp model.AcceptDocResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.AcceptDocResponse{}, nil, fmt.Errorf("decode doc accept: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.AcceptDocResponse](ctx, c, http.MethodPost, docPath(id, "/accept"), nil, "doc accept")
 }
 
 // ReviseDoc calls POST /api/v1/docs/{id}/revise, opening the one candidate
@@ -1082,57 +966,25 @@ func docPath(id int64, suffix string) string {
 // docWrite is the shared decode for the document endpoints answering with the
 // document itself.
 func (c *Client) docWrite(ctx context.Context, method, path string, body any) (model.Doc, []byte, error) {
-	raw, err := c.do(ctx, method, path, body)
-	if err != nil {
-		return model.Doc{}, nil, err
-	}
-	var d model.Doc
-	if err := json.Unmarshal(raw, &d); err != nil {
-		return model.Doc{}, nil, fmt.Errorf("decode doc: %w", err)
-	}
-	return d, raw, nil
+	return doJSON[model.Doc](ctx, c, method, path, body, "doc")
 }
 
 // docRevisionWrite is the same for the two endpoints answering with the open
 // candidate revision.
 func (c *Client) docRevisionWrite(ctx context.Context, method, path string, body any) (model.DocRevision, []byte, error) {
-	raw, err := c.do(ctx, method, path, body)
-	if err != nil {
-		return model.DocRevision{}, nil, err
-	}
-	var rev model.DocRevision
-	if err := json.Unmarshal(raw, &rev); err != nil {
-		return model.DocRevision{}, nil, fmt.Errorf("decode doc revision: %w", err)
-	}
-	return rev, raw, nil
+	return doJSON[model.DocRevision](ctx, c, method, path, body, "doc revision")
 }
 
 // --- projects ---------------------------------------------------------
 
 // CreateProject calls POST /api/v1/projects.
 func (c *Client) CreateProject(ctx context.Context, in model.CreateProjectInput) (model.Project, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/projects", in)
-	if err != nil {
-		return model.Project{}, nil, err
-	}
-	var p model.Project
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return model.Project{}, nil, fmt.Errorf("decode project: %w", err)
-	}
-	return p, raw, nil
+	return doJSON[model.Project](ctx, c, http.MethodPost, "/api/v1/projects", in, "project")
 }
 
 // ListProjects calls GET /api/v1/projects.
 func (c *Client) ListProjects(ctx context.Context) (model.ProjectListResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/projects", nil)
-	if err != nil {
-		return model.ProjectListResponse{}, nil, err
-	}
-	var resp model.ProjectListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.ProjectListResponse{}, nil, fmt.Errorf("decode project list: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.ProjectListResponse](ctx, c, http.MethodGet, "/api/v1/projects", nil, "project list")
 }
 
 // SetProjectFocus calls PATCH /api/v1/projects/{id} with the ordered focus
@@ -1172,15 +1024,7 @@ func (c *Client) SetProjectNextDecision(ctx context.Context, id, title, accounta
 // patchProject PATCHes in to /api/v1/projects/{id} and decodes the updated
 // project it returns, shared by the project-mutation client methods.
 func (c *Client) patchProject(ctx context.Context, id string, in model.PatchProjectInput) (model.Project, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id), in)
-	if err != nil {
-		return model.Project{}, nil, err
-	}
-	var p model.Project
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return model.Project{}, nil, fmt.Errorf("decode project: %w", err)
-	}
-	return p, raw, nil
+	return doJSON[model.Project](ctx, c, http.MethodPatch, "/api/v1/projects/"+url.PathEscape(id), in, "project")
 }
 
 // ProjectDetail calls GET /api/v1/projects/{id}. A zero from or to leaves
@@ -1193,15 +1037,7 @@ func (c *Client) ProjectDetail(ctx context.Context, id string, from, to time.Tim
 	if !to.IsZero() {
 		q.Set("to", to.Format(time.DateOnly))
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/"+url.PathEscape(id), q), nil)
-	if err != nil {
-		return model.ProjectDetail{}, nil, err
-	}
-	var p model.ProjectDetail
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return model.ProjectDetail{}, nil, fmt.Errorf("decode project detail: %w", err)
-	}
-	return p, raw, nil
+	return doJSON[model.ProjectDetail](ctx, c, http.MethodGet, withQuery("/api/v1/projects/"+url.PathEscape(id), q), nil, "project detail")
 }
 
 // TaskCost calls GET /api/v1/tasks/{id}/cost. A zero from or to leaves that
@@ -1253,31 +1089,14 @@ func (c *Client) GetProject(ctx context.Context, id string) (model.Project, erro
 func (c *Client) ResolveRemote(ctx context.Context, remote string) (model.Project, error) {
 	q := url.Values{}
 	q.Set("remote", remote)
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/projects/resolve", q), nil)
-	if err != nil {
-		return model.Project{}, err
-	}
-	var p model.Project
-	if err := json.Unmarshal(raw, &p); err != nil {
-		return model.Project{}, fmt.Errorf("decode project: %w", err)
-	}
-	return p, nil
+	p, _, err := doJSON[model.Project](ctx, c, http.MethodGet, withQuery("/api/v1/projects/resolve", q), nil, "project")
+	return p, err
 }
 
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
 func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (model.AddRepoResult, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost,
-		"/api/v1/projects/"+url.PathEscape(projectID)+"/repos",
-		model.AddRepoInput{Repo: repo, DoneState: doneState})
-	if err != nil {
-		return model.AddRepoResult{}, nil, err
-	}
-	var out model.AddRepoResult
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return model.AddRepoResult{}, nil, fmt.Errorf("decode add-repo response: %w", err)
-	}
-	return out, raw, nil
+	return doJSON[model.AddRepoResult](ctx, c, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", model.AddRepoInput{Repo: repo, DoneState: doneState}, "add-repo response")
 }
 
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
@@ -1296,15 +1115,7 @@ func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) (
 
 // CreateActor calls POST /api/v1/actors.
 func (c *Client) CreateActor(ctx context.Context, in model.CreateActorInput) (model.Actor, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors", in)
-	if err != nil {
-		return model.Actor{}, nil, err
-	}
-	var a model.Actor
-	if err := json.Unmarshal(raw, &a); err != nil {
-		return model.Actor{}, nil, fmt.Errorf("decode actor: %w", err)
-	}
-	return a, raw, nil
+	return doJSON[model.Actor](ctx, c, http.MethodPost, "/api/v1/actors", in, "actor")
 }
 
 // CreateToken calls POST /api/v1/actors/{id}/tokens. A nil expiresAt means
@@ -1315,15 +1126,7 @@ func (c *Client) CreateToken(ctx context.Context, actorID, description string, e
 		exp := expiresAt.UTC().Format(time.RFC3339)
 		in.ExpiresAt = &exp
 	}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/actors/"+url.PathEscape(actorID)+"/tokens", in)
-	if err != nil {
-		return model.TokenResponse{}, nil, err
-	}
-	var resp model.TokenResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.TokenResponse{}, nil, fmt.Errorf("decode token response: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.TokenResponse](ctx, c, http.MethodPost, "/api/v1/actors/"+url.PathEscape(actorID)+"/tokens", in, "token response")
 }
 
 // RevokeToken calls DELETE /api/v1/tokens (204, no body). token may be
@@ -1332,34 +1135,20 @@ func (c *Client) RevokeToken(ctx context.Context, token string) ([]byte, error) 
 	return c.do(ctx, http.MethodDelete, "/api/v1/tokens", model.RevokeTokenInput{Token: token})
 }
 
-// --- board and timeline -------------------------------------------------
-
 // --- skills -----------------------------------------------------------
 
 // Skills calls GET /api/v1/skills.
 func (c *Client) Skills(ctx context.Context) ([]model.Skill, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills", nil)
+	resp, raw, err := doJSON[model.SkillsListResponse](ctx, c, http.MethodGet, "/api/v1/skills", nil, "skills")
 	if err != nil {
 		return nil, nil, err
-	}
-	var resp model.SkillsListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return nil, nil, fmt.Errorf("decode skills: %w", err)
 	}
 	return resp.Skills, raw, nil
 }
 
 // Skill calls GET /api/v1/skills/{name}.
 func (c *Client) Skill(ctx context.Context, name string) (model.Skill, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/skills/"+url.PathEscape(name), nil)
-	if err != nil {
-		return model.Skill{}, nil, err
-	}
-	var sk model.Skill
-	if err := json.Unmarshal(raw, &sk); err != nil {
-		return model.Skill{}, nil, fmt.Errorf("decode skill: %w", err)
-	}
-	return sk, raw, nil
+	return doJSON[model.Skill](ctx, c, http.MethodGet, "/api/v1/skills/"+url.PathEscape(name), nil, "skill")
 }
 
 // SkillArchive calls GET /api/v1/skills/{name}/archive/{hash} and returns the
@@ -1375,15 +1164,7 @@ func (c *Client) SkillArchive(ctx context.Context, name, hash string) ([]byte, e
 // or text is required by the server.
 func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit int) (model.SkillRecommendation, []byte, error) {
 	in := model.RecommendInput{TaskID: taskID, Text: text, Limit: limit}
-	raw, err := c.do(ctx, http.MethodPost, "/api/v1/skills/recommend", in)
-	if err != nil {
-		return model.SkillRecommendation{}, nil, err
-	}
-	var rec model.SkillRecommendation
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		return model.SkillRecommendation{}, nil, fmt.Errorf("decode skill recommendation: %w", err)
-	}
-	return rec, raw, nil
+	return doJSON[model.SkillRecommendation](ctx, c, http.MethodPost, "/api/v1/skills/recommend", in, "skill recommendation")
 }
 
 // SyncSkills calls POST /api/v1/skills/sync (admin-only).
@@ -1391,48 +1172,26 @@ func (c *Client) SyncSkills(ctx context.Context) ([]byte, error) {
 	return c.do(ctx, http.MethodPost, "/api/v1/skills/sync", nil)
 }
 
+// --- board and timeline -------------------------------------------------
+
 // Board calls GET /api/v1/board. An empty project fetches every project.
 func (c *Client) Board(ctx context.Context, project string) (model.BoardResponse, []byte, error) {
 	q := url.Values{}
 	if project != "" {
 		q.Set("project", project)
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/board", q), nil)
-	if err != nil {
-		return model.BoardResponse{}, nil, err
-	}
-	var resp model.BoardResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.BoardResponse{}, nil, fmt.Errorf("decode board: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.BoardResponse](ctx, c, http.MethodGet, withQuery("/api/v1/board", q), nil, "board")
 }
 
 // Timeline calls GET /api/v1/tasks/{id}/timeline.
 func (c *Client) Timeline(ctx context.Context, taskID string) (model.TimelineResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(taskID)+"/timeline", nil)
-	if err != nil {
-		return model.TimelineResponse{}, nil, err
-	}
-	var resp model.TimelineResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.TimelineResponse{}, nil, fmt.Errorf("decode timeline: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.TimelineResponse](ctx, c, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(taskID)+"/timeline", nil, "timeline")
 }
 
 // SecretsCatalog calls GET /api/v1/secrets/catalog (authenticated; 404 when
 // the server has no catalog configured).
 func (c *Client) SecretsCatalog(ctx context.Context) (model.SecretCatalogResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/secrets/catalog", nil)
-	if err != nil {
-		return model.SecretCatalogResponse{}, nil, err
-	}
-	var resp model.SecretCatalogResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.SecretCatalogResponse{}, nil, fmt.Errorf("decode secrets catalog: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.SecretCatalogResponse](ctx, c, http.MethodGet, "/api/v1/secrets/catalog", nil, "secrets catalog")
 }
 
 // RecordSecretsMaterialized calls POST /api/v1/tasks/{id}/secrets-materialized
@@ -1469,15 +1228,7 @@ func (c *Client) ListEvents(ctx context.Context, f EventListFilter) (model.Event
 	if f.Limit != 0 {
 		q.Set("limit", strconv.Itoa(f.Limit))
 	}
-	raw, err := c.do(ctx, http.MethodGet, withQuery("/api/v1/events", q), nil)
-	if err != nil {
-		return model.EventListResponse{}, nil, err
-	}
-	var resp model.EventListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.EventListResponse{}, nil, fmt.Errorf("decode event list: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.EventListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/events", q), nil, "event list")
 }
 
 // EventStreamFilter narrows StreamEvents. After is where the stream resumes
@@ -1543,12 +1294,7 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxAPIErrBody))
-		msg := strings.TrimSpace(string(body))
-		var errBody model.ErrorResponse
-		if json.Unmarshal(body, &errBody) == nil && errBody.Error != "" {
-			msg = errBody.Error
-		}
-		return &ClientError{Status: resp.StatusCode, Msg: msg}
+		return apiError(resp.StatusCode, body)
 	}
 
 	sc := bufio.NewScanner(resp.Body)
@@ -1600,30 +1346,12 @@ func (c *Client) StreamEvents(ctx context.Context, f EventStreamFilter, fn func(
 
 // EventSubscribers calls GET /api/v1/event-subscribers.
 func (c *Client) EventSubscribers(ctx context.Context) (model.EventSubscriberListResponse, []byte, error) {
-	raw, err := c.do(ctx, http.MethodGet, "/api/v1/event-subscribers", nil)
-	if err != nil {
-		return model.EventSubscriberListResponse{}, nil, err
-	}
-	var resp model.EventSubscriberListResponse
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return model.EventSubscriberListResponse{}, nil, fmt.Errorf("decode event subscriber list: %w", err)
-	}
-	return resp, raw, nil
+	return doJSON[model.EventSubscriberListResponse](ctx, c, http.MethodGet, "/api/v1/event-subscribers", nil, "event subscriber list")
 }
 
 // SeekEventSubscriber calls POST /api/v1/event-subscribers/{name}/seek,
 // moving both of the subscriber's offsets to to — an admin correction of
 // consumer state (025 §18), safe only because handlers are idempotent.
 func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64) (model.EventSubscriberStatus, []byte, error) {
-	raw, err := c.do(ctx, http.MethodPost,
-		"/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek",
-		model.EventSubscriberSeekRequest{To: to})
-	if err != nil {
-		return model.EventSubscriberStatus{}, nil, err
-	}
-	var st model.EventSubscriberStatus
-	if err := json.Unmarshal(raw, &st); err != nil {
-		return model.EventSubscriberStatus{}, nil, fmt.Errorf("decode event subscriber status: %w", err)
-	}
-	return st, raw, nil
+	return doJSON[model.EventSubscriberStatus](ctx, c, http.MethodPost, "/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek", model.EventSubscriberSeekRequest{To: to}, "event subscriber status")
 }

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -50,11 +49,7 @@ type remoteCache struct {
 
 // cachePath returns ~/.cache/worklode/remotes.json.
 func cachePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("find home directory: %w", err)
-	}
-	return filepath.Join(home, ".cache", "worklode", "remotes.json"), nil
+	return homeFile(".cache", "worklode", "remotes.json")
 }
 
 // loadCache reads the cache and returns a view of the given server's section.
@@ -100,18 +95,18 @@ func (c *remoteCache) key(project string, now time.Time) (string, bool) {
 	return e.Key, true
 }
 
-// section returns this view's server section, creating it on first write.
+// section returns this view's server section, creating it on first write. A
+// missing key yields the zero serverCache, whose nil maps the two checks fill
+// in.
 func (c *remoteCache) section() serverCache {
-	s, ok := c.Servers[c.server]
-	if !ok || s.Remotes == nil || s.Keys == nil {
-		if s.Remotes == nil {
-			s.Remotes = map[string]remoteEntry{}
-		}
-		if s.Keys == nil {
-			s.Keys = map[string]keyEntry{}
-		}
-		c.Servers[c.server] = s
+	s := c.Servers[c.server]
+	if s.Remotes == nil {
+		s.Remotes = map[string]remoteEntry{}
 	}
+	if s.Keys == nil {
+		s.Keys = map[string]keyEntry{}
+	}
+	c.Servers[c.server] = s
 	return s
 }
 
@@ -138,38 +133,16 @@ func fresh(at time.Time, hit bool, now time.Time) bool {
 	return now.Sub(at) < ttl
 }
 
-// save writes the cache atomically (temp file + rename) with 0600
-// permissions. Callers treat the error as advisory.
+// save writes the cache through writeFileAtomic. Callers treat the error as
+// advisory.
 func (c *remoteCache) save() error {
 	path, err := cachePath()
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create cache directory: %w", err)
-	}
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode cache: %w", err)
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), "remotes-*.json")
-	if err != nil {
-		return fmt.Errorf("create cache temp file: %w", err)
-	}
-	defer os.Remove(tmp.Name())
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return fmt.Errorf("chmod cache temp file: %w", err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf("write cache: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close cache: %w", err)
-	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		return fmt.Errorf("replace cache: %w", err)
-	}
-	return nil
+	return writeFileAtomic(path, "remotes-*.json", data)
 }

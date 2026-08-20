@@ -165,15 +165,7 @@ func runManualLogin(ctx context.Context, opts LoginOptions, disc model.LoginDisc
 // buildManualAuthURL asks the server for manual mode. It passes no
 // redirect_uri: there is no listener to redirect to, which is the whole point.
 func buildManualAuthURL(authorizeURL, state string) (string, error) {
-	u, err := url.Parse(authorizeURL)
-	if err != nil {
-		return "", fmt.Errorf("parse authorize_url: %w", err)
-	}
-	q := u.Query()
-	q.Set("mode", "manual")
-	q.Set("state", state)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
+	return authURLWith(authorizeURL, url.Values{"mode": {"manual"}, "state": {state}})
 }
 
 // readLine reads one trimmed, non-empty line. The read runs on its own
@@ -240,16 +232,23 @@ func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (
 }
 
 // buildAuthURL adds the loopback redirect_uri and CSRF state to the server's
-// authorize URL. It parses the base so an authorize_url that already carries a
-// query is preserved rather than clobbered.
+// authorize URL.
 func buildAuthURL(authorizeURL, redirectURL, state string) (string, error) {
+	return authURLWith(authorizeURL, url.Values{"redirect_uri": {redirectURL}, "state": {state}})
+}
+
+// authURLWith sets extra on the server's authorize URL. It parses the base so
+// an authorize_url that already carries a query is preserved rather than
+// clobbered.
+func authURLWith(authorizeURL string, extra url.Values) (string, error) {
 	u, err := url.Parse(authorizeURL)
 	if err != nil {
 		return "", fmt.Errorf("parse authorize_url: %w", err)
 	}
 	q := u.Query()
-	q.Set("redirect_uri", redirectURL)
-	q.Set("state", state)
+	for k, vs := range extra {
+		q.Set(k, vs[0])
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
@@ -271,12 +270,7 @@ func exchangeCLIToken(ctx context.Context, client *http.Client, tokenURL, code, 
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		msg := strings.TrimSpace(string(data))
-		var e model.ErrorResponse
-		if json.Unmarshal(data, &e) == nil && e.Error != "" {
-			msg = e.Error
-		}
-		return nil, &ClientError{Status: resp.StatusCode, Msg: msg}
+		return nil, apiError(resp.StatusCode, data)
 	}
 	var r model.MintedToken
 	if err := json.Unmarshal(data, &r); err != nil {

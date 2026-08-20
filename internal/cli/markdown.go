@@ -28,14 +28,10 @@ func Markdown(w io.Writer, body string) {
 	if strings.TrimSpace(body) == "" {
 		return
 	}
-	fd, isTTY := terminalFd(w)
+	width, isTTY := termWidth(w)
 	if !isTTY || !colorEnabled() {
 		fmt.Fprintf(w, "%s\n", strings.TrimRight(body, "\n"))
 		return
-	}
-	width, _, err := term.GetSize(fd)
-	if err != nil {
-		width = 0
 	}
 	out, err := renderStyled(body, clampWidth(width))
 	if err != nil {
@@ -69,6 +65,21 @@ func terminalFd(w io.Writer) (int, bool) {
 	}
 	fd := int(f.Fd())
 	return fd, term.IsTerminal(fd)
+}
+
+// termWidth reports w's terminal width and whether w is a terminal at all. A
+// terminal whose size cannot be read reports width 0, which every caller
+// already maps to its own default.
+func termWidth(w io.Writer) (int, bool) {
+	fd, isTTY := terminalFd(w)
+	if !isTTY {
+		return 0, false
+	}
+	width, _, err := term.GetSize(fd)
+	if err != nil {
+		return 0, true
+	}
+	return width, true
 }
 
 // colorEnabled honours the two conventions that suppress styling:

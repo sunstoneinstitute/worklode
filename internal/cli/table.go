@@ -1,17 +1,20 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
-
-	"golang.org/x/term"
 )
 
 // Column padding, matched to the tabwriter the tables used before: two spaces
-// between columns, none after the last one.
-const colPad = 2
+// between columns, none after the last one. colPad is its width, for the
+// layout arithmetic.
+const (
+	colPadding = "  "
+	colPad     = len(colPadding)
+)
 
 // wrapMode says how a column's cell may be broken when the table is wider
 // than the terminal.
@@ -72,22 +75,21 @@ func (t *table) add(cells ...string) {
 // gets unwrapped rows: there is no width to fit, and callers parsing the
 // output want one row per line.
 func (t *table) flush(w io.Writer) {
-	width := 0
-	if fd, isTTY := terminalFd(w); isTTY {
-		if cols, _, err := term.GetSize(fd); err == nil {
-			width = cols
-		}
-	}
+	width, _ := termWidth(w)
 	t.render(w, width)
 }
 
 // render writes the table wrapped to width. A width of 0 or less means
 // unlimited.
 func (t *table) render(w io.Writer, width int) {
+	// Buffered so a long list is one write rather than one per line; the
+	// deferred flush completes before render returns.
+	bw := bufio.NewWriter(w)
+	defer bw.Flush()
 	widths := t.layout(width)
-	t.writeRow(w, widths, t.headerCells())
+	t.writeRow(bw, widths, t.headerCells())
 	for _, row := range t.rows {
-		t.writeRow(w, widths, row)
+		t.writeRow(bw, widths, row)
 	}
 }
 
@@ -235,7 +237,7 @@ func (t *table) writeRow(w io.Writer, widths []int, row []string) {
 				part = lines[i][l]
 			}
 			if i > 0 {
-				b.WriteString(strings.Repeat(" ", colPad))
+				b.WriteString(colPadding)
 			}
 			b.WriteString(part)
 			if i < len(widths)-1 {
