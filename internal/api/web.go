@@ -225,9 +225,9 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 // implemented yet, one honest-unavailable message per key naming the owning
 // spec section. Unknown keys 404 (see projectSectionPage).
 // Deliverables is absent: it is a built destination now (see webform.go's
-// deliverablesPage), routed ahead of this wildcard.
+// deliverablesPage), routed ahead of this wildcard. Crew is absent for the
+// same reason: it is a built destination now (see crew.go's crewPage).
 var projectSections = map[string]struct{ Title, Message string }{
-	"crew":      {"Crew", "Crew arrives with project participants in spec 029 §6.1."},
 	"reviews":   {"Reviews", "Governed approval reviews arrive with spec 029 §7."},
 	"decisions": {"Decisions", "Research decisions arrive with specs 025 and 029."},
 	"documents": {"Documents", "Backbone documents arrive with specs 025 and 026."},

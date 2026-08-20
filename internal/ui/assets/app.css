@@ -958,6 +958,10 @@ nav.local a .cnt {
   color: var(--ink-2);
   background: var(--sunk);
 }
+.chip.lead {
+  color: var(--accent-ink);
+  background: var(--accent);
+}
 .dossier .q {
   font-size: 17px;
   font-family: "Source Serif 4",serif;

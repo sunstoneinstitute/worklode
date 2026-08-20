@@ -1,0 +1,70 @@
+package ui
+
+// crew.templ renders a project's Crew destination (GET /projects/{id}/crew):
+// the read-only roster of the time-limited group defined by spec 029 §6.1,
+// presented as "Crew" per spec 032 §6 (never "participants"). Add/remove
+// affordances arrive with later tasks; this page is a projection only.
+//
+// Each row shows what is stored — display name (falling back to the actor
+// id when none is set) and role labels — plus a visually distinct Lead
+// badge on the one accountable human (032 §6). An empty roster states that
+// honestly instead of showing a fabricated record.
+
+import "strings"
+
+templ Crew(v CrewView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "crew") {
+			<div class="canvas">
+				<section class="card">
+					<div class="hd">
+						<h3>Crew</h3>
+					</div>
+					<div class="bd">
+						if len(v.Members) == 0 {
+							<p class="muted">
+								No Crew yet. Crew is the time-limited group of people
+								contributing to this project (spec 029 §6.1).
+							</p>
+						} else {
+							<div class="dod">
+								for _, m := range v.Members {
+									@crewRow(m)
+								}
+							</div>
+						}
+					</div>
+				</section>
+			</div>
+		}
+	}
+}
+
+// crewRow renders one Crew member. The Lead badge is the only member marked
+// current: 032 §6 requires exactly one project lead be visually distinct as
+// the accountable human.
+templ crewRow(m CrewMember) {
+	<div class="dodrow">
+		<div>
+			<div class="name">
+				if m.DisplayName != "" {
+					{ m.DisplayName }
+				} else {
+					{ m.ActorID }
+				}
+			</div>
+			if m.DisplayName != "" {
+				<div class="def mono">{ m.ActorID }</div>
+			}
+			if len(m.Roles) > 0 {
+				<div class="def">{ strings.Join(m.Roles, ", ") }</div>
+			}
+		</div>
+		<div class="st">
+			if m.IsLead {
+				<span class="chip lead"><span class="cd" aria-hidden="true"></span>Lead</span>
+			}
+		</div>
+	</div>
+}

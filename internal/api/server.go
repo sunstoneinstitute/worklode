@@ -406,6 +406,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// The literal-segment patterns win over the {section} wildcard below for
 	// the destinations that are built; everything else still lands on the
 	// honest placeholder.
+	r.web("GET /projects/{id}/crew", s.navWrap("crew", s.crewPage))
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))

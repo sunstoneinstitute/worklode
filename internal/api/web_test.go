@@ -373,10 +373,10 @@ func TestProjectSections(t *testing.T) {
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
-	// Deliverables is absent on purpose: it is a built destination now, with
-	// its own page and creation form (see webform_test.go).
+	// Deliverables and Crew are both absent on purpose: they are built
+	// destinations now, with their own pages (see webform_test.go and
+	// TestCrewPage below).
 	sections := map[string]string{
-		"crew":      "spec 029 §6.1",
 		"reviews":   "spec 029 §7",
 		"decisions": "specs 025 and 029",
 		"documents": "specs 025 and 026",
@@ -406,9 +406,41 @@ func TestProjectSections(t *testing.T) {
 		t.Fatalf("unknown section status = %d, want 404; body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "GET", "/projects/nosuch/crew", "", nil)
+	rr = doReq(t, h, "GET", "/projects/nosuch/reviews", "", nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown project section status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestCrewPage checks the built Crew destination replaces the placeholder:
+// an empty roster renders the honest "No Crew yet" state with no fabricated
+// record, form, or count, and an unknown project 404s the same way every
+// other project route does. A populated roster is asserted once a writer
+// exists (Task 6) — no exported writer lands in this task.
+func TestCrewPage(t *testing.T) {
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "GET", "/projects/proj/crew", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	bodyContains(t, body, "No Crew yet")
+	if strings.Contains(body, "spec 029 §6.1.") {
+		t.Error("the crew destination still renders its old placeholder message")
+	}
+	main := mainContent(t, body)
+	for _, forbidden := range []string{"<form", "<button"} {
+		if strings.Contains(main, forbidden) {
+			t.Fatalf("crew page unexpectedly renders %q in its main content:\n%s", forbidden, body)
+		}
+	}
+
+	if rr := doReq(t, h, "GET", "/projects/nosuch/crew", "", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown project status = %d, want 404", rr.Code)
 	}
 }
 

@@ -270,6 +270,29 @@ type DeliverableRow struct {
 	CreatedAt   time.Time
 }
 
+// --- crew --------------------------------------------------------------------
+
+// CrewView is a project's Crew roster (spec 029 §6.1), the project-local
+// Crew destination. An empty Members slice renders an honest "No Crew yet"
+// state, never a fabricated row.
+type CrewView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	Members      []CrewMember
+}
+
+// CrewMember is one Crew member: an actor holding at least one role-labelled
+// project_participants row, folded to one row per actor (internal/store's
+// ListParticipants already aggregates this). Exactly one member on a project
+// may have IsLead set (032 §6's "accountable human").
+type CrewMember struct {
+	ActorID     string
+	DisplayName string
+	Roles       []string
+	IsLead      bool
+}
+
 // --- documents ---------------------------------------------------------------
 
 // DocsView is the document corpus index (GET /docs): every spec, ADR and plan

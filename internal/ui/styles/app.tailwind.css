@@ -249,6 +249,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .chip.crit{color:var(--crit);background:var(--crit-bg)}
 .chip.info{color:var(--info);background:var(--info-bg)}
 .chip.plain{color:var(--ink-2);background:var(--sunk)}
+.chip.lead{color:var(--accent-ink);background:var(--accent)}
 
 /* dossier / list rows */
 .dossier .q{font-size:17px;font-family:"Source Serif 4",serif;font-weight:600;line-height:1.35;margin:0 0 4px}
