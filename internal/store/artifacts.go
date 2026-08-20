@@ -48,26 +48,22 @@ func CreateArtifact(tx *sql.Tx, a Artifact) (int64, error) {
 		builtAt = sql.NullTime{Time: a.BuiltAt.UTC(), Valid: true}
 	}
 
-	_, err := tx.Exec(
+	// DO UPDATE (unlike DO NOTHING) always produces a row, so RETURNING
+	// carries the id on both the insert and the conflict path — no follow-up
+	// SELECT.
+	var id int64
+	if err := tx.QueryRow(
 		`INSERT INTO artifacts (kind, name, version, digest, repo, source_sha, built_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
 		 ON CONFLICT (kind, name, version) DO UPDATE SET
 		   digest = excluded.digest,
 		   repo = excluded.repo,
 		   source_sha = excluded.source_sha,
-		   built_at = excluded.built_at`,
+		   built_at = excluded.built_at
+		 RETURNING id`,
 		a.Kind, a.Name, a.Version, digest, a.Repo, a.SourceSHA, builtAt,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("upsert artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
-	}
-
-	var id int64
-	if err := tx.QueryRow(
-		`SELECT id FROM artifacts WHERE kind = $1 AND name = $2 AND version = $3`,
-		a.Kind, a.Name, a.Version,
 	).Scan(&id); err != nil {
-		return 0, fmt.Errorf("look up artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
+		return 0, fmt.Errorf("upsert artifact %s/%s@%s: %w", a.Kind, a.Name, a.Version, err)
 	}
 	return id, nil
 }

@@ -12,6 +12,9 @@ import (
 // dependency needed.
 func vectorLiteral(v []float32) string {
 	var b strings.Builder
+	// A 1536-dimension vector renders to ~15 KB; sizing up front spares the
+	// builder a dozen reallocation-and-copy rounds per chunk.
+	b.Grow(len(v)*12 + 2)
 	b.WriteByte('[')
 	for i, f := range v {
 		if i > 0 {

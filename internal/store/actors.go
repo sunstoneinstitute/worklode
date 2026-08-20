@@ -97,16 +97,28 @@ func (s *Store) UpsertHumanActor(ctx context.Context, id, displayName string, ad
 
 // GetActor looks up an actor by id. Returns ErrNotFound if it does not exist.
 func (s *Store) GetActor(ctx context.Context, id string) (*Actor, error) {
-	var a Actor
-	var displayName sql.NullString
-	var ghLogin sql.NullString
-	row := s.db.QueryRowContext(ctx,
-		`SELECT id, kind, display_name, admin, expected_github_login FROM actors WHERE id = $1`, id)
-	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
+	a, err := scanActor(s.db.QueryRowContext(ctx,
+		`SELECT `+actorColumns+` FROM actors WHERE id = $1`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
 		return nil, fmt.Errorf("get actor %s: %w", id, err)
+	}
+	return a, nil
+}
+
+// actorColumns is the SELECT list scanActor expects, in order.
+const actorColumns = `id, kind, display_name, admin, expected_github_login`
+
+// actorColumnsA is actorColumns under the `a` alias, for Authenticate's join.
+var actorColumnsA = qualifyColumns(actorColumns, "a")
+
+func scanActor(row rowScanner) (*Actor, error) {
+	var a Actor
+	var displayName, ghLogin sql.NullString
+	if err := row.Scan(&a.ID, &a.Kind, &displayName, &a.Admin, &ghLogin); err != nil {
+		return nil, err
 	}
 	a.DisplayName = displayName.String
 	a.ExpectedGitHubLogin = ghLogin.String
@@ -201,15 +213,18 @@ func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 func (s *Store) Authenticate(ctx context.Context, plaintext string) (*Actor, error) {
 	hash := tokenHashOf(plaintext)
 
-	var actorID string
-	var revokedAt sql.NullTime
-	var expiresAt sql.NullTime
-	row := s.db.QueryRowContext(ctx,
-		`SELECT actor_id, revoked_at, expires_at FROM tokens WHERE token_hash = $1`, hash)
-	if err := row.Scan(&actorID, &revokedAt, &expiresAt); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
+	// One join, not a token read followed by GetActor: this runs on every
+	// bearer-token request, and a token whose actor row is missing was
+	// ErrNotFound under either shape.
+	var revokedAt, expiresAt sql.NullTime
+	a, err := scanActor(appendScan{s.db.QueryRowContext(ctx,
+		`SELECT `+actorColumnsA+`, t.revoked_at, t.expires_at
+		   FROM tokens t JOIN actors a ON a.id = t.actor_id
+		  WHERE t.token_hash = $1`, hash), []any{&revokedAt, &expiresAt}})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
 		return nil, fmt.Errorf("look up token: %w", err)
 	}
 
@@ -219,8 +234,7 @@ func (s *Store) Authenticate(ctx context.Context, plaintext string) (*Actor, err
 	if expiresAt.Valid && expiresAt.Time.Before(s.nowFn()) {
 		return nil, ErrNotFound
 	}
-
-	return s.GetActor(ctx, actorID)
+	return a, nil
 }
 
 // tokenHashOf accepts either a plaintext token (with the "wl_" prefix) or an

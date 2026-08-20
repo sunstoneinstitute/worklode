@@ -111,26 +111,44 @@ func (s *Store) CreateProject(ctx context.Context, id, name, key string) error {
 	return nil
 }
 
-// GetProject looks up a project by id. Returns ErrNotFound if it does not exist.
-func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
+// projectColumnsP is projectColumns under the `p` alias, for the queries that
+// join projects against another table.
+var projectColumnsP = qualifyColumns(projectColumns, "p")
+
+// scanProject reads one row selected with projectColumns.
+func scanProject(row rowScanner) (*Project, error) {
 	var p Project
 	var focus []byte
 	var ext projectExtras
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+projectColumns+` FROM projects WHERE id = $1`, id)
 	if err := row.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("get project %s: %w", id, err)
+		return nil, err
 	}
 	f, err := scanProjectFocus(focus)
 	if err != nil {
-		return nil, fmt.Errorf("get project %s: %w", id, err)
+		return nil, fmt.Errorf("project %s focus: %w", p.ID, err)
 	}
 	p.Focus = f
 	ext.apply(&p)
 	return &p, nil
+}
+
+// projectRow runs a single-project query, mapping a missing row to
+// ErrNotFound and wrapping anything else under what.
+func (s *Store) projectRow(ctx context.Context, query, what string, args ...any) (*Project, error) {
+	p, err := scanProject(s.db.QueryRowContext(ctx, query, args...))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	return p, nil
+}
+
+// GetProject looks up a project by id. Returns ErrNotFound if it does not exist.
+func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
+	return s.projectRow(ctx, `SELECT `+projectColumns+` FROM projects WHERE id = $1`,
+		fmt.Sprintf("get project %s", id), id)
 }
 
 // ListProjects returns all projects.
@@ -139,28 +157,7 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
-	defer rows.Close()
-
-	var out []Project
-	for rows.Next() {
-		var p Project
-		var focus []byte
-		var ext projectExtras
-		if err := rows.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
-			return nil, fmt.Errorf("scan project: %w", err)
-		}
-		f, err := scanProjectFocus(focus)
-		if err != nil {
-			return nil, fmt.Errorf("scan project %s: %w", p.ID, err)
-		}
-		p.Focus = f
-		ext.apply(&p)
-		out = append(out, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list projects: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list projects", byValue(scanProject))
 }
 
 // SetProjectFocus records the ordered list of concerns a project's ranking
@@ -272,16 +269,13 @@ func (s *Store) AddRepo(ctx context.Context, projectID, repo string) error {
 // ProjectForRepo looks up the project a repo is mapped to. Returns
 // ErrNotFound if the repo is not mapped to any project.
 func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, error) {
-	var projectID string
-	row := s.db.QueryRowContext(ctx,
-		`SELECT project_id FROM project_repos WHERE repo = $1`, repo)
-	if err := row.Scan(&projectID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("look up project for repo %s: %w", repo, err)
-	}
-	return s.GetProject(ctx, projectID)
+	// One join rather than a repo lookup followed by GetProject: this runs on
+	// the GitHub webhook path, and an unmapped repo is ErrNotFound either way.
+	return s.projectRow(ctx,
+		`SELECT `+projectColumnsP+` FROM projects p
+		   JOIN project_repos pr ON pr.project_id = p.id
+		  WHERE pr.repo = $1`,
+		fmt.Sprintf("look up project for repo %s", repo), repo)
 }
 
 // DefaultDoneState is the project_repos.done_state schema default, used for

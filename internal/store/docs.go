@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1170,12 +1170,7 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 		typ string
 		src designdoc.AnchorMap
 	}{{"amends", fm.Amends}, {"replaces", fm.Replaces}} {
-		keys := make([]string, 0, len(m.src))
-		for k := range m.src {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
+		for _, k := range slices.Sorted(maps.Keys(m.src)) {
 			// "." is the document-level subject; anything else is one of this
 			// document's own anchors, with or without its leading '#'.
 			anchor := ""

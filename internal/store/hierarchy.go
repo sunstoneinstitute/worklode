@@ -284,15 +284,13 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 			parentID, ErrInvalidInput)
 	}
 
-	leased, err := hasActiveLease(tx, parentID)
-	if err != nil {
+	// activeLeaseTx answers both "is it leased" and "by whom" in one query;
+	// no lease is ErrNotFound, which is the pass case here.
+	lease, err := activeLeaseTx(tx, parentID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}
-	if leased {
-		lease, err := activeLeaseTx(tx, parentID)
-		if err != nil {
-			return nil, fmt.Errorf("get active lease on %s: %w", parentID, err)
-		}
+	if err == nil {
 		return nil, fmt.Errorf("task %s is held by %s in %s; release it before decomposing: %w",
 			parentID, lease.ActorID, lease.Worktree, ErrLeased)
 	}

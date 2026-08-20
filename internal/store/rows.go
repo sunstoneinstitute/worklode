@@ -45,12 +45,12 @@ func byValue[T any](scan func(rowScanner) (*T, error)) func(rowScanner) (T, erro
 
 // qualifyColumns renders a SELECT list with every column prefixed by alias,
 // for queries that join the table against another one carrying a column of
-// the same name. It splits naively on ", ", so every entry in cols must stay
+// the same name. It splits naively on ",", so every entry in cols must stay
 // comma-free.
 func qualifyColumns(cols, alias string) string {
-	parts := strings.Split(cols, ", ")
+	parts := strings.Split(cols, ",")
 	for i, c := range parts {
-		parts[i] = alias + "." + c
+		parts[i] = alias + "." + strings.TrimSpace(c)
 	}
 	return strings.Join(parts, ", ")
 }

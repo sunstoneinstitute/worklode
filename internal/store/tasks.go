@@ -121,12 +121,7 @@ func allStates() []string {
 		seen[pair[0]] = true
 		seen[pair[1]] = true
 	}
-	out := make([]string, 0, len(seen))
-	for s := range seen {
-		out = append(out, s)
-	}
-	slices.Sort(out)
-	return out
+	return slices.Sorted(maps.Keys(seen))
 }
 
 // containerForbiddenStates are the delivery states a task with children can
@@ -409,12 +404,8 @@ func scanTask(row rowScanner) (*model.Task, error) {
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc); err != nil {
 		return nil, err
 	}
-	if planDoc.Valid {
-		t.PlanDoc = planDoc.Int64
-	}
-	if aboutDoc.Valid {
-		t.AboutDoc = aboutDoc.Int64
-	}
+	t.PlanDoc = planDoc.Int64
+	t.AboutDoc = aboutDoc.Int64
 	t.Body = body.String
 	t.Concern = concern.String
 	t.Assignee = assignee.String
@@ -868,17 +859,21 @@ var deliveredStateSet = func() map[string]bool {
 	return m
 }()
 
+// deliveryRankArms is deliveryRank's WHEN list. Only the scrutinee varies
+// between call sites, so the arms are rendered once.
+var deliveryRankArms = func() string {
+	var b strings.Builder
+	for _, st := range slices.Sorted(maps.Keys(deliveryRanks)) {
+		fmt.Fprintf(&b, " WHEN '%s' THEN %d", st, deliveryRanks[st])
+	}
+	return b.String()
+}()
+
 // deliveryRank renders the SQL rank of a state expression. A task's state and
 // a repo's done_state both map through the same CASE, so the two are directly
 // comparable. Anything before merged ranks 0, below every done_state.
 func deliveryRank(expr string) string {
-	var b strings.Builder
-	b.WriteString("(CASE " + expr)
-	for _, st := range slices.Sorted(maps.Keys(deliveryRanks)) {
-		fmt.Fprintf(&b, " WHEN '%s' THEN %d", st, deliveryRanks[st])
-	}
-	b.WriteString(" ELSE 0 END)")
-	return b.String()
+	return "(CASE " + expr + deliveryRankArms + " ELSE 0 END)"
 }
 
 // taskClosed renders the "no longer blocks its dependents" predicate for the

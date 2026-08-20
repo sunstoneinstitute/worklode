@@ -273,12 +273,8 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	t.CreatedBy = createdBy.String
 	t.CreatedAt = t.CreatedAt.UTC()
 	t.UpdatedAt = t.UpdatedAt.UTC()
-	if planDoc.Valid {
-		t.PlanDoc = planDoc.Int64
-	}
-	if aboutDoc.Valid {
-		t.AboutDoc = aboutDoc.Int64
-	}
+	t.PlanDoc = planDoc.Int64
+	t.AboutDoc = aboutDoc.Int64
 	if err := json.Unmarshal([]byte(skillsJSON), &t.Skills); err != nil {
 		return nil, fmt.Errorf("unmarshal task %s skills: %w", t.ID, err)
 	}
