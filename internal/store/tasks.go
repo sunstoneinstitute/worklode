@@ -525,6 +525,11 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get task %s: %w", id, err)
 	}
+	closed, err := s.ClosedTaskIDs(ctx, []string{id})
+	if err != nil {
+		return nil, fmt.Errorf("closed for task %s: %w", id, err)
+	}
+	t.Closed = closed[id]
 	return t, nil
 }
 
@@ -591,7 +596,26 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if err != nil {
 		return nil, fmt.Errorf("list tasks: %w", err)
 	}
-	return collectRows(rows, "list tasks", byValue(scanTask))
+	out, err := collectRows(rows, "list tasks", byValue(scanTask))
+	if err != nil {
+		return nil, err
+	}
+	// A second query, not folded into taskColumns: taskClosed's rendered
+	// subqueries bind ch/tc/mc/pr, which would collide with every other query
+	// sharing that column list. collectRows has already closed the cursor, so
+	// this does not hold that connection open while it runs.
+	ids := make([]string, len(out))
+	for i, t := range out {
+		ids[i] = t.ID
+	}
+	closed, err := s.ClosedTaskIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks: %w", err)
+	}
+	for i := range out {
+		out[i].Closed = closed[out[i].ID]
+	}
+	return out, nil
 }
 
 // AddEdge inserts a typed edge between two existing tasks inside the given
@@ -960,6 +984,36 @@ func (s *Store) BlockedTaskIDs(ctx context.Context) (map[string]bool, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("blocked task ids: %w", err)
+	}
+	return out, nil
+}
+
+// ClosedTaskIDs reports, for the given task ids, which are closed by the
+// per-repo predicate in taskClosed (004 §1.3; see also 026 §2.5, which
+// requires closure be the server's answer since a client cannot evaluate a
+// predicate over other repos' done_state and landed-commit facts). An empty
+// ids returns an empty map without touching the database.
+func (s *Store) ClosedTaskIDs(ctx context.Context, ids []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT t.id FROM tasks t WHERE t.id = ANY($1) AND `+taskClosed("t"), ids)
+	if err != nil {
+		return nil, fmt.Errorf("closed task ids: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan closed task id: %w", err)
+		}
+		out[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("closed task ids: %w", err)
 	}
 	return out, nil
 }

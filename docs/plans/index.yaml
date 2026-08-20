@@ -1001,6 +1001,16 @@ docs/plans/2026-08-19-component-boundary-manifest.md:
     task-1-parse-the-component-boundary-manifest-with-first-match-wins-globs: "### Task 1 — Parse the component-boundary manifest with first-match-wins globs"
     task-2-declare-worklodes-whole-repo-component-manifest: "### Task 2 — Declare Worklode's whole-repo component manifest"
     out-of-scope-owned-elsewhere: "## Out of scope (owned elsewhere)"
+docs/plans/2026-08-19-doc-todo-rollup.md:
+  sections:
+    what-exists-vs-what-this-builds: "## What exists vs. what this builds"
+    constraint-that-bites: "## Constraint that bites"
+    tasks: "## Tasks"
+    task-1-expose-server-computed-task-closure-on-the-wire: "### Task 1 — Expose server-computed task closure on the wire"
+    task-2-the-21-coverage-predicate: "### Task 2 — The §2.1 coverage predicate"
+    task-3-the-rollup-walk-ordering-and-deps: "### Task 3 — The rollup walk, ordering, and `--deps`"
+    task-4-lode-doc-todo-on-the-cli: "### Task 4 — `lode doc todo` on the CLI"
+    task-5-dogfood-it-and-record-what-it-finds: "### Task 5 — Dogfood it and record what it finds"
 docs/plans/2026-08-19-show-pager-flag.md:
   sections:
     global-constraints: "## Global Constraints"

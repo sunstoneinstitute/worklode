@@ -1752,6 +1752,7 @@ The document and event surface, backed by the backbone store:
 | `lode doc list --needs-planning` | Accepted specs with unplanned accepted sections |
 | `lode doc list --needs-execution` | Accepted plans whose task set is unminted or unfinished |
 | `lode doc list --bare-superseded` | Superseded documents whose sections nothing replaces — §6 rule 2, read as a query |
+| `lode doc todo <ref> [--deps]` | One spec's remaining work, ordered: planning gaps, unaccepted plans, unexecuted plans (026 §2.5) |
 | `lode doc accept <id>` | The manual commit; on a plan, mints its tasks (§9.2) |
 | `lode doc revise <slug>` | Open a candidate revision (§7.2) |
 | `lode doc publish <slug>` | Run the §6 constraints, then the §4 transaction |

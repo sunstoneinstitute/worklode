@@ -36,6 +36,12 @@ type Task struct {
 	// from PlanDoc, which names the plan whose acceptance minted the task
 	// (025 §9.2), not what the task is about.
 	AboutDoc int64 `json:"about_doc,omitempty"`
+	// Closed reports whether the task has no work left for anyone to own, by
+	// the per-repo predicate of 004 §1.3: server-derived and read-only. A
+	// client cannot compute this itself (the predicate reads other repos'
+	// done_state and landed-commit facts), and it is ignored on any inbound
+	// body.
+	Closed bool `json:"closed"`
 }
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
