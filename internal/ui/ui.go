@@ -28,15 +28,15 @@ func Assets() fs.FS {
 	return assets
 }
 
-// FmtTime renders every timestamp the same way across the web UI: UTC,
+// fmtTime renders every timestamp the same way across the web UI: UTC,
 // "2006-01-02 15:04". Every page-facing timestamp goes through it, so the web
 // UI never disagrees with itself about how a time is written.
-func FmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
+func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
 
-// FmtBytes renders a byte count for display: exact below 1 kB, one decimal
+// fmtBytes renders a byte count for display: exact below 1 kB, one decimal
 // place above it. Attachment sizes span a 33-byte PNG and a 100 MiB screen
 // recording (spec 021 §5), and neither reads as a plain byte count.
-func FmtBytes(n int64) string {
+func fmtBytes(n int64) string {
 	if n < 1000 {
 		return strconv.FormatInt(n, 10) + " B"
 	}
