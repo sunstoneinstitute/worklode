@@ -565,13 +565,22 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
 
 1. `POST /api/v1/blobs` with a PNG returns a hash; re-posting identical bytes returns the same
    hash, creates no second row, and issues no second `PutObject`.
-2. An upload over the 100 MiB cap gets `413`, and the server's memory does not track payload
-   size on any upload — asserted by uploading 100 MiB with a bounded heap.
+2. An upload over the cap gets `413` and stores no object. Asserted against a lowered cap, not
+   against 100 MiB: the streaming path spools every byte the client sends before the limit
+   reader can refuse it, so asserting at the real cap would write 100 MiB to the spool directory
+   on every test run — which on a runner with a small or `tmpfs` `/tmp` fails with `ENOSPC` (a
+   `500`) rather than the `413` it means to prove. The cap's *value* is 100 MiB (§5); what the
+   test pins is that it is enforced. That the server's memory does not track payload size is a
+   property of spooling to a temp file rather than buffering, and is visible in the handler.
 3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session. With a
    web auth provider configured it `401`s with neither; with no provider configured it refuses
    with a `401` unless `LODE_WEB_OPEN` is set. The refusal is `eitherGuard`'s, not `webGuard`'s
-   `503`: a subresource a browser fetches must answer with a status code, never with an HTML
-   error page or a login redirect (§4). The presigned response carries the sniffed
+   `503`, on two counts: a subresource a browser fetches must answer with a status code, never
+   with an HTML error page or a login redirect (§4); and unlike a page, a blob on a
+   provider-less instance *is* served to a caller who presents a bearer token, so the anonymous
+   refusal is a missing credential rather than a deployment fact. An unknown bearer token is
+   `401` too, on an opted-in instance as much as a closed one — a rejected credential never
+   falls through to the anonymous posture. The presigned response carries the sniffed
    `Content-Type`, a correct `Content-Length`, and `Content-Disposition: attachment` for a
    non-embeddable type.
 4. `lode task add --body-file` on markdown referencing two local PNGs creates one task whose

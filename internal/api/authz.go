@@ -478,7 +478,14 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 //   - It answers with writeErr (JSON), never webErr (HTML), and never a login
 //     redirect. This is a subresource: a browser fetching <img src="/blob/…">
 //     cannot usefully follow a redirect to a login page — it would render the
-//     HTML as a broken image — so the honest answer is a status code.
+//     HTML as a broken image — so the honest answer is a status code. That
+//     code is 401 and not webGuard's 503, even on a provider-less instance:
+//     unlike a page, a blob there *is* served to a caller carrying a bearer
+//     token, so the anonymous refusal is a missing credential rather than a
+//     deployment fact (spec 021 §15 AC3).
+//   - A bearer token that does not resolve is refused outright rather than
+//     retried as a web request. Falling through to webSubject would serve the
+//     blob to a rejected credential whenever LODE_WEB_OPEN is set.
 //   - The session cookie is SameSite=Lax (see setAuthCookie), which is
 //     load-bearing here: Lax withholds the cookie from cross-site subresource
 //     loads, so an attacker page embedding <img src="https://worklode/blob/…">
@@ -490,6 +497,20 @@ func (s *server) eitherGuard(perm Permission, next http.HandlerFunc) http.Handle
 			actor, err := s.st.Authenticate(r.Context(), token)
 			if err != nil {
 				if errors.Is(err, store.ErrNotFound) {
+					// A token that does not resolve is refused here and
+					// never falls through to webSubject: on an instance with
+					// LODE_WEB_OPEN set, falling through would serve the blob
+					// to a caller whose credential was rejected. Counted and
+					// logged like any other denial — the blob route is the
+					// one both audiences hit directly, so a token-guessing
+					// campaign against it must be visible in
+					// worklode_authz_decisions_total. The subject stays
+					// authNone — a token that did not resolve authenticates
+					// nobody, and logging it as an authenticated denial would
+					// let an anonymous caller raise log level at will.
+					d := Decision{Reason: "invalid_token"}
+					s.observeAuthz(perm, d)
+					s.logDenial(r, Subject{Via: authNone}, perm, d)
 					writeErr(w, http.StatusUnauthorized, "unauthorized")
 					return
 				}
