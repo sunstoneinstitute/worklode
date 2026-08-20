@@ -72,8 +72,9 @@ func terminalFd(w io.Writer) (int, bool) {
 //     from the data, so with no terminal to fit there is nothing to decide,
 //     and the agents and pipes parsing `lode task list` want one row per line.
 //   - tableWidth (render.go), used only by SkillTable, falls back to 80. A
-//     skill description is a paragraph, not a cell: unlimited would leave the
-//     column at its minimum (24) and hard-wrap 400-character prose, so the
+//     skill description is a paragraph, not a cell: skillTable sizes the
+//     description column from the total width, so unlimited would pin it at
+//     its 24-column minimum and pour 400-character prose into a ribbon. The
 //     table needs a width even when nothing supplies one.
 //   - clampWidth (below) falls back to 80 for the same reason — prose has no
 //     natural width — but only ever runs on a terminal whose size failed to
