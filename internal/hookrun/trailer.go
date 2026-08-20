@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -48,7 +48,7 @@ func handleCommitMsg(opts Options, dir string, l worktree.Layout) {
 	if !filepath.IsAbs(msgFile) {
 		msgFile = filepath.Join(root, msgFile)
 	}
-	if gitOK(root, "rev-parse", "--verify", "--quiet", "MERGE_HEAD") {
+	if gitexec.OK(root, "rev-parse", "--verify", "--quiet", "MERGE_HEAD") {
 		// A merge commit's message is git's, not the author's, and the merge
 		// itself is not this task's work.
 		return
@@ -78,7 +78,7 @@ func hasMessageBody(root, msgFile string) (bool, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	cmd := exec.Command("git", "-C", root, "stripspace", "--strip-comments")
+	cmd := gitexec.Cmd(root, "stripspace", "--strip-comments")
 	cmd.Stdin = f
 	out, err := cmd.Output()
 	if err != nil {
@@ -100,11 +100,7 @@ func hasMessageBody(root, msgFile string) (bool, error) {
 // cherry-picked commit keeps the attribution it arrived with rather than
 // gaining a second, contradictory one.
 func stampTrailer(root, msgFile, taskID string) error {
-	cmd := exec.Command("git", "-C", root, "interpret-trailers", //nolint:gosec // fixed argv; taskID is a server-issued id
+	return gitexec.Run(root, "interpret-trailers",
 		"--in-place", "--if-exists", "doNothing",
 		"--trailer", trailerToken+": "+taskID, msgFile)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%w: %s", err, bytes.TrimSpace(out))
-	}
-	return nil
 }

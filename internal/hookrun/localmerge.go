@@ -3,10 +3,10 @@ package hookrun
 import (
 	"bytes"
 	"context"
-	"os/exec"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -48,7 +48,7 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 	if !ok {
 		return // not in a git repo ⇒ NOP
 	}
-	branch, ok := gitLine(root, "symbolic-ref", "--short", "HEAD")
+	branch, ok := gitexec.Line(root, "symbolic-ref", "--short", "HEAD")
 	if !ok {
 		return // detached HEAD, or mid-rebase: nothing landed on a branch
 	}
@@ -56,17 +56,17 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 	if !ok || branch != def {
 		return
 	}
-	head, ok := gitLine(root, "rev-parse", "HEAD")
+	head, ok := gitexec.Line(root, "rev-parse", "HEAD")
 	if !ok {
 		return
 	}
 	// The commit before this event. Everything already contained in it was
 	// delivered by some earlier event, not this one — see landedNow.
-	prev, hasPrev := gitLine(root, "rev-parse", "HEAD~1")
+	prev, hasPrev := gitexec.Line(root, "rev-parse", "HEAD~1")
 	if !hasPrev {
 		return // root commit: nothing can have landed into it
 	}
-	remote, ok := gitLine(root, "remote", "get-url", "origin")
+	remote, ok := gitexec.Line(root, "remote", "get-url", "origin")
 	if !ok {
 		return // no origin ⇒ no repo identity the backbone would recognize
 	}
@@ -147,10 +147,10 @@ type mergeProbe struct {
 // worktree's task as merged. Excluding what prev already contained also makes
 // the handler self-limiting: the commit after a merge does not re-report it.
 func (p *mergeProbe) landedNow(branch string) bool {
-	if gitOK(p.root, "merge-base", "--is-ancestor", branch, p.prev) {
+	if gitexec.OK(p.root, "merge-base", "--is-ancestor", branch, p.prev) {
 		return false // already delivered before this event
 	}
-	if gitOK(p.root, "merge-base", "--is-ancestor", branch, "HEAD") {
+	if gitexec.OK(p.root, "merge-base", "--is-ancestor", branch, "HEAD") {
 		return true
 	}
 	return p.replayLanded(branch) || p.squashLanded(branch)
@@ -161,7 +161,7 @@ func (p *mergeProbe) landedNow(branch string) bool {
 // one with no equivalent upstream and "-" for one whose patch is already
 // there, so "landed" means no "+" line, not no output.
 func (p *mergeProbe) replayLanded(branch string) bool {
-	out, err := exec.Command("git", "-C", p.root, "cherry", "HEAD", branch).Output() //nolint:gosec // branch comes from the backbone
+	out, err := gitexec.Bytes(p.root, "cherry", "HEAD", branch)
 	if err != nil {
 		return false
 	}
@@ -187,7 +187,7 @@ func (p *mergeProbe) replayLanded(branch string) bool {
 // prev test above cannot retire it, but the squash commit sits in this
 // event's window exactly once.
 func (p *mergeProbe) squashLanded(branch string) bool {
-	base, ok := gitLine(p.root, "merge-base", p.prev, branch)
+	base, ok := gitexec.Line(p.root, "merge-base", p.prev, branch)
 	if !ok {
 		return false // unrelated history: no combined diff to speak of
 	}
@@ -206,7 +206,7 @@ func (p *mergeProbe) landedPatches() map[string]bool {
 		return p.landed
 	}
 	p.loaded = true
-	out, err := exec.Command("git", "-C", p.root, "rev-list", "--no-merges", p.prev+"..HEAD").Output() //nolint:gosec // fixed argv, local shas only
+	out, err := gitexec.Bytes(p.root, "rev-list", "--no-merges", p.prev+"..HEAD")
 	if err != nil {
 		return nil
 	}
@@ -236,13 +236,13 @@ func (p *mergeProbe) landedPatches() map[string]bool {
 // It returns one id per patch, in order, and nothing at all for an empty
 // diff: patch-id prints a line only for a patch that changes something.
 func gitPatchIDs(root string, stdin []byte, args ...string) []string {
-	diff := exec.Command("git", append([]string{"-C", root}, args...)...) //nolint:gosec // fixed argv, caller-controlled refs only
+	diff := gitexec.Cmd(root, args...)
 	diff.Stdin = bytes.NewReader(stdin)
 	patch, err := diff.Output()
 	if err != nil || len(patch) == 0 {
 		return nil
 	}
-	hash := exec.Command("git", "-C", root, "patch-id", "--stable")
+	hash := gitexec.Cmd(root, "patch-id", "--stable")
 	hash.Stdin = bytes.NewReader(patch)
 	out, err := hash.Output()
 	if err != nil {
@@ -267,7 +267,7 @@ func gitPatchIDs(root string, stdin []byte, args ...string) []string {
 // report merges from a long-lived branch as deliveries, so an ambiguous repo
 // reports nothing and leaves delivery to the webhook.
 func defaultBranch(root string) (string, bool) {
-	if ref, ok := gitLine(root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); ok {
+	if ref, ok := gitexec.Line(root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD"); ok {
 		if _, name, found := strings.Cut(ref, "/"); found && name != "" {
 			return name, true
 		}
@@ -288,8 +288,7 @@ func defaultBranch(root string) (string, bool) {
 
 // localBranches returns the set of branch names in root, in one git call.
 func localBranches(root string) map[string]bool {
-	out, err := exec.Command("git", "-C", root, "for-each-ref",
-		"--format=%(refname:short)", "refs/heads/").Output()
+	out, err := gitexec.Bytes(root, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
 	if err != nil {
 		return nil
 	}
@@ -300,20 +299,4 @@ func localBranches(root string) map[string]bool {
 		}
 	}
 	return set
-}
-
-// gitLine runs a git command in root and returns its single line of output.
-// Empty output counts as failure: every caller wants a name or a sha.
-func gitLine(root string, args ...string) (string, bool) {
-	out, err := exec.Command("git", append([]string{"-C", root}, args...)...).Output() //nolint:gosec // fixed argv, caller-controlled refs only
-	if err != nil {
-		return "", false
-	}
-	line := strings.TrimSpace(string(out))
-	return line, line != ""
-}
-
-// gitOK runs a git command in root for its exit status alone.
-func gitOK(root string, args ...string) bool {
-	return exec.Command("git", append([]string{"-C", root}, args...)...).Run() == nil //nolint:gosec // fixed argv, caller-controlled refs only
 }
