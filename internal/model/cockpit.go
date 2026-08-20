@@ -124,5 +124,5 @@ type CockpitProjection struct {
 	Work              CockpitWork        `json:"work"`
 	SecondaryConcerns []SecondaryConcern `json:"secondary_concerns"`
 	Repositories      []Repository       `json:"repositories"`
-	Cost              ProjectCost        `json:"cost"`
+	Cost              CostReport         `json:"cost"`
 }
