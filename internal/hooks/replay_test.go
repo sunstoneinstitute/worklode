@@ -1,0 +1,205 @@
+package hooks_test
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// newUnmappedEnv is newEnv without the repo mapping: deliveries for
+// sunstoneinstitute/demo are recorded *.ignored until mapDemoRepo runs.
+func newUnmappedEnv(t *testing.T) *env {
+	t.Helper()
+	st := store.OpenTestStore(t)
+	return &env{
+		dbEnv: dbEnv{st: st},
+		h:     hooks.NewGitHubHandler(st, testSecret, slog.Default(), nil, nil, nil),
+	}
+}
+
+func mapDemoRepo(t *testing.T, e *env) {
+	t.Helper()
+	ctx := context.Background()
+	if err := e.st.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := e.st.AddRepo(ctx, "demo", demoRepo); err != nil {
+		t.Fatalf("add repo: %v", err)
+	}
+}
+
+func TestReplayAppliesIgnoredEventsAfterMapping(t *testing.T) {
+	e := newUnmappedEnv(t)
+	rr := deliverBody(t, e.h, "issues", "d-1", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"issue": {"number": 7, "title": "late issue", "state": "open", "html_url": "u"}
+	}`))
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
+		t.Fatalf("delivery: %d %s", rr.Code, rr.Body.String())
+	}
+	mapDemoRepo(t, e)
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 || res.StillUnmapped != 0 {
+		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues WHERE repo = 'sunstoneinstitute/demo' AND number = 7`); n != 1 {
+		t.Fatalf("issue rows after replay = %d, want 1", n)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE external_id = 'd-1' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("applied_at set = %d rows, want 1", n)
+	}
+
+	// Second replay: nothing left to do.
+	res, err = hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("second replay: %v", err)
+	}
+	if res.Candidates != 0 || res.Replayed != 0 {
+		t.Fatalf("second replay = %+v; want a no-op", res)
+	}
+}
+
+// TestReplayProvenance: a replayed pull_request.opened produces the same
+// state_log transition a live delivery would, attributed to the ORIGINAL
+// event's id — the timeline reads "applied late", not "invented later".
+func TestReplayProvenance(t *testing.T) {
+	e := newUnmappedEnv(t)
+	// The delivery arrives before the repo is mapped. Its head ref is WL-1-x,
+	// which correlates to the first task seeded in project demo.
+	rr := deliver(t, e.h, "pull_request", "d-pr", "pull_request_opened.json")
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
+		t.Fatalf("delivery: %d %s", rr.Code, rr.Body.String())
+	}
+
+	// ...then the repo is mapped and the task exists, claimed (in_progress).
+	mapDemoRepo(t, e)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	if taskID != "WL-1" {
+		t.Fatalf("seeded task id = %q; the fixture's WL-1-x head ref no longer correlates", taskID)
+	}
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Replayed != 1 {
+		t.Fatalf("replay result = %+v; want 1 replayed", res)
+	}
+
+	if got := e.taskState(t, taskID); got != "in_review" {
+		t.Fatalf("task state after replay = %q, want in_review", got)
+	}
+
+	var originalID int64
+	row := e.st.DBForTests().QueryRow(`SELECT id FROM events WHERE external_id = 'd-pr'`)
+	if err := row.Scan(&originalID); err != nil {
+		t.Fatalf("original event id: %v", err)
+	}
+	entries, err := e.st.StateLogForEntity(context.Background(), "task", taskID)
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatalf("no state_log entries for %s; want the in_review transition", taskID)
+	}
+	last := entries[len(entries)-1]
+	if last.EventID != originalID {
+		t.Fatalf("transition event_id = %d; want the original event %d", last.EventID, originalID)
+	}
+}
+
+func TestReplayDryRunWritesNothing(t *testing.T) {
+	e := newUnmappedEnv(t)
+	deliverBody(t, e.h, "issues", "d-1", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"issue": {"number": 7, "title": "late issue", "state": "open", "html_url": "u"}
+	}`))
+	mapDemoRepo(t, e)
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("dry-run replay: %v", err)
+	}
+	if !res.DryRun || res.Candidates != 1 || res.Replayed != 1 {
+		t.Fatalf("dry-run result = %+v; want 1 would-replay", res)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 0 {
+		t.Fatalf("dry-run wrote %d issue rows, want 0", n)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE applied_at IS NOT NULL`); n != 0 {
+		t.Fatalf("dry-run set applied_at on %d events, want 0", n)
+	}
+}
+
+func TestReplaySkipsStillUnmapped(t *testing.T) {
+	e := newUnmappedEnv(t)
+	deliverBody(t, e.h, "issues", "d-1", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "never/mapped"},
+		"issue": {"number": 1, "title": "x", "state": "open", "html_url": "u"}
+	}`))
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 0 || res.StillUnmapped != 1 {
+		t.Fatalf("replay result = %+v; want 1 still-unmapped, 0 replayed", res)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE applied_at IS NULL`); n != 1 {
+		t.Fatalf("still-unmapped event lost its NULL applied_at")
+	}
+}
+
+// TestReplayRecordsMetrics: every candidate lands on exactly one bounded
+// outcome label.
+func TestReplayRecordsMetrics(t *testing.T) {
+	e := newUnmappedEnv(t)
+	deliverBody(t, e.h, "issues", "d-1", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"issue": {"number": 7, "title": "late issue", "state": "open", "html_url": "u"}
+	}`))
+	deliverBody(t, e.h, "issues", "d-2", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "never/mapped"},
+		"issue": {"number": 1, "title": "x", "state": "open", "html_url": "u"}
+	}`))
+	mapDemoRepo(t, e)
+
+	reg := prometheus.NewRegistry()
+	m := hooks.NewMetrics(reg)
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{Metrics: m})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Replayed != 1 || res.StillUnmapped != 1 {
+		t.Fatalf("replay result = %+v; want 1 replayed, 1 still-unmapped", res)
+	}
+
+	for _, tc := range []struct {
+		outcome string
+		want    float64
+	}{
+		{"replayed", 1}, {"still_unmapped", 1}, {"dry_run", 0}, {"error", 0},
+	} {
+		got := testutil.ToFloat64(m.ReplayEvents().WithLabelValues(tc.outcome))
+		if got != tc.want {
+			t.Fatalf("replay_events{%s} = %v, want %v", tc.outcome, got, tc.want)
+		}
+	}
+}
