@@ -75,21 +75,21 @@ func statusLineCommand(t *testing.T, path string) string {
 func TestClaudeInstallScopes(t *testing.T) {
 	root := t.TempDir()
 
-	local, err := ClaudeSettingsPath(root, ScopeLocal)
+	local, err := claudeSettingsPath(root, ScopeLocal)
 	if err != nil {
 		t.Fatalf("local path: %v", err)
 	}
 	if want := filepath.Join(root, ".claude", "settings.local.json"); local != want {
 		t.Fatalf("local scope path: got %s, want %s", local, want)
 	}
-	project, err := ClaudeSettingsPath(root, ScopeProject)
+	project, err := claudeSettingsPath(root, ScopeProject)
 	if err != nil {
 		t.Fatalf("project path: %v", err)
 	}
 	if want := filepath.Join(root, ".claude", "settings.json"); project != want {
 		t.Fatalf("project scope path: got %s, want %s", project, want)
 	}
-	if _, err := ClaudeSettingsPath(root, "global"); err == nil {
+	if _, err := claudeSettingsPath(root, "global"); err == nil {
 		t.Fatal("unknown scope was accepted")
 	}
 }
@@ -257,7 +257,7 @@ func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T
 	}
 	rootSettings := readSettings(t, rootPath)
 	rootSettings["statusLine"] = map[string]any{"type": "command", "command": "my-own-statusline"}
-	if err := WriteJSONFile(rootPath, rootSettings); err != nil {
+	if err := writeJSONFile(rootPath, rootSettings); err != nil {
 		t.Fatalf("seed foreign status line: %v", err)
 	}
 
@@ -356,7 +356,7 @@ func TestInstallStatusLineWritesTheCommand(t *testing.T) {
 // status line must decline rather than replace it.
 func TestInstallStatusLineKeepsAnExistingOne(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := WriteJSONFile(path, map[string]any{
+	if err := writeJSONFile(path, map[string]any{
 		"statusLine": map[string]any{"type": "command", "command": "~/bin/my-statusline"},
 	}); err != nil {
 		t.Fatal(err)
@@ -393,7 +393,7 @@ func TestInstallStatusLineIsIdempotent(t *testing.T) {
 
 func TestInstallStatusLinePreservesOtherSettings(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := WriteJSONFile(path, map[string]any{"model": "opus"}); err != nil {
+	if err := writeJSONFile(path, map[string]any{"model": "opus"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := installStatusLine(path); err != nil {
@@ -431,7 +431,7 @@ func TestUninstallStatusLineRemovesOnlyOurs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-			if err := WriteJSONFile(path, tt.settings); err != nil {
+			if err := writeJSONFile(path, tt.settings); err != nil {
 				t.Fatal(err)
 			}
 			action, err := uninstallStatusLine(path)

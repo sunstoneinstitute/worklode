@@ -58,10 +58,15 @@ func addHookFlags(cmd *cobra.Command) {
 // on. Naming an integration and opting out of it in the same run is a
 // contradiction rather than a precedence question, so it is rejected instead of
 // silently picking a winner.
+//
+// --scope is validated here too, though it is not part of hookTargets: only
+// two of the four adapters have a per-scope location, so leaving the check to
+// them would let a typo pass silently for the other two.
 func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	flags := cmd.Flags()
 	vcs, _ := flags.GetString("vcs")
 	agents, _ := flags.GetStringSlice("agent")
+	scope, _ := flags.GetString("scope")
 	noVCS, _ := flags.GetBool("no-vcs")
 	noAgent, _ := flags.GetBool("no-agent")
 	statusLine, _ := flags.GetBool("statusline")
@@ -82,6 +87,10 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	if noAgent && flags.Changed("statusline") && statusLine {
 		return hookTargets{}, errors.New("--statusline and --no-agent are mutually exclusive")
 	}
+	if scope != harness.ScopeLocal && scope != harness.ScopeProject {
+		return hookTargets{}, fmt.Errorf("unsupported --scope %q (supported: %s, %s)",
+			scope, harness.ScopeLocal, harness.ScopeProject)
+	}
 
 	if noVCS {
 		vcs = ""
@@ -94,6 +103,14 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 		var err error
 		if agents, err = normalizeAgents(agents); err != nil {
 			return hookTargets{}, err
+		}
+		// pflag reads --agent as CSV, so `--agent ""` (an unset shell
+		// variable) parses to an empty slice and never reaches
+		// normalizeAgents' validation. Naming no agent at all is not the
+		// same as --no-agent, so reject it rather than silently skipping
+		// the agent side.
+		if len(agents) == 0 && flags.Changed("agent") {
+			return hookTargets{}, unsupportedAgentError("")
 		}
 	}
 	if vcs == "" && len(agents) == 0 {
@@ -128,8 +145,7 @@ func normalizeAgents(agents []string) ([]string, error) {
 			}
 		default:
 			if _, ok := harness.Get(id); !ok {
-				return nil, fmt.Errorf("unsupported --agent %q (supported: %s, auto, all)",
-					id, strings.Join(harness.IDs(), ", "))
+				return nil, unsupportedAgentError(id)
 			}
 		}
 	}
@@ -137,6 +153,13 @@ func normalizeAgents(agents []string) ([]string, error) {
 		return harness.IDs(), nil
 	}
 	return out, nil
+}
+
+// unsupportedAgentError is the one wording for an --agent value the registry
+// does not carry, so an empty value and a misspelled one read alike.
+func unsupportedAgentError(id string) error {
+	return fmt.Errorf("unsupported --agent %q (supported: %s, auto, all)",
+		id, strings.Join(harness.IDs(), ", "))
 }
 
 // resolveAgents turns the "auto" placeholder into the harnesses actually
@@ -147,6 +170,19 @@ func resolveAgents(agents []string, dir string) []string {
 		return harness.Detected(dir)
 	}
 	return agents
+}
+
+// detectDir is the directory Detect must be given: the git worktree root
+// containing dir. Adapters look for repo-level signals (.claude/,
+// .github/copilot-instructions.md) at the top of the repo, so passing the
+// process working directory would make `--agent auto` resolve differently
+// depending on which subdirectory the command ran from. Outside a git repo
+// dir stands in for the root — auto-detection must never fail an install.
+func detectDir(dir string) string {
+	if root, ok := worktree.Root(dir); ok {
+		return root
+	}
+	return dir
 }
 
 // eventNames renders harness.Events as strings for the JSON report.
@@ -253,7 +289,7 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		}
 		res.VCS = &vcsInstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: chains}
 	}
-	agents := resolveAgents(targets.agents, dir)
+	agents := resolveAgents(targets.agents, detectDir(dir))
 	if len(targets.agents) > 0 && len(agents) == 0 {
 		fmt.Fprintln(cmd.ErrOrStderr(),
 			"no coding agent detected; skipped (name one with --agent <id> to install anyway)")
@@ -314,7 +350,7 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 		}
 		res.VCS = &vcsUninstall{VCS: targets.vcs, HooksDir: hooksDir, Hooks: removals}
 	}
-	for _, id := range resolveAgents(targets.agents, dir) {
+	for _, id := range resolveAgents(targets.agents, detectDir(dir)) {
 		h, ok := harness.Get(id)
 		if !ok {
 			return res, fmt.Errorf("unknown agent %q", id)
@@ -461,6 +497,11 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 	}
 	for _, a := range res.Agents {
 		line := fmt.Sprintf("%s: installed hooks in %s", a.Agent, a.Path)
+		// An adapter that binds nothing writes nothing, so naming its
+		// settings file would report a write that never happened.
+		if len(a.Bound) == 0 {
+			line = fmt.Sprintf("%s: bound no hooks", a.Agent)
+		}
 		if len(a.UnboundEvents) > 0 {
 			line += fmt.Sprintf(" (no binding for: %s; git pre-commit still covers the heartbeat)",
 				strings.Join(a.UnboundEvents, ", "))
@@ -484,6 +525,8 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 		switch i.AgentsMD {
 		case instrCreated:
 			fmt.Fprintf(out, "%s: created with the Worklode block\n", agentsFile)
+		case instrAdded:
+			fmt.Fprintf(out, "%s: added the Worklode block\n", agentsFile)
 		case instrUpdated:
 			fmt.Fprintf(out, "%s: refreshed the Worklode block\n", agentsFile)
 		case instrUnchanged:

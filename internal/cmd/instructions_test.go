@@ -49,7 +49,7 @@ func TestEnsureAgentsMDPreservesForeignContent(t *testing.T) {
 		t.Fatalf("seed %s: %v", path, err)
 	}
 
-	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
+	if action, err := ensureAgentsMD(root); err != nil || action != instrAdded {
 		t.Fatalf("first run: %s %v", action, err)
 	}
 	// Move the tail below the block, which is where a hand-edited file has it.
@@ -190,7 +190,7 @@ func TestAgentsBlockIgnoresMarkersInsideAFence(t *testing.T) {
 		t.Fatalf("seed %s: %v", path, err)
 	}
 
-	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
+	if action, err := ensureAgentsMD(root); err != nil || action != instrAdded {
 		t.Fatalf("ensureAgentsMD: %s %v", action, err)
 	}
 	got := readFile(t, path)
@@ -272,7 +272,7 @@ func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 		t.Fatalf("symlink AGENTS.md -> CLAUDE.md: %v", err)
 	}
 
-	if action, err := ensureAgentsMD(root); err != nil || action != instrUpdated {
+	if action, err := ensureAgentsMD(root); err != nil || action != instrAdded {
 		t.Fatalf("ensureAgentsMD: %s %v", action, err)
 	}
 	got := readFile(t, claudePath)
@@ -497,5 +497,31 @@ func TestReportUninstallInstructionLines(t *testing.T) {
 	}
 	if strings.Contains(out, "unexpected result") {
 		t.Fatalf("report = %q, want no unexpected-result line", out)
+	}
+}
+
+// Appending the block to a file that carried none is not refreshing one, so
+// the two must not print the same sentence.
+func TestReportInstallDistinguishesAddedFromRefreshed(t *testing.T) {
+	lines := map[string]string{}
+	for _, action := range []string{instrAdded, instrUpdated} {
+		var buf strings.Builder
+		cmd := discardCmd()
+		cmd.SetOut(&buf)
+		res := installResult{Instructions: &instructionsResult{
+			AgentsMD: action, ClaudeMD: instrSatisfied}}
+		if err := reportInstall(cmd, res); err != nil {
+			t.Fatalf("reportInstall %s: %v", action, err)
+		}
+		if strings.Contains(buf.String(), "unexpected result") {
+			t.Fatalf("%s: report = %q", action, buf.String())
+		}
+		lines[action] = buf.String()
+	}
+	if lines[instrAdded] == lines[instrUpdated] {
+		t.Fatalf("added and refreshed both report %q", lines[instrAdded])
+	}
+	if !strings.Contains(lines[instrAdded], "added the Worklode block") {
+		t.Fatalf("added report = %q", lines[instrAdded])
 	}
 }

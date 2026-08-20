@@ -11,6 +11,10 @@ import (
 // ReadJSONFile reads path as generic JSON. A missing file is an empty
 // settings object, not an error — installing into a repo that has never had
 // harness settings is the common case.
+//
+// It is the one exported member of this file: internal/cmd's install tests
+// assert on what an adapter wrote by reading it back through the same reader
+// that wrote it. Adapters aside, nothing else needs it.
 func ReadJSONFile(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -29,10 +33,10 @@ func ReadJSONFile(path string) (map[string]any, error) {
 	return settings, nil
 }
 
-// WriteJSONFile writes settings back to path, creating the parent directory
+// writeJSONFile writes settings back to path, creating the parent directory
 // if needed. Output is indented and newline-terminated so a committed
 // settings file stays readable and diffs cleanly.
-func WriteJSONFile(path string, settings map[string]any) error {
+func writeJSONFile(path string, settings map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}

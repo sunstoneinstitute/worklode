@@ -137,11 +137,11 @@ func settingsPathForScope(dir, scope string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("not inside a git repository: %s", dir)
 	}
-	return ClaudeSettingsPath(root, scope)
+	return claudeSettingsPath(root, scope)
 }
 
-// ClaudeSettingsPath maps a scope to its settings file under root.
-func ClaudeSettingsPath(root, scope string) (string, error) {
+// claudeSettingsPath maps a scope to its settings file under root.
+func claudeSettingsPath(root, scope string) (string, error) {
 	switch scope {
 	case ScopeLocal:
 		return filepath.Join(root, ".claude", "settings.local.json"), nil
@@ -168,7 +168,7 @@ func installClaudeHooks(path string) error {
 // where `lode install` was never run locally is left alone, so `lode next`
 // never opts a worktree into Claude Code hooks on its own.
 func (ClaudeCode) PropagateToWorktree(root, dir string) error {
-	rootPath, err := ClaudeSettingsPath(root, ScopeLocal)
+	rootPath, err := claudeSettingsPath(root, ScopeLocal)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 	if _, installed := stripLodeHooks(settingsHooks(rootSettings)); !installed {
 		return nil
 	}
-	dirPath, err := ClaudeSettingsPath(dir, ScopeLocal)
+	dirPath, err := claudeSettingsPath(dir, ScopeLocal)
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func installStatusLine(path string) (action string, err error) {
 		"type":    "command",
 		"command": StatusLineCommand,
 	}
-	if err := WriteJSONFile(path, settings); err != nil {
+	if err := writeJSONFile(path, settings); err != nil {
 		return "", err
 	}
 	return ActionInstalled, nil
@@ -244,7 +244,7 @@ func uninstallStatusLine(path string) (action string, err error) {
 		return ActionKept, nil
 	}
 	delete(settings, "statusLine")
-	if err := WriteJSONFile(path, settings); err != nil {
+	if err := writeJSONFile(path, settings); err != nil {
 		return "", err
 	}
 	return ActionRemoved, nil

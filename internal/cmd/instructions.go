@@ -19,11 +19,14 @@ const (
 )
 
 // Actions reported for the instruction files. AGENTS.md is managed, so it is
-// created/updated/unchanged; CLAUDE.md is authored prose Worklode never edits,
-// so an existing one yields suggested (say the line) or satisfied (the line is
-// already there, or AGENTS.md resolves to this same file).
+// created (no file at all), added (a file carrying no block of ours), updated
+// (a block of ours replaced) or unchanged; CLAUDE.md is authored prose
+// Worklode never edits, so an existing one yields suggested (say the line) or
+// satisfied (the line is already there, or AGENTS.md resolves to this same
+// file).
 const (
 	instrCreated   = "created"
+	instrAdded     = "added"
 	instrUpdated   = "updated"
 	instrUnchanged = "unchanged"
 	instrSuggested = "suggested"
@@ -98,6 +101,9 @@ func ensureAgentsMD(root string) (string, error) {
 	if err != nil && !missing {
 		return "", fmt.Errorf("read %s: %w", path, err)
 	}
+	// Whether a block of ours was already there is what separates appending
+	// one from refreshing one; the report says which.
+	had := len(findBlockRegions(string(old))) > 0
 	next := spliceAgentsBlock(string(old))
 	if !missing && next == string(old) {
 		return instrUnchanged, nil
@@ -110,6 +116,9 @@ func ensureAgentsMD(root string) (string, error) {
 	}
 	if missing {
 		return instrCreated, nil
+	}
+	if !had {
+		return instrAdded, nil
 	}
 	return instrUpdated, nil
 }

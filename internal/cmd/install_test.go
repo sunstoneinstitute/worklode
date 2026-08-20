@@ -157,6 +157,42 @@ func TestResolveHookTargetsRejectsUnknownAgent(t *testing.T) {
 	}
 }
 
+// An explicit --agent that names nothing is a mistake — `--agent "$AGENT"`
+// with the variable unset — not a way to spell --no-agent. pflag reads the
+// flag as CSV, so the empty value parses to an empty slice and would
+// otherwise skip the agent side with exit 0.
+func TestResolveHookTargetsRejectsEmptyAgent(t *testing.T) {
+	for _, args := range [][]string{{"--agent", ""}, {"--agent", "", "--no-vcs"}} {
+		_, err := targetsFor(t, args...)
+		if err == nil {
+			t.Fatalf("%v was accepted, want an error", args)
+		}
+		if !strings.Contains(err.Error(), "unsupported --agent") {
+			t.Fatalf("%v: error = %v, want it to mention \"unsupported --agent\"", args, err)
+		}
+	}
+}
+
+// --scope is checked once here rather than per adapter: only two of the four
+// have a per-scope location, so a typo would otherwise pass silently for the
+// other two and write their user-level file.
+func TestResolveHookTargetsRejectsUnknownScope(t *testing.T) {
+	_, err := targetsFor(t, "--scope", "projct")
+	if err == nil {
+		t.Fatal("--scope projct was accepted, want an error")
+	}
+	for _, want := range []string{"unsupported --scope", harness.ScopeLocal, harness.ScopeProject} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %v, want it to mention %q", err, want)
+		}
+	}
+	for _, scope := range []string{harness.ScopeLocal, harness.ScopeProject} {
+		if _, err := targetsFor(t, "--scope", scope); err != nil {
+			t.Fatalf("--scope %s: %v", scope, err)
+		}
+	}
+}
+
 func TestResolveHookTargetsOptOuts(t *testing.T) {
 	got, err := targetsFor(t, "--no-vcs")
 	if err != nil {
@@ -618,7 +654,8 @@ func TestReportInstallLinesWithChainTarget(t *testing.T) {
 	res := installResult{
 		VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
 			Hooks: []hookChain{{Hook: "pre-commit", ChainedTo: "/repo/.git/hooks/pre-commit.pre-lode"}}},
-		Agents: []agentInstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json"}},
+		Agents: []agentInstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json",
+			Bound: []string{"SessionStart"}}},
 	}
 	if err := reportInstall(cmd, res); err != nil {
 		t.Fatalf("reportInstall: %v", err)
@@ -904,6 +941,39 @@ func TestInstallReportsPerAgentWithUnboundEvents(t *testing.T) {
 	}
 }
 
+// Detection is repo-scoped, so it must resolve the repo root: a run from a
+// subdirectory of a repo whose only harness signal is a root-level .claude/
+// must still find claude-code, or `--agent auto` would mean different things
+// in different directories of the same repo.
+func TestInstallHooksAutoDetectsFromASubdirectory(t *testing.T) {
+	root := initGitRepo(t)
+	isolateHarnessConfig(t)
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+	sub := filepath.Join(root, "internal", "deep")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", sub, err)
+	}
+
+	res, err := installHooks(discardCmd(), sub, hookTargets{agents: []string{agentAuto}}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks from %s: %v", sub, err)
+	}
+	if len(res.Agents) != 1 || res.Agents[0].Agent != claudeCode {
+		t.Fatalf("agents = %+v, want claude-code detected from the repo root", res.Agents)
+	}
+	// The uninstall side resolves the same way, or it could not remove what
+	// the install just wrote.
+	ures, err := uninstallHooks(sub, hookTargets{agents: []string{agentAuto}}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("uninstallHooks from %s: %v", sub, err)
+	}
+	if len(ures.Agents) != 1 || ures.Agents[0].Agent != claudeCode {
+		t.Fatalf("agents = %+v, want claude-code detected from the repo root", ures.Agents)
+	}
+}
+
 // A repo with no harness configured for it or the user writes nothing and
 // succeeds — spec 008 §4 row 1 — but says so rather than going silent.
 func TestInstallHooksAutoDetectsNothing(t *testing.T) {
@@ -1028,6 +1098,7 @@ func TestReportInstallNamesUnboundEventsAndNotes(t *testing.T) {
 	res := installResult{Agents: []agentInstall{{
 		Agent:         "someagent",
 		Path:          "/home/u/.someagent/config.toml",
+		Bound:         []string{"SessionStart"},
 		UnboundEvents: []string{"worktree-enter"},
 		Notes:         []string{"run /hooks to approve them"},
 	}}}
@@ -1039,5 +1110,28 @@ func TestReportInstallNamesUnboundEventsAndNotes(t *testing.T) {
 		"someagent: run /hooks to approve them\n"
 	if buf.String() != want {
 		t.Fatalf("output = %q, want %q", buf.String(), want)
+	}
+}
+
+// An adapter that binds nothing — amp — must not be reported as having
+// installed hooks into a file it never opened, and need not exist.
+func TestReportInstallSaysNothingWasBoundWhenNothingWas(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(&buf)
+	res := installResult{Agents: []agentInstall{{
+		Agent:         registeredAgent(t, "amp"),
+		Path:          "/home/u/.config/amp/settings.json",
+		UnboundEvents: []string{"session-start"},
+		Notes:         []string{"amp binds nothing"},
+	}}}
+	if err := reportInstall(cmd, res); err != nil {
+		t.Fatalf("reportInstall: %v", err)
+	}
+	if strings.Contains(buf.String(), "installed hooks in") {
+		t.Fatalf("output claims a write that never happened:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "amp: bound no hooks") {
+		t.Fatalf("output = %q, want it to say nothing was bound", buf.String())
 	}
 }

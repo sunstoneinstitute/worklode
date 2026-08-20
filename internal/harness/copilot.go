@@ -106,7 +106,7 @@ func (c Copilot) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	for _, b := range copilotBindings {
 		hooks[b.Event] = []any{map[string]any{"type": "command", "command": b.Command}}
 	}
-	if err := WriteJSONFile(path, map[string]any{"version": 1, "hooks": hooks}); err != nil {
+	if err := writeJSONFile(path, map[string]any{"version": 1, "hooks": hooks}); err != nil {
 		return HookInstall{}, err
 	}
 	return HookInstall{

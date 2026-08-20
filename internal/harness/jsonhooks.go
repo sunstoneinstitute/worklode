@@ -75,7 +75,7 @@ func installGroupedHooks(path string, bindings []hookBinding) error {
 		hooks[b.Event] = appendBinding(hooks[b.Event], b)
 	}
 	settings["hooks"] = hooks
-	return WriteJSONFile(path, settings)
+	return writeJSONFile(path, settings)
 }
 
 // uninstallGroupedHooks removes Worklode's bindings from the JSON config at
@@ -100,7 +100,7 @@ func uninstallGroupedHooks(path string) (action string, err error) {
 	} else {
 		settings["hooks"] = hooks
 	}
-	if err := WriteJSONFile(path, settings); err != nil {
+	if err := writeJSONFile(path, settings); err != nil {
 		return "", err
 	}
 	return ActionRemoved, nil

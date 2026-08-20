@@ -14,9 +14,11 @@ import (
 )
 
 // This file wires `lode hook <event>` to the logic in internal/hookrun. It is
-// deliberately thin: it splits the event from an optional `--next <cmd>
-// [arg...]` daisy-chain and hands everything else off. Flag parsing is
-// disabled so the downstream command's own flags pass through verbatim.
+// deliberately thin: it splits the argv four ways — the event, an optional
+// `--harness <id>`, the hook's own positional arguments, and an optional
+// `--next <cmd> [arg...]` daisy-chain — and hands everything else off. Flag
+// parsing is disabled so the downstream command's own flags pass through
+// verbatim.
 
 func init() {
 	rootCmd.AddCommand(newHookCmd())
@@ -94,7 +96,10 @@ func parseHookArgs(argv []string) (event, harnessID string, args, next []string,
 			}
 			return event, harnessID, args, next, nil
 		case "--harness":
-			if i+1 >= len(rest) {
+			// A value that looks like a flag is a caller mistake — an empty
+			// shell variable, most often — not a harness id. Swallowing it
+			// would eat the "--next" that follows and drop the chain.
+			if i+1 >= len(rest) || strings.HasPrefix(rest[i+1], "--") {
 				return "", "", nil, nil, errors.New("--harness requires a harness id")
 			}
 			harnessID = rest[i+1]

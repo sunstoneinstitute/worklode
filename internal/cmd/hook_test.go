@@ -38,6 +38,10 @@ func TestParseHookArgs(t *testing.T) {
 			event: "commit-msg", harness: "codex", hargs: []string{".git/COMMIT_EDITMSG"}},
 		{name: "trailing --harness with no id is an error",
 			args: []string{"heartbeat", "--harness"}, wantErr: true},
+		// An empty shell variable turns `--harness "$H" --next real-hook` into
+		// this. Taking "--next" as the id would silently drop the chain.
+		{name: "--harness swallowing a flag is an error",
+			args: []string{"pre-commit", "--harness", "--next", "real-hook"}, wantErr: true},
 		{name: "empty argv is an error", args: nil, wantErr: true},
 	}
 	for _, c := range cases {
