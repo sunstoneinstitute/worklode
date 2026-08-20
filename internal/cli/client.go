@@ -1173,6 +1173,41 @@ func (c *Client) Reconcile(ctx context.Context, in model.ReconcileInput) (model.
 	return doJSON[model.ReconcileResponse](ctx, c, http.MethodPost, "/api/v1/reconcile", in, "reconcile")
 }
 
+// AddCrewMember calls POST /api/v1/projects/{id}/participants, adding one
+// role-labelled Crew member (spec 029 §6.1). An empty role means "member";
+// the returned member carries every role that actor holds on the project,
+// not just the one just added.
+func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string, lead bool) (model.CrewMember, []byte, error) {
+	return doJSON[model.CrewMember](ctx, c, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants",
+		model.AddCrewMemberInput{Actor: actor, Role: role, Lead: lead}, "crew member")
+}
+
+// ListCrew calls GET /api/v1/projects/{id}/participants: every member of a
+// project's Crew (spec 029 §6.1), lead-first then by when they were added.
+// An empty roster is an empty slice, not nil.
+func (c *Client) ListCrew(ctx context.Context, project string) ([]model.CrewMember, []byte, error) {
+	resp, raw, err := doJSON[model.ParticipantListResponse](ctx, c, http.MethodGet,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants", nil, "participant list")
+	if err != nil {
+		return nil, nil, err
+	}
+	return resp.Participants, raw, nil
+}
+
+// RemoveCrewMember calls DELETE /api/v1/projects/{id}/participants/{actor},
+// removing every role that actor holds on the project in one act (spec 029
+// §6.1). The server answers 204 with no body, so the returned raw bytes are
+// always empty; it is returned anyway to match AddCrewMember/ListCrew's
+// shape, letting the caller's --json path print via printRaw the same way.
+// A removal refused because the member still owns open work comes back as a
+// *ClientError whose message names each item, so the caller can print the
+// responsibility list as the server wrote it.
+func (c *Client) RemoveCrewMember(ctx context.Context, project, actor string) ([]byte, error) {
+	return c.do(ctx, http.MethodDelete,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants/"+url.PathEscape(actor), nil)
+}
+
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
 // setting the terminal delivery state for an already-mapped repo.
 func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {

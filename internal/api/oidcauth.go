@@ -32,11 +32,11 @@ var errNoUserRole = errors.New("missing user role")
 var errActorKindConflict = errors.New("actor id is reserved by a non-human actor")
 
 // provisionActor enforces the "user" role and upserts the human actor from the
-// verified claims, syncing the admin flag from the "admin" role and the
-// expected GitHub login from the github_username claim (spec 001 §9.2, empty
-// when Keycloak asserts none). It returns the provisioned actor id (the
-// preferred_username). Shared by the token-exchange endpoint and the web
-// callback.
+// verified claims, syncing the admin flag from the "admin" role, the expected
+// GitHub login from the github_username claim (spec 001 §9.2, empty when
+// Keycloak asserts none), and the email and groups claims in full (spec 029
+// §6.2). It returns the provisioned actor id (the preferred_username). Shared
+// by the token-exchange endpoint and the web callback.
 func (s *server) provisionActor(ctx context.Context, c *oidc.Claims) (string, error) {
 	if !c.HasRole("user") {
 		return "", errNoUserRole
@@ -51,7 +51,7 @@ func (s *server) provisionActor(ctx context.Context, c *oidc.Claims) (string, er
 	if existing != nil && existing.Kind != "human" {
 		return "", errActorKindConflict
 	}
-	if err := s.st.UpsertHumanActor(ctx, c.PreferredUsername, c.Name, c.HasRole("admin"), c.GitHubUsername); err != nil {
+	if err := s.st.UpsertHumanActor(ctx, c.PreferredUsername, c.Name, c.HasRole("admin"), c.GitHubUsername, c.Email, c.Groups); err != nil {
 		return "", err
 	}
 	return c.PreferredUsername, nil

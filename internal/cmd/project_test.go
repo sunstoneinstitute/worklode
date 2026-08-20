@@ -381,3 +381,234 @@ func TestProjectDoctorRendersReport(t *testing.T) {
 		t.Fatalf("--json output does not round-trip stale:\n%s", out)
 	}
 }
+
+// TestProjectCrewAdd covers `lode project crew add` end to end against a real
+// server: the default role, an explicit role, the lead flag, and a refusal
+// surfacing as a CLI error.
+func TestProjectCrewAdd(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+
+	// runLode reuses rootCmd, so a flag set by one call leaks into a later
+	// call that omits it: exercise the omitted-flag case first.
+	out, err := runLode(t, "project", "crew", "add", "proj", "bob")
+	if err != nil {
+		t.Fatalf("crew add: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "added bob to project proj as member") {
+		t.Fatalf("crew add output = %q, want it to name the default role", out)
+	}
+
+	out, err = runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead")
+	if err != nil {
+		t.Fatalf("crew add --role --lead: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "as editor") || !strings.Contains(out, "ada is the project lead") {
+		t.Fatalf("crew add output = %q, want the role and the lead line", out)
+	}
+
+	// --json prints the server's own body, with every role the member holds.
+	out, err = runLode(t, "project", "crew", "add", "proj", "ada", "--role", "reporter", "--json")
+	if err != nil {
+		t.Fatalf("crew add --json: %v\noutput: %s", err, out)
+	}
+	var member model.CrewMember
+	if err := json.Unmarshal([]byte(out), &member); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if member.Actor != "ada" || !member.Lead || strings.Join(member.Roles, ",") != "editor,reporter" {
+		t.Fatalf("member = %+v, want ada, lead, [editor reporter]", member)
+	}
+
+	// A refused add is an error the CLI surfaces, not a silent success.
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "member"); err == nil {
+		t.Fatalf("duplicate role: want an error, got nil\noutput: %s", out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "nosuch"); err == nil {
+		t.Fatalf("unknown actor: want an error, got nil\noutput: %s", out)
+	}
+
+	crew, err := st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 2 {
+		t.Fatalf("crew = %+v, want 2 members", crew)
+	}
+}
+
+// TestProjectCrewList covers `lode project crew <project>` (no subcommand):
+// the roster renders as a table (name, roles comma-joined, a lead marker),
+// --json prints the server's envelope verbatim, and an empty roster still
+// prints the header row rather than erroring.
+func TestProjectCrewList(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead"); err != nil {
+		t.Fatalf("seed lead: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("seed member: %v\noutput: %s", err, out)
+	}
+
+	out, err := runLode(t, "project", "crew", "proj")
+	if err != nil {
+		t.Fatalf("crew list: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "ada") || !strings.Contains(out, "editor") || !strings.Contains(out, "lead") {
+		t.Fatalf("crew list output = %q, want ada/editor/lead", out)
+	}
+	if !strings.Contains(out, "bob") || !strings.Contains(out, "reporter") {
+		t.Fatalf("crew list output = %q, want bob/reporter", out)
+	}
+
+	out, err = runLode(t, "project", "crew", "proj", "--json")
+	if err != nil {
+		t.Fatalf("crew list --json: %v\noutput: %s", err, out)
+	}
+	var resp model.ParticipantListResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if len(resp.Participants) != 2 {
+		t.Fatalf("participants = %+v, want 2", resp.Participants)
+	}
+}
+
+// TestProjectCrewDispatch checks the parent `crew` command's own RunE (the
+// listing form) does not swallow the `add`/`remove` subcommands: cobra must
+// still dispatch to them when the first argument names one, which is the one
+// thing giving the parent its own RunE risks silently breaking.
+func TestProjectCrewDispatch(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "ada", "human", "Ada", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada"); err != nil {
+		t.Fatalf("crew add: %v\noutput: %s", err, out)
+	} else if !strings.Contains(out, "added ada to project proj") {
+		t.Fatalf("crew add output = %q, want the add subcommand's own message, not a listing", out)
+	}
+
+	crew, err := st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 {
+		t.Fatalf("crew = %+v, want ada added by the subcommand", crew)
+	}
+
+	if out, err := runLode(t, "project", "crew", "remove", "proj", "ada"); err != nil {
+		t.Fatalf("crew remove: %v\noutput: %s", err, out)
+	} else if !strings.Contains(out, "removed ada from project proj") {
+		t.Fatalf("crew remove output = %q, want the remove subcommand's own message, not a listing", out)
+	}
+
+	crew, err = st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 0 {
+		t.Fatalf("crew = %+v, want ada removed by the subcommand", crew)
+	}
+}
+
+// TestProjectCrewRemove covers `lode project crew remove` end to end: the
+// open-work guard's item list reaches the terminal verbatim, the lead cannot
+// be removed, and a clean removal drops every role the member held.
+func TestProjectCrewRemove(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead"); err != nil {
+		t.Fatalf("seed lead: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("seed member: %v\noutput: %s", err, out)
+	}
+
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{
+		Project: "proj", Title: "bob's open task", Body: "b",
+		Priority: "medium", Kind: "feature",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, _, err := c.AssignTask(ctx, task.ID, "bob"); err != nil {
+		t.Fatalf("assign task: %v", err)
+	}
+
+	// The guard's item list is what the person has to act on, so it reaches
+	// the terminal exactly as the server wrote it.
+	out, err := runLode(t, "project", "crew", "remove", "proj", "bob")
+	if err == nil {
+		t.Fatalf("open work: want an error, got nil\noutput: %s", out)
+	}
+	if !strings.Contains(err.Error(), task.ID+" (task, ready)") {
+		t.Fatalf("error = %v, want it to name %s (task, ready)", err, task.ID)
+	}
+
+	// The lead cannot go while handoff is unimplemented.
+	if out, err := runLode(t, "project", "crew", "remove", "proj", "ada"); err == nil {
+		t.Fatalf("lead removal: want an error, got nil\noutput: %s", out)
+	} else if !strings.Contains(err.Error(), "lead handoff is not implemented") {
+		t.Fatalf("lead removal error = %v, want it to say why", err)
+	}
+
+	if _, _, err := c.UnassignTask(ctx, task.ID); err != nil {
+		t.Fatalf("unassign task: %v", err)
+	}
+	out, err = runLode(t, "project", "crew", "remove", "proj", "bob")
+	if err != nil {
+		t.Fatalf("crew remove: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "removed bob from project proj") {
+		t.Fatalf("output = %q, want it to name the member and the project", out)
+	}
+
+	crew, err := st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 || crew[0].ActorID != "ada" {
+		t.Fatalf("crew = %+v, want only ada", crew)
+	}
+
+	// Removing them again is an error, not a silent success.
+	if out, err := runLode(t, "project", "crew", "remove", "proj", "bob"); err == nil {
+		t.Fatalf("second removal: want an error, got nil\noutput: %s", out)
+	}
+
+	// --json is honored like the sibling 204-returning set-repo command: the
+	// server's empty body means printRaw writes nothing, not the prose message.
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("re-seed bob: %v\noutput: %s", err, out)
+	}
+	out, err = runLode(t, "project", "crew", "remove", "proj", "bob", "--json")
+	if err != nil {
+		t.Fatalf("crew remove --json: %v\noutput: %s", err, out)
+	}
+	if out != "" {
+		t.Fatalf("crew remove --json output = %q, want empty (204 has no body)", out)
+	}
+}

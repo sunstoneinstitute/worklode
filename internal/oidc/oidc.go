@@ -16,6 +16,7 @@ import (
 type Claims struct {
 	PreferredUsername string   `json:"preferred_username"`
 	Name              string   `json:"name"`
+	Email             string   `json:"email"`
 	Groups            []string `json:"groups"`
 	// GitHubUsername is the realm's github_username user attribute (spec 001
 	// §9.2): the GitHub login Keycloak asserts for this actor. Empty when the
