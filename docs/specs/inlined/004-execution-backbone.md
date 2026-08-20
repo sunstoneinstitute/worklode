@@ -454,6 +454,14 @@ repos — no per-repo lifecycle configuration.
 
 ### 5.1 State machine
 
+> Pending `045-per-project-workflows.md#sec-2` (not yet effective)
+
+> **Amended by spec 045.** The transition table below is now the built-in
+> `default` workflow. The authority on any task's legal transitions is the
+> per-project workflow that governs it (045 §2): the mandatory core edges
+> hold everywhere, and entries into `in_review` and the delivery states
+> exist only where the workflow declares them.
+
 ```
 draft → ready → in_progress → in_review → merged → deployed_dev → deployed_prod
                      │                     ↑ │  ↘ released        (terminal)
@@ -892,6 +900,13 @@ to check out, so `lode next` must never hand an agent one. Decomposition work
 that genuinely needs a worktree becomes a child task.
 
 ### 6.4 State machine of a task with children
+
+> Pending `045-per-project-workflows.md#sec-5.4` (not yet effective)
+
+> **Amended by spec 045.** Restated workflow-independently (045 §5.4): a task
+> with children moves only among the mandatory core states, and the forbidden
+> set below is "every non-core state", so the roll-up never consults a
+> workflow.
 
 The state of a task with children is driven entirely by those children.
 `legalTransitions` (`tasks.go:66`) is global, so the restriction is enforced in
