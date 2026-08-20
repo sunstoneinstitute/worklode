@@ -11,6 +11,7 @@
 package designdoc
 
 import (
+	"bytes"
 	"regexp"
 	"strings"
 )
@@ -39,8 +40,6 @@ type Document struct {
 	Sections []*Section
 	// Frontmatter is the YAML header, or nil when the document has none.
 	Frontmatter *Frontmatter
-
-	src []byte
 }
 
 // Section is an addressable part of a document: a wl:Section. It is
@@ -81,7 +80,7 @@ type Section struct {
 
 // Parse reads a design document from src.
 func Parse(src []byte) (*Document, error) {
-	d := &Document{src: src}
+	d := &Document{}
 	front, inner, body := splitFrontmatter(string(src))
 	if front != "" {
 		fm, err := parseFrontmatter(front, inner)
@@ -91,9 +90,10 @@ func Parse(src []byte) (*Document, error) {
 		d.Frontmatter = fm
 	}
 
-	// Offsets of each heading line within body, and the parsed section.
-	var starts, ends []int
-	for _, h := range scanHeadings(body) {
+	// hits[i] carries section i's byte span, so the section bodies below are
+	// cut straight from it rather than from parallel offset slices.
+	hits := scanHeadings(body)
+	for _, h := range hits {
 		raw := body[h.start:h.end]
 		sec := &Section{
 			Level:      len(h.hashes),
@@ -109,20 +109,18 @@ func Parse(src []byte) (*Document, error) {
 			origAnchor: h.anchor,
 		}
 		d.Sections = append(d.Sections, sec)
-		starts = append(starts, h.start)
-		ends = append(ends, h.end)
 	}
 
 	if len(d.Sections) == 0 {
 		d.Preamble = body
 		return d, nil
 	}
-	d.Preamble = body[:starts[0]]
+	d.Preamble = body[:hits[0].start]
 	for i, sec := range d.Sections {
-		if i+1 < len(d.Sections) {
-			sec.Body = body[ends[i]:starts[i+1]]
+		if i+1 < len(hits) {
+			sec.Body = body[hits[i].end:hits[i+1].start]
 		} else {
-			sec.Body = body[ends[i]:]
+			sec.Body = body[hits[i].end:]
 		}
 	}
 	link(d.Sections)
@@ -149,14 +147,16 @@ func link(sections []*Section) {
 // Bytes renders the document. For a document that has not been edited it
 // returns the source unchanged.
 func (d *Document) Bytes() []byte {
-	var b strings.Builder
+	// bytes.Buffer rather than strings.Builder: Builder.String() would have to
+	// be copied again to satisfy the []byte return.
+	var b bytes.Buffer
 	b.WriteString(d.Frontmatter.source())
 	b.WriteString(d.Preamble)
 	for _, sec := range d.Sections {
 		b.WriteString(sec.headingSource())
 		b.WriteString(sec.Body)
 	}
-	return []byte(b.String())
+	return b.Bytes()
 }
 
 // headingSource returns the section's heading line: the original bytes while
@@ -208,7 +208,7 @@ func terminatorOf(raw string) string {
 
 // hit is one heading found in the source, with its byte span.
 type hit struct {
-	start, end                int // span of the heading line, excluding terminator
+	start, end                int // span of the heading line, terminator included
 	hashes, num, text, anchor string
 }
 
@@ -217,7 +217,7 @@ func scanHeadings(body string) []hit {
 	var hits []hit
 	var fence string
 	for _, ln := range splitLines(body) {
-		line := strings.TrimRight(body[ln.start:ln.textEnd], "\r")
+		line := strings.TrimRight(ln.text(body), "\r")
 		stripped := strings.TrimLeft(line, " \t")
 		if fence != "" {
 			if strings.HasPrefix(stripped, fence) {
@@ -250,6 +250,10 @@ func scanHeadings(body string) []hit {
 type span struct {
 	start, textEnd, end int
 }
+
+// text returns the line's text out of the string it was located in, without
+// its terminator.
+func (sp span) text(s string) string { return s[sp.start:sp.textEnd] }
 
 // splitLines returns every line in s, terminators included in end. A final
 // line with no terminator is returned too, so concatenating the spans

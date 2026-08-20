@@ -3,15 +3,14 @@ package designdoc
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // SectionMeta is one anchored section, as loaded for sync (025 §16.2).
@@ -95,11 +94,11 @@ func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 	if doc.Frontmatter.Status == "" {
 		return nil, CorpusDoc{}, fmt.Errorf("%s: frontmatter has no status", name)
 	}
-	title, ok := docTitle(doc.Preamble)
+	title, ok := Title(doc)
 	if !ok {
 		return nil, CorpusDoc{}, fmt.Errorf("%s: no H1 title", name)
 	}
-	fmJSON, err := frontmatterJSON(doc.Frontmatter)
+	fmJSON, err := doc.Frontmatter.jsonBytes()
 	if err != nil {
 		return nil, CorpusDoc{}, fmt.Errorf("%s: %w", name, err)
 	}
@@ -110,39 +109,16 @@ func loadDoc(dir, name string) (*Document, CorpusDoc, error) {
 	}, nil
 }
 
-// Title is the document's H1 title — the first "# …" line of the preamble.
-// Reported false when the preamble carries none.
+// Title is the document's H1 title — the preamble's first "# …" line, hash
+// and whitespace stripped. Reported false when the preamble carries none.
 func Title(d *Document) (string, bool) {
-	return docTitle(d.Preamble)
-}
-
-// docTitle returns the preamble's first "# " heading line, hash and
-// whitespace stripped. ok is false when the preamble has none.
-func docTitle(preamble string) (string, bool) {
-	for _, line := range strings.Split(preamble, "\n") {
+	for line := range strings.SplitSeq(d.Preamble, "\n") {
 		trimmed := strings.TrimRight(line, "\r")
 		if strings.HasPrefix(trimmed, "# ") {
 			return strings.TrimSpace(strings.TrimPrefix(trimmed, "#")), true
 		}
 	}
 	return "", false
-}
-
-// frontmatterJSON re-encodes the frontmatter's inner YAML as JSON, so the
-// backbone can store it without a second parser (025 §16.3). YAML scalar
-// timestamps (e.g. "issued: 2026-01-01") are normalized to RFC3339
-// ("2026-01-01T00:00:00Z") in the process — the value is preserved, only its
-// lexical form changes.
-func frontmatterJSON(f *Frontmatter) (json.RawMessage, error) {
-	var m map[string]any
-	if err := yaml.Unmarshal([]byte(f.inner), &m); err != nil {
-		return nil, fmt.Errorf("frontmatter: %w", err)
-	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return nil, fmt.Errorf("frontmatter: %w", err)
-	}
-	return b, nil
 }
 
 // loadSpecOrADR loads one SPEC-corpus document: kind from frontmatter (adr
@@ -220,12 +196,7 @@ func anchorEdges(fm *Frontmatter) []EdgeMeta {
 	var edges []EdgeMeta
 	for _, r := range anchorRelOrder {
 		m := r.get(fm)
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
+		for _, k := range slices.Sorted(maps.Keys(m)) {
 			srcAnchor := anchorMapSrcAnchor(k)
 			for _, ref := range m[k] {
 				target, targetAnchor := SplitFragment(ref)
@@ -338,6 +309,6 @@ func corpusFilenames(corpusDir string) ([]string, error) {
 	for i, m := range matches {
 		names[i] = filepath.Base(m)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, nil
 }
