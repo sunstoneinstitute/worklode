@@ -474,3 +474,28 @@ one pass.
   rather than corrupts — so it was out of scope for the non-regressing-upsert
   fix, which guards fact columns and not this ordering. Reconcile engine 2
   (013 §2.2, WL-33) repairs facts against GitHub's current truth and heals it.
+
+## From WL-207 — blob spool volume (2026-08-20)
+
+- `[P2]` **`POST /api/v1/blobs` has no concurrency cap, so the spool volume's
+  `sizeLimit` is enforced by pod eviction.** Each upload spools up to
+  `maxBlobBytes` (100 MiB) to the `blob-spool` emptyDir, sized 1Gi in
+  `deploy/base/deployment.yaml`. Nothing bounds in-flight uploads, so ~11
+  concurrent max-size ones exceed the limit and the kubelet evicts the pod —
+  killing every other in-flight request on a single-replica Deployment, and
+  reachable by any client holding a valid token. Unbounded ephemeral storage
+  is the worse trade, so the fix is a semaphore in the handler capping
+  concurrency at `sizeLimit / maxBlobBytes` and returning 503 above it, not a
+  larger volume. Needs the 503-vs-queue decision made before it is written.
+- `[P4]` **Spec 021 §13 does not mention the spool directory's writability
+  requirement.** The table still reads "defaults to `os.TempDir()`"; since
+  WL-207 the server refuses to boot when blob storage is configured and that
+  directory is unwritable, and the deployment mounts a volume for it. A
+  one-line amendment to §13 would make the corpus of record true — README.md
+  and the manifests already are.
+- `[P4]` **Only the blob spool has a writable path; `os.TempDir()` is still
+  read-only in-cluster.** Any future dependency that stages through it —
+  multipart form parsing, an SDK that buffers uploads, exec'ing git — fails
+  the same EROFS way WL-207 just fixed. Pointing `TMPDIR` at the spool mount
+  would close the class rather than the instance, at the cost of letting
+  unrelated temp writes consume the blob spool's budget.

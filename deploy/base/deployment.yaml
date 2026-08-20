@@ -83,13 +83,26 @@ spec:
             - name: secrets-catalog
               mountPath: /etc/worklode/secrets-catalog
               readOnly: true
+            # The only writable path in the container. Must stay in sync with
+            # LODE_BLOB_SPOOL_DIR in configmap.yaml.
+            - name: blob-spool
+              mountPath: /var/spool/worklode/blobs
           resources:
             requests:
               memory: "128Mi"
               cpu: "100m"
+              # The blob-spool emptyDir counts as this container's ephemeral
+              # storage. Requesting some makes the scheduler account for it and
+              # keeps the pod off the front of the queue when a node hits disk
+              # pressure, where a request of 0 puts it. The limit sits above
+              # the volume's sizeLimit so that sizeLimit stays the binding
+              # constraint — a lower limit here would evict first, for a
+              # reason nothing points at.
+              ephemeral-storage: "256Mi"
             limits:
               memory: "512Mi"
               cpu: "500m"
+              ephemeral-storage: "2Gi"
           livenessProbe:
             httpGet:
               path: /healthz
@@ -117,3 +130,19 @@ spec:
           secret:
             secretName: worklode-secrets-catalog
             optional: true
+        # Scratch space for blob uploads. The root filesystem is read-only, so
+        # without this every POST /api/v1/blobs fails EROFS in os.CreateTemp.
+        #
+        # Disk-backed on purpose: a `medium: Memory` emptyDir is charged to the
+        # container's memory limit, and one upload can be maxBlobBytes
+        # (internal/api/blobs.go), so a couple of concurrent uploads would
+        # OOM-kill the pod instead of filling a directory.
+        #
+        # A spool file lives only for one request, so sizeLimit bounds
+        # concurrent uploads, not stored blobs: 1Gi is ~10 max-size uploads at
+        # once. Beyond it the kubelet evicts the pod, which is why the upload
+        # path wants a concurrency cap (docs/follow-ups.md) — keep sizeLimit
+        # and the ephemeral-storage limit above in step.
+        - name: blob-spool
+          emptyDir:
+            sizeLimit: 1Gi
