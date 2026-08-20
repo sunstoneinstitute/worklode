@@ -598,4 +598,17 @@ func TestProjectCrewRemove(t *testing.T) {
 	if out, err := runLode(t, "project", "crew", "remove", "proj", "bob"); err == nil {
 		t.Fatalf("second removal: want an error, got nil\noutput: %s", out)
 	}
+
+	// --json is honored like the sibling 204-returning set-repo command: the
+	// server's empty body means printRaw writes nothing, not the prose message.
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("re-seed bob: %v\noutput: %s", err, out)
+	}
+	out, err = runLode(t, "project", "crew", "remove", "proj", "bob", "--json")
+	if err != nil {
+		t.Fatalf("crew remove --json: %v\noutput: %s", err, out)
+	}
+	if out != "" {
+		t.Fatalf("crew remove --json output = %q, want empty (204 has no body)", out)
+	}
 }

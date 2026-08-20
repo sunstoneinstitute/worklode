@@ -290,12 +290,10 @@ type CrewView struct {
 
 	// RemoveAction is where each non-lead member's Remove button POSTs; the
 	// member is named in a hidden field. RemoveError is the one message a
-	// refused removal shows ("" otherwise), RemoveActor names the member it
-	// is about, and Responsibilities is that member's open work — spec 032
-	// §6's responsibility review: what has to be reassigned or closed before
-	// the removal can proceed (spec 029 §6.1).
+	// refused removal shows ("" otherwise), and Responsibilities is that
+	// member's open work — spec 032 §6's responsibility review: what has to
+	// be reassigned or closed before the removal can proceed (spec 029 §6.1).
 	RemoveAction     string
-	RemoveActor      string
 	RemoveError      string
 	Responsibilities []CrewWorkItem
 }

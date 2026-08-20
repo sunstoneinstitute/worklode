@@ -148,7 +148,7 @@ func TestCrewLifecycle(t *testing.T) {
 		t.Fatalf("assign task to mo: %v", err)
 	}
 
-	err = admin.RemoveCrewMember(ctx, "crewproj", "mo")
+	_, err = admin.RemoveCrewMember(ctx, "crewproj", "mo")
 	if err == nil {
 		t.Fatal("remove mo while she owns an open task: want error, got success")
 	}
@@ -168,7 +168,7 @@ func TestCrewLifecycle(t *testing.T) {
 	if _, _, err := admin.UnassignTask(ctx, task.ID); err != nil {
 		t.Fatalf("unassign task: %v", err)
 	}
-	if err := admin.RemoveCrewMember(ctx, "crewproj", "mo"); err != nil {
+	if _, err := admin.RemoveCrewMember(ctx, "crewproj", "mo"); err != nil {
 		t.Fatalf("remove mo after unassign: %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestCrewLifecycle(t *testing.T) {
 
 	// --- Step 6: the lead can never be removed -------------------------------
 
-	err = admin.RemoveCrewMember(ctx, "crewproj", "lucy")
+	_, err = admin.RemoveCrewMember(ctx, "crewproj", "lucy")
 	if err == nil {
 		t.Fatal("remove the lead: want error, got success")
 	}

@@ -430,7 +430,7 @@ func TestCrewPage(t *testing.T) {
 	assertShell(t, body)
 	assertOneAriaCurrent(t, body)
 	bodyContains(t, body, "No Crew yet")
-	if strings.Contains(body, "spec 029 §6.1.") {
+	if strings.Contains(body, "Crew arrives with project participants") {
 		t.Error("the crew destination still renders its old placeholder message")
 	}
 	// The add-member form is the page's one write affordance (029 §6.1).

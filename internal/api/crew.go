@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -218,7 +220,8 @@ func crewFormMessage(err error) string {
 	if msg == "" {
 		return "That add was refused."
 	}
-	return strings.ToUpper(msg[:1]) + msg[1:] + "."
+	r, size := utf8.DecodeRuneInString(msg)
+	return string(unicode.ToUpper(r)) + msg[size:] + "."
 }
 
 // crewMember reads one member off a project's roster. It is how the remove
@@ -335,7 +338,6 @@ func (s *server) renderCrewRemovalRefusal(w http.ResponseWriter, r *http.Request
 		return
 	}
 	v := crewView(project, participants)
-	v.RemoveActor = actor
 
 	var open []store.OwnedWork
 	if actor != "" {
@@ -381,5 +383,6 @@ func crewRemovalMessage(err error) string {
 	if msg == "" {
 		return "That removal was refused."
 	}
-	return strings.ToUpper(msg[:1]) + msg[1:] + "."
+	r, size := utf8.DecodeRuneInString(msg)
+	return string(unicode.ToUpper(r)) + msg[size:] + "."
 }

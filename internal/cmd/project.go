@@ -211,8 +211,13 @@ func newProjectCrewRemoveCmd() *cobra.Command {
 			// The server's message carries the responsibility list verbatim;
 			// returning it unwrapped is what puts that list in front of the
 			// person who has to act on it.
-			if err := c.RemoveCrewMember(cmd.Context(), args[0], args[1]); err != nil {
+			raw, err := c.RemoveCrewMember(cmd.Context(), args[0], args[1])
+			if err != nil {
 				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "removed %s from project %s\n", args[1], args[0])
 			return nil

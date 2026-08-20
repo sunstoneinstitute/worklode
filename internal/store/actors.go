@@ -34,11 +34,11 @@ type Actor struct {
 	ExpectedGitHubLogin string
 	// Email is the Keycloak email claim, re-synced on every login (spec 029
 	// §6.2). Empty when the account carries no email or has never logged in
-	// since migration 0033.
+	// since migration 0035.
 	Email string
 	// Groups is the raw groups claim, stored in full (not filtered to
 	// user/admin) and re-synced on every login (spec 029 §6.2). Nil when the
-	// actor has never logged in since migration 0033.
+	// actor has never logged in since migration 0035.
 	Groups []string
 }
 

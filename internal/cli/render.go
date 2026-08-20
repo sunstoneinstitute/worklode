@@ -397,7 +397,14 @@ func CrewTable(w io.Writer, members []model.CrewMember) {
 		if m.Lead {
 			lead = "lead"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", m.Actor, m.DisplayName, strings.Join(m.Roles, ", "), lead)
+		// display_name is nullable; the web page falls back to the actor id
+		// (internal/ui/crew.templ), so the CLI table matches it rather than
+		// printing a blank NAME cell.
+		name := m.DisplayName
+		if name == "" {
+			name = m.Actor
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", m.Actor, name, strings.Join(m.Roles, ", "), lead)
 	}
 	tw.Flush()
 }
