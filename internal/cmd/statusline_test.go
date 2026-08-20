@@ -75,23 +75,26 @@ func TestInstallHooksWritesStatusLineOnlyWhenTargeted(t *testing.T) {
 	root := initGitRepo(t)
 	settingsPath := filepath.Join(root, ".claude", "settings.local.json")
 
-	res, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, harness.ScopeLocal)
+	res, err := installHooks(discardCmd(), root, claudeTargets("", false), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
-	if res.StatusLine != nil {
-		t.Fatalf("status line result = %+v, want nil when not targeted", res.StatusLine)
+	if len(res.StatusLine) != 0 {
+		t.Fatalf("status line result = %+v, want none when not targeted", res.StatusLine)
 	}
 	if got := statusLineCommand(t, settingsPath); got != "" {
 		t.Fatalf("statusLine written when not targeted: %q", got)
 	}
 
-	res, err = installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode, statusLine: true}, harness.ScopeLocal)
+	res, err = installHooks(discardCmd(), root, claudeTargets("", true), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --statusline: %v", err)
 	}
-	if res.StatusLine == nil || res.StatusLine.Action != harness.ActionInstalled {
+	if len(res.StatusLine) != 1 || res.StatusLine[0].Action != harness.ActionInstalled {
 		t.Fatalf("status line result = %+v", res.StatusLine)
+	}
+	if got := res.StatusLine[0].Agent; got != claudeCode {
+		t.Fatalf("status line agent = %q, want %q", got, claudeCode)
 	}
 	if got := statusLineCommand(t, settingsPath); got != harness.StatusLineCommand {
 		t.Fatalf("statusLine command = %q", got)
@@ -103,7 +106,7 @@ func TestInstallHooksWritesStatusLineOnlyWhenTargeted(t *testing.T) {
 // where nothing else would.
 func TestInstallHooksStatusLineEnablesTheWorktreeConfigExtension(t *testing.T) {
 	root := initGitRepo(t)
-	targets := hookTargets{agent: agentClaudeCode, statusLine: true}
+	targets := claudeTargets("", true)
 	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks --no-vcs --statusline: %v", err)
 	}
@@ -118,7 +121,7 @@ func TestInstallHooksStatusLineEnablesTheWorktreeConfigExtension(t *testing.T) {
 
 func TestUninstallHooksUndoesTheStatusLine(t *testing.T) {
 	root := initGitRepo(t)
-	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode, statusLine: true}
+	targets := claudeTargets(vcsGit, true)
 	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -127,7 +130,7 @@ func TestUninstallHooksUndoesTheStatusLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstallHooks: %v", err)
 	}
-	if res.StatusLine == nil || res.StatusLine.Action != harness.ActionRemoved {
+	if len(res.StatusLine) != 1 || res.StatusLine[0].Action != harness.ActionRemoved {
 		t.Fatalf("status line result = %+v", res.StatusLine)
 	}
 	if got := statusLineCommand(t, filepath.Join(root, ".claude", "settings.local.json")); got != "" {
@@ -150,9 +153,9 @@ func TestReportInstallStatusLineLines(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			cmd.Flags().Bool("json", false, "")
 			cmd.SetOut(&buf)
-			res := installResult{StatusLine: &statusLineInstall{
-				Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
-			}}
+			res := installResult{StatusLine: []statusLineInstall{{
+				Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
+			}}}
 			if err := reportInstall(cmd, res); err != nil {
 				t.Fatal(err)
 			}
@@ -179,9 +182,9 @@ func TestReportUninstallStatusLineLines(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			cmd.Flags().Bool("json", false, "")
 			cmd.SetOut(&buf)
-			res := uninstallResult{StatusLine: &statusLineUninstall{
-				Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
-			}}
+			res := uninstallResult{StatusLine: []statusLineUninstall{{
+				Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
+			}}}
 			if err := reportUninstall(cmd, res); err != nil {
 				t.Fatal(err)
 			}
@@ -194,7 +197,7 @@ func TestReportUninstallStatusLineLines(t *testing.T) {
 
 func TestReportInstallJSONOmitsSkippedStatusLine(t *testing.T) {
 	var buf bytes.Buffer
-	if err := reportInstall(jsonCmd(&buf), installResult{Agent: &agentInstall{Agent: agentClaudeCode, Path: "p"}}); err != nil {
+	if err := reportInstall(jsonCmd(&buf), installResult{Agents: []agentInstall{{Agent: claudeCode, Path: "p"}}}); err != nil {
 		t.Fatal(err)
 	}
 	var got map[string]any

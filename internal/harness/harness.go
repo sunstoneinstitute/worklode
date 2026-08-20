@@ -54,6 +54,10 @@ type HookInstall struct {
 	Path    string
 	Bound   []string // harness-native event names actually bound
 	Unbound []Event
+	// Notes carries adapter-specific advice the install report must show the
+	// user — a harness whose hooks stay inert until the user approves them, for
+	// instance. Empty for an adapter with nothing to say.
+	Notes []string
 }
 
 // HookUninstall mirrors internal/cmd's git-hook action vocabulary.

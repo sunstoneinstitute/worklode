@@ -84,13 +84,76 @@ func targetsFor(t *testing.T, args ...string) (hookTargets, error) {
 	return resolveHookTargets(cmd)
 }
 
+// claudeCode is the adapter id the install tests exercise. It is a literal,
+// not a const in install.go: the CLI resolves agents through the registry.
+const claudeCode = "claude-code"
+
+// claudeTargets is the explicit single-agent target these tests use, so they
+// never depend on whether the machine running them happens to have a ~/.claude.
+func claudeTargets(vcs string, statusLine bool) hookTargets {
+	return hookTargets{vcs: vcs, agents: []string{claudeCode}, statusLine: statusLine}
+}
+
 func TestResolveHookTargetsDefaults(t *testing.T) {
 	got, err := targetsFor(t)
 	if err != nil {
 		t.Fatalf("resolveHookTargets: %v", err)
 	}
-	if got.vcs != vcsGit || got.agent != agentClaudeCode {
-		t.Fatalf("targets = %+v, want vcs=%q agent=%q", got, vcsGit, agentClaudeCode)
+	// auto is not resolved at flag time: there is no repo directory yet.
+	if got.vcs != vcsGit || len(got.agents) != 1 || got.agents[0] != "auto" {
+		t.Fatalf("targets = %+v, want vcs=%q agents=[auto]", got, vcsGit)
+	}
+}
+
+func TestResolveHookTargetsRepeatableAgent(t *testing.T) {
+	got, err := targetsFor(t, "--agent", claudeCode)
+	if err != nil {
+		t.Fatalf("one agent: %v", err)
+	}
+	if len(got.agents) != 1 || got.agents[0] != claudeCode {
+		t.Fatalf("agents = %v", got.agents)
+	}
+	// Duplicates collapse, preserving the order given.
+	got, err = targetsFor(t, "--agent", claudeCode, "--agent", claudeCode)
+	if err != nil || len(got.agents) != 1 || got.agents[0] != claudeCode {
+		t.Fatalf("dedupe: %v %v", got.agents, err)
+	}
+}
+
+func TestResolveHookTargetsAgentAll(t *testing.T) {
+	got, err := targetsFor(t, "--agent", "all")
+	if err != nil {
+		t.Fatalf("all: %v", err)
+	}
+	if len(got.agents) != len(harness.IDs()) {
+		t.Fatalf("all = %v; want every registered id %v", got.agents, harness.IDs())
+	}
+	for i, id := range harness.IDs() {
+		if got.agents[i] != id {
+			t.Fatalf("all = %v, want %v", got.agents, harness.IDs())
+		}
+	}
+	// A pseudo-id alongside an explicit one contradicts the intent of either.
+	if _, err := targetsFor(t, "--agent", "all", "--agent", claudeCode); err == nil {
+		t.Fatal("all + explicit id accepted")
+	}
+	if _, err := targetsFor(t, "--agent", "auto", "--agent", claudeCode); err == nil {
+		t.Fatal("auto + explicit id accepted")
+	}
+}
+
+func TestResolveHookTargetsRejectsUnknownAgent(t *testing.T) {
+	_, err := targetsFor(t, "--agent", "opencode")
+	if err == nil {
+		t.Fatal("--agent opencode was accepted, want an error")
+	}
+	for _, id := range harness.IDs() {
+		if !strings.Contains(err.Error(), id) {
+			t.Fatalf("unknown agent error must list supported ids (%v), got %v", harness.IDs(), err)
+		}
+	}
+	if !strings.Contains(err.Error(), "auto, all") {
+		t.Fatalf("unknown agent error must name the pseudo-ids, got %v", err)
 	}
 }
 
@@ -99,16 +162,16 @@ func TestResolveHookTargetsOptOuts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("--no-vcs: %v", err)
 	}
-	if got.vcs != "" || got.agent != agentClaudeCode {
-		t.Fatalf("--no-vcs targets = %+v, want vcs empty, agent %q", got, agentClaudeCode)
+	if got.vcs != "" || len(got.agents) != 1 || got.agents[0] != "auto" {
+		t.Fatalf("--no-vcs targets = %+v, want vcs empty, agents [auto]", got)
 	}
 
 	got, err = targetsFor(t, "--no-agent")
 	if err != nil {
 		t.Fatalf("--no-agent: %v", err)
 	}
-	if got.vcs != vcsGit || got.agent != "" {
-		t.Fatalf("--no-agent targets = %+v, want vcs %q, agent empty", got, vcsGit)
+	if got.vcs != vcsGit || len(got.agents) != 0 {
+		t.Fatalf("--no-agent targets = %+v, want vcs %q, agents empty", got, vcsGit)
 	}
 }
 
@@ -161,12 +224,12 @@ func TestResolveHookTargetsRejectsContradictions(t *testing.T) {
 // not trip the mutual-exclusion check — only naming *and* opting out of the
 // *same* target is a contradiction.
 func TestResolveHookTargetsOptOutsCrossTarget(t *testing.T) {
-	got, err := targetsFor(t, "--no-vcs", "--agent", "claude-code")
+	got, err := targetsFor(t, "--no-vcs", "--agent", claudeCode)
 	if err != nil {
 		t.Fatalf("--no-vcs --agent claude-code: %v", err)
 	}
-	if got.vcs != "" || got.agent != agentClaudeCode {
-		t.Fatalf("targets = %+v, want vcs empty, agent %q", got, agentClaudeCode)
+	if got.vcs != "" || len(got.agents) != 1 || got.agents[0] != claudeCode {
+		t.Fatalf("targets = %+v, want vcs empty, agents [%s]", got, claudeCode)
 	}
 }
 
@@ -239,18 +302,18 @@ func TestInstallHooksWarnsButContinuesWhenExtensionRefused(t *testing.T) {
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(&stderr)
 
-	res, err := installHooks(cmd, root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal)
+	res, err := installHooks(cmd, root, claudeTargets(vcsGit, false), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v (a refused worktree config extension must not abort the run)", err)
 	}
-	if res.VCS == nil || res.Agent == nil {
+	if res.VCS == nil || len(res.Agents) != 1 {
 		t.Fatalf("result = %+v, want both integrations installed", res)
 	}
 	if _, err := os.Stat(filepath.Join(res.VCS.HooksDir, "pre-commit")); err != nil {
 		t.Fatalf("stat pre-commit hook: %v", err)
 	}
-	if _, err := os.Stat(res.Agent.Path); err != nil {
-		t.Fatalf("stat agent settings %s: %v", res.Agent.Path, err)
+	if _, err := os.Stat(res.Agents[0].Path); err != nil {
+		t.Fatalf("stat agent settings %s: %v", res.Agents[0].Path, err)
 	}
 	if !strings.Contains(stderr.String(), "warning: enable git worktree config extension") {
 		t.Fatalf("stderr = %q, want a warning about the worktree config extension", stderr.String())
@@ -266,7 +329,7 @@ func TestInstallHooksWarnsButContinuesWhenExtensionRefused(t *testing.T) {
 // on by default and pulls the extension in with it.
 func TestInstallHooksSkipsWorktreeConfigExtensionWhenNothingNeedsIt(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, harness.ScopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, claudeTargets("", false), harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
 	if out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").CombinedOutput(); err == nil {
@@ -278,7 +341,7 @@ func TestInstallHooksSkipsWorktreeConfigExtensionWhenNothingNeedsIt(t *testing.T
 func TestInstallHooksBothIntegrations(t *testing.T) {
 	root := initGitRepo(t)
 
-	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal)
+	res, err := installHooks(discardCmd(), root, claudeTargets(vcsGit, false), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -288,13 +351,19 @@ func TestInstallHooksBothIntegrations(t *testing.T) {
 	if !fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
 		t.Fatalf("pre-commit not written into %s", res.VCS.HooksDir)
 	}
-	if res.Agent == nil {
-		t.Fatal("agent result missing")
+	if len(res.Agents) != 1 {
+		t.Fatalf("agent results = %+v, want exactly one", res.Agents)
 	}
-	if want := filepath.Join(root, ".claude", "settings.local.json"); res.Agent.Path != want {
-		t.Fatalf("agent path = %q, want %q", res.Agent.Path, want)
+	if got := res.Agents[0].Agent; got != claudeCode {
+		t.Fatalf("agent = %q, want %q", got, claudeCode)
 	}
-	settings := readSettings(t, res.Agent.Path)
+	if want := filepath.Join(root, ".claude", "settings.local.json"); res.Agents[0].Path != want {
+		t.Fatalf("agent path = %q, want %q", res.Agents[0].Path, want)
+	}
+	if got := res.Agents[0].UnboundEvents; len(got) != 0 {
+		t.Fatalf("unbound events = %v, want none for claude-code", got)
+	}
+	settings := readSettings(t, res.Agents[0].Path)
 	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
@@ -307,15 +376,15 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installHooks --no-agent: %v", err)
 	}
-	if res.Agent != nil {
-		t.Fatalf("agent result = %+v, want nil when the agent is skipped", res.Agent)
+	if len(res.Agents) != 0 {
+		t.Fatalf("agent results = %+v, want none when the agent is skipped", res.Agents)
 	}
 	if fileExists(filepath.Join(root, ".claude", "settings.local.json")) {
 		t.Fatal("--no-agent wrote a settings file")
 	}
 
 	root2 := initGitRepo(t)
-	res2, err := installHooks(discardCmd(), root2, hookTargets{agent: agentClaudeCode}, harness.ScopeLocal)
+	res2, err := installHooks(discardCmd(), root2, claudeTargets("", false), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --no-vcs: %v", err)
 	}
@@ -333,7 +402,7 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 
 func TestUninstallHooksUndoesInstall(t *testing.T) {
 	root := initGitRepo(t)
-	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
+	targets := claudeTargets(vcsGit, false)
 	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
@@ -348,10 +417,10 @@ func TestUninstallHooksUndoesInstall(t *testing.T) {
 	if fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
 		t.Fatal("pre-commit still present after uninstall")
 	}
-	if res.Agent == nil {
-		t.Fatal("agent result missing")
+	if len(res.Agents) != 1 {
+		t.Fatalf("agent results = %+v, want exactly one", res.Agents)
 	}
-	settings := readSettings(t, res.Agent.Path)
+	settings := readSettings(t, res.Agents[0].Path)
 	if got := commandsFor(t, settings, "SessionStart"); len(got) != 0 {
 		t.Fatalf("SessionStart after uninstall: %v, want none", got)
 	}
@@ -379,8 +448,8 @@ func TestInstallHooksJSONOmitsSkippedIntegration(t *testing.T) {
 	if _, ok := decoded["vcs"]; !ok {
 		t.Fatalf("JSON missing the vcs key: %s", b)
 	}
-	if _, ok := decoded["agent"]; ok {
-		t.Fatalf("JSON has an agent key for a skipped integration: %s", b)
+	if _, ok := decoded["agents"]; ok {
+		t.Fatalf("JSON has an agents key for a skipped integration: %s", b)
 	}
 }
 
@@ -405,7 +474,7 @@ func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	root := initGitRepo(t)
 	writeCorruptSettings(t, root)
 
-	res, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal)
+	res, err := installHooks(discardCmd(), root, claudeTargets(vcsGit, false), harness.ScopeLocal)
 	if err == nil {
 		t.Fatal("installHooks with corrupt settings: err = nil, want a parse error")
 	}
@@ -415,14 +484,14 @@ func TestInstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	if !fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
 		t.Fatal("pre-commit not written despite the VCS step succeeding")
 	}
-	if res.Agent != nil {
-		t.Fatalf("agent result = %+v, want nil: the agent step failed", res.Agent)
+	if len(res.Agents) != 0 {
+		t.Fatalf("agent results = %+v, want none: the agent step failed", res.Agents)
 	}
 }
 
 func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	root := initGitRepo(t)
-	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode}
+	targets := claudeTargets(vcsGit, false)
 	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
@@ -438,8 +507,8 @@ func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	if fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
 		t.Fatal("pre-commit still present: the VCS uninstall step should have removed it")
 	}
-	if res.Agent != nil {
-		t.Fatalf("agent result = %+v, want nil: the agent step failed", res.Agent)
+	if len(res.Agents) != 0 {
+		t.Fatalf("agent results = %+v, want none: the agent step failed", res.Agents)
 	}
 }
 
@@ -466,7 +535,7 @@ func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 
 func TestUninstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, claudeTargets(vcsGit, false), harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	writeCorruptSettings(t, root)
@@ -518,7 +587,7 @@ func TestUninstallCmdReportsHonestNoOpForBothIntegrations(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 
-	out, err := runLode(t, "uninstall")
+	out, err := runLode(t, "uninstall", "--agent", claudeCode)
 	if err != nil {
 		t.Fatalf("uninstall on a repo with nothing installed: %v\noutput: %s", err, out)
 	}
@@ -547,7 +616,7 @@ func TestReportInstallLinesWithChainTarget(t *testing.T) {
 	res := installResult{
 		VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
 			Hooks: []hookChain{{Hook: "pre-commit", ChainedTo: "/repo/.git/hooks/pre-commit.pre-lode"}}},
-		Agent: &agentInstall{Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json"},
+		Agents: []agentInstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json"}},
 	}
 	if err := reportInstall(cmd, res); err != nil {
 		t.Fatalf("reportInstall: %v", err)
@@ -611,7 +680,7 @@ func TestReportUninstallAgentActions(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			var buf bytes.Buffer
 			cmd.SetOut(&buf)
-			res := uninstallResult{Agent: &agentUninstall{Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: tc.action}}
+			res := uninstallResult{Agents: []agentUninstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: tc.action}}}
 			if err := reportUninstall(cmd, res); err != nil {
 				t.Fatalf("reportUninstall: %v", err)
 			}
@@ -648,8 +717,8 @@ func TestReportInstallJSON(t *testing.T) {
 	if _, ok := decoded["vcs"]; !ok {
 		t.Fatalf("JSON missing vcs key: %s", buf.String())
 	}
-	if _, ok := decoded["agent"]; ok {
-		t.Fatalf("JSON has an agent key for a skipped integration: %s", buf.String())
+	if _, ok := decoded["agents"]; ok {
+		t.Fatalf("JSON has an agents key for a skipped integration: %s", buf.String())
 	}
 }
 
@@ -659,14 +728,14 @@ func TestReportUninstallJSON(t *testing.T) {
 	res := uninstallResult{
 		VCS: &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
 			Hooks: []hookRemoval{{Hook: "pre-commit", Action: hookActionRemoved}}},
-		Agent: &agentUninstall{Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: hookActionNone},
+		Agents: []agentUninstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: hookActionNone}},
 	}
 	if err := reportUninstall(cmd, res); err != nil {
 		t.Fatalf("reportUninstall: %v", err)
 	}
 	var decoded struct {
-		VCS   struct{ Hooks []hookRemoval } `json:"vcs"`
-		Agent struct{ Action string }       `json:"agent"`
+		VCS    struct{ Hooks []hookRemoval } `json:"vcs"`
+		Agents []struct{ Action string }     `json:"agents"`
 	}
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("decode %s: %v", buf.String(), err)
@@ -674,8 +743,8 @@ func TestReportUninstallJSON(t *testing.T) {
 	if got := actionFor(t, decoded.VCS.Hooks, "pre-commit"); got != hookActionRemoved {
 		t.Fatalf("vcs pre-commit action = %q, want %q", got, hookActionRemoved)
 	}
-	if decoded.Agent.Action != hookActionNone {
-		t.Fatalf("agent.action = %q, want %q", decoded.Agent.Action, hookActionNone)
+	if len(decoded.Agents) != 1 || decoded.Agents[0].Action != hookActionNone {
+		t.Fatalf("agents = %+v, want one entry with action %q", decoded.Agents, hookActionNone)
 	}
 }
 
@@ -704,8 +773,8 @@ func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
 	if _, ok := decoded["vcs"]; !ok {
 		t.Fatalf("JSON missing the vcs key: %s", buf.String())
 	}
-	if _, ok := decoded["agent"]; ok {
-		t.Fatalf("JSON has an agent key for a skipped integration: %s", buf.String())
+	if _, ok := decoded["agents"]; ok {
+		t.Fatalf("JSON has an agents key for a skipped integration: %s", buf.String())
 	}
 }
 
@@ -714,7 +783,7 @@ func TestInstallCmdJSONOmitsSkippedIntegration(t *testing.T) {
 // output, not just in the struct.
 func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	root := initGitRepo(t)
-	if _, err := installHooks(discardCmd(), root, hookTargets{vcs: vcsGit, agent: agentClaudeCode}, harness.ScopeLocal); err != nil {
+	if _, err := installHooks(discardCmd(), root, claudeTargets(vcsGit, false), harness.ScopeLocal); err != nil {
 		t.Fatalf("seed install: %v", err)
 	}
 	t.Chdir(root)
@@ -729,8 +798,8 @@ func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	}
 
 	var decoded struct {
-		VCS   struct{ Hooks []hookRemoval } `json:"vcs"`
-		Agent struct{ Action string }       `json:"agent"`
+		VCS    struct{ Hooks []hookRemoval } `json:"vcs"`
+		Agents []struct{ Action string }     `json:"agents"`
 	}
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("decode %s: %v", buf.String(), err)
@@ -738,7 +807,127 @@ func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	if got := actionFor(t, decoded.VCS.Hooks, "pre-commit"); got != hookActionRemoved {
 		t.Fatalf("vcs pre-commit action = %q, want %q", got, hookActionRemoved)
 	}
-	if decoded.Agent.Action != hookActionRemoved {
-		t.Fatalf("agent.action = %q, want %q", decoded.Agent.Action, hookActionRemoved)
+	if len(decoded.Agents) != 1 || decoded.Agents[0].Action != hookActionRemoved {
+		t.Fatalf("agents = %+v, want one entry with action %q", decoded.Agents, hookActionRemoved)
+	}
+}
+
+// --- the harness dimension: auto, per-agent stanzas, unbound events --------
+
+// TestInstallReportsPerAgentWithUnboundEvents pins the report's list shape: one
+// stanza per agent, self-describing, with unbound_events present as a key even
+// though claude-code binds everything. HOME is redirected so detection depends
+// only on the repo.
+func TestInstallReportsPerAgentWithUnboundEvents(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("HOME", t.TempDir())
+	if err := os.MkdirAll(filepath.Join(root, ".claude"), 0o755); err != nil {
+		t.Fatalf("mkdir .claude: %v", err)
+	}
+
+	res, err := installHooks(discardCmd(), root, hookTargets{agents: []string{"auto"}}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --agent auto: %v", err)
+	}
+	if len(res.Agents) != 1 || res.Agents[0].Agent != claudeCode {
+		t.Fatalf("agents = %+v, want one claude-code stanza", res.Agents)
+	}
+	if want := filepath.Join(root, ".claude", "settings.local.json"); res.Agents[0].Path != want {
+		t.Fatalf("path = %q, want %q", res.Agents[0].Path, want)
+	}
+	if got := res.Agents[0].UnboundEvents; len(got) != 0 {
+		t.Fatalf("unbound_events = %v, want none: claude-code binds every event", got)
+	}
+	if len(res.Agents[0].Bound) == 0 {
+		t.Fatal("bound is empty; the stanza must name what it wrote")
+	}
+
+	var buf bytes.Buffer
+	if err := reportInstall(jsonCmd(&buf), res); err != nil {
+		t.Fatalf("reportInstall: %v", err)
+	}
+	var decoded struct {
+		Agents []struct {
+			Agent         string   `json:"agent"`
+			Path          string   `json:"path"`
+			UnboundEvents []string `json:"unbound_events"`
+		} `json:"agents"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode %s: %v", buf.String(), err)
+	}
+	if len(decoded.Agents) != 1 || decoded.Agents[0].Agent != claudeCode {
+		t.Fatalf("JSON agents = %+v: %s", decoded.Agents, buf.String())
+	}
+	if !strings.HasSuffix(decoded.Agents[0].Path, filepath.Join(".claude", "settings.local.json")) {
+		t.Fatalf("JSON path = %q", decoded.Agents[0].Path)
+	}
+	if len(decoded.Agents[0].UnboundEvents) != 0 {
+		t.Fatalf("JSON unbound_events = %v, want none", decoded.Agents[0].UnboundEvents)
+	}
+}
+
+// A repo with no harness configured for it or the user writes nothing and
+// succeeds — spec 008 §4 row 1 — but says so rather than going silent.
+func TestInstallHooksAutoDetectsNothing(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("HOME", t.TempDir())
+
+	var stderr bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(&stderr)
+
+	res, err := installHooks(cmd, root, hookTargets{vcs: vcsGit, agents: []string{"auto"}}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks with nothing to detect: %v", err)
+	}
+	if len(res.Agents) != 0 {
+		t.Fatalf("agents = %+v, want none when nothing is detected", res.Agents)
+	}
+	if res.VCS == nil {
+		t.Fatal("the VCS side must still install when no agent is detected")
+	}
+	if !strings.Contains(stderr.String(), "no coding agent detected") {
+		t.Fatalf("stderr = %q, want it to say no agent was detected", stderr.String())
+	}
+}
+
+// An explicitly named harness installs even when nothing would detect it:
+// asking for it is the detection signal (spec 008 §3.2).
+func TestInstallHooksNamedAgentInstallsUndetected(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("HOME", t.TempDir())
+
+	res, err := installHooks(discardCmd(), root, claudeTargets("", false), harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --agent claude-code: %v", err)
+	}
+	if len(res.Agents) != 1 {
+		t.Fatalf("agents = %+v, want the named harness installed anyway", res.Agents)
+	}
+}
+
+// TestReportInstallNamesUnboundEventsAndNotes covers the two report lines no
+// registered adapter produces yet: a harness that cannot bind every event, and
+// one with advice to pass on.
+func TestReportInstallNamesUnboundEventsAndNotes(t *testing.T) {
+	var buf bytes.Buffer
+	cmd := &cobra.Command{Use: "test"}
+	cmd.SetOut(&buf)
+	res := installResult{Agents: []agentInstall{{
+		Agent:         "someagent",
+		Path:          "/home/u/.someagent/config.toml",
+		UnboundEvents: []string{"worktree-enter"},
+		Notes:         []string{"run /hooks to approve them"},
+	}}}
+	if err := reportInstall(cmd, res); err != nil {
+		t.Fatalf("reportInstall: %v", err)
+	}
+	want := "someagent: installed hooks in /home/u/.someagent/config.toml " +
+		"(no binding for: worktree-enter; git pre-commit still covers the heartbeat)\n" +
+		"someagent: run /hooks to approve them\n"
+	if buf.String() != want {
+		t.Fatalf("output = %q, want %q", buf.String(), want)
 	}
 }

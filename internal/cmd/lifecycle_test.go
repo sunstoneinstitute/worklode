@@ -88,7 +88,11 @@ func resetFlags(t *testing.T, cmd *cobra.Command) {
 	reset := func(f *pflag.Flag) {
 		f.Changed = false
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
-			if err := sv.Replace(nil); err != nil {
+			// Replace, not Set: a slice flag's Set appends once Changed is
+			// set. Its declared default has to be restored rather than
+			// cleared, or a flag like --agent loses the value the command
+			// relies on when nothing was passed.
+			if err := sv.Replace(defaultSliceValue(f.DefValue)); err != nil {
 				t.Fatalf("reset --%s: %v", f.Name, err)
 			}
 			return
@@ -102,6 +106,16 @@ func resetFlags(t *testing.T, cmd *cobra.Command) {
 	for _, sub := range cmd.Commands() {
 		resetFlags(t, sub)
 	}
+}
+
+// defaultSliceValue parses a slice flag's rendered DefValue ("[]", "[auto]",
+// "[a,b]") back into its elements.
+func defaultSliceValue(def string) []string {
+	inner := strings.TrimSuffix(strings.TrimPrefix(def, "["), "]")
+	if inner == "" {
+		return nil
+	}
+	return strings.Split(inner, ",")
 }
 
 // initGitRepo creates a fresh git repo with one commit (so `git worktree add
