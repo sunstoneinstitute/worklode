@@ -284,10 +284,11 @@ func eventLabel(event string) string {
 func applyIssue(tx *sql.Tx, repo string, body []byte) error {
 	var p struct {
 		Issue struct {
-			Number  int64  `json:"number"`
-			Title   string `json:"title"`
-			State   string `json:"state"`
-			HTMLURL string `json:"html_url"`
+			Number    int64     `json:"number"`
+			Title     string    `json:"title"`
+			State     string    `json:"state"`
+			HTMLURL   string    `json:"html_url"`
+			UpdatedAt time.Time `json:"updated_at"`
 		} `json:"issue"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -299,7 +300,7 @@ func applyIssue(tx *sql.Tx, repo string, body []byte) error {
 		Title:  p.Issue.Title,
 		State:  p.Issue.State,
 		URL:    p.Issue.HTMLURL,
-	})
+	}, p.Issue.UpdatedAt)
 }
 
 func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action string, body []byte) error {
@@ -312,6 +313,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 			Body           string     `json:"body"`
 			HTMLURL        string     `json:"html_url"`
 			CreatedAt      time.Time  `json:"created_at"`
+			UpdatedAt      time.Time  `json:"updated_at"`
 			MergedAt       *time.Time `json:"merged_at"`
 			MergeCommitSHA *string    `json:"merge_commit_sha"`
 			Head           struct {
@@ -343,16 +345,17 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	}
 
 	pr, err := store.UpsertPR(tx, store.PullRequest{
-		Repo:     repo,
-		Number:   gh.Number,
-		Title:    gh.Title,
-		State:    state,
-		HeadRef:  gh.Head.Ref,
-		HeadSHA:  gh.Head.SHA,
-		MergeSHA: gh.MergeCommitSHA,
-		URL:      gh.HTMLURL,
-		OpenedAt: openedAt,
-		MergedAt: mergedAt,
+		Repo:      repo,
+		Number:    gh.Number,
+		Title:     gh.Title,
+		State:     state,
+		HeadRef:   gh.Head.Ref,
+		HeadSHA:   gh.Head.SHA,
+		MergeSHA:  gh.MergeCommitSHA,
+		URL:       gh.HTMLURL,
+		OpenedAt:  openedAt,
+		MergedAt:  mergedAt,
+		UpdatedAt: gh.UpdatedAt,
 	}, gh.Body)
 	if err != nil {
 		return err
@@ -361,6 +364,12 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return nil
 	}
 	taskID := *pr.TaskID
+
+	// The lifecycle effects below stay unconditional even when UpsertPR's
+	// non-regression guard rejected the fact columns: they are order-safe on
+	// their own (Transition guards on the from-state, ResolveDelivery derives
+	// from the stored facts), and a replayed stale pull_request.opened still
+	// legitimately moves an in_progress task to in_review.
 
 	// in_review is not a delivery milestone, so it transitions here; every
 	// delivery state is decided by store.ResolveDelivery from recorded facts.
@@ -468,6 +477,7 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
 		URL:         run.HTMLURL,
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
+		UpdatedAt:   run.UpdatedAt,
 	})
 }
 

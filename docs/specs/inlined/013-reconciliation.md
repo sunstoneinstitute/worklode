@@ -108,10 +108,12 @@ transition points at the real GitHub event. The timeline reads correctly — the
 applied late.
 
 **Completion marker.** `events.applied_at timestamptz` — nullable; set when an event's apply
-completes, by either the webhook path or the replayer. The applies are idempotent (upserts, and
-`Transition` guards on the from-state), so re-running is harmless; the marker exists so reconcile
-can find outstanding work without rescanning history. The down migration drops the column; the
-repo's `migrate up`/`down` round-trip check covers it.
+completes, by either the webhook path or the replayer. Re-running is harmless because the applies
+are order-safe, not merely idempotent: a replayed event may be older than facts that already
+landed, so every fact upsert is guarded on the fact's own last-modified time and cannot overwrite a
+newer row (see `store.UpsertPR`), and `Transition` guards on the from-state. The marker exists so
+reconcile can find outstanding work without rescanning history. The down migration drops the
+column; the repo's `migrate up`/`down` round-trip check covers it.
 
 ### 2.2 Engine 2 — poll GitHub
 

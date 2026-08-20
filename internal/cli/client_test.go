@@ -613,7 +613,7 @@ func TestClientInboxFlow(t *testing.T) {
 				return store.UpsertIssue(tx, model.Issue{
 					Repo: "acme/widgets", Number: number, Title: title, State: "open",
 					URL: "https://github.com/acme/widgets/issues/1",
-				})
+				}, time.Time{})
 			})
 		if err != nil {
 			t.Fatalf("seed issue %q: %v", title, err)

@@ -273,6 +273,151 @@ func TestUpsertPRUpdateKeepsTaskID(t *testing.T) {
 	}
 }
 
+// TestUpsertPRNonRegressing covers the guard on pull_requests.updated_at: a
+// delivery carrying an older updated_at must not overwrite newer facts, which
+// is how a replayed pull_request.opened used to regress a merged PR (WL-198).
+func TestUpsertPRNonRegressing(t *testing.T) {
+	s := openChangesStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	t1 := changesTestNow
+	t2 := changesTestNow.Add(time.Hour)
+	t3 := changesTestNow.Add(2 * time.Hour)
+
+	mergeSHA := "def456"
+	merged := defaultPR(task.ID)
+	merged.State = "merged"
+	merged.HeadSHA = "def456"
+	merged.MergeSHA = &mergeSHA
+	merged.MergedAt = &t2
+	merged.UpdatedAt = t2
+	if _, err := upsertPR(t, s, merged, ""); err != nil {
+		t.Fatalf("seed merged PR: %v", err)
+	}
+
+	// Stale replay: an "opened" payload from before the merge.
+	stale := defaultPR(task.ID)
+	stale.Title = "fix the thing"
+	stale.UpdatedAt = t1
+	got, err := upsertPR(t, s, stale, "")
+	if err != nil {
+		t.Fatalf("stale UpsertPR: %v", err)
+	}
+	if got.State != "merged" {
+		t.Fatalf("state after stale upsert: got %q, want merged", got.State)
+	}
+	if got.MergeSHA == nil || *got.MergeSHA != mergeSHA {
+		t.Fatalf("merge_sha after stale upsert: got %v, want %s", got.MergeSHA, mergeSHA)
+	}
+	if got.MergedAt == nil || !got.MergedAt.Equal(t2) {
+		t.Fatalf("merged_at after stale upsert: got %v, want %v", got.MergedAt, t2)
+	}
+
+	// Equal timestamps: an ordinary redelivery of the stored payload writes.
+	redelivered := merged
+	redelivered.Title = "fix the thing (retitled)"
+	if got, err = upsertPR(t, s, redelivered, ""); err != nil {
+		t.Fatalf("redelivery UpsertPR: %v", err)
+	}
+	if got.Title != "fix the thing (retitled)" {
+		t.Fatalf("title after equal-timestamp redelivery: got %q, want the new title", got.Title)
+	}
+
+	// Newer: applies.
+	newer := defaultPR(task.ID)
+	newer.State = "closed"
+	newer.Title = "fix the thing (reopened then closed)"
+	newer.UpdatedAt = t3
+	if got, err = upsertPR(t, s, newer, ""); err != nil {
+		t.Fatalf("newer UpsertPR: %v", err)
+	}
+	if got.State != "closed" || got.MergeSHA != nil || got.MergedAt != nil {
+		t.Fatalf("row after newer upsert: got %+v, want closed with no merge data", got)
+	}
+}
+
+// TestUpsertPRLegacyNullTimestampYields covers a row written before the
+// updated_at column existed: unknown sorts as -infinity, so the first
+// timestamped event applies rather than the row freezing forever.
+func TestUpsertPRLegacyNullTimestampYields(t *testing.T) {
+	s := openChangesStore(t)
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	legacy := defaultPR(task.ID) // zero UpdatedAt -> NULL
+	if _, err := upsertPR(t, s, legacy, ""); err != nil {
+		t.Fatalf("seed legacy PR: %v", err)
+	}
+
+	next := legacy
+	next.State = "closed"
+	next.UpdatedAt = changesTestNow.Add(time.Hour)
+	got, err := upsertPR(t, s, next, "")
+	if err != nil {
+		t.Fatalf("timestamped UpsertPR: %v", err)
+	}
+	if got.State != "closed" {
+		t.Fatalf("state after timestamped upsert over a NULL row: got %q, want closed", got.State)
+	}
+	if !got.UpdatedAt.Equal(next.UpdatedAt) {
+		t.Fatalf("updated_at round trip: got %v, want %v", got.UpdatedAt, next.UpdatedAt)
+	}
+}
+
+// TestUpsertCIRunNonRegressing covers the guard on ci_runs.updated_at: a
+// stale in_progress delivery must not regress a completed run.
+func TestUpsertCIRunNonRegressing(t *testing.T) {
+	s := openChangesStore(t)
+
+	t1 := changesTestNow
+	t2 := changesTestNow.Add(time.Hour)
+	success := "success"
+
+	done := CIRun{
+		Repo:        "sunstoneinstitute/demo",
+		HeadSHA:     "abc123",
+		Workflow:    "ci",
+		Status:      "completed",
+		Conclusion:  &success,
+		URL:         "https://github.com/sunstoneinstitute/demo/actions/runs/2",
+		StartedAt:   t1,
+		CompletedAt: &t2,
+		UpdatedAt:   t2,
+	}
+	if err := upsertCIRun(t, s, done); err != nil {
+		t.Fatalf("seed completed run: %v", err)
+	}
+
+	stale := done
+	stale.Status = "in_progress"
+	stale.Conclusion = nil
+	stale.CompletedAt = nil
+	stale.UpdatedAt = t1
+	if err := upsertCIRun(t, s, stale); err != nil {
+		t.Fatalf("stale UpsertCIRun: %v", err)
+	}
+
+	runs, err := s.CIRunsForSHA(t.Context(), done.Repo, done.HeadSHA)
+	if err != nil {
+		t.Fatalf("CIRunsForSHA: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("CIRunsForSHA: got %d runs, want 1", len(runs))
+	}
+	got := runs[0]
+	if got.Status != "completed" {
+		t.Fatalf("status after stale upsert: got %q, want completed", got.Status)
+	}
+	if got.Conclusion == nil || *got.Conclusion != success {
+		t.Fatalf("conclusion after stale upsert: got %v, want success", got.Conclusion)
+	}
+	if got.CompletedAt == nil || !got.CompletedAt.Equal(t2) {
+		t.Fatalf("completed_at after stale upsert: got %v, want %v", got.CompletedAt, t2)
+	}
+	if !got.UpdatedAt.Equal(t2) {
+		t.Fatalf("updated_at round trip: got %v, want %v", got.UpdatedAt, t2)
+	}
+}
+
 // TestExistingPRNumbers covers the read import uses before upserting, so it
 // can report new rows separately from updated ones.
 func TestExistingPRNumbers(t *testing.T) {
