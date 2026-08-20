@@ -189,3 +189,21 @@ func TestSkillPushDuplicateDeliveryStaysDuplicate(t *testing.T) {
 		t.Fatalf("event rows = %d, want 1", n)
 	}
 }
+
+// TestSkillPushDeliveryIsMarkedApplied proves a push.skills delivery is not
+// left awaiting replay: the sync ran as the apply, so applied_at is set even
+// though there is no typed-table effect to run alongside it.
+func TestSkillPushDeliveryIsMarkedApplied(t *testing.T) {
+	e := newEnvWithSkillPush(t, func(repo, branch string) bool {
+		return repo == "acme/skills-repo" && branch == "main"
+	})
+
+	rr := deliverBody(t, e.h, "push", "d-1", skillPushBody("acme/skills-repo", "refs/heads/main"))
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-1' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("skill push applied_at set = %d rows, want 1", n)
+	}
+}

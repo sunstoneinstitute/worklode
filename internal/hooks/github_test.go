@@ -890,6 +890,46 @@ func TestMountedOnServer(t *testing.T) {
 	}
 }
 
+// TestAppliedAtMarksMappedDeliveries: a mapped repo's delivery gets
+// applied_at (even for an event type with no typed-table effect); an
+// unmapped repo's .ignored delivery does not.
+func TestAppliedAtMarksMappedDeliveries(t *testing.T) {
+	e := newEnv(t)
+
+	rr := deliver(t, e.h, "issues", "d-applied", "issues_opened.json")
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
+		t.Fatalf("mapped delivery: %d %s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-applied' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("mapped delivery applied_at set = %d rows, want 1", n)
+	}
+
+	// "ping" routes to a nil apply but the repo is mapped: still marked, so
+	// it never shows up as awaiting replay.
+	rr = deliverBody(t, e.h, "ping", "d-ping", []byte(`{"repository":{"full_name":"sunstoneinstitute/demo"}}`))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("ping delivery: %d %s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-ping' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("nil-apply delivery applied_at set = %d rows, want 1", n)
+	}
+
+	rr = deliverBody(t, e.h, "issues", "d-ignored", []byte(`{
+		"action": "opened",
+		"repository": {"full_name": "other/repo"},
+		"issue": {"number": 1, "title": "x", "state": "open", "html_url": "u"}
+	}`))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("ignored delivery: %d %s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-ignored' AND applied_at IS NULL`); n != 1 {
+		t.Fatalf("ignored delivery applied_at NULL = %d rows, want 1", n)
+	}
+}
+
 func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	want := map[string]bool{
 		"issues": true, "push": true, "pull_request": true, "deployment_status": true,

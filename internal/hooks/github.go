@@ -223,10 +223,17 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case skillPush:
 		typ = "push.skills"
+		// The skill sync handled this delivery already; there is no
+		// typed-table apply to run, but the event is done, not awaiting
+		// replay, so it still gets the marker.
+		apply = markApplied(h.st, nil)
 	case ignored:
 		typ += ".ignored"
 	default:
-		apply = h.applyFunc(event, env, body, resolvedCommitish)
+		// Mapped-repo deliveries always get an apply — at minimum the
+		// applied_at marker — so a nil-routed event (unknown type, unhandled
+		// action) is recorded as done rather than awaiting replay.
+		apply = markApplied(h.st, h.applyFunc(event, env, body, resolvedCommitish))
 	}
 
 	_, inserted, err := h.st.RecordEvent(r.Context(), "github", delivery, typ, body, apply)
@@ -323,6 +330,20 @@ func (h *githubHandler) applyFunc(event string, env envelope, body []byte, resol
 		}
 	default:
 		return nil
+	}
+}
+
+// markApplied wraps an apply (possibly nil) so the event's applied_at is set
+// in the same transaction, by the webhook path and replayer alike. Only
+// *.ignored deliveries are left unmarked: they are the replay candidates.
+func markApplied(st *store.Store, inner func(tx *sql.Tx, eventID int64) error) func(tx *sql.Tx, eventID int64) error {
+	return func(tx *sql.Tx, eventID int64) error {
+		if inner != nil {
+			if err := inner(tx, eventID); err != nil {
+				return err
+			}
+		}
+		return store.MarkEventApplied(tx, eventID, st.Now())
 	}
 }
 
