@@ -142,9 +142,10 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-// listDocs handles GET /api/v1/docs?project=&kind=&status= plus the three
-// derived selectors: ?needs_planning= and ?needs_execution= (026 §2.1), and
-// ?bare_superseded= (026 §2.4, 025 §6 rule 2).
+// listDocs handles GET /api/v1/docs?project=&kind=&status=&deleted= plus the
+// three derived selectors: ?needs_planning= and ?needs_execution= (026 §2.1),
+// and ?bare_superseded= (026 §2.4, 025 §6 rule 2). deleted=true switches the
+// list from live documents to tombstoned ones (044 §5).
 func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	sel, err := docSelectorFrom(r)
 	if err != nil {
@@ -264,6 +265,13 @@ func docSelectorFrom(r *http.Request) (docListSelector, error) {
 		return docListSelector{}, err
 	}
 	if sel.bareSuperseded, err = queryBool(q, "bare_superseded"); err != nil {
+		return docListSelector{}, err
+	}
+	// A switch, not an addition (044 §5): deleted=true lists the tombstoned
+	// documents instead of the live ones. Read here rather than in
+	// docFilterFrom, which the cockpit's read-only /docs page also calls and
+	// which has no tombstone surface.
+	if sel.filter.Deleted, err = queryBool(q, "deleted"); err != nil {
 		return docListSelector{}, err
 	}
 

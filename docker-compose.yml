@@ -54,6 +54,9 @@ services:
       LODE_GITHUB_WEBHOOK_SECRET: ${LODE_GITHUB_WEBHOOK_SECRET:-}
       LODE_FLUX_WEBHOOK_SECRET: ${LODE_FLUX_WEBHOOK_SECRET:-}
       LODE_CLUSTER_ENV_MAP: ${LODE_CLUSTER_ENV_MAP:-}
+      # The local stack is a dev instance (039 §3): it re-seeds and discards
+      # data, so a delete does not have to carry a justification.
+      LODE_INSTANCE_ENV: ${LODE_INSTANCE_ENV:-dev}
       LODE_BRANCH_TEMPLATE: ${LODE_BRANCH_TEMPLATE:-}
       LODE_SKILL_SOURCES: ${LODE_SKILL_SOURCES:-}
       LODE_EMBEDDING_URL: ${LODE_EMBEDDING_URL:-}
