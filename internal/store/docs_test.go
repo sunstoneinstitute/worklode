@@ -358,8 +358,23 @@ func TestDocSchemaSpecRowNumberNullViolatesCheck(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CHECK violation, got nil error")
 	}
-	if !isCheckViolationOn(err, "docs_check") {
-		t.Fatalf("expected docs_check CHECK violation, got: %v", err)
+	if !isCheckViolationOn(err, "docs_number_matches_kind") {
+		t.Fatalf("expected docs_number_matches_kind CHECK violation, got: %v", err)
+	}
+}
+
+// The other half of 025 §14.3, enforced by the schema since migration 0037:
+// a plan carries no corpus number even for a writer going around the store.
+func TestDocSchemaPlanRowWithNumberViolatesCheck(t *testing.T) {
+	s := openTestStore(t)
+	seedDocsProject(t, s)
+
+	_, err := insertDoc(t, s, "plan", 25, "numbered-plan")
+	if err == nil {
+		t.Fatal("expected CHECK violation, got nil error")
+	}
+	if !isCheckViolationOn(err, "docs_number_matches_kind") {
+		t.Fatalf("expected docs_number_matches_kind CHECK violation, got: %v", err)
 	}
 }
 
