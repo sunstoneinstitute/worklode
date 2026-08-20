@@ -42,12 +42,20 @@ forward-compatible.
 
 ## 1. Names & catalog
 
-> Pending `042-secret-templates.md#sec-2` (not yet effective)
+> Pending `042-secret-templates.md#sec-2` (not yet effective)  
+> Pending `043-secrets-catalog-home.md#sec-2` (not yet effective)
 
 > **Amended by spec 042 §2.** An entry whose value would exceed the OS
 > keystore item cap (a full kubeconfig) is declared as a plaintext `template`
 > (a sibling ConfigMap key) plus `cred.<PLACEHOLDER>` references — only the
 > credentials take the `op://` path — with an optional `env` exported name.
+
+> **Amended by ADR 043 §2.** The catalog is not a git-tracked ConfigMap. It is
+> the 1Password item `worklode-secrets-catalog`, projected per environment into
+> a Kubernetes Secret of the same name by an ExternalSecret using
+> `dataFrom.extract`; `catalog.toml` and each 042 template are field labels on
+> that item. Changes are 1Password edits, not deployment-repo PRs; the mount
+> path and everything the server does are unchanged.
 
 **Namespace.** Secret names are env-var style (`^[A-Z][A-Z0-9_]*$`) and **org-unique** — never
 per-project, because a repo may participate in multiple projects. Examples: `GIT_SIGNING_KEY`,
@@ -217,6 +225,14 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
   exists.
 
 ## 8. Dependencies
+
+> Pending `043-secrets-catalog-home.md#sec-2` (not yet effective)
+
+> **Amended by ADR 043 §2.** The external dependency is no longer a deployment
+> repo hosting a catalog ConfigMap. It is the 1Password item
+> `worklode-secrets-catalog`, plus External Secrets Operator and the
+> per-environment `ClusterSecretStore` (`onepassword-hzdev-worklode` /
+> `onepassword-hzprod-worklode`) that project it into the cluster.
 
 - **004 (backbone)** — `secrets` field on Task; `secrets_materialized` event.
 - **008 (plugin)** — claim/resume/exit hooks host the ceremony and purge; brief carries the

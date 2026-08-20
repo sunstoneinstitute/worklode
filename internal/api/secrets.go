@@ -3,6 +3,8 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"net/http"
 	"os"
 
@@ -14,14 +16,21 @@ import (
 // secretsCatalog handles GET /api/v1/secrets/catalog. Authenticated only —
 // the name → op:// map must not leak vault/item structure (spec 017), which
 // is why the route table guards it with permSecretRead rather than reusing
-// task.read. The file is re-read per request so a ConfigMap update propagates
+// task.read. The file is re-read per request so a Secret update propagates
 // without a restart; it is small and requests are rare (one per claim).
+// The catalog Secret is projected per environment and mounted optional, so an
+// absent file means "no catalog here", not a server fault: same 404 as an
+// unconfigured path.
 func (s *server) secretsCatalog(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SecretsCatalogPath == "" {
 		writeErr(w, http.StatusNotFound, "secrets catalog not configured")
 		return
 	}
 	data, err := os.ReadFile(s.cfg.SecretsCatalogPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		writeErr(w, http.StatusNotFound, "secrets catalog not configured")
+		return
+	}
 	if err != nil {
 		s.log.Error("read secrets catalog", "err", err)
 		writeErr(w, http.StatusInternalServerError, "internal error")
