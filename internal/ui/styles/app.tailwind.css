@@ -61,6 +61,16 @@
 
 *{box-sizing:border-box}
 html,body{margin:0}
+/* The topbar is sticky and 56px tall, so any in-page jump — the skip link, the
+ * project nav's #work — would land its target underneath it, and a focused
+ * control scrolled to just under the top edge would be covered (WCAG 2.4.11
+ * Focus Not Obscured). scroll-padding-top reserves the bar's height on every
+ * scroll-into-view, programmatic focus included. */
+html{scroll-padding-top:64px}
+/* A <pre> holds text nobody can re-wrap — a stored document body, a code block
+ * — so it scrolls inside itself rather than widening the page (WCAG 1.4.10
+ * Reflow). .prose pre restates the same thing for the sanitised task body. */
+pre{overflow-x:auto;max-width:100%}
 body{
   background:var(--bg);color:var(--ink);
   font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -147,7 +157,15 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .main{padding:22px 26px 60px;min-width:0}
 .mode{display:none;grid-template-columns:minmax(0,1fr) 340px;gap:22px;align-items:start}
 .mode.active{display:grid}
-@media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}.rail{order:-1}}
+/* One column below 1080px. The rail keeps its DOM position: it used to carry
+ * order:-1, which painted the decisions above a work list that still came
+ * first in the document, so a sighted keyboard user tabbed in an order that
+ * did not match what they saw (WCAG 1.3.2 Meaningful Sequence). Visual order
+ * now follows document order at every width — canvas, then rail — which is
+ * also the desktop left-to-right order. The cost is that on a phone the next
+ * decision sits below the work list; the alternative, moving the aside ahead
+ * of the canvas in the DOM, only moves the same mismatch to the desktop. */
+@media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}}
 
 /* Below 880px the shell collapses to one column (spec 032 §10: reduced
  * columns, not a squeezed grid): the sidebar — global or project — becomes
@@ -207,6 +225,18 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .muted{color:var(--ink-3)}
 .small{font-size:12.5px}
 
+/* A data table is the one thing WCAG 1.4.10 exempts from reflow — it needs two
+ * dimensions to mean anything — so each one scrolls inside its own container
+ * instead of widening the page. The container is a labelled region carrying
+ * tabindex="0" in the markup, which is what makes it scrollable by keyboard
+ * (2.1.1); the markup side is layout.templ's tableWrap component. */
+.tablewrap{overflow-x:auto;max-width:100%}
+
+/* A link rendered as a flex item is blockified, so its box is exactly its text
+ * — 19px tall, under the 24px WCAG 2.5.8 minimum. These are the page-level
+ * "new thing" affordances; give them the minimum height explicitly. */
+.newlink{min-height:24px;display:inline-flex;align-items:center}
+
 /* evidence chips */
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;line-height:1.5;white-space:nowrap}
 .chip .cd{width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 auto}
@@ -235,18 +265,23 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 
 /* definition-of-done table */
 .dod{display:flex;flex-direction:column}
-.dodrow{display:grid;grid-template-columns:1fr auto;gap:10px 14px;padding:12px 0;border-top:1px solid var(--line);align-items:start}
+/* minmax(0,…) lets the descriptive column shrink below the intrinsic width of
+ * a long unbroken value (a deliverable's URL), so the row stays inside the
+ * card instead of pushing the page wider (WCAG 1.4.10). */
+.dodrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;padding:12px 0;border-top:1px solid var(--line);align-items:start}
 .dodrow:first-child{border-top:0}
 .dodrow .name{font-weight:600;font-size:13.5px}
 .dodrow .def{color:var(--ink-3);font-size:12px;margin-top:2px}
-.dodrow .ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.dodrow .ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;overflow-wrap:anywhere}
 .dodrow .st{justify-self:end;text-align:right}
 
 /* worklist */
 .wl{display:flex;flex-direction:column}
 .wlrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}
 .wlrow:first-child{border-top:0}
-.wlrow .who{display:flex;align-items:center;gap:8px;min-width:0}
+/* flex:0 0 auto keeps the avatar at its own 26px: as a shrinkable item next to
+ * a nowrap chip strip it was squeezed to 1-4px wide at 320px. */
+.wlrow .who{display:flex;align-items:center;gap:8px;min-width:0;flex:0 0 auto}
 .wlrow .who .avatar{width:26px;height:26px;font-size:10px}
 .wlrow .who.agent .avatar{border-radius:7px;background:linear-gradient(135deg,#F58221,#9A5410)}
 .wlrow .tl{min-width:0}
@@ -254,6 +289,20 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .wlrow .tl .s{font-size:11.5px;color:var(--ink-3)}
 .wlrow .rt{margin-left:auto;display:flex;align-items:center;gap:9px;white-space:nowrap}
 .wlrow .rt .cost{font-variant-numeric:tabular-nums;font-size:12px;color:var(--ink-3)}
+/* Below 880px — the width at which the shell itself drops to one column — a
+ * work row stacks rather than compressing: the title wraps to as many lines as
+ * it needs and the chip strip takes its own line. Ellipsis truncation left the
+ * title 15-58px of a 320px viewport, which is loss of content (WCAG 1.4.10),
+ * not the "reduced columns" spec 032 §10 asks narrow layouts for. Above the
+ * breakpoint the single-line ellipsis row stays. */
+@media (max-width:880px){
+  .wlrow{flex-wrap:wrap}
+  .wlrow .tl{flex:1 1 auto}
+  .wlrow .tl .t{white-space:normal;overflow:visible;text-overflow:clip}
+  .wlrow .rt{flex:1 1 100%;margin-left:0;flex-wrap:wrap;white-space:normal}
+  .dodrow{grid-template-columns:minmax(0,1fr)}
+  .dodrow .st{justify-self:start;text-align:left}
+}
 
 .kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:13px}
 .kv dt{color:var(--ink-3)}
@@ -316,7 +365,9 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .fieldrow input:hover,.fieldrow select:hover,.fieldrow textarea:hover{border-color:var(--ink-3)}
 .fieldrow.check{flex-direction:row;align-items:center;gap:9px}
 .fieldrow.check label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink-2)}
-.fieldrow.check input{width:20px;height:20px;min-height:0;accent-color:var(--link)}
+/* 24px square, and never shrunk by the flex row: WCAG 2.5.8's minimum target
+ * size. At 320px the 20px box was flex-shrunk to 14.5px wide. */
+.fieldrow.check input{width:24px;height:24px;min-height:0;flex:0 0 auto;accent-color:var(--link)}
 .btnrow{display:flex;gap:10px;margin-top:22px}
 .btnrow .btn{width:auto;min-height:40px;padding:9px 18px}
 
@@ -324,6 +375,11 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 /* .prose is the one subtree whose markup comes from an untrusted task body
  * (internal/mdrender's allowlist), so it is styled by element: nothing in
  * that body can carry a class of its own. */
+/* A task body is prose someone else wrote: a bare URL, a container digest or a
+ * stack-trace line has no break opportunity, and at 320px one such token made
+ * the whole page scroll sideways. overflow-wrap:anywhere breaks it (WCAG
+ * 1.4.10); white-space:pre in .prose pre is unaffected and keeps scrolling. */
+.prose{overflow-wrap:anywhere}
 .prose > :first-child{margin-top:0}
 .prose > :last-child{margin-bottom:0}
 .prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose table{margin:0 0 12px}
@@ -339,7 +395,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
  * recording is in scope (spec 021 §5) — so it is constrained to the column
  * rather than allowed to set the page width. */
 .prose img,.prose video{max-width:100%;height:auto;border-radius:9px}
-.prose table{border-collapse:collapse}
+/* Nothing in the body can carry a class, so a table there cannot be wrapped in
+ * a .tablewrap the way the page's own tables are; display:block makes the
+ * table its own scroll container instead, which is the same 1.4.10 outcome. */
+.prose table{border-collapse:collapse;display:block;width:max-content;max-width:100%;overflow-x:auto}
 .prose th,.prose td{border:1px solid var(--line);padding:5px 9px;text-align:left}
 .prose th{background:var(--surface-2);font-weight:600}
 

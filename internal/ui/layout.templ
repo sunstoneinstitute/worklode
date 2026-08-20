@@ -47,6 +47,20 @@ templ Page(p PageProps) {
 	</html>
 }
 
+// tableWrap is the scroll container every data table on a page renders inside.
+// A table is the one thing WCAG 1.4.10 exempts from reflow — it needs two
+// dimensions to mean anything — so at 320px it scrolls horizontally inside
+// this container instead of widening the page, which is what the four tables
+// in this package used to do. tabindex="0" is what makes that scrolling
+// reachable from the keyboard (2.1.1) in browsers that do not focus scroll
+// containers on their own, and the label is what a screen reader announces on
+// arriving in the region it thereby becomes.
+templ tableWrap(label string) {
+	<div class="tablewrap" role="region" aria-label={ label } tabindex="0">
+		{ children... }
+	</div>
+}
+
 // navLink renders one nav anchor — global or project-local — marking it
 // current when key matches active. The label is emitted tight against the tags
 // (>{label}<) so every destination keeps its exact >Name< text marker.
@@ -95,7 +109,7 @@ templ globalShell(active string) {
 		<div class="sidebar">
 			@primaryNav(active)
 		</div>
-		<main id="main-content" class="main">
+		<main id="main-content" class="main" tabindex="-1">
 			<div class="canvas">
 				{ children... }
 			</div>
@@ -110,7 +124,7 @@ templ globalShell(active string) {
 templ projectShell(p CockpitProject, active string) {
 	<div class="shell">
 		@sidebar(p, active)
-		<main id="main-content" class="main">
+		<main id="main-content" class="main" tabindex="-1">
 			{ children... }
 		</main>
 	</div>

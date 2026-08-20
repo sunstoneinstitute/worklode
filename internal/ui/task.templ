@@ -98,21 +98,23 @@ templ Task(v TaskView) {
 					if len(v.Timeline) == 0 {
 						<p class="muted">No timeline entries yet.</p>
 					} else {
-						<table>
-							<tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
-							for _, row := range v.Timeline {
-								<tr>
-									<td class="mono">{ FmtTime(row.At) }</td>
-									<td>{ row.Label }</td>
-									<td>{ row.Summary }</td>
-									<td>
-										if row.URL != "" {
-											<a href={ row.URL } rel="noreferrer">Open source</a>
-										}
-									</td>
-								</tr>
-							}
-						</table>
+						@tableWrap("Timeline") {
+							<table>
+								<tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
+								for _, row := range v.Timeline {
+									<tr>
+										<td class="mono">{ FmtTime(row.At) }</td>
+										<td>{ row.Label }</td>
+										<td>{ row.Summary }</td>
+										<td>
+											if row.URL != "" {
+												<a href={ row.URL } rel="noreferrer">Open source</a>
+											}
+										</td>
+									</tr>
+								}
+							</table>
+						}
 					}
 				</div>
 			</section>
