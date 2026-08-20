@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,6 +38,30 @@ func mintedPlanTasks(t *testing.T, h http.Handler, token string) []model.Task {
 	var resp model.AcceptDocResponse
 	decodeInto(t, rr, &resp)
 	return resp.Tasks
+}
+
+// taskAboutDoc creates a task directly through the store with AboutDoc set
+// to docID. The API accepts no about_doc creation input yet — only the
+// doc-lifecycle watcher (a later task in this plan) writes it (025 §15.4) —
+// so tests exercising the read/filter surface seed it this way, mirroring
+// inbox_import_test.go's direct store.CreateTask use.
+func taskAboutDoc(t *testing.T, st *store.Store, project, kind string, docID int64) *model.Task {
+	t.Helper()
+	var task *model.Task
+	_, _, err := st.RecordEvent(context.Background(), "cli",
+		fmt.Sprintf("about-doc-%d-%s-%s", docID, kind, project), "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			task, err = store.CreateTask(tx, st.Now(), store.TaskInput{
+				ProjectID: project, Title: "About doc " + kind, Priority: "medium", Kind: kind,
+				CreatedBy: "alice", AboutDoc: docID,
+			}, eventID)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("create task about doc %d: %v", docID, err)
+	}
+	return task
 }
 
 // createProject registers a project for tests. Most tests only create one
@@ -342,6 +367,80 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 	rr = doReq(t, h, "GET", "/api/v1/tasks?plan_doc=not-a-number", token, nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("non-numeric plan_doc status = %d, want 400, body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestGetTaskShowsAboutDoc: a task referencing a document carries
+// "about_doc" (025 §15.4); an ordinary task with none omits the key
+// entirely — its absence is the correct answer, not a zero value.
+func TestGetTaskShowsAboutDoc(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	doc := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "about-doc-fixture",
+		Body: "---\nstatus: draft\n---\n\nNo heading here.\n",
+	})
+	task := taskAboutDoc(t, st, "proj", "review", doc.ID)
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+task.ID, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if int64(got["about_doc"].(float64)) != doc.ID {
+		t.Errorf("about_doc = %v, want %d", got["about_doc"], doc.ID)
+	}
+
+	ordinary := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ordinary", "priority": "medium", "kind": "feature",
+	})
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+ordinary["id"].(string), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if _, present := decodeMap(t, rr)["about_doc"]; present {
+		t.Errorf(`ordinary task carries an "about_doc" key, want none`)
+	}
+}
+
+// TestListTasksFilterByAboutDoc: GET /tasks?about_doc=<id> returns exactly
+// the tasks referencing that document; a non-numeric about_doc is a named
+// 400, not a silently empty result — mirroring TestListTasksFilterByPlanDoc.
+func TestListTasksFilterByAboutDoc(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	doc := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "about-doc-fixture",
+		Body: "---\nstatus: draft\n---\n\nNo heading here.\n",
+	})
+	review := taskAboutDoc(t, st, "proj", "review", doc.ID)
+	design := taskAboutDoc(t, st, "proj", "design", doc.ID)
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Ordinary", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", fmt.Sprintf("/api/v1/tasks?about_doc=%d", doc.ID), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	tasks, ok := decodeMap(t, rr)["tasks"].([]any)
+	if !ok || len(tasks) != 2 {
+		t.Fatalf("got %d tasks, want 2 about the doc: %v", len(tasks), tasks)
+	}
+	var ids []string
+	for _, raw := range tasks {
+		ids = append(ids, raw.(map[string]any)["id"].(string))
+	}
+	sort.Strings(ids)
+	want := []string{review.ID, design.ID}
+	sort.Strings(want)
+	if !reflect.DeepEqual(ids, want) {
+		t.Fatalf("about_doc filter ids = %v, want %v", ids, want)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks?about_doc=not-a-number", token, nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("non-numeric about_doc status = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

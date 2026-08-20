@@ -1602,6 +1602,25 @@ func TestDocPlanTasksMintedMetricNilSafe(t *testing.T) {
 	m.planTasksMinted(3)
 }
 
+// TestRecordDocOpMetric: RecordDocOp is the exported way into
+// worklode_doc_operations_total for the handlers that record their event
+// through eventbus.Emit instead of RecordDocEvent (025 §15.3), so accept and
+// submit stay counted with every other document verb.
+func TestRecordDocOpMetric(t *testing.T) {
+	s := openDocStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+
+	s.RecordDocOp("submit", nil)
+	s.RecordDocOp("accept", errors.New("boom"))
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("submit", "ok")); got != 1 {
+		t.Errorf(`docOps{op=submit,outcome=ok} = %v, want 1`, got)
+	}
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("accept", "error")); got != 1 {
+		t.Errorf(`docOps{op=accept,outcome=error} = %v, want 1`, got)
+	}
+}
+
 // TestDocAcceptSupersedesReplacedDoc: a document-level replaces edge flips an
 // accepted target in the same transaction (025 §3.3), and leaves a draft one
 // alone — 025 §7's ladder runs draft -> accepted -> superseded, and a draft
@@ -2605,5 +2624,52 @@ func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
 	}
 	if got := needsExecutionSlugs(t, s, "p2"); len(got) != 0 {
 		t.Fatalf("needs execution in p2 = %v, want empty", got)
+	}
+}
+
+// TestDocIRIRoundTrip: DocIRI renders spec 025 §4.1's project-qualified
+// subject IRI for a spec, an ADR, and a plan in the same project, and
+// DocBySubjectIRI resolves each back to its row. An unknown IRI is
+// ErrNotFound.
+func TestDocIRIRoundTrip(t *testing.T) {
+	s := openDocStore(t)
+	ctx := t.Context()
+
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	adr := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 7,
+		Slug: "007-some-decision", Body: specBody, CreatedBy: "stig",
+	})
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan",
+		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
+	})
+
+	cases := []struct {
+		doc  *model.Doc
+		want string
+	}{
+		{spec, "wlid:doc/spec-p1-025"},
+		{adr, "wlid:doc/adr-p1-007"},
+		{plan, "wlid:doc/plan-p1-025-documents-in-the-backbone-2"},
+	}
+	for _, tc := range cases {
+		if got := DocIRI(*tc.doc); got != tc.want {
+			t.Errorf("DocIRI(%s) = %q, want %q", tc.doc.Slug, got, tc.want)
+		}
+		resolved, err := s.DocBySubjectIRI(ctx, tc.want)
+		if err != nil {
+			t.Fatalf("DocBySubjectIRI(%q): %v", tc.want, err)
+		}
+		if resolved.ID != tc.doc.ID {
+			t.Fatalf("DocBySubjectIRI(%q) = doc %d, want doc %d", tc.want, resolved.ID, tc.doc.ID)
+		}
+	}
+
+	if _, err := s.DocBySubjectIRI(ctx, "wlid:doc/spec-p1-999"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("DocBySubjectIRI unknown iri: got %v, want ErrNotFound", err)
 	}
 }

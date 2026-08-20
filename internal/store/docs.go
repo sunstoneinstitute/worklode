@@ -653,6 +653,41 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 	return nil
 }
 
+// CheckDocAcceptable re-runs AcceptDoc's gates without accepting anything, and
+// returns the same sentinels: ErrNotFound, ErrForbidden for an actor that is
+// not the assignee, ErrInvalidInput for a document that is not draft.
+//
+// It exists for one caller. The typed accept emission (025 §15.3) derives its
+// external id from the document's IRI and version, so a second accept of the
+// same version conflicts at the log and eventbus.Emit skips apply — which
+// means AcceptDoc's gates never run and the handler has no store answer to
+// return. Without this the request would report success for an accept that
+// did not happen, to an actor who may not even be the assignee. The gates live
+// here, next to the ones AcceptDoc runs, so the two cannot drift.
+func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) error {
+	var status, assignee string
+	var assigneeCol sql.NullString
+	err := s.db.QueryRowContext(ctx,
+		`SELECT status, assignee FROM docs WHERE id = $1`, id).Scan(&status, &assigneeCol)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("doc %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("load doc %d: %w", id, err)
+	}
+	assignee = assigneeCol.String
+	// Assignee first, matching AcceptDoc: standing to touch the document does
+	// not depend on its state, and checking state first would disclose it to
+	// an actor who has none.
+	if err := checkDocAssignee(id, assignee, actorID); err != nil {
+		return err
+	}
+	if status != "draft" {
+		return fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
+	}
+	return nil
+}
+
 // supersedeReplacedDocs flips every accepted document a document-level
 // replaces edge names to superseded, in the accepting transaction.
 // Section-scoped replaces edges flip nothing — section-level supersession
@@ -1428,6 +1463,47 @@ func (s *Store) RecordDocEvent(
 // a store opened without WithMetrics records nothing.
 func (s *Store) RecordPlanTasksMinted(n int) {
 	s.metrics.planTasksMinted(n)
+}
+
+// RecordDocOp records one document mutation's outcome
+// (worklode_doc_operations_total) for a caller that records its event
+// through eventbus.Emit rather than RecordDocEvent — the typed emission
+// path of 025 §15.3, which cannot go through the wrapper because the
+// payload needs the event id before the insert. Nil-safe.
+func (s *Store) RecordDocOp(op string, err error) { s.metrics.docOp(op, err) }
+
+// DocIRI is a document's canonical subject IRI (spec 025 §4.1's
+// wlid:doc/spec-worklode-025 form): wlid:doc/<kind>-<project>-<number>
+// zero-padded to three digits for the numbered kinds, and
+// wlid:doc/plan-<project>-<slug> for plans, which carry no number
+// (025 §14.3). Project-qualified because the identity rules of §5 are
+// per project: two projects may each hold a spec 25.
+func DocIRI(d model.Doc) string {
+	if d.Kind == "plan" {
+		return "wlid:doc/plan-" + d.Project + "-" + d.Slug
+	}
+	return fmt.Sprintf("wlid:doc/%s-%s-%03d", d.Kind, d.Project, d.Number)
+}
+
+// DocBySubjectIRI resolves an event's wl:subject back to its row.
+//
+// Reconstructs the IRI in SQL and compares, rather than parsing iri in Go:
+// both a project id and a plan slug may contain hyphens, so
+// "wlid:doc/<kind>-<project>-<tail>" is not unambiguously splittable back
+// into its parts.
+func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, error) {
+	d, err := scanDoc(s.db.QueryRowContext(ctx,
+		`SELECT `+docColumns+` FROM docs
+		  WHERE 'wlid:doc/' || kind || '-' || project_id || '-' ||
+		        CASE WHEN kind = 'plan' THEN slug ELSE lpad(number::text, 3, '0') END = $1`,
+		iri))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("doc with subject %q: %w", iri, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve doc subject %q: %w", iri, err)
+	}
+	return d, nil
 }
 
 // nullText maps "" to NULL, for the document columns where absent and empty

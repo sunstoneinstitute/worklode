@@ -8,6 +8,12 @@
 // gate, the anchor diff, what a plan may and may not do. Nothing here
 // re-decides them; the handlers' job is to name the caller, name the event,
 // and turn a store sentinel into a status code (see mapStoreErr).
+//
+// Two verbs are the exception to the RecordDocEvent shape above: submit and
+// accept emit 025 §15.3's typed JSON-LD events (wl:DocumentSubmitted,
+// wl:DocumentAccepted) through eventbus.Emit, because those are the two the
+// doc-lifecycle subscriber consumes (§15.4). Every other verb still writes a
+// dotted doc.* event; retyping the rest is a separate decision, not made here.
 package api
 
 import (
@@ -20,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -392,16 +399,34 @@ func (s *server) replaceDocEdges(w http.ResponseWriter, r *http.Request) {
 // execution tasks (025 §9.2) in the same transaction; the response carries
 // the doc and, for a plan, the minted set (model.AcceptDocResponse) — empty
 // and omitted for a spec or ADR, so their response stays byte-identical.
+//
+// The event is 025 §15.3's typed wl:DocumentAccepted, whose external id is
+// derived from the document's IRI and version, so a retried request records
+// one event rather than two.
 func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
+		return
+	}
+	// Read the document before the transaction because that external id needs
+	// its IRI and version before the insert. The pre-read decides nothing:
+	// store.AcceptDoc re-locks the row FOR UPDATE and re-checks the assignee
+	// and the draft-only rule inside the transaction, so a document that
+	// changed in between is still refused there, not here.
+	doc, err := s.st.GetDoc(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
 		return
 	}
 	actor := actorFrom(r)
 	now := s.st.Now()
 	var accepted *model.Doc
 	var minted []model.Task
-	err := s.recordDocEvent(w, r, "accept", "doc.accepted", id, nil,
+	ev := eventbus.DocumentAccepted{
+		Doc: store.DocIRI(*doc), Actor: actor.ID, At: now,
+		Version: doc.Version, From: "wlc:draft", To: "wlc:accepted",
+	}
+	_, inserted, err := eventbus.Emit(r.Context(), s.st, docSource, ev,
 		func(tx *sql.Tx, eventID int64) error {
 			d, tasks, err := store.AcceptDoc(tx, now, id, actor.ID, eventID)
 			if err != nil {
@@ -410,11 +435,66 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 			accepted, minted = d, tasks
 			return nil
 		})
+	// Counted before the error branch, exactly as RecordDocEvent counts it:
+	// a refused accept is an outcome of the accept op, not an absence of one.
+	s.st.RecordDocOp("accept", err)
 	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if !inserted {
+		// The (source, external_id) conflict means this document at this
+		// version was already accepted, so Emit skipped apply and AcceptDoc's
+		// gates never ran — accepted is nil. Answering 200 here would report
+		// an accept that did not happen, to an actor the assignee gate might
+		// not even admit, so the refusal AcceptDoc would have raised is raised
+		// here instead. Typing the event must not quietly change what the
+		// endpoint answers.
+		err := s.st.CheckDocAcceptable(r.Context(), id, actor.ID)
+		if err == nil {
+			// Unreachable by construction: a failed accept rolls its event
+			// back with it, so an event at this version implies the document
+			// left draft. Named rather than ignored — silently returning the
+			// pre-read row would hide a broken invariant behind a 200.
+			err = fmt.Errorf("internal: doc %d accepted at version %d has no event effect but is still draft",
+				id, doc.Version)
+		}
+		s.st.RecordDocOp("accept", err)
+		s.mapStoreErr(w, err)
 		return
 	}
 	s.st.RecordPlanTasksMinted(len(minted))
 	writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *accepted, Tasks: minted})
+}
+
+// submitDoc handles POST /api/v1/docs/{id}/submit: the document enters review.
+// Submission is an event, not a status (025 §15.4) — no document column moves
+// — so this emits wl:DocumentSubmitted with no apply at all and answers with
+// the document unchanged.
+//
+// A second submit of the same version is a 200 that inserts nothing: the
+// deterministic external id collapses it at the log, before any guard could
+// run. What the submission means is the doc-lifecycle watcher's to decide.
+func (s *server) submitDoc(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	d, err := s.st.GetDoc(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	ev := eventbus.DocumentSubmitted{
+		Doc: store.DocIRI(*d), Actor: actorFrom(r).ID, At: s.st.Now(), Version: d.Version,
+	}
+	_, _, err = eventbus.Emit(r.Context(), s.st, docSource, ev, nil)
+	s.st.RecordDocOp("submit", err)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 // reviseDoc handles POST /api/v1/docs/{id}/revise: opens the one candidate

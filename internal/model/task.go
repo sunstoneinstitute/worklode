@@ -30,6 +30,12 @@ type Task struct {
 	// PlanDoc is the plan document this task was minted from (025 §9.2); 0
 	// (omitted on the wire) when no plan authored it.
 	PlanDoc int64 `json:"plan_doc,omitempty"`
+	// AboutDoc is the document this task is about (025 §15.4): set on review
+	// tasks minted at submission and design tasks minted at acceptance. 0
+	// (omitted on the wire) when the task carries no such reference. Distinct
+	// from PlanDoc, which names the plan whose acceptance minted the task
+	// (025 §9.2), not what the task is about.
+	AboutDoc int64 `json:"about_doc,omitempty"`
 }
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
