@@ -1042,7 +1042,7 @@ func printTaskCost(cmd *cobra.Command, tc model.TaskCost, window string) {
 	} else {
 		fmt.Fprintf(out, "%s\n", tc.Task)
 	}
-	fmt.Fprintf(out, "sessions: %d\n", tc.Sessions)
+	fmt.Fprintf(out, "sessions with recorded usage: %d\n", tc.Sessions)
 	printCost(out, tc.Cost, window)
 }
 

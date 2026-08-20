@@ -698,22 +698,32 @@ func TestTaskCostNoSessions(t *testing.T) {
 }
 
 // A container task holds no lease itself; its own cost is empty unless
-// includeChildren widens the scope to its child_of descendants.
+// includeChildren widens the scope to its child_of descendants — including a
+// grandchild, which a non-recursive single-hop query would miss.
 func TestTaskCostIncludeChildren(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	parent := leaseForTest(t, s, "host:/.worktrees/parent")
 	child := usageSession(t, s, "host:/.worktrees/child", "sess-child")
+	grandchild := usageSession(t, s, "host:/.worktrees/grandchild", "sess-grandchild")
 
-	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			return AddEdge(tx, leaseTestNow, child.TaskID, parent.TaskID, "child_of", eventID)
-		}); err != nil {
-		t.Fatalf("AddEdge child_of: %v", err)
+	addChildOf := func(child, parent string) {
+		t.Helper()
+		if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return AddEdge(tx, leaseTestNow, child, parent, "child_of", eventID)
+			}); err != nil {
+			t.Fatalf("AddEdge %s child_of %s: %v", child, parent, err)
+		}
 	}
+	addChildOf(child.TaskID, parent.TaskID)
+	addChildOf(grandchild.TaskID, child.TaskID)
 
 	reportUsage(t, s, child, "sess-child", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+	})
+	reportUsage(t, s, grandchild, "sess-grandchild", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 2000}},
 	})
 
 	without, err := s.TaskCost(ctx, parent.TaskID, false, time.Time{}, time.Time{})
@@ -721,15 +731,18 @@ func TestTaskCostIncludeChildren(t *testing.T) {
 		t.Fatalf("TaskCost without children: %v", err)
 	}
 	if len(without.Days) != 0 || without.Sessions != 0 {
-		t.Fatalf("without children: got %+v, want empty (a child's usage must not leak in)", without)
+		t.Fatalf("without children: got %+v, want empty (a descendant's usage must not leak in)", without)
 	}
 
 	with, err := s.TaskCost(ctx, parent.TaskID, true, time.Time{}, time.Time{})
 	if err != nil {
 		t.Fatalf("TaskCost with children: %v", err)
 	}
-	if len(with.Days) != 1 || with.Days[0].Cost != "0.010000" || with.Sessions != 1 {
-		t.Fatalf("with children: got %+v, want the child's day and 1 session", with)
+	// 3000 combined output tokens (child's 1000 plus the grandchild's 2000) at
+	// 10.00/MTok = 0.030000. A non-recursive single-hop query would only reach
+	// the child and total 0.010000, so this pins the grandchild's contribution.
+	if len(with.Days) != 1 || with.Days[0].Cost != "0.030000" || with.Sessions != 2 {
+		t.Fatalf("with children: got %+v, want the grandchild's usage folded in (cost 0.030000, 2 sessions)", with)
 	}
 }
 
@@ -809,5 +822,47 @@ func TestTaskCostUnpricedTokens(t *testing.T) {
 	}
 	if tc.Sessions != 1 {
 		t.Fatalf("Sessions: got %d, want 1", tc.Sessions)
+	}
+}
+
+// Usage priced in two different currencies must stay two totals, never
+// summed together — CostReport's contract has no conversion rate to do that
+// with.
+func TestTaskCostMultipleCurrencies(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+
+	if err := s.UpsertModelPrice(ctx, ModelPrice{
+		Model: "vendor-eur-model", EffectiveFrom: usageDay1, Currency: "EUR", OutputMicros: 5_000_000,
+	}); err != nil {
+		t.Fatalf("seed EUR price: %v", err)
+	}
+
+	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+		{Day: usageDay1, Model: "vendor-eur-model", Tokens: TokenCounts{Output: 2000}},
+	})
+
+	tc, err := s.TaskCost(ctx, lease.TaskID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if len(tc.Days) != 2 {
+		t.Fatalf("days: got %d (%+v), want 2 (one per currency)", len(tc.Days), tc.Days)
+	}
+	if len(tc.Totals) != 2 {
+		t.Fatalf("totals: got %d (%+v), want 2", len(tc.Totals), tc.Totals)
+	}
+	// ORDER BY usage_day, cost_currency: same day, so EUR sorts before USD.
+	wantTotals := []CostTotal{
+		{Currency: "EUR", Tokens: TokenCounts{Output: 2000}, Cost: "0.010000"},
+		{Currency: "USD", Tokens: TokenCounts{Output: 1000}, Cost: "0.010000"},
+	}
+	for i, want := range wantTotals {
+		got := tc.Totals[i]
+		if got.Currency != want.Currency || got.Tokens != want.Tokens || got.Cost != want.Cost {
+			t.Fatalf("total %d: got %+v, want %+v", i, got, want)
+		}
 	}
 }

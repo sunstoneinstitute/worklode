@@ -318,8 +318,8 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren bool,
 	from, to time.Time) (*TaskCost, error) {
 
-	var exists bool
-	err := s.db.QueryRowContext(ctx, `SELECT true FROM tasks WHERE id = $1`, taskID).Scan(&exists)
+	var one int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM tasks WHERE id = $1`, taskID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
@@ -352,6 +352,9 @@ func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren boo
 		    JOIN leases l ON l.id = s.lease_id
 		   WHERE ` + where
 
+	// ::numeric(14,6) pins the six-digit shape: without it an all-unpriced
+	// group's SUM renders as "0" and a mixed-scale sum as e.g. "1.5", instead
+	// of the shape cost_amount always carries on the wire.
 	rows, err := s.db.QueryContext(ctx,
 		scope+`
 		SELECT u.usage_day, u.cost_currency,

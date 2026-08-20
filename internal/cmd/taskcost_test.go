@@ -53,7 +53,7 @@ func TestTaskCostCmd(t *testing.T) {
 		t.Fatalf("lode task cost: %v\noutput: %s", err, out)
 	}
 	want := task.ID + "\n" +
-		"sessions: 1\n" +
+		"sessions with recorded usage: 1\n" +
 		"\ncost, all time: 3.00 USD\n" +
 		"  2026-07-31  3.00  in 1.0M  cache-w 0  cache-r 0  out 100.0k\n"
 	if out != want {

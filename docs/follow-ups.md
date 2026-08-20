@@ -449,3 +449,11 @@ one pass.
   narrowing to exclude the naming plan. That is an amendment to 026 §2.1, not
   a query fix — `scripts/secmeta.py`'s §7 check does not catch it either, so
   both would move together once the spec decides.
+
+## From WL-148 — `lode task cost` (2026-08-20)
+
+- `[P4]` **`leases` has no plain index on `task_id`.** Only the partial
+  `leases_active` index (`WHERE released_at IS NULL`,
+  `deploy/base/migrations/0001_baseline.up.sql`) exists, so `Store.TaskCost`
+  (`internal/store/session_usage.go`) scans released leases too when reading
+  a task's cost. Small today, a migration when lease volume grows.

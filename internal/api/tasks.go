@@ -234,8 +234,9 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 // and cost (spec 025 §15.6, AC31). children=true widens the scope to the
 // task's child_of descendants, so a container task's own report is not
 // always zero. No dedicated metric: this is an ordinary read with no derived
-// outcome, already covered by http_requests_total /
-// http_request_duration_seconds (022 §metrics).
+// outcome, so the generic http_requests_total / http_request_duration_seconds
+// middleware (022 §0) is sufficient and 022 §8's add-a-metric rule is
+// deliberately not triggered.
 func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	from, err := dayParam(r, "from")
