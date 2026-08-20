@@ -22,6 +22,19 @@ repos:
         entry: scripts/secfmt.py -l -w
         language: script
         files: ^docs/specs/.*\.md$
+      # REFUSES RATHER THAN REWRITES — the opposite of section-numbers above.
+      # There is no correct automatic repair for a deleted published anchor,
+      # so there is no fix-and-retry loop here: fix the document by hand
+      # (letter-suffix inserts; superseded sections keep their heading and
+      # anchor) and commit again. Checks the whole corpus against HEAD:
+      # anchor permanence on accepted/superseded docs, reference and
+      # mirror-edge integrity, amends/replaces acyclicity (026 §4.1).
+      - id: section-permanence
+        name: anchor permanence & corpus integrity
+        entry: scripts/secfrozen.py
+        language: script
+        files: ^docs/(specs|plans)/.*\.md$
+        pass_filenames: false
       # Rewrites like secfmt above. The views are a function of the *whole*
       # corpus — an amendment added to one spec changes another spec's view — so
       # this regenerates all of them whenever any spec changes, and never just

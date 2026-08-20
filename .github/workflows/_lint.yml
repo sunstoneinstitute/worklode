@@ -73,6 +73,15 @@ jobs:
             echo "$out" >&2
           fi
           exit "${status:-0}"
+      # docs/specs and docs/plans are exempt from the docs-only skip, so a
+      # corpus-only PR runs this job — this is a real gate, not a backstop.
+      # secfrozen.py checks anchor permanence, reference and mirror-edge
+      # integrity, and amends/replaces acyclicity (026 §4.1); the test suite
+      # guards the script itself.
+      - name: Design-doc corpus integrity
+        run: |
+          ./scripts/secfrozen.py
+          python3 scripts/secfrozen_test.py
       # internal/ns/gen.go is generated from ns/concept.ttl, so a kind or a
       # status added to the Turtle without a regenerate fails here. Stdlib
       # only, so nothing to install.
