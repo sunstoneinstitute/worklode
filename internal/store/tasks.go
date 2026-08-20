@@ -111,11 +111,11 @@ var legalTransitions = map[[2]string]bool{
 	{"abandoned", "ready"}:            true,
 }
 
-// AllStates returns every state the task machine can occupy, sorted. It is
+// allStates returns every state the task machine can occupy, sorted. It is
 // derived from legalTransitions rather than listed, so it cannot fall behind
-// the machine; ns/shapes.ttl's wl:taskState sh:in list is pinned against it
-// (internal/ns), which is the only reason it is exported.
-func AllStates() []string {
+// the machine; TestTaskStateShapeMatchesStateMachine pins ns/shapes.ttl's
+// wl:taskState sh:in list against it.
+func allStates() []string {
 	seen := make(map[string]bool, 16)
 	for pair := range legalTransitions {
 		seen[pair[0]] = true

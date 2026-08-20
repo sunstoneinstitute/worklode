@@ -8,11 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"reflect"
-	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -856,20 +852,22 @@ func TestSetTaskSkills(t *testing.T) {
 	}
 }
 
-// TestTaskKindsAgreeAcrossSources pins the three places the kind enum is
-// spelled — the API's validKinds, the tasks.kind CHECK constraint, and
-// wlc:TaskKind in ns/concept.ttl — to the same set. validKinds now derives
-// from ns.TaskKinds, so the loop drives off that: creating a task of every
-// kind proves the CHECK admits the generated set, since the insert rejects
-// anything outside it. The .ttl is then read directly as well, so `go test`
-// alone still catches a stale internal/ns/gen.go — scripts/nsgen.py --check
-// in CI is the other half of that guard.
+// TestTaskKindsAgreeAcrossSources proves the tasks.kind CHECK constraint and
+// validKinds both admit every generated kind: validKinds derives from
+// ns.TaskKinds, the handler rejects anything outside it, and the insert
+// rejects anything outside the CHECK, so creating one task per kind fails
+// here if either is missing one.
+//
+// That is containment, not equality. The two directions it cannot see are
+// pinned elsewhere: a CHECK wider than ns.TaskKinds by internal/store's
+// TestKindCheckConstraintMatchesGeneratedKinds, which reads the constraint
+// back, and a stale internal/ns/gen.go by internal/ns's
+// TestTaskKindsMatchTurtle, which re-reads ns/concept.ttl independently.
 func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	kinds := ns.TaskKinds
-	for _, k := range kinds {
+	for _, k := range ns.TaskKinds {
 		t.Run(k, func(t *testing.T) {
 			rr := doReq(t, h, "POST", "/api/v1/tasks", token,
 				map[string]any{"project": "proj", "title": "t", "priority": "high", "kind": k})
@@ -877,23 +875,6 @@ func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 				t.Fatalf("create kind %q status = %d, want 201; body %s", k, rr.Code, rr.Body.String())
 			}
 		})
-	}
-
-	ttl, err := os.ReadFile(filepath.Join("..", "..", "ns", "concept.ttl"))
-	if err != nil {
-		t.Fatalf("read ns/concept.ttl: %v", err)
-	}
-	// Every wlc:<name> declared in scheme wlc:TaskKind.
-	re := regexp.MustCompile(`wlc:(\w+) a skos:Concept ; skos:inScheme wlc:TaskKind`)
-	var inTTL []string
-	for _, m := range re.FindAllStringSubmatch(string(ttl), -1) {
-		inTTL = append(inTTL, m[1])
-	}
-	sort.Strings(inTTL)
-	want := append([]string(nil), kinds...)
-	sort.Strings(want)
-	if !slices.Equal(inTTL, want) {
-		t.Errorf("wlc:TaskKind = %v, want %v (ns/concept.ttl disagrees with internal/ns/gen.go — run ./scripts/nsgen.py)", inTTL, want)
 	}
 }
 
