@@ -23,8 +23,8 @@ func newEnvWithSkillPush(t *testing.T, onSkillPush func(repo, branch string) boo
 		t.Fatalf("add repo: %v", err)
 	}
 	return &env{
-		st: st,
-		h:  hooks.NewGitHubHandler(st, testSecret, slog.Default(), onSkillPush, nil, nil),
+		dbEnv: dbEnv{st: st},
+		h:     hooks.NewGitHubHandler(st, testSecret, slog.Default(), onSkillPush, nil, nil),
 	}
 }
 
@@ -46,7 +46,7 @@ func TestSkillPushMatchMarksEventAndSkipsIgnored(t *testing.T) {
 	})
 
 	rr := deliverBody(t, e.h, "push", "d-1", skillPushBody("acme/skills-repo", "refs/heads/main"))
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "push.skills" {
@@ -67,7 +67,7 @@ func TestSkillPushNoMatchStaysIgnored(t *testing.T) {
 	// Same repo, non-matching branch: unmapped, and not a skill push either,
 	// so existing "ignored" behavior applies unchanged.
 	rr := deliverBody(t, e.h, "push", "d-1", skillPushBody("acme/skills-repo", "refs/heads/dev"))
-	if rr.Code != http.StatusOK || status(t, rr) != "ignored" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "push.ignored" {
@@ -89,7 +89,7 @@ func TestSkillPushWinsOverMappedRepoApply(t *testing.T) {
 	})
 
 	rr := deliver(t, e.h, "push", "d-1", "push_main_ff.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "push.skills" {
@@ -115,7 +115,7 @@ func TestSkillPushNoMatchOnMappedRepoStillApplies(t *testing.T) {
 	})
 
 	rr := deliver(t, e.h, "push", "d-1", "push_main_ff.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "push" {
@@ -139,7 +139,7 @@ func TestSkillPushTagRefDoesNotMatch(t *testing.T) {
 	})
 
 	rr := deliverBody(t, e.h, "push", "d-1", skillPushBody("acme/skills-repo", "refs/tags/v1"))
-	if rr.Code != http.StatusOK || status(t, rr) != "ignored" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if called {
@@ -175,11 +175,11 @@ func TestSkillPushDuplicateDeliveryStaysDuplicate(t *testing.T) {
 
 	body := skillPushBody("acme/skills-repo", "refs/heads/main")
 	rr := deliverBody(t, e.h, "push", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("first delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	rr = deliverBody(t, e.h, "push", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "duplicate" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
 		t.Fatalf("second delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if calls != 2 {

@@ -70,7 +70,7 @@ func TestDeploymentStatusFailureIgnored(t *testing.T) {
 		"repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"}
 	}`)
 	rr := deliverBody(t, e.h, "deployment_status", "d-3", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM env_deploys`); n != 0 {
@@ -97,7 +97,7 @@ func TestDeploymentStatusIgnoredEnvironment(t *testing.T) {
 		"repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"}
 	}`)
 	rr := deliverBody(t, e.h, "deployment_status", "d-3", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM env_deploys`); n != 0 {
@@ -124,7 +124,7 @@ func TestDeploymentStatusProdAdvancesTask(t *testing.T) {
 		"repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"}
 	}`)
 	rr := deliverBody(t, e.h, "deployment_status", "d-3", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if st := e.taskState(t, taskID); st != "deployed_prod" {
