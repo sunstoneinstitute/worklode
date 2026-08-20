@@ -15,7 +15,7 @@ import {
   type ProjectMembers,
   type WlBlock,
 } from "../serialize/note";
-import type { Doc, Project, TaskListDetail } from "../api/types";
+import type { Project } from "../api/types";
 
 /** The file operations the mirror needs. Implemented against Obsidian's
  *  vault in src/vault/writer.ts, and against a map in the tests.
@@ -185,9 +185,8 @@ function sortByKey<T>(items: T[], keyOf: (item: T) => string): T[] {
 /** Renders each item to a note, keeping only the ones whose produced path
  *  matches what `desiredPath` computes from the *trusted* project id (the
  *  key it was grouped under in byProject) and the item's own key -- `keyOf`,
- *  the path segment that identifies the item: a task's id, or a doc's slug
- *  (docs have no successor to `ordinal`, and slug is the one identifier
- *  that's universal across spec/adr/plan and safe as a filename). A note's
+ *  the path segment that identifies the item: a task's id, or a doc's slug.
+ *  A note's
  *  path is actually built by *ToNote from the object's own fields (e.g.
  *  Doc.project), which can diverge from that grouping key -- comparing
  *  against the produced path, rather than trusting the object's own field,
@@ -279,7 +278,7 @@ export async function desiredNotes(
         "doc",
         p.id,
         sortByKey(members.docs, (d) => d.slug),
-        (d: Doc) => d.slug,
+        (d) => d.slug,
         docToNote,
         conflicts,
       );
@@ -287,7 +286,7 @@ export async function desiredNotes(
         "task",
         p.id,
         sortByKey(members.tasks, (t) => t.id),
-        (t: TaskListDetail) => t.id,
+        (t) => t.id,
         taskToNote,
         conflicts,
       );
@@ -357,7 +356,7 @@ export async function desiredTaskNotes(
         "task",
         p.id,
         sortByKey(members.tasks, (t) => t.id),
-        (t: TaskListDetail) => t.id,
+        (t) => t.id,
         taskToNote,
         conflicts,
       );

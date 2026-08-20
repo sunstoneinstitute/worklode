@@ -851,7 +851,9 @@ describe("desiredNotes conflicts", () => {
 
     const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
-    expect(desired.conflicts.some((c) => c.includes(String(collidingDoc.id)))).toBe(true);
+    expect(
+      desired.conflicts.some((c) => c.includes(collidingDoc.slug) && c.includes('already has a "wl" key')),
+    ).toBe(true);
     // The note is still produced -- the backbone block wins, per note.ts.
     expect(desired.notes.some((n) => n.path === "worklode/docs/WL-SPEC-1.md")).toBe(true);
   });

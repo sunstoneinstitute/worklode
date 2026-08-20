@@ -89,6 +89,8 @@ export interface DocSection {
  * internal/model.DocEdge. An edge is always stated from the point of view
  * of the document being read: from_anchor is the near end, to_doc and
  * to_anchor the far end -- in DocDetail.edges and DocDetail.edges_in alike.
+ * An anchor is "" when that end of the edge is the whole document rather
+ * than one of its sections.
  *
  * One stored row carries both directions, so an edge in edges_in is that
  * row read backward: the ends swap and type is already the inverse
