@@ -359,6 +359,47 @@ func TestSetReleaseFrontierIsForwardOnly(t *testing.T) {
 	}
 }
 
+// TestConfirmedFrontierFrom exercises the dual-signal rule directly, over
+// every combination of watermarks one env_deploys row can hold. Both callers
+// — ConfirmedFrontier's own SELECT and attachDeployFacts' widened one — route
+// through this, so the rule cannot drift between them.
+func TestConfirmedFrontierFrom(t *testing.T) {
+	id := func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }
+	var none sql.NullInt64
+
+	cases := []struct {
+		name     string
+		gh, flux sql.NullInt64
+		fluxSeen bool
+		want     *int64
+	}{
+		{"no signal at all", none, none, false, nil},
+		{"github only, before any flux signal", id(7), none, false, ptrTo(int64(7))},
+		{"flux only, no github watermark", none, id(7), true, nil},
+		{"github missing once flux is correlated", none, id(7), true, nil},
+		{"flux behind github", id(9), id(7), true, ptrTo(int64(7))},
+		{"github behind flux", id(7), id(9), true, ptrTo(int64(7))},
+		{"both agree", id(7), id(7), true, ptrTo(int64(7))},
+		// flux_seen without a flux watermark cannot confirm: the pair is
+		// past bootstrap, so the GitHub fallback no longer applies.
+		{"flux seen but no flux watermark", id(9), none, true, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := confirmedFrontierFrom(c.gh, c.flux, c.fluxSeen)
+			switch {
+			case got == nil && c.want == nil:
+			case got == nil || c.want == nil:
+				t.Fatalf("frontier = %v, want %v", got, c.want)
+			case *got != *c.want:
+				t.Fatalf("frontier = %d, want %d", *got, *c.want)
+			}
+		})
+	}
+}
+
+func ptrTo[T any](v T) *T { return &v }
+
 func TestNormalizeEnvironment(t *testing.T) {
 	cases := map[string]string{
 		"dev": "dev", "test": "dev", "development": "dev", "staging": "dev",
