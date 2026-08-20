@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -85,15 +83,8 @@ func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// The signature covers the exact request bytes: read the raw body first
 	// (capped at maxFluxBody), verify, and only then parse.
-	r.Body = http.MaxBytesReader(w, r.Body, maxFluxBody)
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		var mbe *http.MaxBytesError
-		if errors.As(err, &mbe) {
-			writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
-			return
-		}
-		writeErr(w, http.StatusBadRequest, "read body")
+	body, ok := readSignedBody(w, r, maxFluxBody)
+	if !ok {
 		return
 	}
 	if !validSignature(h.secret, body, r.Header.Get("X-Signature")) {
@@ -133,17 +124,16 @@ func (h *fluxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	// A redelivery acks "duplicate" whatever it would otherwise have been.
+	status := "ok"
+	result = "ok"
 	switch {
 	case !inserted:
-		result = "ok"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "duplicate"})
+		status = "duplicate"
 	case ignored:
-		result = "ignored"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ignored"})
-	default:
-		result = "ok"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ok"})
+		result, status = "ignored", "ignored"
 	}
+	writeJSON(w, http.StatusOK, model.WebhookAck{Status: status})
 }
 
 // resolveEnvironment maps a Flux event's cluster to a deployment
@@ -292,27 +282,37 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 		}
 	}
 
-	failed := ev.Severity == "error" || ev.Reason == "ReconciliationFailed" || ev.Reason == "HealthCheckFailed"
-	switch {
-	case failed:
-		if err := store.UpsertDeployment(tx, now, store.Deployment{
+	// The three outcomes below differ only in the status they record and
+	// whether they emit a runtime event, so the target identity is built
+	// once here.
+	setStatus := func(status string) error {
+		return store.UpsertDeployment(tx, now, store.Deployment{
 			ArtifactID:  artifactID,
 			Environment: environment,
 			TargetKind:  fluxTargetKind,
 			TargetName:  targetName,
-			Status:      "failed",
-		}); err != nil {
-			return err
-		}
+			Status:      status,
+		})
+	}
+	runtimeEvent := func(kind string) error {
 		_, err := store.InsertRuntimeEvent(tx, store.RuntimeEvent{
 			Cluster:    cluster,
-			Kind:       "flux_failure",
+			Kind:       kind,
 			Workload:   targetName,
 			ArtifactID: artifactID,
 			Message:    ev.Message,
 			OccurredAt: occurredAt,
 		})
 		return err
+	}
+
+	failed := ev.Severity == "error" || ev.Reason == "ReconciliationFailed" || ev.Reason == "HealthCheckFailed"
+	switch {
+	case failed:
+		if err := setStatus("failed"); err != nil {
+			return err
+		}
+		return runtimeEvent("flux_failure")
 
 	case ev.Reason == "ReconciliationSucceeded":
 		// Read the prior status before upserting: a success arriving after
@@ -321,13 +321,7 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 		if err != nil {
 			return err
 		}
-		if err := store.UpsertDeployment(tx, now, store.Deployment{
-			ArtifactID:  artifactID,
-			Environment: environment,
-			TargetKind:  fluxTargetKind,
-			TargetName:  targetName,
-			Status:      "deployed",
-		}); err != nil {
+		if err := setStatus("deployed"); err != nil {
 			return err
 		}
 		if err := h.confirmFluxDelivery(tx, now, environment, gitSHA, artifact, eventID); err != nil {
@@ -336,25 +330,11 @@ func (h *fluxHandler) apply(tx *sql.Tx, eventID int64, ev fluxEvent) error {
 		if priorStatus != "failed" {
 			return nil
 		}
-		_, err = store.InsertRuntimeEvent(tx, store.RuntimeEvent{
-			Cluster:    cluster,
-			Kind:       "flux_recovery",
-			Workload:   targetName,
-			ArtifactID: artifactID,
-			Message:    ev.Message,
-			OccurredAt: occurredAt,
-		})
-		return err
+		return runtimeEvent("flux_recovery")
 
 	default:
 		// Other info-severity reasons (Progressing, garbage collection,
 		// ...): reconciliation is underway but not yet resolved either way.
-		return store.UpsertDeployment(tx, now, store.Deployment{
-			ArtifactID:  artifactID,
-			Environment: environment,
-			TargetKind:  fluxTargetKind,
-			TargetName:  targetName,
-			Status:      "reconciling",
-		})
+		return setStatus("reconciling")
 	}
 }

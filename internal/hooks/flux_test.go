@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -27,11 +26,11 @@ const fluxTestSecret = "test-flux-secret"
 const fluxSeededSHA = "abc1230000000000000000000000000000000000"
 
 // fluxEnv is a webhook test fixture: a real store and the Flux handler with
-// a single-cluster map (prod-1 -> prod). Raw SQL assertions go through the
-// store's own connection pool.
+// a single-cluster map (prod-1 -> prod). The raw-SQL assertions come from
+// the embedded dbEnv, shared with the GitHub fixture.
 type fluxEnv struct {
-	st *store.Store
-	h  http.Handler
+	dbEnv
+	h http.Handler
 }
 
 func newFluxEnv(t *testing.T) *fluxEnv {
@@ -39,8 +38,8 @@ func newFluxEnv(t *testing.T) *fluxEnv {
 	st := store.OpenTestStore(t)
 
 	return &fluxEnv{
-		st: st,
-		h:  hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil, nil),
+		dbEnv: dbEnv{st: st},
+		h:     hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil, nil),
 	}
 }
 
@@ -108,36 +107,6 @@ func fluxDeliverBody(t *testing.T, h http.Handler, body []byte) *httptest.Respon
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 	return rr
-}
-
-func fluxStatus(t *testing.T, rr *httptest.ResponseRecorder) string {
-	t.Helper()
-	var m map[string]string
-	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
-		t.Fatalf("decode body %q: %v", rr.Body.String(), err)
-	}
-	return m["status"]
-}
-
-func (e *fluxEnv) rawQueryRow(t *testing.T, dest []any, query string, args ...any) bool {
-	t.Helper()
-	err := e.st.DBForTests().QueryRow(query, args...).Scan(dest...)
-	if err == sql.ErrNoRows {
-		return false
-	}
-	if err != nil {
-		t.Fatalf("raw query %q: %v", query, err)
-	}
-	return true
-}
-
-func (e *fluxEnv) rawQueryInt(t *testing.T, query string, args ...any) int {
-	t.Helper()
-	var n int
-	if err := e.st.DBForTests().QueryRow(query, args...).Scan(&n); err != nil {
-		t.Fatalf("raw query %q: %v", query, err)
-	}
-	return n
 }
 
 func (e *fluxEnv) eventCount(t *testing.T) int {
@@ -216,11 +185,11 @@ func TestFluxOversizedBody413(t *testing.T) {
 func TestFluxIdempotency(t *testing.T) {
 	e := newFluxEnv(t)
 	rr := fluxDeliver(t, e.h, "kustomization_succeeded.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("first delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	rr = fluxDeliver(t, e.h, "kustomization_succeeded.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "duplicate" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
 		t.Fatalf("second delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.eventCount(t); n != 1 {
@@ -236,7 +205,7 @@ func TestFluxKustomizationSucceededWithArtifact(t *testing.T) {
 	artifactID := e.seedArtifact(t, fluxSeededSHA)
 
 	rr := fluxDeliver(t, e.h, "kustomization_succeeded.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -256,7 +225,7 @@ func TestFluxKustomizationSucceededNoArtifactMatch(t *testing.T) {
 	e := newFluxEnv(t)
 
 	rr := fluxDeliver(t, e.h, "kustomization_succeeded.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -315,7 +284,7 @@ func TestFluxOCIRevisionCorrelatesThroughArtifact(t *testing.T) {
 	}
 
 	rr := fluxDeliver(t, e.h, "kustomization_succeeded_oci.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -343,7 +312,7 @@ func TestFluxOCIRevisionNoArtifactDoesNotLatch(t *testing.T) {
 	e := newFluxEnv(t)
 
 	rr := fluxDeliver(t, e.h, "kustomization_succeeded_oci.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -367,7 +336,7 @@ func TestFluxKustomizationFailedRecordsFailureAndRuntimeEvent(t *testing.T) {
 	artifactID := e.seedArtifact(t, fluxSeededSHA)
 
 	rr := fluxDeliver(t, e.h, "kustomization_failed.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -400,7 +369,7 @@ func TestFluxRecoveryAfterFailure(t *testing.T) {
 	e := newFluxEnv(t)
 
 	rr := fluxDeliver(t, e.h, "kustomization_failed.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("failed delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	status, _, ok := e.deployment(t, "prod", "flux_kustomization", "flux-system/demo")
@@ -422,7 +391,7 @@ func TestFluxRecoveryAfterFailure(t *testing.T) {
 		}
 	}`)
 	rr = fluxDeliverBody(t, e.h, recoveryBody)
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("recovery delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -442,7 +411,7 @@ func TestFluxHelmReleaseUsesFluxKustomizationTargetKind(t *testing.T) {
 	e := newFluxEnv(t)
 
 	rr := fluxDeliver(t, e.h, "helmrelease_succeeded.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -462,7 +431,7 @@ func TestFluxUnknownKindIgnored(t *testing.T) {
 	e := newFluxEnv(t)
 
 	rr := fluxDeliver(t, e.h, "unknown_kind.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ignored" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM deployments`); n != 0 {
@@ -496,7 +465,7 @@ func TestFluxOtherReasonSetsReconciling(t *testing.T) {
 		"metadata": {"cluster": "prod-1"}
 	}`)
 	rr := fluxDeliverBody(t, e.h, body)
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	status, _, ok := e.deployment(t, "prod", "flux_kustomization", "flux-system/demo")
@@ -524,7 +493,7 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 	t.Run("mapped cluster", func(t *testing.T) {
 		e := newFluxEnv(t) // clusterEnv: {"prod-1": "prod"}
 		rr := fluxDeliverBody(t, e.h, mkBody("prod-1"))
-		if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+		if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 			t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 		}
 		if _, _, ok := e.deployment(t, "prod", "flux_kustomization", "flux-system/demo"); !ok {
@@ -535,7 +504,7 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 	t.Run("no cluster, single-entry map", func(t *testing.T) {
 		e := newFluxEnv(t) // clusterEnv: {"prod-1": "prod"}
 		rr := fluxDeliverBody(t, e.h, mkBody(""))
-		if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+		if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 			t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 		}
 		if _, _, ok := e.deployment(t, "prod", "flux_kustomization", "flux-system/demo"); !ok {
@@ -546,10 +515,10 @@ func TestFluxClusterEnvResolution(t *testing.T) {
 	t.Run("unmapped cluster defaults to dev", func(t *testing.T) {
 		st := store.OpenTestStore(t)
 		h := hooks.NewFluxHandler(st, fluxTestSecret, map[string]string{"prod-1": "prod"}, nil, nil)
-		e := &fluxEnv{st: st, h: h}
+		e := &fluxEnv{dbEnv: dbEnv{st: st}, h: h}
 
 		rr := fluxDeliverBody(t, e.h, mkBody("staging-9"))
-		if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+		if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 			t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 		}
 		if _, _, ok := e.deployment(t, "dev", "flux_kustomization", "flux-system/demo"); !ok {
@@ -595,7 +564,7 @@ func fluxBody(reason, severity, cluster, sha string) []byte {
 func fluxDeliverOK(t *testing.T, h http.Handler, body []byte) {
 	t.Helper()
 	rr := fluxDeliverBody(t, h, body)
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("flux deliver: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
@@ -710,7 +679,7 @@ func TestFluxGatesAfterFirstSeen(t *testing.T) {
 
 	// GitHub confirms the newer commit. min(gh, flux) is still the older one.
 	rr := deliverBody(t, e.h, "deployment_status", "d-3", deploymentStatusBody("dev", markerSHA))
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("deployment_status: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	gh, flux, seen, ok := e.envDeploy(t, "dev")
@@ -824,7 +793,7 @@ func TestFluxMountedOnServer(t *testing.T) {
 		t.Fatalf("new server: %v", err)
 	}
 	rr := fluxDeliver(t, h, "kustomization_succeeded.json")
-	if rr.Code != http.StatusOK || fluxStatus(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }

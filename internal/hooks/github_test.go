@@ -24,12 +24,18 @@ import (
 
 const testSecret = "test-webhook-secret"
 
+// dbEnv is the half of a webhook test fixture both handlers share: the
+// store, and the raw-SQL assertions that read it. Raw SQL goes through the
+// store's own connection pool.
+type dbEnv struct {
+	st *store.Store
+}
+
 // env is a webhook test fixture: a real store with repo
 // sunstoneinstitute/demo mapped to project "demo" and the GitHub handler.
-// Raw SQL assertions go through the store's own connection pool.
 type env struct {
-	st *store.Store
-	h  http.Handler
+	dbEnv
+	h http.Handler
 }
 
 func newEnv(t *testing.T) *env {
@@ -59,8 +65,8 @@ func newEnvWithBranchResolver(t *testing.T, resolveBranch func(repo, branch stri
 		}
 	}
 	return &env{
-		st: st,
-		h:  hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil),
+		dbEnv: dbEnv{st: st},
+		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil),
 	}
 }
 
@@ -140,7 +146,7 @@ func deliverBody(t *testing.T, h http.Handler, event, deliveryID string, body []
 func deliverOK(t *testing.T, e *env, event, deliveryID, fixtureFile string) {
 	t.Helper()
 	rr := deliver(t, e.h, event, deliveryID, fixtureFile)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("deliver %s %s (%s): code=%d body=%s",
 			event, fixtureFile, deliveryID, rr.Code, rr.Body.String())
 	}
@@ -155,7 +161,8 @@ func (e *env) setDoneState(t *testing.T, repo, doneState string) {
 	}
 }
 
-func status(t *testing.T, rr *httptest.ResponseRecorder) string {
+// ackStatus decodes the "status" field of a webhook ack body.
+func ackStatus(t *testing.T, rr *httptest.ResponseRecorder) string {
 	t.Helper()
 	var m map[string]string
 	if err := json.Unmarshal(rr.Body.Bytes(), &m); err != nil {
@@ -165,7 +172,7 @@ func status(t *testing.T, rr *httptest.ResponseRecorder) string {
 }
 
 // rawQueryInt runs a single-value SQL query against the store's database.
-func (e *env) rawQueryInt(t *testing.T, query string, args ...any) int {
+func (e *dbEnv) rawQueryInt(t *testing.T, query string, args ...any) int {
 	t.Helper()
 	var n int
 	if err := e.st.DBForTests().QueryRow(query, args...).Scan(&n); err != nil {
@@ -175,7 +182,7 @@ func (e *env) rawQueryInt(t *testing.T, query string, args ...any) int {
 }
 
 // rawQueryRow scans one multi-column row, reporting whether it existed.
-func (e *env) rawQueryRow(t *testing.T, dest []any, query string, args ...any) bool {
+func (e *dbEnv) rawQueryRow(t *testing.T, dest []any, query string, args ...any) bool {
 	t.Helper()
 	err := e.st.DBForTests().QueryRow(query, args...).Scan(dest...)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -188,7 +195,7 @@ func (e *env) rawQueryRow(t *testing.T, dest []any, query string, args ...any) b
 }
 
 // rawQueryString runs a single-value SQL query against the store's database.
-func (e *env) rawQueryString(t *testing.T, query string, args ...any) string {
+func (e *dbEnv) rawQueryString(t *testing.T, query string, args ...any) string {
 	t.Helper()
 	var s string
 	if err := e.st.DBForTests().QueryRow(query, args...).Scan(&s); err != nil {
@@ -267,11 +274,11 @@ func TestEmptySecretIs503(t *testing.T) {
 func TestIdempotency(t *testing.T) {
 	e := newEnv(t)
 	rr := deliver(t, e.h, "issues", "d-1", "issues_opened.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("first delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	rr = deliver(t, e.h, "issues", "d-1", "issues_opened.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "duplicate" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
 		t.Fatalf("second delivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.eventCount(t); n != 1 {
@@ -319,7 +326,7 @@ func TestPROpenedCorrelatesAndMovesToReview(t *testing.T) {
 	e.claimTask(t, taskID)  // in_progress + active lease
 
 	rr := deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -349,7 +356,7 @@ func TestPROpenedTaskNotInProgressSkipsTransition(t *testing.T) {
 	taskID := e.seedTask(t) // WL-1 stays in ready
 
 	rr := deliver(t, e.h, "pull_request", "d-1", "pull_request_opened.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	pr, err := e.st.GetPR(ctx, "sunstoneinstitute/demo", 42)
@@ -439,7 +446,7 @@ func TestPRMergeRecordsFactsAndResolves(t *testing.T) {
 func TestReviewSubmitted(t *testing.T) {
 	e := newEnv(t)
 	rr := deliver(t, e.h, "pull_request_review", "d-1", "pull_request_review_submitted.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	reviews, err := e.st.ReviewsForPR(context.Background(), "sunstoneinstitute/demo", 42)
@@ -455,7 +462,7 @@ func TestReviewSubmitted(t *testing.T) {
 func TestWorkflowRunCompleted(t *testing.T) {
 	e := newEnv(t)
 	rr := deliver(t, e.h, "workflow_run", "d-1", "workflow_run_completed.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	runs, err := e.st.CIRunsForSHA(context.Background(),
@@ -474,7 +481,7 @@ func TestWorkflowRunCompleted(t *testing.T) {
 func TestReleasePublished(t *testing.T) {
 	e := newEnv(t)
 	rr := deliver(t, e.h, "release", "d-1", "release_published.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	// No main commit has ever been seen for the repo, so the frontier is
@@ -515,7 +522,7 @@ func TestReleaseArtifactKeepsAnUnlandedCommitish(t *testing.T) {
 	const headSHA = "3333333333333333333333333333333333333333"
 
 	rr := deliverBody(t, e.h, "release", "d-2", releaseBody("v0.9.1", backportSHA))
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -671,7 +678,7 @@ func TestReleaseFrontierNarrowsToTaggedCommit(t *testing.T) {
 	const oldSHA = "1111111111111111111111111111111111111111"
 	const headSHA = "3333333333333333333333333333333333333333"
 	rr := deliverBody(t, e.h, "release", "d-3", releaseBody("v0.9.0", oldSHA))
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("backport release: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if got, want := e.rawQueryInt(t,
@@ -685,7 +692,7 @@ func TestReleaseFrontierNarrowsToTaggedCommit(t *testing.T) {
 
 	// A release that does reach the task's commit delivers it.
 	rr = deliverBody(t, e.h, "release", "d-4", releaseBody("v1.0.0", headSHA))
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("head release: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if st := e.taskState(t, taskID); st != "released" {
@@ -765,7 +772,7 @@ func TestRegistryPackageWithoutPackageURL(t *testing.T) {
 		}
 	}`)
 	rr := deliverBody(t, e.h, "registry_package", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	a, err := e.st.FindArtifactByImage(context.Background(),
@@ -796,7 +803,7 @@ func TestRegistryPackageUntaggedIsRecordedNotApplied(t *testing.T) {
 		}
 	}`)
 	rr := deliverBody(t, e.h, "registry_package", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM artifacts`); n != 0 {
@@ -819,7 +826,7 @@ func TestRegistryPackageNonContainerIgnored(t *testing.T) {
 		}
 	}`)
 	rr := deliverBody(t, e.h, "registry_package", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM artifacts`); n != 0 {
@@ -835,7 +842,7 @@ func TestUnmappedRepoIgnored(t *testing.T) {
 		"issue": {"number": 1, "title": "x", "state": "open", "html_url": "u"}
 	}`)
 	rr := deliverBody(t, e.h, "issues", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ignored" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "issues.opened.ignored" {
@@ -849,7 +856,7 @@ func TestUnmappedRepoIgnored(t *testing.T) {
 func TestUnknownEventRecorded(t *testing.T) {
 	e := newEnv(t)
 	rr := deliverBody(t, e.h, "ping", "d-1", []byte(`{"zen": "Keep it simple."}`))
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "ping" {
@@ -878,7 +885,7 @@ func TestMountedOnServer(t *testing.T) {
 		t.Fatalf("new server: %v", err)
 	}
 	rr := deliver(t, h, "issues", "d-1", "issues_opened.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 }

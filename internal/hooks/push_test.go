@@ -88,7 +88,7 @@ func TestPushBranchRecordsTaskCommits(t *testing.T) {
 	e.claimTask(t, taskID)  // in_progress
 
 	rr := deliver(t, e.h, "push", "d-1", "push_branch.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -116,7 +116,7 @@ func TestPushMainMergeAdvancesTask(t *testing.T) {
 
 	deliverPushOK(t, e, "d-1", "push_branch.json")
 	rr := deliver(t, e.h, "push", "d-2", "push_main_merge.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -147,7 +147,7 @@ func TestPushMainMarkerAdvancesTask(t *testing.T) {
 	taskID := e.seedTask(t) // stays ready
 
 	rr := deliver(t, e.h, "push", "d-1", "push_main_marker.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	const sha = "4444444444444444444444444444444444444444"
@@ -209,7 +209,7 @@ func TestPushLastDeployMapsShas(t *testing.T) {
 	deliverPushOK(t, e, "d-1", "push_main_merge.json")
 
 	rr := deliver(t, e.h, "push", "d-2", "push_last_deploy.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 
@@ -233,7 +233,7 @@ func TestPushUnmappedRepoIgnored(t *testing.T) {
 		"commits": [{"id": "1111111111111111111111111111111111111111", "message": "Add widget"}]
 	}`)
 	rr := deliverBody(t, e.h, "push", "d-1", body)
-	if rr.Code != http.StatusOK || status(t, rr) != "ignored" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
 		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if typ := e.eventType(t, "d-1"); typ != "push.ignored" {
@@ -265,7 +265,7 @@ func TestPushUnrelatedRefsAreNoOps(t *testing.T) {
 	}
 	for id, body := range bodies {
 		rr := deliverBody(t, e.h, "push", id, body)
-		if rr.Code != http.StatusOK || status(t, rr) != "ok" {
+		if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
 			t.Fatalf("%s: code=%d body=%s", id, rr.Code, rr.Body.String())
 		}
 	}
@@ -289,7 +289,7 @@ func TestPushRedeliveryIsIdempotent(t *testing.T) {
 
 	deliverPushOK(t, e, "d-1", "push_branch.json")
 	rr := deliver(t, e.h, "push", "d-1", "push_branch.json")
-	if rr.Code != http.StatusOK || status(t, rr) != "duplicate" {
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
 		t.Fatalf("redelivery: code=%d body=%s", rr.Code, rr.Body.String())
 	}
 	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM task_commits`); n != 2 {
