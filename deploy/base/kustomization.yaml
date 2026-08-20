@@ -7,7 +7,6 @@ resources:
   - postgres.yaml
   - database.yaml
   - configmap.yaml
-  - secrets-catalog.yaml
   - deployment.yaml
   - service.yaml
   - metrics-service.yaml

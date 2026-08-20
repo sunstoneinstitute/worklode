@@ -12,6 +12,9 @@ amends:
   - 017-task-secrets.md#sec-4
   "#sec-5":
   - 017-task-secrets.md#sec-6
+amendedBy:
+  "#sec-2":
+  - 043-secrets-catalog-home.md#sec-2
 ---
 # Spec 042 — Secret templates
 
@@ -72,6 +75,12 @@ wrapped around a credential, and the scaffolding is not entitled to keystore
 protection.
 
 ## 2. Catalog declaration {#sec-2}
+
+> **Amended by ADR 043 §2.** A `template` names a sibling key of the projected
+> `worklode-secrets-catalog` **Secret**, not of a ConfigMap: the catalog and
+> its templates are field labels on a 1Password item, extracted into that
+> Secret per environment. The mechanism below is otherwise unchanged — only the
+> object kind and how it gets provisioned.
 
 Amends 017 §1. A templated entry replaces `ref` with a `template` key naming a
 sibling file and one `cred.<PLACEHOLDER>` key per credential:

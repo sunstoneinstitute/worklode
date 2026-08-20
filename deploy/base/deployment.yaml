@@ -110,6 +110,10 @@ spec:
         - name: migrations
           configMap:
             name: worklode-migrations
+        # Projected per environment by the overlay's ExternalSecret
+        # (externalsecret-worklode-secrets-catalog.yaml); optional so base
+        # alone, and any environment without the catalog item, still starts.
         - name: secrets-catalog
-          configMap:
-            name: worklode-secrets-catalog
+          secret:
+            secretName: worklode-secrets-catalog
+            optional: true

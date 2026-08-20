@@ -561,3 +561,10 @@ docs/specs/042-secret-templates.md:
     sec-4.1: "### 4.1 Rendered-file lifetime"
     sec-5: "## 5. Degradation"
     sec-6: "## 6. Acceptance criteria"
+docs/specs/043-secrets-catalog-home.md:
+  sections:
+    sec-0: "## 0. Decision"
+    sec-1: "## 1. The problem"
+    sec-2: "## 2. Where the catalog lives"
+    sec-3: "## 3. What ships in this repo"
+    sec-4: "## 4. Consequences"

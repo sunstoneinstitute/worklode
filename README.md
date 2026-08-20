@@ -279,8 +279,11 @@ without ever storing a value in worklode (spec 017).
   `lode block`, and worktree removal — merely leaving a worktree keeps them,
   since the lease is still yours; `lode secrets purge --task <id>` is the
   manual escape hatch.
-- **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, deployed
-  as the `worklode-secrets-catalog` ConfigMap.
+- **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, projected
+  from the `worklode-secrets-catalog` 1Password item into a per-environment
+  `worklode-secrets-catalog` Secret by an ExternalSecret. It's deliberately
+  not in this repo (spec 017 §1, ADR 043); entries are added in 1Password, not
+  by PR — `deploy/secrets-catalog.example.toml` shows the shape.
 - **Guarantees:** worklode stores names only — values never touch disk, logs,
   or the event log; the `secrets_materialized` event records names, not
   values.
