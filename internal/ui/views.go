@@ -136,11 +136,14 @@ type PlaceholderView struct {
 // --- project cockpit --------------------------------------------------------
 
 // CockpitView is the project cockpit page (project overview), rendered in the
-// prototype's Operations mode (docs/mockups/cockpit/index.html, mode B). It
-// mirrors the shape of model.CockpitProjection, flattened for rendering.
-// PinnedFocus, NextDecision, and RankingFocus stay nil/empty until the stores
-// that back them exist; each panel is omitted honestly when its data is
-// absent rather than rendering an invented placeholder.
+// prototype's Operations mode (docs/mockups/cockpit/index.html, mode B). It is
+// the subset of model.CockpitProjection mode B shows, flattened for rendering
+// — not the whole projection: the projection's ranking focus and mapped
+// repositories have no panel in mode B, so they are absent here rather than
+// carried unrendered (WL-164); the JSON cockpit still serves both.
+// PinnedFocus and NextDecision are optional facts, and each panel is omitted
+// honestly when its data is absent rather than rendering an invented
+// placeholder.
 type CockpitView struct {
 	Page              PageProps
 	CanonicalURL      string
@@ -149,11 +152,9 @@ type CockpitView struct {
 	ModeName          string
 	ModeBasis         string
 	PinnedFocus       *CockpitFocus
-	RankingFocus      []string
 	NextDecision      *CockpitDecision
 	Work              CockpitWork
 	SecondaryConcerns []CockpitConcern
-	Repositories      []CockpitRepo
 	CostTotals        []CockpitCostTotal
 }
 
@@ -220,13 +221,6 @@ type CockpitConcern struct {
 	Title           string
 	URL             string
 	EvidenceSummary string
-}
-
-// CockpitRepo is one mapped repository and its declared done-state evidence.
-type CockpitRepo struct {
-	Repo             string
-	DoneState        string
-	EvidenceCategory string
 }
 
 // CockpitCostTotal is a per-currency cost total for the cockpit's cost window.

@@ -16,6 +16,13 @@ package ui
 // backbone does not store yet and shows real 30-day agent spend. The
 // prototype's Definition-of-done panel has no backing data and is omitted.
 // The prototype-only A/B/C mode switch is omitted (only Operations is wired).
+//
+// Mode B has no repositories panel and no ranking-focus list — the prototype
+// shows neither, and both facts read better where they are already contracted
+// (the JSON cockpit; `lode next` acts on the ranking focus). CockpitView
+// therefore does not carry them at all (WL-164), so "populated but never
+// rendered" cannot recur here: adding either panel means adding the field
+// back deliberately, alongside markup that reads it.
 
 templ Cockpit(v CockpitView) {
 	@Page(v.Page) {
