@@ -193,7 +193,6 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 		want string
 	}{
 		{"/intake", "spec 032 §5"},
-		{"/reviews", "spec 029 §7"},
 		{"/deliveries", "spec 029 §3"},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
@@ -211,6 +210,32 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReviewsPageListsAwaitingApprovals checks the Reviews destination is
+// the real awaiting-approvals queue (spec 029 §7.1), not a placeholder: a
+// seeded PR-kind approval shows its title and entity id, and the page still
+// carries exactly one aria-current="page" marker.
+func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
+	st, h, _ := newTestServer(t)
+	seedAwaitingPRApproval(t, st, "acme/site#7", "Fix the widget")
+
+	rr := doReq(t, h, "GET", "/reviews", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("reviews page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	bodyContains(t, body, "Fix the widget", "acme/site#7", `aria-current="page"`)
+	assertOneAriaCurrent(t, body)
+}
+
+// TestReviewsPageEmptyIsHonest checks an empty queue states that honestly
+// rather than showing a fabricated record.
+func TestReviewsPageEmptyIsHonest(t *testing.T) {
+	_, h, _ := newTestServer(t)
+
+	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
+	bodyContains(t, body, "No approvals are waiting.")
 }
 
 // TestShellReferencesHTMX asserts the shell references the self-hosted,

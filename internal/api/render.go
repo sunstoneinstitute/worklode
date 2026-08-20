@@ -9,6 +9,7 @@ package api
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -59,6 +60,33 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 	return ui.ProjectsView{
 		Page:     ui.PageProps{Title: title, ActiveGlobal: active},
 		Projects: out,
+	}
+}
+
+// approvalsView maps the awaiting-approvals queue (029 §7.1) into the
+// Reviews page's view type; now is the reference point FmtAge renders each
+// row's age against. Read-only: no row carries a control, since the decide
+// route does not exist until spec 029 §7.2 lands.
+func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsView {
+	out := make([]ui.ApprovalRow, 0, len(rows))
+	for _, a := range rows {
+		row := ui.ApprovalRow{
+			EntityID:    a.EntityID,
+			PRTitle:     a.PRTitle,
+			PRURL:       a.PRURL,
+			TaskID:      a.TaskID,
+			ProjectID:   a.ProjectID,
+			ProjectName: a.ProjectName,
+			Age:         ui.FmtAge(a.CreatedAt, now),
+		}
+		if a.RequiredActorName != nil {
+			row.RequiredActorName = *a.RequiredActorName
+		}
+		out = append(out, row)
+	}
+	return ui.ApprovalsView{
+		Page: ui.PageProps{Title: "worklode: reviews", ActiveGlobal: "reviews"},
+		Rows: out,
 	}
 }
 

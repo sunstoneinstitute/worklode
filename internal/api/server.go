@@ -430,8 +430,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
 	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
 	r.web("GET /work", s.navWrap("work", s.workPage))
-	r.web("GET /reviews", s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
-		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7.")))
+	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
 		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
 	// Knowledge is the document corpus: spec 032 §2 defines the destination

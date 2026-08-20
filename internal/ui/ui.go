@@ -10,6 +10,7 @@ package ui
 
 import (
 	"embed"
+	"fmt"
 	"io/fs"
 	"strconv"
 	"time"
@@ -32,6 +33,28 @@ func Assets() fs.FS {
 // "2006-01-02 15:04". Every page-facing timestamp goes through it, so the web
 // UI never disagrees with itself about how a time is written.
 func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
+
+// FmtAge renders how long ago t was, relative to now, in the coarsest unit
+// that stays legible: minutes under an hour, hours under a day, days beyond
+// that. The Reviews queue (spec 029 §7.1) is the first page to show it; any
+// later page needing a relative age should call this rather than inventing
+// a second phrasing.
+func FmtAge(t, now time.Time) string {
+	d := now.Sub(t)
+	if d < time.Minute {
+		return "just now"
+	}
+	if d < time.Hour {
+		m := int(d / time.Minute)
+		return fmt.Sprintf("%dm ago", m)
+	}
+	if d < 24*time.Hour {
+		h := int(d / time.Hour)
+		return fmt.Sprintf("%dh ago", h)
+	}
+	days := int(d / (24 * time.Hour))
+	return fmt.Sprintf("%dd ago", days)
+}
 
 // fmtBytes renders a byte count for display: exact below 1 kB, one decimal
 // place above it. Attachment sizes span a 33-byte PNG and a 100 MiB screen
