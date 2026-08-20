@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -31,6 +32,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
+	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
 // Config carries server configuration. The webhook secrets and cluster/env
@@ -107,7 +109,16 @@ type Config struct {
 	// unbounded and are never cancelled; pass the process's shutdown context
 	// (e.g. the one built around signal.NotifyContext in cmd/serve.go) to
 	// have them abort on shutdown instead of outliving the server.
+	//
+	// Passing it non-nil is additionally what starts the doc-lifecycle
+	// subscriber, which unlike the skill sync has no configuration of its own
+	// to gate on.
 	BackgroundCtx context.Context
+
+	// EventPoll is how often the doc-lifecycle subscriber polls the log. Zero
+	// takes eventbus's 1s default; e2e sets it low so the test does not wait
+	// a second per step.
+	EventPoll time.Duration
 
 	// Metrics is the registry the server registers its instruments on and
 	// serves at /metrics on the admin handler. Nil (tests) gets a private
@@ -175,6 +186,11 @@ type server struct {
 	// webhook-triggered syncs) — cfg.BackgroundCtx, or context.Background()
 	// when unset. It is not the request context of any HTTP call.
 	bgCtx context.Context
+
+	// watcherMetrics counts doc-lifecycle rule outcomes (docwatch.go). Nil
+	// in every server that starts no subscriber; *watcher.Metrics is
+	// nil-safe, so the handler is still callable directly in tests.
+	watcherMetrics *watcher.Metrics
 
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
@@ -555,6 +571,46 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// sources configured starts no background goroutine.
 	if s.skillSyncer != nil {
 		go s.runSkillSync(s.bgCtx, "boot")
+	}
+
+	// The doc-lifecycle subscriber (025 §15.4). Gated on the caller having
+	// passed a background context rather than on s.bgCtx, which defaults to
+	// context.Background(): the hundreds of tests that pass none stay
+	// loop-free, while serve.go passes the process shutdown context, so
+	// production wiring is free.
+	if cfg.BackgroundCtx != nil {
+		// context.Background(), not bgCtx: these two assertions are part of
+		// starting up, so a shutdown racing the boot must fail the boot
+		// rather than leave the loop running against a missing row.
+		if err := st.EnsureEventSubscriber(context.Background(), docLifecycleSubscriber); err != nil {
+			return nil, nil, fmt.Errorf("ensure %s subscriber: %w", docLifecycleSubscriber, err)
+		}
+		if err := st.EnsureServiceActor(context.Background(), watcherActorID, "doc-lifecycle watcher"); err != nil {
+			return nil, nil, fmt.Errorf("ensure %s actor: %w", watcherActorID, err)
+		}
+		s.watcherMetrics = watcher.NewMetrics(reg)
+		// First and only registration of the eventbus instruments: this is
+		// the process's one subscriber loop. The horizon collector in
+		// metrics.go registers a different family (worklode_event_log_horizon_id),
+		// so the two do not collide.
+		busMetrics := eventbus.NewMetrics(reg, st)
+		go func() {
+			err := eventbus.Run(cfg.BackgroundCtx, eventbus.Options{
+				Store:   st,
+				Name:    docLifecycleSubscriber,
+				Handler: s.docLifecycleHandler(),
+				Poll:    cfg.EventPoll,
+				Metrics: busMetrics,
+				Log:     s.log,
+			})
+			// Run always ends with an error; context.Canceled is the ordinary
+			// shutdown path and anything else means the subscriber stopped
+			// consuming while the server kept serving — a silent stall unless
+			// it is said out loud.
+			if err != nil && !errors.Is(err, context.Canceled) {
+				s.log.Error("doc-lifecycle subscriber stopped", "err", err)
+			}
+		}()
 	}
 
 	return s.logging(s.metrics(mux)), admin, nil
