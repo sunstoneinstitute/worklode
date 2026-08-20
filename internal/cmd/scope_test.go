@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -371,7 +372,7 @@ func seedIssue(t *testing.T, st *store.Store, repo string, number int64) {
 			return store.UpsertIssue(tx, model.Issue{
 				Repo: repo, Number: number, Title: "issue", State: "open",
 				URL: "https://example.test/x",
-			})
+			}, time.Time{})
 		})
 	if err != nil {
 		t.Fatalf("seed issue %s#%d: %v", repo, number, err)

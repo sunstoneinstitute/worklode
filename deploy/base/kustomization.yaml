@@ -72,3 +72,5 @@ configMapGenerator:
       - migrations/0029_doc_edge_coverage.down.sql
       - migrations/0030_reconciliation.up.sql
       - migrations/0030_reconciliation.down.sql
+      - migrations/0031_fact_timestamps.up.sql
+      - migrations/0031_fact_timestamps.down.sql

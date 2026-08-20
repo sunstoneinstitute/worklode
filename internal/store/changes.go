@@ -23,6 +23,9 @@ type PullRequest struct {
 	URL      string
 	OpenedAt time.Time
 	MergedAt *time.Time
+	// UpdatedAt is GitHub's pull_request.updated_at, the non-regression
+	// guard's clock. See UpsertPR.
+	UpdatedAt time.Time
 }
 
 // CIRun is one workflow run reported for a commit.
@@ -35,6 +38,9 @@ type CIRun struct {
 	URL         string
 	StartedAt   time.Time
 	CompletedAt *time.Time
+	// UpdatedAt is GitHub's workflow_run.updated_at, the non-regression
+	// guard's clock. See UpsertPR.
+	UpdatedAt time.Time
 }
 
 // Review is one PR review submission.
@@ -92,6 +98,31 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 // exists. On update, task_id is set only if it is currently NULL — once
 // correlated, a PR keeps its task link even if a later delivery carries a
 // different (or no) correlation signal.
+//
+// # The non-regressing guard
+//
+// This is the reference site for the
+//
+//	WHERE coalesce(excluded.<col>, '-infinity') >= coalesce(<table>.<col>, '-infinity')
+//
+// clause on DO UPDATE that UpsertCIRun, UpsertIssue and CreateArtifact also
+// carry. Deliveries arrive out of order — GitHub does not guarantee order,
+// and reconcile replays backlogged .ignored events after newer ones already
+// applied (spec 013 §2.1) — so an unconditional upsert lets a stale payload
+// overwrite newer facts (a replayed pull_request.opened regressing a merged
+// PR to open, dropping merge_sha and merged_at). The guard makes the write
+// non-regressing; a first insert has no conflicting row and always lands.
+//
+// The column is the fact's own last-modified time (GitHub's updated_at /
+// published_at), never the delivery time: when we received a payload says
+// nothing about whether it describes newer state.
+//
+// It is >= and not >, so an ordinary redelivery of the same payload still
+// writes. Unknown on either side sorts as '-infinity': a legacy row with no
+// stored timestamp yields to the first event that carries one, so nothing
+// freezes, and an event with no timestamp yields to any row that has one,
+// because it cannot prove it is newer. Both unknown falls through to the
+// old unconditional behaviour.
 func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 	candidate := TaskIDFromRef(pr.HeadRef)
 	if candidate == "" {
@@ -124,10 +155,14 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 	if taskID != nil {
 		taskIDArg = sql.NullString{String: *taskID, Valid: true}
 	}
+	var updatedAt sql.NullTime
+	if !pr.UpdatedAt.IsZero() {
+		updatedAt = sql.NullTime{Time: pr.UpdatedAt.UTC(), Valid: true}
+	}
 
 	_, err := tx.Exec(
-		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
 		   state = excluded.state,
@@ -135,8 +170,10 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 		   merge_sha = excluded.merge_sha,
 		   url = excluded.url,
 		   merged_at = excluded.merged_at,
-		   task_id = CASE WHEN pull_requests.task_id IS NULL THEN excluded.task_id ELSE pull_requests.task_id END`,
-		pr.Repo, pr.Number, pr.Title, pr.State, taskIDArg, pr.HeadRef, pr.HeadSHA, mergeSHA, pr.URL, openedAt, mergedAt,
+		   updated_at = excluded.updated_at,
+		   task_id = CASE WHEN pull_requests.task_id IS NULL THEN excluded.task_id ELSE pull_requests.task_id END
+		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(pull_requests.updated_at, '-infinity')`,
+		pr.Repo, pr.Number, pr.Title, pr.State, taskIDArg, pr.HeadRef, pr.HeadSHA, mergeSHA, pr.URL, openedAt, mergedAt, updatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("upsert PR %s#%d: %w", pr.Repo, pr.Number, err)
@@ -168,14 +205,14 @@ func ExistingPRNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 }
 
 // prColumns is the SELECT list scanPR expects, in order.
-const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at`
+const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at`
 
 func scanPR(row rowScanner) (*PullRequest, error) {
 	var pr PullRequest
 	var title, state, taskID, headRef, headSHA, mergeSHA, url sql.NullString
-	var openedAt, mergedAt sql.NullTime
+	var openedAt, mergedAt, updatedAt sql.NullTime
 	if err := row.Scan(&pr.Repo, &pr.Number, &title, &state, &taskID,
-		&headRef, &headSHA, &mergeSHA, &url, &openedAt, &mergedAt); err != nil {
+		&headRef, &headSHA, &mergeSHA, &url, &openedAt, &mergedAt, &updatedAt); err != nil {
 		return nil, err
 	}
 	pr.Title = title.String
@@ -195,6 +232,9 @@ func scanPR(row rowScanner) (*PullRequest, error) {
 	if mergedAt.Valid {
 		t := mergedAt.Time.UTC()
 		pr.MergedAt = &t
+	}
+	if updatedAt.Valid {
+		pr.UpdatedAt = updatedAt.Time.UTC()
 	}
 	return &pr, nil
 }
@@ -240,7 +280,7 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 // first.
 func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT repo, head_sha, workflow, status, conclusion, url, started_at, completed_at
+		`SELECT repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at
 		 FROM ci_runs WHERE repo = $1 AND head_sha = $2 ORDER BY started_at, id`,
 		repo, headSHA)
 	if err != nil {
@@ -252,9 +292,9 @@ func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun
 	for rows.Next() {
 		var r CIRun
 		var status, conclusion, url sql.NullString
-		var startedAt, completedAt sql.NullTime
+		var startedAt, completedAt, updatedAt sql.NullTime
 		if err := rows.Scan(&r.Repo, &r.HeadSHA, &r.Workflow, &status, &conclusion,
-			&url, &startedAt, &completedAt); err != nil {
+			&url, &startedAt, &completedAt, &updatedAt); err != nil {
 			return nil, fmt.Errorf("scan ci run: %w", err)
 		}
 		r.Status = status.String
@@ -268,6 +308,9 @@ func (s *Store) CIRunsForSHA(ctx context.Context, repo, headSHA string) ([]CIRun
 		if completedAt.Valid {
 			t := completedAt.Time.UTC()
 			r.CompletedAt = &t
+		}
+		if updatedAt.Valid {
+			r.UpdatedAt = updatedAt.Time.UTC()
 		}
 		out = append(out, r)
 	}
@@ -298,7 +341,9 @@ func (s *Store) ReviewsForPR(ctx context.Context, repo string, prNumber int64) (
 }
 
 // UpsertCIRun inserts or, on redelivery, updates a CI run row. The natural
-// key is (repo, head_sha, workflow, started_at).
+// key is (repo, head_sha, workflow, started_at). The update is guarded on
+// updated_at so a stale delivery cannot regress a finished run to running —
+// see UpsertPR for the guard's rationale.
 func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 	var conclusion sql.NullString
 	if r.Conclusion != nil {
@@ -308,16 +353,22 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 	if r.CompletedAt != nil {
 		completedAt = sql.NullTime{Time: r.CompletedAt.UTC(), Valid: true}
 	}
+	var updatedAt sql.NullTime
+	if !r.UpdatedAt.IsZero() {
+		updatedAt = sql.NullTime{Time: r.UpdatedAt.UTC(), Valid: true}
+	}
 	_, err := tx.Exec(
-		`INSERT INTO ci_runs (repo, head_sha, workflow, status, conclusion, url, started_at, completed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		`INSERT INTO ci_runs (repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (repo, head_sha, workflow, started_at) DO UPDATE SET
 		   status = excluded.status,
 		   conclusion = excluded.conclusion,
 		   url = excluded.url,
-		   completed_at = excluded.completed_at`,
+		   completed_at = excluded.completed_at,
+		   updated_at = excluded.updated_at
+		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(ci_runs.updated_at, '-infinity')`,
 		r.Repo, r.HeadSHA, r.Workflow, r.Status, conclusion, r.URL,
-		r.StartedAt.UTC(), completedAt,
+		r.StartedAt.UTC(), completedAt, updatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert ci run %s %s %s: %w", r.Repo, r.HeadSHA, r.Workflow, err)
@@ -327,6 +378,10 @@ func UpsertCIRun(tx *sql.Tx, r CIRun) error {
 
 // UpsertReview inserts or, on redelivery, updates a review row. The
 // natural key is (repo, pr_number, reviewer, submitted_at).
+//
+// It needs no non-regression guard (UpsertPR): submitted_at is already part
+// of the key, so a conflict means literally the same review submission, and
+// its state cannot differ between two deliveries of it.
 func UpsertReview(tx *sql.Tx, rv Review) error {
 	_, err := tx.Exec(
 		`INSERT INTO reviews (repo, pr_number, reviewer, state, submitted_at)

@@ -16,15 +16,26 @@ import (
 // title/state/url. It never touches triage_state, task_id, or
 // applies_to_versions — those are set once, by triage (PromoteIssue /
 // DismissIssue), and a later webhook replay must not clobber them.
-func UpsertIssue(tx *sql.Tx, is model.Issue) error {
+//
+// updatedAt is GitHub's issue.updated_at; the update is guarded on it so a
+// stale delivery cannot regress title/state/url — see UpsertPR for the
+// guard's rationale. It is a parameter rather than a model.Issue field
+// because the fact timestamp is an ingestion concern, not a wire field.
+func UpsertIssue(tx *sql.Tx, is model.Issue, updatedAt time.Time) error {
+	var updated sql.NullTime
+	if !updatedAt.IsZero() {
+		updated = sql.NullTime{Time: updatedAt.UTC(), Valid: true}
+	}
 	_, err := tx.Exec(
-		`INSERT INTO issues (repo, number, title, state, url)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO issues (repo, number, title, state, url, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
 		   state = excluded.state,
-		   url = excluded.url`,
-		is.Repo, is.Number, is.Title, is.State, is.URL,
+		   url = excluded.url,
+		   updated_at = excluded.updated_at
+		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(issues.updated_at, '-infinity')`,
+		is.Repo, is.Number, is.Title, is.State, is.URL, updated,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert issue %s#%d: %w", is.Repo, is.Number, err)

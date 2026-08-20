@@ -20,15 +20,22 @@ func openInboxStore(t *testing.T) *Store {
 	return openTaskStore(t)
 }
 
-// upsertIssue drives UpsertIssue through RecordEvent, source "github", the
-// way a webhook handler will use it.
-func upsertIssue(t *testing.T, s *Store, is model.Issue) error {
+// upsertIssueAt drives UpsertIssue through RecordEvent, source "github", the
+// way a webhook handler will use it, carrying the issue's own updated_at.
+func upsertIssueAt(t *testing.T, s *Store, is model.Issue, updatedAt time.Time) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "github", nextExt(t), "issues.opened", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpsertIssue(tx, is)
+			return UpsertIssue(tx, is, updatedAt)
 		})
 	return err
+}
+
+// upsertIssue is upsertIssueAt with no fact timestamp, for the tests that are
+// not about the non-regression guard.
+func upsertIssue(t *testing.T, s *Store, is model.Issue) error {
+	t.Helper()
+	return upsertIssueAt(t, s, is, time.Time{})
 }
 
 // promoteIssue drives PromoteIssue through RecordEvent, source "cli".
@@ -128,6 +135,55 @@ func TestUpsertIssueInsertAndUpdate(t *testing.T) {
 	if got.TriageState != "new" {
 		t.Fatalf("updated issue triage_state: got %q, want new", got.TriageState)
 	}
+}
+
+// TestUpsertIssueNonRegressing covers the guard on issues.updated_at: an
+// out-of-order or replayed delivery carrying an older updated_at must not
+// overwrite newer facts (WL-198).
+func TestUpsertIssueNonRegressing(t *testing.T) {
+	s := openInboxStore(t)
+	t1 := inboxTestNow
+	t2 := inboxTestNow.Add(time.Hour)
+
+	is := defaultIssue()
+	is.State = "closed"
+	is.Title = "fixed"
+	if err := upsertIssueAt(t, s, is, t2); err != nil {
+		t.Fatalf("seed closed issue: %v", err)
+	}
+
+	stale := defaultIssue() // open, original title
+	if err := upsertIssueAt(t, s, stale, t1); err != nil {
+		t.Fatalf("stale UpsertIssue: %v", err)
+	}
+	got := onlyIssue(t, s)
+	if got.State != "closed" || got.Title != "fixed" {
+		t.Fatalf("issue after stale upsert: got state=%q title=%q, want closed/fixed", got.State, got.Title)
+	}
+
+	newer := defaultIssue()
+	newer.Title = "reopened"
+	if err := upsertIssueAt(t, s, newer, t2.Add(time.Hour)); err != nil {
+		t.Fatalf("newer UpsertIssue: %v", err)
+	}
+	got = onlyIssue(t, s)
+	if got.State != "open" || got.Title != "reopened" {
+		t.Fatalf("issue after newer upsert: got state=%q title=%q, want open/reopened", got.State, got.Title)
+	}
+}
+
+// onlyIssue returns the single stored inbox issue, failing if there is not
+// exactly one.
+func onlyIssue(t *testing.T, s *Store) model.Issue {
+	t.Helper()
+	list, err := s.ListIssues(t.Context(), "", "")
+	if err != nil {
+		t.Fatalf("ListIssues: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("ListIssues: got %d issues, want 1", len(list))
+	}
+	return list[0]
 }
 
 func TestUpsertIssueDoesNotClobberAfterPromote(t *testing.T) {
