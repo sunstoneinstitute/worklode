@@ -38,13 +38,9 @@ func handleCommitMsg(opts Options, dir string, l worktree.Layout) {
 		warn(opts, "commit-msg: no message file argument (commit not blocked)")
 		return
 	}
-	root, ok := worktree.Root(dir)
+	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
-		return // not in a git repo ⇒ NOP
-	}
-	taskID, ok := l.TaskID(root)
-	if !ok {
-		return // not a task worktree: the main clone commits unstamped
+		return // outside a repo, or not a task worktree: the main clone commits unstamped
 	}
 	// git runs a hook from the top of the working tree, so a relative message
 	// path is relative to root.

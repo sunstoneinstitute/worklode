@@ -151,6 +151,56 @@ func layoutFor(opts Options, dir string) worktree.Layout {
 	return l
 }
 
+// leasedWorktree is the uniform guard for the handlers that act on the
+// worktree they are running in: the enclosing git worktree root, and the task
+// it carries. ok=false ⇒ NOP. root is still returned when only the task id is
+// missing, for the one caller (session start) that has something to say about
+// a repo that is not a task worktree.
+func leasedWorktree(l worktree.Layout, dir string) (root, taskID string, ok bool) {
+	root, ok = worktree.Root(dir)
+	if !ok {
+		return "", "", false // not in a git repo
+	}
+	taskID, ok = l.TaskID(root)
+	if !ok {
+		return root, "", false // in a repo, but not a task worktree
+	}
+	return root, taskID, true
+}
+
+// clientAndIdentity is the shared prologue of every handler that talks to the
+// backbone about a worktree's lease: the client, and the lease identity of
+// path. ok=false means the failure has already been warned about, so the
+// caller just returns.
+func clientAndIdentity(opts Options, path string) (*cli.Client, string, bool) {
+	c, err := opts.client()
+	if err != nil {
+		warn(opts, "load config: %v", err)
+		return nil, "", false
+	}
+	identity, err := worktree.Identity(path)
+	if err != nil {
+		warn(opts, "resolve worktree identity: %v", err)
+		return nil, "", false
+	}
+	return c, identity, true
+}
+
+// fetchBrief reads taskID's brief under the standard backbone timeout.
+func fetchBrief(ctx context.Context, c *cli.Client, taskID string) (model.Brief, error) {
+	bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	defer cancel()
+	b, _, err := c.Brief(bctx, taskID)
+	return b, err
+}
+
+// abandoned reports whether the worktree at dir is free to adopt: no live
+// lease on the task, and no live coding session in the directory.
+func abandoned(brief model.Brief, dir string, now time.Time) bool {
+	leaseGone := brief.Lease == nil || brief.Lease.ExpiresAt.Before(now)
+	return leaseGone && !sessionMarkerFresh(dir)
+}
+
 // defaultClient builds the backbone client from the on-disk config plus the
 // LODE_SERVER/LODE_TOKEN overrides.
 func defaultClient() (*cli.Client, error) {
@@ -365,6 +415,21 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 	}
 }
 
+// closeSession ends the session recorded against root's lease and drops its
+// marker — the shared tail of session-end and worktree-exit. The session id
+// comes from the payload, falling back to the marker for a caller that got no
+// stdin.
+func closeSession(ctx context.Context, opts Options, p Payload, taskID, root string) {
+	sessionID := p.SessionID
+	if sessionID == "" {
+		sessionID, _ = markerSessionID(root)
+	}
+	endSession(ctx, opts, taskID, sessionID, p.TranscriptPath, root)
+	if err := removeSessionMarker(root); err != nil {
+		warn(opts, "remove session marker: %v", err)
+	}
+}
+
 // purgeSecrets removes a task's materialized secrets when its worktree goes
 // away — materialized lifetime equals worktree lifetime (spec 017). Local
 // only, so it runs BEFORE any backbone call and regardless of their outcome.
@@ -427,30 +492,18 @@ func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsag
 // --- event handlers ---------------------------------------------------------
 
 func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	root, ok := worktree.Root(dir)
+	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
-		return // not in a git repo ⇒ NOP
+		if root != "" {
+			offerScan(ctx, opts, root, l)
+		}
+		return
 	}
-	taskID, ok := l.TaskID(root)
+	c, identity, ok := clientAndIdentity(opts, root)
 	if !ok {
-		offerScan(ctx, opts, root, l)
 		return
 	}
-
-	c, err := opts.client()
-	if err != nil {
-		warn(opts, "load config: %v", err)
-		return
-	}
-	identity, err := worktree.Identity(root)
-	if err != nil {
-		warn(opts, "resolve worktree identity: %v", err)
-		return
-	}
-
-	bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	brief, _, err := c.Brief(bctx, taskID)
-	cancel()
+	brief, err := fetchBrief(ctx, c, taskID)
 	if err != nil {
 		warn(opts, "fetch brief for %s: %v", taskID, err)
 		return
@@ -587,15 +640,12 @@ func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.La
 			continue
 		}
 
-		bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		brief, _, briefErr := c.Brief(bctx, taskID)
-		cancel()
+		brief, briefErr := fetchBrief(ctx, c, taskID)
 		if briefErr != nil {
 			continue // best-effort per worktree
 		}
 
-		leaseGone := brief.Lease == nil || brief.Lease.ExpiresAt.Before(now)
-		if leaseGone && !sessionMarkerFresh(wtDir) {
+		if abandoned(brief, wtDir, now) {
 			shown := filepath.ToSlash(filepath.Join(l.Base(), e.Name()))
 			lines = append(lines, fmt.Sprintf(
 				"Worklode worktree %s (%s: %s) is abandoned — `/lode:resume %s` to adopt it.",
@@ -609,22 +659,11 @@ func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.La
 }
 
 func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	root, ok := worktree.Root(dir)
+	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
 		return
 	}
-	taskID, ok := l.TaskID(root)
-	if !ok {
-		return
-	}
-	sessionID := p.SessionID
-	if sessionID == "" {
-		sessionID, _ = markerSessionID(root)
-	}
-	endSession(ctx, opts, taskID, sessionID, p.TranscriptPath, root)
-	if err := removeSessionMarker(root); err != nil {
-		warn(opts, "remove session marker: %v", err)
-	}
+	closeSession(ctx, opts, p, taskID, root)
 }
 
 // handlePreCommit keeps this worktree's lease alive across a long working
@@ -643,27 +682,15 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, 
 // the active lease, so with no lease of ours it would 404 for exactly the same
 // benign reason. Nothing here can block a commit.
 func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.Layout) {
-	root, ok := worktree.Root(dir)
+	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
 		return
 	}
-	taskID, ok := l.TaskID(root)
+	c, identity, ok := clientAndIdentity(opts, root)
 	if !ok {
 		return
 	}
-	c, err := opts.client()
-	if err != nil {
-		warn(opts, "load config: %v", err)
-		return
-	}
-	identity, err := worktree.Identity(root)
-	if err != nil {
-		warn(opts, "resolve worktree identity: %v", err)
-		return
-	}
-	bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	brief, _, err := c.Brief(bctx, taskID)
-	cancel()
+	brief, err := fetchBrief(ctx, c, taskID)
 	if err != nil {
 		warn(opts, "fetch brief for %s: %v (commit not blocked)", taskID, err)
 		return
@@ -693,25 +720,16 @@ func handleWorktreeCreate(ctx context.Context, opts Options, p Payload, dir stri
 	if !ok {
 		return // not under the worktree base dir (or unknown path) ⇒ NOP
 	}
-	c, err := opts.client()
-	if err != nil {
-		warn(opts, "load config: %v", err)
+	c, identity, ok := clientAndIdentity(opts, created)
+	if !ok {
 		return
 	}
-	identity, err := worktree.Identity(created)
-	if err != nil {
-		warn(opts, "resolve worktree identity: %v", err)
-		return
-	}
-	bctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	brief, _, err := c.Brief(bctx, taskID)
-	cancel()
+	brief, err := fetchBrief(ctx, c, taskID)
 	if err != nil {
 		warn(opts, "fetch brief for %s: %v", taskID, err)
 		return
 	}
-	leaseGone := brief.Lease == nil || brief.Lease.ExpiresAt.Before(opts.now())
-	if leaseGone && !sessionMarkerFresh(created) {
+	if abandoned(brief, created, opts.now()) {
 		rctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 		defer cancel()
 		if err := cli.ReacquireOrRenew(rctx, c, taskID, identity, brief.Lease); err != nil {
@@ -754,11 +772,7 @@ func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir stri
 // debounce window that was never actually started for this id is not one to
 // wait out.
 func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	root, ok := worktree.Root(dir)
-	if !ok {
-		return
-	}
-	taskID, ok := l.TaskID(root)
+	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
 		return
 	}
@@ -796,12 +810,7 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l
 // forever (no marker ⇒ nothing due) and sessionMarkerFresh would read this
 // worktree as abandoned while it is actively being worked.
 func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	entered := payloadPath(p, dir)
-	root, ok := worktree.Root(entered)
-	if !ok {
-		return
-	}
-	taskID, ok := l.TaskID(root)
+	root, taskID, ok := leasedWorktree(l, payloadPath(p, dir))
 	if !ok {
 		return
 	}
@@ -835,24 +844,13 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if exited == "" {
 		return
 	}
-	root, ok := worktree.Root(exited)
-	if !ok {
-		return
-	}
-	taskID, ok := l.TaskID(root)
-	if !ok {
-		return
-	}
-	sessionID := p.SessionID
-	if sessionID == "" {
-		sessionID, _ = markerSessionID(root)
-	}
 	// root is the worktree being LEFT, so its turns are the ones that bill
 	// against this lease.
-	endSession(ctx, opts, taskID, sessionID, p.TranscriptPath, root)
-	if err := removeSessionMarker(root); err != nil {
-		warn(opts, "remove session marker: %v", err)
+	root, taskID, ok := leasedWorktree(l, exited)
+	if !ok {
+		return
 	}
+	closeSession(ctx, opts, p, taskID, root)
 }
 
 // payloadPath returns the created/removed worktree path from the payload's
@@ -947,14 +945,11 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 		var overBudget bool // sticky: once one pin doesn't fit, none after it are considered either
 		for _, p := range b.Skills.Pinned {
 			fmt.Fprintf(&sb, "\n### Pinned: %s\n", p.Name)
-			loc := "lode skills install " + p.Name
-			if path := skillPaths[p.Name]; path != "" {
-				loc = filepath.Join(path, "SKILL.md")
-			}
+			path := skillPaths[p.Name]
 			if !overBudget && inlined+len(p.Content) <= maxInlinedSkillBytes {
 				inlined += len(p.Content)
 				fmt.Fprintf(&sb, "%s\n", p.Content)
-				if path := skillPaths[p.Name]; path != "" {
+				if path != "" {
 					fmt.Fprintf(&sb, "(supporting files: %s)\n", path)
 				}
 				continue
@@ -962,16 +957,14 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 			// Never truncate mid-document: half a SKILL.md is worse than
 			// none, since the model would act on incomplete instructions.
 			overBudget = true
-			fmt.Fprintf(&sb, "(content omitted — %s; read it at %s)\n", humanKB(len(p.Content)), loc)
+			fmt.Fprintf(&sb, "(content omitted — %s; read it at %s)\n",
+				humanKB(len(p.Content)), skillLocation(p.Name, path))
 		}
 		if len(b.Skills.Matches) > 0 {
 			fmt.Fprintf(&sb, "\n### Possibly relevant org skills\nRead the SKILL.md if relevant to this task:\n")
 			for _, m := range b.Skills.Matches {
-				loc := "lode skills install " + m.Name
-				if path := skillPaths[m.Name]; path != "" {
-					loc = filepath.Join(path, "SKILL.md")
-				}
-				fmt.Fprintf(&sb, "- %s (%.2f): %s — %s\n", m.Name, m.Score, m.Description, loc)
+				fmt.Fprintf(&sb, "- %s (%.2f): %s — %s\n",
+					m.Name, m.Score, m.Description, skillLocation(m.Name, skillPaths[m.Name]))
 			}
 		}
 	}
@@ -983,6 +976,15 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 // not a pin-count cap, since one large pin costs far more context than
 // several small ones.
 const maxInlinedSkillBytes = 32 << 10
+
+// skillLocation is where the agent can read a skill: its SKILL.md in the local
+// store when the archive was fetched (path non-empty), else the install hint.
+func skillLocation(name, path string) string {
+	if path != "" {
+		return filepath.Join(path, "SKILL.md")
+	}
+	return "lode skills install " + name
+}
 
 // humanKB renders a byte count in kilobytes to one decimal place.
 func humanKB(n int) string {

@@ -4,50 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 )
 
-// mergeRepo is a throwaway clone-shaped repo: a default branch, an origin
-// remote, and a git runner that keeps the developer's global config out of it.
-type mergeRepo struct {
-	t    *testing.T
-	root string
-}
-
-func newMergeRepo(t *testing.T) *mergeRepo {
+// newMergeRepo builds a throwaway clone-shaped repo: a default branch and an
+// origin remote, which is all handleLocalMerge's guard looks at.
+func newMergeRepo(t *testing.T) *gitRepo {
 	t.Helper()
-	r := &mergeRepo{t: t, root: t.TempDir()}
+	r := &gitRepo{t: t, root: t.TempDir()}
 	r.git("-c", "init.defaultBranch=main", "init")
 	r.git("remote", "add", "origin", "git@github.com:acme/app.git")
 	r.commit("README.md", "hello\n", "initial commit")
 	return r
-}
-
-func (r *mergeRepo) git(args ...string) string {
-	r.t.Helper()
-	c := exec.Command("git", append([]string{"-C", r.root, "-c", "commit.gpgsign=false"}, args...)...)
-	c.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-	out, err := c.CombinedOutput()
-	if err != nil {
-		r.t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func (r *mergeRepo) commit(name, content, msg string) {
-	r.t.Helper()
-	if err := os.WriteFile(filepath.Join(r.root, name), []byte(content), 0o644); err != nil {
-		r.t.Fatalf("write %s: %v", name, err)
-	}
-	r.git("add", name)
-	r.git("commit", "-m", msg)
 }
 
 // mergeBackbone answers the two calls the handler makes: the candidate list
