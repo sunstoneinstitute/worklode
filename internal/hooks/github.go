@@ -101,6 +101,26 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	writeJSON(w, code, model.ErrorResponse{Error: msg})
 }
 
+// readSignedBody reads at most max bytes of r's body and returns them for
+// signature verification, writing the 413/400 response itself and reporting
+// ok=false when there is nothing to verify. It only reads: both handlers
+// still call validSignature over the returned bytes as their very next step,
+// before anything parses them.
+func readSignedBody(w http.ResponseWriter, r *http.Request, max int64) (body []byte, ok bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, max)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return nil, false
+		}
+		writeErr(w, http.StatusBadRequest, "read body")
+		return nil, false
+	}
+	return body, true
+}
+
 // validSignature reports whether header is a well-formed
 // "sha256=<hex>" HMAC-SHA256 of body under secret (constant-time compare).
 func validSignature(secret string, body []byte, header string) bool {
@@ -132,15 +152,8 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// The signature covers the exact request bytes: read the raw body first
 	// (capped at maxGitHubBody), verify, and only then parse.
-	r.Body = http.MaxBytesReader(w, r.Body, maxGitHubBody)
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		var mbe *http.MaxBytesError
-		if errors.As(err, &mbe) {
-			writeErr(w, http.StatusRequestEntityTooLarge, "request body too large")
-			return
-		}
-		writeErr(w, http.StatusBadRequest, "read body")
+	body, ok := readSignedBody(w, r, maxGitHubBody)
+	if !ok {
 		return
 	}
 	if !validSignature(h.secret, body, r.Header.Get("X-Hub-Signature-256")) {
@@ -183,7 +196,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// repo name.
 	ignored := false
 	if repo := env.Repository.FullName; repo != "" {
-		_, err = h.st.ProjectForRepo(r.Context(), repo)
+		_, err := h.st.ProjectForRepo(r.Context(), repo)
 		if errors.Is(err, store.ErrNotFound) {
 			ignored = true
 		} else if err != nil {
@@ -222,20 +235,17 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	// A redelivery acks "duplicate" whatever it would otherwise have been,
+	// and a skill push acks "ok" even from a repo no project maps.
+	status := "ok"
+	result = "ok"
 	switch {
 	case !inserted:
-		result = "ok"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "duplicate"})
-	case skillPush:
-		result = "ok"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ok"})
-	case ignored:
-		result = "ignored"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ignored"})
-	default:
-		result = "ok"
-		writeJSON(w, http.StatusOK, model.WebhookAck{Status: "ok"})
+		status = "duplicate"
+	case ignored && !skillPush:
+		result, status = "ignored", "ignored"
 	}
+	writeJSON(w, http.StatusOK, model.WebhookAck{Status: status})
 }
 
 // handledEvents are the GitHub event names applyFunc routes. It is the single
@@ -249,9 +259,7 @@ var handledEvents = []string{
 
 // HandledEvents returns the event names this handler routes.
 func HandledEvents() []string {
-	out := make([]string, len(handledEvents))
-	copy(out, handledEvents)
-	return out
+	return slices.Clone(handledEvents)
 }
 
 // eventLabel bounds the metric's event label to the handled GitHub events;
@@ -469,16 +477,16 @@ func (h *githubHandler) applyPullRequest(tx *sql.Tx, eventID int64, repo, action
 		// occupied, which a merge does not change (spec 004 §3).
 		// Record the PR's shas as task commits; the resolver advances the
 		// task once (and if) they appear on main via a push event.
-		if gh.Head.SHA != "" {
-			if err := store.InsertTaskCommit(tx, store.TaskCommit{
-				TaskID: taskID, Repo: repo, SHA: gh.Head.SHA, Source: "pr", SeenAt: now,
-			}); err != nil {
-				return err
-			}
+		shas := []string{gh.Head.SHA}
+		if gh.MergeCommitSHA != nil {
+			shas = append(shas, *gh.MergeCommitSHA)
 		}
-		if gh.MergeCommitSHA != nil && *gh.MergeCommitSHA != "" {
+		for _, sha := range shas {
+			if sha == "" {
+				continue
+			}
 			if err := store.InsertTaskCommit(tx, store.TaskCommit{
-				TaskID: taskID, Repo: repo, SHA: *gh.MergeCommitSHA, Source: "pr", SeenAt: now,
+				TaskID: taskID, Repo: repo, SHA: sha, Source: "pr", SeenAt: now,
 			}); err != nil {
 				return err
 			}
@@ -631,16 +639,7 @@ func (h *githubHandler) applyRelease(tx *sql.Tx, eventID int64, repo string, bod
 	if err := store.SetReleaseFrontier(tx, repo, p.Release.TagName, *frontier, publishedAt); err != nil {
 		return err
 	}
-	tasks, err := store.TasksBelowFrontier(tx, repo, *frontier)
-	if err != nil {
-		return err
-	}
-	for _, taskID := range tasks {
-		if err := store.ResolveDelivery(tx, now, taskID, repo, eventID); err != nil {
-			return err
-		}
-	}
-	return nil
+	return resolveTasksBelow(tx, now, repo, *frontier, eventID)
 }
 
 // applyRegistryPackage mints a docker_image artifact from a container push.

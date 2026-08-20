@@ -64,7 +64,15 @@ func resolveFrontier(tx *sql.Tx, now time.Time, repo, env string, eventID int64)
 	if frontier == nil {
 		return nil
 	}
-	tasks, err := store.TasksBelowFrontier(tx, repo, *frontier)
+	return resolveTasksBelow(tx, now, repo, *frontier, eventID)
+}
+
+// resolveTasksBelow resolves the delivery state of every task whose work is
+// at or below frontier in repo. The release handler calls it with the
+// release's own frontier; resolveFrontier calls it with the confirmed
+// deploy frontier.
+func resolveTasksBelow(tx *sql.Tx, now time.Time, repo string, frontier, eventID int64) error {
+	tasks, err := store.TasksBelowFrontier(tx, repo, frontier)
 	if err != nil {
 		return err
 	}

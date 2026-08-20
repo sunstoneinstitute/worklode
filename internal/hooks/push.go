@@ -136,10 +136,11 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 			return err
 		}
 		// Attribute by message: merge-commit branch name or marker.
-		for _, taskID := range taskIDsFromMessage(c.Message) {
+		ids, source := taskIDsFromMessage(c.Message)
+		for _, taskID := range ids {
 			if err := store.InsertTaskCommit(tx, store.TaskCommit{
 				TaskID: taskID, Repo: repo, SHA: c.ID,
-				Source: sourceForMessage(c.Message), SeenAt: now,
+				Source: source, SeenAt: now,
 			}); err != nil {
 				return err
 			}
@@ -168,25 +169,19 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 // taskIDsFromMessage extracts task ids from a commit message: the branch
 // named in a merge-commit subject, plus any "Worklode-Task: <id>" trailer
 // line. The label is fixed — the id after it carries its own project key
-// (SW-3, ...), matched by store.TaskIDFromBody.
-func taskIDsFromMessage(msg string) []string {
-	var out []string
+// (SW-3, ...), matched by store.TaskIDFromBody. source is the attribution
+// every id from this message is filed under: a trailer is the stronger
+// signal, so its presence makes the whole message "marker".
+func taskIDsFromMessage(msg string) (ids []string, source string) {
 	for _, pat := range mergeMessagePatterns {
 		if m := pat.FindStringSubmatch(msg); m != nil {
 			if id := store.TaskIDFromRef(m[1]); id != "" {
-				out = append(out, id)
+				ids = append(ids, id)
 			}
 		}
 	}
 	if id := store.TaskIDFromBody(msg); id != "" {
-		out = append(out, id)
+		return append(ids, id), "marker"
 	}
-	return out
-}
-
-func sourceForMessage(msg string) string {
-	if store.TaskIDFromBody(msg) != "" {
-		return "marker"
-	}
-	return "merge_message"
+	return ids, "merge_message"
 }
