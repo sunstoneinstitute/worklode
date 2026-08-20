@@ -106,11 +106,15 @@ func New(allowedHosts []string, maxBytes int64) *Fetcher {
 // Get fetches url, returning its bytes and the Content-Type the origin
 // claimed. The header is unverified — callers that care must sniff the bytes.
 func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error) {
+	// The timeout has to cover the pre-flight resolve in checkURL too, or a
+	// stalling nameserver alone can hold the call open past the documented
+	// budget.
+	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+
 	if err := f.checkURL(ctx, rawURL); err != nil {
 		return nil, "", err
 	}
-	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
-	defer cancel()
 
 	transport := f.transport()
 	defer transport.CloseIdleConnections()
@@ -185,6 +189,10 @@ func (f *Fetcher) transport() *http.Transport {
 		ForceAttemptHTTP2:     true,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
+		// Default is 10 MiB; a hostile origin sending oversized headers is a
+		// cheap allocation amplifier. Also what makes HTTP/2's
+		// MaxHeaderListSize non-zero, since it derives from this field.
+		MaxResponseHeaderBytes: 64 << 10,
 	}
 }
 
@@ -205,6 +213,13 @@ func (f *Fetcher) checkURL(ctx context.Context, rawURL string) error {
 	host := normalizeHost(u.Hostname())
 	if host == "" {
 		return errors.New("url has no host")
+	}
+	// An empty label (a leading dot, or ".." anywhere) makes host == "."+a
+	// true for a host that is nothing but the allowed suffix with a blank
+	// label glued on front, e.g. ".githubusercontent.com". Reject it here
+	// rather than relying on the resolver to fail.
+	if strings.HasPrefix(host, ".") || strings.Contains(host, "..") {
+		return fmt.Errorf("host %q has an empty label", host)
 	}
 	// Non-ASCII hosts are refused rather than IDNA-normalised: nothing this
 	// fetches is an IDN, and refusing removes homograph lookalikes of an
@@ -276,6 +291,13 @@ func (f *Fetcher) checkAddr(addr netip.Addr) error {
 func (f *Fetcher) hostAllowed(host string) bool {
 	for _, a := range f.allowedHosts {
 		a = normalizeHost(a)
+		// "*.example.com" and ".example.com" are the two natural spellings
+		// of "and its subdomains", but neither equals "example.com" as a
+		// string, so left unstripped they match nothing and fail closed
+		// silently. Reduce both to the bare suffix the checks below already
+		// match subdomains of.
+		a = strings.TrimPrefix(a, "*.")
+		a = strings.TrimPrefix(a, ".")
 		if a == "" {
 			continue
 		}
@@ -286,11 +308,16 @@ func (f *Fetcher) hostAllowed(host string) bool {
 	return false
 }
 
-// normalizeHost lowercases and drops trailing root dots, so
+// normalizeHost lowercases and drops a single trailing root dot, so
 // "GithubUserContent.com." and "githubusercontent.com" compare equal and
 // "evil.example." cannot slip past the allowlist as a distinct string.
+// TrimSuffix rather than TrimRight: a single trailing dot is the only legal
+// form (the DNS root), so a second one must survive normalisation and fail
+// the comparison rather than being silently absorbed — u.Hostname() is
+// dialled verbatim, so validating a name other than the one dialled would
+// reopen the gap this check exists to close.
 func normalizeHost(host string) string {
-	return strings.ToLower(strings.TrimRight(host, "."))
+	return strings.ToLower(strings.TrimSuffix(host, "."))
 }
 
 func isASCII(s string) bool {

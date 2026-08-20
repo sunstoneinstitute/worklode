@@ -43,6 +43,14 @@ var mirrorHosts = []string{"githubusercontent.com", "github.com"}
 // other per-image failure.
 const mirrorTimeout = 60 * time.Second
 
+// maxMirroredImages bounds how many remote references one pass will fetch.
+// safefetch buffers up to maxBlobBytes per image in memory, and the number of
+// `![](…)` references in a body is chosen by whoever filed the issue; a bug
+// report with more than a handful of screenshots is already unusual, and
+// references beyond the cap keep their original URL -- the same failure mode
+// already documented above for any other per-image failure.
+const maxMirroredImages = 20
+
 // mirrorRemoteImages rewrites a body's remote image references to /blob/
 // URLs, uploading each through the normal blob path. Everything becomes a
 // blob, so nothing in a rendered body points off-site -- which is also what
@@ -72,6 +80,10 @@ func (s *server) mirrorRemoteImages(ctx context.Context, body string) string {
 
 	mapping := map[string]string{}
 	stored, deduped := 0, 0
+	if len(remotes) > maxMirroredImages {
+		s.observeImageMirror(mirrorCapped, len(remotes)-maxMirroredImages)
+		remotes = remotes[:maxMirroredImages]
+	}
 	for _, src := range remotes {
 		data, _, err := f.Get(ctx, src)
 		if err != nil {

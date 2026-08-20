@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 )
@@ -373,6 +374,94 @@ func TestPublicAddressesNotBlocked(t *testing.T) {
 			_, _, err := f.Get(ctx, "https://"+ip+"/x.png")
 			if err != nil && strings.Contains(err.Error(), "blocked address range") {
 				t.Fatalf("%s wrongly blocked: %v", ip, err)
+			}
+		})
+	}
+}
+
+// Get wraps ctx with the whole-fetch timeout before calling checkURL, not
+// after, so an already-expired context is honoured by the pre-flight resolve
+// too, not only by the later HTTP round trip. Before the fix, checkURL ran on
+// the caller's raw context and a stalling nameserver could run past the
+// documented 30-second budget.
+func TestPreflightHonoursExpiredContext(t *testing.T) {
+	f := safefetch.New([]string{"githubusercontent.com"}, 1<<20)
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Minute))
+	defer cancel()
+
+	start := time.Now()
+	_, _, err := f.Get(ctx, "https://user-images.githubusercontent.com/x.png")
+	if err == nil {
+		t.Fatal("expected an error for an already-expired context")
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("preflight did not fail fast on an expired context: %v", elapsed)
+	}
+}
+
+// A host with an empty label — a leading dot, or ".." anywhere — must be
+// rejected by the host check itself: strings.HasSuffix(host, "."+a) would
+// otherwise be true for a host that is nothing but a blank label glued onto
+// an allowed suffix.
+func TestRejectsEmptyLabelHosts(t *testing.T) {
+	f := safefetch.New([]string{"githubusercontent.com"}, 1<<20)
+	for name, raw := range map[string]string{
+		"leading dot": "https://.githubusercontent.com/x",
+		"double dot":  "https://evil.example..githubusercontent.com/x",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := f.Get(context.Background(), raw)
+			if err == nil {
+				t.Fatalf("%q accepted", raw)
+			}
+			if !strings.Contains(err.Error(), "empty label") {
+				t.Fatalf("%q: want rejection by the host check, got %v", raw, err)
+			}
+		})
+	}
+}
+
+// The two natural spellings of "and its subdomains" — a leading dot and a
+// leading "*." — must allow the same hosts as the bare suffix, not silently
+// allow nothing. A trailing dot on the allowlist entry must keep working too.
+func TestHostAllowedEntrySpellings(t *testing.T) {
+	for _, entry := range []string{
+		"githubusercontent.com",
+		".githubusercontent.com",
+		"*.githubusercontent.com",
+		"githubusercontent.com.",
+	} {
+		t.Run(entry, func(t *testing.T) {
+			f := safefetch.New([]string{entry}, 1<<20)
+			if _, _, err := f.Get(context.Background(), "https://a.githubusercontent.com/x.png"); err != nil && strings.Contains(err.Error(), "not allowed") {
+				t.Fatalf("entry %q: allowed host rejected: %v", entry, err)
+			}
+			if _, _, err := f.Get(context.Background(), "https://evilgithubusercontent.com/x.png"); err == nil {
+				t.Fatalf("entry %q: lookalike host accepted", entry)
+			}
+		})
+	}
+}
+
+// A second trailing dot must not be silently absorbed: the dialer uses
+// u.Hostname() verbatim, so normalising away more than the one legal root dot
+// would validate a name other than the one actually dialled.
+func TestDoubleTrailingDotRejected(t *testing.T) {
+	f := safefetch.New([]string{"githubusercontent.com"}, 1<<20)
+	if _, _, err := f.Get(context.Background(), "https://githubusercontent.com../x"); err == nil {
+		t.Fatal("double trailing dot accepted")
+	}
+}
+
+// An allowlist with no usable entries must still fail closed: it allows
+// nothing, not everything.
+func TestEmptyAllowlistEntriesAllowNothing(t *testing.T) {
+	for _, hosts := range [][]string{nil, {}, {""}, {"."}} {
+		t.Run(fmt.Sprintf("%q", hosts), func(t *testing.T) {
+			f := safefetch.New(hosts, 1<<20)
+			_, _, err := f.Get(context.Background(), "https://a.githubusercontent.com/x.png")
+			if err == nil || !strings.Contains(err.Error(), "not allowed") {
+				t.Fatalf("want a not-allowed rejection, got %v", err)
 			}
 		})
 	}

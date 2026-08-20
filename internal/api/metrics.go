@@ -477,6 +477,7 @@ var imageMirrorOutcomes = []string{
 	mirrorNotEmbeddable, // fetched, but the bytes do not render in place
 	mirrorStoreFailed,   // the bucket or the index refused
 	mirrorRewriteFailed, // stored, but the body could not be rewritten
+	mirrorCapped,        // over the per-body reference cap; skipped without a fetch
 }
 
 const (
@@ -486,6 +487,7 @@ const (
 	mirrorNotEmbeddable = "not_embeddable"
 	mirrorStoreFailed   = "store_failed"
 	mirrorRewriteFailed = "rewrite_failed"
+	mirrorCapped        = "capped"
 )
 
 // observeImageMirror adds n remote image references resolved to the named

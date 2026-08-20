@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -195,9 +196,43 @@ func TestMirrorMetrics(t *testing.T) {
 		{mirrorNotEmbeddable, 0},
 		{mirrorStoreFailed, 0},
 		{mirrorRewriteFailed, 0},
+		{mirrorCapped, 0},
 	} {
 		if got := testutil.ToFloat64(s.imageMirrors.WithLabelValues(tc.outcome)); got != tc.want {
 			t.Fatalf("imageMirrors{%s} = %v, want %v", tc.outcome, got, tc.want)
 		}
+	}
+}
+
+// TestMirrorCapsReferencesPerBody: a body with more remote references than
+// maxMirroredImages mirrors exactly the cap's worth; the rest keep their
+// original URL, the same fate as any other per-image failure.
+func TestMirrorCapsReferencesPerBody(t *testing.T) {
+	s, fake, origin := mirrorTestServer(t)
+	s.initMetrics(prometheus.NewRegistry())
+	s.mirrorFetcherForTest = testFetcher()
+
+	const total = maxMirroredImages + 5
+	var body strings.Builder
+	for i := 0; i < total; i++ {
+		fmt.Fprintf(&body, "![x](%s/%d.png)\n\n", origin, i)
+	}
+	got := s.mirrorRemoteImages(context.Background(), body.String())
+
+	if n := strings.Count(got, "](/blob/"); n != maxMirroredImages {
+		t.Fatalf("rewrote %d references, want %d", n, maxMirroredImages)
+	}
+	if n := strings.Count(got, origin); n != total-maxMirroredImages {
+		t.Fatalf("%d original URLs survived, want %d", n, total-maxMirroredImages)
+	}
+	// All references resolve to the same bytes, so the cap still leaves
+	// exactly one stored object regardless of how many references were
+	// mirrored.
+	objs, _ := fake.List(context.Background(), "blobs/")
+	if len(objs) != 1 {
+		t.Fatalf("stored %d objects, want 1", len(objs))
+	}
+	if got := testutil.ToFloat64(s.imageMirrors.WithLabelValues(mirrorCapped)); got != float64(total-maxMirroredImages) {
+		t.Fatalf("imageMirrors{capped} = %v, want %d", got, total-maxMirroredImages)
 	}
 }
