@@ -13,8 +13,16 @@ import {
   mountRootName,
   type VaultWriter,
 } from "../src/sync/mirror";
+import { stringify as stringifyYaml } from "yaml";
 import { parseNote, SERIALIZER_VERSION } from "../src/serialize/note";
 import type { Doc, Project, TaskListDetail } from "../src/api/types";
+
+/** Renders a frontmatter object as a `---`-fenced YAML block, the shape a
+ *  doc body carries its own frontmatter in (internal/model.Doc.Body: "the
+ *  full markdown, frontmatter included"). */
+function withFrontmatter(frontmatter: Record<string, unknown>, body: string): string {
+  return `---\n${stringifyYaml(frontmatter)}---\n${body}`;
+}
 
 function fixtureProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -29,16 +37,19 @@ function fixtureProject(overrides: Partial<Project> = {}): Project {
 
 function fixtureDoc(overrides: Partial<Doc> = {}): Doc {
   return {
-    id: "WL-SPEC-1",
+    id: 1,
     project: "worklode",
     kind: "spec",
-    ordinal: "001",
+    number: 1,
+    slug: "WL-SPEC-1",
     status: "draft",
     title: "A doc",
     version: 1,
-    source_branch: "main",
-    source_dirty: false,
-    synced_at: "2026-08-16T09:12:00Z",
+    issued: "2026-01-01",
+    assignee: "stig",
+    created_by: "stig",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-08-16T09:12:00Z",
     body: "doc body",
     ...overrides,
   };
@@ -564,7 +575,7 @@ describe("applyMirror", () => {
     // grouped under in byProject. A backbone response could carry either
     // one hostile while the other looks fine.
     const project = fixtureProject({ id: "worklode" });
-    const hostileDoc = fixtureDoc({ id: "WL-SPEC-9", project: "../../../escape" });
+    const hostileDoc = fixtureDoc({ slug: "WL-SPEC-9", project: "../../../escape" });
     const hostileTask = fixtureTask({ id: "WL-9", project: "../../../escape" });
     const goodTask = fixtureTask({ id: "WL-1", project: "worklode" });
 
@@ -594,7 +605,7 @@ describe("applyMirror", () => {
     const badProject = fixtureProject({ id: "../escape", name: "Escape" });
     const goodProject = fixtureProject({ id: "worklode" });
 
-    const badProjectDoc = fixtureDoc({ id: "WL-SPEC-9", project: "../escape" });
+    const badProjectDoc = fixtureDoc({ slug: "WL-SPEC-9", project: "../escape" });
     const badProjectTask = fixtureTask({ id: "WL-9", project: "../escape" });
     const badIdTask = fixtureTask({ id: "a/b", project: "worklode" });
     const goodTask = fixtureTask({ id: "WL-1", project: "worklode" });
@@ -765,8 +776,8 @@ describe("desiredNotes ordering", () => {
     // match its grouping key, or filterSafe drops it as a mismatched path.
     const members = (project: string, prefix: string) => ({
       docs: [
-        fixtureDoc({ id: `${prefix}-DOC-2`, project }),
-        fixtureDoc({ id: `${prefix}-DOC-1`, project }),
+        fixtureDoc({ slug: `${prefix}-DOC-2`, project }),
+        fixtureDoc({ slug: `${prefix}-DOC-1`, project }),
       ],
       tasks: [fixtureTask({ id: `${prefix}-2`, project }), fixtureTask({ id: `${prefix}-1`, project })],
     });
@@ -801,7 +812,7 @@ describe("desiredNotes ordering", () => {
 
   it("reports conflicts in project-id order, docs before tasks within a project", async () => {
     const projects = [fixtureProject({ id: "zebra" }), fixtureProject({ id: "alpha" })];
-    const bad = (id: string, project: string) => ({ ...fixtureDoc({ id, project }) });
+    const bad = (slug: string, project: string) => ({ ...fixtureDoc({ slug, project }) });
     const byProject = new Map([
       [
         "zebra",
@@ -835,12 +846,12 @@ describe("desiredNotes ordering", () => {
 describe("desiredNotes conflicts", () => {
   it("drains a rendered note's own conflict (e.g. a wl key collision) into the report", async () => {
     const project = fixtureProject();
-    const collidingDoc = fixtureDoc({ frontmatter: { wl: { author_note: "collides" } } });
+    const collidingDoc = fixtureDoc({ body: withFrontmatter({ wl: { author_note: "collides" } }, "doc body") });
     const byProject = new Map([["worklode", { docs: [collidingDoc], tasks: [] }]]);
 
     const desired = await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT);
 
-    expect(desired.conflicts.some((c) => c.includes(collidingDoc.id))).toBe(true);
+    expect(desired.conflicts.some((c) => c.includes(String(collidingDoc.id)))).toBe(true);
     // The note is still produced -- the backbone block wins, per note.ts.
     expect(desired.notes.some((n) => n.path === "worklode/docs/WL-SPEC-1.md")).toBe(true);
   });

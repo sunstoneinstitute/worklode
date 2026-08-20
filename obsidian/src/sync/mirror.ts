@@ -15,7 +15,7 @@ import {
   type ProjectMembers,
   type WlBlock,
 } from "../serialize/note";
-import type { Project } from "../api/types";
+import type { Doc, Project, TaskListDetail } from "../api/types";
 
 /** The file operations the mirror needs. Implemented against Obsidian's
  *  vault in src/vault/writer.ts, and against a map in the tests.
@@ -174,18 +174,25 @@ function isMemberNotePath(path: string, folder: "docs" | "tasks"): boolean {
   return segments.length === 3 && segments[1] === folder && path.endsWith(".md");
 }
 
-function sortById<T extends { id: string }>(items: T[]): T[] {
-  return [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+function sortByKey<T>(items: T[], keyOf: (item: T) => string): T[] {
+  return [...items].sort((a, b) => {
+    const ka = keyOf(a);
+    const kb = keyOf(b);
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
 }
 
 /** Renders each item to a note, keeping only the ones whose produced path
  *  matches what `desiredPath` computes from the *trusted* project id (the
- *  key it was grouped under in byProject) and the item's own id. A note's
+ *  key it was grouped under in byProject) and the item's own key -- `keyOf`,
+ *  the path segment that identifies the item: a task's id, or a doc's slug
+ *  (docs have no successor to `ordinal`, and slug is the one identifier
+ *  that's universal across spec/adr/plan and safe as a filename). A note's
  *  path is actually built by *ToNote from the object's own fields (e.g.
  *  Doc.project), which can diverge from that grouping key -- comparing
  *  against the produced path, rather than trusting the object's own field,
  *  is what catches that divergence. A mismatch (including `desiredPath`
- *  itself rejecting the id) is dropped and reported in `conflicts`, along
+ *  itself rejecting the key) is dropped and reported in `conflicts`, along
  *  with any conflict the note itself carries (e.g. a wl-key collision).
  *
  *  Rendering itself is caught too: a row shaped differently from what the
@@ -199,10 +206,11 @@ function sortById<T extends { id: string }>(items: T[]): T[] {
  *  make a sync as slow as its note count, while draining by index keeps both
  *  the kept-note order and the order conflicts are reported in exactly what
  *  the serial version produced. */
-async function filterSafe<T extends { id: string }>(
+async function filterSafe<T>(
   kind: "doc" | "task",
   projectId: string,
   items: T[],
+  keyOf: (item: T) => string,
   toNote: (item: T) => Promise<Note>,
   conflicts: string[],
 ): Promise<{ items: T[]; notes: Note[] }> {
@@ -212,17 +220,18 @@ async function filterSafe<T extends { id: string }>(
   const keptNotes: Note[] = [];
   for (const [i, outcome] of rendered.entries()) {
     const item = items[i];
+    const key = keyOf(item);
     if (outcome.status === "rejected") {
       const err: unknown = outcome.reason;
       const message = err instanceof Error ? err.message : String(err);
-      conflicts.push(`${kind} ${JSON.stringify(item.id)}: could not be rendered (${message}), skipped`);
+      conflicts.push(`${kind} ${JSON.stringify(key)}: could not be rendered (${message}), skipped`);
       continue;
     }
     const note = outcome.value;
-    const expected = desiredPath(kind, projectId, item.id);
+    const expected = desiredPath(kind, projectId, key);
     if (expected === undefined || note.path !== expected) {
       conflicts.push(
-        `${kind} ${JSON.stringify(item.id)}: unsafe or mismatched path ${JSON.stringify(note.path)}, skipped`,
+        `${kind} ${JSON.stringify(key)}: unsafe or mismatched path ${JSON.stringify(note.path)}, skipped`,
       );
       continue;
     }
@@ -258,7 +267,7 @@ export async function desiredNotes(
   syncedAt: string,
 ): Promise<DesiredSet> {
   const rendered = await Promise.all(
-    sortById(projects).map(async (p) => {
+    sortByKey(projects, (p) => p.id).map(async (p) => {
       const conflicts: string[] = [];
       if (desiredPath("project", p.id) === undefined) {
         conflicts.push(`project ${JSON.stringify(p.id)}: unsafe id, skipped along with its docs and tasks`);
@@ -266,8 +275,22 @@ export async function desiredNotes(
       }
 
       const members = byProject.get(p.id) ?? { docs: [], tasks: [] };
-      const docs = await filterSafe("doc", p.id, sortById(members.docs), docToNote, conflicts);
-      const tasks = await filterSafe("task", p.id, sortById(members.tasks), taskToNote, conflicts);
+      const docs = await filterSafe(
+        "doc",
+        p.id,
+        sortByKey(members.docs, (d) => d.slug),
+        (d: Doc) => d.slug,
+        docToNote,
+        conflicts,
+      );
+      const tasks = await filterSafe(
+        "task",
+        p.id,
+        sortByKey(members.tasks, (t) => t.id),
+        (t: TaskListDetail) => t.id,
+        taskToNote,
+        conflicts,
+      );
 
       const projectNote = await projectToNote(p, docs.items, tasks.items);
       if (projectNote.conflict) conflicts.push(projectNote.conflict);
@@ -323,14 +346,21 @@ export async function desiredTaskNotes(
   byProject: Map<string, ProjectMembers>,
 ): Promise<DesiredSet> {
   const rendered = await Promise.all(
-    sortById(projects).map(async (p) => {
+    sortByKey(projects, (p) => p.id).map(async (p) => {
       const conflicts: string[] = [];
       if (desiredPath("project", p.id) === undefined) {
         conflicts.push(`project ${JSON.stringify(p.id)}: unsafe id, skipped along with its tasks`);
         return { notes: [] as Note[], conflicts };
       }
       const members = byProject.get(p.id) ?? { docs: [], tasks: [] };
-      const tasks = await filterSafe("task", p.id, sortById(members.tasks), taskToNote, conflicts);
+      const tasks = await filterSafe(
+        "task",
+        p.id,
+        sortByKey(members.tasks, (t) => t.id),
+        (t: TaskListDetail) => t.id,
+        taskToNote,
+        conflicts,
+      );
       return { notes: tasks.notes, conflicts };
     }),
   );

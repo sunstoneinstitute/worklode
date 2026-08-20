@@ -60,9 +60,11 @@ export class WorklodeClient {
     return this.get<{ tasks: TaskListDetail[] }>(path).then((r) => r.tasks);
   }
 
-  /** GET /api/v1/docs?project=&body=true */
+  /** GET /api/v1/docs?project= -- the list route never serves a body (every
+   *  row comes back with body: ""); GET /api/v1/docs/{id} is the one that
+   *  does. */
   listDocs(project: string): Promise<Doc[]> {
-    const path = `/api/v1/docs?project=${encodeURIComponent(project)}&body=true`;
+    const path = `/api/v1/docs?project=${encodeURIComponent(project)}`;
     return this.get<{ docs: Doc[] }>(path).then((r) => r.docs);
   }
 

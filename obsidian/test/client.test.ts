@@ -60,16 +60,14 @@ describe("WorklodeClient", () => {
     expect(requests[0].url).toBe("https://lode.example.com/api/v1/tasks?project=worklode&detail=true");
   });
 
-  it("requests docs with the body param and sends the bearer token", async () => {
+  it("requests docs and sends the bearer token", async () => {
     const { transport, requests } = fakeTransport(200, JSON.stringify({ docs: [] }));
     const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
 
     await client.listDocs("worklode");
 
     expect(requests).toHaveLength(1);
-    expect(requests[0].url).toBe(
-      "https://lode.example.com/api/v1/docs?project=worklode&body=true",
-    );
+    expect(requests[0].url).toBe("https://lode.example.com/api/v1/docs?project=worklode");
     expect(requests[0].headers.Authorization).toBe("Bearer wl_abc123");
     expect(requests[0].headers.Accept).toBe("application/json");
   });
