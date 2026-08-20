@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // AgentSession is one coding-agent session's work on one lease. A lease
@@ -34,18 +36,11 @@ type AgentSession struct {
 	CostCurrency string
 }
 
-// validAgents mirrors the agent_sessions.agent CHECK constraint in Go so
-// callers get ErrInvalidInput instead of a raw constraint violation.
-var validAgents = map[string]bool{
-	"claude-code": true,
-	"codex":       true,
-	"cursor":      true,
-	"aider":       true,
-	"opencode":    true,
-	"pi":          true,
-	"amp":         true,
-	"other":       true,
-}
+// validAgent mirrors the agent_sessions.agent CHECK constraint in Go so
+// callers get ErrInvalidInput instead of a raw constraint violation. The
+// vocabulary itself is model.KnownAgents — clients need it too, to fold an
+// unfamiliar harness id onto "other" before it reaches this check.
+func validAgent(agent string) bool { return model.AgentKnown(agent) }
 
 // currencyRE mirrors the cost_currency CHECK constraint (ISO 4217).
 var currencyRE = regexp.MustCompile(`^[A-Z]{3}$`)
@@ -137,7 +132,7 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
 func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, agentVersion, sessionID string, buckets []SessionUsageBucket) (*AgentSession, error) {
-	if !validAgents[agent] {
+	if !validAgent(agent) {
 		return nil, fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
 	}
 	if sessionID == "" {
@@ -294,7 +289,7 @@ type SessionUsage struct {
 // whole transaction — including the event insert — rolls back, so a repeat
 // close never leaves a duplicate agent_session.ended event.
 func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, sessionID string, usage SessionUsage) error {
-	if !validAgents[agent] {
+	if !validAgent(agent) {
 		return fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
 	}
 	if sessionID == "" {
