@@ -138,8 +138,8 @@ type DocPlanningGap struct {
 // is keyed by document id for the same reason DocPlanningGap is: one listing
 // shape serves every selector.
 //
-// Sections is the document's section count at the time it was superseded, so
-// a caller can render the "1/3" ratio without a second request.
+// Sections is the document's whole section count, so a caller can render the
+// "1/3" ratio without a second request.
 type DocSupersessionGap struct {
 	Doc         int64    `json:"doc"`
 	Sections    int      `json:"sections"`

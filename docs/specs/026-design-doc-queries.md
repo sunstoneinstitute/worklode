@@ -114,6 +114,7 @@ lode doc list --kind spec|adr|plan
 lode doc list --status draft|accepted|superseded
 lode doc list --needs-planning      accepted specs with sections not fully planned
 lode doc list --needs-execution     accepted plans with no closed execution task
+lode doc list --bare-superseded     superseded documents whose sections nothing replaces
 ```
 
 Filters compose. `--json` (the root persistent flag) emits the same rows as objects.
@@ -216,6 +217,33 @@ contract, and the script's tests become this command's.
 It is the orientation map for anyone entering the corpus: one screen naming where each
 subject is decided, in place of grepping 26 files, and the entry point to the consolidated
 reading path of §3.2.
+
+### 2.4 `--bare-superseded` {#sec-2.4}
+
+025 §6 rule 2 says a superseded section carries an explanation. This is the selector that finds
+the ones that do not — a detection query rather than an accept-time refusal, for the reason
+025 §6.2 gives.
+
+A section counts as **explained** when a `replaces` edge names it directly, or when a `replaces`
+edge names its whole document: a document with a successor explains all of its sections at
+document granularity, which is coarse but not a broken promise. A section is therefore **bare**
+only when its document is `superseded` and nothing replaces either the section or the document
+— the case that arises from a document authored or imported as `superseded`, since the accept
+path only supersedes a document by way of the `replaces` edge that did it.
+
+The successor's own status is not checked. The edge is the explanation, and requiring an
+accepted successor would report an explained section as bare while its replacement is still in
+review. A `replaces` edge resolving to `to_external` (§14.3 of 025) names no document in this
+backbone and so explains nothing here.
+
+Like the other two derived selectors this one implies a `status` — `superseded` — and a
+contradicting `--status` is an error rather than an empty result. It implies no single kind:
+specs and ADRs both carry sections and both qualify, while a plan carries none (025 §9) and is
+never reported, so only `--kind plan` conflicts.
+
+```
+docs/specs/013-reconciliation.md          superseded   4/4 bare   sec-1 sec-2 sec-3 sec-4
+```
 
 ## 3. Showing a document: `lode show` {#sec-3}
 
