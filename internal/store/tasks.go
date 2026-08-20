@@ -34,6 +34,10 @@ type TaskInput struct {
 	// Written only by AcceptDoc's plan branch (025 §9.2) — no other caller
 	// sets it.
 	PlanDoc int64
+	// AboutDoc is the document this task is about (0 = none) — the review or
+	// design task's reference to the document that triggered its minting
+	// (025 §15.4). Distinct from PlanDoc.
+	AboutDoc int64
 }
 
 // TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
@@ -61,6 +65,9 @@ type TaskFilter struct {
 	// PlanDoc narrows to the tasks minted from this plan document (0 = none)
 	// — the query that is the plan's task set (025 §9.2, §1).
 	PlanDoc int64
+	// AboutDoc narrows to the tasks that reference this document (0 = none)
+	// — the review/design task set a document's lifecycle minted (025 §15.4).
+	AboutDoc int64
 }
 
 // Edge is a typed, directed link between two tasks. "A blocks B" means B is
@@ -167,10 +174,10 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14)`,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, about_doc)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15)`,
 		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
-		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc),
+		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullID(in.AboutDoc),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -194,6 +201,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		Skills:    skills,
 		Secrets:   secretNames,
 		PlanDoc:   in.PlanDoc,
+		AboutDoc:  in.AboutDoc,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -364,13 +372,13 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 }
 
 // taskColumns is the SELECT list scanTask expects, in order. skills,
-// secrets and plan_doc are last so positional scans elsewhere are unaffected
-// by their addition. skills and secrets are "jsonb NOT NULL DEFAULT '[]'"
-// (see migrations 0007 and 0024), so a bare cast is enough — no coalesce
-// needed; plan_doc is a nullable bigint (migration 0027), scanned into
-// sql.NullInt64. prefixedTaskColumns below requires each entry to be
-// comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc`
+// secrets, plan_doc and about_doc are last so positional scans elsewhere are
+// unaffected by their addition. skills and secrets are "jsonb NOT NULL
+// DEFAULT '[]'" (see migrations 0007 and 0024), so a bare cast is enough — no
+// coalesce needed; plan_doc and about_doc are nullable bigints (migrations
+// 0027 and 0028), scanned into sql.NullInt64. prefixedTaskColumns below
+// requires each entry to be comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -380,13 +388,16 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var t model.Task
 	var body, createdBy, concern, assignee sql.NullString
 	var skillsJSON, secretsCol string
-	var planDoc sql.NullInt64
+	var planDoc, aboutDoc sql.NullInt64
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc); err != nil {
+		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc); err != nil {
 		return nil, err
 	}
 	if planDoc.Valid {
 		t.PlanDoc = planDoc.Int64
+	}
+	if aboutDoc.Valid {
+		t.AboutDoc = aboutDoc.Int64
 	}
 	t.Body = body.String
 	t.Concern = concern.String
@@ -542,6 +553,10 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if f.PlanDoc != 0 {
 		args = append(args, f.PlanDoc)
 		conds = append(conds, fmt.Sprintf(`plan_doc = $%d`, len(args)))
+	}
+	if f.AboutDoc != 0 {
+		args = append(args, f.AboutDoc)
+		conds = append(conds, fmt.Sprintf(`about_doc = $%d`, len(args)))
 	}
 	if f.Assignee != "" {
 		args = append(args, f.Assignee)
@@ -990,4 +1005,25 @@ func IsBlocked(tx *sql.Tx, taskID string) (bool, error) {
 		return false, fmt.Errorf("is blocked %s: %w", taskID, err)
 	}
 	return blocked, nil
+}
+
+// OpenTaskForDoc returns the id of an open task of the given kind that
+// references doc, or "" — the §5 suppression guard of spec 025 §15.4,
+// computed rather than stored (025 §1). Open means taskClosed's complement,
+// the same notion the ready set and the blocks predicate share, so this guard
+// cannot disagree with either about what "still open" means.
+func (s *Store) OpenTaskForDoc(ctx context.Context, docID int64, kind string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM tasks
+		  WHERE about_doc = $1 AND kind = $2 AND NOT `+taskClosed("tasks")+`
+		  ORDER BY created_at, id LIMIT 1`, docID, kind,
+	).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("open task for doc %d kind %s: %w", docID, kind, err)
+	}
+	return id, nil
 }

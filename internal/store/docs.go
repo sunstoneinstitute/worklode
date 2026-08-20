@@ -1430,6 +1430,40 @@ func (s *Store) RecordPlanTasksMinted(n int) {
 	s.metrics.planTasksMinted(n)
 }
 
+// DocIRI is a document's canonical subject IRI (spec 025 §4.1's
+// wlid:doc/spec-worklode-025 form): wlid:doc/<kind>-<project>-<number>
+// zero-padded to three digits for the numbered kinds, and
+// wlid:doc/plan-<project>-<slug> for plans, which carry no number
+// (025 §14.3). Project-qualified because the identity rules of §5 are
+// per project: two projects may each hold a spec 25.
+func DocIRI(d model.Doc) string {
+	if d.Kind == "plan" {
+		return "wlid:doc/plan-" + d.Project + "-" + d.Slug
+	}
+	return fmt.Sprintf("wlid:doc/%s-%s-%03d", d.Kind, d.Project, d.Number)
+}
+
+// DocBySubjectIRI resolves an event's wl:subject back to its row.
+//
+// Reconstructs the IRI in SQL and compares, rather than parsing iri in Go:
+// both a project id and a plan slug may contain hyphens, so
+// "wlid:doc/<kind>-<project>-<tail>" is not unambiguously splittable back
+// into its parts.
+func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, error) {
+	d, err := scanDoc(s.db.QueryRowContext(ctx,
+		`SELECT `+docColumns+` FROM docs
+		  WHERE 'wlid:doc/' || kind || '-' || project_id || '-' ||
+		        CASE WHEN kind = 'plan' THEN slug ELSE lpad(number::text, 3, '0') END = $1`,
+		iri))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("doc with subject %q: %w", iri, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve doc subject %q: %w", iri, err)
+	}
+	return d, nil
+}
+
 // nullText maps "" to NULL, for the document columns where absent and empty
 // are the same thing.
 func nullText(s string) sql.NullString {
