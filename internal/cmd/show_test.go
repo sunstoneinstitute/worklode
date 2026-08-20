@@ -609,11 +609,11 @@ func TestShowNoSpecSentinelIsNamed(t *testing.T) {
 
 // trailingSpaceFrontmatterSpec closes its frontmatter with "--- " (a
 // trailing space) and later has an exact "---" thematic break in the body.
-// frontmatterEnd must still recognise the real close and stop scanning
-// there — a regression fixture for the bug where the trailing space made
-// the scan run past every earlier heading looking for an exact "---" match,
-// finding the later thematic break instead and reporting "no section" for a
-// section that plainly exists.
+// The frontmatter split must still recognise the real close and stop
+// scanning there — a regression fixture for the bug where the trailing space
+// made the scan run past every earlier heading looking for an exact "---"
+// match, finding the later thematic break instead and reporting "no section"
+// for a section that plainly exists.
 const trailingSpaceFrontmatterSpec = "---\nstatus: accepted\nimplements: NO-SPEC\n--- \n" +
 	"# Spec 18 — Frontmatter trailing space fixture\n\n" +
 	"Intro text.\n\n" +

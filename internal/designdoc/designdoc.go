@@ -159,6 +159,41 @@ func (d *Document) Bytes() []byte {
 	return b.Bytes()
 }
 
+// Subtree returns the source text of the section anchored anchor, together
+// with every section nested under it, and reports whether that anchor exists.
+// It is the cut `lode show --section` prints (026 §3: a section is always its
+// whole subtree).
+//
+// The same round-trip guarantee Bytes rests on applies here: for an unedited
+// document the result is the exact bytes of that span of the source, so no
+// caller needs a second scan to recover heading offsets Parse discarded.
+func (d *Document) Subtree(anchor string) (string, bool) {
+	for _, sec := range d.Sections {
+		if sec.Anchor == anchor {
+			return sec.Source(), true
+		}
+	}
+	return "", false
+}
+
+// Source returns the section's own heading and body followed by those of its
+// descendants, in document order. Children is what bounds it, so a subtree
+// ends where the next heading of the same or shallower level begins — and an
+// anchorless subsection, legal at H5/H6, is included like any other child.
+func (s *Section) Source() string {
+	var b strings.Builder
+	s.writeSource(&b)
+	return b.String()
+}
+
+func (s *Section) writeSource(b *strings.Builder) {
+	b.WriteString(s.headingSource())
+	b.WriteString(s.Body)
+	for _, child := range s.Children {
+		child.writeSource(b)
+	}
+}
+
 // headingSource returns the section's heading line: the original bytes while
 // every heading field still holds what was parsed, and a fresh rendering once
 // any of them has been assigned. Keeping the untouched case verbatim means
