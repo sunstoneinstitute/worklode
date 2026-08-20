@@ -1,0 +1,54 @@
+---
+name: plan-spec
+description: Decompose an accepted spec into implementation plans, under a claimed design task so the planning cost bills to it
+argument-hint: "<design-task-id>"
+disable-model-invocation: true
+allowed-tools: Bash(lode *) Bash(git *)
+---
+
+Invocation arguments: $ARGUMENTS
+
+The first argument is the id of the `design` task to plan under. Accepting a
+spec mints one (spec 025 §15.4); `lode task list --kind design` finds it if the
+user did not name one.
+
+**Step 1, before reading or writing anything: claim the task.**
+
+```bash
+lode task claim <design-task-id> --json
+```
+
+Claiming first is not bookkeeping. Agent sessions hang off leases, a lease
+binds a task to a worktree, and each turn bills to the worktree it ran in
+(spec 012 §4) — so planning done in the main checkout, which holds no lease,
+is spent tokens nobody can attribute (025 §15.6). Claiming also gets planning
+the brief, the secrets and the hook wiring every other kind of work gets,
+which is the better reason. Tokens spent before the claim — the exploration
+that decided which task to pick up — stay unattributed by design.
+
+`cd` into the worktree the claim printed. Everything below happens there.
+
+**Step 2: read the spec, not the plan of it.** The task's `about_doc` names the
+accepted spec. Read it with `lode doc get <id>` — and read it from
+`docs/specs/inlined/` if the corpus is also on disk, since that view folds in
+every in-force amendment.
+
+**Step 3: write the plans.** Load `splitting-specs-into-plans` if the spec is
+large enough to need a numbered series, and `superpowers:writing-plans` for
+each plan document. A plan's `covers:` frontmatter must name the spec sections
+it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
+`lode doc list --needs-planning` would keep reporting the spec as unplanned.
+
+Create each plan in the backbone rather than only on disk:
+
+```bash
+lode doc new --kind plan --slug <slug> --file <path>
+```
+
+**Step 4: accept the plans.** `lode doc accept <id>` mints each plan's task set
+in the accepting transaction (025 §9.2), which is what turns a written plan
+into claimable work. Only the document's assignee may accept it.
+
+**Step 5: finish the design task.** `lode task done <design-task-id>` once the
+plan documents are accepted. Writing the plan is the deliverable; executing it
+is the task set the acceptance just minted, not this task.
