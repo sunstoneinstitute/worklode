@@ -223,6 +223,35 @@ func TestTaskListStatusFiltering(t *testing.T) {
 	}
 }
 
+// TestTaskListFilterByKind: `task list --kind` narrows to one task kind. The
+// filter existed everywhere below the CLI (store.TaskFilter.Kind, the `kind`
+// query param); only the flag was missing, which left the plan-spec skill
+// telling agents to run a flag that did not parse.
+func TestTaskListFilterByKind(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupRepoConfig(t, "proj")
+	setupProject(t, c)
+	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
+
+	feature := createTestTask(t, c, "A feature")
+	design, _, err := c.CreateTask(context.Background(), model.CreateTaskInput{
+		Project: "proj", Title: "Plan a spec", Priority: "high", Kind: "design",
+	})
+	if err != nil {
+		t.Fatalf("create design task: %v", err)
+	}
+
+	if got := taskListIDs(t, "--kind", "design"); len(got) != 1 || got[0] != design.ID {
+		t.Fatalf("--kind design: got %v, want [%s]", got, design.ID)
+	}
+	if got := taskListIDs(t, "--kind", "feature"); len(got) != 1 || got[0] != feature.ID {
+		t.Fatalf("--kind feature: got %v, want [%s]", got, feature.ID)
+	}
+	if got := taskListIDs(t); len(got) != 2 {
+		t.Fatalf("no --kind: got %v, want both tasks", got)
+	}
+}
+
 // TestTaskListFilterByPlan: `task list --plan <ref>` resolves the ref (a
 // plan doc id or slug, 025 §9.2) via resolveDocID and returns exactly its
 // minted task set; an unmatched ref is an error, not an empty list.

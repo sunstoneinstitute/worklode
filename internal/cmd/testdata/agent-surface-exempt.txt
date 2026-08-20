@@ -1,0 +1,6 @@
+# Invocations TestAgentSurfaces should not resolve against the cobra tree —
+# normally a command documented before it ships. One normalized invocation per
+# line, exactly as written in the markdown. Every entry needs a comment saying
+# why it is here and what removes it.
+#
+# Empty on purpose: nothing is currently exempt.
