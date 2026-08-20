@@ -75,6 +75,7 @@ func newInboxPromoteCmd() *cobra.Command {
 		Short: "Turn an inbox issue into a task",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			warnDeprecatedKind(cmd, kind)
 			number, err := parseIssueNumber(args[1])
 			if err != nil {
 				return err

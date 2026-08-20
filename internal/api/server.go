@@ -250,6 +250,12 @@ type server struct {
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
 	// observeListExpansion.
 	listExpansions *prometheus.CounterVec
+
+	// kindAliasUses counts requests naming a deprecated task kind that was
+	// normalised to its current name, by alias and surface; see
+	// kindalias.go. A sustained zero is the evidence needed to drop the
+	// alias (WL-138).
+	kindAliasUses *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
