@@ -5,54 +5,87 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/ns"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// TestGeneratedListsAreNonEmpty is the cheap smoke test that the generator
-// ran at all: an empty slice would silently turn validKinds into a gate that
-// rejects everything.
-func TestGeneratedListsAreNonEmpty(t *testing.T) {
-	if len(ns.TaskKinds) == 0 {
-		t.Error("ns.TaskKinds is empty — run ./scripts/nsgen.py")
+// conceptsInScheme reads ns/concept.ttl and returns the local names declared
+// in one scheme, in file order. It re-derives with a regexp what
+// scripts/nsgen.py derives with a parser, so a bug in the parser — or a
+// gen.go that was never regenerated — shows up as a disagreement between two
+// independent readings of the same Turtle. `go test` alone therefore catches
+// the drift that scripts/nsgen.py --check catches in CI.
+func conceptsInScheme(t *testing.T, scheme string) []string {
+	t.Helper()
+	ttl, err := os.ReadFile(filepath.Join("..", "..", "ns", "concept.ttl"))
+	if err != nil {
+		t.Fatalf("read ns/concept.ttl: %v", err)
 	}
-	if len(ns.DesignDocStatuses) == 0 {
-		t.Error("ns.DesignDocStatuses is empty — run ./scripts/nsgen.py")
+	re := regexp.MustCompile(`wlc:(\w+) a skos:Concept ; skos:inScheme wlc:` + scheme + `\b`)
+	var out []string
+	for _, m := range re.FindAllStringSubmatch(string(ttl), -1) {
+		out = append(out, m[1])
 	}
-	if !slices.IsSorted(ns.TaskKinds) {
-		t.Errorf("ns.TaskKinds = %v, want alphabetical", ns.TaskKinds)
+	if len(out) == 0 {
+		t.Fatalf("no wlc:%s concepts found in ns/concept.ttl", scheme)
+	}
+	return out
+}
+
+// TestTaskKindsMatchTurtle pins the generated slice to wlc:TaskKind, and to
+// the alphabetical order internal/api's error message depends on.
+func TestTaskKindsMatchTurtle(t *testing.T) {
+	want := conceptsInScheme(t, "TaskKind")
+	slices.Sort(want)
+	if !slices.Equal(ns.TaskKinds, want) {
+		t.Errorf("ns.TaskKinds = %v, want %v — run ./scripts/nsgen.py", ns.TaskKinds, want)
 	}
 }
 
-// TestTaskStateShapeMatchesStateMachine pins ns/shapes.ttl's wl:taskState
-// sh:in list to the states store's transition table can reach. The shape is
-// hand-written Turtle with no generator behind it (the state machine is Go,
-// not an enum in ns/concept.ttl), so this test is what keeps the duplicate
-// honest — docs/follow-ups.md flagged exactly this drift.
-func TestTaskStateShapeMatchesStateMachine(t *testing.T) {
-	shapes, err := os.ReadFile(filepath.Join("..", "..", "ns", "shapes.ttl"))
-	if err != nil {
-		t.Fatalf("read ns/shapes.ttl: %v", err)
+// TestDesignDocStatusesMatchTurtle pins the generated slice to
+// wlc:DesignDocStatus. Both internal/api and internal/store now gate document
+// writes on it, so a wrong list here is a validation bug, not a cosmetic one.
+// The order is checked separately: it is wlc:DesignDocStatusOrder's lifecycle
+// order, not alphabetical, and sorting would mean the generator dropped the
+// ordered collection.
+func TestDesignDocStatusesMatchTurtle(t *testing.T) {
+	want := conceptsInScheme(t, "DesignDocStatus")
+	got := slices.Clone(ns.DesignDocStatuses)
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("ns.DesignDocStatuses = %v, want the %v of ns/concept.ttl — run ./scripts/nsgen.py",
+			ns.DesignDocStatuses, want)
 	}
-
-	// The sh:in list on the property shape whose sh:path is wl:taskState.
-	// [^]]*? keeps the match inside the one property shape's brackets.
-	re := regexp.MustCompile(`sh:path wl:taskState ;[^\]]*?sh:in \(([^)]*)\)`)
-	m := re.FindSubmatch(shapes)
-	if m == nil {
-		t.Fatal("no `sh:path wl:taskState` property shape with an sh:in list in ns/shapes.ttl")
+	if lifecycle := []string{"draft", "accepted", "superseded"}; !slices.Equal(ns.DesignDocStatuses, lifecycle) {
+		t.Errorf("ns.DesignDocStatuses = %v, want %v (wlc:DesignDocStatusOrder's order)",
+			ns.DesignDocStatuses, lifecycle)
 	}
-	inShape := strings.FieldsFunc(string(m[1]), func(r rune) bool {
-		return r == '"' || r == ' ' || r == '\n' || r == '\t'
-	})
-	slices.Sort(inShape)
+}
 
-	if want := store.AllStates(); !slices.Equal(inShape, want) {
-		t.Errorf("wl:taskState sh:in = %v, want %v\n"+
-			"ns/shapes.ttl and internal/store's legalTransitions disagree; widen both together",
-			inShape, want)
+// TestOrList renders the closed-set phrasing the 422 bodies use, including
+// the two short cases that are easy to get wrong.
+func TestOrList(t *testing.T) {
+	for _, tc := range []struct {
+		in   []string
+		want string
+	}{
+		{nil, ""},
+		{[]string{"a"}, "a"},
+		{[]string{"a", "b"}, "a or b"},
+		{[]string{"a", "b", "c"}, "a, b, or c"},
+	} {
+		if got := ns.OrList(tc.in); got != tc.want {
+			t.Errorf("OrList(%v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestSet turns an enum into the lookup map the validation gates use.
+func TestSet(t *testing.T) {
+	got := ns.Set([]string{"a", "b"})
+	if !got["a"] || !got["b"] || got["c"] || len(got) != 2 {
+		t.Errorf("Set([a b]) = %v", got)
 	}
 }

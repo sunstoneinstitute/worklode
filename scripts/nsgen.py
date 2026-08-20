@@ -90,8 +90,12 @@ class Parser:
     Supported: @prefix/@base directives, IRIs, prefixed names, `a`, string
     literals (short and long, with optional language tag or ^^datatype),
     predicate-object lists (`;`), object lists (`,`), and RDF collections
-    (`( ... )`). Everything else - blank node property lists, numeric and
-    boolean literals as bare tokens - raises TurtleError.
+    (`( ... )`).
+
+    Everything else raises TurtleError: blank node property lists, bare
+    numeric and boolean literals, SPARQL-style PREFIX/BASE, the default
+    prefix (`:x`), and - the one a human might actually write - a language
+    tag with a subtag, `"hi"@en-GB`.
     """
 
     def __init__(self, text: str) -> None:
@@ -243,22 +247,56 @@ def scheme_members(triples, scheme: str) -> set[str]:
     return members
 
 
+def check_no_orphan_concepts(triples) -> None:
+    """Every skos:Concept must sit in a declared scheme via skos:inScheme.
+
+    Without this the generator is silent about the mistakes that actually
+    happen: a misspelled `skos:inscheme`, a scheme name accidentally quoted,
+    or a concept attached only by `skos:hasTopConcept`. Each leaves a real
+    concept out of its scheme's member set, and a member set is a Go slice
+    that a CHECK constraint is supposed to match — so a drop must be an error,
+    not a shorter list.
+    """
+    concepts = {s for s, p, o in triples if p == RDF_TYPE and o == SKOS + "Concept"}
+    schemes = {s for s, p, o in triples if p == RDF_TYPE and o == SKOS + "ConceptScheme"}
+    placed = {
+        s for s, p, o in triples
+        if p == SKOS + "inScheme" and o in schemes
+    }
+    orphans = concepts - placed
+    if orphans:
+        raise TurtleError(
+            "skos:Concept with no `skos:inScheme <a declared scheme>`: "
+            f"{sorted(orphans)}"
+        )
+
+
 def ordered_list(triples, head: str) -> list[str]:
     firsts = {s: o for s, p, o in triples if p == RDF_FIRST}
     rests = {s: o for s, p, o in triples if p == RDF_REST}
     out: list[str] = []
+    seen: set[str] = set()
     node = head
     while node != RDF_NIL:
         if node not in firsts:
             raise TurtleError(f"malformed collection at {node}")
+        if node in seen:
+            # Unreachable via `( ... )`, which mints fresh cells; possible if
+            # someone writes rdf:rest by hand. Raise rather than spin.
+            raise TurtleError(f"cyclic rdf:rest chain at {node}")
+        seen.add(node)
         out.append(firsts[node])
         node = rests[node]
     return out
 
 
 def extract(ttl: str) -> tuple[list[str], list[str]]:
-    triples = Parser(ttl).parse()
-    wlc = "https://worklode.io/ns/concept/"
+    parser = Parser(ttl)
+    triples = parser.parse()
+    if "wlc" not in parser.prefixes:
+        raise TurtleError("no `@prefix wlc:` declared")
+    wlc = parser.prefixes["wlc"]
+    check_no_orphan_concepts(triples)
 
     kinds = sorted(local_name(m, wlc) for m in scheme_members(triples, wlc + "TaskKind"))
 
@@ -273,10 +311,12 @@ def extract(ttl: str) -> tuple[list[str], list[str]]:
             f"wlc:DesignDocStatusOrder needs exactly one skos:memberList, got {len(order_heads)}"
         )
     ordered = ordered_list(triples, order_heads[0])
-    if set(ordered) != status_set:
+    # Length as well as membership: a duplicate entry has the same set as the
+    # scheme, and would emit a Go slice with a repeated status.
+    if len(ordered) != len(status_set) or set(ordered) != status_set:
         raise TurtleError(
-            "wlc:DesignDocStatusOrder does not list exactly the scheme's members: "
-            f"list={sorted(ordered)} scheme={sorted(status_set)}"
+            "wlc:DesignDocStatusOrder does not list exactly the scheme's members, once each: "
+            f"list={ordered} scheme={sorted(status_set)}"
         )
     statuses = [local_name(o, wlc) for o in ordered]
     return kinds, statuses
@@ -323,7 +363,7 @@ def main() -> int:
 
     try:
         kinds, statuses = extract(CONCEPT_TTL.read_text(encoding="utf-8"))
-    except TurtleError as exc:
+    except (TurtleError, OSError) as exc:
         print(f"{CONCEPT_TTL.relative_to(ROOT)}: {exc}", file=sys.stderr)
         return 1
     want = render(kinds, statuses)

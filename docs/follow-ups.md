@@ -208,10 +208,9 @@ outright once it is fixed over annotating it as resolved.
 - `[gated]` **Two shapes still duplicate a backbone enum** in `ns/shapes.ttl`
   (`sh:in`): `wl:priority` mirrors the `tasks.priority` CHECK and `wl:concern`
   the `tasks.concern` CHECK, so widening either CHECK in a migration means
-  widening the matching shape by hand. The third, `wl:taskState`, is **done**:
-  `internal/ns`'s `TestTaskStateShapeMatchesStateMachine` pins its list to
-  `store.AllStates()`, derived from `legalTransitions`. The transitions
-  themselves are still not duplicated into RDF — they stay in
+  widening the matching shape by hand. `wl:taskState` was the third and is now
+  pinned by `TestTaskStateShapeMatchesStateMachine` (`internal/store`). The
+  transitions themselves are still not duplicated into RDF — they stay in
   `internal/store/tasks.go`.
 - `[gated]` **`ns/` changes still owed at spec 029's acceptance**: `wl:Milestone`
   (subsuming 006's reserved term) and the participants/approvals vocabulary.
