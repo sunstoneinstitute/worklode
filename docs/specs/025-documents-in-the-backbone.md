@@ -460,8 +460,10 @@ document was left bare would block the wrong edit.
 So rule 2 is **derived and queryable**, consistent with §3.3 keeping section-level supersession
 derived rather than stored: a section is superseded when an effective `replaces` names it, or
 when its document is superseded, and it is explained when a `replaces` edge names either the
-section or its document. A superseded document that nothing replaces leaves every one of its
-sections bare, and `lode doc list --bare-superseded` (§18) is the query that finds them.
+section or its document. What is left bare is the difference between the two — a superseded
+document nothing replaces, and, more usefully, one an accept superseded whole while naming only
+some of its sections. `lode doc list --bare-superseded` (§18, 026 §2.4) is the query that finds
+both.
 
 Rule 2's second branch — a `dct:description` saying why a section went away with no successor
 to point at — has **no representation in the document store**: neither `doc_sections` nor

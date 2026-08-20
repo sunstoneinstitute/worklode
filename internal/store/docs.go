@@ -1275,7 +1275,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 // least one section nothing explains — 025 §6 rule 2's "bare superseded
 // section", read as a derived query rather than an accept-time gate (per the
 // decision recorded at 025 §3.3: section-level supersession stays derived).
-// project narrows the answer; "" answers over every project.
+// project and kind both narrow the answer; "" in either does not filter.
 //
 // A section counts as explained by a `replaces` edge that names it, at either
 // granularity doc_edges can express:
@@ -1290,16 +1290,16 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 // the explanation 025 §3.3 asks for, and demanding an accepted successor would
 // report an explained section as bare. A `to_external` edge names no local
 // row and so explains nothing, whatever it once pointed at. Plans carry no
-// sections (025 §9), so the JOIN against doc_sections already excludes them
-// without a kind filter.
+// sections (025 §9), so the JOIN against doc_sections excludes them
+// structurally, independent of the kind predicate below.
 //
 // Not answered here: rule 2's other branch, a `dct:description` saying why a
 // section went away. `0027_docs` has no free-text column on doc_sections or
 // doc_edges to read for that, on either the section or its explaining edge, so
 // it stays unmechanised — it lands with section-level supersession in the
-// graph (025 §3.3), tracked by WL-44 / WL-41. This mirrors NeedsPlanning's
+// graph (025 §3.3), tracked by WL-150. This mirrors NeedsPlanning's
 // WL-141 gap: a rule 025 states that today's schema cannot fully answer.
-func (s *Store) BareSupersededSections(ctx context.Context, project string) (
+func (s *Store) BareSupersededSections(ctx context.Context, project, kind string) (
 	[]model.Doc, []model.DocSupersessionGap, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`WITH replaced_section AS (
@@ -1321,10 +1321,11 @@ func (s *Store) BareSupersededSections(ctx context.Context, project string) (
 		   LEFT JOIN replaced_section rs ON rs.doc_id = sec.doc_id AND rs.anchor = sec.anchor
 		  WHERE d.status = 'superseded'
 		    AND ($1 = '' OR d.project_id = $1)
+		    AND ($2 = '' OR d.kind = $2)
 		    AND NOT EXISTS (SELECT 1 FROM replaced_doc rd WHERE rd.doc_id = d.id)
 		  GROUP BY d.id
 		 HAVING count(*) FILTER (WHERE rs.anchor IS NULL) > 0
-		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project)
+		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project, kind)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list bare superseded sections: %w", err)
 	}

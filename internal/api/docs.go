@@ -185,7 +185,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
 	case sel.bareSuperseded:
-		docs, gaps, err := s.st.BareSupersededSections(r.Context(), sel.filter.Project)
+		docs, gaps, err := s.st.BareSupersededSections(r.Context(), sel.filter.Project, sel.filter.Kind)
 		if err != nil {
 			s.mapStoreErr(w, err)
 			return

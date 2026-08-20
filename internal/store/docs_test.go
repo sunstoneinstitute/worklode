@@ -2629,11 +2629,17 @@ func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
 
 // --- BareSupersededSections (025 §6 rule 2) ---------------------------------
 
-// bareSupersededSlugs runs the query and returns the matching documents'
-// slugs alongside their gaps, in the same order.
+// bareSupersededSlugs runs the query unscoped by kind and returns the
+// matching documents' slugs alongside their gaps, in the same order.
 func bareSupersededSlugs(t *testing.T, s *Store, project string) ([]string, []model.DocSupersessionGap) {
 	t.Helper()
-	docs, gaps, err := s.BareSupersededSections(t.Context(), project)
+	return bareSupersededKindSlugs(t, s, project, "")
+}
+
+// bareSupersededKindSlugs is bareSupersededSlugs with a kind narrowing.
+func bareSupersededKindSlugs(t *testing.T, s *Store, project, kind string) ([]string, []model.DocSupersessionGap) {
+	t.Helper()
+	docs, gaps, err := s.BareSupersededSections(t.Context(), project, kind)
 	if err != nil {
 		t.Fatalf("BareSupersededSections: %v", err)
 	}
@@ -2825,6 +2831,76 @@ func TestDocBareSupersededPlanNeverReported(t *testing.T) {
 	slugs, gaps := bareSupersededSlugs(t, s, "p1")
 	if len(slugs) != 0 || len(gaps) != 0 {
 		t.Fatalf("bare superseded = %v / %v, want empty for a superseded plan", slugs, gaps)
+	}
+}
+
+// TestDocBareSupersededKindNarrows: kind narrows the same way project does —
+// "" answers both a superseded spec and a superseded ADR, "spec" or "adr"
+// answers only its own.
+func TestDocBareSupersededKindNarrows(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old-spec", Body: specBody,
+		CreatedBy: "stig", Status: "superseded",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 7, Slug: "007-old-adr", Body: specBody,
+		CreatedBy: "stig", Status: "superseded",
+	})
+
+	if got, _ := bareSupersededKindSlugs(t, s, "p1", ""); !slices.Equal(got, []string{"006-old-spec", "007-old-adr"}) {
+		t.Fatalf("unscoped bare superseded = %v, want both docs", got)
+	}
+	if got, _ := bareSupersededKindSlugs(t, s, "p1", "spec"); !slices.Equal(got, []string{"006-old-spec"}) {
+		t.Fatalf("spec-scoped bare superseded = %v, want [006-old-spec]", got)
+	}
+	if got, _ := bareSupersededKindSlugs(t, s, "p1", "adr"); !slices.Equal(got, []string{"007-old-adr"}) {
+		t.Fatalf("adr-scoped bare superseded = %v, want [007-old-adr]", got)
+	}
+}
+
+// TestDocBareSupersededViaAcceptPath: supersedeReplacedDocs flips a target on
+// from_anchor IS NULL (a document-level source), not on to_anchor — so a
+// document-level source naming a section-scoped target flips the whole
+// target document to superseded while its `replaces` edge only names one of
+// its sections. That leaves the other two sections bare, reachable through
+// the real accept path rather than a fixture that sets Status directly.
+func TestDocBareSupersededViaAcceptPath(t *testing.T) {
+	s := openDocStore(t)
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	successor := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md#sec-1\n---\n\n" +
+			"# New\n\n## 1. Scope {#sec-1}\n\na\n",
+	})
+
+	if _, _, err := acceptDoc(t, s, successor.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc(025-new): %v", err)
+	}
+
+	got, err := s.GetDoc(t.Context(), old.ID)
+	if err != nil {
+		t.Fatalf("GetDoc(006-old): %v", err)
+	}
+	if got.Status != "superseded" {
+		t.Fatalf("006-old status = %q, want superseded", got.Status)
+	}
+
+	slugs, gaps := bareSupersededSlugs(t, s, "p1")
+	if !slices.Equal(slugs, []string{"006-old"}) {
+		t.Fatalf("bare superseded = %v, want [006-old]", slugs)
+	}
+	if len(gaps) != 1 {
+		t.Fatalf("gaps = %v, want one entry", gaps)
+	}
+	if gaps[0].Sections != 3 {
+		t.Errorf("gap sections = %d, want 3", gaps[0].Sections)
+	}
+	if !slices.Equal(gaps[0].Unexplained, []string{"sec-2", "sec-2.1"}) {
+		t.Errorf("unexplained = %v, want [sec-2 sec-2.1]", gaps[0].Unexplained)
 	}
 }
 
