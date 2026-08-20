@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 )
 
@@ -106,7 +107,7 @@ func newSkillsRecommendCmd() *cobra.Command {
 }
 
 func newSkillsInstallCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "install <name>[@<hash>]",
 		Short: "Install a skill into the local store (~/.worklode/skills)",
 		Args:  cobra.ExactArgs(1),
@@ -114,6 +115,11 @@ func newSkillsInstallCmd() *cobra.Command {
 			name, hash, _ := strings.Cut(args[0], "@")
 			if name == "" {
 				return fmt.Errorf("skill name is required")
+			}
+			link, _ := cmd.Flags().GetString("link")
+			linkIDs, err := resolveLinkAgents(link)
+			if err != nil {
+				return err
 			}
 			c, err := newAPIClient()
 			if err != nil {
@@ -140,9 +146,71 @@ func newSkillsInstallCmd() *cobra.Command {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), p)
-			return nil
+			return publishLinked(cmd, dirs, linkIDs, name)
 		},
 	}
+	cmd.Flags().String("link", "",
+		"publish this skill into a harness's personal skill directory: an adapter id or all")
+	return cmd
+}
+
+// resolveLinkAgents turns --link's value into the adapter ids to publish
+// into: empty means none, "all" means every registered adapter
+// (harness.IDs()), anything else must name one.
+func resolveLinkAgents(link string) ([]string, error) {
+	switch link {
+	case "":
+		return nil, nil
+	case agentAll:
+		return harness.IDs(), nil
+	default:
+		if _, ok := harness.Get(link); !ok {
+			return nil, unsupportedLinkError(link)
+		}
+		return []string{link}, nil
+	}
+}
+
+// unsupportedLinkError is the one wording for a --link value the registry
+// does not carry.
+func unsupportedLinkError(id string) error {
+	return fmt.Errorf("unsupported --link %q (supported: %s, all)", id, strings.Join(harness.IDs(), ", "))
+}
+
+// publishLinked publishes the just-installed skill into every named
+// adapter's personal skill targets: a PerSkill target gets just that one
+// skill's link (skillstore.PublishOneSkill), any other target becomes a
+// symlink to the whole store (skillstore.PublishDirLink). Personal targets
+// only (harness.ScopeLocal) — there is no repo here to scope a project-level
+// target to.
+func publishLinked(cmd *cobra.Command, dirs skillstore.Dirs, ids []string, name string) error {
+	out := cmd.OutOrStdout()
+	for _, id := range ids {
+		h, ok := harness.Get(id)
+		if !ok {
+			continue
+		}
+		targets, err := h.SkillTargets("", harness.ScopeLocal)
+		if err != nil {
+			return fmt.Errorf("skill targets for %s: %w", id, err)
+		}
+		for _, t := range targets {
+			var (
+				pr   skillstore.PublishResult
+				perr error
+			)
+			if t.PerSkill {
+				pr, perr = skillstore.PublishOneSkill(dirs, t.Dir, name)
+			} else {
+				pr, perr = skillstore.PublishDirLink(dirs, t.Dir)
+			}
+			if perr != nil {
+				return fmt.Errorf("publish %s to %s: %w", name, id, perr)
+			}
+			fmt.Fprintf(out, "%s: %s %s\n", id, pr.Action, pr.Path)
+		}
+	}
+	return nil
 }
 
 func newSkillsSyncCmd() *cobra.Command {

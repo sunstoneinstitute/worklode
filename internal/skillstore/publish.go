@@ -94,27 +94,18 @@ func PublishPerSkill(dirs Dirs, target string) (PublishResult, error) {
 			continue // dirs.Links holds only name symlinks (spec 008 §17.3)
 		}
 		name := e.Name()
-		versionDir, err := filepath.EvalSymlinks(filepath.Join(dirs.Links, name))
-		if err != nil {
-			res.Skips = append(res.Skips, name)
-			skipped = true
-			continue
-		}
-		linkPath := filepath.Join(target, name)
-		action, ok, err := publishEntry(dirs, versionDir, linkPath)
+		one, err := PublishOneSkill(dirs, target, name)
 		if err != nil {
 			return res, fmt.Errorf("publish per-skill %s: %w", name, err)
 		}
-		if !ok {
-			res.Skips = append(res.Skips, name)
-			skipped = true
-			continue
-		}
-		switch action {
+		switch one.Action {
 		case "copied":
 			copied = true
 		case "linked":
 			linked = true
+		case "skipped":
+			res.Skips = append(res.Skips, one.Skips...)
+			skipped = true
 		}
 	}
 
@@ -128,6 +119,37 @@ func PublishPerSkill(dirs Dirs, target string) (PublishResult, error) {
 	default:
 		res.Action = "unchanged"
 	}
+	return res, nil
+}
+
+// PublishOneSkill links <target>/<name> to name's resolved version dir —
+// the per-entry step PublishPerSkill runs for every name symlink in
+// dirs.Links, exposed so `skills install --link` can publish just the one
+// skill it fetched without touching the rest of a per-skill target. A
+// dangling name symlink or anything publishEntry refuses (spec 008 §18 row
+// 4) is reported in Skips rather than treated as an error.
+func PublishOneSkill(dirs Dirs, target, name string) (PublishResult, error) {
+	res := PublishResult{Path: target}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return res, fmt.Errorf("publish one skill: %w", err)
+	}
+	versionDir, err := filepath.EvalSymlinks(filepath.Join(dirs.Links, name))
+	if err != nil {
+		res.Action = "skipped"
+		res.Skips = []string{name}
+		return res, nil
+	}
+	linkPath := filepath.Join(target, name)
+	action, ok, err := publishEntry(dirs, versionDir, linkPath)
+	if err != nil {
+		return res, fmt.Errorf("publish one skill %s: %w", name, err)
+	}
+	if !ok {
+		res.Action = "skipped"
+		res.Skips = []string{name}
+		return res, nil
+	}
+	res.Action = action
 	return res, nil
 }
 

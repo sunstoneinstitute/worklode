@@ -13,6 +13,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/harness"
+	"github.com/sunstoneinstitute/worklode/internal/skillhash"
+	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 )
 
 // readSettings reads a settings file through the same reader the adapter
@@ -1133,5 +1135,97 @@ func TestReportInstallSaysNothingWasBoundWhenNothingWas(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "amp: bound no hooks") {
 		t.Fatalf("output = %q, want it to say nothing was bound", buf.String())
+	}
+}
+
+// TestInstallSkillsPublishesAllDoorways drives installHooks with --skills'
+// equivalent (targets.skills) directly, so it needs no server and no
+// Postgres. It pins acceptance 9 (spec 008): one store copy reaches Codex,
+// Copilot, Amp and Claude Code's skill directories, none of them ever list
+// the store's hash directory as if it were a skill.
+func TestInstallSkillsPublishesAllDoorways(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	skillsRoot := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", skillsRoot)
+
+	dirs, err := skillstore.DefaultDirs()
+	if err != nil {
+		t.Fatalf("DefaultDirs: %v", err)
+	}
+	content := "# tdd\n\nDo the thing.\n"
+	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
+	hash := skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: []byte(content)}})
+	versionDir, err := skillstore.Ensure(dirs, "tdd", hash, func() ([]byte, error) { return archive, nil })
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	wantVersion, err := filepath.EvalSymlinks(versionDir)
+	if err != nil {
+		t.Fatalf("resolve version dir: %v", err)
+	}
+
+	root := initGitRepo(t)
+	targets := hookTargets{skills: true}
+	res, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --skills: %v", err)
+	}
+	if len(res.Skills) == 0 {
+		t.Fatal("Skills report is empty, want one entry per deduped target")
+	}
+
+	agentsSkills := filepath.Join(homeDir, ".agents", "skills")
+	info, err := os.Lstat(agentsSkills)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("%s is not a symlink: info=%v err=%v", agentsSkills, info, err)
+	}
+	if got, err := os.Readlink(agentsSkills); err != nil || got != dirs.Links {
+		t.Fatalf("readlink %s = %q, %v, want %q", agentsSkills, got, err, dirs.Links)
+	}
+	if entries, err := os.ReadDir(agentsSkills); err != nil {
+		t.Fatalf("read %s: %v", agentsSkills, err)
+	} else {
+		for _, e := range entries {
+			if e.Name() == "store" || e.Name() == ".store" {
+				t.Fatalf("%s lists a store hash directory as a skill: %s", agentsSkills, e.Name())
+			}
+		}
+	}
+
+	claudeSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
+	resolved, err := filepath.EvalSymlinks(claudeSkill)
+	if err != nil {
+		t.Fatalf("resolve %s: %v", claudeSkill, err)
+	}
+	if resolved != wantVersion {
+		t.Fatalf("%s resolves to %q, want %q", claudeSkill, resolved, wantVersion)
+	}
+	claudeSkillsDir := filepath.Join(homeDir, ".claude", "skills")
+	if entries, err := os.ReadDir(claudeSkillsDir); err != nil {
+		t.Fatalf("read %s: %v", claudeSkillsDir, err)
+	} else {
+		for _, e := range entries {
+			if e.Name() == "store" || e.Name() == ".store" {
+				t.Fatalf("%s lists a store hash directory as a skill: %s", claudeSkillsDir, e.Name())
+			}
+		}
+	}
+
+	// Re-running must be idempotent: unchanged/per-skill outcomes, never an
+	// error, and no drift in what got published.
+	res2, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks --skills (second run): %v", err)
+	}
+	if len(res2.Skills) != len(res.Skills) {
+		t.Fatalf("second run skills = %+v, want %d entries", res2.Skills, len(res.Skills))
+	}
+	for _, s := range res2.Skills {
+		switch s.Action {
+		case "unchanged", "linked", "per-skill":
+		default:
+			t.Fatalf("second run action = %q for %s, want a stable no-op result", s.Action, s.Path)
+		}
 	}
 }
