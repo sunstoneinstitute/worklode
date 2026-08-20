@@ -335,6 +335,18 @@ func TestProjectDoctorRendersReport(t *testing.T) {
 				"mapped_at": "2026-07-30T00:00:00Z",
 				"last_event_at": null, "event_types": [],
 				"unapplied_events": 3, "stale": true
+			}, {
+				"repo": "acme/slow", "project": "demo",
+				"app_installed": null, "app_error": "context deadline exceeded",
+				"mapped_at": "2026-07-30T00:00:00Z",
+				"last_event_at": null, "event_types": [],
+				"unapplied_events": 0, "stale": true
+			}, {
+				"repo": "acme/gone", "project": "demo",
+				"app_installed": false, "app_error": "github app is not installed on this repo",
+				"mapped_at": "2026-07-30T00:00:00Z",
+				"last_event_at": null, "event_types": [],
+				"unapplied_events": 0, "stale": true
 			}],
 			"unmapped_senders": [{"repo": "acme/unmapped", "events": 2, "last_event_at": "2026-07-29T00:00:00Z"}]
 		}`)
@@ -347,7 +359,15 @@ func TestProjectDoctorRendersReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("project doctor: %v\n%s", err, out)
 	}
-	for _, want := range []string{"acme/app", "STALE", "acme/unmapped"} {
+	// A null app_installed renders as unchecked either way, but the reason
+	// separates "no App configured" from "the check did not finish"; only a
+	// false one may read as NOT INSTALLED.
+	for _, want := range []string{
+		"acme/app", "STALE", "acme/unmapped",
+		"unchecked (no GitHub App configured)",
+		"unchecked (context deadline exceeded)",
+		"NOT INSTALLED (github app is not installed on this repo)",
+	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}
