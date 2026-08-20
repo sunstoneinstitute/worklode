@@ -56,7 +56,9 @@ It resolves command paths and long flags against the cobra tree, and checks
 `--kind` values against the set that command's usage string names — pinned to
 `ns.TaskKinds` by a test, so the check cannot follow a usage string that has
 itself drifted. `--kind` alone gets the value treatment because it is the flag
-agent docs get wrong: a task kind is not a document kind, and `spec` is neither.
+agent docs get wrong: a task kind is not a document kind, and `spec` is a
+retired task-kind spelling the server still accepts as a deprecated alias, but
+agent docs must not use it.
 
 It says nothing about whether the surrounding explanation is still true, whether
 a `--json` field an agent parses still exists, or what a command now does

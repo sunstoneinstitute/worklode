@@ -89,7 +89,7 @@ func newTaskAddCmd() *cobra.Command {
 		Use:   "add",
 		Short: "Create a task",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			warnDeprecatedKind(cmd, kind)
+			warnDeprecatedTaskKind(cmd, kind)
 			body, err := resolveBody(body, bodyFile, cmd.InOrStdin())
 			if err != nil {
 				return err
@@ -148,7 +148,7 @@ func newTaskListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List tasks (delivered and abandoned are hidden unless requested with --status)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			warnDeprecatedKind(cmd, kind)
+			warnDeprecatedTaskKind(cmd, kind)
 			states := resolveStatusFilter(statuses)
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -558,7 +558,7 @@ func newTaskClaimCmd() *cobra.Command {
 			if len(args) > 0 {
 				return fmt.Errorf("--next and a task id are mutually exclusive")
 			}
-			warnDeprecatedKind(cmd, kind)
+			warnDeprecatedTaskKind(cmd, kind)
 			if worktree == "" && !dryRun {
 				worktree, err = currentWorktreeIdentity()
 				if err != nil {

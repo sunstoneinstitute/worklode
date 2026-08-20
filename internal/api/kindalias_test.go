@@ -6,30 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"github.com/sunstoneinstitute/worklode/internal/api"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
-
-// newTestServerWithAdmin is newTestServer plus the admin handler (/metrics),
-// for the tests here that need to read a counter back out.
-func newTestServerWithAdmin(t *testing.T) (*store.Store, http.Handler, http.Handler, string) {
-	t.Helper()
-	st := newTestStore(t)
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
-		t.Fatalf("create actor: %v", err)
-	}
-	token, err := st.CreateToken(ctx, "alice", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token: %v", err)
-	}
-	h, admin, err := api.NewServer(st, api.Config{})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	return st, h, admin, token
-}
 
 // TestCreateTaskAliasesDeprecatedKind proves POST /api/v1/tasks accepts the
 // retired "spec" spelling (migration 0025 renamed it to "design"), stores
@@ -94,9 +71,10 @@ func TestCreateTaskUnknownKindStays422(t *testing.T) {
 }
 
 // TestCreateTaskFromFormAliasesDeprecatedKind proves the web form normalizes
-// "spec" the same way the JSON API does.
+// "spec" the same way the JSON API does, and counts the alias use on the
+// web_form surface.
 func TestCreateTaskFromFormAliasesDeprecatedKind(t *testing.T) {
-	st, h, _ := newTestServer(t)
+	st, h, admin, _ := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 
 	rr := doForm(t, h, "/projects/proj/tasks", url.Values{
@@ -114,12 +92,18 @@ func TestCreateTaskFromFormAliasesDeprecatedKind(t *testing.T) {
 	if task.Kind != "design" {
 		t.Fatalf("kind = %q, want design", task.Kind)
 	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_task_kind_alias_uses_total{alias="spec",surface="web_form"} 1`) {
+		t.Errorf("metrics missing kind alias counter: %s", metrics)
+	}
 }
 
 // TestListTasksByDeprecatedKind proves `?kind=spec` still returns the design
-// tasks migration 0025 rewrote, rather than an empty set.
+// tasks migration 0025 rewrote, rather than an empty set, and counts the
+// alias use on the list surface.
 func TestListTasksByDeprecatedKind(t *testing.T) {
-	st, h, token := newTestServer(t)
+	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "A design doc task", "priority": "medium", "kind": "design",
@@ -138,6 +122,11 @@ func TestListTasksByDeprecatedKind(t *testing.T) {
 	decodeInto(t, rr, &resp)
 	if len(resp.Tasks) != 1 || resp.Tasks[0]["kind"] != "design" {
 		t.Fatalf("tasks = %+v, want exactly the one design task", resp.Tasks)
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_task_kind_alias_uses_total{alias="spec",surface="list"} 1`) {
+		t.Errorf("metrics missing kind alias counter: %s", metrics)
 	}
 }
 
@@ -180,10 +169,10 @@ func TestClaimNextAliasesDeprecatedKind(t *testing.T) {
 	}
 }
 
-// TestPromoteInboxAliasesDeprecatedKind proves promote-inbox accepts "spec"
-// and creates a design task.
+// TestPromoteInboxAliasesDeprecatedKind proves promote-inbox accepts "spec",
+// creates a design task, and counts the alias use on the promote surface.
 func TestPromoteInboxAliasesDeprecatedKind(t *testing.T) {
-	st, h, token := newTestServer(t)
+	st, h, admin, token := newTestServerWithAdmin(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
 
@@ -196,5 +185,10 @@ func TestPromoteInboxAliasesDeprecatedKind(t *testing.T) {
 	got := decodeMap(t, rr)
 	if got["kind"] != "design" {
 		t.Fatalf("kind = %v, want design", got["kind"])
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_task_kind_alias_uses_total{alias="spec",surface="promote"} 1`) {
+		t.Errorf("metrics missing kind alias counter: %s", metrics)
 	}
 }

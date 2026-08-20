@@ -142,6 +142,28 @@ Prose.
 	}
 }
 
+// TestPlanTasksAliasesDeprecatedKind proves a pre-025 plan body using the
+// retired "spec" spelling still mints, as "design" (WL-138).
+func TestPlanTasksAliasesDeprecatedKind(t *testing.T) {
+	d := mustParsePlan(t, `## Tasks
+
+### Task 1 — Only task
+
+`+"```yaml"+`
+kind: spec
+`+"```"+`
+
+Prose.
+`)
+	defs, err := PlanTasks(d)
+	if err != nil {
+		t.Fatalf("PlanTasks: %v", err)
+	}
+	if defs[0].Kind != "design" {
+		t.Errorf("kind = %q, want design", defs[0].Kind)
+	}
+}
+
 func TestPlanTasksBlockedByBasic(t *testing.T) {
 	d := mustParsePlan(t, `## Tasks
 

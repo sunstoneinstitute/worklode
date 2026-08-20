@@ -1,5 +1,12 @@
 package ns
 
+// This file is hand-written, unlike gen.go beside it. A retirement could be
+// expressed in ns/concept.ttl as a skos:hiddenLabel on the current term, but
+// deliberately isn't: an alias is a transient input shim for callers still
+// using an old spelling, not an ontology fact worth recording permanently.
+// The next retirement needs its own entry here — it will not show up in the
+// TTL and scripts/nsgen.py will not generate one.
+
 // DeprecatedTaskKinds maps a retired task-kind spelling to the kind it became
 // (025 §10 renamed spec → design, migration 0025). It is input-only: callers
 // normalise before validating, and only the current name is ever persisted, so

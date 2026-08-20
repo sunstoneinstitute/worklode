@@ -253,8 +253,11 @@ type server struct {
 
 	// kindAliasUses counts requests naming a deprecated task kind that was
 	// normalised to its current name, by alias and surface; see
-	// kindalias.go. A sustained zero is the evidence needed to drop the
-	// alias (WL-138).
+	// kindalias.go. A sustained zero across these surfaces is not the whole
+	// picture: plan-document bodies (internal/designdoc/plantasks.go) are a
+	// stored input normalised the same way but not counted here, since they
+	// are discoverable by querying the documents themselves rather than by
+	// watching a request-shaped metric (WL-138).
 	kindAliasUses *prometheus.CounterVec
 }
 

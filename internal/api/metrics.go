@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -67,7 +68,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"endpoint", "expansion"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
-		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (create, list, claim_next, promote, web_form). A sustained zero is the evidence needed to drop the alias.",
+		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
+			strings.Join(kindAliasSurfaces, ", ") +
+			"). Pre-initialised, so a flat zero means no request has used a retired spelling.",
 	}, []string{"alias", "surface"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
