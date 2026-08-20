@@ -167,6 +167,12 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err := rebuildEdges(tx, id, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
+	// A reference resolves once, at write time, so references already stored
+	// unresolved because this document did not exist yet are re-pointed now —
+	// that is what makes corpus import order-independent (WL-130).
+	if err := repointExternalEdges(tx, in.Project, id, eventID); err != nil {
+		return nil, err
+	}
 	if err := logDocChange(tx, id, eventID,
 		map[string]string{"field": "status", "new": status}); err != nil {
 		return nil, err
@@ -244,10 +250,13 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 }
 
 // ReplaceDocEdges re-resolves a document's outbound edges from its stored
-// body and appends a state_log row attributed to eventID. It is the corpus
-// import's second pass: the frontmatter references that resolved to nothing
-// when the document was created become real edges once the rest of the corpus
-// is present.
+// body and appends a state_log row attributed to eventID: the frontmatter
+// references that resolved to nothing when the document was created become
+// real edges once the rest of the corpus is present.
+//
+// CreateDoc now re-points existing unresolved references as their targets
+// arrive (repointExternalEdges), so corpus import no longer depends on this
+// pass; it is a repair path for edges that went stale some other way.
 //
 // Nothing authored changes — not the body, not the sections, not the status,
 // and the version does not move: the same source is being read again against a
@@ -1067,6 +1076,162 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 				return fmt.Errorf("insert fullCoverageWith[%d] of doc %d covers %q: %w",
 					pos, docID, e.ref, err)
 			}
+		}
+	}
+	return nil
+}
+
+// repointExternalEdges re-points the project's already-stored unresolved
+// references that name newDocID, in both doc_edges and the
+// doc_coverage_completed_with closure. rebuildEdges resolves a reference once,
+// at write time, so without this a document written before its target existed
+// would keep a dangling to_external forever and corpus import would be
+// order-dependent (WL-130). Both passes are project-scoped, which is exactly
+// resolveDocRef's resolution scope.
+//
+// Only references resolving to newDocID move: one resolving to some other
+// document was already re-pointed when that document was created.
+//
+// Collapsing two spellings of one target onto one row can collide with
+// doc_edges_unique, so a candidate whose re-pointed tuple another row already
+// holds is deleted instead of updated (doc_coverage_completed_with cascades
+// with it). Where the surviving row and the deleted one disagree on coverage
+// level or closure, the lower-id row wins — which rebuildEdges would instead
+// have refused as a contradiction (026 §5.1). That disagreement is deliberately
+// not ErrInvalidInput here: it lives in *another* document's frontmatter, and
+// failing this document's creation for it would wedge an import on an unrelated
+// defect.
+//
+// The re-point is attributed to the creating document's event and logged as an
+// edges change on each referring document whose rows moved.
+func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) error {
+	// Distinct referring documents whose rows changed, logged once each below.
+	touched := map[int64]bool{}
+	type externalEdge struct {
+		id         int64
+		fromDoc    int64
+		fromAnchor string
+		typ        string
+		ref        string
+	}
+	// collectRows closes the cursor before any of the writes below run: the
+	// same *sql.Tx cannot interleave a write with an open Rows.
+	rows, err := tx.Query(
+		`SELECT e.id, e.from_doc, coalesce(e.from_anchor,''), e.type, e.to_external
+		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
+		  WHERE d.project_id = $1 AND e.to_external IS NOT NULL
+		  ORDER BY e.id`, project)
+	if err != nil {
+		return fmt.Errorf("read unresolved edges of project %s: %w", project, err)
+	}
+	candidates, err := collectRows(rows, "read unresolved edges of project "+project,
+		func(r rowScanner) (externalEdge, error) {
+			var c externalEdge
+			err := r.Scan(&c.id, &c.fromDoc, &c.fromAnchor, &c.typ, &c.ref)
+			return c, err
+		})
+	if err != nil {
+		return err
+	}
+
+	for _, c := range candidates {
+		base, fragment := cutFragment(c.ref)
+		toDoc, resolved, err := resolveDocRef(tx, project, base)
+		if err != nil {
+			return err
+		}
+		if !resolved || toDoc != newDocID {
+			continue
+		}
+		// The pre-check reads live state and candidates run in id order, so two
+		// spellings of one target in one document collapse: the first
+		// re-points, the second finds it and deletes itself.
+		var dup int
+		err = tx.QueryRow(
+			`SELECT 1 FROM doc_edges
+			  WHERE from_doc = $1 AND coalesce(from_anchor,'') = $2 AND type = $3
+			    AND to_doc = $4 AND coalesce(to_anchor,'') = $5 AND to_external IS NULL
+			    AND id <> $6`,
+			c.fromDoc, c.fromAnchor, c.typ, newDocID, fragment, c.id).Scan(&dup)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("check duplicate of edge %d of doc %d: %w", c.id, c.fromDoc, err)
+		}
+		if err == nil {
+			if _, err := tx.Exec(`DELETE FROM doc_edges WHERE id = $1`, c.id); err != nil {
+				return fmt.Errorf("drop duplicate edge %d of doc %d: %w", c.id, c.fromDoc, err)
+			}
+			touched[c.fromDoc] = true
+			continue
+		}
+		if _, err := tx.Exec(
+			`UPDATE doc_edges SET to_doc = $1, to_anchor = $2, to_external = NULL WHERE id = $3`,
+			newDocID, nullText(fragment), c.id,
+		); err != nil {
+			return fmt.Errorf("re-point edge %d of doc %d to doc %d: %w", c.id, c.fromDoc, newDocID, err)
+		}
+		touched[c.fromDoc] = true
+	}
+
+	// Second pass, after the first: rows hanging off edges the first pass
+	// deleted are already gone. An unresolvable closure entry closes nothing
+	// (026 §2.1), so a dangling one silently changes coverage-completeness
+	// answers. The primary key (edge_id, position) does not move, so there is
+	// no collision case here.
+	type closureRow struct {
+		edgeID   int64
+		fromDoc  int64
+		position int
+		ref      string
+	}
+	closureRows, err := tx.Query(
+		`SELECT cw.edge_id, e.from_doc, cw.position, cw.to_external
+		   FROM doc_coverage_completed_with cw
+		   JOIN doc_edges e ON e.id = cw.edge_id
+		   JOIN docs d ON d.id = e.from_doc
+		  WHERE d.project_id = $1 AND cw.to_external IS NOT NULL
+		  ORDER BY cw.edge_id, cw.position`, project)
+	if err != nil {
+		return fmt.Errorf("read unresolved closure entries of project %s: %w", project, err)
+	}
+	closures, err := collectRows(closureRows, "read unresolved closure entries of project "+project,
+		func(r rowScanner) (closureRow, error) {
+			var row closureRow
+			err := r.Scan(&row.edgeID, &row.fromDoc, &row.position, &row.ref)
+			return row, err
+		})
+	if err != nil {
+		return err
+	}
+
+	for _, r := range closures {
+		cwBase, _ := cutFragment(r.ref) // plans take no anchors
+		toDoc, resolved, err := resolveDocRef(tx, project, cwBase)
+		if err != nil {
+			return err
+		}
+		if !resolved || toDoc != newDocID {
+			continue
+		}
+		if _, err := tx.Exec(
+			`UPDATE doc_coverage_completed_with SET to_doc = $1, to_external = NULL
+			  WHERE edge_id = $2 AND position = $3`,
+			newDocID, r.edgeID, r.position,
+		); err != nil {
+			return fmt.Errorf("re-point fullCoverageWith[%d] of edge %d to doc %d: %w",
+				r.position, r.edgeID, newDocID, err)
+		}
+		touched[r.fromDoc] = true
+	}
+
+	// One row per referring document, in id order so the log is deterministic.
+	// The new document is skipped: CreateDoc logs its own status change.
+	for _, id := range slices.Sorted(maps.Keys(touched)) {
+		if id == newDocID {
+			continue
+		}
+		if err := logDocChange(tx, id, eventID,
+			map[string]string{"field": "edges"}); err != nil {
+			return err
 		}
 	}
 	return nil
