@@ -2525,6 +2525,84 @@ func TestDocAcceptRevision(t *testing.T) {
 	}
 }
 
+// TestDocAcceptRevisionStampsEveryChangedSection: last_revised_in moves on
+// each of several changed anchors and on none of the untouched ones — the
+// stamp is one UPDATE over the anchor set, so a whole-document or
+// first-anchor-only stamp would show here and not in the single-change case.
+// It also checks the rebuilt rows' own columns, since they are written from
+// parallel arrays where a transposition would silently swap headings.
+func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	// sec-2 and sec-2.1 both get new bodies; sec-1 is left verbatim.
+	revised := strings.NewReplacer(
+		"status: draft", "status: accepted",
+		"Model body.", "Model body, revised.",
+		"Detail body.", "Detail body, revised.",
+	).Replace(specBody)
+	if err := updateRevision(t, s, doc.ID, revised); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+
+	want := []model.DocSection{
+		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Published: true},
+		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 2, Published: true},
+		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 2, Published: true},
+	}
+	if got := docSections(t, s, doc.ID); !slices.Equal(got, want) {
+		t.Errorf("sections =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// TestDocAcceptSupersedesEveryReplacedDoc: a document replacing several
+// accepted documents flips and logs all of them, not just the first — the
+// flip is one UPDATE ... RETURNING over the target set.
+func TestDocAcceptSupersedesEveryReplacedDoc(t *testing.T) {
+	s := openDocStore(t)
+	var replaced []int64
+	for _, spec := range []struct {
+		number int
+		slug   string
+	}{{6, "006-old"}, {7, "007-older"}, {8, "008-oldest"}} {
+		d := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: spec.number, Slug: spec.slug, Body: specBody,
+			CreatedBy: "stig", Status: "accepted",
+		})
+		replaced = append(replaced, d.ID)
+	}
+	body := "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n    - 007-older.md\n" +
+		"    - 008-oldest.md\n---\n\n# New\n\n## 1. Scope {#sec-1}\n\na\n"
+	newDoc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", Body: body, CreatedBy: "stig",
+	})
+
+	if _, _, err := acceptDoc(t, s, newDoc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	for _, id := range replaced {
+		got, err := s.GetDoc(t.Context(), id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Status != "superseded" {
+			t.Errorf("doc %d status = %q, want superseded", id, got.Status)
+		}
+		entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(id, 10))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 2 || !strings.Contains(entries[1].Change, `"superseded"`) {
+			t.Errorf("doc %d state log = %+v, want a superseded entry", id, entries)
+		}
+	}
+}
+
 // TestDocAcceptRevisionWrongActorForbidden: the revision accept is gated like
 // the first one.
 func TestDocAcceptRevisionWrongActorForbidden(t *testing.T) {
