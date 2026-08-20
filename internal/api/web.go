@@ -295,7 +295,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		refs[i].URL = "/blob/" + refs[i].Hash
 	}
 
-	view := taskView(t, blocked[id], entries, out, in)
+	view := taskView(s.mdcache, t, blocked[id], entries, out, in)
 	view.Attachments = refs
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
