@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
@@ -108,4 +109,105 @@ func TestInsertBlobIdempotent(t *testing.T) {
 	if _, err := s.GetBlob(ctx, strings.Repeat("f", 64)); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetBlob(missing) error = %v, want ErrNotFound", err)
 	}
+}
+
+// TestReconcileEmbedded asserts the derived half of the reference graph:
+// embedded tracks the body exactly, and a row that ends up neither embedded
+// nor attached is deleted rather than left to violate the CHECK.
+func TestReconcileEmbedded(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := seedTask(t, s, "WL-1"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// created_by references actors(id); ReconcileEmbedded and AttachBlob
+	// enforce that FK, so the actor must exist before either is called.
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+	h1 := "a1" + strings.Repeat("0", 62)
+	h2 := "b2" + strings.Repeat("0", 62)
+	for _, h := range []string{h1, h2} {
+		if _, err := s.InsertBlob(ctx, h, "image/png", 1); err != nil {
+			t.Fatalf("insert blob: %v", err)
+		}
+	}
+
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return ReconcileEmbedded(tx, s.Now(), "WL-1", []string{h1, h2}, "alice")
+	}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if got := mustListHashes(t, s, "WL-1"); len(got) != 2 {
+		t.Fatalf("after first reconcile: %v, want 2", got)
+	}
+
+	// Drop h2 from the body: its row must go.
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return ReconcileEmbedded(tx, s.Now(), "WL-1", []string{h1}, "alice")
+	}); err != nil {
+		t.Fatalf("reconcile 2: %v", err)
+	}
+	got := mustListHashes(t, s, "WL-1")
+	if len(got) != 1 || got[0] != h1 {
+		t.Fatalf("after second reconcile: %v, want [%s]", got, h1)
+	}
+}
+
+// TestAttachSurvivesBodyEdit is the declared half: an attached blob is not
+// in the body, so reconciliation must not touch it.
+func TestAttachSurvivesBodyEdit(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := seedTask(t, s, "WL-2"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// created_by references actors(id); ReconcileEmbedded and AttachBlob
+	// enforce that FK, so the actor must exist before either is called.
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+	h := "cc" + strings.Repeat("0", 62)
+	if _, err := s.InsertBlob(ctx, h, "text/plain", 5); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if err := s.AttachBlob(ctx, "WL-2", h, "crash.log", "alice"); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return ReconcileEmbedded(tx, s.Now(), "WL-2", nil, "alice")
+	}); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	refs, err := s.ListTaskBlobs(ctx, "WL-2")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(refs) != 1 || refs[0].Embedded || !refs[0].Attached {
+		t.Fatalf("refs = %+v, want one attached, non-embedded row", refs)
+	}
+	if refs[0].Filename != "crash.log" || refs[0].MediaType != "text/plain" {
+		t.Fatalf("refs[0] = %+v, want filename and media type joined in", refs[0])
+	}
+
+	if err := s.DetachBlob(ctx, "WL-2", h); err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+	if refs, _ := s.ListTaskBlobs(ctx, "WL-2"); len(refs) != 0 {
+		t.Fatalf("after detach: %+v, want none", refs)
+	}
+}
+
+func mustListHashes(t *testing.T, s *Store, taskID string) []string {
+	t.Helper()
+	refs, err := s.ListTaskBlobs(context.Background(), taskID)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var out []string
+	for _, r := range refs {
+		out = append(out, r.Hash)
+	}
+	return out
 }
