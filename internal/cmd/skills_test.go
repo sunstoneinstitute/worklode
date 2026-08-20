@@ -15,6 +15,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -320,7 +321,8 @@ func TestSkillsInstallHashMismatch(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(root, "tdd")); err == nil {
 		t.Fatalf("skills install left a symlink at %s despite the hash mismatch", filepath.Join(root, "tdd"))
 	}
-	entries, _ := os.ReadDir(filepath.Join(root, ".store"))
+	storeDir := filepath.Join(filepath.Dir(root), "store")
+	entries, _ := os.ReadDir(storeDir)
 	for _, e := range entries {
 		if e.Name() == badHash {
 			t.Fatalf("skills install left a store dir for the mismatched hash: %s", e.Name())
@@ -359,5 +361,103 @@ func TestSkillsInstallDeletedWarnsOnStderr(t *testing.T) {
 	}
 	if string(got) != content {
 		t.Fatalf("installed SKILL.md = %q, want %q", got, content)
+	}
+}
+
+// TestSkillsInstallLink drives `skills install --link`, which needs a real
+// store.Store behind skillsTestServer, so it needs Postgres — it skips on
+// this machine and runs for real in CI (pgvector runner).
+func TestSkillsInstallLink(t *testing.T) {
+	st, _, _, _ := skillsTestServer(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	_, content := seedInstallableSkill(t, st, "tdd")
+
+	out, err := runLode(t, "skills", "install", "tdd", "--link", claudeCode)
+	if err != nil {
+		t.Fatalf("skills install --link claude-code: %v\noutput: %s", err, out)
+	}
+	linkedSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
+	got, err := os.ReadFile(filepath.Join(linkedSkill, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read published SKILL.md at %s: %v", linkedSkill, err)
+	}
+	if string(got) != content {
+		t.Fatalf("published SKILL.md = %q, want %q", got, content)
+	}
+
+	// --link all touches every registered adapter's personal target, not
+	// just claude-code's.
+	homeDir2 := t.TempDir()
+	t.Setenv("HOME", homeDir2)
+	if out, err := runLode(t, "skills", "install", "tdd", "--link", "all"); err != nil {
+		t.Fatalf("skills install --link all: %v\noutput: %s", err, out)
+	}
+	for _, id := range harness.IDs() {
+		h, ok := harness.Get(id)
+		if !ok {
+			continue
+		}
+		targets, err := h.SkillTargets("", harness.ScopeLocal)
+		if err != nil {
+			t.Fatalf("%s SkillTargets: %v", id, err)
+		}
+		for _, target := range targets {
+			path := target.Dir
+			if target.PerSkill {
+				path = filepath.Join(target.Dir, "tdd")
+			}
+			if _, err := os.Lstat(path); err != nil {
+				t.Fatalf("%s: %s not published by --link all: %v", id, path, err)
+			}
+		}
+	}
+
+	// --link nonsense errors naming the registered ids and "all".
+	_, err = runLode(t, "skills", "install", "tdd", "--link", "nonsense")
+	if err == nil {
+		t.Fatal("skills install --link nonsense: want an error")
+	}
+	for _, id := range harness.IDs() {
+		if !strings.Contains(err.Error(), id) {
+			t.Fatalf("error %q does not name adapter %s", err.Error(), id)
+		}
+	}
+	if !strings.Contains(err.Error(), "all") {
+		t.Fatalf("error %q does not name \"all\"", err.Error())
+	}
+}
+
+// TestSkillsInstallLinkContinuesAfterOneTargetFails pins publishLinked's
+// record-and-continue stance: amp is first in harness.IDs() and shares
+// ~/.agents/skills with codex and copilot, so blocking that target (a
+// regular file where the directory should go) fails amp's publish before
+// claude-code's distinct ~/.claude/skills target is even reached. The
+// command must still succeed and still publish to claude-code's target —
+// one bad target must not stop --link all from reaching the rest. Needs
+// Postgres via skillsTestServer; skips locally, runs in CI.
+func TestSkillsInstallLinkContinuesAfterOneTargetFails(t *testing.T) {
+	st, _, _, _ := skillsTestServer(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	seedInstallableSkill(t, st, "tdd")
+
+	// A regular file at ~/.agents blocks MkdirAll(~/.agents/skills), so
+	// amp's (and codex's and copilot's) PublishDirLink call fails.
+	if err := os.WriteFile(filepath.Join(homeDir, ".agents"), []byte("not a dir"), 0o644); err != nil {
+		t.Fatalf("seed foreign .agents file: %v", err)
+	}
+
+	out, err := runLode(t, "skills", "install", "tdd", "--link", "all")
+	if err != nil {
+		t.Fatalf("skills install --link all (one target blocked): %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "amp:") {
+		t.Fatalf("output = %q, want a reported failure for amp's blocked target", out)
+	}
+
+	claudeSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
+	if _, err := os.Lstat(claudeSkill); err != nil {
+		t.Fatalf("%s not published despite amp's earlier failure: %v", claudeSkill, err)
 	}
 }

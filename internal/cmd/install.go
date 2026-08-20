@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/harness"
+	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -33,6 +34,11 @@ type hookTargets struct {
 	vcs        string
 	agents     []string
 	statusLine bool
+	// skills is --skills: publish the local skill store into every
+	// registered adapter's skill directories. Independent of agents — it
+	// writes outside the hook config (spec 008 §3.2) and runs for every
+	// registered adapter regardless of which ones agents names.
+	skills bool
 }
 
 // addHookFlags declares the flags shared by `lode install` and `lode uninstall`.
@@ -47,6 +53,8 @@ func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("statusline", true,
 		"manage the agent's status line, pointing it at 'lode statusline'")
 	cmd.Flags().Bool("no-statusline", false, "skip the agent's status line")
+	cmd.Flags().Bool("skills", false,
+		"publish the Worklode skill store into every harness's skill directories")
 	cmd.Flags().String("scope", harness.ScopeLocal,
 		"whether to write each harness's personal config or its committed one: local or "+
 			"project (Claude Code settings.local.json vs settings.json, Copilot "+
@@ -71,6 +79,7 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 	noAgent, _ := flags.GetBool("no-agent")
 	statusLine, _ := flags.GetBool("statusline")
 	noStatusLine, _ := flags.GetBool("no-statusline")
+	skills, _ := flags.GetBool("skills")
 
 	if noVCS && flags.Changed("vcs") {
 		return hookTargets{}, errors.New("--vcs and --no-vcs are mutually exclusive")
@@ -113,13 +122,18 @@ func resolveHookTargets(cmd *cobra.Command) (hookTargets, error) {
 			return hookTargets{}, unsupportedAgentError("")
 		}
 	}
-	if vcs == "" && len(agents) == 0 {
-		return hookTargets{}, errors.New("nothing to do: --no-vcs and --no-agent were both given")
+	// --skills is independent of vcs/agents (it writes outside the hook
+	// config), so it counts toward "there is something to do" too — --no-vcs
+	// --no-agent --skills is exactly how to publish skills without touching
+	// hook config at all, and must not be rejected as a no-op.
+	if vcs == "" && len(agents) == 0 && !skills {
+		return hookTargets{}, errors.New(
+			"nothing to do: --no-vcs and --no-agent were both given (add --skills to publish the skill store)")
 	}
 	if noStatusLine || len(agents) == 0 {
 		statusLine = false
 	}
-	return hookTargets{vcs: vcs, agents: agents, statusLine: statusLine}, nil
+	return hookTargets{vcs: vcs, agents: agents, statusLine: statusLine, skills: skills}, nil
 }
 
 // normalizeAgents dedupes --agent (preserving the order given) and validates
@@ -203,6 +217,9 @@ type installResult struct {
 	// Instructions is the repo-level AGENTS.md/CLAUDE.md pair, not a
 	// per-harness integration: nil when there was no repo root to write to.
 	Instructions *instructionsResult `json:"instructions,omitempty"`
+	// Skills is one entry per --skills publish target (spec 008 acceptance
+	// 9), empty/omitted when --skills was not given.
+	Skills []skillstore.PublishResult `json:"skills,omitempty"`
 }
 
 type vcsInstall struct {
@@ -320,6 +337,12 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		}
 	}
 
+	if targets.skills {
+		if err := installSkills(&res, dir); err != nil {
+			return res, err
+		}
+	}
+
 	// The managed block is repo-level, not per-harness, so it is written once
 	// whatever the agent selection was (spec 008 §17.7). Outside a git repo
 	// there is no root to anchor it to; warn and carry on, the same posture
@@ -335,6 +358,86 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 			"warning: %s is not inside a git repository; skipped the %s block\n", dir, agentsFile)
 	}
 	return res, nil
+}
+
+// skillTargets collects the union of every registered adapter's skill
+// directories — harness.IDs(), not just those detected or named by --agent:
+// acceptance 9 (spec 008) wants every doorway open from one command, the
+// links are inert for a harness that is not installed, and one installed
+// later then just works. Deduped by Dir, first-seen wins: today three of the
+// four adapters report ~/.agents/skills with PerSkill=false and claude-code
+// alone reports a distinct Dir with PerSkill=true, so no two adapters ever
+// disagree about the same Dir's PerSkill-ness — first-seen-wins is safe only
+// because that invariant holds. The check below turns a future adapter that
+// broke it into an error here rather than a silently wrong publish action.
+func skillTargets(dir string) ([]harness.SkillTarget, error) {
+	seen := map[string]bool{} // Dir -> the PerSkill value it was first seen with
+	var out []harness.SkillTarget
+	for _, id := range harness.IDs() {
+		h, ok := harness.Get(id)
+		if !ok {
+			continue
+		}
+		targets, err := h.SkillTargets(dir, harness.ScopeLocal)
+		if err != nil {
+			return nil, fmt.Errorf("skill targets for %s: %w", id, err)
+		}
+		for _, t := range targets {
+			if perSkill, ok := seen[t.Dir]; ok {
+				if perSkill != t.PerSkill {
+					return nil, fmt.Errorf(
+						"skill target %s: %s reports PerSkill=%v, disagreeing with an earlier adapter",
+						t.Dir, id, t.PerSkill)
+				}
+				continue
+			}
+			seen[t.Dir] = t.PerSkill
+			out = append(out, t)
+		}
+	}
+	return out, nil
+}
+
+// installSkills publishes the local skill store into every target
+// skillTargets names: a PerSkill target gets one link per skill inside it
+// (skillstore.PublishPerSkill), any other target becomes a symlink to the
+// store's links dir (skillstore.PublishDirLink). A publish error on one
+// target is recorded in that target's result and the loop continues,
+// mirroring installHooks' own install-is-not-atomic reporting stance.
+func installSkills(res *installResult, dir string) error {
+	dirs, err := skillstore.DefaultDirs()
+	if err != nil {
+		return err
+	}
+	targets, err := skillTargets(dir)
+	if err != nil {
+		return err
+	}
+	for _, t := range targets {
+		var (
+			pr   skillstore.PublishResult
+			perr error
+		)
+		if t.PerSkill {
+			pr, perr = skillstore.PublishPerSkill(dirs, t.Dir)
+			// PublishPerSkill reports "linked" for an individual entry; a
+			// PerSkill target normalizes that to "per-skill" so reportInstall
+			// never claims the whole dir (e.g. ~/.claude/skills) was replaced
+			// with a symlink into the store (spec 008 §17.3).
+			if pr.Action == "linked" {
+				pr.Action = "per-skill"
+			}
+		} else {
+			pr, perr = skillstore.PublishDirLink(dirs, t.Dir)
+		}
+		if perr != nil {
+			pr.Path = t.Dir
+			pr.Action = "skipped"
+			pr.Skips = append(pr.Skips, perr.Error())
+		}
+		res.Skills = append(res.Skills, pr)
+	}
+	return nil
 }
 
 // uninstallHooks removes every selected integration from the repo containing
@@ -408,7 +511,13 @@ func newInstallCmd() *cobra.Command {
 			"worktree config extension that lets it read a workspace's own worklode.task-id. That " +
 			"is safe to have on by default because it never takes a slot it does not already own: " +
 			"the slot holds exactly one command, so a status line someone else configured is " +
-			"reported and left alone. Use --no-statusline to skip it entirely.",
+			"reported and left alone. Use --no-statusline to skip it entirely.\n\n" +
+			"--skills publishes the local skill store (~/.worklode/skills) into every registered " +
+			"harness's skill directory in one pass — Codex, Copilot and Amp through ~/.agents/skills, " +
+			"Claude Code through ~/.claude/skills/<name> — for every registered adapter, not just " +
+			"ones detected for this repo, so a harness installed later just works. It is off by " +
+			"default because it writes outside the hook config; a real directory already at a " +
+			"target is never replaced, only linked into per-skill.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			targets, err := resolveHookTargets(cmd)
@@ -452,7 +561,11 @@ func newUninstallCmd() *cobra.Command {
 			"supported harness, and naming one explicitly acts on it whether or not it is " +
 			"detected.\n\n" +
 			"The agent side also removes the status line, but only if it is ours; one someone else " +
-			"configured is reported and left alone. Use --no-statusline to leave ours in place.",
+			"configured is reported and left alone. Use --no-statusline to leave ours in place.\n\n" +
+			"--skills is accepted but does nothing here: skill links are inert data outside the " +
+			"hook config, publishing them was an explicit opt-in, and removing entries under " +
+			"~/.claude/skills risks deleting content the user put there themselves. Uninstall never " +
+			"removes what --skills published.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			targets, err := resolveHookTargets(cmd)
@@ -519,6 +632,29 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 			fmt.Fprintf(out, "%s: kept the status line already configured in %s\n", sl.Agent, sl.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
+		}
+	}
+	if len(res.Skills) > 0 {
+		dirs, _ := skillstore.DefaultDirs() // best-effort: only for the "linked" line's arrow
+		for _, s := range res.Skills {
+			switch s.Action {
+			case "linked":
+				fmt.Fprintf(out, "skills: linked %s -> %s\n", s.Path, dirs.Links)
+			case "per-skill":
+				fmt.Fprintf(out, "skills: linked skills individually in %s\n", s.Path)
+			case "copied":
+				fmt.Fprintf(out, "skills: copied skills into %s (symlinks unavailable)\n", s.Path)
+			case "unchanged":
+				fmt.Fprintf(out, "skills: %s already up to date\n", s.Path)
+			case "skipped":
+				reason := "exists, not ours"
+				if len(s.Skips) > 0 {
+					reason = strings.Join(s.Skips, ", ")
+				}
+				fmt.Fprintf(out, "skills: skipped %s (%s)\n", s.Path, reason)
+			default:
+				fmt.Fprintf(out, "skills: unexpected publish result %q in %s\n", s.Action, s.Path)
+			}
 		}
 	}
 	if i := res.Instructions; i != nil {

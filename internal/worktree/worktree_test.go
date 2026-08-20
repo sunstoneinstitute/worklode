@@ -570,6 +570,42 @@ func TestCurrentBranchAndIsClean(t *testing.T) {
 	}
 }
 
+func TestExcludeFile(t *testing.T) {
+	dir := initGitRepo(t)
+
+	p, err := worktree.ExcludeFile(dir)
+	if err != nil {
+		t.Fatalf("ExcludeFile: %v", err)
+	}
+	if want := filepath.Join(dir, ".git", "info", "exclude"); p != want {
+		t.Fatalf("ExcludeFile = %q, want %q", p, want)
+	}
+	if info, err := os.Stat(filepath.Dir(p)); err != nil || !info.IsDir() {
+		t.Fatalf("ExcludeFile parent dir missing: %v", err)
+	}
+}
+
+// TestExcludeFileLinkedWorktreeSharesCommonDir pins the reason ExcludeFile
+// uses --git-path rather than --git-dir: a linked worktree's own git dir is
+// private, but info/exclude lives in the COMMON dir, so every worktree of one
+// repo shares the same per-machine exclude file.
+func TestExcludeFileLinkedWorktreeSharesCommonDir(t *testing.T) {
+	dir := initGitRepo(t)
+	wt := addWorktreeUnderBase(t, dir, "WL-1-x")
+
+	mainExcl, err := worktree.ExcludeFile(dir)
+	if err != nil {
+		t.Fatalf("ExcludeFile(main): %v", err)
+	}
+	wtExcl, err := worktree.ExcludeFile(wt)
+	if err != nil {
+		t.Fatalf("ExcludeFile(linked worktree): %v", err)
+	}
+	if wtExcl != mainExcl {
+		t.Fatalf("ExcludeFile(linked worktree) = %q, want the main repo's %q", wtExcl, mainExcl)
+	}
+}
+
 func TestDefaultBranch(t *testing.T) {
 	dir := initGitRepo(t)
 
