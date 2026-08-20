@@ -31,15 +31,8 @@ func TestRenderMarkdownRawEndsInExactlyOneNewline(t *testing.T) {
 	}
 }
 
-// GLAMOUR_STYLE is set explicitly: with auto-style the test environment has no
-// TTY, so glamour would pick its plain "notty" style and nothing would be
-// styled.
 func TestRenderStyledFormatsMarkdown(t *testing.T) {
-	t.Setenv("GLAMOUR_STYLE", "dark")
-	out, err := renderStyled("# Heading\n\ntext\n", 80)
-	if err != nil {
-		t.Fatalf("renderStyled: %v", err)
-	}
+	out := renderStyled("# Heading\n\ntext\n", 80)
 	if !strings.Contains(out, "\x1b[") {
 		t.Fatalf("expected ANSI styling in output:\n%q", out)
 	}
@@ -50,11 +43,7 @@ func TestRenderStyledFormatsMarkdown(t *testing.T) {
 
 func TestRenderStyledWrapsToWidth(t *testing.T) {
 	body := strings.Repeat("word ", 60)
-	out, err := renderStyled(body, 40)
-	if err != nil {
-		t.Fatalf("renderStyled: %v", err)
-	}
-	for _, line := range strings.Split(out, "\n") {
+	for _, line := range strings.Split(renderStyled(body, 40), "\n") {
 		if len(line) > 40 {
 			t.Fatalf("line exceeds wrap width 40 (%d): %q", len(line), line)
 		}
