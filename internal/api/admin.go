@@ -78,14 +78,20 @@ func (s *server) listProjects(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	ids := make([]string, 0, len(ps))
+	for _, p := range ps {
+		ids = append(ids, p.ID)
+	}
+	// One query for every project's repos: ListRepos per row would be an N+1
+	// on a request that already listed the projects.
+	reposByProject, err := s.st.ListReposForProjects(r.Context(), ids)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
 	resp := model.ProjectListResponse{Projects: make([]model.Project, 0, len(ps))}
 	for _, p := range ps {
-		repos, err := s.st.ListRepos(r.Context(), p.ID)
-		if err != nil {
-			s.mapStoreErr(w, err)
-			return
-		}
-		resp.Projects = append(resp.Projects, toProjectJSON(&p, repos))
+		resp.Projects = append(resp.Projects, toProjectJSON(&p, reposByProject[p.ID]))
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
