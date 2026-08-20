@@ -1108,7 +1108,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 		t.Fatalf("brief.Skills.Warnings = %+v, want [pinned skill not found: ghost]", b.Skills.Warnings)
 	}
 
-	// Non-JSON rendering surfaces the same information via printBrief.
+	// Non-JSON rendering surfaces the same information via cli.BriefRender.
 	out, err = runLode(t, "task", "brief", task.ID)
 	if err != nil {
 		t.Fatalf("lode task brief (table): %v\noutput: %s", err, out)
@@ -1118,99 +1118,5 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	}
 	if !strings.Contains(out, "warning: pinned skill not found: ghost") {
 		t.Fatalf("brief output = %q, want the missing-skill warning", out)
-	}
-}
-
-// --- printBrief -------------------------------------------------------
-
-func TestPrintBriefRendersSkillsSection(t *testing.T) {
-	b := model.Brief{
-		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch: "WL-1-t",
-		Skills: model.SkillRecommendation{
-			Pinned:   []model.PinnedSkill{{Name: "tdd", Description: "Red-green-refactor"}},
-			Matches:  []model.SkillMatch{{Name: "debugging", Description: "Systematic debugging", Score: 0.87}},
-			Warnings: []string{"pinned skill not found: ghost"},
-			Provider: "openai-compatible",
-		},
-	}
-	buf := &bytes.Buffer{}
-	cmd := &cobra.Command{}
-	cmd.SetOut(buf)
-
-	printBrief(cmd, b)
-
-	out := buf.String()
-	if !strings.Contains(out, "Skills:") {
-		t.Fatalf("output = %q, want a Skills section", out)
-	}
-	if !strings.Contains(out, "pinned  tdd — Red-green-refactor (content in brief)") {
-		t.Fatalf("output = %q, want a rendered pinned line", out)
-	}
-	if !strings.Contains(out, "0.87    debugging — Systematic debugging") {
-		t.Fatalf("output = %q, want a rendered match line", out)
-	}
-	if !strings.Contains(out, "warning: pinned skill not found: ghost") {
-		t.Fatalf("output = %q, want a rendered warning line", out)
-	}
-}
-
-// A brief whose only skills content is warnings still prints them: a user who
-// misspelled every pin would otherwise see nothing, which is the one case the
-// warnings exist for.
-func TestPrintBriefRendersWarningsOnlySkillsSection(t *testing.T) {
-	b := model.Brief{
-		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch: "WL-1-t",
-		Skills: model.SkillRecommendation{
-			Warnings: []string{"pinned skill not found: ghost"},
-			Provider: "openai-compatible",
-		},
-	}
-	buf := &bytes.Buffer{}
-	cmd := &cobra.Command{}
-	cmd.SetOut(buf)
-
-	printBrief(cmd, b)
-
-	if out := buf.String(); !strings.Contains(out, "warning: pinned skill not found: ghost") {
-		t.Fatalf("output = %q, want the warning rendered", out)
-	}
-}
-
-func TestPrintBriefOmitsSkillsSectionWhenEmpty(t *testing.T) {
-	b := model.Brief{
-		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch: "WL-1-t",
-		Skills: model.SkillRecommendation{Provider: "none"},
-	}
-	buf := &bytes.Buffer{}
-	cmd := &cobra.Command{}
-	cmd.SetOut(buf)
-
-	printBrief(cmd, b)
-
-	if strings.Contains(buf.String(), "Skills:") {
-		t.Fatalf("output = %q, want no Skills section when there is nothing to show", buf.String())
-	}
-}
-
-// TestPrintBriefRendersBlockingPlans: the plans holding a task (025 §9.3) are
-// rendered even when they have minted no task to list under "blocked by".
-func TestPrintBriefRendersBlockingPlans(t *testing.T) {
-	b := model.Brief{
-		Task:          model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch:        "WL-1-t",
-		BlockingPlans: []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}},
-		Skills:        model.SkillRecommendation{Provider: "none"},
-	}
-	buf := &bytes.Buffer{}
-	cmd := &cobra.Command{}
-	cmd.SetOut(buf)
-
-	printBrief(cmd, b)
-
-	if out := buf.String(); !strings.Contains(out, "blocked by plans:\n  - plan-a: Plan A (draft)") {
-		t.Fatalf("output = %q, want the blocking plan rendered", out)
 	}
 }

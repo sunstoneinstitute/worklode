@@ -27,17 +27,20 @@ func dash(s string) string {
 	return s
 }
 
-// docNumber renders a document's number, or "-" for a plan, which carries
+// DocNumber renders a document's number, or "-" for a plan, which carries
 // none (025 §14.3).
-func docNumber(n int) string {
+func DocNumber(n int) string {
 	if n == 0 {
 		return "-"
 	}
 	return strconv.Itoa(n)
 }
 
-// localTime formats t in the local zone, or "-" for the zero value.
-func localTime(t time.Time) string {
+// LocalTime formats t in the local zone, or "-" for the zero value. Every
+// timestamp the CLI prints goes through it, including the one-line
+// confirmations in internal/cmd, so a lease expiry reads the same wherever it
+// appears.
+func LocalTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"
 	}
@@ -92,7 +95,7 @@ func Money(amount string) string {
 // "active" while running, "ended <ts>" once closed.
 func sessionStatus(sess model.AgentSession) string {
 	if sess.EndedAt != nil {
-		return "ended " + localTime(*sess.EndedAt)
+		return "ended " + LocalTime(*sess.EndedAt)
 	}
 	return "active"
 }
@@ -171,7 +174,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 		fmt.Fprintf(w, "  blocked:  yes\n")
 	}
 	if t.Lease != nil {
-		fmt.Fprintf(w, "  held by:  %s (expires %s)\n", t.Lease.ActorID, localTime(t.Lease.ExpiresAt))
+		fmt.Fprintf(w, "  held by:  %s (expires %s)\n", t.Lease.ActorID, LocalTime(t.Lease.ExpiresAt))
 		fmt.Fprintf(w, "  worktree: %s\n", t.Lease.Worktree)
 	}
 	if len(t.AgentSessions) > 0 {
@@ -180,7 +183,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 		fmt.Fprintln(tw, "    AGENT\tSESSION\tSTARTED\tSTATUS\tTOKENS\tCOST")
 		for _, sess := range t.AgentSessions {
 			fmt.Fprintf(tw, "    %s\t%s\t%s\t%s\t%s\t%s\n",
-				sess.Agent, sess.SessionID, localTime(sess.StartedAt),
+				sess.Agent, sess.SessionID, LocalTime(sess.StartedAt),
 				sessionStatus(sess), sessionTokens(sess), sessionCost(sess))
 		}
 		tw.Flush()
@@ -218,6 +221,80 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	}
 }
 
+// BriefRender prints a task's brief as a readable summary — the `lode task
+// brief` and `lode next` view.
+func BriefRender(w io.Writer, b model.Brief) {
+	fmt.Fprintf(w, "%s: %s\n", b.Task.ID, b.Task.Title)
+	fmt.Fprintf(w, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
+	fmt.Fprintf(w, "branch: %s\n", b.Branch)
+	if len(b.Task.Secrets) > 0 {
+		fmt.Fprintf(w, "secrets: %s\n", strings.Join(b.Task.Secrets, ", "))
+	}
+	if b.Lease != nil {
+		fmt.Fprintf(w, "lease: %s (expires %s)\n", b.Lease.Worktree, LocalTime(b.Lease.ExpiresAt))
+	}
+	BlockersRender(w, b.OpenBlockers, b.BlockingPlans)
+	if b.Body != "" {
+		fmt.Fprintln(w)
+		Markdown(w, b.Body)
+	}
+	// Warnings alone still print the section: a user who misspelled every pin
+	// would otherwise see nothing at all, which is exactly the case the
+	// warnings exist for.
+	if len(b.Skills.Pinned) > 0 || len(b.Skills.Matches) > 0 || len(b.Skills.Warnings) > 0 {
+		fmt.Fprintln(w, "\nSkills:")
+		for _, p := range b.Skills.Pinned {
+			fmt.Fprintf(w, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)
+		}
+		for _, m := range b.Skills.Matches {
+			fmt.Fprintf(w, "  %.2f    %s — %s\n", m.Score, m.Name, m.Description)
+		}
+		for _, warn := range b.Skills.Warnings {
+			fmt.Fprintf(w, "  warning: %s\n", warn)
+		}
+	}
+}
+
+// BlockersRender prints what is holding a task up, shared by `lode task
+// brief`, `lode next` and `lode status`. Each section is omitted when empty.
+func BlockersRender(w io.Writer, blockers []model.BriefBlocker, plans []model.DocRef) {
+	if len(blockers) > 0 {
+		fmt.Fprintln(w, "blocked by:")
+		for _, blk := range blockers {
+			fmt.Fprintf(w, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
+		}
+	}
+	if len(plans) > 0 {
+		fmt.Fprintln(w, "blocked by plans:")
+		for _, p := range plans {
+			fmt.Fprintf(w, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
+		}
+	}
+}
+
+// PinnedSkillList prints a task's pinned skills, one per line, or a note when
+// there are none — a bare blank line reads as a rendering bug, not "no pins".
+func PinnedSkillList(w io.Writer, skills []string) {
+	if len(skills) == 0 {
+		fmt.Fprintln(w, "(no pinned skills)")
+		return
+	}
+	fmt.Fprintln(w, strings.Join(skills, "\n"))
+}
+
+// TaskCostRender prints `lode task cost`: which task and scope, how many agent
+// sessions billed usage, then the cost blocks CostRender renders. window is the
+// human label for the requested period ("last 7 days", "all time").
+func TaskCostRender(w io.Writer, tc model.TaskCost, window string) {
+	if tc.IncludesChildren {
+		fmt.Fprintf(w, "%s (including child tasks)\n", tc.Task)
+	} else {
+		fmt.Fprintf(w, "%s\n", tc.Task)
+	}
+	fmt.Fprintf(w, "sessions with recorded usage: %d\n", tc.Sessions)
+	CostRender(w, tc.Cost, window)
+}
+
 // DocTable prints one row per document: id, kind, number, slug, title,
 // status, version. Number is "-" for a plan, which carries none (025 §14.3).
 func DocTable(w io.Writer, docs []model.Doc) {
@@ -231,7 +308,7 @@ func DocTable(w io.Writer, docs []model.Doc) {
 		column{header: "VERSION"},
 	)
 	for _, d := range docs {
-		tbl.add(strconv.FormatInt(d.ID, 10), d.Kind, docNumber(d.Number), d.Slug, d.Title,
+		tbl.add(strconv.FormatInt(d.ID, 10), d.Kind, DocNumber(d.Number), d.Slug, d.Title,
 			d.Status, strconv.Itoa(d.Version))
 	}
 	tbl.flush(w)
@@ -289,7 +366,7 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 	)
 	for _, d := range docs {
 		sections, anchors := gapsOf(d)
-		tbl.add(strconv.FormatInt(d.ID, 10), docNumber(d.Number), d.Slug, d.Title,
+		tbl.add(strconv.FormatInt(d.ID, 10), DocNumber(d.Number), d.Slug, d.Title,
 			fmt.Sprintf("%d/%d", len(anchors), sections),
 			strings.Join(anchors, " "))
 	}
@@ -313,7 +390,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	}
 	fmt.Fprintf(w, "  assignee: %s\n", dash(d.Assignee))
 	if d.Revision != nil {
-		fmt.Fprintf(w, "  open revision: by %s at %s\n", d.Revision.CreatedBy, localTime(d.Revision.CreatedAt))
+		fmt.Fprintf(w, "  open revision: by %s at %s\n", d.Revision.CreatedBy, LocalTime(d.Revision.CreatedAt))
 	}
 	if len(d.Sections) > 0 {
 		fmt.Fprintln(w, "\n  sections:")
@@ -385,6 +462,133 @@ func ProjectTable(w io.Writer, projects []model.Project) {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.ID, p.Key, p.Name, strings.Join(repos, ", "))
 	}
 	tw.Flush()
+}
+
+// ProjectDetailRender prints `lode project show`: the project's identity,
+// focus, and repos, then one cost block per currency. window is the human
+// label for the cost period.
+func ProjectDetailRender(w io.Writer, d model.ProjectDetail, window string) {
+	fmt.Fprintf(w, "%s%s — %s\n", d.ID, KeySuffix(d.Key), d.Name)
+	FocusLine(w, d.Focus)
+	if len(d.Repos) > 0 {
+		fmt.Fprintln(w, "repos:")
+		tw := newTabwriter(w)
+		for _, r := range d.Repos {
+			fmt.Fprintf(tw, "  %s\tdone: %s\n", r.Repo, r.DoneState)
+		}
+		tw.Flush()
+	}
+	CostRender(w, d.Cost, window)
+}
+
+// FocusLine writes the "focus: a, b" (or "focus: (none)") line for a project's
+// ranking focus.
+func FocusLine(w io.Writer, focus []string) {
+	if len(focus) == 0 {
+		fmt.Fprintln(w, "focus: (none)")
+		return
+	}
+	fmt.Fprintf(w, "focus: %s\n", strings.Join(focus, ", "))
+}
+
+// KeySuffix renders " (WL)" for a known task-id key, or nothing.
+func KeySuffix(key string) string {
+	if key == "" {
+		return ""
+	}
+	return " (" + key + ")"
+}
+
+// CostRender writes one block per currency: a headline total, a row per day,
+// and — when some tokens were billed on a model with no price on file — the
+// shortfall that headline therefore omits.
+func CostRender(w io.Writer, cost model.CostReport, window string) {
+	if len(cost.Totals) == 0 {
+		fmt.Fprintf(w, "\ncost, %s: none recorded\n", window)
+		return
+	}
+	// No currency symbol: a vendor need not bill in dollars, and one block per
+	// currency already names it in the header. "$12.000000 EUR" is the kind of
+	// wrong a symbol table earns you.
+	for _, total := range cost.Totals {
+		fmt.Fprintf(w, "\ncost, %s: %s %s\n", window, Money(total.CostAmount), total.Currency)
+		tw := newTabwriter(w)
+		for _, d := range cost.Days {
+			if d.Currency != total.Currency {
+				continue
+			}
+			fmt.Fprintf(tw, "  %s\t%s\tin %s\tcache-w %s\tcache-r %s\tout %s\n",
+				d.Day, Money(d.CostAmount),
+				HumanTokens(d.InputTokens),
+				HumanTokens(d.CacheWrite5mTokens+d.CacheWrite1hTokens),
+				HumanTokens(d.CacheReadTokens),
+				HumanTokens(d.OutputTokens))
+		}
+		tw.Flush()
+		if total.UnpricedTokens > 0 {
+			fmt.Fprintf(w, "note: %s tokens from models with no price on file are excluded from the total.\n",
+				HumanTokens(total.UnpricedTokens))
+		}
+	}
+}
+
+// ReposDoctorRender prints `lode project doctor`: per mapped repo, whether the
+// GitHub App check ran and what it found, when the last delivery arrived, and
+// the reconcile hint for a repo that has never delivered. Senders that map to
+// no project follow.
+func ReposDoctorRender(w io.Writer, resp model.ReposDoctorResponse) {
+	for _, r := range resp.Repos {
+		// A nil app_installed means the check did not run; the reason is in
+		// app_error when there is one, and its absence means no GitHub App is
+		// configured at all.
+		app := "unchecked (no GitHub App configured)"
+		switch {
+		case r.AppInstalled == nil && r.AppError != "":
+			app = "unchecked (" + r.AppError + ")"
+		case r.AppInstalled != nil && *r.AppInstalled:
+			app = "installed"
+		case r.AppInstalled != nil:
+			app = "NOT INSTALLED (" + r.AppError + ")"
+		}
+		last := "never"
+		if r.LastEventAt != nil {
+			last = LocalTime(*r.LastEventAt)
+		}
+		fmt.Fprintf(w, "%s (project %s)\n", r.Repo, r.Project)
+		fmt.Fprintf(w, "  app:        %s\n", app)
+		fmt.Fprintf(w, "  last event: %s (types: %s)\n", last, strings.Join(r.EventTypes, ", "))
+		fmt.Fprintf(w, "  unapplied:  %d\n", r.UnappliedEvents)
+		if r.Stale {
+			fmt.Fprintf(w, "  STALE: no delivery since mapping — run `lode reconcile --repo %s`\n", r.Repo)
+		}
+	}
+	for _, u := range resp.UnmappedSenders {
+		fmt.Fprintf(w, "unmapped sender: %s (%d events, last %s)\n",
+			u.Repo, u.Events, LocalTime(u.LastEventAt))
+	}
+}
+
+// ReconcileRender prints `lode reconcile`: the run id, what the replay pass
+// repaired (or would repair, on a dry run), and what the poll pass did.
+func ReconcileRender(w io.Writer, resp model.ReconcileResponse) {
+	verb := "repaired"
+	if resp.DryRun {
+		verb = "would repair"
+	}
+	fmt.Fprintf(w, "run %s\n", resp.RunID)
+	if resp.Replay != nil {
+		fmt.Fprintf(w, "replay: %s %d of %d candidate event(s), %d still unmapped\n",
+			verb, resp.Replay.Replayed, resp.Replay.Candidates, resp.Replay.StillUnmapped)
+		for _, e := range resp.Replay.Errors {
+			fmt.Fprintf(w, "  error: %s\n", e)
+		}
+	}
+	switch {
+	case resp.PollSkipped != "":
+		fmt.Fprintf(w, "poll: skipped (%s)\n", resp.PollSkipped)
+	case resp.Poll != nil:
+		fmt.Fprintf(w, "poll: %v\n", resp.Poll)
+	}
 }
 
 // CrewTable renders a project's Crew roster: name, roles comma-joined, and a
@@ -536,7 +740,7 @@ func BoardRender(w io.Writer, board model.BoardResponse) {
 			titleColumn("MESSAGE"),
 		)
 		for _, e := range board.RecentFailures {
-			tbl.add(localTime(e.OccurredAt), e.Cluster, e.Kind, e.Workload, e.Message)
+			tbl.add(LocalTime(e.OccurredAt), e.Cluster, e.Kind, e.Workload, e.Message)
 		}
 		tbl.flush(w)
 	}
@@ -648,7 +852,7 @@ func TimelineRender(w io.Writer, entries []model.TimelineEntry) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "TIME\tTYPE\tSUMMARY")
 	for _, e := range entries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", localTime(e.At), e.Type, timelineSummary(e))
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", LocalTime(e.At), e.Type, timelineSummary(e))
 	}
 	tw.Flush()
 }
@@ -719,7 +923,7 @@ func EventTable(w io.Writer, events []model.Event) {
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "ID\tRECEIVED\tSOURCE\tTYPE\tEXTERNAL_ID")
 	for _, e := range events {
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", e.ID, localTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", e.ID, LocalTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
 	}
 	tw.Flush()
 }
@@ -737,7 +941,7 @@ func EventStreamHeader(w io.Writer) {
 
 // EventStreamRow prints one streamed event in EventTable's column order.
 func EventStreamRow(w io.Writer, e model.Event) {
-	fmt.Fprintf(w, eventStreamRowFmt, e.ID, localTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
+	fmt.Fprintf(w, eventStreamRowFmt, e.ID, LocalTime(e.ReceivedAt), e.Source, e.Type, e.ExternalID)
 }
 
 // EventSubscriberTable prints one row per subscriber: name, offsets, lag,
@@ -752,7 +956,7 @@ func EventSubscriberTable(w io.Writer, subs []model.EventSubscriberStatus) {
 			holder = strconv.FormatInt(s.HolderPID, 10)
 		}
 		fmt.Fprintf(tw, "%s\t%d\t%d\t%d\t%s\t%s\n",
-			s.Name, s.LastReadOffset, s.LastAckedOffset, s.Lag, holder, localTime(s.UpdatedAt))
+			s.Name, s.LastReadOffset, s.LastAckedOffset, s.Lag, holder, LocalTime(s.UpdatedAt))
 	}
 	tw.Flush()
 }
