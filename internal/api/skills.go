@@ -160,10 +160,9 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // starting work.
 func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]model.SkillMatch, []string) {
 	matches := []model.SkillMatch{}
-	switch {
-	case limit <= 0:
+	if limit <= 0 {
 		limit = defaultSkillLimit
-	case limit > maxSkillLimit:
+	} else if limit > maxSkillLimit {
 		limit = maxSkillLimit
 	}
 	if s.embedder == nil {
@@ -221,6 +220,9 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 	if s.skillSyncPending.CompareAndSwap(true, false) {
 		go s.runSkillSync(s.bgCtx, "coalesced after admin sync")
 	}
+	report := model.SkillSyncReport{
+		Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
+	}
 	if err != nil {
 		// Logged unconditionally: a caller that drops the response (or gets
 		// the generic 502 below) must not be the only record of this.
@@ -234,15 +236,9 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		// Partial failure: real work happened alongside the failures, so it
 		// is reported rather than discarded.
-		writeJSON(w, http.StatusOK, model.SkillSyncReport{
-			Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
-			Errors: joinedMessages(err),
-		})
-		return
+		report.Errors = joinedMessages(err)
 	}
-	writeJSON(w, http.StatusOK, model.SkillSyncReport{
-		Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
-	})
+	writeJSON(w, http.StatusOK, report)
 }
 
 // joinedMessages splits an errors.Join result back into its parts. SyncAll

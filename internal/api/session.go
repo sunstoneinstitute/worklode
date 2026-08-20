@@ -1,7 +1,7 @@
 // session.go implements the web UI's stateless auth cookies, all signed under
 // LODE_SESSION_SECRET (there is no server-side session store):
 //   - the session cookie: {username, expiry}, ~12h, set after a successful
-//     login and checked by webAuth on every gated web request.
+//     login and checked by webGuard on every gated web request.
 //   - the oauth-state cookie: {state, PKCE verifier, next, expiry}, short-lived,
 //     set at /auth/login and consumed at /auth/callback.
 //
@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,26 @@ const (
 	sessionLifetime   = 12 * time.Hour
 	oauthStateMaxAge  = 10 * time.Minute
 )
+
+// setAuthCookie sets one of the signed auth cookies with the flags they all
+// share. Spelled once so a cookie added later cannot quietly ship without
+// HttpOnly, Secure, or SameSite.
+func setAuthCookie(w http.ResponseWriter, name, path, value string, ttl time.Duration) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     path,
+		MaxAge:   int(ttl.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// clearAuthCookie expires one of the transient /auth/ cookies.
+func clearAuthCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{Name: name, Path: "/auth/", MaxAge: -1})
+}
 
 // hmacSHA256 returns HMAC-SHA256(secret, msg).
 func hmacSHA256(secret string, msg []byte) []byte {

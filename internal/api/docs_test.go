@@ -87,15 +87,7 @@ Do the second thing.
 // cases that need a second identity (the accept gate is assignee-only).
 func docActor(t *testing.T, st *store.Store, id string) string {
 	t.Helper()
-	ctx := context.Background()
-	if err := st.CreateActor(ctx, id, "human", id, false); err != nil {
-		t.Fatalf("create actor %s: %v", id, err)
-	}
-	token, err := st.CreateToken(ctx, id, "test token", nil)
-	if err != nil {
-		t.Fatalf("create token for %s: %v", id, err)
-	}
-	return token
+	return seedActor(t, st, id, "human", id, false)
 }
 
 // createDocViaAPI posts a document and fails unless it lands.

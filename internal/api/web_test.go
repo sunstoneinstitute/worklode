@@ -835,13 +835,7 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 	if err := st.CreateActor(ctx, "dana", "human", "Dana", false); err != nil {
 		t.Fatalf("create actor dana: %v", err)
 	}
-	if err := st.CreateActor(ctx, "agent-one", "agent", "Agent One", false); err != nil {
-		t.Fatalf("create actor agent-one: %v", err)
-	}
-	agentToken, err := st.CreateToken(ctx, "agent-one", "test token", nil)
-	if err != nil {
-		t.Fatalf("create token for agent-one: %v", err)
-	}
+	agentToken := seedActor(t, st, "agent-one", "agent", "Agent One", false)
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Owned and delegated", "priority": "medium", "kind": "feature",
 	})

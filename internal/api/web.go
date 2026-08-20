@@ -4,7 +4,7 @@
 // global destinations and the project-local destinations spec 032 §2 defines)
 // and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
 // from internal/ui — see assetHandler). When OIDC is configured every page
-// route except /assets/ is gated by s.webAuth (see oidcweb.go), which
+// route except /assets/ is gated by webGuard (see authz.go), which
 // requires a valid session cookie; /assets/ stays open unconditionally and,
 // when OIDC is unconfigured, every route stays open and the bind address is
 // the only access control. Each handler maps the read model into a ui view
@@ -27,7 +27,7 @@ import (
 )
 
 // assetHandler serves internal/ui's embedded /assets/ tree (stylesheet and
-// self-hosted fonts) outside webAuth: they carry no project data, so an
+// self-hosted fonts) outside webGuard: they carry no project data, so an
 // OIDC-gated deployment must not redirect them to login (a stylesheet
 // request has no session to attach a redirect to). Cache-Control is bounded
 // (an hour) rather than immutable/forever, since asset filenames are not
@@ -60,8 +60,12 @@ func navOutcome(status int) string {
 
 // navWrap wraps a web handler to record one worklode_web_navigation_requests_total
 // observation for the given destination, classified from the handler's final
-// HTTP status code.
+// HTTP status code. It also collects the destination, so initNavMetrics can
+// pre-initialise exactly the series the registered routes can emit — the list
+// used to be restated by hand in metrics.go, where a new page silently
+// shipped without its zero-series.
 func (s *server) navWrap(destination string, next http.HandlerFunc) http.HandlerFunc {
+	s.navDestinations = append(s.navDestinations, destination)
 	return func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next(sw, r)
@@ -126,10 +130,7 @@ func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGloba
 	}
 
 	view := boardView(board, len(issues), activeGlobal == "home", title, activeGlobal)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Board(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render board page", "err", err)
-	}
+	s.renderWeb(w, r, http.StatusOK, "board page", ui.Board(view))
 }
 
 // projectsPage handles GET /projects: the cross-project portfolio (spec 032
@@ -141,10 +142,7 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := projectsView(projects, "worklode: projects", "projects")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Projects(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render projects page", "err", err)
-	}
+	s.renderWeb(w, r, http.StatusOK, "projects page", ui.Projects(view))
 }
 
 // globalPlaceholder returns a handler for a global destination with no
@@ -153,11 +151,8 @@ func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
 // button, count, or fabricated record.
 func (s *server) globalPlaceholder(destination, heading, message string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		view := placeholderGlobalView(destination, heading, message)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ui.Placeholder(view).Render(r.Context(), w); err != nil {
-			s.log.Error("render placeholder page", "err", err)
-		}
+		s.renderWeb(w, r, http.StatusOK, "placeholder page",
+			ui.Placeholder(placeholderGlobalView(destination, heading, message)))
 	}
 }
 
@@ -166,21 +161,12 @@ func (s *server) globalPlaceholder(destination, heading, message string) http.Ha
 // spec section. Unknown keys 404 (see projectSectionPage).
 // Deliverables is absent: it is a built destination now (see webform.go's
 // deliverablesPage), routed ahead of this wildcard.
-var projectSections = map[string]string{
-	"crew":      "Crew arrives with project participants in spec 029 §6.1.",
-	"reviews":   "Governed approval reviews arrive with spec 029 §7.",
-	"decisions": "Research decisions arrive with specs 025 and 029.",
-	"documents": "Backbone documents arrive with specs 025 and 026.",
-	"activity":  "Project activity arrives when the ordered event view is implemented.",
-}
-
-// projectSectionTitles gives each projectSections key its display heading.
-var projectSectionTitles = map[string]string{
-	"crew":      "Crew",
-	"reviews":   "Reviews",
-	"decisions": "Decisions",
-	"documents": "Documents",
-	"activity":  "Activity",
+var projectSections = map[string]struct{ Title, Message string }{
+	"crew":      {"Crew", "Crew arrives with project participants in spec 029 §6.1."},
+	"reviews":   {"Reviews", "Governed approval reviews arrive with spec 029 §7."},
+	"decisions": {"Decisions", "Research decisions arrive with specs 025 and 029."},
+	"documents": {"Documents", "Backbone documents arrive with specs 025 and 026."},
+	"activity":  {"Activity", "Project activity arrives when the ordered event view is implemented."},
 }
 
 // projectSectionPage handles GET /projects/{id}/{section}: an honest
@@ -191,7 +177,7 @@ var projectSectionTitles = map[string]string{
 // count, or fake record — see the global constraints in the plan.
 func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 	section := r.PathValue("section")
-	message, ok := projectSections[section]
+	sec, ok := projectSections[section]
 	if !ok {
 		webErr(w, http.StatusNotFound, "not found")
 		return
@@ -204,11 +190,8 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view := placeholderProjectView(cockpit, projectSectionTitles[section], message, section)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Placeholder(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render project section page", "err", err)
-	}
+	view := placeholderProjectView(cockpit, sec.Title, sec.Message, section)
+	s.renderWeb(w, r, http.StatusOK, "project section page", ui.Placeholder(view))
 }
 
 // taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
@@ -234,32 +217,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	view := ui.TaskView{
-		Page:     ui.PageProps{Title: "worklode: " + id},
-		Task:     *t,
-		Blocked:  blocked[id],
-		Timeline: timelineRows(entries),
-	}
-	for _, e := range out {
-		switch e.Type {
-		case "blocks":
-			view.Blocks = append(view.Blocks, e.ToTask)
-		case "child_of":
-			view.Parent = e.ToTask
-		case "follow_up_to":
-			view.FollowUpTo = e.ToTask
-		}
-	}
-	for _, e := range in {
-		switch e.Type {
-		case "blocks":
-			view.BlockedBy = append(view.BlockedBy, e.FromTask)
-		case "child_of":
-			view.Children = append(view.Children, e.FromTask)
-		case "follow_up_to":
-			view.FollowUps = append(view.FollowUps, e.FromTask)
-		}
-	}
+	view := taskView(t, blocked[id], entries, out, in)
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
 		view.Holder = &l
@@ -279,10 +237,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		view.Progress = progress
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Task(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render task page", "err", err)
-	}
+	s.renderWeb(w, r, http.StatusOK, "task page", ui.Task(view))
 }
 
 // docsPage handles GET /docs: the whole document corpus (spec 025 §5), in
@@ -295,10 +250,7 @@ func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := docsView(docs)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Docs(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render docs page", "err", err)
-	}
+	s.renderWeb(w, r, http.StatusOK, "docs page", ui.Docs(view))
 }
 
 // docPage handles GET /docs/{id}: one document's identity, sections, relations
@@ -317,10 +269,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	view := docView(detail)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Doc(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render doc page", "err", err)
-	}
+	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
 }
 
 // projectPage handles GET /projects/{id}: the project cockpit, via the same
@@ -340,10 +289,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ui.Cockpit(view).Render(r.Context(), w); err != nil {
-		s.log.Error("render project page", "err", err)
-	}
+	s.renderWeb(w, r, http.StatusOK, "project page", ui.Cockpit(view))
 }
 
 // summarizeEntry renders one timeline entry as a human-readable row: a type

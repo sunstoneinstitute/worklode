@@ -2,7 +2,6 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -82,24 +81,9 @@ func (s *server) secretsMaterialized(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	extID, err := randomExternalID()
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	actor := actorFrom(r)
-	var actorID string
-	if actor != nil {
-		actorID = actor.ID
-	}
-	payload, err := json.Marshal(map[string]any{
-		"task": id, "actor": actorID, "names": req.Names,
-	})
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	_, _, err = s.st.RecordEvent(r.Context(), "cli", extID, "secrets_materialized", payload,
+	actorID := actorIDFrom(r)
+	err := s.recordEvent(r.Context(), "cli", "secrets_materialized",
+		map[string]any{"task": id, "actor": actorID, "names": req.Names},
 		func(tx *sql.Tx, eventID int64) error {
 			return store.LogChange(tx, "task", id, eventID,
 				map[string]any{"field": "secrets_materialized", "names": req.Names})
