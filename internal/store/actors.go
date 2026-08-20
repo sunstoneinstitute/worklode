@@ -56,6 +56,23 @@ func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, a
 	return nil
 }
 
+// EnsureServiceActor creates a service actor if absent. Idempotent, so a
+// process that owns a service identity (the doc-lifecycle watcher, which is
+// tasks.created_by on everything it mints) can assert it at every boot.
+// Unlike UpsertHumanActor it never updates: a service identity has no
+// external source of truth to re-sync from.
+func (s *Store) EnsureServiceActor(ctx context.Context, id, displayName string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO actors (id, kind, display_name, admin) VALUES ($1, 'service', $2, false)
+		 ON CONFLICT (id) DO NOTHING`,
+		id, displayName,
+	)
+	if err != nil {
+		return fmt.Errorf("ensure service actor %s: %w", id, err)
+	}
+	return nil
+}
+
 // UpsertHumanActor inserts a human actor, or on repeat login updates its
 // display name, admin flag, and expected GitHub login. Admin and
 // expectedGitHubLogin are both re-synced on every login, so a Keycloak

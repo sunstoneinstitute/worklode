@@ -28,6 +28,52 @@ func TestCreateAndGetActor(t *testing.T) {
 	}
 }
 
+// TestEnsureServiceActorIsIdempotent pins the property the boot path needs:
+// CreateActor is a plain INSERT and fails the second time, so a server that
+// asserts its service identity at every start needs this instead.
+func TestEnsureServiceActorIsIdempotent(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	for i := range 2 {
+		if err := s.EnsureServiceActor(ctx, "watcher", "doc-lifecycle watcher"); err != nil {
+			t.Fatalf("EnsureServiceActor call %d: %v", i+1, err)
+		}
+	}
+
+	got, err := s.GetActor(ctx, "watcher")
+	if err != nil {
+		t.Fatalf("GetActor: %v", err)
+	}
+	want := &Actor{ID: "watcher", Kind: "service", DisplayName: "doc-lifecycle watcher"}
+	if *got != *want {
+		t.Fatalf("GetActor: got %+v, want %+v", got, want)
+	}
+}
+
+// TestEnsureServiceActorLeavesAnExistingRowAlone: DO NOTHING, not DO UPDATE —
+// a service identity has no external source of truth to re-sync from, so a
+// second call must not rewrite a display name an operator changed.
+func TestEnsureServiceActorLeavesAnExistingRowAlone(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateActor(ctx, "watcher", "service", "original", false); err != nil {
+		t.Fatalf("CreateActor: %v", err)
+	}
+	if err := s.EnsureServiceActor(ctx, "watcher", "replacement"); err != nil {
+		t.Fatalf("EnsureServiceActor: %v", err)
+	}
+
+	got, err := s.GetActor(ctx, "watcher")
+	if err != nil {
+		t.Fatalf("GetActor: %v", err)
+	}
+	if got.DisplayName != "original" {
+		t.Fatalf("display name = %q, want it left at %q", got.DisplayName, "original")
+	}
+}
+
 func TestGetActorNotFound(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
