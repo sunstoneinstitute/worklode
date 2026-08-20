@@ -1,11 +1,10 @@
 // Wire shapes for the worklode HTTP API's read surface. The source of truth
-// is internal/cli/client.go (the Go client's own struct + json tags for the
-// same endpoints) plus, for the two expanded shapes no Go client consumes,
-// the serializers in internal/api/tasks.go (taskJSON, taskListDetailJSON,
-// edgeOut, edgeIn) and internal/api/docs.go (docJSON). When the two disagree,
-// change the Go side first: ADR 036 makes internal/model the one declaration
-// of every shape crossing the HTTP boundary, and this file is meant to
-// shrink to a thin mirror of that, not grow its own opinions.
+// is internal/model — ADR 036 makes it the one declaration of every shape
+// crossing the HTTP boundary — specifically its project.go, task.go,
+// taskdetail.go and doc.go, one Go type per interface below. There is no
+// codegen yet (WL-76), so this file is kept by hand and drifts silently when
+// the Go side moves; when the two disagree, change the Go side first and
+// mirror it here, never the reverse.
 
 /** A repo mapped to a project, and its terminal delivery state. */
 export interface RepoMapping {
@@ -22,7 +21,8 @@ export interface Project {
   focus: string[];
 }
 
-/** A task, matching internal/api's taskJSON (every store.Task field). */
+/** A task, matching internal/model.Task. The mirror declares only the fields
+ *  a note renders, so the Go type may carry more. */
 export interface Task {
   id: string;
   project: string;
@@ -54,12 +54,12 @@ export interface TaskEdgeIn {
 }
 
 /**
- * A GET /api/v1/tasks?detail=true row: a Task plus its blocked status and
- * edges. edges.out/edges.in are always present arrays, never null — the
- * server guarantees this so callers can treat them as required. Deliberately
- * has no hierarchy or lease field: hierarchy is derivable from the child_of
- * edges here, and lease is per-task ephemeral state a list response would
- * misreport (see internal/api/tasks.go's taskListDetailJSON).
+ * A GET /api/v1/tasks?detail=true row, matching internal/model.TaskListDetail:
+ * a Task plus its blocked status and edges. edges.out/edges.in are always
+ * present arrays, never null — the server guarantees this so callers can treat
+ * them as required. Deliberately has no hierarchy or lease field: hierarchy is
+ * derivable from the child_of edges here, and lease is per-task ephemeral state
+ * a list response would misreport.
  */
 export interface TaskListDetail extends Task {
   blocked: boolean;
