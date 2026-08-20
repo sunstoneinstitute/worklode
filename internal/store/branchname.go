@@ -184,8 +184,14 @@ func BranchTemplate() string {
 // it validates a sample, not the real value (spec 008 §3.1).
 func BranchFor(t *model.Task) string {
 	branchMu.RLock()
-	tmpl := branchTmpl
+	text, tmpl := branchText, branchTmpl
 	branchMu.RUnlock()
+	// The default template renders exactly the fallback below, and scanTask
+	// calls this once per row: skip the two unused slugifies and the
+	// reflective render in the configuration everything actually runs.
+	if text == DefaultBranchTemplate {
+		return t.ID + "-" + SlugifyTitle(t.Title)
+	}
 	f := branchFields{id: t.ID, slug: SlugifyTitle(t.Title), projectID: SlugifyTitle(t.Project), kind: SlugifyTitle(t.Kind)}
 	out, err := render(tmpl, f)
 	if err != nil || out == "" {

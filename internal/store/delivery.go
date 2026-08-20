@@ -58,19 +58,7 @@ func TaskIDsForSHA(tx *sql.Tx, repo, sha string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("tasks for sha %s %s: %w", repo, sha, err)
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan task for sha %s %s: %w", repo, sha, err)
-		}
-		out = append(out, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("tasks for sha %s %s: %w", repo, sha, err)
-	}
-	return out, nil
+	return scanColumn[string](rows, fmt.Sprintf("tasks for sha %s %s", repo, sha))
 }
 
 // ClearTaskCommits drops every commit attributed to taskID. Reopening a task
@@ -113,10 +101,7 @@ func LatestMainID(tx *sql.Tx, repo string) (*int64, error) {
 		repo).Scan(&id); err != nil {
 		return nil, fmt.Errorf("latest main commit for %s: %w", repo, err)
 	}
-	if !id.Valid {
-		return nil, nil
-	}
-	return &id.Int64, nil
+	return nullableID(id), nil
 }
 
 // MapDeploySHA maps a deploy-branch commit to the main commit its
@@ -198,10 +183,7 @@ func LandedMainID(tx *sql.Tx, taskID, repo string) (*int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("landed main id for %s: %w", taskID, err)
 	}
-	if !id.Valid {
-		return nil, nil
-	}
-	return &id.Int64, nil
+	return nullableID(id), nil
 }
 
 // NormalizeEnvironment maps a GitHub environment name to the delivery stage
@@ -449,8 +431,5 @@ func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("release frontier %s: %w", repo, err)
 	}
-	if !id.Valid {
-		return nil, nil
-	}
-	return &id.Int64, nil
+	return nullableID(id), nil
 }

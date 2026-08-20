@@ -95,7 +95,7 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 }
 
 // scanDeliverable reads one row selected with deliverableColumns.
-func scanDeliverable(row interface{ Scan(...any) error }) (*model.Deliverable, error) {
+func scanDeliverable(row rowScanner) (*model.Deliverable, error) {
 	var d model.Deliverable
 	var createdBy sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Name, &d.Description, &d.URL,
@@ -116,20 +116,11 @@ func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]model
 	if err != nil {
 		return nil, fmt.Errorf("list deliverables for %s: %w", projectID, err)
 	}
-	defer rows.Close()
-
-	out := []model.Deliverable{}
-	for rows.Next() {
-		d, err := scanDeliverable(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan deliverable: %w", err)
-		}
-		out = append(out, *d)
+	out, err := collectRows(rows, fmt.Sprintf("list deliverables for %s", projectID), byValue(scanDeliverable))
+	if err != nil {
+		return nil, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list deliverables for %s: %w", projectID, err)
-	}
-	return out, nil
+	return nonNil(out), nil
 }
 
 // GetDeliverable looks up one deliverable by id. Returns ErrNotFound if it

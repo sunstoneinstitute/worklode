@@ -93,15 +93,6 @@ func scanAgentSession(row rowScanner) (*AgentSession, error) {
 	return &a, nil
 }
 
-// nullIfEmpty maps "" to a SQL NULL, so optional text columns stay NULL
-// rather than holding an empty string.
-func nullIfEmpty(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
 // heldLease returns the active lease on taskID, erroring with ErrNotFound
 // unless actorID holds it. A non-holder and an absent lease are deliberately
 // indistinguishable, the same probe-resistant policy as Renew and Release.
@@ -180,7 +171,7 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 				   (lease_id, agent, agent_version, external_session_id, started_at, last_seen_at)
 				 VALUES ($1, $2, $3, $4, $5, $5)
 				 ON CONFLICT (lease_id, agent, external_session_id) DO NOTHING`,
-				lease.ID, agent, nullIfEmpty(agentVersion), sessionID, now,
+				lease.ID, agent, nullText(agentVersion), sessionID, now,
 			); err != nil {
 				return fmt.Errorf("insert agent session on lease %d: %w", lease.ID, err)
 			}
@@ -427,20 +418,11 @@ func (s *Store) AgentSessionsForLease(ctx context.Context, leaseID int64) ([]Age
 	if err != nil {
 		return nil, fmt.Errorf("list agent sessions for lease %d: %w", leaseID, err)
 	}
-	defer rows.Close()
-
-	sessions := make([]AgentSession, 0)
-	for rows.Next() {
-		a, err := scanAgentSession(rows)
-		if err != nil {
-			return nil, fmt.Errorf("scan agent session for lease %d: %w", leaseID, err)
-		}
-		sessions = append(sessions, *a)
+	sessions, err := collectRows(rows, fmt.Sprintf("list agent sessions for lease %d", leaseID), byValue(scanAgentSession))
+	if err != nil {
+		return nil, err
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list agent sessions for lease %d: %w", leaseID, err)
-	}
-	return sessions, nil
+	return nonNil(sessions), nil
 }
 
 // AgentSession returns one session row by its natural key, or ErrNotFound.
