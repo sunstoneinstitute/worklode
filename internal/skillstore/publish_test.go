@@ -1,6 +1,7 @@
 package skillstore
 
 import (
+	"archive/tar"
 	"errors"
 	"os"
 	"path/filepath"
@@ -8,14 +9,24 @@ import (
 	"testing"
 )
 
+// demoEntries is the "demo" skill's fixture: a plain file plus an
+// executable one, so the exec bit has something to survive through both
+// extract and the publish-side copy fallback.
+func demoEntries() []tarEntry {
+	return []tarEntry{
+		{Name: "SKILL.md", Content: "demo body", Mode: 0o644, Typeflag: tar.TypeReg},
+		{Name: "run.sh", Content: "#!/bin/sh\necho hi\n", Mode: 0o755, Typeflag: tar.TypeReg},
+	}
+}
+
 // installedDirs returns a fresh Dirs with one skill ("demo") installed, for
 // tests that publish from an already-populated links dir.
 func installedDirs(t *testing.T) Dirs {
 	t.Helper()
 	dirs := testDirs(t)
-	files := map[string]string{"SKILL.md": "demo body"}
-	arch := gzTar(t, files)
-	hash := hashFiles(files)
+	entries := demoEntries()
+	arch := buildTar(t, entries)
+	hash := hashEntries(entries)
 	if _, err := Ensure(dirs, "demo", hash, func() ([]byte, error) { return arch, nil }); err != nil {
 		t.Fatalf("setup: ensure demo skill: %v", err)
 	}
@@ -197,5 +208,142 @@ func TestPublishCopyFallback(t *testing.T) {
 	}
 	if string(got) != string(want) {
 		t.Fatalf("copy content = %q, want %q", got, want)
+	}
+
+	// The exec bit must survive the copy, same as it survives extract.
+	runInfo, err := os.Stat(filepath.Join(linkPath, "run.sh"))
+	if err != nil {
+		t.Fatalf("stat copied run.sh: %v", err)
+	}
+	if runInfo.Mode().Perm()&0o111 == 0 {
+		t.Fatalf("copied run.sh should be executable, got mode %v", runInfo.Mode())
+	}
+	skillInfo, err := os.Stat(filepath.Join(linkPath, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("stat copied SKILL.md: %v", err)
+	}
+	if skillInfo.Mode().Perm()&0o111 != 0 {
+		t.Fatalf("copied SKILL.md should not be executable, got mode %v", skillInfo.Mode())
+	}
+}
+
+// TestPublishDirLinkPerSkillCopyFallbackReportsCopied covers the full
+// degradation chain: an existing real directory at target forces PublishDirLink
+// to delegate to PublishPerSkill, and symlinks being unavailable forces that
+// delegate to copy. The "copied" signal must survive both hops — spec 008
+// §18 row 5 requires the copy be diagnosable, and PublishDirLink is the
+// entry point the harnesses actually go through, so losing the signal there
+// loses it where it matters most.
+func TestPublishDirLinkPerSkillCopyFallbackReportsCopied(t *testing.T) {
+	dirs := installedDirs(t)
+	target := t.TempDir() // a real dir already, forcing the per-skill branch
+
+	orig := symlink
+	symlink = func(string, string) error { return errors.New("injected: symlinks unavailable") }
+	defer func() { symlink = orig }()
+
+	res, err := PublishDirLink(dirs, target)
+	if err != nil || res.Action != "copied" {
+		t.Fatalf("publish: %+v %v", res, err)
+	}
+
+	linkPath := filepath.Join(target, "demo")
+	info, err := os.Lstat(linkPath)
+	if err != nil {
+		t.Fatalf("lstat copy: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("demo should be a real copy, not a symlink")
+	}
+	if got, err := os.ReadFile(filepath.Join(linkPath, "SKILL.md")); err != nil || string(got) != "demo body" {
+		t.Fatalf("copy content: %q, %v", got, err)
+	}
+}
+
+// TestPublishPerSkillReplacesOwnStaleLink is the one path that actually
+// exercises the destructive branch on something Worklode created: a name
+// already published, then re-installed at a new hash, must have its target
+// link swapped to the new version — not left pointing at the old one, and
+// not (incorrectly) treated as foreign and skipped.
+func TestPublishPerSkillReplacesOwnStaleLink(t *testing.T) {
+	dirs := installedDirs(t) // "demo" at its first hash
+	target := t.TempDir()
+
+	if _, err := PublishPerSkill(dirs, target); err != nil {
+		t.Fatalf("initial publish: %v", err)
+	}
+	oldVersion, err := os.Readlink(filepath.Join(target, "demo"))
+	if err != nil {
+		t.Fatalf("readlink: %v", err)
+	}
+
+	// Install a new version of the same skill: dirs.Links now points
+	// elsewhere, so the target's link is ours but stale.
+	files2 := map[string]string{"SKILL.md": "demo body v2"}
+	arch2 := gzTar(t, files2)
+	hash2 := hashFiles(files2)
+	if _, err := Ensure(dirs, "demo", hash2, func() ([]byte, error) { return arch2, nil }); err != nil {
+		t.Fatalf("ensure v2: %v", err)
+	}
+
+	res, err := PublishPerSkill(dirs, target)
+	if err != nil || res.Action != "linked" {
+		t.Fatalf("re-publish: %+v %v", res, err)
+	}
+	if len(res.Skips) != 0 {
+		t.Fatalf("skips = %v, want none", res.Skips)
+	}
+	newVersion, err := os.Readlink(filepath.Join(target, "demo"))
+	if err != nil {
+		t.Fatalf("readlink after swap: %v", err)
+	}
+	if newVersion == oldVersion {
+		t.Fatalf("stale link not replaced: still %s", newVersion)
+	}
+	got, err := os.ReadFile(filepath.Join(target, "demo", "SKILL.md"))
+	if err != nil || string(got) != "demo body v2" {
+		t.Fatalf("content after swap: %q, %v", got, err)
+	}
+}
+
+// TestPublishDirLinkSkipsRealFile covers a plain file sitting where the dir
+// link is expected to go: neither a symlink nor a directory, so it cannot
+// be repointed or degraded into — skipped, untouched.
+func TestPublishDirLinkSkipsRealFile(t *testing.T) {
+	dirs := installedDirs(t)
+	target := filepath.Join(t.TempDir(), "skills")
+	if err := os.WriteFile(target, []byte("not a dir"), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	res, err := PublishDirLink(dirs, target)
+	if err != nil || res.Action != "skipped" {
+		t.Fatalf("publish: %+v %v", res, err)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "not a dir" {
+		t.Fatalf("target file disturbed: %q, %v", got, err)
+	}
+}
+
+// TestPublishPerSkillSkipsDanglingNameLink covers a name symlink in
+// dirs.Links whose target no longer resolves (EvalSymlinks fails): the name
+// is reported in Skips and never gets a (broken) entry created for it in
+// target.
+func TestPublishPerSkillSkipsDanglingNameLink(t *testing.T) {
+	dirs := installedDirs(t)
+	if err := os.Symlink(filepath.Join("..", "store", "deadbeef"), filepath.Join(dirs.Links, "ghost")); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	target := t.TempDir()
+
+	res, err := PublishPerSkill(dirs, target)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if !reflect.DeepEqual(res.Skips, []string{"ghost"}) {
+		t.Fatalf("skips = %v, want [ghost]", res.Skips)
+	}
+	if _, err := os.Lstat(filepath.Join(target, "ghost")); !os.IsNotExist(err) {
+		t.Fatalf("ghost should not be created in target, lstat err=%v", err)
 	}
 }

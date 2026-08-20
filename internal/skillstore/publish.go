@@ -36,9 +36,15 @@ func PublishDirLink(dirs Dirs, target string) (PublishResult, error) {
 		}
 		if err := symlink(dirs.Links, target); err != nil {
 			// Symlinks unavailable outright: fall back to the same
-			// per-skill mechanism a pre-existing real dir uses.
+			// per-skill mechanism a pre-existing real dir uses. If that
+			// itself has to copy (spec 008 §18 row 5), "copied" must
+			// still surface here — this is the entry point the harnesses
+			// go through, so losing the signal here loses it where it
+			// matters most.
 			per, perr := PublishPerSkill(dirs, target)
-			per.Action = "per-skill"
+			if per.Action != "copied" {
+				per.Action = "per-skill"
+			}
 			return per, perr
 		}
 		res.Action = "linked"
@@ -58,7 +64,9 @@ func PublishDirLink(dirs Dirs, target string) (PublishResult, error) {
 		return res, nil
 	case info.IsDir():
 		per, perr := PublishPerSkill(dirs, target)
-		per.Action = "per-skill"
+		if per.Action != "copied" {
+			per.Action = "per-skill"
+		}
 		return per, perr
 	default:
 		res.Action = "skipped" // a plain file where a skills dir is expected: foreign, untouched
@@ -170,11 +178,12 @@ func withinStore(path, store string) bool {
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// linkVersion atomically points linkPath at versionDir (an absolute path),
-// replacing whatever publishEntry already determined is safe to remove. If
-// symlinks are unavailable (spec 008 §18 row 5), it falls back to copying
-// versionDir's content in full so the harness still sees the skill, and
-// reports "copied" so a stale copy is diagnosable.
+// linkVersion points linkPath at versionDir (an absolute path), replacing
+// whatever publishEntry already determined is safe to remove: nothing, or a
+// symlink Worklode created itself. If symlinks are unavailable (spec 008
+// §18 row 5), it falls back to copying versionDir's content in full so the
+// harness still sees the skill, and reports "copied" so a stale copy is
+// diagnosable.
 func linkVersion(versionDir, linkPath string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
 		return "", err
@@ -184,23 +193,36 @@ func linkVersion(versionDir, linkPath string) (string, error) {
 		return "", err
 	}
 	tmp := linkPath + ".tmp-" + suffix
-	if err := symlink(versionDir, tmp); err != nil {
-		if err := os.RemoveAll(linkPath); err != nil {
+
+	if err := symlink(versionDir, tmp); err == nil {
+		defer os.Remove(tmp) // no-op once rename consumes it; cleans up on failure
+		// rename(2) atomically replaces an existing symlink at linkPath —
+		// same guarantee as swapSymlink, no window where nothing exists.
+		if err := os.Rename(tmp, linkPath); err != nil {
 			return "", err
 		}
-		if err := copyDir(versionDir, linkPath); err != nil {
-			return "", err
-		}
-		return "copied", nil
+		return "linked", nil
 	}
-	defer os.Remove(tmp) // no-op once rename consumes it; cleans up on failure
+
+	// Symlinks unavailable: assemble the full copy in a sibling tmp dir
+	// first, the same commit-point pattern extract uses (skillstore.go),
+	// so a copy that dies partway never becomes visible at linkPath.
+	defer os.RemoveAll(tmp) // no-op once rename consumes it; cleans up on failure
+	if err := copyDir(versionDir, tmp); err != nil {
+		return "", err
+	}
+	// rename(2) cannot replace a non-directory with a directory in place,
+	// so a pre-existing entry at linkPath (only ever our own stale
+	// symlink — publishEntry has already ruled out anything foreign) must
+	// be cleared first. The copy itself is already complete in tmp by
+	// this point, so the only window is the swap, not a partial write.
 	if err := os.RemoveAll(linkPath); err != nil {
 		return "", err
 	}
 	if err := os.Rename(tmp, linkPath); err != nil {
 		return "", err
 	}
-	return "linked", nil
+	return "copied", nil
 }
 
 // copyDir recursively copies src into dst, preserving the exec bit the same
