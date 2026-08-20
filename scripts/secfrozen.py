@@ -90,7 +90,8 @@ def head_files(root, roots):
         cwd=root, capture_output=True, text=True)
     if p.returncode != 0:  # no HEAD yet: nothing is published
         return []
-    return [f for f in p.stdout.splitlines() if f.endswith(".md")]
+    return [f for f in p.stdout.splitlines()
+            if f.endswith(".md") and not generated(f)]
 
 
 def anchors_of(text):

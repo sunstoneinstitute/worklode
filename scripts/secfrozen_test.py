@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for secfrozen.py, run against throwaway fixture git repos."""
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -193,8 +194,9 @@ class TestPermanence(unittest.TestCase):
         bindir = r.root / "bin"
         bindir.mkdir()
         (bindir / "python3").symlink_to(sys.executable)
-        git = subprocess.run(["which", "git"], capture_output=True,
-                             text=True).stdout.strip()
+        git = shutil.which("git")
+        if git is None:
+            self.skipTest("no git on PATH to symlink into the stripped bindir")
         (bindir / "git").symlink_to(git)
         env = {"PATH": str(bindir), "HOME": os.environ.get("HOME", "/tmp")}
         p = r.run(env=env)

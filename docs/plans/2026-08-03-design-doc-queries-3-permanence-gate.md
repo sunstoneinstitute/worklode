@@ -4,8 +4,6 @@ covers:
   - docs/specs/026-design-doc-queries.md#sec-4.1
   - docs/specs/026-design-doc-queries.md#sec-9
   - docs/specs/026-design-doc-queries.md#sec-10
-requires:
-  - 2026-08-03-spec-shorthand-references.md
 ---
 # Design-doc queries 3/3: the commit-time anchor-permanence gate
 
