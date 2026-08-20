@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -77,8 +79,67 @@ func TestBodyFileRejectsTraversal(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected traversal rejection, got:\n%s", out)
 	}
-	if !strings.Contains(err.Error()+out, "outside") {
+	// "resolves outside", not "outside": the fixture is called outside.png,
+	// so the bare word also matches a plain "no such file" failure.
+	if !strings.Contains(err.Error()+out, "resolves outside") {
 		t.Fatalf("error should name the traversal: %v\n%s", err, out)
+	}
+}
+
+// TestBodyFileRejectsSymlinkEscape: --body-file is aimed at a markdown bundle
+// plus its assets directory, which is exactly the kind of thing an author
+// receives from someone else. os.Open follows symlinks, so containment has to
+// be decided on resolved paths or the bundle can name any file on the box.
+func TestBodyFileRejectsSymlinkEscape(t *testing.T) {
+	dir := t.TempDir()
+	secret := writeFile(t, dir, "elsewhere/secret.png", "\x89PNG\r\n\x1a\n secret")
+	assets := t.TempDir()
+	if err := os.Symlink(secret, filepath.Join(assets, "shot.png")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	bodyFile := writeFile(t, assets, "bug.md", "![shot](./shot.png)\n")
+	srv := startBlobSrv(t, func([]byte) string { return "image/png" })
+
+	out, err := runLode(t, "task", "add", "--project", "p",
+		"--title", "x", "--body-file", bodyFile)
+	if err == nil {
+		t.Fatalf("expected the symlink escape to be refused, got:\n%s", out)
+	}
+	if !strings.Contains(err.Error()+out, "resolves outside") {
+		t.Fatalf("error should name the traversal: %v\n%s", err, out)
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.uploads) != 0 {
+		t.Fatalf("uploaded %d file(s) through a symlink", len(srv.uploads))
+	}
+	if len(srv.created) != 0 {
+		t.Fatalf("task was created despite the refusal: %v", srv.created)
+	}
+}
+
+// TestBodyFilePercentEncodedName: a markdown destination is URL-escaped, so
+// a file with a space in its name is written `./my%20shot.png` and has to be
+// decoded before it is opened -- while the body is rewritten on the raw
+// destination that is actually spelled there.
+func TestBodyFilePercentEncodedName(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "my shot.png", "\x89PNG\r\n\x1a\n one")
+	bodyFile := writeFile(t, dir, "bug.md", "![shot](./my%20shot.png)\n")
+	srv := startBlobSrv(t, func([]byte) string { return "image/png" })
+
+	out, err := runLode(t, "task", "add", "--project", "p",
+		"--title", "x", "--body-file", bodyFile)
+	if err != nil {
+		t.Fatalf("task add: %v\n%s", err, out)
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.uploads) != 1 {
+		t.Fatalf("uploads = %d, want 1", len(srv.uploads))
+	}
+	if len(srv.created) != 1 || !strings.Contains(srv.created[0], "](/blob/") {
+		t.Fatalf("body not rewritten: %v", srv.created)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,17 +222,36 @@ func uploadBodyImages(ctx context.Context, c *cli.Client, body, baseDir string, 
 	if err != nil {
 		return "", err
 	}
+	// The containment check has to compare resolved paths, because os.Open
+	// follows symlinks: a bundle carrying `shot.png -> /etc/shadow` would
+	// otherwise pass a purely lexical test and upload that file's bytes.
+	base, err = filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", baseDir, err)
+	}
 	mapping := make(map[string]string, len(locals))
 	for _, rel := range locals {
-		abs, err := filepath.Abs(filepath.Join(base, rel))
-		if err != nil {
-			return "", err
+		// A markdown destination is URL-escaped, the filesystem name is not,
+		// so `./my%20file.png` has to be decoded before it is opened. The raw
+		// destination stays the rewrite key: it is the string actually
+		// written in the body, and the two differ. Decoding belongs here and
+		// not in blobref, which only ever deals in body text.
+		name := rel
+		if dec, err := url.PathUnescape(rel); err == nil {
+			name = dec
 		}
-		if !strings.HasPrefix(abs, base+string(filepath.Separator)) {
-			return "", fmt.Errorf("image %q resolves outside %s", rel, base)
-		}
-		if _, err := os.Stat(abs); err != nil {
+		abs := filepath.Join(base, name)
+		// Lstat before EvalSymlinks so a genuinely missing file still
+		// reports "no such file" rather than a confusing resolve error.
+		if _, err := os.Lstat(abs); err != nil {
 			return "", fmt.Errorf("image %q: %w", rel, err)
+		}
+		abs, err = filepath.EvalSymlinks(abs)
+		if err != nil {
+			return "", fmt.Errorf("image %q: %w", rel, err)
+		}
+		if !withinDir(base, abs) {
+			return "", fmt.Errorf("image %q resolves outside %s", rel, base)
 		}
 		blob, err := c.UploadFile(ctx, abs)
 		if err != nil {
@@ -240,7 +260,18 @@ func uploadBodyImages(ctx context.Context, c *cli.Client, body, baseDir string, 
 		mapping[rel] = blob.URL
 		fmt.Fprintf(out, "uploaded %s (%s, %d bytes)\n", rel, blob.MediaType, blob.Size)
 	}
-	return blobref.ReplaceDestination(body, mapping), nil
+	return blobref.ReplaceDestination(body, mapping)
+}
+
+// withinDir reports whether path is dir or below it. filepath.Rel rather than
+// a string prefix, which would accept /foo/bar for a /foo/ba base. Both
+// arguments must already be absolute and symlink-resolved.
+func withinDir(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func newTaskAddCmd() *cobra.Command {

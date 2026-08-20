@@ -5,6 +5,7 @@
 package blobref
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -105,37 +106,145 @@ func Embeddable(mediaType string) bool {
 	return embeddableTypes[mediaType]
 }
 
-// ReplaceDestination rewrites image destinations according to mapping,
-// leaving unmapped destinations and every other token untouched. It edits
-// the source text by byte offset rather than re-rendering the AST, so
-// nothing else in the body can be reformatted.
-func ReplaceDestination(body string, mapping map[string]string) string {
+// ReplaceDestination rewrites the destination of every image whose
+// destination mapping names, splicing the source by byte offset: only the
+// destination token itself is replaced, so an image title, a link label, the
+// same path spelled in prose or inside a code fence, and a plain link to the
+// same file all survive verbatim. Spec 021 §7 keeps a linked local file
+// linked -- `lode task attach` is the tool for those -- so only *ast.Image
+// destinations move.
+//
+// An angle-bracket destination (`<./my shot.png>`) is replaced whole,
+// brackets included: the `/blob/<hash>` form contains no spaces, so the
+// brackets have nothing left to protect.
+//
+// It errors rather than half-rewriting when a mapped destination cannot be
+// located in the source -- a reference-style image, whose destination is
+// written at the definition and not at the image. The caller has already
+// uploaded that file, so failing beats writing a body that points at a local
+// path the reader cannot resolve.
+func ReplaceDestination(body string, mapping map[string]string) (string, error) {
 	if len(mapping) == 0 {
-		return body
+		return body, nil
 	}
 	src := []byte(body)
 	doc := md.Parser().Parse(text.NewReader(src))
 
-	type edit struct{ from, to string }
+	type edit struct {
+		start, stop int
+		to          string
+	}
 	var edits []edit
-	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
+	// cursor is the offset past everything already accounted for, so a
+	// destination is only ever matched at or after the image that owns it.
+	cursor := 0
+	err := ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			if c := consumedThrough(n); c > cursor {
+				cursor = c
+			}
 			return ast.WalkContinue, nil
 		}
-		if img, ok := n.(*ast.Image); ok {
-			dest := string(img.Destination)
-			if to, ok := mapping[dest]; ok {
-				edits = append(edits, edit{from: dest, to: to})
+		// On exit, so the node's own label text has already pushed the
+		// cursor past the "](" that introduces the destination.
+		dest, isImage := inlineDestination(n)
+		if dest == "" {
+			return ast.WalkContinue, nil
+		}
+		to, mapped := mapping[dest]
+		start, stop, ok := findDestination(src, cursor, dest)
+		if !ok {
+			if mapped && isImage {
+				return ast.WalkStop, fmt.Errorf(
+					"cannot locate image destination %q in the body: only inline images (![alt](path)) can be rewritten", dest)
 			}
+			return ast.WalkContinue, nil
+		}
+		cursor = stop
+		if mapped && isImage {
+			edits = append(edits, edit{start: start, stop: stop, to: to})
 		}
 		return ast.WalkContinue, nil
 	})
-
-	out := body
-	for _, e := range edits {
-		// The destination appears inside "](...)"; anchoring on that
-		// avoids rewriting a path that also occurs as prose.
-		out = strings.ReplaceAll(out, "]("+e.from+")", "]("+e.to+")")
+	if err != nil {
+		return "", err
 	}
-	return out
+
+	// Edits come out in document order; apply them back to front so an
+	// earlier edit's offsets stay valid.
+	out := body
+	for i := len(edits) - 1; i >= 0; i-- {
+		e := edits[i]
+		out = out[:e.start] + e.to + out[e.stop:]
+	}
+	return out, nil
+}
+
+// inlineDestination returns an inline node's link destination and whether the
+// node is an image, or "" for anything else.
+func inlineDestination(n ast.Node) (string, bool) {
+	switch v := n.(type) {
+	case *ast.Image:
+		return string(v.Destination), true
+	case *ast.Link:
+		return string(v.Destination), false
+	}
+	return "", false
+}
+
+// consumedThrough returns the offset a node proves the scan has reached.
+// Blocks contribute the start of their first line, which is what steps the
+// cursor over a preceding fenced code block; inline text contributes the end
+// of its own segment, which is what steps it over a code span. Everything
+// else contributes nothing and leaves the cursor where it was.
+func consumedThrough(n ast.Node) int {
+	switch v := n.(type) {
+	case *ast.Text:
+		return v.Segment.Stop
+	case *ast.RawHTML:
+		if v.Segments.Len() > 0 {
+			return v.Segments.At(v.Segments.Len() - 1).Stop
+		}
+		return 0
+	}
+	if n.Type() == ast.TypeBlock && n.Lines().Len() > 0 {
+		return n.Lines().At(0).Start
+	}
+	return 0
+}
+
+// findDestination locates dest as a link destination at or after from,
+// returning its byte span. goldmark stores Destination as the raw source
+// bytes (angle brackets stripped, escapes unresolved), so the comparison is
+// exact; anchoring on "](" is what keeps a bare path in prose from matching.
+func findDestination(src []byte, from int, dest string) (start, stop int, ok bool) {
+	if from < 0 {
+		from = 0
+	}
+	for i := from; i+1 < len(src); i++ {
+		if src[i] != ']' || src[i+1] != '(' {
+			continue
+		}
+		j := i + 2
+		for j < len(src) && isDestSpace(src[j]) {
+			j++
+		}
+		if j < len(src) && src[j] == '<' {
+			end := j + 1 + len(dest)
+			if end < len(src) && string(src[j+1:end]) == dest && src[end] == '>' {
+				return j, end + 1, true
+			}
+			continue
+		}
+		end := j + len(dest)
+		if end <= len(src) && string(src[j:end]) == dest &&
+			(end == len(src) || src[end] == ')' || isDestSpace(src[end])) {
+			return j, end, true
+		}
+	}
+	return 0, 0, false
+}
+
+func isDestSpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
 }

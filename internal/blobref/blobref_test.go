@@ -55,9 +55,12 @@ func TestLocalImages(t *testing.T) {
 
 func TestReplaceDestination(t *testing.T) {
 	body := "![a](./one.png)\n\n![b](./one.png)\n\n![c](./two.png)\n"
-	got := blobref.ReplaceDestination(body, map[string]string{
+	got, err := blobref.ReplaceDestination(body, map[string]string{
 		"./one.png": "/blob/" + strings.Repeat("e", 64),
 	})
+	if err != nil {
+		t.Fatalf("ReplaceDestination: %v", err)
+	}
 	if strings.Contains(got, "./one.png") {
 		t.Fatalf("destination not replaced:\n%s", got)
 	}
@@ -66,6 +69,87 @@ func TestReplaceDestination(t *testing.T) {
 	}
 	if strings.Count(got, "/blob/") != 2 {
 		t.Fatalf("both occurrences should be replaced:\n%s", got)
+	}
+}
+
+// TestReplaceDestinationSpans covers the shapes a whole-token search misses.
+// Each one used to leave a local path in the body while its bytes were
+// already uploaded -- a broken image plus a blob nothing references -- or
+// rewrote text that is not an image destination at all.
+func TestReplaceDestinationSpans(t *testing.T) {
+	blob := "/blob/" + strings.Repeat("e", 64)
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "title is preserved",
+			body: "![a](./a.png \"a title\")\n",
+			want: "![a](" + blob + " \"a title\")\n",
+		},
+		{
+			// The bracket form only exists to protect spaces, and the
+			// replacement has none, so it is dropped with the old path.
+			name: "angle brackets",
+			body: "![b](<./my shot.png>)\n",
+			want: "![b](" + blob + ")\n",
+		},
+		{
+			// Spec 021 §7: a link to a local file is left alone.
+			name: "sibling plain link",
+			body: "![a](./a.png)\n\n[dl](./a.png)\n",
+			want: "![a](" + blob + ")\n\n[dl](./a.png)\n",
+		},
+		{
+			name: "plain link before the image",
+			body: "[dl](./a.png)\n\n![a](./a.png)\n",
+			want: "[dl](./a.png)\n\n![a](" + blob + ")\n",
+		},
+		{
+			name: "fenced code block",
+			body: "```\n![a](./a.png)\n```\n\n![a](./a.png)\n",
+			want: "```\n![a](./a.png)\n```\n\n![a](" + blob + ")\n",
+		},
+		{
+			name: "prose mention",
+			body: "see ./a.png below\n\n![a](./a.png)\n",
+			want: "see ./a.png below\n\n![a](" + blob + ")\n",
+		},
+		{
+			name: "inline code span",
+			body: "`![a](./a.png)` renders as ![a](./a.png)\n",
+			want: "`![a](./a.png)` renders as ![a](" + blob + ")\n",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var mapping = map[string]string{"./a.png": blob, "./my shot.png": blob}
+			got, err := blobref.ReplaceDestination(c.body, mapping)
+			if err != nil {
+				t.Fatalf("ReplaceDestination: %v", err)
+			}
+			if got != c.want {
+				t.Fatalf("got:\n%q\nwant:\n%q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestReplaceDestinationUnlocatable: a reference-style image's destination is
+// written at the definition, not at the image, so there is no span to splice.
+// Erroring is the only honest answer -- the caller has already uploaded the
+// file, and a half-rewritten body points at bytes nobody can resolve.
+func TestReplaceDestinationUnlocatable(t *testing.T) {
+	body := "![a][r]\n\n[r]: ./a.png\n"
+	_, err := blobref.ReplaceDestination(body, map[string]string{
+		"./a.png": "/blob/" + strings.Repeat("e", 64),
+	})
+	if err == nil {
+		t.Fatal("expected an error for a destination with no inline span")
+	}
+	if !strings.Contains(err.Error(), "./a.png") {
+		t.Fatalf("error should name the destination: %v", err)
 	}
 }
 
