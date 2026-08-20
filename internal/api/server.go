@@ -130,6 +130,12 @@ type Config struct {
 	// S3 construction above. Tests only; production sets BlobEndpoint.
 	BlobStoreForTest blobstore.Store
 
+	// MaxBlobBytesForTest lowers the upload cap from maxBlobBytes. Tests
+	// only, and deliberately not an operator knob: 100 MiB is spec 021 §5's
+	// number, and a test that wants to see the 413 should not have to spool
+	// 100 MiB to prove it. Zero means the real cap.
+	MaxBlobBytesForTest int64
+
 	// BackgroundCtx governs goroutines NewServer starts on its own (boot
 	// skill sync, webhook-triggered skill syncs) — not any HTTP request.
 	// Defaults to context.Background() when nil, so background syncs run
