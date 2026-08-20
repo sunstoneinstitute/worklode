@@ -110,14 +110,11 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err != nil {
 		return nil, err
 	}
-	// Created accepted: run AcceptDoc's first-accept gate. There is no accepted
-	// version to diff against, so only TooDeep can fire — Removed and
-	// Renumbered come back empty by construction. Plans skip it: they carry no
-	// sections and no anchors (025 §9).
+	// Created accepted: run AcceptDoc's first-accept gate. Plans skip it: they
+	// carry no sections and no anchors (025 §9).
 	acceptedAtCreate := status == "accepted" && in.Kind != "plan"
 	if acceptedAtCreate {
-		diff := designdoc.CompareSections(&designdoc.Document{}, parsed.doc, designdoc.DepthLimit)
-		if v := diff.Violations(); len(v) > 0 {
+		if v := designdoc.DepthViolations(parsed.doc, designdoc.DepthLimit); len(v) > 0 {
 			return nil, fmt.Errorf("doc %s/%s cannot be created accepted: %s: %w",
 				in.Project, in.Slug, strings.Join(v, "; "), ErrInvalidInput)
 		}
@@ -323,11 +320,9 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err != nil {
 		return nil, nil, err
 	}
-	// No accepted version to diff against, so the comparison runs against an
-	// empty document: Removed and Renumbered come back empty by construction
-	// and TooDeep carries the one rule a first accept still enforces.
-	diff := designdoc.CompareSections(&designdoc.Document{}, parsed.doc, designdoc.DepthLimit)
-	if v := diff.Violations(); len(v) > 0 {
+	// The depth gate is the one rule a first accept still enforces: rules 1-3
+	// need an accepted version to diff against, and there is none.
+	if v := designdoc.DepthViolations(parsed.doc, designdoc.DepthLimit); len(v) > 0 {
 		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
 	}
 
@@ -360,7 +355,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 //
 // Plans carry no sections and no anchors (025 §9), so none of the spec/ADR
 // branch's section or diff machinery runs here: there is nothing to publish
-// and no CompareSections gate to evaluate. d.status is already known draft —
+// and no depth gate to evaluate. d.status is already known draft —
 // AcceptDoc checks it before branching.
 func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	parsed, err := parseDocBody(d.kind, d.body)
