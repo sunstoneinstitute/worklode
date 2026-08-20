@@ -16,6 +16,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
 
@@ -210,11 +211,11 @@ func secretsSatisfied(taskID string, declared []string) bool {
 // file (info/exclude in the common git dir) so the refs-only template is
 // never committed. Best-effort: any failure is silent.
 func excludeSecretsEnv(dir string) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
-	if err != nil {
+	common, ok := gitexec.Line(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if !ok {
 		return
 	}
-	exclude := filepath.Join(strings.TrimSpace(string(out)), "info", "exclude")
+	exclude := filepath.Join(common, "info", "exclude")
 	const line = ".worklode/secrets.env"
 	if data, err := os.ReadFile(exclude); err == nil && strings.Contains(string(data), line) {
 		return

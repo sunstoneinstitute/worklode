@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -200,13 +200,9 @@ func uninstallGitHook(hooksDir, name string) (action string, err error) {
 // `git -C repoDir rev-parse --git-path hooks`, which honors core.hooksPath,
 // and makes the result absolute (git reports it relative to repoDir).
 func resolveHooksDir(repoDir string) (string, error) {
-	out, err := exec.Command("git", "-C", repoDir, "rev-parse", "--git-path", "hooks").Output()
-	if err != nil {
-		return "", fmt.Errorf("resolve git hooks directory (is %s a git repo?): %w", repoDir, err)
-	}
-	raw := strings.TrimSpace(string(out))
-	if raw == "" {
-		return "", fmt.Errorf("git rev-parse --git-path hooks returned no output")
+	raw, ok := gitexec.Line(repoDir, "rev-parse", "--git-path", "hooks")
+	if !ok {
+		return "", fmt.Errorf("resolve git hooks directory (is %s a git repo?)", repoDir)
 	}
 	if !filepath.IsAbs(raw) {
 		raw = filepath.Join(repoDir, raw)

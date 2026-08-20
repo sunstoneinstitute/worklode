@@ -4,14 +4,14 @@
 package worktree
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 )
 
 // DefaultBase is the worktree base directory used when worktree_dir /
@@ -134,26 +134,17 @@ func BranchName(taskID, slug string) string { return taskID + "-" + slug }
 // Root walks up from dir to the enclosing git worktree root
 // (git -C dir rev-parse --show-toplevel); ok=false outside a repo.
 func Root(dir string) (string, bool) {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		return "", false
-	}
-	return strings.TrimSpace(string(out)), true
+	return gitexec.Line(dir, "rev-parse", "--show-toplevel")
 }
 
 // Identity returns "<hostname>:<abs path>" — the lease worktree identity.
 // It resolves path to its git worktree root first, so any directory inside a
 // worktree yields the same stable identity. Fails outside a git worktree.
 func Identity(path string) (string, error) {
-	out, err := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel").Output()
+	root, err := gitexec.Text(path, "rev-parse", "--show-toplevel")
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
-			return "", fmt.Errorf("%s is not inside a git worktree: %s", path, strings.TrimSpace(string(exitErr.Stderr)))
-		}
 		return "", fmt.Errorf("%s is not inside a git worktree: %w", path, err)
 	}
-	root := strings.TrimSpace(string(out))
 	host, err := os.Hostname()
 	if err != nil {
 		return "", fmt.Errorf("determine hostname: %w", err)
@@ -163,15 +154,11 @@ func Identity(path string) (string, error) {
 
 // GitDir returns the worktree-private git dir (rev-parse --git-dir, abs).
 func GitDir(root string) (string, error) {
-	out, err := exec.Command("git", "-C", root, "rev-parse", "--absolute-git-dir").Output()
+	dir, err := gitexec.Text(root, "rev-parse", "--absolute-git-dir")
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
-			return "", fmt.Errorf("%s is not inside a git worktree: %s", root, strings.TrimSpace(string(exitErr.Stderr)))
-		}
 		return "", fmt.Errorf("%s is not inside a git worktree: %w", root, err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	return dir, nil
 }
 
 // EnableWorktreeConfigExtension turns on extensions.worktreeConfig in root's
@@ -192,23 +179,17 @@ func GitDir(root string) (string, error) {
 // and leaves the repo alone; callers treat the failure as a warning, and
 // TaskID's directory-name fallback keeps working there.
 func EnableWorktreeConfigExtension(root string) error {
-	if bare, err := exec.Command("git", "-C", root, "rev-parse", "--is-bare-repository").Output(); err == nil &&
-		strings.TrimSpace(string(bare)) == "true" {
+	if bare, ok := gitexec.Line(root, "rev-parse", "--is-bare-repository"); ok && bare == "true" {
 		return fmt.Errorf("refusing to enable extensions.worktreeConfig on the bare repository %s: "+
 			"it requires migrating core.bare/core.worktree into the main worktree's config.worktree first, "+
 			"which would otherwise break existing linked worktrees", root)
 	}
-	if cw, err := exec.Command("git", "-C", root, "config", "--get", "core.worktree").Output(); err == nil &&
-		strings.TrimSpace(string(cw)) != "" {
+	if _, ok := gitexec.Line(root, "config", "--get", "core.worktree"); ok {
 		return fmt.Errorf("refusing to enable extensions.worktreeConfig on %s: core.worktree is set, "+
 			"so the extension requires migrating core.bare/core.worktree into the main worktree's "+
 			"config.worktree first, which would otherwise break existing linked worktrees", root)
 	}
-	out, err := exec.Command("git", "-C", root, "config", "extensions.worktreeConfig", "true").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git config extensions.worktreeConfig true: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	return nil
+	return gitexec.Run(root, "config", "extensions.worktreeConfig", "true")
 }
 
 // SetTaskID stamps dir's own worktree-private git config with its task id,
@@ -218,11 +199,7 @@ func EnableWorktreeConfigExtension(root string) error {
 // callers should treat a failure here as a warning, not fatal: TaskID's
 // ParseDir fallback keeps working from the directory name regardless.
 func SetTaskID(dir, taskID string) error {
-	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "worklode.task-id", taskID).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git config --worktree worklode.task-id %s: %s: %w", taskID, strings.TrimSpace(string(out)), err)
-	}
-	return nil
+	return gitexec.Run(dir, "config", "--worktree", "worklode.task-id", taskID)
 }
 
 // UnsetTaskID removes dir's worklode.task-id stamp, so a worktree that
@@ -240,15 +217,11 @@ func SetTaskID(dir, taskID string) error {
 // not exist" — so this is idempotent. Like SetTaskID, callers should treat a
 // genuine failure as a warning rather than fatal.
 func UnsetTaskID(dir string) error {
-	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "--unset", "worklode.task-id").CombinedOutput()
-	if err == nil {
+	err := gitexec.Run(dir, "config", "--worktree", "--unset", "worklode.task-id")
+	if err == nil || gitexec.ExitCode(err) == 5 {
 		return nil
 	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 5 {
-		return nil
-	}
-	return fmt.Errorf("git config --worktree --unset worklode.task-id: %s: %w", strings.TrimSpace(string(out)), err)
+	return err
 }
 
 // StampedTaskID reads the worklode.task-id SetTaskID stamped on dir's own
@@ -261,12 +234,7 @@ func UnsetTaskID(dir string) error {
 // rather than answering wrongly, which is the right degradation: the stamp
 // cannot be worktree-scoped there, so there is nothing trustworthy to report.
 func StampedTaskID(dir string) (taskID string, ok bool) {
-	out, err := exec.Command("git", "-C", dir, "config", "--worktree", "--get", "worklode.task-id").Output()
-	if err != nil {
-		return "", false
-	}
-	id := strings.TrimSpace(string(out))
-	return id, id != ""
+	return gitexec.Line(dir, "config", "--worktree", "--get", "worklode.task-id")
 }
 
 // TaskID resolves the task id of a worktree root, preferring the explicit
@@ -299,11 +267,11 @@ func (l Layout) TaskID(dir string) (taskID string, ok bool) {
 // an error: the doc-sync gate (spec 025 §16.2) needs a branch to compare and to
 // record as provenance.
 func CurrentBranch(root string) (string, error) {
-	out, err := exec.Command("git", "-C", root, "symbolic-ref", "--short", "HEAD").Output()
+	branch, err := gitexec.Text(root, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("resolve current branch (detached HEAD?): %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	return branch, nil
 }
 
 // DefaultBranch returns the repository's default branch as recorded by the
@@ -312,11 +280,11 @@ func CurrentBranch(root string) (string, error) {
 // old clone, or `git init` with a remote added by hand) gets an error naming
 // the fix.
 func DefaultBranch(root string) (string, error) {
-	out, err := exec.Command("git", "-C", root, "symbolic-ref", "refs/remotes/origin/HEAD").Output()
+	ref, err := gitexec.Text(root, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err != nil {
 		return "", fmt.Errorf("no default branch recorded for origin; run `git remote set-head origin --auto` (needs network) and retry")
 	}
-	return strings.TrimPrefix(strings.TrimSpace(string(out)), "refs/remotes/origin/"), nil
+	return strings.TrimPrefix(ref, "refs/remotes/origin/"), nil
 }
 
 // ExcludeFile returns the repo's info/exclude path (creating its parent),
@@ -324,11 +292,10 @@ func DefaultBranch(root string) (string, error) {
 // common dir for linked worktrees, exactly where per-machine excludes
 // belong.
 func ExcludeFile(root string) (string, error) {
-	out, err := exec.Command("git", "-C", root, "rev-parse", "--git-path", "info/exclude").Output()
+	p, err := gitexec.Text(root, "rev-parse", "--git-path", "info/exclude")
 	if err != nil {
 		return "", fmt.Errorf("%s is not inside a git worktree: %w", root, err)
 	}
-	p := strings.TrimSpace(string(out))
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(root, p)
 	}
@@ -341,9 +308,9 @@ func ExcludeFile(root string) (string, error) {
 // IsClean reports whether root's working tree has no uncommitted changes,
 // untracked files included — `git status --porcelain` prints nothing (025 §16.2).
 func IsClean(root string) (bool, error) {
-	out, err := exec.Command("git", "-C", root, "status", "--porcelain").Output()
+	out, err := gitexec.Text(root, "status", "--porcelain")
 	if err != nil {
-		return false, fmt.Errorf("git status --porcelain: %w", err)
+		return false, err
 	}
-	return len(strings.TrimSpace(string(out))) == 0, nil
+	return out == "", nil
 }

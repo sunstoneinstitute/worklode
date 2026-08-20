@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
@@ -102,16 +102,15 @@ func pendingIdentity(root string) (string, error) {
 // leftover from an earlier attempt), it retries attaching to the existing
 // branch instead.
 func addWorktree(root, dir, branch string) error {
-	out, err := exec.Command("git", "-C", root, "worktree", "add", "-b", branch, dir).CombinedOutput()
+	err := gitexec.Run(root, "worktree", "add", "-b", branch, dir)
 	if err == nil {
 		return nil
 	}
-	out2, err2 := exec.Command("git", "-C", root, "worktree", "add", dir, branch).CombinedOutput()
+	err2 := gitexec.Run(root, "worktree", "add", dir, branch)
 	if err2 == nil {
 		return nil
 	}
-	return fmt.Errorf("git worktree add -b %s %s: %s (retry attaching existing branch also failed: %s)",
-		branch, dir, strings.TrimSpace(string(out)), strings.TrimSpace(string(out2)))
+	return fmt.Errorf("%w (retry attaching existing branch also failed: %v)", err, err2)
 }
 
 // clearTaskBinding drops the worklode.task-id stamp from a checkout whose
@@ -169,8 +168,8 @@ func purgeTaskSecrets(cmd *cobra.Command, taskID string) {
 // already returning the original error and this must not mask it.
 func rollbackClaim(ctx context.Context, c *cli.Client, taskID, root, dir string) {
 	if dir != "" {
-		worktree.UnsetTaskID(dir)                                                   //nolint:errcheck
-		exec.Command("git", "-C", root, "worktree", "remove", "--force", dir).Run() //nolint:errcheck
+		worktree.UnsetTaskID(dir) //nolint:errcheck
+		gitexec.OK(root, "worktree", "remove", "--force", dir)
 	}
 	c.ReleaseLease(ctx, taskID) //nolint:errcheck
 }

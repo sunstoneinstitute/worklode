@@ -19,12 +19,12 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -178,10 +178,10 @@ func renderLocation(p *Payload, fallbackDir string) string {
 	}
 
 	// One rev-parse for toplevel, common .git dir, and branch.
-	info, ok := gitOutput(dir, "rev-parse", "--path-format=absolute",
+	info, err := gitexec.Text(dir, "rev-parse", "--path-format=absolute",
 		"--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD")
 	lines := strings.Split(info, "\n")
-	if !ok || len(lines) < 3 {
+	if err != nil || len(lines) < 3 {
 		return filepath.Base(dir)
 	}
 	toplevel := lines[0]
@@ -215,7 +215,7 @@ func formatTaskLocation(project, taskID, branch string) string {
 // gitProject returns the project name: the basename of the remote URL with any
 // ".git" suffix removed, falling back to the main worktree directory name.
 func gitProject(dir, mainWorktree string) string {
-	if url, ok := gitOutput(dir, "config", "--get", "remote.origin.url"); ok && url != "" {
+	if url, ok := gitexec.Line(dir, "config", "--get", "remote.origin.url"); ok && url != "" {
 		base := url
 		if i := strings.LastIndexAny(base, "/:"); i >= 0 {
 			base = base[i+1:]
@@ -249,18 +249,6 @@ func formatLocation(project string, isWorktree bool, branch string) string {
 		out += " " + branchSymbol + " " + branch
 	}
 	return out
-}
-
-// gitOutput runs git in dir and returns its trimmed stdout, with ok=false on
-// any error (e.g. not a git repository).
-func gitOutput(dir string, args ...string) (string, bool) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return "", false
-	}
-	return strings.TrimSpace(string(out)), true
 }
 
 // todoItem is one entry in the harness's per-session todo file.
