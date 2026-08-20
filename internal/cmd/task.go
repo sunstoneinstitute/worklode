@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -496,7 +497,16 @@ func newTaskEditCmd() *cobra.Command {
 // readBodyFile reads a body from path, or from the command's stdin when path
 // is "-". Multi-line markdown bodies are awkward to pass as a flag value, so
 // `lode task edit --body-file -` is the pipe-friendly form.
+//
+// An empty path is rejected rather than delegated: resolveBody reads "no file
+// named" as "use the inline body", which for these callers — who have no
+// inline body — would quietly overwrite a document or task body with nothing.
+// MarkFlagRequired only checks that the flag was set, so `--file ""` reaches
+// here.
 func readBodyFile(cmd *cobra.Command, path string) (string, error) {
+	if path == "" {
+		return "", errors.New(`no file: pass a path, or "-" to read the body from stdin`)
+	}
 	return resolveBody("", path, cmd.InOrStdin())
 }
 

@@ -250,6 +250,47 @@ func docJSON(t *testing.T, out string) model.Doc {
 	return d
 }
 
+// TestDocFileFlagRejectsEmptyPath pins the --file flag against an empty value.
+// MarkFlagRequired only checks that the flag was set, so `--file ""` reaches
+// readBodyFile; resolving it to an empty body would create a doc with no
+// content, and on `doc edit` would overwrite one that had some.
+func TestDocFileFlagRejectsEmptyPath(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+		"--number", "902", "--slug", "empty-file-adr", "--file", ""); err == nil {
+		t.Fatal(`doc new --file "": want error, got nil`)
+	}
+	out, err := runLode(t, "doc", "list", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("doc list: %v\noutput: %s", err, out)
+	}
+	if strings.Contains(out, "empty-file-adr") {
+		t.Fatalf(`doc new --file "" created a document anyway: %s`, out)
+	}
+
+	// Same guard on the edit side: the body must survive a rejected --file.
+	specFile := writeDocFile(t, docTestBody)
+	out, err = runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "902", "--slug", "keeps-its-body", "--file", specFile, "--json")
+	if err != nil {
+		t.Fatalf("doc new: %v\noutput: %s", err, out)
+	}
+	idArg := strconv.FormatInt(docJSON(t, out).ID, 10)
+
+	if _, err := runLode(t, "doc", "edit", idArg, "--file", ""); err == nil {
+		t.Fatal(`doc edit --file "": want error, got nil`)
+	}
+	out, err = runLode(t, "doc", "get", idArg, "--json")
+	if err != nil {
+		t.Fatalf("doc get: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out).Body; got != docTestBody {
+		t.Fatalf(`body after rejected --file "" = %q, want it untouched`, got)
+	}
+}
+
 func TestDocLifecycle(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

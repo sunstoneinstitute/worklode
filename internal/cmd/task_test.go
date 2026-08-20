@@ -154,6 +154,19 @@ func TestTaskEditBodyErrors(t *testing.T) {
 	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", filepath.Join(t.TempDir(), "missing.md")); err == nil {
 		t.Fatal("--body-file with missing file: want error, got nil")
 	}
+
+	// An empty --body-file names no file at all. It must fail rather than
+	// resolve to an empty body and wipe what is there — MarkFlagRequired only
+	// checks that the flag was set, so the value still reaches readBodyFile.
+	if _, err := runLode(t, "task", "edit", task.ID, "--body", "ORIGINAL"); err != nil {
+		t.Fatalf("edit --body: %v", err)
+	}
+	if _, err := runLode(t, "task", "edit", task.ID, "--body-file", ""); err == nil {
+		t.Fatal(`--body-file "": want error, got nil`)
+	}
+	if got := taskBody(t, task.ID); got != "ORIGINAL" {
+		t.Fatalf(`body after --body-file "" = %q, want it untouched (%q)`, got, "ORIGINAL")
+	}
 }
 
 func TestTaskListStatusFiltering(t *testing.T) {
