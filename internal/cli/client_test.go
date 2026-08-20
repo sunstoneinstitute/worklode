@@ -932,19 +932,9 @@ func TestClientErrorRendering(t *testing.T) {
 }
 
 func TestLoadConfigFileAndEnvOverride(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("LODE_SERVER", "")
-	t.Setenv("LODE_TOKEN", "")
-
-	cfgDir := filepath.Join(dir, ".config", "worklode")
-	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
-		t.Fatalf("mkdir config dir: %v", err)
-	}
-	cfgFile := filepath.Join(cfgDir, "config.toml")
+	configTestHome(t)
 	content := "# a comment\nserver = \"https://file.example.com\"\ntoken = \"wl_filetoken\"\n\n"
-	if err := os.WriteFile(cfgFile, []byte(content), 0o600); err != nil {
+	if err := cli.WriteRawConfigForTest(content); err != nil {
 		t.Fatalf("write config file: %v", err)
 	}
 
@@ -968,11 +958,8 @@ func TestLoadConfigFileAndEnvOverride(t *testing.T) {
 }
 
 func TestLoadConfigMissingFile(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	configTestHome(t)
 	t.Setenv("LODE_SERVER", "https://env-only.example.com")
-	t.Setenv("LODE_TOKEN", "")
 
 	cfg, err := cli.LoadConfig()
 	if err != nil {
@@ -984,11 +971,7 @@ func TestLoadConfigMissingFile(t *testing.T) {
 }
 
 func TestSaveConfigRoundTrip(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("LODE_SERVER", "")
-	t.Setenv("LODE_TOKEN", "")
+	configTestHome(t)
 
 	want := cli.Config{ServerURL: "https://wl.example.com", Token: "wl_" + strings.Repeat("ab", 20)}
 	if err := cli.SaveConfig(want); err != nil {
@@ -1019,11 +1002,7 @@ func TestSaveConfigRoundTrip(t *testing.T) {
 }
 
 func TestLoadConfigResolvesTokenFromKeychain(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("LODE_TOKEN", "")
-	t.Setenv("LODE_SERVER", "")
+	configTestHome(t)
 
 	// config.toml has only server.
 	if err := cli.SaveServerOnly("https://wl.example.com"); err != nil {
@@ -1042,9 +1021,7 @@ func TestLoadConfigResolvesTokenFromKeychain(t *testing.T) {
 }
 
 func TestEnvTokenBeatsKeychain(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	configTestHome(t)
 	t.Setenv("LODE_SERVER", "https://wl.example.com")
 	t.Setenv("LODE_TOKEN", "wl_env")
 	_ = cli.NewKeychainTokenStore().Set("https://wl.example.com", "wl_kc")
@@ -1059,11 +1036,7 @@ func TestEnvTokenBeatsKeychain(t *testing.T) {
 }
 
 func TestSaveConfigWritesKeychainAndStripsLegacyToken(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("LODE_TOKEN", "")
-	t.Setenv("LODE_SERVER", "")
+	configTestHome(t)
 
 	// Simulate a legacy cleartext config.toml with a token line.
 	if err := cli.WriteRawConfigForTest("server = \"https://wl.example.com\"\ntoken = \"wl_old\"\n"); err != nil {
@@ -1148,10 +1121,7 @@ func TestSaveConfigKeychainWriteFailureKeepsLegacyToken(t *testing.T) {
 }
 
 func TestLoadConfigServerOverrideDropsLegacyFileToken(t *testing.T) {
-	keyring.MockInit()
-	dir := t.TempDir()
-	t.Setenv("HOME", dir)
-	t.Setenv("LODE_TOKEN", "")
+	configTestHome(t)
 
 	// Legacy cleartext file: server + token both point at the file server.
 	if err := cli.WriteRawConfigForTest("server = \"https://file.example.com\"\ntoken = \"wl_filetoken\"\n"); err != nil {
@@ -1178,16 +1148,8 @@ func TestLoadConfigMalformed(t *testing.T) {
 		"unknown key":    "bogus = \"value\"\n",
 	} {
 		t.Run(name, func(t *testing.T) {
-			keyring.MockInit()
-			dir := t.TempDir()
-			t.Setenv("HOME", dir)
-			t.Setenv("LODE_SERVER", "")
-			t.Setenv("LODE_TOKEN", "")
-			cfgDir := filepath.Join(dir, ".config", "worklode")
-			if err := os.MkdirAll(cfgDir, 0o755); err != nil {
-				t.Fatalf("mkdir config dir: %v", err)
-			}
-			if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(content), 0o600); err != nil {
+			configTestHome(t)
+			if err := cli.WriteRawConfigForTest(content); err != nil {
 				t.Fatalf("write config file: %v", err)
 			}
 			if _, err := cli.LoadConfig(); err == nil {
@@ -1209,16 +1171,25 @@ func writeRepoConfig(t *testing.T, dir, confDir, content string) {
 	}
 }
 
+// configTestHome points $HOME at a fresh temp dir with a mock keychain and no
+// LODE_* environment, so a config test sees only what it writes. A test that
+// wants an override sets it after calling this.
+func configTestHome(t *testing.T) string {
+	t.Helper()
+	keyring.MockInit()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("LODE_SERVER", "")
+	t.Setenv("LODE_TOKEN", "")
+	return dir
+}
+
 // repoTestHome sets up a fake $HOME with a user config and returns the home
 // directory plus a nested repo working directory (<home>/git/proj/sub) to load
 // from.
 func repoTestHome(t *testing.T, userConfig string) (home, workDir string) {
 	t.Helper()
-	keyring.MockInit()
-	home = t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("LODE_SERVER", "")
-	t.Setenv("LODE_TOKEN", "")
+	home = configTestHome(t)
 	if userConfig != "" {
 		if err := cli.WriteRawConfigForTest(userConfig); err != nil {
 			t.Fatalf("write user config: %v", err)
@@ -1375,10 +1346,7 @@ func TestRepoConfigServerOverrideDropsLegacyFileToken(t *testing.T) {
 }
 
 func TestSaveServerOnlyPreservesCurrentProject(t *testing.T) {
-	keyring.MockInit()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("LODE_SERVER", "")
-	t.Setenv("LODE_TOKEN", "")
+	configTestHome(t)
 
 	if err := cli.WriteRawConfigForTest("server = \"https://old.example.com\"\ncurrent_project = \"keepme\"\n"); err != nil {
 		t.Fatalf("seed config: %v", err)
@@ -1396,10 +1364,7 @@ func TestSaveServerOnlyPreservesCurrentProject(t *testing.T) {
 }
 
 func TestSaveServerOnlyPreservesProjectKey(t *testing.T) {
-	keyring.MockInit()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("LODE_SERVER", "")
-	t.Setenv("LODE_TOKEN", "")
+	configTestHome(t)
 
 	if err := cli.WriteRawConfigForTest("server = \"https://old.example.com\"\nproject_key = \"WL\"\n"); err != nil {
 		t.Fatalf("seed config: %v", err)
