@@ -236,14 +236,8 @@ func (s *Store) ResetEventRead(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("reset event read for %s: %w", name, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("reset event read for %s: %w", name, err)
-	}
-	if n == 0 {
-		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "reset event read for "+name,
+		fmt.Errorf("event subscriber %s: %w", name, ErrNotFound))
 }
 
 // ReadEventBatch returns up to limit events after the subscriber's
@@ -462,14 +456,8 @@ func (s *Store) SeekEventSubscriber(ctx context.Context, name string, to int64) 
 	if err != nil {
 		return fmt.Errorf("seek event subscriber %s: %w", name, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("seek event subscriber %s: %w", name, err)
-	}
-	if n == 0 {
-		return fmt.Errorf("event subscriber %s: %w", name, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "seek event subscriber "+name,
+		fmt.Errorf("event subscriber %s: %w", name, ErrNotFound))
 }
 
 // SubscriberLock pins one pool connection holding the pg_try_advisory_lock

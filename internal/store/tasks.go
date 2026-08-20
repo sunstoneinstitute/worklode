@@ -379,14 +379,8 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", id, err)
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("update task %s rows affected: %w", id, err)
-	}
-	if affected == 0 {
-		return fmt.Errorf("task %s: %w", id, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "update task "+id,
+		fmt.Errorf("task %s: %w", id, ErrNotFound))
 }
 
 // taskColumns is the SELECT list scanTask expects, in order. skills,
@@ -495,10 +489,8 @@ func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error 
 	if err != nil {
 		return fmt.Errorf("set task skills %s: %w", id, err)
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("task %s: %w", id, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "set task skills "+id,
+		fmt.Errorf("task %s: %w", id, ErrNotFound))
 }
 
 // SlugifyTitle turns a task title into a branch-name slug: lowercase, every

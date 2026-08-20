@@ -101,10 +101,7 @@ func LatestMainID(tx *sql.Tx, repo string) (*int64, error) {
 		repo).Scan(&id); err != nil {
 		return nil, fmt.Errorf("latest main commit for %s: %w", repo, err)
 	}
-	if !id.Valid {
-		return nil, nil
-	}
-	return &id.Int64, nil
+	return nullableID(id), nil
 }
 
 // MapDeploySHA maps a deploy-branch commit to the main commit its
@@ -186,10 +183,7 @@ func LandedMainID(tx *sql.Tx, taskID, repo string) (*int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("landed main id for %s: %w", taskID, err)
 	}
-	if !id.Valid {
-		return nil, nil
-	}
-	return &id.Int64, nil
+	return nullableID(id), nil
 }
 
 // NormalizeEnvironment maps a GitHub environment name to the delivery stage
@@ -437,8 +431,5 @@ func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("release frontier %s: %w", repo, err)
 	}
-	if !id.Valid {
-		return nil, nil
-	}
-	return &id.Int64, nil
+	return nullableID(id), nil
 }

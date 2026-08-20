@@ -23,6 +23,17 @@ func vectorLiteral(v []float32) string {
 	return b.String()
 }
 
+// isZeroVector reports whether v has zero magnitude. Cosine distance is
+// undefined against such a vector, so neither a stored chunk nor a query may
+// be one.
+func isZeroVector(v []float32) bool {
+	var sum float32
+	for _, x := range v {
+		sum += x * x
+	}
+	return sum == 0
+}
+
 // ReplaceSkillEmbeddings swaps the full chunk-vector set for one skill. All
 // vectors must share one non-zero dimension: the embedding column has no
 // dimension typmod, so mixed dimensions in the table make cosine queries
@@ -41,11 +52,7 @@ func (s *Store) ReplaceSkillEmbeddings(ctx context.Context, skillID int64, vecs 
 				return fmt.Errorf("replace skill embeddings %d: vector %d has dimension %d, want %d: %w",
 					skillID, i, len(v), dim, ErrInvalidInput)
 			}
-			var sum float32
-			for _, x := range v {
-				sum += x * x
-			}
-			if sum == 0 {
+			if isZeroVector(v) {
 				return fmt.Errorf("replace skill embeddings %d: vector %d is all zeros (cosine distance is undefined): %w",
 					skillID, i, ErrInvalidInput)
 			}
@@ -95,11 +102,7 @@ func (s *Store) RecommendSkills(ctx context.Context, query []float32, limit int,
 	if len(query) == 0 {
 		return nil, fmt.Errorf("recommend skills: zero-length query vector: %w", ErrInvalidInput)
 	}
-	var sum float32
-	for _, x := range query {
-		sum += x * x
-	}
-	if sum == 0 {
+	if isZeroVector(query) {
 		return nil, fmt.Errorf("recommend skills: query vector is all zeros (cosine distance is undefined): %w", ErrInvalidInput)
 	}
 

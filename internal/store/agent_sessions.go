@@ -93,15 +93,6 @@ func scanAgentSession(row rowScanner) (*AgentSession, error) {
 	return &a, nil
 }
 
-// nullIfEmpty maps "" to a SQL NULL, so optional text columns stay NULL
-// rather than holding an empty string.
-func nullIfEmpty(s string) any {
-	if s == "" {
-		return nil
-	}
-	return s
-}
-
 // heldLease returns the active lease on taskID, erroring with ErrNotFound
 // unless actorID holds it. A non-holder and an absent lease are deliberately
 // indistinguishable, the same probe-resistant policy as Renew and Release.
@@ -180,7 +171,7 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 				   (lease_id, agent, agent_version, external_session_id, started_at, last_seen_at)
 				 VALUES ($1, $2, $3, $4, $5, $5)
 				 ON CONFLICT (lease_id, agent, external_session_id) DO NOTHING`,
-				lease.ID, agent, nullIfEmpty(agentVersion), sessionID, now,
+				lease.ID, agent, nullText(agentVersion), sessionID, now,
 			); err != nil {
 				return fmt.Errorf("insert agent session on lease %d: %w", lease.ID, err)
 			}

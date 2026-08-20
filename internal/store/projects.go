@@ -198,14 +198,8 @@ func (s *Store) SetProjectFocus(ctx context.Context, projectID string, focus []s
 			if err != nil {
 				return fmt.Errorf("set focus for project %s: %w", projectID, err)
 			}
-			affected, err := res.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("set focus rows affected: %w", err)
-			}
-			if affected == 0 {
-				return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
-			}
-			return nil
+			return requireOneAffected(res, "set focus",
+				fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 		})
 	return err
 }
@@ -221,7 +215,7 @@ func (s *Store) PinProjectFocus(ctx context.Context, projectID, note, pinnedBy s
 	var noteVal, byVal, atVal any
 	if note != "" {
 		noteVal = note
-		byVal = nullIfEmpty(pinnedBy)
+		byVal = nullText(pinnedBy)
 		atVal = nullIfZeroTime(pinnedAt)
 	}
 	res, err := s.db.ExecContext(ctx,
@@ -231,14 +225,8 @@ func (s *Store) PinProjectFocus(ctx context.Context, projectID, note, pinnedBy s
 	if err != nil {
 		return fmt.Errorf("pin focus for project %s: %w", projectID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("pin focus rows affected: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "pin focus",
+		fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 }
 
 // SetProjectNextDecision sets (or clears) the cockpit's curated "Next decision"
@@ -252,8 +240,8 @@ func (s *Store) SetProjectNextDecision(ctx context.Context, projectID, title, ac
 	var titleVal, accVal, readyVal any
 	if title != "" {
 		titleVal = title
-		accVal = nullIfEmpty(accountable)
-		readyVal = nullIfEmpty(readiness)
+		accVal = nullText(accountable)
+		readyVal = nullText(readiness)
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE projects
@@ -262,14 +250,8 @@ func (s *Store) SetProjectNextDecision(ctx context.Context, projectID, title, ac
 	if err != nil {
 		return fmt.Errorf("set next decision for project %s: %w", projectID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("set next decision rows affected: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("project %s: %w", projectID, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "set next decision",
+		fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 }
 
 // AddRepo maps repo ("owner/name") to projectID. A repo may belong to at
@@ -326,14 +308,8 @@ func (s *Store) SetRepoDoneState(ctx context.Context, repo, state string) error 
 	if err != nil {
 		return fmt.Errorf("set done_state for %s: %w", repo, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("set done_state rows affected: %w", err)
-	}
-	if n == 0 {
-		return fmt.Errorf("repo %s: %w", repo, ErrNotFound)
-	}
-	return nil
+	return requireOneAffected(res, "set done_state",
+		fmt.Errorf("repo %s: %w", repo, ErrNotFound))
 }
 
 // ListRepos returns the repos mapped to a project, each with its done_state.

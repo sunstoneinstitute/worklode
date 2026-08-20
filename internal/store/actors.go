@@ -193,14 +193,7 @@ func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 	if err != nil {
 		return fmt.Errorf("revoke token: %w", err)
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("revoke token rows affected: %w", err)
-	}
-	if affected == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return requireOneAffected(res, "revoke token", ErrNotFound)
 }
 
 // Authenticate looks up the actor for a plaintext bearer token. It returns

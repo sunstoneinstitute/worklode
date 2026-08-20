@@ -61,6 +61,13 @@ type DocFilter struct {
 	Status  string
 }
 
+// logDocChange records one document mutation in the state log. Nine write
+// paths in this file need it; the entity kind and the id formatting are
+// stated here rather than re-typed at each of them.
+func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) error {
+	return LogChange(tx, docEntityKind, strconv.FormatInt(docID, 10), eventID, change)
+}
+
 // CreateDoc inserts a document, its section rows and its frontmatter-derived
 // edges inside the given transaction, and appends a state_log row attributed
 // to eventID. Call it from a RecordDocEvent apply callback with the store's
@@ -160,7 +167,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err := rebuildEdges(tx, id, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
-	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	if err := logDocChange(tx, id, eventID,
 		map[string]string{"field": "status", "new": status}); err != nil {
 		return nil, err
 	}
@@ -229,7 +236,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	if err := rebuildEdges(tx, id, project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
-	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	if err := logDocChange(tx, id, eventID,
 		map[string]string{"field": "body"}); err != nil {
 		return nil, err
 	}
@@ -262,7 +269,7 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 	if err := rebuildEdges(tx, id, d.project, parsed.doc.Frontmatter); err != nil {
 		return err
 	}
-	return LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "edges"})
 }
 
@@ -322,7 +329,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
 		return nil, nil, err
 	}
-	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	if err := logDocChange(tx, id, eventID,
 		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
 		return nil, nil, err
 	}
@@ -388,7 +395,7 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
 		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
-	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	if err := logDocChange(tx, id, eventID,
 		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
 		return nil, nil, err
 	}
@@ -428,7 +435,7 @@ func ReviseDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		}
 		return fmt.Errorf("open revision of doc %d: %w", id, err)
 	}
-	return LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "revision", "new": "open"})
 }
 
@@ -455,12 +462,11 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 	if err != nil {
 		return fmt.Errorf("update revision of doc %d: %w", id, err)
 	}
-	if n, err := res.RowsAffected(); err != nil {
-		return fmt.Errorf("update revision of doc %d: %w", id, err)
-	} else if n == 0 {
-		return fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+	if err := requireOneAffected(res, fmt.Sprintf("update revision of doc %d", id),
+		fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)); err != nil {
+		return err
 	}
-	return LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "revision", "new": "updated"})
 }
 
@@ -584,7 +590,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
 		return nil, err
 	}
-	if err := LogChange(tx, docEntityKind, strconv.FormatInt(id, 10), eventID,
+	if err := logDocChange(tx, id, eventID,
 		map[string]string{
 			"field": "version",
 			"old":   strconv.Itoa(d.version),
@@ -730,7 +736,7 @@ func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error
 		if n == 0 {
 			continue
 		}
-		if err := LogChange(tx, docEntityKind, strconv.FormatInt(target, 10), eventID,
+		if err := logDocChange(tx, target, eventID,
 			map[string]string{
 				"field":       "status",
 				"new":         "superseded",
@@ -1751,15 +1757,4 @@ func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, er
 		return nil, fmt.Errorf("resolve doc subject %q: %w", iri, err)
 	}
 	return d, nil
-}
-
-// nullText maps "" to NULL, for the document columns where absent and empty
-// are the same thing.
-func nullText(s string) sql.NullString {
-	return sql.NullString{String: s, Valid: s != ""}
-}
-
-// nullID maps 0 to NULL, for the nullable doc_edges.to_doc reference.
-func nullID(id int64) sql.NullInt64 {
-	return sql.NullInt64{Int64: id, Valid: id != 0}
 }

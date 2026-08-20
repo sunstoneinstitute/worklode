@@ -72,3 +72,23 @@ func scanColumn[T any](rows *sql.Rows, what string) ([]T, error) {
 		return v, err
 	})
 }
+
+// nullText maps "" to NULL, for the columns where absent and empty are the
+// same thing.
+func nullText(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// nullID maps 0 to NULL, for the nullable id references (doc_edges.to_doc,
+// tasks.plan_doc).
+func nullID(id int64) sql.NullInt64 {
+	return sql.NullInt64{Int64: id, Valid: id != 0}
+}
+
+// nullableID is nullID's read counterpart: nil when the column was NULL.
+func nullableID(n sql.NullInt64) *int64 {
+	if !n.Valid {
+		return nil
+	}
+	return &n.Int64
+}
