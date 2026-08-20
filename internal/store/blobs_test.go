@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestBlobsSchema asserts migration 0032 created both tables with the
@@ -303,6 +304,59 @@ func TestAttachBlobKeepsFilename(t *testing.T) {
 // TestAttachBlobUnknownHash maps the insert direction of task_blobs_hash_fkey
 // onto a sentinel, so the handler can answer 422 without matching on a
 // constraint name that also fires for a GC deleting a referenced blob.
+// TestUnreferencedBlobs asserts the GC listing/delete pair: a blob with no
+// task_blobs row and past the grace period is collected, a fresh unreferenced
+// blob is held back (the upload path writes the object before the row, per
+// spec 021 §5), and a referenced blob is never listed or deletable.
+func TestUnreferencedBlobs(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := seedTask(t, s, "WL-9"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("seed actor: %v", err)
+	}
+	referenced := "11" + strings.Repeat("0", 62)
+	orphaned := "22" + strings.Repeat("0", 62)
+	fresh := "33" + strings.Repeat("0", 62)
+
+	old := time.Now().UTC().Add(-48 * time.Hour)
+	s.SetNowFunc(func() time.Time { return old })
+	for _, h := range []string{referenced, orphaned} {
+		if _, err := s.InsertBlob(ctx, h, "image/png", 1); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	s.SetNowFunc(func() time.Time { return time.Now().UTC() })
+	if _, err := s.InsertBlob(ctx, fresh, "image/png", 1); err != nil {
+		t.Fatalf("insert fresh: %v", err)
+	}
+	if err := s.AttachBlob(ctx, "WL-9", referenced, "a.png", "alice"); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+
+	got, err := s.UnreferencedBlobs(ctx, 24*time.Hour)
+	if err != nil {
+		t.Fatalf("unreferenced: %v", err)
+	}
+	if len(got) != 1 || got[0].Hash != orphaned {
+		t.Fatalf("got %+v, want only %s (referenced kept, fresh inside grace)", got, orphaned)
+	}
+
+	deleted, err := s.DeleteBlobIfUnreferenced(ctx, orphaned)
+	if err != nil || !deleted {
+		t.Fatalf("delete = %v, %v; want true, nil", deleted, err)
+	}
+	deleted, err = s.DeleteBlobIfUnreferenced(ctx, referenced)
+	if err != nil {
+		t.Fatalf("delete referenced: %v", err)
+	}
+	if deleted {
+		t.Fatal("a referenced blob must not be deletable")
+	}
+}
+
 func TestAttachBlobUnknownHash(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()

@@ -1,9 +1,14 @@
 package ui
 
 // task.templ renders one task's detail page (GET /tasks/{id}): identity,
-// state/priority/kind, project link, body, edges, and the full timeline.
-// Restyled from the former internal/api/task.templ into design-system cards
-// and chips. row.URL (TimelineRow.URL) is rendered as a plain string href, so
+// state/priority/kind, project link, body, attachments, edges, and the full
+// timeline. Restyled from the former internal/api/task.templ into
+// design-system cards and chips.
+//
+// The body is the page's one piece of untrusted markup (spec 021 §8): it
+// arrives as v.BodyHTML, already rendered and sanitised by internal/mdrender
+// at the api boundary, and is the only value emitted raw. Everything else,
+// row.URL (TimelineRow.URL) included, is rendered as a plain string href, so
 // templ's SafeURL sanitizer neutralizes an unsafe scheme into
 // "about:invalid#TemplFailedSanitizationURL" before it reaches the page (see
 // web_test.go's TestTaskPageEscapesHostileTimelineURL).
@@ -34,8 +39,35 @@ templ Task(v TaskView) {
 
 			<section class="card">
 				<div class="hd"><h3>Body</h3></div>
-				<div class="bd"><pre>{ v.Task.Body }</pre></div>
+				// BodyHTML is the one value this package emits unescaped. What
+				// makes that safe is internal/mdrender: the untrusted body is
+				// rendered permissively, then the OUTPUT HTML is reduced to an
+				// allowlist, so no element, attribute or URL scheme reaches
+				// this div that the sanitiser did not pass.
+				<div class="bd prose">
+					@templ.Raw(string(v.BodyHTML))
+				</div>
 			</section>
+
+			if len(v.Attachments) > 0 {
+				<section class="card">
+					<div class="hd"><h3>Attachments</h3></div>
+					<div class="bd">
+						<ul class="attachments">
+							for _, b := range v.Attachments {
+								<li>
+									if b.Filename != "" {
+										<a href={ b.URL }>{ b.Filename }</a>
+									} else {
+										<a href={ b.URL } class="mono">{ b.Hash }</a>
+									}
+									<span class="meta">{ b.MediaType } &middot; { FmtBytes(b.Size) }</span>
+								</li>
+							}
+						</ul>
+					</div>
+				</section>
+			}
 
 			<section class="card">
 				<div class="hd"><h3>Edges</h3></div>
