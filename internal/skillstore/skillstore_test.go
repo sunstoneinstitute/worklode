@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -178,7 +179,8 @@ func TestEnsure(t *testing.T) {
 
 // TestEnsurePlacesVersionsInStoreDir is the split's point: harnesses walk the
 // links dir looking for skill names, so it must hold name symlinks and
-// nothing else — no ".store", no hash-named dirs (spec 024 acceptance 2).
+// nothing else — no ".store", no hash-named dirs (spec 008 acceptance
+// criterion 9).
 func TestEnsurePlacesVersionsInStoreDir(t *testing.T) {
 	dirs := testDirs(t)
 	files := map[string]string{"SKILL.md": "body"}
@@ -217,7 +219,7 @@ func TestEnsurePlacesVersionsInStoreDir(t *testing.T) {
 	}
 }
 
-// TestEnsureMigratesLegacyStore covers the pre-spec-024 layout: hash dirs and
+// TestEnsureMigratesLegacyStore covers the pre-split layout: hash dirs and
 // name symlinks under <links>/.store. Ensure must migrate it, silently, on
 // its way to installing an unrelated skill.
 func TestEnsureMigratesLegacyStore(t *testing.T) {
@@ -283,6 +285,55 @@ func TestEnsureMigratesLegacyStore(t *testing.T) {
 	}
 	if got, err := os.ReadFile(filepath.Join(links, "legacy", "SKILL.md")); err != nil || string(got) != "legacy body" {
 		t.Fatalf("legacy symlink broken after second migration: %q, %v", got, err)
+	}
+}
+
+// TestEnsureMigratesLegacyStoreSurvivesRenameFailure is the fix for the
+// defect a review caught in the plan's sample migration code: a rename
+// failure (permission, EXDEV across a mount) must degrade to "this version
+// stays unmigrated, Ensure retries later" — never data loss plus a dangling
+// symlink. Injects a failing rename via the package's rename var and checks
+// the legacy copy and its symlink both survive intact, not just that the
+// symlink's target string is unchanged.
+func TestEnsureMigratesLegacyStoreSurvivesRenameFailure(t *testing.T) {
+	base := t.TempDir()
+	links := filepath.Join(base, "skills")
+	dirs := Dirs{Links: links, Store: filepath.Join(base, "store")}
+
+	legacyHash := hashFiles(map[string]string{"SKILL.md": "unmovable body"})
+	legacyDir := filepath.Join(links, ".store", legacyHash)
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatalf("setup legacy store dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "SKILL.md"), []byte("unmovable body"), 0o644); err != nil {
+		t.Fatalf("setup legacy skill file: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(".store", legacyHash), filepath.Join(links, "stuck")); err != nil {
+		t.Fatalf("setup legacy symlink: %v", err)
+	}
+
+	orig := rename
+	rename = func(string, string) error { return errors.New("injected rename failure") }
+	defer func() { rename = orig }()
+
+	migrateLegacyStore(dirs)
+
+	// (a) the legacy content still exists, readable, where it was.
+	if got, err := os.ReadFile(filepath.Join(legacyDir, "SKILL.md")); err != nil || string(got) != "unmovable body" {
+		t.Fatalf("legacy content lost: %q, %v", got, err)
+	}
+	// (c) nothing was deleted out from under it.
+	if _, err := os.Stat(filepath.Join(links, ".store")); err != nil {
+		t.Fatalf("legacy dir should survive a failed rename: %v", err)
+	}
+	// (b) the name symlink still RESOLVES — not just an unchanged target
+	// string, an actual read through it.
+	if got, err := os.ReadFile(filepath.Join(links, "stuck", "SKILL.md")); err != nil || string(got) != "unmovable body" {
+		t.Fatalf("symlink should still resolve after a failed rename: %q, %v", got, err)
+	}
+	// No store entry was ever committed for the hash whose rename failed.
+	if _, err := os.Stat(filepath.Join(dirs.Store, legacyHash)); !os.IsNotExist(err) {
+		t.Fatalf("store dir should not exist for a hash whose rename failed: %v", err)
 	}
 }
 

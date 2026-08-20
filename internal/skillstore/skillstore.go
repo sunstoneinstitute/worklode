@@ -10,7 +10,7 @@
 // convenience for humans and the path every coding-agent harness walks to
 // discover skills. It holds one name symlink per skill and nothing else: a
 // hash dir living there too would surface every version as a duplicate
-// skill (spec 024 §3.3). It holds one version at a time, so nothing that
+// skill (spec 008 §17.3). It holds one version at a time, so nothing that
 // needs a specific version may depend on it.
 //
 // A pre-split layout (Store nested under Links, as <links>/.store/<hash>)
@@ -55,8 +55,8 @@ func Root() (string, error) {
 
 // Dirs locates the two halves of the local skill cache. Links holds one
 // symlink per skill name and nothing else — harnesses walk it, so a hash
-// dir here would surface every version as a duplicate skill (spec 024
-// §3.3). Store holds the immutable content-addressed version dirs.
+// dir here would surface every version as a duplicate skill (spec 008
+// §17.3). Store holds the immutable content-addressed version dirs.
 type Dirs struct {
 	Links string // ~/.worklode/skills
 	Store string // ~/.worklode/store
@@ -73,10 +73,11 @@ func DefaultDirs() (Dirs, error) {
 	return Dirs{Links: links, Store: filepath.Join(filepath.Dir(links), "store")}, nil
 }
 
-// Path returns the by-name symlink <root>/<name>, whether or not it exists
-// yet. It points at whichever version was installed last, so it is for humans
-// only; anything needing a particular version uses the path Ensure returns.
-func Path(root, name string) string { return filepath.Join(root, name) }
+// Path returns the by-name symlink dirs.Links/<name>, whether or not it
+// exists yet. It points at whichever version was installed last, so it is
+// for humans only; anything needing a particular version uses the path
+// Ensure returns.
+func Path(links, name string) string { return filepath.Join(links, name) }
 
 // validHash requires lowercase hex only: uppercase would collide with
 // lowercase store dirs on a case-insensitive filesystem (macOS default
@@ -132,16 +133,24 @@ func Ensure(dirs Dirs, name, hash string, fetch func() ([]byte, error)) (string,
 func relTarget(dirs Dirs, hash string) string {
 	rel, err := filepath.Rel(dirs.Links, filepath.Join(dirs.Store, hash))
 	if err != nil {
-		return filepath.Join(dirs.Store, hash) // disjoint roots: absolute
+		return filepath.Join(dirs.Store, hash) // disjoint roots: not necessarily absolute, just unrelocated
 	}
 	return rel
 }
 
-// migrateLegacyStore moves a pre-spec-024 <links>/.store/ into dirs.Store
+// rename is os.Rename, a var so a test can inject a failure (permission,
+// EXDEV across a mount) to exercise migrateLegacyStore's per-hash fallback
+// without needing a real broken filesystem.
+var rename = os.Rename
+
+// migrateLegacyStore moves a pre-split <links>/.store/ into dirs.Store
 // (Q024.2: silent, by rename — content-addressed dirs are immutable, so a
-// rename either fully succeeds or leaves the version to be re-fetched) and
-// repoints name symlinks that still target ".store/<hash>". Best-effort:
-// any failure leaves Ensure to fetch as if the version were absent.
+// rename either fully succeeds or leaves the version in place) and repoints
+// name symlinks that still target ".store/<hash>". Best-effort and silent,
+// but never at the cost of content: a hash whose rename fails keeps its
+// legacy copy and its working symlink untouched — exactly as if migration
+// had not run for that version — rather than being repointed at a store
+// entry that was never created or deleted out from under a live symlink.
 func migrateLegacyStore(dirs Dirs) {
 	legacy := filepath.Join(dirs.Links, ".store")
 	entries, err := os.ReadDir(legacy)
@@ -149,16 +158,25 @@ func migrateLegacyStore(dirs Dirs) {
 		return // no legacy store — the common case, one cheap ReadDir
 	}
 	_ = os.MkdirAll(dirs.Store, 0o755)
+	moved := map[string]bool{}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 		dst := filepath.Join(dirs.Store, e.Name())
 		if _, err := os.Stat(dst); err == nil {
+			// Already in the store (an earlier migration, or a fresh
+			// Ensure that raced ahead of this one): the legacy copy is
+			// redundant and safe to drop.
 			_ = os.RemoveAll(filepath.Join(legacy, e.Name()))
+			moved[e.Name()] = true
 			continue
 		}
-		_ = os.Rename(filepath.Join(legacy, e.Name()), dst)
+		if err := rename(filepath.Join(legacy, e.Name()), dst); err == nil {
+			moved[e.Name()] = true
+		}
+		// Rename failure leaves legacy/<hash> in place; its symlink is
+		// left pointing at it below, and the next Ensure retries.
 	}
 	links, err := os.ReadDir(dirs.Links)
 	if err != nil {
@@ -170,9 +188,18 @@ func migrateLegacyStore(dirs Dirs) {
 		if err != nil || !strings.HasPrefix(target, ".store"+string(filepath.Separator)) {
 			continue
 		}
-		_ = swapSymlink(relTarget(dirs, filepath.Base(target)), p)
+		hash := filepath.Base(target)
+		if !moved[hash] {
+			continue // this hash's rename failed or never ran: leave the still-working symlink alone
+		}
+		_ = swapSymlink(relTarget(dirs, hash), p)
 	}
-	_ = os.RemoveAll(legacy)
+	// Only clear the legacy dir once nothing is left in it: a leftover
+	// entry means some hash's rename failed, and that content — and the
+	// symlink still pointing at it — must survive for the next retry.
+	if remaining, err := os.ReadDir(legacy); err == nil && len(remaining) == 0 {
+		_ = os.RemoveAll(legacy)
+	}
 }
 
 // extract unpacks tgz into a sibling tmp dir, verifies its content hashes to
