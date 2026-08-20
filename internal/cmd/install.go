@@ -162,6 +162,9 @@ type installResult struct {
 	VCS        *vcsInstall         `json:"vcs,omitempty"`
 	Agents     []agentInstall      `json:"agents,omitempty"`
 	StatusLine []statusLineInstall `json:"status_line,omitempty"`
+	// Instructions is the repo-level AGENTS.md/CLAUDE.md pair, not a
+	// per-harness integration: nil when there was no repo root to write to.
+	Instructions *instructionsResult `json:"instructions,omitempty"`
 }
 
 type vcsInstall struct {
@@ -195,9 +198,10 @@ type statusLineInstall struct {
 
 // uninstallResult is the same, for `lode uninstall`.
 type uninstallResult struct {
-	VCS        *vcsUninstall         `json:"vcs,omitempty"`
-	Agents     []agentUninstall      `json:"agents,omitempty"`
-	StatusLine []statusLineUninstall `json:"status_line,omitempty"`
+	VCS          *vcsUninstall         `json:"vcs,omitempty"`
+	Agents       []agentUninstall      `json:"agents,omitempty"`
+	StatusLine   []statusLineUninstall `json:"status_line,omitempty"`
+	Instructions *instructionsResult   `json:"instructions,omitempty"`
 }
 
 type statusLineUninstall struct {
@@ -277,6 +281,21 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 				statusLineInstall{Agent: id, Path: action.Path, Action: action.Action})
 		}
 	}
+
+	// The managed block is repo-level, not per-harness, so it is written once
+	// whatever the agent selection was (spec 008 §17.7). Outside a git repo
+	// there is no root to anchor it to; warn and carry on, the same posture
+	// the worktree config extension takes.
+	if root, ok := worktree.Root(dir); ok {
+		instr, err := ensureInstructions(root)
+		if err != nil {
+			return res, err
+		}
+		res.Instructions = instr
+	} else {
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"warning: %s is not inside a git repository; skipped the %s block\n", dir, agentsFile)
+	}
 	return res, nil
 }
 
@@ -313,6 +332,17 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 			res.StatusLine = append(res.StatusLine,
 				statusLineUninstall{Agent: id, Path: action.Path, Action: action.Action})
 		}
+	}
+
+	// Mirrors installHooks. It has no *cobra.Command to warn on, and a repo
+	// root that has vanished has nothing to remove anyway, so this side skips
+	// silently: installing is where the user needs to hear about it.
+	if root, ok := worktree.Root(dir); ok {
+		instr, err := removeInstructions(root)
+		if err != nil {
+			return res, err
+		}
+		res.Instructions = instr
 	}
 	return res, nil
 }
@@ -448,6 +478,29 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
 		}
 	}
+	if i := res.Instructions; i != nil {
+		switch i.AgentsMD {
+		case instrCreated:
+			fmt.Fprintf(out, "%s: created with the Worklode block\n", agentsFile)
+		case instrUpdated:
+			fmt.Fprintf(out, "%s: refreshed the Worklode block\n", agentsFile)
+		case instrUnchanged:
+			fmt.Fprintf(out, "%s: the Worklode block is already current\n", agentsFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", agentsFile, i.AgentsMD)
+		}
+		switch i.ClaudeMD {
+		case instrCreated:
+			fmt.Fprintf(out, "%s: created, importing %s\n", claudeFile, agentsFile)
+		case instrSuggested:
+			fmt.Fprintf(out, "%s: claude-code reads this file; add %q to it to import the Worklode block\n",
+				claudeFile, claudeImportLine)
+		case instrSatisfied:
+			fmt.Fprintf(out, "%s: already imports the Worklode block\n", claudeFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", claudeFile, i.ClaudeMD)
+		}
+	}
 	return nil
 }
 
@@ -493,6 +546,24 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 			fmt.Fprintf(out, "%s: no status line in %s\n", sl.Agent, sl.Path)
 		default:
 			fmt.Fprintf(out, "%s: unexpected status line result %q in %s\n", sl.Agent, sl.Action, sl.Path)
+		}
+	}
+	if i := res.Instructions; i != nil {
+		switch i.AgentsMD {
+		case instrRemoved:
+			fmt.Fprintf(out, "%s: removed the Worklode block\n", agentsFile)
+		case instrNone:
+			fmt.Fprintf(out, "%s: no Worklode block\n", agentsFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", agentsFile, i.AgentsMD)
+		}
+		switch i.ClaudeMD {
+		case instrRemoved:
+			fmt.Fprintf(out, "%s: removed (it held nothing but the %s import)\n", claudeFile, agentsFile)
+		case instrNone:
+			fmt.Fprintf(out, "%s: left alone (authored prose)\n", claudeFile)
+		default:
+			fmt.Fprintf(out, "%s: unexpected result %q\n", claudeFile, i.ClaudeMD)
 		}
 	}
 	return nil
