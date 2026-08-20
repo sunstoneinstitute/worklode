@@ -109,6 +109,29 @@ func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifac
 	return collectRows(rows, fmt.Sprintf("artifacts by source sha %s", sha), byValue(scanArtifact))
 }
 
+// ArtifactsBySourceSHAs is the bulk form of ArtifactsBySourceSHA: the
+// artifacts built from every sha in one query, keyed by source_sha. SHAs with
+// no artifacts are absent from the map; shas is empty-safe. Order within each
+// slice matches ArtifactsBySourceSHA.
+func (s *Store) ArtifactsBySourceSHAs(ctx context.Context, shas []string) (map[string][]Artifact, error) {
+	if len(shas) == 0 {
+		return map[string][]Artifact{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+artifactColumns+` FROM artifacts WHERE source_sha = ANY($1) ORDER BY source_sha, id`, shas)
+	if err != nil {
+		return nil, fmt.Errorf("artifacts by %d source shas: %w", len(shas), err)
+	}
+	return groupRows(rows, fmt.Sprintf("artifacts by %d source shas", len(shas)),
+		func(r rowScanner) (string, Artifact, error) {
+			a, err := scanArtifact(r)
+			if err != nil {
+				return "", Artifact{}, err
+			}
+			return a.SourceSHA, *a, nil
+		})
+}
+
 // ArtifactIDBySourceSHA looks up an artifact by source_sha inside the given
 // transaction, for callers (e.g. the Flux webhook) that must resolve an
 // artifact atomically with the rest of their apply. Returns nil if no
@@ -283,6 +306,31 @@ func (s *Store) DeploymentsForArtifact(ctx context.Context, artifactID int64) ([
 		return nil, fmt.Errorf("deployments for artifact %d: %w", artifactID, err)
 	}
 	return collectRows(rows, fmt.Sprintf("deployments for artifact %d", artifactID), byValue(scanDeployment))
+}
+
+// DeploymentsForArtifacts is the bulk form of DeploymentsForArtifact: the
+// deployments referencing every id in one query, keyed by artifact id. Ids
+// with no deployments are absent from the map; ids is empty-safe. Order
+// within each slice matches DeploymentsForArtifact.
+func (s *Store) DeploymentsForArtifacts(ctx context.Context, ids []int64) (map[int64][]Deployment, error) {
+	if len(ids) == 0 {
+		return map[int64][]Deployment{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deploymentColumns+` FROM deployments WHERE artifact_id = ANY($1)
+		 ORDER BY artifact_id, last_update, id`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("deployments for %d artifacts: %w", len(ids), err)
+	}
+	return groupRows(rows, fmt.Sprintf("deployments for %d artifacts", len(ids)),
+		func(r rowScanner) (int64, Deployment, error) {
+			d, err := scanDeployment(r)
+			if err != nil {
+				return 0, Deployment{}, err
+			}
+			// artifact_id is the filtered column, so it is never NULL here.
+			return *d.ArtifactID, *d, nil
+		})
 }
 
 // ListDeployments returns deployments, optionally filtered by environment

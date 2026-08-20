@@ -100,6 +100,31 @@ func (s *Store) RuntimeEventsForArtifact(ctx context.Context, artifactID int64) 
 	return collectRows(rows, fmt.Sprintf("runtime events for artifact %d", artifactID), byValue(scanRuntimeEvent))
 }
 
+// RuntimeEventsForArtifacts is the bulk form of RuntimeEventsForArtifact: the
+// events referencing every id in one query, keyed by artifact id. Ids with no
+// events are absent from the map; ids is empty-safe. Order within each slice
+// matches RuntimeEventsForArtifact.
+func (s *Store) RuntimeEventsForArtifacts(ctx context.Context, ids []int64) (map[int64][]RuntimeEvent, error) {
+	if len(ids) == 0 {
+		return map[int64][]RuntimeEvent{}, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+runtimeEventColumns+` FROM runtime_events WHERE artifact_id = ANY($1)
+		 ORDER BY artifact_id, occurred_at, id`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("runtime events for %d artifacts: %w", len(ids), err)
+	}
+	return groupRows(rows, fmt.Sprintf("runtime events for %d artifacts", len(ids)),
+		func(r rowScanner) (int64, RuntimeEvent, error) {
+			re, err := scanRuntimeEvent(r)
+			if err != nil {
+				return 0, RuntimeEvent{}, err
+			}
+			// artifact_id is the filtered column, so it is never NULL here.
+			return *re.ArtifactID, *re, nil
+		})
+}
+
 // ListRuntimeEvents returns runtime events, newest first, optionally
 // filtered by cluster ("" means all clusters). limit <= 0 means
 // defaultRuntimeEventLimit.

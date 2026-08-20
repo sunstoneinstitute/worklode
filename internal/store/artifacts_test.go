@@ -501,3 +501,122 @@ func TestArtifactsBySourceSHAKindOrder(t *testing.T) {
 		t.Fatalf("ArtifactsBySourceSHA kind: got %q, want %q", got[0].Kind, a.Kind)
 	}
 }
+
+// TestArtifactsBySourceSHAs covers the bulk reader: one query answers every
+// sha, and each group matches what ArtifactsBySourceSHA returns.
+func TestArtifactsBySourceSHAs(t *testing.T) {
+	s := openArtifactsStore(t)
+
+	a1 := defaultArtifact()
+	a2 := defaultArtifact()
+	a2.Kind = "git_tag"
+	a2.Name = "release"
+	a3 := defaultArtifact()
+	a3.Version = "v2.0.0"
+	a3.SourceSHA = "other-sha"
+	for _, a := range []Artifact{a1, a2, a3} {
+		if _, err := createArtifact(t, s, a); err != nil {
+			t.Fatalf("createArtifact: %v", err)
+		}
+	}
+
+	shas := []string{"abc123", "other-sha", "absent-sha"}
+	got, err := s.ArtifactsBySourceSHAs(t.Context(), shas)
+	if err != nil {
+		t.Fatalf("ArtifactsBySourceSHAs: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("ArtifactsBySourceSHAs: got %d keys, want 2 (absent-sha must be absent)", len(got))
+	}
+	for _, sha := range shas {
+		want, err := s.ArtifactsBySourceSHA(t.Context(), sha)
+		if err != nil {
+			t.Fatalf("ArtifactsBySourceSHA %s: %v", sha, err)
+		}
+		if !reflect.DeepEqual(got[sha], want) {
+			t.Fatalf("ArtifactsBySourceSHAs[%s] = %v, want %v", sha, got[sha], want)
+		}
+	}
+
+	empty, err := s.ArtifactsBySourceSHAs(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("ArtifactsBySourceSHAs(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("ArtifactsBySourceSHAs(nil): got %v, want empty non-nil map", empty)
+	}
+}
+
+// TestDeploymentsForArtifacts covers the bulk reader: one query answers every
+// artifact id, and each group matches what DeploymentsForArtifact returns.
+func TestDeploymentsForArtifacts(t *testing.T) {
+	s := openArtifactsStore(t)
+
+	first := defaultArtifact()
+	firstID, err := createArtifact(t, s, first)
+	if err != nil {
+		t.Fatalf("createArtifact first: %v", err)
+	}
+	second := defaultArtifact()
+	second.Name = "sunstoneinstitute/other"
+	second.SourceSHA = "other-sha"
+	secondID, err := createArtifact(t, s, second)
+	if err != nil {
+		t.Fatalf("createArtifact second: %v", err)
+	}
+	bare := defaultArtifact()
+	bare.Name = "sunstoneinstitute/bare"
+	bare.SourceSHA = "bare-sha"
+	bareID, err := createArtifact(t, s, bare)
+	if err != nil {
+		t.Fatalf("createArtifact bare: %v", err)
+	}
+
+	// Deployments are keyed by (environment, target_kind, target_name), so
+	// each row needs its own target to stay distinct.
+	for i, spec := range []struct {
+		artifactID  int64
+		environment string
+		target      string
+		offset      time.Duration
+	}{
+		{firstID, "prod", "demo/one", 2 * time.Minute},
+		{firstID, "dev", "demo/two", time.Minute},
+		{secondID, "prod", "demo/three", time.Minute},
+	} {
+		artifactID := spec.artifactID
+		d := defaultDeployment()
+		d.ArtifactID = &artifactID
+		d.Environment = spec.environment
+		d.TargetName = spec.target
+		if err := upsertDeployment(t, s, artifactsTestNow.Add(spec.offset), d); err != nil {
+			t.Fatalf("upsertDeployment %d: %v", i, err)
+		}
+	}
+
+	ids := []int64{firstID, secondID, bareID}
+	got, err := s.DeploymentsForArtifacts(t.Context(), ids)
+	if err != nil {
+		t.Fatalf("DeploymentsForArtifacts: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("DeploymentsForArtifacts: got %d keys, want 2 (bare artifact must be absent)", len(got))
+	}
+	for _, id := range ids {
+		want, err := s.DeploymentsForArtifact(t.Context(), id)
+		if err != nil {
+			t.Fatalf("DeploymentsForArtifact %d: %v", id, err)
+		}
+		if !reflect.DeepEqual(got[id], want) {
+			t.Fatalf("DeploymentsForArtifacts[%d] = %v, want %v", id, got[id], want)
+		}
+	}
+
+	empty, err := s.DeploymentsForArtifacts(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("DeploymentsForArtifacts(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("DeploymentsForArtifacts(nil): got %v, want empty non-nil map", empty)
+	}
+}
