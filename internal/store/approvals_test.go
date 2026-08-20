@@ -59,7 +59,7 @@ func TestApprovalResolveApprovedClosesOpenLookup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := resolveApproval(tx, a.ID, "approved", nil, now); err != nil {
+	if err := ResolveApproval(tx, a.ID, "approved", nil, now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := OpenApprovalForEntity(tx, "pr", "acme/site#8"); !errors.Is(err, ErrNotFound) {
@@ -78,7 +78,7 @@ func TestApprovalResolveChangesRequestedStaysOpen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := resolveApproval(tx, a.ID, "changes_requested", nil, now); err != nil {
+	if err := ResolveApproval(tx, a.ID, "changes_requested", nil, now); err != nil {
 		t.Fatal(err)
 	}
 	got, err := OpenApprovalForEntity(tx, "pr", "acme/site#9")
@@ -106,7 +106,7 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := resolveApproval(tx, a.ID, "changes_requested", &reviewer, now); err != nil {
+	if err := ResolveApproval(tx, a.ID, "changes_requested", &reviewer, now); err != nil {
 		t.Fatal(err)
 	}
 	resolved, err := OpenApprovalForEntity(tx, "pr", "acme/site#10")
@@ -114,7 +114,7 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 		t.Fatal(err)
 	}
 	if resolved.ResolvingActor == nil || *resolved.ResolvingActor != reviewer || resolved.ResolvedAt == nil {
-		t.Fatalf("got resolvingActor %v resolvedAt %v, want %q/non-nil (resolveApproval must stamp both)",
+		t.Fatalf("got resolvingActor %v resolvedAt %v, want %q/non-nil (ResolveApproval must stamp both)",
 			resolved.ResolvingActor, resolved.ResolvedAt, reviewer)
 	}
 	if err := ReopenApproval(tx, a.ID); err != nil {
@@ -130,7 +130,7 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 	}
 
 	// Approved is not reopenable: ReopenApproval must leave it untouched.
-	if err := resolveApproval(tx, a.ID, "approved", &reviewer, now); err != nil {
+	if err := ResolveApproval(tx, a.ID, "approved", &reviewer, now); err != nil {
 		t.Fatal(err)
 	}
 	if err := ReopenApproval(tx, a.ID); err != nil {

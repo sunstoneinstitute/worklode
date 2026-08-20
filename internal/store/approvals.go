@@ -27,8 +27,8 @@ type Approval struct {
 	ResolvedAt      *time.Time
 }
 
-// PREntityID renders the approvals entity_id for a pull request: the ingest
-// (Task 5) and the queue reader must share this one spelling.
+// PREntityID renders the approvals entity_id for a pull request: the webhook
+// ingest and the queue reader must share this one spelling.
 func PREntityID(repo string, number int64) string {
 	return fmt.Sprintf("%s#%d", repo, number)
 }
@@ -91,9 +91,11 @@ func OpenApprovalForEntity(tx *sql.Tx, entityKind, entityID string) (*Approval, 
 	return a, nil
 }
 
-// resolveApproval stamps state, resolving_actor, resolved_at. Shared by the
+// ResolveApproval stamps state, resolving_actor, resolved_at. Shared by the
 // review ingest and the web act, so the two resolution paths cannot drift.
-func resolveApproval(tx *sql.Tx, id int64, state string,
+// There is no state guard here: callers reach the row through
+// OpenApprovalForEntity (or their own open-state check) first.
+func ResolveApproval(tx *sql.Tx, id int64, state string,
 	resolvingActor *string, at time.Time) error {
 	_, err := tx.Exec(
 		`UPDATE approvals SET state = $1, resolving_actor = $2, resolved_at = $3

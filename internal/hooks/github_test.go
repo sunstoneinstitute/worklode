@@ -49,6 +49,18 @@ func newEnv(t *testing.T) *env {
 // matches newEnv: resolution disabled, same as no App configured.
 func newEnvWithBranchResolver(t *testing.T, resolveBranch func(repo, branch string) (string, error)) *env {
 	t.Helper()
+	return newEnvWith(t, resolveBranch, nil)
+}
+
+// newEnvWithMetrics builds an env whose handler records into m, so a test can
+// assert on the webhook counters.
+func newEnvWithMetrics(t *testing.T, m *hooks.Metrics) *env {
+	t.Helper()
+	return newEnvWith(t, nil, m)
+}
+
+func newEnvWith(t *testing.T, resolveBranch func(repo, branch string) (string, error), m *hooks.Metrics) *env {
+	t.Helper()
 	st := store.OpenTestStore(t)
 
 	ctx := context.Background()
@@ -66,8 +78,45 @@ func newEnvWithBranchResolver(t *testing.T, resolveBranch func(repo, branch stri
 	}
 	return &env{
 		dbEnv: dbEnv{st: st},
-		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil),
+		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, m),
 	}
+}
+
+// seedReviewer creates a human actor whose expected_github_login is login,
+// which is what maps a GitHub reviewer to an actor id.
+func (e *env) seedReviewer(t *testing.T, id, login string) {
+	t.Helper()
+	if err := e.st.UpsertHumanActor(context.Background(), id, id, false, login, "", nil); err != nil {
+		t.Fatalf("seed reviewer %s: %v", id, err)
+	}
+}
+
+// approvalRow reads the single approval for demoRepo#42.
+func (e *env) approvalRow(t *testing.T, number int64) (state string, requiredActor, resolvingActor *string, resolvedAt *time.Time) {
+	t.Helper()
+	var ra, sa sql.NullString
+	var at sql.NullTime
+	if !e.rawQueryRow(t, []any{&state, &ra, &sa, &at},
+		`SELECT state, required_actor, resolving_actor, resolved_at FROM approvals
+		 WHERE entity_kind = 'pr' AND entity_id = $1`,
+		store.PREntityID(demoRepo, number)) {
+		t.Fatalf("no approval row for %s", store.PREntityID(demoRepo, number))
+	}
+	if ra.Valid {
+		requiredActor = &ra.String
+	}
+	if sa.Valid {
+		resolvingActor = &sa.String
+	}
+	if at.Valid {
+		t := at.Time.UTC()
+		resolvedAt = &t
+	}
+	return state, requiredActor, resolvingActor, resolvedAt
+}
+
+func (e *env) approvalCount(t *testing.T) int {
+	return e.rawQueryInt(t, `SELECT COUNT(*) FROM approvals`)
 }
 
 // seedTask creates a task in project "demo" (state ready) and returns its id.
@@ -944,5 +993,133 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 		if !want[e] {
 			t.Errorf("unexpected event %q", e)
 		}
+	}
+}
+
+// TestPROpenedMaterializesAwaitingApproval: 029 §7.1 — the requirement is a
+// row, not an absence, so a task-correlated PR opening leaves an awaiting
+// approval bound to its head sha, naming the requested reviewer when that
+// login maps to an actor. A redelivery conflicts and writes nothing.
+func TestPROpenedMaterializesAwaitingApproval(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	e.seedReviewer(t, "bob-actor", "bob")
+
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+
+	state, requiredActor, resolvingActor, resolvedAt := e.approvalRow(t, 42)
+	if state != "awaiting" {
+		t.Errorf("approval state = %q, want awaiting", state)
+	}
+	if requiredActor == nil || *requiredActor != "bob-actor" {
+		t.Errorf("required_actor = %v, want bob-actor", requiredActor)
+	}
+	if resolvingActor != nil || resolvedAt != nil {
+		t.Errorf("open approval has resolving_actor %v / resolved_at %v, want both NULL",
+			resolvingActor, resolvedAt)
+	}
+	if rev := e.rawQueryString(t,
+		`SELECT subject_revision FROM approvals WHERE entity_id = $1`,
+		store.PREntityID(demoRepo, 42)); rev != prHeadSHA {
+		t.Errorf("subject_revision = %q, want the head sha %q", rev, prHeadSHA)
+	}
+	// The PR author is what the self-approval check compares against.
+	if author := e.rawQueryString(t,
+		`SELECT author FROM pull_requests WHERE repo = $1 AND number = 42`, demoRepo); author != "alice" {
+		t.Errorf("pull_requests.author = %q, want alice", author)
+	}
+
+	deliverOK(t, e, "pull_request", "d-appr-2", "pull_request_opened.json")
+	if n := e.approvalCount(t); n != 1 {
+		t.Errorf("approval rows after redelivery = %d, want 1", n)
+	}
+}
+
+// TestPROpenedUncorrelatedWritesNoApproval: a PR that names no task has no
+// task to hold up, and failing to correlate must never fail the delivery.
+func TestPROpenedUncorrelatedWritesNoApproval(t *testing.T) {
+	e := newEnv(t)
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened_uncorrelated.json")
+	if n := e.approvalCount(t); n != 0 {
+		t.Errorf("approval rows for an uncorrelated PR = %d, want 0", n)
+	}
+}
+
+// TestReviewApprovedResolvesApproval: the review decides the open row, at the
+// review's own submitted_at, attributed to the reviewer's actor.
+func TestReviewApprovedResolvesApproval(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	e.seedReviewer(t, "bob-actor", "bob")
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+
+	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_submitted.json")
+
+	state, _, resolvingActor, resolvedAt := e.approvalRow(t, 42)
+	if state != "approved" {
+		t.Errorf("approval state = %q, want approved", state)
+	}
+	if resolvingActor == nil || *resolvingActor != "bob-actor" {
+		t.Errorf("resolving_actor = %v, want bob-actor", resolvingActor)
+	}
+	want := time.Date(2026, 7, 19, 11, 0, 0, 0, time.UTC)
+	if resolvedAt == nil || !resolvedAt.Equal(want) {
+		t.Errorf("resolved_at = %v, want the review submitted_at %v", resolvedAt, want)
+	}
+}
+
+// TestReviewCommentedLeavesApprovalAwaiting: a comment is not a decision.
+// The row stays visible as waiting on someone (029 §7.1).
+func TestReviewCommentedLeavesApprovalAwaiting(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+
+	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_commented.json")
+
+	state, _, resolvingActor, resolvedAt := e.approvalRow(t, 42)
+	if state != "awaiting" || resolvingActor != nil || resolvedAt != nil {
+		t.Errorf("after a commented review: state=%q resolving_actor=%v resolved_at=%v, want awaiting/NULL/NULL",
+			state, resolvingActor, resolvedAt)
+	}
+}
+
+// TestChangesRequestedThenReviewRequestedReopens: 029 §7.1's re-request edge.
+// The reviewer is unknown when the PR opens and only becomes an actor later,
+// so the re-request also fills the required_actor the open ingest could not.
+func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+	if _, requiredActor, _, _ := e.approvalRow(t, 42); requiredActor != nil {
+		t.Fatalf("required_actor = %v with no matching actor, want NULL", requiredActor)
+	}
+
+	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_changes_requested.json")
+	state, _, resolvingActor, _ := e.approvalRow(t, 42)
+	if state != "changes_requested" {
+		t.Fatalf("approval state = %q, want changes_requested", state)
+	}
+	if resolvingActor != nil {
+		t.Errorf("resolving_actor = %v for an unmapped reviewer, want NULL", resolvingActor)
+	}
+
+	e.seedReviewer(t, "bob-actor", "bob")
+	deliverOK(t, e, "pull_request", "d-appr-3", "pull_request_review_requested.json")
+
+	state, requiredActor, resolvingActor, resolvedAt := e.approvalRow(t, 42)
+	if state != "awaiting" || resolvingActor != nil || resolvedAt != nil {
+		t.Errorf("after review_requested: state=%q resolving_actor=%v resolved_at=%v, want awaiting/NULL/NULL",
+			state, resolvingActor, resolvedAt)
+	}
+	if requiredActor == nil || *requiredActor != "bob-actor" {
+		t.Errorf("required_actor = %v, want bob-actor", requiredActor)
+	}
+	if n := e.approvalCount(t); n != 1 {
+		t.Errorf("approval rows = %d, want 1 (reopen, not a second row)", n)
 	}
 }

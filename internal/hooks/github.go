@@ -320,7 +320,18 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 				Ref string `json:"ref"`
 				SHA string `json:"sha"`
 			} `json:"head"`
+			User struct {
+				Login string `json:"login"`
+			} `json:"user"`
+			RequestedReviewers []struct {
+				Login string `json:"login"`
+			} `json:"requested_reviewers"`
 		} `json:"pull_request"`
+		// Only the review_requested action carries this; it names the one
+		// reviewer this delivery added.
+		RequestedReviewer struct {
+			Login string `json:"login"`
+		} `json:"requested_reviewer"`
 	}
 	if err := json.Unmarshal(body, &p); err != nil {
 		return fmt.Errorf("parse pull_request payload: %w", err)
@@ -356,6 +367,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		OpenedAt:  openedAt,
 		MergedAt:  mergedAt,
 		UpdatedAt: gh.UpdatedAt,
+		Author:    gh.User.Login,
 	}, gh.Body)
 	if err != nil {
 		return err
@@ -383,8 +395,17 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 			return err
 		}
 		if taskState == "in_progress" {
-			return store.Transition(tx, now, taskID, "in_progress", "in_review", eventID)
+			if err := store.Transition(tx, now, taskID, "in_progress", "in_review", eventID); err != nil {
+				return err
+			}
 		}
+		logins := make([]string, 0, len(gh.RequestedReviewers))
+		for _, r := range gh.RequestedReviewers {
+			logins = append(logins, r.Login)
+		}
+		return a.openApproval(tx, now, repo, gh.Number, gh.Head.SHA, logins)
+	case action == "review_requested":
+		return a.reopenApproval(tx, repo, gh.Number, p.RequestedReviewer.Login)
 	case action == "closed" && gh.Merged:
 		// The lease is deliberately left alone: it says a worktree is
 		// occupied, which a merge does not change (spec 004 §3).
@@ -435,13 +456,127 @@ func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 	if submittedAt.IsZero() {
 		submittedAt = a.st.Now()
 	}
-	return store.UpsertReview(tx, store.Review{
+	if err := store.UpsertReview(tx, store.Review{
 		Repo:        repo,
 		PRNumber:    p.PullRequest.Number,
 		Reviewer:    p.Review.User.Login,
 		State:       state,
 		SubmittedAt: submittedAt,
-	})
+	}); err != nil {
+		return err
+	}
+	return a.resolveApprovalForReview(tx, repo, p.PullRequest.Number,
+		state, p.Review.User.Login, submittedAt)
+}
+
+// openApproval materializes 029 §7.1's "a missing approval is a visible
+// awaiting row" for a task-correlated PR, bound to the head sha it governs.
+// required_actor is best effort: the first requested reviewer that maps to an
+// actor, NULL when none does. A redelivery conflicts on (kind, id, revision)
+// and writes nothing.
+func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number int64, headSHA string, reviewerLogins []string) error {
+	requiredActor, err := firstKnownActor(tx, reviewerLogins)
+	if err != nil {
+		return err
+	}
+	if err := store.InsertAwaitingApproval(tx, now, "pr",
+		store.PREntityID(repo, number), headSHA, nil, requiredActor); err != nil {
+		return err
+	}
+	a.metrics.approvalIngest("opened")
+	return nil
+}
+
+// reopenApproval handles 029 §7.1's re-request edge: asking for review again
+// puts a changes_requested row back in the awaiting queue, and fills in the
+// reviewer the open delivery could not resolve. Any other state is a no-op.
+func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewerLogin string) error {
+	ap, err := store.OpenApprovalForEntity(tx, "pr", store.PREntityID(repo, number))
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if ap.RequiredActor == nil && reviewerLogin != "" {
+		actorID, err := store.ActorIDForGitHubLogin(tx, reviewerLogin)
+		if err != nil {
+			return err
+		}
+		if actorID != "" {
+			if err := store.SetRequiredActor(tx, ap.ID, actorID); err != nil {
+				return err
+			}
+		}
+	}
+	if ap.State != "changes_requested" {
+		return nil
+	}
+	if err := store.ReopenApproval(tx, ap.ID); err != nil {
+		return err
+	}
+	a.metrics.approvalIngest("reopened")
+	return nil
+}
+
+// resolveApprovalForReview closes the open approval a review decides. Only
+// approved and changes_requested decide anything: a commented review leaves
+// the row awaiting, because a merged-but-unreviewed PR must stay visible as
+// waiting on someone (029 §7.1). resolving_actor is NULL when the reviewer
+// maps to no actor. A PR with no open row, or none correlated to a task, is
+// a no-op — a correlation must never fail the delivery.
+func (a *applier) resolveApprovalForReview(tx *sql.Tx, repo string, number int64, reviewState, reviewerLogin string, at time.Time) error {
+	if reviewState != "approved" && reviewState != "changes_requested" {
+		return nil
+	}
+	pr, err := store.GetPRTx(tx, repo, number)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if pr.TaskID == nil {
+		return nil
+	}
+	ap, err := store.OpenApprovalForEntity(tx, "pr", store.PREntityID(repo, number))
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var resolvingActor *string
+	actorID, err := store.ActorIDForGitHubLogin(tx, reviewerLogin)
+	if err != nil {
+		return err
+	}
+	if actorID != "" {
+		resolvingActor = &actorID
+	}
+	if err := store.ResolveApproval(tx, ap.ID, reviewState, resolvingActor, at); err != nil {
+		return err
+	}
+	a.metrics.approvalIngest("resolved")
+	return nil
+}
+
+// firstKnownActor returns the actor id of the first login that maps to one,
+// nil when none does.
+func firstKnownActor(tx *sql.Tx, logins []string) (*string, error) {
+	for _, login := range logins {
+		if login == "" {
+			continue
+		}
+		actorID, err := store.ActorIDForGitHubLogin(tx, login)
+		if err != nil {
+			return nil, err
+		}
+		if actorID != "" {
+			return &actorID, nil
+		}
+	}
+	return nil, nil
 }
 
 func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
