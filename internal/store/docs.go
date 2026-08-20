@@ -1430,6 +1430,13 @@ func (s *Store) RecordPlanTasksMinted(n int) {
 	s.metrics.planTasksMinted(n)
 }
 
+// RecordDocOp records one document mutation's outcome
+// (worklode_doc_operations_total) for a caller that records its event
+// through eventbus.Emit rather than RecordDocEvent — the typed emission
+// path of 025 §15.3, which cannot go through the wrapper because the
+// payload needs the event id before the insert. Nil-safe.
+func (s *Store) RecordDocOp(op string, err error) { s.metrics.docOp(op, err) }
+
 // DocIRI is a document's canonical subject IRI (spec 025 §4.1's
 // wlid:doc/spec-worklode-025 form): wlid:doc/<kind>-<project>-<number>
 // zero-padded to three digits for the numbered kinds, and

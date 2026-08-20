@@ -119,6 +119,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/docs/{id}":                  guarded(permDocRead),
 	"PUT /api/v1/docs/{id}/body":             guarded(permDocWrite),
 	"PUT /api/v1/docs/{id}/edges":            guarded(permDocImport),
+	"POST /api/v1/docs/{id}/submit":          guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/accept":          guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revise":          guarded(permDocWrite),
 	"PUT /api/v1/docs/{id}/revision":         guarded(permDocWrite),

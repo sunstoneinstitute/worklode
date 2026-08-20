@@ -209,6 +209,35 @@ func TestDocAcceptBySlugPrintsMintedTasks(t *testing.T) {
 	}
 }
 
+// TestDocSubmitBySlug: `lode doc submit <slug>` resolves the ref, reports the
+// document it submitted, and leaves the document's status alone — submission
+// is an event, not a status (025 §15.4).
+func TestDocSubmitBySlug(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	specFile := writeDocFile(t, docTestBody)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "1", "--slug", "my-spec", "--file", specFile); err != nil {
+		t.Fatalf("doc new: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "submit", "my-spec")
+	if err != nil {
+		t.Fatalf("doc submit my-spec: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "submitted doc") {
+		t.Fatalf("doc submit output = %q, want it to report the submission", out)
+	}
+
+	out, err = runLode(t, "doc", "submit", "my-spec", "--json")
+	if err != nil {
+		t.Fatalf("doc submit --json: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out); got.Status != "draft" {
+		t.Errorf("doc submit: status = %q, want draft (submission moves no column)", got.Status)
+	}
+}
+
 // --- happy paths, against a real store + server -------------------------
 
 // docJSON decodes a `--json` command's stdout into a model.Doc.
