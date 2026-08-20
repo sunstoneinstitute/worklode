@@ -56,9 +56,7 @@ func (s *server) reposDoctor(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.Repos = append(resp.Repos, rj)
 	}
-	if s.appAuth != nil {
-		s.checkAppInstalls(r.Context(), resp.Repos)
-	}
+	s.checkAppInstalls(r.Context(), resp.Repos)
 	for _, u := range senders {
 		resp.UnmappedSenders = append(resp.UnmappedSenders,
 			model.UnmappedSender{Repo: u.Repo, Events: u.Events, LastEventAt: u.LastEventAt})
@@ -90,6 +88,9 @@ var appCheckBudget = 15 * time.Second
 // saying the App is not installed. "We could not tell" must not read as "not
 // installed" in an operator's diagnosis.
 func (s *server) checkAppInstalls(ctx context.Context, repos []model.RepoDoctor) {
+	if s.appAuth == nil {
+		return
+	}
 	ctx, cancel := context.WithTimeout(ctx, appCheckBudget)
 	defer cancel()
 
@@ -117,6 +118,21 @@ func (s *server) checkAppInstalls(ctx context.Context, repos []model.RepoDoctor)
 		})
 	}
 	_ = g.Wait()
+
+	// One line for the whole phase, not one per repo: with GitHub down, a
+	// per-repo warning is a hundred lines saying the same thing. The report
+	// already tells the operator which repos went unchecked; the log is what
+	// tells the server's own watcher that the check degraded at all.
+	unchecked := 0
+	for i := range repos {
+		if repos[i].AppInstalled == nil {
+			unchecked++
+		}
+	}
+	if unchecked > 0 {
+		s.log.Warn("repos doctor could not check github app installation",
+			"unchecked", unchecked, "repos", len(repos))
+	}
 }
 
 // parseSince resolves a --since value against now: an RFC 3339 timestamp is
