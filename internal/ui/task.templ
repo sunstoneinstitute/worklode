@@ -41,31 +41,9 @@ templ Task(v TaskView) {
 				<div class="hd"><h3>Edges</h3></div>
 				<div class="bd">
 					<ul>
-						<li>Blocks:
-							if len(v.Blocks) == 0 {
-								<span class="muted">none</span>
-							} else {
-								for _, id := range v.Blocks {
-									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-								}
-							}
-						</li>
-						<li>Blocked by:
-							if len(v.BlockedBy) == 0 {
-								<span class="muted">none</span>
-							} else {
-								for _, id := range v.BlockedBy {
-									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-								}
-							}
-						</li>
-						<li>Parent:
-							if v.Parent == "" {
-								<span class="muted">none</span>
-							} else {
-								<a href={ "/tasks/" + v.Parent }>{ v.Parent }</a>
-							}
-						</li>
+						@taskEdgeIDs("Blocks", v.Blocks)
+						@taskEdgeIDs("Blocked by", v.BlockedBy)
+						@taskEdgeID("Parent", v.Parent)
 						<li>Children:
 							if len(v.Children) == 0 {
 								<span class="muted">none</span>
@@ -76,22 +54,8 @@ templ Task(v TaskView) {
 								<span class="muted">({ v.Progress.Closed }/{ v.Progress.Total } closed)</span>
 							}
 						</li>
-						<li>Follow-up to:
-							if v.FollowUpTo == "" {
-								<span class="muted">none</span>
-							} else {
-								<a href={ "/tasks/" + v.FollowUpTo }>{ v.FollowUpTo }</a>
-							}
-						</li>
-						<li>Follow-ups:
-							if len(v.FollowUps) == 0 {
-								<span class="muted">none</span>
-							} else {
-								for _, id := range v.FollowUps {
-									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-								}
-							}
-						</li>
+						@taskEdgeID("Follow-up to", v.FollowUpTo)
+						@taskEdgeIDs("Follow-ups", v.FollowUps)
 					</ul>
 				</div>
 			</section>
@@ -122,4 +86,35 @@ templ Task(v TaskView) {
 			</section>
 		}
 	}
+}
+
+// taskEdgeIDs renders one labelled edge row as a link per related task id, or
+// an honest "none" when the edge has no other end. The Children row stays
+// inline in Task above: it is the one row that renders more than the links (a
+// closed/total counter), and a { children... } slot here would emit a stray
+// whitespace node into every row that passes none.
+templ taskEdgeIDs(label string, ids []string) {
+	<li>
+		{ label }:
+		if len(ids) == 0 {
+			<span class="muted">none</span>
+		} else {
+			for _, id := range ids {
+				<a href={ "/tasks/" + id }>{ id }</a>{ " " }
+			}
+		}
+	</li>
+}
+
+// taskEdgeID renders one labelled edge row that holds at most one task id
+// (Parent, Follow-up to), or an honest "none" when it is unset.
+templ taskEdgeID(label, id string) {
+	<li>
+		{ label }:
+		if id == "" {
+			<span class="muted">none</span>
+		} else {
+			<a href={ "/tasks/" + id }>{ id }</a>
+		}
+	</li>
 }
