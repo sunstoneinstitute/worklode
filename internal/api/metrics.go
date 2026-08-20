@@ -132,15 +132,6 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			s.cockpitProjections.WithLabelValues(surface, outcome)
 		}
 	}
-	for _, destination := range []string{
-		"home", "intake", "projects", "work", "reviews", "deliveries", "knowledge",
-		"project_section", "asset", "deliverables", "deliverable_new", "task_new",
-		"docs",
-	} {
-		for _, outcome := range []string{"ok", "not_found", "error", "rejected"} {
-			s.navigations.WithLabelValues(destination, outcome)
-		}
-	}
 	// Every declared permission, so a permission that is never exercised
 	// reads as a flat zero rather than as no-data — the difference between
 	// "nobody tried" and "we are not measuring".
@@ -218,6 +209,22 @@ func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Durat
 		"deleted":  sum.Deleted,
 	} {
 		s.syncItems.WithLabelValues(action).Add(float64(n))
+	}
+}
+
+// initNavMetrics pre-initialises the navigation series for every destination
+// the registered routes wrap (see navWrap), so a page that has not been
+// visited yet reports zero rather than being absent from the scrape. Called
+// after route registration, since that is what determines the set.
+// Nil-safe like the observers, for tests that build a *server directly.
+func (s *server) initNavMetrics() {
+	if s.navigations == nil {
+		return
+	}
+	for _, destination := range s.navDestinations {
+		for _, outcome := range []string{"ok", "not_found", "error", "rejected"} {
+			s.navigations.WithLabelValues(destination, outcome)
+		}
 	}
 }
 

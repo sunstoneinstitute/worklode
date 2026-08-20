@@ -189,6 +189,11 @@ type server struct {
 	// when unset. It is not the request context of any HTTP call.
 	bgCtx context.Context
 
+	// navDestinations are the web navigation destinations the registered
+	// routes wrap, collected by navWrap and pre-initialised by
+	// initNavMetrics once registration is complete.
+	navDestinations []string
+
 	// watcherMetrics counts doc-lifecycle rule outcomes (docwatch.go). Nil
 	// in every server that starts no subscriber; *watcher.Metrics is
 	// nil-safe, so the handler is still callable directly in tests.
@@ -285,6 +290,177 @@ func (cfg Config) requireWebSecrets(feature string) error {
 		return fmt.Errorf("LODE_PUBLIC_URL is required when %s is enabled", feature)
 	}
 	return validatePublicURL(cfg.PublicURL)
+}
+
+// registerRoutes builds the public mux: the whole route table in one place,
+// separate from NewServer's config validation and background startup.
+//
+// Every route is registered through r, which looks its guard up in
+// routeGuards (router.go) and panics on a pattern the table does not name.
+// The permission a route requires is therefore stated as data, in one
+// reviewable place, rather than implied by how its handler is wrapped; see
+// authz.go for the policy it is checked against.
+func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, error) {
+	mux := http.NewServeMux()
+	r := newRouter(s, mux)
+
+	// Read-mostly web UI. These resolve a session cookie to a subject and
+	// apply the policy (webGuard); an unauthenticated visitor is sent to
+	// /auth/login, and when no login provider is configured the UI stays open
+	// as in v1 — as one named decision rather than a silent passthrough (see
+	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The seven
+	// global destinations (spec 032 §2) and the project-local destinations
+	// below each record one worklode_web_navigation_requests_total
+	// observation via navWrap.
+	r.web("GET /{$}", s.navWrap("home", s.homePage))
+	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
+		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8.")))
+	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
+	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
+	// The literal-segment patterns win over the {section} wildcard below for
+	// the destinations that are built; everything else still lands on the
+	// honest placeholder.
+	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
+	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
+	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
+	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
+	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
+	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
+	r.web("GET /work", s.navWrap("work", s.workPage))
+	r.web("GET /reviews", s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
+		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7.")))
+	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
+		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
+	r.web("GET /knowledge", s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
+		"Documents and graph-backed expert views arrive with specs 025, 026, and 006.")))
+	r.web("GET /tasks/{id}", s.taskPage)
+	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
+	// a document is an authoring act performed through the API and the CLI,
+	// where the body — the artifact itself — comes from a file.
+	r.web("GET /docs", s.navWrap("docs", s.docsPage))
+	r.web("GET /docs/{id}", s.navWrap("docs", s.docPage))
+	r.public("GET /assets/", s.assetHandler())
+	r.publicFunc("GET /auth/login", s.authLogin)
+	r.publicFunc("GET /auth/callback", s.authCallback)
+
+	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
+	// handler itself rejects all requests with 503 when its secret is empty.
+	// onSkillPush triggers an async sync on a push matching a configured
+	// skill source; skillSources is nil when none are configured, so
+	// MatchesPush always reports false and the closure is a no-op.
+	onSkillPush := func(repo, branch string) bool {
+		if !skillsync.MatchesPush(s.skillSources, repo, branch) {
+			return false
+		}
+		go s.runSkillSync(s.bgCtx, "webhook push")
+		return true
+	}
+	hookMetrics := hooks.NewMetrics(reg)
+	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
+	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
+
+	// SSO token exchange + config discovery for the CLI login flow. Registered
+	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
+	// Both 404 when OIDC is unconfigured (s.oidc == nil).
+	r.publicFunc("GET /auth/oidc/config", s.oidcConfig)
+	r.publicFunc("POST /auth/oidc/token", s.oidcTokenExchange)
+
+	// Provider-neutral, server-mediated CLI login (see cliauth.go).
+	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
+	r.publicFunc("GET /auth/cli/login", s.cliLogin)
+	r.publicFunc("POST /auth/cli/token", s.cliToken)
+
+	r.api("POST /api/v1/tasks", s.createTask)
+	r.api("GET /api/v1/tasks", s.listTasks)
+	r.api("GET /api/v1/tasks/{id}", s.getTask)
+	r.api("GET /api/v1/tasks/{id}/brief", s.taskBrief)
+	r.api("GET /api/v1/tasks/{id}/cost", s.getTaskCost)
+	r.api("PATCH /api/v1/tasks/{id}", s.patchTask)
+	r.api("PUT /api/v1/tasks/{id}/skills", s.setTaskSkills)
+	r.api("POST /api/v1/tasks/{id}/edges", s.addEdge)
+	r.api("DELETE /api/v1/tasks/{id}/edges", s.removeEdge)
+	r.api("POST /api/v1/tasks/{id}/decompose", s.decomposeTask)
+	r.api("POST /api/v1/tasks/claim-next", s.claimNext)
+	r.api("POST /api/v1/tasks/{id}/claim", s.claimTask)
+	r.api("POST /api/v1/tasks/{id}/renew", s.renewLease)
+	r.api("POST /api/v1/tasks/{id}/release", s.releaseLease)
+	r.api("POST /api/v1/tasks/{id}/assign", s.assignTask)
+	r.api("POST /api/v1/tasks/{id}/unassign", s.unassignTask)
+	r.api("POST /api/v1/tasks/{id}/start", s.startTask)
+	r.api("POST /api/v1/tasks/{id}/stop", s.stopTask)
+	r.api("POST /api/v1/tasks/{id}/lease/worktree", s.rebindWorktree)
+	r.api("POST /api/v1/tasks/{id}/agent-session", s.touchAgentSession)
+	r.api("POST /api/v1/tasks/{id}/agent-session/end", s.endAgentSession)
+	r.api("POST /api/v1/tasks/{id}/done", s.doneTask)
+	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
+	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
+	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
+
+	r.api("POST /api/v1/docs", s.createDoc)
+	r.api("GET /api/v1/docs", s.listDocs)
+	r.api("GET /api/v1/docs/{id}", s.getDoc)
+	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
+	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)
+	r.api("POST /api/v1/docs/{id}/submit", s.submitDoc)
+	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
+	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
+	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)
+	r.api("POST /api/v1/docs/{id}/revision/accept", s.acceptDocRevision)
+
+	r.api("GET /api/v1/skills", s.listSkills)
+	r.api("GET /api/v1/skills/{name}", s.getSkill)
+	r.api("GET /api/v1/skills/{name}/archive/{hash}", s.skillArchive)
+	r.api("POST /api/v1/skills/recommend", s.recommendSkills)
+	r.api("POST /api/v1/skills/sync", s.syncSkills)
+
+	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
+
+	r.api("GET /api/v1/secrets/catalog", s.secretsCatalog)
+	r.api("POST /api/v1/tasks/{id}/secrets-materialized", s.secretsMaterialized)
+	r.api("POST /api/v1/merges", s.reportMerge)
+
+	// Project, actor, and token management is admin-only (permProjectAdmin /
+	// permActorAdmin in routeGuards): any bearer token may otherwise mint
+	// further tokens, which is privilege escalation.
+	r.api("POST /api/v1/projects", s.createProject)
+	r.api("GET /api/v1/projects", s.listProjects)
+	// Literal segment, so Go's mux prefers it over the wildcard route below.
+	r.api("GET /api/v1/projects/resolve", s.resolveProjectByRemote)
+	r.api("GET /api/v1/projects/{id}", s.getProject)
+	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
+	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
+	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
+	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
+	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
+	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
+
+	r.api("POST /api/v1/actors", s.createActor)
+	r.api("POST /api/v1/actors/{id}/tokens", s.createToken)
+	r.api("DELETE /api/v1/tokens", s.revokeToken)
+
+	// The repo half of an inbox item contains a slash ("owner/name"), so
+	// promote/dismiss take it as a body field instead of a path segment.
+	r.api("GET /api/v1/inbox", s.listInbox)
+	r.api("POST /api/v1/inbox/promote", s.promoteInbox)
+	r.api("POST /api/v1/inbox/dismiss", s.dismissInbox)
+	r.api("POST /api/v1/inbox/link", s.linkInbox)
+	r.api("POST /api/v1/inbox/import", s.importInbox)
+
+	r.api("GET /api/v1/board", s.board)
+
+	r.api("GET /api/v1/events", s.listEvents)
+	r.api("GET /api/v1/events/stream", s.streamEvents)
+	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
+	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
+
+	// The table describes exactly the routes above: an entry nothing
+	// registered is dead policy that reads like a guard, so it fails the boot
+	// rather than sitting in the file looking enforced.
+	if err := r.checkComplete(); err != nil {
+		return nil, err
+	}
+	s.initNavMetrics()
+	return mux, nil
 }
 
 // NewServer builds the worklode HTTP handlers. It returns two handlers: the
@@ -399,167 +575,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	s.initMetrics(reg)
 
-	mux := http.NewServeMux()
-	// Every route below is registered through r, which looks its guard up in
-	// routeGuards (router.go) and panics on a pattern the table does not
-	// name. The permission a route requires is therefore stated as data, in
-	// one reviewable place, rather than implied by how its handler is
-	// wrapped; see authz.go for the policy it is checked against.
-	r := newRouter(s, mux)
-
-	// Read-mostly web UI. These resolve a session cookie to a subject and
-	// apply the policy (webGuard); an unauthenticated visitor is sent to
-	// /auth/login, and when no login provider is configured the UI stays open
-	// as in v1 — as one named decision rather than a silent passthrough (see
-	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The seven
-	// global destinations (spec 032 §2) and the project-local destinations
-	// below each record one worklode_web_navigation_requests_total
-	// observation via navWrap.
-	r.web("GET /{$}", s.navWrap("home", s.homePage))
-	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
-		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8.")))
-	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
-	r.web("GET /projects/{id}", s.navWrap("projects", s.projectPage))
-	// The literal-segment patterns win over the {section} wildcard below for
-	// the destinations that are built; everything else still lands on the
-	// honest placeholder.
-	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
-	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
-	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
-	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
-	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
-	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
-	r.web("GET /work", s.navWrap("work", s.workPage))
-	r.web("GET /reviews", s.navWrap("reviews", s.globalPlaceholder("reviews", "Reviews",
-		"Decisions awaiting the current actor arrive with spec 029 §7 and spec 032 §7.")))
-	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
-		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
-	r.web("GET /knowledge", s.navWrap("knowledge", s.globalPlaceholder("knowledge", "Knowledge",
-		"Documents and graph-backed expert views arrive with specs 025, 026, and 006.")))
-	r.web("GET /tasks/{id}", s.taskPage)
-	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
-	// a document is an authoring act performed through the API and the CLI,
-	// where the body — the artifact itself — comes from a file.
-	r.web("GET /docs", s.navWrap("docs", s.docsPage))
-	r.web("GET /docs/{id}", s.navWrap("docs", s.docPage))
-	r.public("GET /assets/", s.assetHandler())
-	r.publicFunc("GET /auth/login", s.authLogin)
-	r.publicFunc("GET /auth/callback", s.authCallback)
-
-	// Webhooks authenticate with HMAC signatures, not bearer tokens. The
-	// handler itself rejects all requests with 503 when its secret is empty.
-	// onSkillPush triggers an async sync on a push matching a configured
-	// skill source; skillSources is nil when none are configured, so
-	// MatchesPush always reports false and the closure is a no-op.
-	onSkillPush := func(repo, branch string) bool {
-		if !skillsync.MatchesPush(s.skillSources, repo, branch) {
-			return false
-		}
-		go s.runSkillSync(s.bgCtx, "webhook push")
-		return true
-	}
-	hookMetrics := hooks.NewMetrics(reg)
-	r.public("POST /hooks/github", hooks.NewGitHubHandler(st, cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
-	r.public("POST /hooks/flux", hooks.NewFluxHandler(st, cfg.FluxWebhookSecret, cfg.ClusterEnvMap, s.log, hookMetrics))
-
-	// SSO token exchange + config discovery for the CLI login flow. Registered
-	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
-	// Both 404 when OIDC is unconfigured (s.oidc == nil).
-	r.publicFunc("GET /auth/oidc/config", s.oidcConfig)
-	r.publicFunc("POST /auth/oidc/token", s.oidcTokenExchange)
-
-	// Provider-neutral, server-mediated CLI login (see cliauth.go).
-	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
-	r.publicFunc("GET /auth/cli/login", s.cliLogin)
-	r.publicFunc("POST /auth/cli/token", s.cliToken)
-
-	r.api("POST /api/v1/tasks", s.createTask)
-	r.api("GET /api/v1/tasks", s.listTasks)
-	r.api("GET /api/v1/tasks/{id}", s.getTask)
-	r.api("GET /api/v1/tasks/{id}/brief", s.taskBrief)
-	r.api("GET /api/v1/tasks/{id}/cost", s.getTaskCost)
-	r.api("PATCH /api/v1/tasks/{id}", s.patchTask)
-	r.api("PUT /api/v1/tasks/{id}/skills", s.setTaskSkills)
-	r.api("POST /api/v1/tasks/{id}/edges", s.addEdge)
-	r.api("DELETE /api/v1/tasks/{id}/edges", s.removeEdge)
-	r.api("POST /api/v1/tasks/{id}/decompose", s.decomposeTask)
-	r.api("POST /api/v1/tasks/claim-next", s.claimNext)
-	r.api("POST /api/v1/tasks/{id}/claim", s.claimTask)
-	r.api("POST /api/v1/tasks/{id}/renew", s.renewLease)
-	r.api("POST /api/v1/tasks/{id}/release", s.releaseLease)
-	r.api("POST /api/v1/tasks/{id}/assign", s.assignTask)
-	r.api("POST /api/v1/tasks/{id}/unassign", s.unassignTask)
-	r.api("POST /api/v1/tasks/{id}/start", s.startTask)
-	r.api("POST /api/v1/tasks/{id}/stop", s.stopTask)
-	r.api("POST /api/v1/tasks/{id}/lease/worktree", s.rebindWorktree)
-	r.api("POST /api/v1/tasks/{id}/agent-session", s.touchAgentSession)
-	r.api("POST /api/v1/tasks/{id}/agent-session/end", s.endAgentSession)
-	r.api("POST /api/v1/tasks/{id}/done", s.doneTask)
-	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
-	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
-	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
-
-	r.api("POST /api/v1/docs", s.createDoc)
-	r.api("GET /api/v1/docs", s.listDocs)
-	r.api("GET /api/v1/docs/{id}", s.getDoc)
-	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
-	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)
-	r.api("POST /api/v1/docs/{id}/submit", s.submitDoc)
-	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
-	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
-	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)
-	r.api("POST /api/v1/docs/{id}/revision/accept", s.acceptDocRevision)
-
-	r.api("GET /api/v1/skills", s.listSkills)
-	r.api("GET /api/v1/skills/{name}", s.getSkill)
-	r.api("GET /api/v1/skills/{name}/archive/{hash}", s.skillArchive)
-	r.api("POST /api/v1/skills/recommend", s.recommendSkills)
-	r.api("POST /api/v1/skills/sync", s.syncSkills)
-
-	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
-
-	r.api("GET /api/v1/secrets/catalog", s.secretsCatalog)
-	r.api("POST /api/v1/tasks/{id}/secrets-materialized", s.secretsMaterialized)
-	r.api("POST /api/v1/merges", s.reportMerge)
-
-	// Project, actor, and token management is admin-only (permProjectAdmin /
-	// permActorAdmin in routeGuards): any bearer token may otherwise mint
-	// further tokens, which is privilege escalation.
-	r.api("POST /api/v1/projects", s.createProject)
-	r.api("GET /api/v1/projects", s.listProjects)
-	// Literal segment, so Go's mux prefers it over the wildcard route below.
-	r.api("GET /api/v1/projects/resolve", s.resolveProjectByRemote)
-	r.api("GET /api/v1/projects/{id}", s.getProject)
-	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
-	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
-	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
-	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
-	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
-	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
-
-	r.api("POST /api/v1/actors", s.createActor)
-	r.api("POST /api/v1/actors/{id}/tokens", s.createToken)
-	r.api("DELETE /api/v1/tokens", s.revokeToken)
-
-	// The repo half of an inbox item contains a slash ("owner/name"), so
-	// promote/dismiss take it as a body field instead of a path segment.
-	r.api("GET /api/v1/inbox", s.listInbox)
-	r.api("POST /api/v1/inbox/promote", s.promoteInbox)
-	r.api("POST /api/v1/inbox/dismiss", s.dismissInbox)
-	r.api("POST /api/v1/inbox/link", s.linkInbox)
-	r.api("POST /api/v1/inbox/import", s.importInbox)
-
-	r.api("GET /api/v1/board", s.board)
-
-	r.api("GET /api/v1/events", s.listEvents)
-	r.api("GET /api/v1/events/stream", s.streamEvents)
-	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
-	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
-
-	// The table describes exactly the routes above: an entry nothing
-	// registered is dead policy that reads like a guard, so it fails the boot
-	// rather than sitting in the file looking enforced.
-	if err := r.checkComplete(); err != nil {
+	mux, err := s.registerRoutes(reg)
+	if err != nil {
 		return nil, nil, err
 	}
 

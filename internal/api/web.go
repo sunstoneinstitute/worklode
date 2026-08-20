@@ -60,8 +60,12 @@ func navOutcome(status int) string {
 
 // navWrap wraps a web handler to record one worklode_web_navigation_requests_total
 // observation for the given destination, classified from the handler's final
-// HTTP status code.
+// HTTP status code. It also collects the destination, so initNavMetrics can
+// pre-initialise exactly the series the registered routes can emit — the list
+// used to be restated by hand in metrics.go, where a new page silently
+// shipped without its zero-series.
 func (s *server) navWrap(destination string, next http.HandlerFunc) http.HandlerFunc {
+	s.navDestinations = append(s.navDestinations, destination)
 	return func(w http.ResponseWriter, r *http.Request) {
 		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
 		next(sw, r)
