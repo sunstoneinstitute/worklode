@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -73,11 +75,74 @@ func (s *server) navWrap(destination string, next http.HandlerFunc) http.Handler
 	}
 }
 
+// blobOrigin is the object-storage origin a /blob/{hash} redirect lands on,
+// for the page CSP: a redirect target must match the source list by origin
+// (paths are ignored on a redirect), so img-src/media-src have to name it.
+// Empty when blob storage is unconfigured — a server with no blob storage
+// serves no blob redirect, so there is nothing to allow.
+func (s *server) blobOrigin() string {
+	if s.cfg.BlobEndpoint == "" {
+		return ""
+	}
+	u, err := url.Parse(s.cfg.BlobEndpoint)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
+// contentSecurityPolicy is the policy every rendered page carries (set in one
+// place, renderWeb). Each directive is what the pages actually load:
+//
+//   - script-src 'self': layout.templ's /assets/theme.js and /assets/htmx.min.js
+//     and cliauth.templ's /assets/copy.js. No page has an inline script.
+//   - style-src 'self' 'unsafe-inline': /assets/app.css, plus cockpit.templ's
+//     one inline style attribute on the mode chip (and the <style> element
+//     htmx injects for its indicator class). Remove that attribute and
+//     'unsafe-inline' can go.
+//   - font-src 'self': app.css's @font-face files under /assets/fonts/.
+//   - img-src/media-src: a rendered task body embeds /blob/{hash}, which
+//     redirects to presigned object storage — see blobOrigin.
+//   - object-src/base-uri/frame-ancestors 'none': nothing here embeds a
+//     plugin, sets a <base>, or is meant to be framed.
+//   - form-action 'self': the two creation forms post to this origin only.
+//
+// default-src 'self' covers the rest (connect, worker, manifest, frame).
+func (s *server) contentSecurityPolicy() string {
+	media := selfAnd(s.blobOrigin())
+	return strings.Join([]string{
+		"default-src 'self'",
+		"img-src " + media,
+		"media-src " + media,
+		"script-src 'self'",
+		"style-src 'self' 'unsafe-inline'",
+		"font-src 'self'",
+		"object-src 'none'",
+		"base-uri 'none'",
+		"frame-ancestors 'none'",
+		"form-action 'self'",
+	}, "; ")
+}
+
+// selfAnd builds a source list of 'self' plus one optional origin, without
+// the stray space an unconfigured origin would otherwise leave behind.
+func selfAnd(origin string) string {
+	if origin == "" {
+		return "'self'"
+	}
+	return "'self' " + origin
+}
+
 // webErr renders a minimal HTML error page. The web UI has no JSON error
 // convention of its own (see writeErr for the API's), so this is its
 // equivalent.
 func webErr(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// An error page loads nothing at all — no stylesheet, script, or image —
+	// so it gets a tighter policy than renderWeb's rather than that one
+	// loosened to a free function with no server to read the blob origin from.
+	w.Header().Set("Content-Security-Policy",
+		"default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
 	w.WriteHeader(code)
 	fmt.Fprintf(w, "<!doctype html><title>%d</title><h1>%d</h1><p>%s</p>", code, code, html.EscapeString(msg))
 }
@@ -195,8 +260,9 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
-// body, lease holder (if any), edges, and the full timeline — built from the
-// same assembleTimeline used by GET /api/v1/tasks/{id}/timeline.
+// body (rendered as sanitised markdown — see taskView), attachments, lease
+// holder (if any), edges, and the full timeline — built from the same
+// assembleTimeline used by GET /api/v1/tasks/{id}/timeline.
 func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
@@ -217,7 +283,20 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The reference graph row, embedded and attached alike — the same list
+	// GET /api/v1/tasks/{id}/blobs answers with, URL filled in here for the
+	// same reason (see listTaskBlobs): the store leaves it empty.
+	refs, err := s.st.ListTaskBlobs(ctx, id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	for i := range refs {
+		refs[i].URL = "/blob/" + refs[i].Hash
+	}
+
 	view := taskView(t, blocked[id], entries, out, in)
+	view.Attachments = refs
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
 		view.Holder = &l

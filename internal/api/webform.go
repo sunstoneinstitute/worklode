@@ -151,9 +151,13 @@ func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form stri
 
 // renderWeb writes one rendered page with the given status. Form pages use it
 // for the 422 re-render; the plain GET pages go through it too, so the
-// content type is set in one place.
+// content type and the Content-Security-Policy are set in one place — every
+// templ page renders through here, and a task body is untrusted markup
+// (spec 021 §8), so a page that skipped the policy would be the one that
+// needs it.
 func (s *server) renderWeb(w http.ResponseWriter, r *http.Request, status int, page string, c templ.Component) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", s.contentSecurityPolicy())
 	w.WriteHeader(status)
 	if err := c.Render(r.Context(), w); err != nil {
 		s.log.Error("render "+page, "err", err)

@@ -9,6 +9,7 @@ package ui
 // reference api's DTOs (ADR 036 §3).
 
 import (
+	"html/template"
 	"strings"
 	"time"
 	"unicode"
@@ -75,21 +76,31 @@ type ProjectsView struct {
 
 // --- task -------------------------------------------------------------------
 
-// TaskView is one task's detail page. Task/Holder/Progress embed
+// TaskView is one task's detail page. Task/Holder/Progress/Attachments embed
 // internal/model types directly; the edge lists are task ids.
 type TaskView struct {
-	Page       PageProps
-	Task       model.Task
-	Blocked    bool
-	Holder     *model.Lease
-	Blocks     []string
-	BlockedBy  []string
-	Parent     string
-	Children   []string
-	FollowUpTo string
-	FollowUps  []string
-	Progress   model.TaskProgress
-	Timeline   []TimelineRow
+	Page PageProps
+	Task model.Task
+	// BodyHTML is Task.Body rendered from markdown and sanitised by
+	// internal/mdrender, which internal/api calls: ui may not import it (it
+	// imports goldmark and bluemonday, and ui is a stdlib+model leaf). It is
+	// the only value any component emits unescaped, and it is safe only
+	// because mdrender's allowlist already stripped every element, attribute
+	// and URL scheme not on it — never assign anything else here.
+	BodyHTML template.HTML
+	// Attachments is the task's blob reference graph row, embedded and
+	// attached alike (spec 021 §3), with URL filled in at the HTTP boundary.
+	Attachments []model.TaskBlob
+	Blocked     bool
+	Holder      *model.Lease
+	Blocks      []string
+	BlockedBy   []string
+	Parent      string
+	Children    []string
+	FollowUpTo  string
+	FollowUps   []string
+	Progress    model.TaskProgress
+	Timeline    []TimelineRow
 }
 
 // TimelineRow is one rendered row of a task's timeline: a type label and a

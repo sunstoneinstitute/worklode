@@ -183,6 +183,60 @@ func (s *Store) ListTaskBlobs(ctx context.Context, taskID string) ([]model.TaskB
 	return out, rows.Err()
 }
 
+// UnreferencedBlobs returns blobs no task_blobs row references and that are
+// older than grace. The grace period exists because the upload path writes
+// the object before the row (spec 021 section 5), so a blob seconds old may
+// legitimately have no reference yet.
+//
+// When spec 014 adds section_blobs, this predicate grows a second NOT EXISTS
+// clause. That is the one place a new reference table has to touch GC.
+func (s *Store) UnreferencedBlobs(ctx context.Context, grace time.Duration) ([]model.Blob, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT b.hash, b.media_type, b.size, b.created_at
+		   FROM blobs b
+		  WHERE NOT EXISTS (SELECT 1 FROM task_blobs tb WHERE tb.hash = b.hash)
+		    AND b.created_at < $1
+		  ORDER BY b.created_at`,
+		s.nowFn().UTC().Add(-grace))
+	if err != nil {
+		return nil, fmt.Errorf("unreferenced blobs: %w", err)
+	}
+	defer rows.Close()
+	var out []model.Blob
+	for rows.Next() {
+		var b model.Blob
+		if err := rows.Scan(&b.Hash, &b.MediaType, &b.Size, &b.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan blob: %w", err)
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// DeleteBlobIfUnreferenced removes the index row, re-checking the
+// zero-reference condition inside the statement so a reference added since
+// the listing query cannot be raced away. Reports whether a row went.
+//
+// The caller deletes the object AFTER this returns true. That ordering is
+// deliberate and mirrors the upload path: a failure between the two leaves an
+// orphan object, which the second sweep collects, whereas the reverse order
+// would leave a row pointing at deleted bytes -- a permanently broken image.
+func (s *Store) DeleteBlobIfUnreferenced(ctx context.Context, hash string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM blobs AS b
+		  WHERE b.hash = $1
+		    AND NOT EXISTS (SELECT 1 FROM task_blobs tb WHERE tb.hash = b.hash)`,
+		hash)
+	if err != nil {
+		return false, fmt.Errorf("delete blob: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete blob rows: %w", err)
+	}
+	return n > 0, nil
+}
+
 // nullString maps "" to a NULL created_by, since the column references
 // actors(id) and an empty string is not an actor.
 func nullString(s string) any {

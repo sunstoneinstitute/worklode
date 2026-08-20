@@ -126,7 +126,7 @@ not ours:
 |---|---|
 | `Content-Type` | Set as object metadata at upload, and overridden per-request via `response-content-type` from `blobs.media_type` |
 | `Content-Length` | The object store's own, always correct |
-| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, `attachment; filename="…"` for everything else |
+| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, bare `attachment` for everything else. The `filename="…"` half is not implemented: `task_blobs.filename` is per-reference and `/blob/{hash}` is per-blob, so the route has no single name to serve a shared blob under |
 | `Cache-Control` | `response-cache-control: private, max-age=31536000, immutable` — safe because the URL is content-addressed |
 
 Setting `Content-Type` at PUT time *and* overriding on presign is deliberate belt-and-braces:
@@ -146,12 +146,13 @@ override turns out to be unsupported, the fallback is to stream the object throu
 with our own headers — simpler, same external behaviour, and it costs the app egress and a held
 connection per download.
 
-**Not yet verified.** As of the §1–§6 implementation, this has **not** been confirmed against a
-live bucket: no bucket has been provisioned and no credentials are configured. The check is
-still outstanding, tracked by **WL-206**. The `httptest`-based tests in
-`internal/blobstore/s3_test.go` do not discharge it — they prove our client emits and signs the
-`response-*` overrides, not that the gateway honours them, which is gateway behaviour only a
-real bucket can answer.
+**Not yet verified.** As of the §1–§12 implementation — the whole spec, less this — it has
+**not** been confirmed against a live bucket: no bucket has been provisioned and no credentials
+are configured. The check is still outstanding, tracked by **WL-206**. The `httptest`-based
+tests in `internal/blobstore/s3_test.go` do not discharge it — they prove our client emits and
+signs the `response-*` overrides, not that the gateway honours them, which is gateway behaviour
+only a real bucket can answer. `Content-Length` is not in our code at all; it is the gateway's
+in full.
 
 ---
 
@@ -168,7 +169,7 @@ real bucket can answer.
 | `lode task attach <id> -` | Read one blob from stdin. Pairs with `pngpaste - \| lode task attach WL-42 -`. |
 | `lode task detach <id> <hash>` | The inverse. Warns if the body still embeds it. |
 | `lode task add --body-file`, `lode task edit --body-file` | **Reference rewriting** (§7) — the main event. |
-| `lode admin blob gc [--dry-run]` | Both GC sweeps (§11). |
+| `lode blob gc [--apply]` | Both GC sweeps (§11). Reports only unless `--apply`. |
 
 `lode task attach` is the explicit path and the only path for non-embeddable files. Reference
 rewriting is what people will actually use for images, because it requires knowing nothing.
@@ -365,11 +366,19 @@ The pipeline mirrors what GitHub does — render permissively, then sanitise the
      `fix(security): reject non-http(s) licence URLs before rendering as href`.
    - `video` allowed with `controls`, `preload`, `poster`.
 
-**CSRF.** Every web route is `GET` today (`server.go:323–330`) and the UI has no form that
-mutates state, so there is nothing to forge. That is a property to keep rather than one to
-assume: the moment a mutating web surface is added, it needs a per-session token and a
-`SameSite=Strict` cookie for that route. Until then, the standing rule is that the web UI
-performs no state change, and a test asserts the template set contains no `<form method="post">`.
+**CSRF.** This section was written when every web route was `GET`. That is no longer true —
+spec 032's cockpit added POST forms (`internal/api/webform.go`), so the "no mutating web
+surface" rule is retired rather than upheld, and the test that would have asserted an empty
+`<form>` set is not written. What replaced it is a same-origin check on every form POST
+(`sameOriginForm`, reading `Sec-Fetch-Site`/`Origin`) plus the `SameSite=Lax` session cookie,
+with `form-action 'self'` in the page CSP as a third layer. A per-session token is still the
+stronger answer and remains open.
+
+**CSP.** Every page carries one, set in the single place all pages render through:
+`default-src 'self'`, `script-src 'self'`, `img-src`/`media-src` extended with the blob
+endpoint's origin because `/blob/{hash}` 302s there, and `object-src`/`base-uri`/
+`frame-ancestors` `'none'`. `style-src` keeps `'unsafe-inline'`: the bundled HTMX injects an
+unnonced `<style>` element on load. That is the one directive worth tightening later.
 
 The board and project pages keep showing titles only.
 
@@ -448,7 +457,7 @@ Alt text stays in the body markdown, where it belongs, and is not duplicated her
 
 ## 11. Lifecycle and garbage collection
 
-Two sweeps, both in `lode admin blob gc`, both with a **24-hour grace period** so neither can
+Two sweeps, both in `lode blob gc`, both with a **24-hour grace period** so neither can
 race an upload in flight.
 
 ### 11.1 Unreferenced blobs
@@ -474,12 +483,15 @@ place adding a reference table touches GC, and it is worth a comment in the migr
 
 The other direction, which should find nothing and will occasionally find something, because
 the write path deliberately creates orphans on partial failure. List the bucket under
-`blobs/`, parallel over the 256 shard prefixes, and delete any key whose hash has no `blobs`
-row and whose `LastModified` is older than the grace period.
+`blobs/` and delete any key whose hash has no `blobs` row and whose `LastModified` is older
+than the grace period. The two-character shard in the key exists so this listing *can* be
+split across 256 prefixes; the implementation issues one serial `List` and will need that
+split when a bucket grows past what one listing answers comfortably.
 
-`--dry-run` reports both sets without deleting, and is the default in the first release —
-running the real sweep should be a deliberate act until the reference reconciliation in §1 has
-been observed to behave.
+Reporting without deleting is the default, and deleting is the deliberate act — spelled
+`--apply` rather than `--dry-run`, so the flag names what is unusual instead of defaulting a
+destructive verb to safe. It stays that way until the reference reconciliation in §1 has been
+observed to behave.
 
 Deleting a task cascades its `task_blobs` rows, which drops the reference count and makes its
 blobs collectable on the next sweep unless another task shares them.
@@ -558,26 +570,32 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
 
 1. `POST /api/v1/blobs` with a PNG returns a hash; re-posting identical bytes returns the same
    hash, creates no second row, and issues no second `PutObject`.
-2. A 200 MiB upload gets `413`, and the server's memory does not track payload size on any
-   upload — asserted by uploading 100 MiB with a bounded heap.
+2. An upload over the 100 MiB cap gets `413`, and the server's memory does not track payload
+   size on any upload — asserted by uploading 100 MiB with a bounded heap.
 3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session. With a
    web auth provider configured it `401`s with neither; with no provider configured it refuses
-   with a `503` unless `LODE_WEB_OPEN` is set, matching `webGuard`. The presigned response
-   carries the sniffed `Content-Type`, a correct `Content-Length`, and `Content-Disposition:
-   attachment` for a non-embeddable type.
+   with a `401` unless `LODE_WEB_OPEN` is set. The refusal is `eitherGuard`'s, not `webGuard`'s
+   `503`: a subresource a browser fetches must answer with a status code, never with an HTML
+   error page or a login redirect (§4). The presigned response carries the sniffed
+   `Content-Type`, a correct `Content-Length`, and `Content-Disposition: attachment` for a
+   non-embeddable type.
 4. `lode task add --body-file` on markdown referencing two local PNGs creates one task whose
    body cites `/blob/…` twice, with two `blobs` rows and two `task_blobs` rows at
    `embedded = true`.
 5. Editing that body to drop one image clears its `embedded` flag and deletes the row; the next
-   `lode admin blob gc` collects that blob and its object, and leaves the other.
+   `lode blob gc --apply` collects that blob and its object, and leaves the other.
 6. `lode task attach` with a `.log` file creates a row at `attached = true, embedded = false`,
    appends nothing to the body, and the blob survives a body rewrite.
 7. A body containing `<script>alert(1)</script>`, `[x](javascript:alert(1))`,
    `![](https://evil.example/p.png)`, and `<img src="/blob/../../etc/passwd">` renders with the
    script stripped, the link inert, and both images dropped — while `<b>`, tables, and task-list
    checkboxes survive.
-8. An imported issue body with a `user-images.githubusercontent.com` image ends up citing
-   `/blob/…`; one pointing at `http://169.254.169.254/…` is refused and left as-is.
+8. A body promoted through `POST /api/v1/inbox/promote` carrying a
+   `user-images.githubusercontent.com` image ends up citing `/blob/…`; one pointing at
+   `http://169.254.169.254/…` is refused and left as-is. Promote, not import: the `issues` table
+   has no body column and neither `githubauth.Issue` nor `model.Issue` carries one, so an
+   imported issue holds a title and a URL and nothing to mirror. Promote is where an
+   issue-derived body first becomes `tasks.body`.
 9. `lode task brief --json` returns a `blobs` array with absolute URLs, media types, and the
    `embedded` flag.
 10. An object with no `blobs` row and a `LastModified` older than the grace period is deleted by
@@ -585,3 +603,30 @@ with no bucket. Worth a `lode doctor` line rather than a silent absence.
 11. Deleting a task cascades its `task_blobs` rows and leaves blobs that another task still
     references intact.
 12. With no `LODE_BLOB_ENDPOINT`, uploads return `501` and every existing test still passes.
+
+### 15.1 Verification state
+
+Audited when the last of §8, §11 and §12 landed. Everything in §1–§13 is implemented; what
+follows is how much of it is *asserted*, because "implemented" and "verified" are different
+claims and the gap between them is the useful part.
+
+| # | State | Where |
+|---|---|---|
+| 1 | partial | Hash and dedup response asserted; `TestInsertBlobIdempotent` covers "no second row". "No second `PutObject`" is unasserted — `blobstore.Fake` counts no calls |
+| 2 | partial | `413` asserted at 100 MiB + 1. The bounded-heap half is implemented (`TeeReader` to a spool file) but nothing measures it |
+| 3 | partial | Both auth paths and the refusal asserted. The presigned response's headers are **live-bucket work** (WL-206) |
+| 4 | partial | Two-PNG rewrite asserted against a stub server; the two-row database half asserted separately at one PNG. No single test spans both |
+| 5 | partial | Body edit, flag clearing and GC each asserted alone. Nothing runs the chain end to end, and no test asserts the *other* blob survives the sweep |
+| 6 | verified | Split across a cmd test and a store test, but every clause is covered |
+| 7 | verified | `TestHostileBodies` covers all four payloads plus ~45 more; `TestTaskPageRendersMarkdown` proves it on the real page |
+| 8 | partial | Mirror and refusal both asserted. No test proves `user-images.githubusercontent.com` passes the allowlist — the mirror test bypasses the host check |
+| 9 | partial | Absolute URLs asserted. `media_type` and `embedded` are populated but unasserted |
+| 10 | partial | Deletion past the grace period asserted; "one newer is not" is asserted for the row sweep only. Every GC test passes `grace_hours: 0`, so the 24-hour default is never exercised |
+| 11 | partial | Cascade and `ON DELETE RESTRICT` asserted. "Leaves blobs another task references" is untested — and unreachable in the product, which has no task-delete surface |
+| 12 | verified | `501` asserted for upload and for GC; full suite green |
+
+Two structural gaps behind that table. The **e2e suite touches blobs nowhere at all** — every
+criterion above is discharged by package tests, which is exactly why 4, 5 and 8 are stitched
+together from a stub-server CLI test and a separate store test rather than proven once through
+the real stack. And **no live bucket exists**, so criterion 3's presigned-response half is
+deferred whole (§2, WL-206); a single session against a real bucket discharges it.

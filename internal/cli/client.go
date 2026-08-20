@@ -1429,3 +1429,12 @@ func (c *Client) DetachBlob(ctx context.Context, id, hash string) error {
 		"/api/v1/tasks/"+url.PathEscape(id)+"/blobs/"+url.PathEscape(hash), nil)
 	return err
 }
+
+// BlobGC runs both garbage-collection sweeps (spec 021 §11). graceHours is
+// pointer-typed on the wire so an admin can pass 0 deliberately (tests, or a
+// deployment confident nothing is mid-upload) without it reading as "use the
+// server default".
+func (c *Client) BlobGC(ctx context.Context, dryRun bool, graceHours *int) (model.BlobGCResponse, []byte, error) {
+	return doJSON[model.BlobGCResponse](ctx, c, http.MethodPost, "/api/v1/blobs/gc",
+		model.BlobGCRequest{DryRun: dryRun, GraceHours: graceHours}, "blob gc result")
+}
