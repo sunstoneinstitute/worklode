@@ -421,7 +421,9 @@ GitHub App):
 - `lode skills list` — list skills known to the server.
 - `lode skills recommend` — cosine-similarity matches for a task or free text.
 - `lode skills install <name>[@<hash>]` — fetch a skill into the local
-  content-addressed store (`~/.worklode/skills`).
+  content-addressed store (`~/.worklode/store`), linked by name from
+  `~/.worklode/skills`. Add `--link <harness>|all` to publish it into that
+  harness's own skills directory.
 
 Pin skills to a task with `lode task add --skill <name>` (repeatable) or
 manage them after the fact with `lode task skills <id> [--set ...]`; pinned
