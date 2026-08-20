@@ -86,7 +86,7 @@ One task per genuine pending item, nothing structural:
 
 ```bash
 # per accepted-but-unplanned spec (kind renames to 'design' after the 025 migration):
-lode task add --kind spec --title "Write implementation plan(s) for spec NNN — <title>" \
+lode task add --kind design --title "Write implementation plan(s) for spec NNN — <title>" \
   --body "Spec NNN is accepted but has no plan in docs/plans/. Produce plans per docs/authoring-design-docs.md."
 
 # per unexecuted plan:

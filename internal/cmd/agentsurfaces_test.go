@@ -6,11 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // Agent-facing markdown hardcodes `lode ...` invocations. Renaming a command or
@@ -223,7 +226,7 @@ func checkInvocation(root *cobra.Command, text string) string {
 		return fmt.Sprintf("%q is not a subcommand of %q", rest[0], cmd.CommandPath())
 	}
 
-	for _, t := range rest {
+	for i, t := range rest {
 		if t == "--" {
 			break // everything after is the wrapped command's own argv
 		}
@@ -231,11 +234,64 @@ func checkInvocation(root *cobra.Command, text string) string {
 		if !ok {
 			continue
 		}
-		if lookupFlag(cmd, name) == nil {
+		flag := lookupFlag(cmd, name)
+		if flag == nil {
 			return fmt.Sprintf("%q has no flag --%s", cmd.CommandPath(), name)
+		}
+		if reason := checkFlagValue(cmd, flag, name, flagValue(rest, i)); reason != "" {
+			return reason
 		}
 	}
 	return ""
+}
+
+// flagValue returns the value written for the flag at rest[i], from either
+// --flag=value or the token after it. It is "" when none was written — a
+// boolean flag, or a value the author left off.
+func flagValue(rest []string, i int) string {
+	if _, v, found := strings.Cut(rest[i], "="); found {
+		return v
+	}
+	if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "-") {
+		return rest[i+1]
+	}
+	return ""
+}
+
+// checkFlagValue rejects a value outside the closed set a flag's usage string
+// names. Only --kind is checked: it is the flag agent docs get wrong (a task
+// kind is not a document kind, and "spec" is neither), and the two enums
+// differ per command, which a hardcoded table here would get wrong in the same
+// way the docs did.
+func checkFlagValue(cmd *cobra.Command, flag *pflag.Flag, name, value string) string {
+	if name != "kind" || value == "" || placeholder(value) {
+		return ""
+	}
+	allowed := enumValues(flag)
+	if len(allowed) == 0 || slices.Contains(allowed, value) {
+		return ""
+	}
+	return fmt.Sprintf("%q --kind takes %s, not %q",
+		cmd.CommandPath(), strings.Join(allowed, ", "), value)
+}
+
+// usageEnum matches the value list a flag's usage string spells out, as in
+// "document kind: spec, adr, or plan (required)". The optional "or" covers the
+// prose form; a trailing parenthetical falls outside the match.
+var usageEnum = regexp.MustCompile(`: ([a-z_]+(?:, (?:or )?[a-z_]+)+)`)
+
+// enumValues returns the closed set a flag's usage names, or nil when it names
+// none — which means the value is unchecked, not that anything goes.
+func enumValues(flag *pflag.Flag) []string {
+	m := usageEnum.FindAllStringSubmatch(flag.Usage, -1)
+	if len(m) == 0 {
+		return nil
+	}
+	values := strings.Split(m[len(m)-1][1], ", ")
+	for i, v := range values {
+		values[i] = strings.TrimPrefix(v, "or ")
+	}
+	return values
 }
 
 // flagName extracts the long-flag name from a token. Shorthands are skipped
@@ -298,7 +354,18 @@ func TestCheckInvocation(t *testing.T) {
 		{"lode doc", false},
 		{"lode task tree", false},
 
+		{"lode doc list --kind spec", false},
+		{"lode doc new --kind plan --slug s --file f", false}, // "spec, adr, or plan"
+		{"lode task add --kind design", false},
+		{"lode task add --kind <the kind>", false},
+		{"lode task list --parent WL-1", false},
+
 		{"lode tsak add", true},
+		// The bug that motivated the value check: "spec" is a document kind,
+		// not a task kind (claude-plugins#133).
+		{"lode task add --kind spec", true},
+		{"lode task add --kind=spec", true},
+		{"lode doc list --kind design", true},
 		{"lode task treee", true},
 		{"lode next --jsonn", true},
 		{"lode task add --titel x", true},
@@ -328,5 +395,18 @@ func TestFindInvocations(t *testing.T) {
 	}
 	if got[1].text != `lode task add --title "x" --kind bug` {
 		t.Errorf("continuation not joined: got %q", got[1].text)
+	}
+}
+
+// TestKindEnumMatchesNS pins enumValues' parse of the task --kind usage string
+// to ns.TaskKinds, the generated source of truth (025 §17). Without this the
+// value check would quietly follow a usage string that had itself drifted.
+func TestKindEnumMatchesNS(t *testing.T) {
+	cmd, _ := resolve(rootCmd, []string{"task", "add"})
+	got := slices.Clone(enumValues(lookupFlag(cmd, "kind")))
+	slices.Sort(got)
+
+	if !slices.Equal(got, ns.TaskKinds) {
+		t.Errorf("`lode task add --kind` usage names %v, ns.TaskKinds is %v", got, ns.TaskKinds)
 	}
 }

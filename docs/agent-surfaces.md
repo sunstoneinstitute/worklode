@@ -52,11 +52,16 @@ shape; changing a config key, env var, or hook name — any of these:
 
 ### What the drift test does not cover
 
-It resolves command paths and long flags against the cobra tree. It says nothing
-about whether the surrounding explanation is still true, whether a `--json`
-field an agent parses still exists, or what a command now does differently. It
-also does not read `docs/specs/` or `docs/plans/`, which record what was
-intended at the time they were written and are allowed to go stale.
+It resolves command paths and long flags against the cobra tree, and checks
+`--kind` values against the set that command's usage string names — pinned to
+`ns.TaskKinds` by a test, so the check cannot follow a usage string that has
+itself drifted. `--kind` alone gets the value treatment because it is the flag
+agent docs get wrong: a task kind is not a document kind, and `spec` is neither.
+
+It says nothing about whether the surrounding explanation is still true, whether
+a `--json` field an agent parses still exists, or what a command now does
+differently. It also does not read `docs/specs/` or `docs/plans/`, which record
+what was intended at the time they were written and are allowed to go stale.
 
 An invocation that is deliberately unresolvable — documenting a command before
 it ships — goes in `internal/cmd/testdata/agent-surface-exempt.txt` with a
