@@ -205,10 +205,48 @@ func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
 	return string(b), nil
 }
 
+// uploadBodyImages uploads every local relative image the body references and
+// returns the body with those destinations rewritten to /blob/<hash>.
+//
+// Uploads complete before the create/update call, so the task is written once
+// with final content and the server's embedded reconciliation sees the
+// rewritten body. A missing file fails the whole command rather than
+// producing a task whose body points at images that were never uploaded.
+func uploadBodyImages(ctx context.Context, c *cli.Client, body, baseDir string, out io.Writer) (string, error) {
+	locals := blobref.LocalImages(body)
+	if len(locals) == 0 {
+		return body, nil
+	}
+	base, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	mapping := make(map[string]string, len(locals))
+	for _, rel := range locals {
+		abs, err := filepath.Abs(filepath.Join(base, rel))
+		if err != nil {
+			return "", err
+		}
+		if !strings.HasPrefix(abs, base+string(filepath.Separator)) {
+			return "", fmt.Errorf("image %q resolves outside %s", rel, base)
+		}
+		if _, err := os.Stat(abs); err != nil {
+			return "", fmt.Errorf("image %q: %w", rel, err)
+		}
+		blob, err := c.UploadFile(ctx, abs)
+		if err != nil {
+			return "", fmt.Errorf("upload %q: %w", rel, err)
+		}
+		mapping[rel] = blob.URL
+		fmt.Fprintf(out, "uploaded %s (%s, %d bytes)\n", rel, blob.MediaType, blob.Size)
+	}
+	return blobref.ReplaceDestination(body, mapping), nil
+}
+
 func newTaskAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var title, body, bodyFile, priority, kind, concern, parent, followUpTo string
-	var draft bool
+	var draft, noUpload bool
 	var skills []string
 	var secretNames []string
 	cmd := &cobra.Command{
@@ -223,6 +261,13 @@ func newTaskAddCmd() *cobra.Command {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
+			}
+			if bodyFile != "" && bodyFile != "-" && !noUpload {
+				body, err = uploadBodyImages(cmd.Context(), c, body,
+					filepath.Dir(bodyFile), cmd.OutOrStdout())
+				if err != nil {
+					return err
+				}
 			}
 			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
 			if err != nil {
@@ -245,8 +290,10 @@ func newTaskAddCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
-	cmd.Flags().StringVar(&bodyFile, "body-file", "", "read the task body from a file (\"-\" for stdin)")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "",
+		"read the body from this file (- for stdin); local images referenced from a file are uploaded and rewritten")
 	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
+	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
@@ -430,7 +477,7 @@ func printSkills(cmd *cobra.Command, skills []string) {
 
 func newTaskEditCmd() *cobra.Command {
 	var title, body, bodyFile, concern, priority string
-	var needsDecomposition bool
+	var needsDecomposition, noUpload bool
 	var secretNames []string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
@@ -481,6 +528,17 @@ func newTaskEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// bodyFile != "-" means the body came from a real file with a
+			// base directory to resolve local images against; --body and
+			// --body-file - (stdin) never rewrite (no base directory).
+			if in.Body != nil && cmd.Flags().Changed("body-file") && bodyFile != "-" && !noUpload {
+				rewritten, err := uploadBodyImages(cmd.Context(), c, *in.Body,
+					filepath.Dir(bodyFile), cmd.OutOrStdout())
+				if err != nil {
+					return err
+				}
+				in.Body = &rewritten
+			}
 			t, raw, err := c.EditTask(cmd.Context(), id, in)
 			if err != nil {
 				return err
@@ -490,7 +548,9 @@ func newTaskEditCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&title, "title", "", "replace the task title (must not be blank)")
 	cmd.Flags().StringVar(&body, "body", "", "replace the task body with this text")
-	cmd.Flags().StringVar(&bodyFile, "body-file", "", "replace the task body with the contents of this file (- for stdin)")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "",
+		"replace the task body with the contents of this file (- for stdin); local images referenced from a file are uploaded and rewritten")
+	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
