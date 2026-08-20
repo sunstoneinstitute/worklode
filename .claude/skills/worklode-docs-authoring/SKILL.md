@@ -83,3 +83,12 @@ implemented.
   no container above a plan's tasks — order plans with `blocks`.
 - Spec → plan decomposition is always an explicit human act; skills may offer
   it, never perform it unasked.
+- **The prompt is minted, the act is not** (025 §15.4). `lode doc submit`
+  emits `wl:DocumentSubmitted` and moves no column — the open review task *is*
+  "under review" — and accepting a **spec** emits `wl:DocumentAccepted`. The
+  `doc-lifecycle` subscriber turns each into one task: a `review` task on
+  submission, a `design` task charged with decomposing the spec on acceptance,
+  both carrying `about_doc` and suppressed while an open task of that kind
+  already references the document. Minting the prompt is not performing the
+  act: nothing here reviews, accepts or plans anything — `lode doc accept`
+  stays the manual, assignee-gated commit it was.
