@@ -362,3 +362,47 @@ func TestDeleteOutcomeClassifies(t *testing.T) {
 func TestObserveDeleteNilSafe(t *testing.T) {
 	(&server{}).observeDelete(entityTask, opDelete, deleteOK)
 }
+
+// TestRegisterRoutesLeavesNavMetricsUninitialised pins the position-independence
+// the nav zero-series depend on (WL-186). The series are minted from the set of
+// destinations registration collected, so they must be minted *after*
+// registration finishes — from NewServer, not from inside registerRoutes, where
+// a route added below the call would silently lose its zero-series.
+func TestRegisterRoutesLeavesNavMetricsUninitialised(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	if _, err := s.registerRoutes(reg); err != nil {
+		t.Fatalf("register routes: %v", err)
+	}
+	if len(s.navDestinations) == 0 {
+		t.Fatal("registration collected no nav destinations")
+	}
+	if got := countNavSeries(t, reg); got != 0 {
+		t.Fatalf("registerRoutes minted %d nav series; it must leave that to the caller, so a route registered anywhere in the function is covered", got)
+	}
+
+	s.initNavMetrics()
+	unique := map[string]bool{}
+	for _, d := range s.navDestinations {
+		unique[d] = true
+	}
+	if got, want := countNavSeries(t, reg), len(unique)*4; got != want {
+		t.Fatalf("nav series after initNavMetrics = %d, want %d (one per destination per outcome)", got, want)
+	}
+}
+
+func countNavSeries(t *testing.T, g prometheus.Gatherer) int {
+	t.Helper()
+	mfs, err := g.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_web_navigation_requests_total" {
+			return len(mf.GetMetric())
+		}
+	}
+	return 0
+}
