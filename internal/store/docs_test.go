@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -4150,5 +4151,32 @@ covers:
 	}
 	if cw := docCompletedWith(t, s, before[1].id); len(cw) != 0 {
 		t.Fatalf("collapsed edge %d kept closure rows %+v", before[1].id, cw)
+	}
+}
+
+// TestDocEdgeTypesWithoutWriter pins the one gap between the doc_edges type
+// set and what can produce a row in it. rebuildEdges derives every edge from
+// frontmatter through frontmatterEdges, whose relation set is
+// designdoc.ActingRels, so a type outside that set is a value the CHECK admits
+// and no surface writes.
+//
+// Today that is exactly `implements`, and deliberately so: 026 §5.1 makes
+// `implements` the retired frontmatter spelling of `covers` (read as covers,
+// never written as implements), while the `implements` *edge type* is reserved
+// for a component's evidence about its own code (026 §6.2) — a different
+// subject, declared in `.worklode/implements.yaml`, whose machinery is 025 §11
+// and is not built. WL-132 filed that gap so it is not re-diagnosed as a
+// defect; this test is the record. When §11's writer lands, or a new type
+// joins docEdgeInverse, update the want list deliberately.
+func TestDocEdgeTypesWithoutWriter(t *testing.T) {
+	var unwritten []string
+	for typ := range docEdgeInverse {
+		if !slices.Contains(designdoc.ActingRels, typ) {
+			unwritten = append(unwritten, typ)
+		}
+	}
+	slices.Sort(unwritten)
+	if want := []string{"implements"}; !slices.Equal(unwritten, want) {
+		t.Errorf("doc_edges types with no writer = %v, want %v", unwritten, want)
 	}
 }
