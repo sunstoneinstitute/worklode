@@ -496,7 +496,7 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 			fmt.Fprintf(out, "%s: claude-code reads this file; add %q to it to import the Worklode block\n",
 				claudeFile, claudeImportLine)
 		case instrSatisfied:
-			fmt.Fprintf(out, "%s: already imports the Worklode block\n", claudeFile)
+			fmt.Fprintf(out, "%s: already carries the Worklode block\n", claudeFile)
 		default:
 			fmt.Fprintf(out, "%s: unexpected result %q\n", claudeFile, i.ClaudeMD)
 		}
