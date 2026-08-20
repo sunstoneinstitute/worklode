@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
@@ -27,23 +26,13 @@ import (
 // if it changes, not follow it.
 const docLifecycleSubscriberName = "doc-lifecycle"
 
-// tasksAboutDoc reads GET /api/v1/tasks?about_doc=<id>[&kind=<kind>] over raw
-// HTTP. An empty kind does not filter. The task list is read this way rather
-// than through cli.Client because TaskListFilter carries no about_doc field
-// yet, and this suite drives public surfaces, not the client's convenience.
-func tasksAboutDoc(t *testing.T, baseURL, token string, docID int64, kind string) []model.Task {
+// tasksAboutDoc reads GET /api/v1/tasks?about_doc=<id>[&kind=<kind>] through
+// the client's own filter fields. An empty kind does not filter.
+func tasksAboutDoc(t *testing.T, ctx context.Context, c *cli.Client, docID int64, kind string) []model.Task {
 	t.Helper()
-	url := fmt.Sprintf("%s/api/v1/tasks?about_doc=%d", baseURL, docID)
-	if kind != "" {
-		url += "&kind=" + kind
-	}
-	status, body := getAuthed(t, url, token)
-	if status != http.StatusOK {
-		t.Fatalf("GET %s: status = %d, want 200; body: %s", url, status, body)
-	}
-	var resp model.TaskListResponse
-	if err := json.Unmarshal([]byte(body), &resp); err != nil {
-		t.Fatalf("decode task list %q: %v", body, err)
+	resp, _, err := c.ListTasks(ctx, cli.TaskListFilter{AboutDoc: docID, Kind: kind})
+	if err != nil {
+		t.Fatalf("list tasks about doc %d (kind %q): %v", docID, kind, err)
 	}
 	return resp.Tasks
 }
@@ -69,21 +58,21 @@ func describeTasks(tasks []model.Task) string {
 // about whether the loop was stalled, unlocked, or simply minted the wrong
 // thing.
 func pollTasksAboutDoc(
-	t *testing.T, ctx context.Context, c *cli.Client, baseURL, token string,
+	t *testing.T, ctx context.Context, admin, reader *cli.Client,
 	docID int64, kind string, want int, why string,
 ) []model.Task {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	var last []model.Task
 	for {
-		last = tasksAboutDoc(t, baseURL, token, docID, kind)
+		last = tasksAboutDoc(t, ctx, reader, docID, kind)
 		if len(last) == want {
 			return last
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("%s: %d %s tasks about doc %d after 10s, want %d; saw: %s; subscriber: %s",
 				why, len(last), kind, docID, want, describeTasks(last),
-				describeSubscriber(t, ctx, c))
+				describeSubscriber(t, ctx, admin))
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -269,7 +258,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	}
 	// Nothing references the document before anything happens to it: this is
 	// the baseline the two mints below are measured against.
-	if tasks := tasksAboutDoc(t, srv.URL, ownerTok.Token, doc.ID, ""); len(tasks) != 0 {
+	if tasks := tasksAboutDoc(t, ctx, owner, doc.ID, ""); len(tasks) != 0 {
 		t.Fatalf("tasks about doc %d before submit = %s, want none", doc.ID, describeTasks(tasks))
 	}
 
@@ -285,7 +274,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 			"(submission moves no document column)", submitted.Status, submitted.Version, doc.Version)
 	}
 
-	reviewTasks := pollTasksAboutDoc(t, ctx, admin, srv.URL, ownerTok.Token,
+	reviewTasks := pollTasksAboutDoc(t, ctx, admin, owner,
 		doc.ID, "review", 1, "after the first submit")
 	review := reviewTasks[0]
 	if review.State != "ready" {
@@ -304,7 +293,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 		t.Fatalf("review task %s created_by = %q, want watcher (the mechanism, not the submitter)",
 			review.ID, review.CreatedBy)
 	}
-	if tasks := tasksAboutDoc(t, srv.URL, ownerTok.Token, doc.ID, ""); len(tasks) != 1 {
+	if tasks := tasksAboutDoc(t, ctx, owner, doc.ID, ""); len(tasks) != 1 {
 		t.Fatalf("tasks about doc %d after submit = %s, want only the review task", doc.ID, describeTasks(tasks))
 	}
 
@@ -332,7 +321,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 			eventbus.TypeDocumentSubmitted, len(submits))
 	}
 	pollDocLifecycleCaughtUp(t, ctx, admin, "after the second submit")
-	if tasks := tasksAboutDoc(t, srv.URL, ownerTok.Token, doc.ID, ""); len(tasks) != 1 || tasks[0].ID != review.ID {
+	if tasks := tasksAboutDoc(t, ctx, owner, doc.ID, ""); len(tasks) != 1 || tasks[0].ID != review.ID {
 		t.Fatalf("tasks about doc %d after the second submit = %s, want only %s",
 			doc.ID, describeTasks(tasks), review.ID)
 	}
@@ -354,7 +343,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 		t.Fatalf("doc status after accept = %q, want accepted", accept.Doc.Status)
 	}
 
-	designTasks := pollTasksAboutDoc(t, ctx, admin, srv.URL, ownerTok.Token,
+	designTasks := pollTasksAboutDoc(t, ctx, admin, owner,
 		doc.ID, "design", 1, "after accepting the spec")
 	design := designTasks[0]
 	if design.State != "ready" {

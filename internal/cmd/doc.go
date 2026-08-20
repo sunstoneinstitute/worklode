@@ -26,8 +26,8 @@ var docKinds = []string{"spec", "adr", "plan"}
 // else is matched against every document's slug over GET /api/v1/docs
 // (exact match only — corpus-number and SPEC/ADR shorthand resolution stay
 // unbuilt). It is the one resolver both `lode doc <ref>`'s verbs and `lode
-// task list --plan` call, so the two surfaces cannot disagree about what a
-// ref names. An unmatched or ambiguous slug is an error naming what was
+// task list`'s `--plan`/`--about` call, so the surfaces cannot disagree about
+// what a ref names. An unmatched or ambiguous slug is an error naming what was
 // tried.
 //
 // A slug that matches no live document is retried against the tombstoned ones.
