@@ -89,6 +89,9 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if in.Slug == "" {
 		return nil, fmt.Errorf("doc slug must not be empty: %w", ErrInvalidInput)
 	}
+	// docs_number_matches_kind enforces both halves of 025 §14.3 in the schema;
+	// these two cases are kept so a caller gets ErrInvalidInput naming the field
+	// rather than a CHECK violation.
 	switch {
 	case in.Kind == "plan" && in.Number != 0:
 		return nil, fmt.Errorf("a plan carries no number (025 §14.3), got %d: %w", in.Number, ErrInvalidInput)
