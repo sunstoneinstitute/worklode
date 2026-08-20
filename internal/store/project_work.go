@@ -257,8 +257,8 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 		return nil, err
 	}
 	// scanTask derives Branch; this projection has always shipped it empty
-	// and the board's wire shape is not this change's business. See
-	// docs/follow-ups.md.
+	// and the board's wire shape is not this change's business. WL-183 picks
+	// which side is right.
 	t.Branch = ""
 
 	f := &ProjectWorkFact{Task: *t}

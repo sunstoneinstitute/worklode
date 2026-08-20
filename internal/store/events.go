@@ -382,12 +382,15 @@ func (s *Store) ListEvents(ctx context.Context, f EventFilter) ([]Event, error) 
 		limit = MaxEventListLimit
 	}
 
+	// Bound before the call: args.next mutates args.vals, and the order of
+	// evaluation between a call operand and a plain one is unspecified.
+	limitArg := args.next(limit)
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+eventColumns+`
 		   FROM events
 		  WHERE `+where+`
 		  ORDER BY id
-		  LIMIT `+args.next(limit), args.vals...)
+		  LIMIT `+limitArg, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("list events: %w", err)
 	}
