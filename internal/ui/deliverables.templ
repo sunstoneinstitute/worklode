@@ -67,9 +67,9 @@ templ deliverableRow(d DeliverableRow) {
 			<span class="chip declared"><span class="cd" aria-hidden="true"></span>Declared</span>
 			<div class="def">
 				if d.CreatedBy != "" {
-					{ "by " + d.CreatedBy + " · " + FmtTime(d.CreatedAt) }
+					{ "by " + d.CreatedBy + " · " + fmtTime(d.CreatedAt) }
 				} else {
-					{ FmtTime(d.CreatedAt) }
+					{ fmtTime(d.CreatedAt) }
 				}
 			</div>
 		</div>
