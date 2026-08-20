@@ -39,17 +39,11 @@ const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
 // wlc:TaskKind in ns/concept.ttl. The list is generated from the Turtle by
 // scripts/nsgen.py, so adding a kind is one commit over ns/concept.ttl, the
 // regenerated internal/ns/gen.go, and the migration (025 §17).
-var validKinds = func() map[string]bool {
-	m := make(map[string]bool, len(ns.TaskKinds))
-	for _, k := range ns.TaskKinds {
-		m[k] = true
-	}
-	return m
-}()
+var validKinds = ns.Set(ns.TaskKinds)
 
 // invalidKindMsg is shared by every handler that gates on validKinds, so the
 // message cannot drift from the set when a kind is added.
-var invalidKindMsg = "invalid kind: must be one of " + strings.Join(ns.TaskKinds, ", ")
+var invalidKindMsg = "invalid kind: must be " + ns.OrList(ns.TaskKinds)
 
 var validEdgeTypes = map[string]bool{
 	"blocks": true, "child_of": true, "follow_up_to": true,
