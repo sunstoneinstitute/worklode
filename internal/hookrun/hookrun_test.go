@@ -1593,6 +1593,79 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 	}
 }
 
+// TestSessionStartSkillsWorktreeLinkPreservesForeignFile covers the
+// ownership discipline linkWorktreeSkill must not skip (spec 008 §18 row
+// 4): a plain file sitting at .agents/skills/<name> before session-start —
+// something Worklode did not create — must survive untouched, with a
+// warning explaining why that skill was not linked, rather than being
+// silently clobbered by the symlink swap.
+func TestSessionStartSkillsWorktreeLinkPreservesForeignFile(t *testing.T) {
+	root := initGitRepo(t)
+	wtDir := setupFakeWorktree(t, root, "PROJ-9", "foreign")
+
+	tddContent := "# TDD\n"
+	tddArchive, tddHash := buildSkillArchive(t, tddContent)
+	brief := model.Brief{
+		Task:   model.Task{ID: "PROJ-9", Title: "Foreign file", State: "in_progress", Priority: "high"},
+		Skills: model.SkillRecommendation{Pinned: []model.PinnedSkill{{Name: "tdd", Description: "d", Hash: tddHash, Content: tddContent}}},
+	}
+	back := newSkillsBackbone(t, brief)
+	back.setArchive("tdd", tddHash, tddArchive)
+
+	link := filepath.Join(wtDir, ".agents", "skills", "tdd")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	const foreignContent = "not a skill link\n"
+	if err := os.WriteFile(link, []byte(foreignContent), 0o644); err != nil {
+		t.Fatalf("write foreign file: %v", err)
+	}
+
+	_, stderr := runSessionStart(t, wtDir, "s-foreign")
+
+	if !strings.Contains(stderr, "tdd") || !strings.Contains(stderr, "not a symlink") {
+		t.Fatalf("stderr missing the foreign-file warning: %q", stderr)
+	}
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("foreign file gone: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("foreign file was replaced with a symlink")
+	}
+	got, err := os.ReadFile(link)
+	if err != nil || string(got) != foreignContent {
+		t.Fatalf("foreign file content = %q, %v; want %q untouched", got, err, foreignContent)
+	}
+}
+
+// TestEnsureExcludedAddsMissingTrailingNewline covers a hand-edited
+// info/exclude with no trailing newline: appending ".agents/" via
+// os.O_APPEND without checking for one would otherwise merge it onto the
+// end of the file's last pattern.
+func TestEnsureExcludedAddsMissingTrailingNewline(t *testing.T) {
+	root := initGitRepo(t)
+	exclPath, err := worktree.ExcludeFile(root)
+	if err != nil {
+		t.Fatalf("ExcludeFile: %v", err)
+	}
+	const existing = "*.bak" // deliberately no trailing newline
+	if err := os.WriteFile(exclPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write info/exclude: %v", err)
+	}
+
+	ensureExcluded(Options{Stderr: &bytes.Buffer{}}, root)
+
+	got, err := os.ReadFile(exclPath)
+	if err != nil {
+		t.Fatalf("read info/exclude: %v", err)
+	}
+	want := existing + "\n.agents/\n"
+	if string(got) != want {
+		t.Fatalf("info/exclude = %q, want %q", got, want)
+	}
+}
+
 // TestSessionStartSkillsArchiveFetchFailure covers the warn-only discipline:
 // one skill's archive 500s, the hook still exits 0 and emits the full brief,
 // a warning lands on stderr, and the OTHER (pinned) skill is still installed.

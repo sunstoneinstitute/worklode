@@ -577,9 +577,11 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 			p, err := skillstore.Ensure(dirs, name, hash, func() ([]byte, error) {
 				return c.SkillArchive(actx, name, hash)
 			})
-			// mu also guards opts.Stderr: warn's writer (a *bytes.Buffer in
-			// tests) is not safe for concurrent use, and up to
-			// skillFetchConcurrency fetches can land here at once.
+			// mu also guards opts.Stderr (warn's writer, a *bytes.Buffer in
+			// tests, is not safe for concurrent use) and linkWorktreeSkill's
+			// filesystem work below — up to skillFetchConcurrency fetches
+			// can land here at once, so keep all three inside the lock
+			// rather than "optimizing" its scope.
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -622,7 +624,20 @@ func linkWorktreeSkill(opts Options, root, name, versionDir string) bool {
 	if cur, err := os.Readlink(link); err == nil && cur == versionDir {
 		return false
 	}
-	_ = os.Remove(link) // stale version link; ours by construction
+	// Only remove what is actually ours: a symlink at this exact path. A
+	// plain file or directory here was not created by linkWorktreeSkill
+	// (Worklode never deletes or repoints a path it did not create — spec
+	// 008 §18 row 4), so leave it alone and warn instead of clobbering it.
+	if info, err := os.Lstat(link); err == nil {
+		if info.Mode()&os.ModeSymlink == 0 {
+			warn(opts, "worktree skill link %s: %s exists and is not a symlink; leaving it alone", name, link)
+			return false
+		}
+		if err := os.Remove(link); err != nil {
+			warn(opts, "worktree skill link %s: %v", name, err)
+			return false
+		}
+	}
 	if err := os.Symlink(versionDir, link); err != nil {
 		warn(opts, "worktree skill link %s: %v", name, err)
 		return false
@@ -652,6 +667,11 @@ func ensureExcluded(opts Options, root string) {
 		return
 	}
 	defer f.Close()
+	// A hand-edited file with no trailing newline would otherwise get
+	// ".agents/" merged onto the end of its last pattern.
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		fmt.Fprintln(f)
+	}
 	fmt.Fprintln(f, ".agents/")
 }
 
