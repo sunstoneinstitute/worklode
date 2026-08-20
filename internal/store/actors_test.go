@@ -3,6 +3,7 @@ package store
 import (
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,9 +23,12 @@ func TestCreateAndGetActor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetActor: %v", err)
 	}
-	want := &Actor{ID: "alice", Kind: "human", DisplayName: "Alice Example"}
-	if *got != *want {
-		t.Fatalf("GetActor: got %+v, want %+v", got, want)
+	// Compared field-by-field rather than by struct equality: Groups is a
+	// []string (a NULL groups column, as here, scans to nil), which is not
+	// comparable with ==.
+	if got.ID != "alice" || got.Kind != "human" || got.DisplayName != "Alice Example" ||
+		got.Admin || got.ExpectedGitHubLogin != "" || got.Email != "" || got.Groups != nil {
+		t.Fatalf("GetActor: got %+v", got)
 	}
 }
 
@@ -45,9 +49,9 @@ func TestEnsureServiceActorIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetActor: %v", err)
 	}
-	want := &Actor{ID: "watcher", Kind: "service", DisplayName: "doc-lifecycle watcher"}
-	if *got != *want {
-		t.Fatalf("GetActor: got %+v, want %+v", got, want)
+	if got.ID != "watcher" || got.Kind != "service" || got.DisplayName != "doc-lifecycle watcher" ||
+		got.Admin || got.ExpectedGitHubLogin != "" || got.Email != "" || got.Groups != nil {
+		t.Fatalf("GetActor: got %+v", got)
 	}
 }
 
@@ -259,7 +263,7 @@ func TestUpsertHumanActor(t *testing.T) {
 	ctx := t.Context()
 
 	// Insert.
-	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false, ""); err != nil {
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false, "", "", nil); err != nil {
 		t.Fatalf("first upsert: %v", err)
 	}
 	a, err := s.GetActor(ctx, "alice")
@@ -271,7 +275,7 @@ func TestUpsertHumanActor(t *testing.T) {
 	}
 
 	// Re-login promotes to admin and updates the display name.
-	if err := s.UpsertHumanActor(ctx, "alice", "Alice E.", true, ""); err != nil {
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice E.", true, "", "", nil); err != nil {
 		t.Fatalf("second upsert: %v", err)
 	}
 	a, _ = s.GetActor(ctx, "alice")
@@ -280,7 +284,7 @@ func TestUpsertHumanActor(t *testing.T) {
 	}
 
 	// Re-login demotes back to non-admin (demotion takes effect at next login).
-	if err := s.UpsertHumanActor(ctx, "alice", "Alice E.", false, ""); err != nil {
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice E.", false, "", "", nil); err != nil {
 		t.Fatalf("third upsert: %v", err)
 	}
 	a, _ = s.GetActor(ctx, "alice")
@@ -297,7 +301,7 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false, "stigsb"); err != nil {
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false, "stigsb", "", nil); err != nil {
 		t.Fatalf("first upsert: %v", err)
 	}
 	a, err := s.GetActor(ctx, "alice")
@@ -309,7 +313,7 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 	}
 
 	// A later login where Keycloak no longer asserts the attribute clears it.
-	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false, ""); err != nil {
+	if err := s.UpsertHumanActor(ctx, "alice", "Alice Example", false, "", "", nil); err != nil {
 		t.Fatalf("second upsert: %v", err)
 	}
 	a, err = s.GetActor(ctx, "alice")
@@ -318,5 +322,39 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 	}
 	if a.ExpectedGitHubLogin != "" {
 		t.Fatalf("ExpectedGitHubLogin after clear = %q, want empty", a.ExpectedGitHubLogin)
+	}
+}
+
+// TestUpsertHumanActorStoresIdentityClaims asserts the email and groups
+// claims are stored in full at login and re-synced on every login — Keycloak
+// stays the sole authority (spec 029 §6.2) — exactly like the admin flag and
+// expected GitHub login.
+func TestUpsertHumanActorStoresIdentityClaims(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	groups := []string{"user", "science-lead"}
+	if err := s.UpsertHumanActor(ctx, "ada", "Ada", false, "adal", "ada@example.org", groups); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.GetActor(ctx, "ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Email != "ada@example.org" || !slices.Equal(a.Groups, groups) {
+		t.Fatalf("claims not stored: %+v", a)
+	}
+
+	// Re-login with narrower claims replaces the stored value in full —
+	// Keycloak stays the sole authority (029 §6.2).
+	if err := s.UpsertHumanActor(ctx, "ada", "Ada", false, "adal", "", []string{"user"}); err != nil {
+		t.Fatal(err)
+	}
+	a, err = s.GetActor(ctx, "ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Email != "" || !slices.Equal(a.Groups, []string{"user"}) {
+		t.Fatalf("claims not replaced: %+v", a)
 	}
 }

@@ -3,6 +3,7 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -116,7 +117,8 @@ func TestOIDCTokenExchangeMintsToken(t *testing.T) {
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "bob",
 		"name":               "Bob Example",
-		"groups":             []string{"user"},
+		"email":              "bob@example.org",
+		"groups":             []string{"user", "science-lead"},
 	})
 	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{"id_token": raw})
 	if rr.Code != http.StatusCreated {
@@ -137,6 +139,15 @@ func TestOIDCTokenExchangeMintsToken(t *testing.T) {
 	}
 	if a.ID != "bob" || a.Kind != "human" || a.Admin {
 		t.Fatalf("actor = %+v", a)
+	}
+
+	// provisionActor stores the full email and groups claims (spec 029 §6.2).
+	got, err := st.GetActor(context.Background(), "bob")
+	if err != nil {
+		t.Fatalf("get actor: %v", err)
+	}
+	if got.Email != "bob@example.org" || !slices.Equal(got.Groups, []string{"user", "science-lead"}) {
+		t.Fatalf("claims not stored: %+v", got)
 	}
 }
 
