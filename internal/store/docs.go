@@ -1294,46 +1294,78 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 }
 
 // NeedsPlanning returns the accepted specs that have at least one section no
-// accepted plan undertakes, each with the anchors that made it a gap (026
-// §2.1). project narrows the answer; "" answers over every project.
+// accepted plan discharges, each with the anchors that made it a gap and why
+// (026 §2.1). project narrows the answer; "" answers over every project.
 //
-// A section counts as planned when some accepted plan carries a `covers` edge
-// naming both the spec and that exact anchor. Three consequences are
-// deliberate:
+// A section is discharged when some accepted plan's `covers` edge claims it
+// `full`, or claims it `partial` with a `fullCoverageWith` set that closes:
+// every named plan is itself accepted and itself contributes `full` or
+// `partial` to that same section. `fullCoverageWith` is checked, never taken
+// on trust — an empty list, an unresolved reference, a draft target, a `none`
+// target, or a target that does not itself cover the section all leave it
+// open. An undischarged section is classified "partial" when some accepted
+// plan claims it `partial` (whether or not that claim closed), "bound-only"
+// when every accepted plan naming it claims `none`, and "unplanned" when no
+// accepted plan names it at all.
+//
+// Three further consequences are deliberate:
 //
 //   - A whole-document edge (to_anchor IS NULL) discharges nothing. It cannot
 //     say which present section it undertakes and would silently claim future
-//     ones (026 §2.1), so it never appears in the planned set.
+//     ones (026 §2.1), so it never appears in the discharged set.
 //   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
 //     §4.3), so it falls out of the join without a case of its own.
 //   - Only accepted documents on both ends participate: a draft spec is not
 //     yet owed planning, and a draft plan has not yet undertaken work.
-//
-// Coverage here is two-valued — an edge to the anchor means planned. 026 §2.1
-// specifies a three-valued `coverage: full|partial|none` relation with
-// `fullCoverageWith` closure checking, which doc_edges cannot express: it has
-// no coverage-level column, so `rebuildEdges` writes the level away. Closing
-// that gap needs a schema change and is tracked as WL-141.
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`WITH planned AS (
-		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
+		`WITH cov AS (
+		     SELECT e.id, e.from_doc AS plan_id, e.to_doc AS doc_id,
+		            e.to_anchor AS anchor, e.coverage
 		       FROM doc_edges e
 		       JOIN docs p ON p.id = e.from_doc
 		      WHERE e.type = 'covers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		        AND p.kind = 'plan' AND p.status = 'accepted'
+		 ),
+		 closed AS (
+		     SELECT c.id
+		       FROM cov c
+		      WHERE c.coverage = 'partial'
+		        AND EXISTS (SELECT 1 FROM doc_coverage_completed_with w
+		                     WHERE w.edge_id = c.id)
+		        AND NOT EXISTS (
+		              SELECT 1 FROM doc_coverage_completed_with w
+		               WHERE w.edge_id = c.id
+		                 AND NOT EXISTS (
+		                       SELECT 1 FROM cov o
+		                        WHERE o.plan_id = w.to_doc
+		                          AND o.doc_id = c.doc_id AND o.anchor = c.anchor
+		                          AND o.coverage IN ('full','partial')))
+		 ),
+		 resolved AS (
+		     SELECT c.doc_id, c.anchor,
+		            bool_or(c.coverage = 'full' OR cl.id IS NOT NULL) AS discharged,
+		            bool_or(c.coverage = 'partial')                   AS any_partial
+		       FROM cov c
+		       LEFT JOIN closed cl ON cl.id = c.id
+		      GROUP BY c.doc_id, c.anchor
 		 )
 		 SELECT `+qualifiedDocColumns("d")+`, count(*)::int,
-		        coalesce(json_agg(sec.anchor ORDER BY sec.position)
-		                 FILTER (WHERE pl.anchor IS NULL), '[]')::text
+		        coalesce(json_agg(json_build_object(
+		                     'anchor', sec.anchor,
+		                     'coverage', CASE WHEN r.doc_id IS NULL   THEN 'unplanned'
+		                                      WHEN r.any_partial      THEN 'partial'
+		                                      ELSE 'bound-only' END)
+		                 ORDER BY sec.position)
+		                 FILTER (WHERE r.discharged IS NOT TRUE), '[]')::text
 		   FROM docs d
 		   JOIN doc_sections sec ON sec.doc_id = d.id
-		   LEFT JOIN planned pl ON pl.doc_id = sec.doc_id AND pl.anchor = sec.anchor
+		   LEFT JOIN resolved r ON r.doc_id = sec.doc_id AND r.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
 		    AND ($1 = '' OR d.project_id = $1)
 		  GROUP BY d.id
-		 HAVING count(*) FILTER (WHERE pl.anchor IS NULL) > 0
+		 HAVING count(*) FILTER (WHERE r.discharged IS NOT TRUE) > 0
 		  ORDER BY d.project_id, d.number NULLS LAST, d.slug`, project)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list specs needing planning: %w", err)
@@ -1344,13 +1376,13 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 	var gaps []model.DocPlanningGap
 	for rows.Next() {
 		var gap model.DocPlanningGap
-		var unplannedJSON string
-		d, err := scanDoc(appendScan{rows, []any{&gap.Sections, &unplannedJSON}})
+		var gapsJSON string
+		d, err := scanDoc(appendScan{rows, []any{&gap.Sections, &gapsJSON}})
 		if err != nil {
 			return nil, nil, fmt.Errorf("scan spec needing planning: %w", err)
 		}
-		if err := json.Unmarshal([]byte(unplannedJSON), &gap.Unplanned); err != nil {
-			return nil, nil, fmt.Errorf("decode unplanned anchors of doc %d: %w", d.ID, err)
+		if err := json.Unmarshal([]byte(gapsJSON), &gap.Gaps); err != nil {
+			return nil, nil, fmt.Errorf("decode planning gaps of doc %d: %w", d.ID, err)
 		}
 		gap.Doc = d.ID
 		docs = append(docs, *d)

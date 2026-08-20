@@ -940,8 +940,9 @@ func TestListDocsNeedsPlanning(t *testing.T) {
 		t.Fatalf("planning_gaps = %+v, want one entry", resp.PlanningGaps)
 	}
 	gap := resp.PlanningGaps[0]
-	if gap.Doc != spec.ID || gap.Sections != 2 || len(gap.Unplanned) != 1 || gap.Unplanned[0] != "sec-2" {
-		t.Fatalf("gap = %+v, want doc %d, 2 sections, [sec-2] unplanned", gap, spec.ID)
+	if gap.Doc != spec.ID || gap.Sections != 2 || len(gap.Gaps) != 1 ||
+		gap.Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "unplanned"}) {
+		t.Fatalf("gap = %+v, want doc %d, 2 sections, sec-2 unplanned", gap, spec.ID)
 	}
 	// The listing stays body-free, like every other doc list response.
 	if resp.Docs[0].Body != "" {
