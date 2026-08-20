@@ -1,6 +1,7 @@
 package designdoc
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -134,11 +135,9 @@ func (c *Coverage) UnmarshalYAML(n *yaml.Node) error {
 		*c = Coverage{Spec: spec, Coverage: "full"}
 		return nil
 	case yaml.MappingNode:
-		type coverageFields struct {
-			Spec             string  `yaml:"spec,omitempty"`
-			Coverage         string  `yaml:"coverage,omitempty"`
-			FullCoverageWith RefList `yaml:"fullCoverageWith,omitempty"`
-		}
+		// The alias drops Coverage's own UnmarshalYAML, so Decode fills the
+		// fields directly; naming Coverage keeps one declaration of its shape.
+		type coverageFields Coverage
 		var fields coverageFields
 		if err := n.Decode(&fields); err != nil {
 			return err
@@ -189,7 +188,7 @@ func splitFrontmatter(src string) (front, inner, body string) {
 	}
 	lines := splitLines(src)
 	for _, ln := range lines[1:] {
-		if strings.TrimRight(src[ln.start:ln.textEnd], " \t\r") == "---" {
+		if strings.TrimRight(ln.text(src), " \t\r") == "---" {
 			return src[:ln.end], src[lines[1].start:ln.start], src[ln.end:]
 		}
 	}
@@ -248,4 +247,21 @@ func (f *Frontmatter) render() string {
 	}
 	enc.Close()
 	return "---\n" + b.String() + "---\n"
+}
+
+// jsonBytes re-encodes the frontmatter's inner YAML as JSON, so the backbone
+// can store it without a second parser (025 §16.3). YAML scalar timestamps
+// (e.g. "issued: 2026-01-01") are normalized to RFC3339
+// ("2026-01-01T00:00:00Z") in the process — the value is preserved, only its
+// lexical form changes.
+func (f *Frontmatter) jsonBytes() (json.RawMessage, error) {
+	var m map[string]any
+	if err := yaml.Unmarshal([]byte(f.inner), &m); err != nil {
+		return nil, fmt.Errorf("frontmatter: %w", err)
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("frontmatter: %w", err)
+	}
+	return b, nil
 }
