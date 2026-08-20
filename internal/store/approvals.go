@@ -69,14 +69,18 @@ func scanApproval(row rowScanner) (*Approval, error) {
 	return &a, nil
 }
 
-// OpenApprovalForEntity returns the single row for (entityKind, entityID)
-// whose state is 'awaiting' or 'changes_requested' — both count as an open
-// requirement; ErrNotFound otherwise.
+// OpenApprovalForEntity returns the open row for (entityKind, entityID) —
+// state 'awaiting' or 'changes_requested', both counting as open —
+// ErrNotFound otherwise. A draft PR can legally carry two open rows under
+// different subject_revision (opened at head A, then ready_for_review at
+// head B before A resolves): ORDER BY id DESC picks the newest revision,
+// matching 029 §7.1's "each decision binds the exact governed revision".
 func OpenApprovalForEntity(tx *sql.Tx, entityKind, entityID string) (*Approval, error) {
 	a, err := scanApproval(tx.QueryRow(
 		`SELECT `+approvalColumns+` FROM approvals
 		 WHERE entity_kind = $1 AND entity_id = $2
-		   AND state IN ('awaiting', 'changes_requested')`,
+		   AND state IN ('awaiting', 'changes_requested')
+		 ORDER BY id DESC LIMIT 1`,
 		entityKind, entityID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

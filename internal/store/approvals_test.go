@@ -36,6 +36,16 @@ func TestInsertAwaitingApprovalIsIdempotent(t *testing.T) {
 	if a.State != "awaiting" || a.SubjectRevision != "abc123" {
 		t.Errorf("got state %q revision %q", a.State, a.SubjectRevision)
 	}
+
+	var count int
+	if err := tx.QueryRow(
+		`SELECT count(*) FROM approvals WHERE entity_kind = 'pr' AND entity_id = 'acme/site#7'`,
+	).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("got %d rows, want 1 (second insert must not duplicate)", count)
+	}
 }
 
 func TestApprovalResolveApprovedClosesOpenLookup(t *testing.T) {
@@ -99,6 +109,14 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 	if err := resolveApproval(tx, a.ID, "changes_requested", &reviewer, now); err != nil {
 		t.Fatal(err)
 	}
+	resolved, err := OpenApprovalForEntity(tx, "pr", "acme/site#10")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.ResolvingActor == nil || *resolved.ResolvingActor != reviewer || resolved.ResolvedAt == nil {
+		t.Fatalf("got resolvingActor %v resolvedAt %v, want %q/non-nil (resolveApproval must stamp both)",
+			resolved.ResolvingActor, resolved.ResolvedAt, reviewer)
+	}
 	if err := ReopenApproval(tx, a.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -156,6 +174,50 @@ func TestGetApproval(t *testing.T) {
 
 	if _, err := s.GetApproval(t.Context(), a.ID+1_000_000); !errors.Is(err, ErrNotFound) {
 		t.Errorf("got err %v, want ErrNotFound", err)
+	}
+}
+
+func TestSetRequiredActor(t *testing.T) {
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	if err := s.CreateActor(t.Context(), "actor-a", "human", "A", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateActor(t.Context(), "actor-b", "human", "B", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := InsertAwaitingApproval(tx, now, "pr", "acme/site#12", "sha1", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#12")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// required_actor starts NULL: fills.
+	if err := SetRequiredActor(tx, a.ID, "actor-a"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := OpenApprovalForEntity(tx, "pr", "acme/site#12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.RequiredActor == nil || *got.RequiredActor != "actor-a" {
+		t.Fatalf("got requiredActor %v, want actor-a", got.RequiredActor)
+	}
+
+	// Already set: must not overwrite.
+	if err := SetRequiredActor(tx, a.ID, "actor-b"); err != nil {
+		t.Fatal(err)
+	}
+	got2, err := OpenApprovalForEntity(tx, "pr", "acme/site#12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got2.RequiredActor == nil || *got2.RequiredActor != "actor-a" {
+		t.Errorf("got requiredActor %v, want unchanged actor-a", got2.RequiredActor)
 	}
 }
 
