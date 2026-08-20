@@ -90,8 +90,8 @@ func parseSince(s string, now time.Time) (*time.Time, error) {
 }
 
 // reconcile handles POST /api/v1/reconcile: engine 1 (replay stored events)
-// then engine 2 (poll GitHub — a later plan in this series; skipped until
-// the App is configured AND that plan lands). Synchronous by design: a
+// then engine 2 (poll GitHub — skipped until the App is configured AND
+// reconcile.Poll is wired in here). Synchronous by design: a
 // scoped run is fast and the unscoped run is the scheduled case where
 // waiting is acceptable (spec 013 §API).
 func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
@@ -141,14 +141,15 @@ func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 		resp.Replay = replay
 	}
 
-	// Engine 2 lands in a later plan in this series (not this one), which
-	// replaces this block with the poll call. Keep the reason truthful about
-	// which gap is blocking it: an unconfigured App is a config gap, but a
-	// configured App still skips polling because engine 2 doesn't exist yet.
+	// Engine 2 (reconcile.Poll) exists but is not wired here yet; Task 13 of
+	// the poll-engine plan replaces this block with the poll call. Keep the
+	// reason truthful about which gap is blocking it: an unconfigured App is
+	// a config gap, but a configured App still skips polling because this
+	// endpoint does not call the engine yet.
 	if s.appAuth == nil {
 		resp.PollSkipped = "github app auth not configured"
 	} else {
-		resp.PollSkipped = "poll engine not implemented yet"
+		resp.PollSkipped = "poll engine not wired into this endpoint yet"
 	}
 
 	writeJSON(w, http.StatusOK, resp)
