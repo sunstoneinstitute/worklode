@@ -1445,13 +1445,19 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // disagree. For plan ordering that means only the blocking plan can declare it
 // — `blockedBy:` parses and writes nothing (WL-143).
 //
-// covers reads the retired `implements` spelling too (026 §5.1); the
-// implements edge type stays reserved for components. Each entry's level and,
-// for a partial entry, its fullCoverageWith closure ride along with the ref;
-// rebuildEdges normalises and validates the level and resolves the closure.
-// fullCoverageWith beside full or none is invalid (026 §5.1) and contributes
-// nothing to any outcome, so it is dropped here rather than carried to a level
-// that cannot use it.
+// covers reads the retired `implements` spelling too (026 §5.1). Each entry's
+// level and, for a partial entry, its fullCoverageWith closure ride along with
+// the ref; rebuildEdges normalises and validates the level and resolves the
+// closure. fullCoverageWith beside full or none is invalid (026 §5.1) and
+// contributes nothing to any outcome, so it is dropped here rather than carried
+// to a level that cannot use it.
+//
+// The implements edge *type* is a different subject: a component's evidence
+// about its own code (026 §6.2), declared in `.worklode/implements.yaml`. That
+// is 025 §11 machinery, and it is not built — so no writer emits the type here
+// or anywhere else. The doc_edges CHECK admitting a value is not the same as
+// something producing it; TestDocEdgeTypesWithoutWriter pins that gap so it is
+// not re-diagnosed as a defect (WL-132).
 //
 // blocks orders whole plan documents (025 §5, §9.3) — the ordering edge that
 // would otherwise need a container row to attach to. ns/ontology.ttl still
