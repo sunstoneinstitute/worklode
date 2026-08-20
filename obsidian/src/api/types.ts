@@ -6,6 +6,16 @@
 // the Go side moves; when the two disagree, change the Go side first and
 // mirror it here, never the reverse.
 
+/** The delete record a soft-deleted task or document carries (044 §2),
+ *  matching internal/model.Tombstone. Absent on a live row, and absent from
+ *  every list the mirror reads: only a fetch by id serves one, so a vault note
+ *  sees this when it follows an id it already had. */
+export interface Tombstone {
+  deleted_at: string;
+  deleted_by: string;
+  justification?: string;
+}
+
 /** A repo mapped to a project, and its terminal delivery state. */
 export interface RepoMapping {
   repo: string;
@@ -39,6 +49,7 @@ export interface Task {
   skills: string[];
   assignee: string;
   branch: string;
+  tombstone?: Tombstone;
 }
 
 /** The "to"-side of one of a task's outgoing edges. */
@@ -149,6 +160,7 @@ export interface Doc {
   created_by: string;
   created_at: string;
   updated_at: string;
+  tombstone?: Tombstone;
 }
 
 /** The wire form of GET /api/v1/docs/{id}: a Doc plus the rows derived from

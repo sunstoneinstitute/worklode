@@ -30,11 +30,15 @@ var docKinds = []string{"spec", "adr", "plan"}
 // ref names. An unmatched or ambiguous slug is an error naming what was
 // tried.
 //
-// A slug that matches no live document is retried against the tombstoned ones
-// (044 §4): a deleted document leaves every list, so without the second pass
-// `lode doc undelete <slug>` could never name the document it exists to
-// restore. Live documents win outright — the fallback runs only when the first
-// pass found nothing — so an undeleted document never shadows a live one.
+// A slug that matches no live document is retried against the tombstoned ones.
+// `lode doc undelete <slug>` is what forces this — a deleted document has left
+// every list, so without the second pass the one command that exists to restore
+// it could never name it — but the fallback is on every verb deliberately:
+// 044 §4 keeps a tombstoned row addressable by an id its holder already has,
+// and a resolver that answered "no such document" for a row `lode doc get`
+// would happily render is the mysterious failure §4 exists to prevent. Live
+// documents win outright, since the fallback runs only when the first pass
+// found nothing, so a tombstone never shadows a live document.
 func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
 		return id, nil

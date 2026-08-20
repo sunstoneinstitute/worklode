@@ -115,8 +115,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Tombstone operations on tasks and design documents (044 §6), by entity (" +
 			strings.Join(deleteEntities, ", ") + "), op (" +
 			strings.Join(deleteOps, ", ") + ") and outcome (" +
-			strings.Join(deleteOutcomes, ", ") +
-			"). justification_required is the one worth a dashboard: a prod instance counting them is watching a client that has not learned the rule.",
+			strings.Join(deleteOutcomes, ", ") + ").",
 	}, []string{"entity", "op", "outcome"})
 	// A distinct counter, not left to http_requests_total, because a seek is
 	// the one admin-triggered write on this surface: it is the only way an
@@ -218,13 +217,18 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, outcome := range imageMirrorOutcomes {
 		s.imageMirrors.WithLabelValues(outcome)
 	}
-	// Every entity/op/outcome combination, so an instance where nobody has
-	// deleted anything reads as a flat zero rather than as no-data — which is
-	// the difference between "no delete was refused" and "refusals are not
-	// being counted".
+	// Every reachable entity/op/outcome combination, so an instance where
+	// nobody has deleted anything reads as a flat zero rather than as no-data
+	// — the difference between "no delete was refused" and "refusals are not
+	// being counted". Undelete asks for no justification on either instance
+	// (044 §3), so justification_required is unreachable there and would be a
+	// permanently flat series claiming to mean something.
 	for _, entity := range deleteEntities {
 		for _, op := range deleteOps {
 			for _, outcome := range deleteOutcomes {
+				if op == opUndelete && outcome == deleteJustificationRequired {
+					continue
+				}
 				s.deletes.WithLabelValues(entity, op, outcome)
 			}
 		}
@@ -599,10 +603,13 @@ const (
 	deleteError                 = "error"
 )
 
-// observeDelete records one delete or undelete attempt, called exactly once on
-// every exit path of the four handlers in softdelete.go — including the
+// observeDelete records one delete or undelete attempt. It is called once on
+// every path that reached a decision about the row — including the
 // prod-instance refusal, which is an outcome of the delete op and not an
-// absence of one.
+// absence of one. A request that never got that far, because its body or its
+// id would not parse, is counted by the HTTP middleware as the 400 it is and
+// not here: it named no delete to have an outcome.
+//
 // Nil-safe: tests build a *server directly without initMetrics.
 func (s *server) observeDelete(entity, op, outcome string) {
 	if s.deletes == nil {

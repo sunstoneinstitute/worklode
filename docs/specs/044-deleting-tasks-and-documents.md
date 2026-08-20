@@ -69,9 +69,25 @@ Both operations emit through the events log like every other mutation:
 justification in the payload. The tombstone is a fact about the row; the event
 is the record of who made it.
 
-Deleting a task that holds a lease releases the lease in the same transaction. A
-hidden task cannot be worked, and leaving the lease would leave the sweeper
-tending a row nothing can see.
+Three things move with the tombstone, all in the deleting transaction, because
+each of them would otherwise leave the row in a state undelete cannot get out
+of:
+
+- **The lease is released**, and an `in_progress` task goes back to `ready`. A
+  hidden task cannot be worked, so keeping the lease would leave the sweeper
+  tending a row nothing can see; but releasing it alone would strand the task
+  `in_progress` with no lease, which the sweeper never revisits and `Claim`
+  refuses. Undelete has to hand back something claimable.
+- **The parent's roll-up is recomputed**, on delete and on undelete. Roll-up
+  only re-runs on a child's transition (004 §6.1), so deleting the last open
+  child would otherwise leave a parent sitting at `in_progress` with no sibling
+  left to trigger the move.
+- **The document's slug and corpus number are released.** The uniqueness that
+  makes them identities is over live rows only. A deleted document keeps both
+  and stays addressable by them, but stops reserving them, so the correction
+  that motivated the delete — a wrong corpus number, a duplicate import — can
+  actually be created. Where a slug now names both a live document and a
+  tombstone, the live one wins; a tombstone never shadows a live row.
 
 Deleting a task or document does **not** cascade. A parent with children, or a
 document with covering plans, tombstones alone; the references stay resolvable
@@ -120,6 +136,17 @@ Two deliberate consequences:
 - Deleting a task does not retract its edges. `WL-9 blocks WL-12` with `WL-9`
   deleted stops blocking, because the blocking check reads live tasks, and the
   edge itself stays for the undelete.
+
+**Deleted is not closed.** A tombstone changes no answer about the task's own
+state, `closed` included: 004 §1.3's predicate stays "delivered, or abandoned",
+so a deleted `draft` reports `closed: false` and says so on the wire. What the
+tombstone changes is which rows a *query* considers at all. Every place that
+would otherwise treat a deleted task as unfinished work — the blocking check,
+the plan's open-task set, a container's children — filters it out where it
+reads, rather than by calling it closed. The distinction matters because
+`closed` is a claim about work and a tombstone is a claim about the row, and
+one predicate answering both would make "this was delivered" and "this never
+should have existed" indistinguishable to everything downstream.
 
 A tombstone hides a row; it does not freeze it. An edit or a state change
 addressed to a deleted row by id still applies, because the caller naming an id

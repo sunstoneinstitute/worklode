@@ -430,6 +430,17 @@ func TestDeleteMetrics(t *testing.T) {
 			t.Fatalf("metrics missing %s", want)
 		}
 	}
+	// Undelete asks for no justification on either instance (044 §3), so this
+	// series can never move; pre-initialising it would publish a permanently
+	// flat zero that reads as "no undelete was ever refused" rather than as
+	// "an undelete cannot be refused for that reason".
+	for _, entity := range []string{"task", "doc"} {
+		unreachable := `worklode_deletes_total{entity="` + entity +
+			`",op="undelete",outcome="justification_required"}`
+		if strings.Contains(body, unreachable) {
+			t.Fatalf("metrics publish the unreachable series %s", unreachable)
+		}
+	}
 }
 
 func TestParseInstanceEnv(t *testing.T) {
