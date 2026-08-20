@@ -115,16 +115,20 @@ func replaceSessionUsageTx(ctx context.Context, tx *sql.Tx, sessionID int64, buc
 	// rather than silently added up.
 	byCurrency := map[string]*microAmount{}
 
+	// The rows are collected into parallel arrays and written by one INSERT:
+	// pricing is per bucket, but the write need not be, and this is the
+	// heartbeat path.
+	w := usageRowArrays{}
 	for _, b := range merged {
 		price, err := modelPriceFor(ctx, tx, b.Model, b.Speed, b.Day)
 		if err != nil {
 			return totals, "", "", nil, err
 		}
-		var amount any // NULL when unpriced — deliberately not zero
+		var amount *string // NULL when unpriced — deliberately not zero
 		rowCurrency := defaultCurrency
 		if price != nil {
 			a := price.Cost(b.Tokens)
-			amount = a
+			amount = &a
 			rowCurrency = price.Currency
 			acc, ok := byCurrency[rowCurrency]
 			if !ok {
@@ -136,20 +140,30 @@ func replaceSessionUsageTx(ctx context.Context, tx *sql.Tx, sessionID int64, buc
 			}
 		}
 
+		w.add(b, amount, rowCurrency)
+		totals.Add(b.Tokens)
+		daySet[b.Day] = true
+	}
+
+	if len(w.days) > 0 {
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO agent_session_usage
 			   (agent_session_id, usage_day, model, speed, `+usageColumns+`,
 			    cost_amount, cost_currency)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-			sessionID, b.Day, b.Model, b.Speed,
-			b.Tokens.Input, b.Tokens.CacheWrite5m, b.Tokens.CacheWrite1h,
-			b.Tokens.CacheRead, b.Tokens.Output, amount, rowCurrency,
+			 SELECT $1::bigint, u.usage_day, u.model, u.speed,
+			        u.input_tokens, u.cache_write_5m_tokens, u.cache_write_1h_tokens,
+			        u.cache_read_tokens, u.output_tokens,
+			        u.cost_amount::numeric, u.cost_currency
+			   FROM unnest($2::date[], $3::text[], $4::text[], $5::bigint[], $6::bigint[],
+			               $7::bigint[], $8::bigint[], $9::bigint[], $10::text[], $11::text[])
+			        AS u(usage_day, model, speed, input_tokens, cache_write_5m_tokens,
+			             cache_write_1h_tokens, cache_read_tokens, output_tokens,
+			             cost_amount, cost_currency)`,
+			sessionID, w.days, w.models, w.speeds, w.input, w.cacheWrite5m, w.cacheWrite1h,
+			w.cacheRead, w.output, w.amounts, w.currencies,
 		); err != nil {
 			return totals, "", "", nil, fmt.Errorf("record usage for session %d: %w", sessionID, err)
 		}
-
-		totals.Add(b.Tokens)
-		daySet[b.Day] = true
 	}
 
 	if len(byCurrency) == 1 {
@@ -164,6 +178,32 @@ func replaceSessionUsageTx(ctx context.Context, tx *sql.Tx, sessionID int64, buc
 	}
 	sort.Slice(days, func(i, j int) bool { return days[i].Before(days[j]) })
 	return totals, cost, currency, days, nil
+}
+
+// usageRowArrays is one INSERT's worth of agent_session_usage rows, held
+// column-wise so the whole set binds as arrays. cost_amount is carried as a
+// decimal string (Cost's own output) and cast per element, so an unpriced
+// bucket stays NULL rather than becoming a zero amount.
+type usageRowArrays struct {
+	days                              []time.Time
+	models, speeds                    []string
+	input, cacheWrite5m, cacheWrite1h []int64
+	cacheRead, output                 []int64
+	amounts                           []*string
+	currencies                        []string
+}
+
+func (w *usageRowArrays) add(b SessionUsageBucket, amount *string, currency string) {
+	w.days = append(w.days, b.Day)
+	w.models = append(w.models, b.Model)
+	w.speeds = append(w.speeds, b.Speed)
+	w.input = append(w.input, b.Tokens.Input)
+	w.cacheWrite5m = append(w.cacheWrite5m, b.Tokens.CacheWrite5m)
+	w.cacheWrite1h = append(w.cacheWrite1h, b.Tokens.CacheWrite1h)
+	w.cacheRead = append(w.cacheRead, b.Tokens.CacheRead)
+	w.output = append(w.output, b.Tokens.Output)
+	w.amounts = append(w.amounts, amount)
+	w.currencies = append(w.currencies, currency)
 }
 
 // usageKey identifies one usage row within a session.
@@ -250,36 +290,40 @@ func projectForSessionTx(ctx context.Context, tx *sql.Tx, sessionID int64) (stri
 // Deliberately not filtered on tasks.deleted_at: the tokens were spent, and
 // dropping a tombstoned task's usage would stop the rollup reconciling against
 // agent_session_usage.
+// Every affected day goes in one DELETE and one INSERT: this runs on every
+// heartbeat that carries usage, and a session spanning midnight or a backfill
+// replaying weeks would otherwise pay two round trips per day.
 func recomputeProjectDailyCostTx(ctx context.Context, tx *sql.Tx, projectID string, days []time.Time) error {
-	for _, day := range days {
-		if _, err := tx.ExecContext(ctx,
-			`DELETE FROM project_daily_cost WHERE project_id = $1 AND usage_day = $2`,
-			projectID, day); err != nil {
-			return fmt.Errorf("clear rollup for %s on %s: %w", projectID, day.Format(time.DateOnly), err)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO project_daily_cost
-			   (project_id, usage_day, cost_currency, `+usageColumns+`,
-			    cost_amount, unpriced_tokens)
-			 SELECT $1, $2, u.cost_currency,
-			        SUM(u.input_tokens), SUM(u.cache_write_5m_tokens),
-			        SUM(u.cache_write_1h_tokens), SUM(u.cache_read_tokens),
-			        SUM(u.output_tokens),
-			        SUM(COALESCE(u.cost_amount, 0)),
-			        SUM(CASE WHEN u.cost_amount IS NULL
-			                 THEN u.input_tokens + u.cache_write_5m_tokens +
-			                      u.cache_write_1h_tokens + u.cache_read_tokens +
-			                      u.output_tokens
-			                 ELSE 0 END)
-			   FROM agent_session_usage u
-			   JOIN agent_sessions s ON s.id = u.agent_session_id
-			   JOIN leases l ON l.id = s.lease_id
-			   JOIN tasks  t ON t.id = l.task_id
-			  WHERE t.project_id = $1 AND u.usage_day = $2
-			  GROUP BY u.cost_currency`,
-			projectID, day); err != nil {
-			return fmt.Errorf("rebuild rollup for %s on %s: %w", projectID, day.Format(time.DateOnly), err)
-		}
+	if len(days) == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM project_daily_cost WHERE project_id = $1 AND usage_day = ANY($2::date[])`,
+		projectID, days); err != nil {
+		return fmt.Errorf("clear rollup for %s on %d day(s): %w", projectID, len(days), err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO project_daily_cost
+		   (project_id, usage_day, cost_currency, `+usageColumns+`,
+		    cost_amount, unpriced_tokens)
+		 SELECT $1::text, u.usage_day, u.cost_currency,
+		        SUM(u.input_tokens), SUM(u.cache_write_5m_tokens),
+		        SUM(u.cache_write_1h_tokens), SUM(u.cache_read_tokens),
+		        SUM(u.output_tokens),
+		        SUM(COALESCE(u.cost_amount, 0)),
+		        SUM(CASE WHEN u.cost_amount IS NULL
+		                 THEN u.input_tokens + u.cache_write_5m_tokens +
+		                      u.cache_write_1h_tokens + u.cache_read_tokens +
+		                      u.output_tokens
+		                 ELSE 0 END)
+		   FROM agent_session_usage u
+		   JOIN agent_sessions s ON s.id = u.agent_session_id
+		   JOIN leases l ON l.id = s.lease_id
+		   JOIN tasks  t ON t.id = l.task_id
+		  WHERE t.project_id = $1 AND u.usage_day = ANY($2::date[])
+		  GROUP BY u.usage_day, u.cost_currency`,
+		projectID, days); err != nil {
+		return fmt.Errorf("rebuild rollup for %s on %d day(s): %w", projectID, len(days), err)
 	}
 	return nil
 }

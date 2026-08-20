@@ -70,11 +70,22 @@ func (s *Store) ReplaceSkillEmbeddings(ctx context.Context, skillID int64, vecs 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM skill_embeddings WHERE skill_id = $1`, skillID); err != nil {
 		return fmt.Errorf("clear skill embeddings %d: %w", skillID, err)
 	}
-	for i, v := range vecs {
+	// One INSERT over the rendered literals rather than one per chunk: a full
+	// re-embed after a provider change is thousands of chunks in one
+	// transaction, and each round trip is paid with the transaction open.
+	// WITH ORDINALITY carries the slice index into chunk_index, so the array
+	// order is the stored order.
+	if len(vecs) > 0 {
+		lits := make([]string, len(vecs))
+		for i, v := range vecs {
+			lits[i] = vectorLiteral(v)
+		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO skill_embeddings (skill_id, chunk_index, embedding)
-			VALUES ($1, $2, $3::vector)`, skillID, i, vectorLiteral(v)); err != nil {
-			return fmt.Errorf("insert skill embedding %d/%d: %w", skillID, i, err)
+			SELECT $1::bigint, (v.ord - 1)::int, v.lit::vector
+			  FROM unnest($2::text[]) WITH ORDINALITY AS v(lit, ord)`,
+			skillID, lits); err != nil {
+			return fmt.Errorf("insert skill embeddings %d: %w", skillID, err)
 		}
 	}
 	return tx.Commit()

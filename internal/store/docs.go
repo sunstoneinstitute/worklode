@@ -560,7 +560,8 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	); err != nil {
 		return nil, fmt.Errorf("land revision of doc %d: %w", id, err)
 	}
-	if err := rebuildSections(tx, id, d.kind, candidate.doc, version); err != nil {
+	after, err := rebuildSectionsFrom(tx, id, d.kind, candidate.doc, version, prior)
+	if err != nil {
 		return nil, err
 	}
 	if err := rebuildEdges(tx, id, d.project, candidate.doc.Frontmatter); err != nil {
@@ -570,10 +571,6 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	// The diff gate is what keeps a published anchor from being dropped; this
 	// checks that it did. A failure here is a bug in the gate, not bad input,
 	// so it carries no sentinel.
-	after, err := priorSections(tx, id)
-	if err != nil {
-		return nil, err
-	}
 	for anchor, p := range prior {
 		if _, still := after[anchor]; p.published && !still {
 			return nil, fmt.Errorf(
@@ -583,12 +580,13 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 
 	// 025 §6 rule 5: last_revised_in moves on exactly the sections whose
 	// content changed. Touching it elsewhere invalidates valid claims.
-	for _, anchor := range diff.Changed {
+	if len(diff.Changed) > 0 {
 		if _, err := tx.Exec(
-			`UPDATE doc_sections SET last_revised_in = $3 WHERE doc_id = $1 AND anchor = $2`,
-			id, anchor, version,
+			`UPDATE doc_sections SET last_revised_in = $3
+			  WHERE doc_id = $1 AND anchor = ANY($2::text[])`,
+			id, diff.Changed, version,
 		); err != nil {
-			return nil, fmt.Errorf("stamp last_revised_in on #%s of doc %d: %w", anchor, id, err)
+			return nil, fmt.Errorf("stamp last_revised_in on doc %d: %w", id, err)
 		}
 	}
 	if _, err := tx.Exec(
@@ -738,20 +736,28 @@ func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error
 		return err
 	}
 
-	for _, target := range targets {
-		res, err := tx.Exec(
-			`UPDATE docs SET status = 'superseded', updated_at = $2
-			  WHERE id = $1 AND status = 'accepted'`, target, ts)
-		if err != nil {
-			return fmt.Errorf("supersede doc %d: %w", target, err)
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("supersede doc %d: %w", target, err)
-		}
-		if n == 0 {
-			continue
-		}
+	if len(targets) == 0 {
+		return nil
+	}
+
+	// One UPDATE over the whole target set; RETURNING names exactly the rows
+	// that moved, which is what the per-target RowsAffected check used to
+	// establish. Sorted back into id order so the state_log reads the same as
+	// when this walked the (already ordered) targets one at a time.
+	rows, err = tx.Query(
+		`UPDATE docs SET status = 'superseded', updated_at = $2
+		  WHERE id = ANY($1::bigint[]) AND status = 'accepted'
+		 RETURNING id`, targets, ts)
+	if err != nil {
+		return fmt.Errorf("supersede docs replaced by %d: %w", docID, err)
+	}
+	moved, err := scanColumn[int64](rows, fmt.Sprintf("supersede docs replaced by %d", docID))
+	if err != nil {
+		return err
+	}
+	slices.Sort(moved)
+
+	for _, target := range moved {
 		if err := logDocChange(tx, target, eventID,
 			map[string]string{
 				"field":       "status",
@@ -807,10 +813,9 @@ type priorSection struct {
 }
 
 // rebuildSections replaces a document's section rows from its parsed source,
-// preserving last_revised_in and published for every anchor that survives:
-// those are accept-time facts about the section, not facts about the current
-// text. A new anchor starts unpublished at the document's current version.
-// Plans have no sections (025 §9), so nothing is written for one.
+// reading the prior state itself. Callers that already hold that map — the
+// accept path reads it to gate the revision — call rebuildSectionsFrom instead
+// and skip the reread.
 func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Document, version int) error {
 	if kind == "plan" {
 		return nil
@@ -819,28 +824,70 @@ func rebuildSections(tx *sql.Tx, docID int64, kind string, doc *designdoc.Docume
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM doc_sections WHERE doc_id = $1`, docID); err != nil {
-		return fmt.Errorf("clear sections of doc %d: %w", docID, err)
+	_, err = rebuildSectionsFrom(tx, docID, kind, doc, version, prior)
+	return err
+}
+
+// rebuildSectionsFrom replaces a document's section rows from its parsed
+// source, preserving last_revised_in and published for every anchor in prior
+// that survives: those are accept-time facts about the section, not facts
+// about the current text. A new anchor starts unpublished at the document's
+// current version. Plans have no sections (025 §9), so nothing is written for
+// one. The returned map is the state the rebuilt rows carry, so a caller
+// needing to compare before against after does not have to read them back.
+func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Document, version int,
+	prior map[string]priorSection) (map[string]priorSection, error) {
+
+	after := map[string]priorSection{}
+	if kind == "plan" {
+		return after, nil
 	}
-	position := 0
+	if _, err := tx.Exec(`DELETE FROM doc_sections WHERE doc_id = $1`, docID); err != nil {
+		return nil, fmt.Errorf("clear sections of doc %d: %w", docID, err)
+	}
+
+	// One INSERT over parallel arrays rather than one per section: a 60-section
+	// spec is a round trip per heading otherwise, and every accept pays it.
+	var (
+		anchors   []string
+		numbers   []*string
+		headings  []string
+		depths    []int32
+		positions []int32
+		revisions []int32
+		published []bool
+	)
 	for _, sec := range doc.Sections {
 		if sec.Anchor == "" {
 			continue
 		}
-		lastRevisedIn, published := version, false
-		if p, ok := prior[sec.Anchor]; ok {
-			lastRevisedIn, published = p.lastRevisedIn, p.published
+		p := priorSection{lastRevisedIn: version}
+		if q, ok := prior[sec.Anchor]; ok {
+			p = q
 		}
-		if _, err := tx.Exec(
-			`INSERT INTO doc_sections (doc_id, anchor, number, heading, depth, position, last_revised_in, published)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			docID, sec.Anchor, nullText(sec.Number), sec.Title, sec.Level, position, lastRevisedIn, published,
-		); err != nil {
-			return fmt.Errorf("insert section #%s of doc %d: %w", sec.Anchor, docID, err)
-		}
-		position++
+		anchors = append(anchors, sec.Anchor)
+		numbers = append(numbers, nullTextPtr(sec.Number))
+		headings = append(headings, sec.Title)
+		depths = append(depths, int32(sec.Level))
+		positions = append(positions, int32(len(positions)))
+		revisions = append(revisions, int32(p.lastRevisedIn))
+		published = append(published, p.published)
+		after[sec.Anchor] = p
 	}
-	return nil
+	if len(anchors) == 0 {
+		return after, nil
+	}
+	if _, err := tx.Exec(
+		`INSERT INTO doc_sections (doc_id, anchor, number, heading, depth, position, last_revised_in, published)
+		 SELECT $1::bigint, s.anchor, s.number, s.heading, s.depth, s.position,
+		        s.last_revised_in, s.published
+		   FROM unnest($2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::int[], $8::boolean[])
+		        AS s(anchor, number, heading, depth, position, last_revised_in, published)`,
+		docID, anchors, numbers, headings, depths, positions, revisions, published,
+	); err != nil {
+		return nil, fmt.Errorf("insert sections of doc %d: %w", docID, err)
+	}
+	return after, nil
 }
 
 // priorSections reads the accept-time state of a document's current sections,
