@@ -66,6 +66,29 @@ lode task claim <task-id>
 Managing projects, actors, and tokens requires an admin actor; the
 bootstrap actor is admin, and `lode actor add --admin` creates more.
 
+### Blob storage (optional)
+
+Task bodies can embed images and carry attachments once an
+S3-compatible bucket is configured:
+
+```bash
+export LODE_BLOB_ENDPOINT=https://hel1.your-objectstorage.com
+export LODE_BLOB_BUCKET=sunstone-worklode-blobs
+export LODE_BLOB_REGION=hel1
+export LODE_BLOB_ACCESS_KEY=...
+export LODE_BLOB_SECRET_KEY=...
+```
+
+`LODE_BLOB_SPOOL_DIR` is optional too: it is where uploads are
+spooled while being hashed, and defaults to the system temp
+directory when unset.
+
+The bucket must stay private: presigned URLs are the only anonymous
+read path, and they expire after five minutes.
+
+With none of this set, `POST /api/v1/blobs` returns `501` and
+everything else behaves exactly as before.
+
 ### Project scoping
 
 Commands that act on a set of tasks — `lode task list`, `lode task add`,

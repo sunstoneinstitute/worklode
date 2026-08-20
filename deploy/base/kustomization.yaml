@@ -74,3 +74,5 @@ configMapGenerator:
       - migrations/0030_reconciliation.down.sql
       - migrations/0031_fact_timestamps.up.sql
       - migrations/0031_fact_timestamps.down.sql
+      - migrations/0032_blobs.up.sql
+      - migrations/0032_blobs.down.sql

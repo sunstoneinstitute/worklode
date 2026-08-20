@@ -66,6 +66,18 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_list_expansions_total",
 		Help: "List endpoint requests that asked for an expansion, by endpoint (tasks, docs) and expansion (detail, body).",
 	}, []string{"endpoint", "expansion"})
+	s.blobUploads = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_blob_uploads_total",
+		Help: "Blob uploads (POST /api/v1/blobs), by outcome (" +
+			strings.Join(blobUploadOutcomes, ", ") +
+			"). A rising 'deduplicated' share is healthy — it is the same screenshot being pasted twice, costing one query and no object write.",
+	}, []string{"outcome"})
+	s.blobServes = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_blob_serves_total",
+		Help: "Blob fetches (GET /blob/{hash}), by outcome (" +
+			strings.Join(blobServeOutcomes, ", ") +
+			"). Sustained 'not_found' means task bodies reference blobs the index has lost, which renders as broken images.",
+	}, []string{"outcome"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
 		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
@@ -111,6 +123,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
+		s.blobUploads, s.blobServes,
 		s.kindAliasUses)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -144,6 +157,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
+	}
+	// Both blob families in full, so an instance with no bucket configured
+	// reads as a flat zero across every outcome rather than as no-data.
+	for _, outcome := range blobUploadOutcomes {
+		s.blobUploads.WithLabelValues(outcome)
+	}
+	for _, outcome := range blobServeOutcomes {
+		s.blobServes.WithLabelValues(outcome)
 	}
 	// Every alias on every surface, because the whole point of this counter is
 	// to prove nothing still sends the deprecated spelling before the alias is
@@ -368,4 +389,48 @@ func (s *server) observeListExpansion(endpoint, expansion string) {
 		return
 	}
 	s.listExpansions.WithLabelValues(endpoint, expansion).Inc()
+}
+
+// blobUploadOutcomes and blobServeOutcomes are the complete, bounded label
+// sets for the two blob families. They are enumerated here rather than being
+// whatever the handlers happen to pass, so the label stays a closed set and
+// initMetrics can pre-initialise every series.
+var (
+	blobUploadOutcomes = []string{
+		"stored",        // new bytes written to the bucket and indexed
+		"deduplicated",  // the hash was already known; no object write
+		"too_large",     // over maxBlobBytes
+		"empty",         // zero-length payload
+		"unconfigured",  // no bucket on this instance
+		"storage_error", // the object store refused the PUT
+		"error",         // spool, rewind, index, or body-read failure
+	}
+	blobServeOutcomes = []string{
+		"redirect",      // 302 to a presigned URL
+		"not_found",     // no such hash in the index
+		"unconfigured",  // no bucket on this instance
+		"storage_error", // presign failed, or the index read did
+	}
+)
+
+// observeBlobUpload records one POST /api/v1/blobs, called exactly once on
+// every exit path of uploadBlob. Nil-safe: tests build a *server directly
+// without initMetrics.
+func (s *server) observeBlobUpload(outcome string) {
+	if s.blobUploads == nil {
+		return
+	}
+	s.blobUploads.WithLabelValues(outcome).Inc()
+}
+
+// observeBlobServe records one GET /blob/{hash}, called exactly once on every
+// exit path of serveBlob. A refusal by eitherGuard is deliberately not
+// counted here — the request never reached the handler, and
+// worklode_authz_decisions_total is where a denial belongs.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeBlobServe(outcome string) {
+	if s.blobServes == nil {
+		return
+	}
+	s.blobServes.WithLabelValues(outcome).Inc()
 }

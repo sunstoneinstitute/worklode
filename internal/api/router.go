@@ -136,6 +136,14 @@ var routeGuards = map[string]routeGuard{
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
+	// --- blobs (spec 021) -----------------------------------------------------
+	// The upload is an ordinary API route. The read is an asset route: it is
+	// registered with r.asset, which takes either a bearer token or a web
+	// session, since a task page's <img> and an agent's fetch both land here
+	// (see eitherGuard in authz.go).
+	"POST /api/v1/blobs": guarded(permBlobWrite),
+	"GET /blob/{hash}":   guarded(permBlobRead),
+
 	// --- secrets (spec 017) ---------------------------------------------------
 	// Metadata only — names, purposes and op:// references, never values —
 	// but vault and item names describe the org's secret topology, so the
@@ -237,6 +245,20 @@ func (r *router) api(pattern string, h http.HandlerFunc) {
 func (r *router) web(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
 	r.mux.HandleFunc(pattern, r.srv.webGuard(g.perm, h))
+}
+
+// asset registers an asset route behind eitherGuard. An asset route is one
+// that serves bytes a *page* references rather than a document a caller
+// navigates to — today, spec 021's /blob/{hash}. It is neither api nor web
+// because both audiences fetch it directly: an agent with a bearer token, and
+// a browser loading an <img> on a task page with its session cookie. Routing
+// it through api would 401 every image in the cockpit; routing it through web
+// would 401 every agent. eitherGuard accepts both and applies the same
+// policy, and answers a refusal in JSON rather than by redirecting a
+// subresource fetch into a login page.
+func (r *router) asset(pattern string, h http.HandlerFunc) {
+	g := r.guardFor(pattern)
+	r.mux.HandleFunc(pattern, r.srv.eitherGuard(g.perm, h))
 }
 
 // public registers a route that carries no worklode identity. It still goes
