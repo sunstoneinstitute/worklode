@@ -11,6 +11,7 @@ type Metrics struct {
 	truncatedPush prometheus.Counter
 	branchResolve *prometheus.CounterVec
 	replay        *prometheus.CounterVec
+	approvals     *prometheus.CounterVec
 }
 
 // NewMetrics registers the webhook counters and the reconcile replay counter
@@ -42,8 +43,16 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_reconcile_replay_events_total",
 			Help: "Stored webhook events processed by reconcile replay, by outcome.",
 		}, []string{"outcome"}),
+		// approvals counts approval rows the GitHub ingest wrote. action is
+		// one of "opened" (a PR materialized an awaiting row), "resolved" (a
+		// review decided one), or "reopened" (a re-request put one back in
+		// the queue).
+		approvals: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_approvals_ingest_total",
+			Help: "Approval-relevant actions taken by the GitHub webhook ingest, by action.",
+		}, []string{"action"}),
 	}
-	reg.MustRegister(m.events, m.truncatedPush, m.branchResolve, m.replay)
+	reg.MustRegister(m.events, m.truncatedPush, m.branchResolve, m.replay, m.approvals)
 	return m
 }
 
@@ -65,6 +74,11 @@ func (m *Metrics) BranchResolve() *prometheus.CounterVec {
 // ReplayEvents exposes the counter for test assertions.
 func (m *Metrics) ReplayEvents() *prometheus.CounterVec {
 	return m.replay
+}
+
+// ApprovalsIngest exposes the counter for test assertions.
+func (m *Metrics) ApprovalsIngest() *prometheus.CounterVec {
+	return m.approvals
 }
 
 func (m *Metrics) truncatedPushDelivery() {
@@ -93,4 +107,11 @@ func (m *Metrics) replayOutcome(outcome string) {
 		return
 	}
 	m.replay.WithLabelValues(outcome).Inc()
+}
+
+func (m *Metrics) approvalIngest(action string) {
+	if m == nil {
+		return
+	}
+	m.approvals.WithLabelValues(action).Inc()
 }

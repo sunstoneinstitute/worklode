@@ -1,6 +1,7 @@
 {
-  "action": "opened",
+  "action": "review_requested",
   "repository": {"full_name": "sunstoneinstitute/demo"},
+  "requested_reviewer": {"login": "bob"},
   "pull_request": {
     "number": 42,
     "title": "Fix crash on load",

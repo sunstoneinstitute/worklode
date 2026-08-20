@@ -86,3 +86,5 @@ configMapGenerator:
       - migrations/0036_project_participants.down.sql
       - migrations/0037_docs_number_matches_kind.up.sql
       - migrations/0037_docs_number_matches_kind.down.sql
+      - migrations/0038_approvals.up.sql
+      - migrations/0038_approvals.down.sql

@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -26,34 +25,10 @@ func seedCrewActors(t *testing.T, st *store.Store, ids ...string) {
 	}
 }
 
-// crewEventsOfType polls for the recorded crew events of one type, newest
-// last, until at least want of them are readable. ListEvents is bounded by
-// the cluster-wide commit horizon (see pollEvents in events_test.go), so a
-// freshly committed event can take a moment to become visible.
-func crewEventsOfType(t *testing.T, st *store.Store, typ string, want int) []store.Event {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		events, err := st.ListEvents(context.Background(), store.EventFilter{Type: typ})
-		if err != nil {
-			t.Fatalf("list crew events: %v", err)
-		}
-		if len(events) >= want {
-			return events
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s events = %d after polling, want %d "+
-				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
-				typ, len(events), want)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
 // crewEvents polls for crew.member_added events.
 func crewEvents(t *testing.T, st *store.Store, want int) []store.Event {
 	t.Helper()
-	return crewEventsOfType(t, st, "crew.member_added", want)
+	return storeEventsOfType(t, st, "crew.member_added", want)
 }
 
 // crewPayload is the shape spec 029 §8.4's subscribers read off both
@@ -407,7 +382,7 @@ func TestRemoveCrewMemberAPI(t *testing.T) {
 	// The removal is one crew.member_removed event from the "cli" surface,
 	// naming the roles it removed — the fact a subscriber cannot recover
 	// once the rows are gone.
-	events := crewEventsOfType(t, st, "crew.member_removed", 1)
+	events := storeEventsOfType(t, st, "crew.member_removed", 1)
 	if len(events) != 1 {
 		t.Fatalf("crew.member_removed events = %d, want 1", len(events))
 	}
@@ -479,7 +454,7 @@ func TestRemoveCrewMemberForm(t *testing.T) {
 		t.Fatalf("crew = %+v, want only ada", crew)
 	}
 
-	events := crewEventsOfType(t, st, "crew.member_removed", 1)
+	events := storeEventsOfType(t, st, "crew.member_removed", 1)
 	if events[0].Source != "web" {
 		t.Errorf("event source = %q, want web", events[0].Source)
 	}

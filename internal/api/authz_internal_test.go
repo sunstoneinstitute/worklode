@@ -1,7 +1,9 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -231,5 +233,57 @@ func TestUnusedGuardsAreReported(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GET /api/v1/tasks") {
 		t.Errorf("error does not name the unregistered routes: %v", err)
+	}
+}
+
+// TestRequireSession checks the authentication-method gate spec 029 §7.3
+// puts in front of approval decisions: only a subject authenticated by a
+// live session cookie reaches the wrapped handler. A bearer token and the
+// open-deployment bypass are refused exactly like an unauthenticated caller
+// — this is a check on Via, not on role, so an admin token does not pass
+// either.
+func TestRequireSession(t *testing.T) {
+	for _, via := range []authMethod{authNone, authToken, authSession, authOpen} {
+		t.Run(string(via), func(t *testing.T) {
+			s := &server{log: slog.Default()}
+			reached := false
+			h := s.requireSession(func(http.ResponseWriter, *http.Request) {
+				reached = true
+			})
+
+			r := httptest.NewRequest(http.MethodPost, "/approvals/1/decide", nil)
+			r = withSubject(r, Subject{Via: via, Roles: []Role{RoleUser, RoleAdmin}})
+			rr := httptest.NewRecorder()
+			h(rr, r)
+
+			if via == authSession {
+				if !reached {
+					t.Fatal("a session subject did not reach the handler")
+				}
+				return
+			}
+			if reached {
+				t.Fatalf("via %q reached the wrapped handler", via)
+			}
+			if rr.Code != http.StatusForbidden {
+				t.Errorf("via %q: status = %d, want %d", via, rr.Code, http.StatusForbidden)
+			}
+			const want = "approving requires a signed-in browser session"
+			if !strings.Contains(rr.Body.String(), want) {
+				t.Errorf("via %q: body = %q, want it to contain %q", via, rr.Body.String(), want)
+			}
+		})
+	}
+}
+
+// TestSubjectFromActorGroups pins that Subject.Groups is a plain passthrough
+// of store.Actor.Groups — no filtering, no re-derivation — so the staleness
+// requireSession guards against is the actor row's, not something this
+// mapping adds on top.
+func TestSubjectFromActorGroups(t *testing.T) {
+	groups := []string{"crew-backbone", "org-admins"}
+	sub := subjectFromActor(&store.Actor{ID: "dana", Kind: "human", Groups: groups}, authSession)
+	if !slices.Equal(sub.Groups, groups) {
+		t.Errorf("Groups = %v, want %v", sub.Groups, groups)
 	}
 }

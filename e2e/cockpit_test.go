@@ -286,9 +286,10 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 
 	// --- Step 4: honest destinations and embedded assets ---------------------
 
+	// Only the unbuilt destinations belong here. /reviews left this map when
+	// the approvals queue was built; approvals_test.go asserts it instead.
 	honestDestinations := map[string]string{
-		"/intake":  "spec 032 §5",
-		"/reviews": "spec 029 §7",
+		"/intake": "spec 032 §5",
 	}
 	for path, wantSpec := range honestDestinations {
 		code, body := getPage(t, srv.URL+path)

@@ -23,6 +23,9 @@ type PullRequest struct {
 	URL      string
 	OpenedAt time.Time
 	MergedAt *time.Time
+	// Author is the PR's GitHub login, "" when unknown (a row ingested
+	// before the column existed). The self-approval check reads it.
+	Author string
 	// UpdatedAt is GitHub's pull_request.updated_at, the non-regression
 	// guard's clock. See UpsertPR.
 	UpdatedAt time.Time
@@ -100,7 +103,9 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 // different (or no) correlation signal. task_id sits inside the guarded SET
 // below, so a delivery the guard rejects does not correlate either; a PR's
 // head-ref signal is identical on every one of its events, which leaves only
-// a body edit arriving out of order.
+// a body edit arriving out of order. author is written on insert and
+// backfilled on update but never cleared: a payload without user.login (the
+// import backfill) must not erase a login already known.
 //
 // # The non-regressing guard
 //
@@ -163,8 +168,8 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 	}
 
 	_, err := tx.Exec(
-		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, nullif($13, ''))
 		 ON CONFLICT (repo, number) DO UPDATE SET
 		   title = excluded.title,
 		   state = excluded.state,
@@ -173,15 +178,16 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 		   url = excluded.url,
 		   merged_at = excluded.merged_at,
 		   updated_at = excluded.updated_at,
+		   author = coalesce(excluded.author, pull_requests.author),
 		   task_id = CASE WHEN pull_requests.task_id IS NULL THEN excluded.task_id ELSE pull_requests.task_id END
 		 WHERE coalesce(excluded.updated_at, '-infinity') >= coalesce(pull_requests.updated_at, '-infinity')`,
-		pr.Repo, pr.Number, pr.Title, pr.State, taskIDArg, pr.HeadRef, pr.HeadSHA, mergeSHA, pr.URL, openedAt, mergedAt, updatedAt,
+		pr.Repo, pr.Number, pr.Title, pr.State, taskIDArg, pr.HeadRef, pr.HeadSHA, mergeSHA, pr.URL, openedAt, mergedAt, updatedAt, pr.Author,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("upsert PR %s#%d: %w", pr.Repo, pr.Number, err)
 	}
 
-	return getPRTx(tx, pr.Repo, pr.Number)
+	return GetPRTx(tx, pr.Repo, pr.Number)
 }
 
 // ExistingPRNumbers returns the pull-request numbers already stored for repo.
@@ -207,16 +213,18 @@ func ExistingPRNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 }
 
 // prColumns is the SELECT list scanPR expects, in order.
-const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at`
+const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author`
 
 func scanPR(row rowScanner) (*PullRequest, error) {
 	var pr PullRequest
-	var title, state, taskID, headRef, headSHA, mergeSHA, url sql.NullString
+	var title, state, taskID, headRef, headSHA, mergeSHA, url, author sql.NullString
 	var openedAt, mergedAt, updatedAt sql.NullTime
 	if err := row.Scan(&pr.Repo, &pr.Number, &title, &state, &taskID,
-		&headRef, &headSHA, &mergeSHA, &url, &openedAt, &mergedAt, &updatedAt); err != nil {
+		&headRef, &headSHA, &mergeSHA, &url, &openedAt, &mergedAt, &updatedAt,
+		&author); err != nil {
 		return nil, err
 	}
+	pr.Author = author.String
 	pr.Title = title.String
 	pr.State = state.String
 	pr.HeadRef = headRef.String
@@ -241,7 +249,9 @@ func scanPR(row rowScanner) (*PullRequest, error) {
 	return &pr, nil
 }
 
-func getPRTx(tx *sql.Tx, repo string, number int64) (*PullRequest, error) {
+// GetPRTx is GetPR inside an open transaction: the GitHub review ingest
+// reads the PR it is about to act on within the delivery's own transaction.
+func GetPRTx(tx *sql.Tx, repo string, number int64) (*PullRequest, error) {
 	row := tx.QueryRow(`SELECT `+prColumns+` FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number)
 	pr, err := scanPR(row)
 	if errors.Is(err, sql.ErrNoRows) {

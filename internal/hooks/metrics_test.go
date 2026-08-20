@@ -138,3 +138,23 @@ func TestFluxWebhookMetrics(t *testing.T) {
 		t.Fatalf("events{flux,flux,ignored} = %v, want 1", got)
 	}
 }
+
+// TestApprovalIngestMetrics: every approval write the GitHub ingest makes is
+// counted under one of the three bounded action values.
+func TestApprovalIngestMetrics(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := hooks.NewMetrics(reg)
+	e := newEnvWithMetrics(t, m)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_changes_requested.json")
+	deliverOK(t, e, "pull_request", "d-appr-2", "pull_request_review_requested.json")
+
+	for _, action := range []string{"opened", "resolved", "reopened"} {
+		if got := testutil.ToFloat64(m.ApprovalsIngest().WithLabelValues(action)); got != 1 {
+			t.Errorf("approvals_ingest{%s} = %v, want 1", action, got)
+		}
+	}
+}

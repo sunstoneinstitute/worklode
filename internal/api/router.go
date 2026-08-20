@@ -71,6 +71,11 @@ var routeGuards = map[string]routeGuard{
 	"GET /tasks/{id}":                     guarded(permWebRead),
 	"GET /docs":                           guarded(permWebRead),
 	"GET /docs/{id}":                      guarded(permWebRead),
+	// The cockpit's one decision act (029 §7.3). permApprovalDecide rather
+	// than permWebWrite: deciding an approval is a different capability from
+	// filing a task through a form, and the route is additionally gated by
+	// requireSession — see authz.go.
+	"POST /approvals/{id}/decide": guarded(permApprovalDecide),
 
 	// --- unauthenticated by design ------------------------------------------
 	"GET /assets/": open("stylesheet and fonts; no project data, and a " +
