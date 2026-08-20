@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/blobstore"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -63,6 +64,18 @@ func newTestServerWithConfig(t *testing.T, cfg api.Config) (*store.Store, http.H
 func newTestServer(t *testing.T) (*store.Store, http.Handler, string) {
 	t.Helper()
 	return newTestServerWithConfig(t, api.Config{WebOpen: true})
+}
+
+// newTestServerBlobs is newTestServer with an in-memory blob store attached,
+// for the spec 021 blob endpoints. WebOpen matches newTestServer: the blob
+// route inherits the UI's posture, and the opted-in instance is the case
+// most of these tests are about. The closed instance is covered separately in
+// blobs_test.go.
+func newTestServerBlobs(t *testing.T) (*store.Store, http.Handler, string, *blobstore.Fake) {
+	t.Helper()
+	fake := blobstore.NewFake()
+	st, h, token := newTestServerWithConfig(t, api.Config{WebOpen: true, BlobStoreForTest: fake})
+	return st, h, token, fake
 }
 
 // newTestServerAdmin returns both the public app handler and the admin handler

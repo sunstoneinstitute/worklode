@@ -194,6 +194,12 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		EmbeddingModel:      os.Getenv("LODE_EMBEDDING_MODEL"),
 		EmbeddingAPIKey:     os.Getenv("LODE_EMBEDDING_API_KEY"),
 		SkillScoreFloor:     os.Getenv("LODE_SKILL_SCORE_FLOOR"),
+		BlobEndpoint:        os.Getenv("LODE_BLOB_ENDPOINT"),
+		BlobBucket:          os.Getenv("LODE_BLOB_BUCKET"),
+		BlobRegion:          os.Getenv("LODE_BLOB_REGION"),
+		BlobAccessKey:       os.Getenv("LODE_BLOB_ACCESS_KEY"),
+		BlobSecretKey:       os.Getenv("LODE_BLOB_SECRET_KEY"),
+		BlobSpoolDir:        os.Getenv("LODE_BLOB_SPOOL_DIR"),
 		Metrics:             reg,
 	})
 	if err != nil {

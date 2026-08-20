@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobstore"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
@@ -104,6 +105,20 @@ type Config struct {
 	// SkillScoreFloor is the minimum cosine similarity for a recommendation,
 	// default 0.35. LODE_SKILL_SCORE_FLOOR.
 	SkillScoreFloor string
+
+	// Blob storage (spec 021). Off unless BlobEndpoint and BlobBucket are
+	// both set: uploads then return 501 and every other surface behaves
+	// exactly as before, so a local docker-compose stack needs no bucket.
+	BlobEndpoint  string // LODE_BLOB_ENDPOINT, e.g. https://hel1.your-objectstorage.com
+	BlobBucket    string // LODE_BLOB_BUCKET
+	BlobRegion    string // LODE_BLOB_REGION
+	BlobAccessKey string // LODE_BLOB_ACCESS_KEY
+	BlobSecretKey string // LODE_BLOB_SECRET_KEY
+	BlobSpoolDir  string // LODE_BLOB_SPOOL_DIR; empty means os.TempDir()
+
+	// BlobStoreForTest injects a blobstore.Store directly, bypassing the
+	// S3 construction above. Tests only; production sets BlobEndpoint.
+	BlobStoreForTest blobstore.Store
 
 	// BackgroundCtx governs goroutines NewServer starts on its own (boot
 	// skill sync, webhook-triggered skill syncs) — not any HTTP request.
@@ -202,6 +217,11 @@ type server struct {
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
+	// blobs is the object-storage backend for spec 021's content-addressed
+	// blobs, or nil when no bucket is configured — the blob endpoints then
+	// answer 501 and nothing else changes.
+	blobs blobstore.Store
+
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
 
@@ -257,6 +277,15 @@ type server struct {
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
 	// observeListExpansion.
 	listExpansions *prometheus.CounterVec
+
+	// blobUploads and blobServes count the two spec 021 blob endpoints by
+	// outcome; see blobs.go and observeBlobUpload/observeBlobServe. The
+	// generic http_requests_total cannot stand in: a dedup and a fresh store
+	// are both 200, and a "too large" and a rejected body are both 4xx, yet
+	// each pair says something different about whether the bucket is filling
+	// up or clients are misbehaving.
+	blobUploads *prometheus.CounterVec
+	blobServes  *prometheus.CounterVec
 
 	// kindAliasUses counts requests naming a deprecated task kind that was
 	// normalised to its current name, by alias and surface; see
@@ -340,6 +369,11 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /docs", s.navWrap("docs", s.docsPage))
 	r.web("GET /docs/{id}", s.navWrap("docs", s.docPage))
 	r.public("GET /assets/", s.assetHandler())
+	// The blob asset route (spec 021 §4). Neither an API route nor a web
+	// page: a browser <img> on a task page fetches it with a session cookie
+	// and an agent fetches it with a bearer token, so it takes either — see
+	// eitherGuard in authz.go and r.asset in router.go.
+	r.asset("GET /blob/{hash}", s.serveBlob)
 	r.publicFunc("GET /auth/login", s.authLogin)
 	r.publicFunc("GET /auth/callback", s.authCallback)
 
@@ -414,6 +448,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/skills/sync", s.syncSkills)
 
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
+
+	r.api("POST /api/v1/blobs", s.uploadBlob)
 
 	r.api("GET /api/v1/secrets/catalog", s.secretsCatalog)
 	r.api("POST /api/v1/tasks/{id}/secrets-materialized", s.secretsMaterialized)
@@ -565,6 +601,26 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}
 		s.skillSources = skillSources
 		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Embed: s.embedder, Log: s.log}
+	}
+
+	// Blob storage (spec 021). The feature is off unless an endpoint and a
+	// bucket are both named; the injected store is the test path and wins, so
+	// a test never has to stand up an S3 endpoint to exercise the handlers.
+	switch {
+	case cfg.BlobStoreForTest != nil:
+		s.blobs = cfg.BlobStoreForTest
+	case cfg.BlobEndpoint != "" && cfg.BlobBucket != "":
+		bs, err := blobstore.NewS3(blobstore.S3Config{
+			Endpoint:  cfg.BlobEndpoint,
+			Bucket:    cfg.BlobBucket,
+			Region:    cfg.BlobRegion,
+			AccessKey: cfg.BlobAccessKey,
+			SecretKey: cfg.BlobSecretKey,
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("blob store: %w", err)
+		}
+		s.blobs = bs
 	}
 
 	if cfg.BootstrapToken != "" {
