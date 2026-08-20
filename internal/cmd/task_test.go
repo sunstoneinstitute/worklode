@@ -308,6 +308,39 @@ func TestTaskListFilterByPlan(t *testing.T) {
 	}
 }
 
+// TestTaskListFilterByAbout: `task list --about <ref>` resolves the ref the
+// same way `--plan` does and narrows to the tasks that reference that document
+// (025 §15.4). Nothing the CLI can create carries about_doc — the doc-lifecycle
+// watcher mints those — so what is pinned here is that the filter reaches the
+// server: an ordinary task is listed unfiltered and excluded by --about.
+func TestTaskListFilterByAbout(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupRepoConfig(t, "proj")
+	setupProject(t, c)
+	t.Cleanup(func() { resetProjectFlag(t, "task", "list") })
+
+	doc, _, err := c.CreateDoc(context.Background(), model.CreateDocInput{
+		Project: "proj", Kind: "spec", Slug: "about-spec", Body: "# About\n",
+	})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	createTestTask(t, c, "Ordinary task")
+
+	if all := taskListIDs(t); len(all) != 1 {
+		t.Fatalf("unfiltered list = %v, want 1 task", all)
+	}
+	if byID := taskListIDs(t, "--about", strconv.FormatInt(doc.ID, 10)); len(byID) != 0 {
+		t.Fatalf("--about by id = %v, want no tasks", byID)
+	}
+	if bySlug := taskListIDs(t, "--about", "about-spec"); len(bySlug) != 0 {
+		t.Fatalf("--about by slug = %v, want no tasks", bySlug)
+	}
+	if _, err := runLode(t, "task", "list", "--about", "no-such-doc"); err == nil {
+		t.Fatalf("--about unmatched ref: want an error, got none")
+	}
+}
+
 // taskAssignee returns the stored assignee of a task via `lode task show
 // --json`.
 func taskAssignee(t *testing.T, id string) string {

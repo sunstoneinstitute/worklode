@@ -343,7 +343,7 @@ func newTaskAddCmd() *cobra.Command {
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
-	var priority, kind, parent, assignee, plan string
+	var priority, kind, parent, assignee, plan, about string
 	var statuses []string
 	var deleted bool
 	cmd := &cobra.Command{
@@ -360,15 +360,20 @@ func newTaskListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			var planDoc int64
+			var planDoc, aboutDoc int64
 			if plan != "" {
 				if planDoc, err = resolveDocID(cmd.Context(), c, plan); err != nil {
 					return err
 				}
 			}
+			if about != "" {
+				if aboutDoc, err = resolveDocID(cmd.Context(), c, about); err != nil {
+					return err
+				}
+			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
 				Project: sc.Project, States: states, Priority: priority, Kind: kind, Parent: parent,
-				Assignee: assignee, PlanDoc: planDoc, Deleted: deleted,
+				Assignee: assignee, PlanDoc: planDoc, AboutDoc: aboutDoc, Deleted: deleted,
 			})
 			if err != nil {
 				return err
@@ -390,6 +395,7 @@ func newTaskListCmd() *cobra.Command {
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
 	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (id or slug, 025 §9.2)")
+	cmd.Flags().StringVar(&about, "about", "", "list only the tasks about this document — its review and planning tasks (id or slug, 025 §15.4)")
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
 		"list deleted tasks instead of live ones, in any state unless --status is also given")
 	return cmd
