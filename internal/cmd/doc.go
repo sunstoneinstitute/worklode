@@ -29,28 +29,41 @@ var docKinds = []string{"spec", "adr", "plan"}
 // task list --plan` call, so the two surfaces cannot disagree about what a
 // ref names. An unmatched or ambiguous slug is an error naming what was
 // tried.
+//
+// A slug that matches no live document is retried against the tombstoned ones.
+// `lode doc undelete <slug>` is what forces this — a deleted document has left
+// every list, so without the second pass the one command that exists to restore
+// it could never name it — but the fallback is on every verb deliberately:
+// 044 §4 keeps a tombstoned row addressable by an id its holder already has,
+// and a resolver that answered "no such document" for a row `lode doc get`
+// would happily render is the mysterious failure §4 exists to prevent. Live
+// documents win outright, since the fallback runs only when the first pass
+// found nothing, so a tombstone never shadows a live document.
 func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
 		return id, nil
 	}
-	resp, _, err := c.ListDocs(ctx, cli.DocListFilter{})
-	if err != nil {
-		return 0, fmt.Errorf("resolve document %q: %w", ref, err)
-	}
-	var matches []int64
-	for _, d := range resp.Docs {
-		if d.Slug == ref {
-			matches = append(matches, d.ID)
+	for _, deleted := range []bool{false, true} {
+		resp, _, err := c.ListDocs(ctx, cli.DocListFilter{Deleted: deleted})
+		if err != nil {
+			return 0, fmt.Errorf("resolve document %q: %w", ref, err)
+		}
+		var matches []int64
+		for _, d := range resp.Docs {
+			if d.Slug == ref {
+				matches = append(matches, d.ID)
+			}
+		}
+		switch len(matches) {
+		case 1:
+			return matches[0], nil
+		case 0:
+			continue
+		default:
+			return 0, fmt.Errorf("slug %q matches %d documents; pass a numeric id to disambiguate", ref, len(matches))
 		}
 	}
-	switch len(matches) {
-	case 1:
-		return matches[0], nil
-	case 0:
-		return 0, fmt.Errorf("no document found with id or slug %q", ref)
-	default:
-		return 0, fmt.Errorf("slug %q matches %d documents; pass a numeric id to disambiguate", ref, len(matches))
-	}
+	return 0, fmt.Errorf("no document found with id or slug %q", ref)
 }
 
 func newDocCmd() *cobra.Command {
@@ -69,6 +82,8 @@ func newDocCmd() *cobra.Command {
 		newDocAnchorsCmd(),
 		newDocImportCmd(),
 		newDocTodoCmd(),
+		newDocDeleteCmd(),
+		newDocUndeleteCmd(),
 	)
 	return cmd
 }
@@ -132,7 +147,7 @@ func newDocNewCmd() *cobra.Command {
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind, status string
-	var needsPlanning, needsExecution, bareSuperseded bool
+	var needsPlanning, needsExecution, bareSuperseded, deleted bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List documents: specs, ADRs, and plans",
@@ -154,6 +169,7 @@ func newDocListCmd() *cobra.Command {
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
 				Project: sc.Project, Kind: kind, Status: status,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
+				Deleted: deleted,
 			})
 			if err != nil {
 				return err
@@ -182,6 +198,8 @@ func newDocListCmd() *cobra.Command {
 		"accepted plans whose task set has an open task")
 	cmd.Flags().BoolVar(&bareSuperseded, "bare-superseded", false,
 		"superseded documents with a section nothing replaces")
+	cmd.Flags().BoolVar(&deleted, "deleted", false,
+		"list deleted documents instead of live ones (044 §5)")
 	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded")
 	return cmd
 }
@@ -441,6 +459,85 @@ func newDocSubmitCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "submitted doc %d for review\n", d.ID)
+			return nil
+		},
+	}
+	return cmd
+}
+
+// newDocDeleteCmd is `lode doc delete` (044 §5): tombstone a document that
+// should not have existed — a wrong corpus number, a duplicate import. The
+// row and its events survive; only the ways of finding it stop. Whether the
+// justification is required depends on the instance environment and is the
+// server's call (044 §3), so nothing is validated or prompted for here.
+func newDocDeleteCmd() *cobra.Command {
+	var justification string
+	cmd := &cobra.Command{
+		Use:   "delete <id-or-slug>",
+		Short: "Delete a document: hide a row that should not have existed",
+		Long: "Delete a document. The row is tombstoned, not removed: its events stay\n" +
+			"in the log, references to it still resolve, and `lode doc undelete`\n" +
+			"restores it. A prod instance refuses a delete carrying no\n" +
+			"--justification.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.DeleteDoc(cmd.Context(), id, justification)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted doc %d: %s\n", d.ID, d.Slug)
+			if d.Tombstone != nil && d.Tombstone.Justification != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "reason: %s\n", d.Tombstone.Justification)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&justification, "justification", "",
+		"why this document should not have existed (required on a prod instance)")
+	return cmd
+}
+
+// newDocUndeleteCmd clears a document's tombstone. No justification on either
+// instance — only hiding a record is worth making someone stop and type
+// (044 §3).
+func newDocUndeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "undelete <id-or-slug>",
+		Short: "Restore a deleted document, clearing its tombstone",
+		Long: "Restore a deleted document. A slug resolves here even though the\n" +
+			"document has left every live list, because the lookup falls back to\n" +
+			"the tombstoned ones; `lode doc list --deleted` shows what is there.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.UndeleteDoc(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "undeleted doc %d: %s\n", d.ID, d.Slug)
 			return nil
 		},
 	}

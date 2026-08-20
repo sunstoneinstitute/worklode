@@ -562,6 +562,9 @@ type TaskListFilter struct {
 	// PlanDoc narrows to the tasks minted from this plan document id (025
 	// §9.2). 0 does not filter.
 	PlanDoc int64
+	// Deleted switches the list to tombstoned tasks (044 §5): they replace
+	// the live ones rather than joining them, so a list never mixes the two.
+	Deleted bool
 }
 
 // ListTasks calls GET /api/v1/tasks.
@@ -593,6 +596,9 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskLis
 	}
 	if f.PlanDoc != 0 {
 		q.Set("plan_doc", strconv.FormatInt(f.PlanDoc, 10))
+	}
+	if f.Deleted {
+		q.Set("deleted", "true")
 	}
 	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", q), nil, "task list")
 }
@@ -734,6 +740,22 @@ func (c *Client) AbandonTask(ctx context.Context, id string) (model.Task, []byte
 // abandoned task back to ready (a fresh claim is then required).
 func (c *Client) ReopenTask(ctx context.Context, id string) (model.Task, []byte, error) {
 	return c.taskAction(ctx, id, "reopen")
+}
+
+// DeleteTask calls DELETE /api/v1/tasks/{id}: tombstone the task (044 §2).
+// The body is sent even when justification is empty — it marshals to `{}`,
+// which the server reads as "none given". Whether that is acceptable depends
+// on the instance environment and is the server's call alone (044 §3), so
+// nothing is validated or prompted for here.
+func (c *Client) DeleteTask(ctx context.Context, id, justification string) (model.Task, []byte, error) {
+	return doJSON[model.Task](ctx, c, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id),
+		model.DeleteInput{Justification: justification}, "task")
+}
+
+// UndeleteTask calls POST /api/v1/tasks/{id}/undelete: clear the tombstone.
+// No justification on either instance environment (044 §3).
+func (c *Client) UndeleteTask(ctx context.Context, id string) (model.Task, []byte, error) {
+	return c.taskAction(ctx, id, "undelete")
 }
 
 // ReadyTask calls PATCH /api/v1/tasks/{id} with state "ready": publish a
@@ -888,6 +910,10 @@ type DocListFilter struct {
 	NeedsPlanning  bool
 	NeedsExecution bool
 	BareSuperseded bool
+	// Deleted switches the list to tombstoned documents (044 §5): they
+	// replace the live ones rather than joining them, so a list never mixes
+	// the two.
+	Deleted bool
 }
 
 // ListDocs calls GET /api/v1/docs.
@@ -910,6 +936,9 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	}
 	if f.BareSuperseded {
 		q.Set("bare_superseded", "true")
+	}
+	if f.Deleted {
+		q.Set("deleted", "true")
 	}
 	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
 }
@@ -971,6 +1000,20 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 // 025 §6 anchor rules is refused with the violations named.
 func (c *Client) AcceptDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/revision/accept"), nil)
+}
+
+// DeleteDoc calls DELETE /api/v1/docs/{id}: tombstone the document (044 §2).
+// Like DeleteTask, the body goes out even with an empty justification; the
+// server owns the instance-environment rule (044 §3).
+func (c *Client) DeleteDoc(ctx context.Context, id int64, justification string) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodDelete, docPath(id, ""),
+		model.DeleteInput{Justification: justification})
+}
+
+// UndeleteDoc calls POST /api/v1/docs/{id}/undelete: clear the tombstone. No
+// justification on either instance environment (044 §3).
+func (c *Client) UndeleteDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/undelete"), nil)
 }
 
 // docPath builds a document endpoint path.

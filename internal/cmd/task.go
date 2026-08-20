@@ -44,6 +44,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskSubmitCmd(),
 		newTaskDoneCmd(),
 		newTaskAbandonCmd(),
+		newTaskDeleteCmd(),
+		newTaskUndeleteCmd(),
 		newTaskBlockCmd(),
 		newTaskUnblockCmd(),
 		newTaskParentCmd(),
@@ -343,12 +345,13 @@ func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
 	var priority, kind, parent, assignee, plan string
 	var statuses []string
+	var deleted bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tasks (delivered and abandoned are hidden unless requested with --status)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			warnDeprecatedTaskKind(cmd, kind)
-			states := resolveStatusFilter(statuses)
+			states := resolveDeletedStatusFilter(statuses, deleted, cmd.Flags().Changed("status"))
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
@@ -365,7 +368,7 @@ func newTaskListCmd() *cobra.Command {
 			}
 			resp, raw, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
 				Project: sc.Project, States: states, Priority: priority, Kind: kind, Parent: parent,
-				Assignee: assignee, PlanDoc: planDoc,
+				Assignee: assignee, PlanDoc: planDoc, Deleted: deleted,
 			})
 			if err != nil {
 				return err
@@ -387,7 +390,22 @@ func newTaskListCmd() *cobra.Command {
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
 	cmd.Flags().StringVar(&plan, "plan", "", "list only the tasks minted by this plan document (id or slug, 025 §9.2)")
+	cmd.Flags().BoolVar(&deleted, "deleted", false,
+		"list deleted tasks instead of live ones, in any state unless --status is also given")
 	return cmd
+}
+
+// resolveDeletedStatusFilter is resolveStatusFilter with `--deleted` folded
+// in. A tombstone is orthogonal to state (044 §1), so a deleted task keeps
+// whatever state it had — and the default open-state filter would hide most
+// tombstones, which is the opposite of what someone asking for the deleted
+// list wants. So `--deleted` alone drops the state filter entirely; an
+// explicit `--status` still narrows within the tombstoned set.
+func resolveDeletedStatusFilter(statuses []string, deleted, statusGiven bool) []string {
+	if deleted && !statusGiven {
+		return nil
+	}
+	return resolveStatusFilter(statuses)
 }
 
 // resolveStatusFilter turns `lode task list --status` values into the state
@@ -858,6 +876,61 @@ func newTaskDoneCmd() *cobra.Command {
 func newTaskAbandonCmd() *cobra.Command {
 	return newTaskTransitionCmd("abandon <id>", "Abandon a task from any non-terminal state",
 		true, (*cli.Client).AbandonTask)
+}
+
+// newTaskDeleteCmd is `lode task delete` (044 §5): the narrow close for a row
+// that should not have existed. Whether the justification is required depends
+// on the instance environment and is the server's call (044 §3) — nothing is
+// validated or prompted for here, and the server's refusal is returned
+// unchanged because its message already names the environment.
+func newTaskDeleteCmd() *cobra.Command {
+	var justification string
+	cmd := &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Delete a task: hide a row that should not have existed",
+		Long: "Delete a task. Prefer `lode task abandon`, which keeps the decision\n" +
+			"record that work was considered and dropped; delete is for a row that\n" +
+			"should not have existed at all (044 §1). The row is tombstoned, not\n" +
+			"removed: its events stay in the log, and `lode task undelete` restores\n" +
+			"it. A prod instance refuses a delete carrying no --justification.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.DeleteTask(cmd.Context(), id, justification)
+			if err != nil {
+				return err
+			}
+			clearTaskBindingIfCurrent(cmd, id)
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "deleted %s: %s\n", t.ID, t.Title)
+			if t.Tombstone != nil && t.Tombstone.Justification != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "reason: %s\n", t.Tombstone.Justification)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&justification, "justification", "",
+		"why this row should not have existed (required on a prod instance)")
+	return cmd
+}
+
+// newTaskUndeleteCmd is `lode task undelete`: clear the tombstone. It takes no
+// justification on either instance — only hiding a record is worth making
+// someone stop and type (044 §3).
+func newTaskUndeleteCmd() *cobra.Command {
+	return newTaskTransitionCmd("undelete <id>",
+		"Restore a deleted task, clearing its tombstone",
+		false, (*cli.Client).UndeleteTask)
 }
 
 func newTaskBlockCmd() *cobra.Command {

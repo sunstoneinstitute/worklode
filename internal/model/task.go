@@ -42,6 +42,27 @@ type Task struct {
 	// done_state and landed-commit facts), and it is ignored on any inbound
 	// body.
 	Closed bool `json:"closed"`
+	// Tombstone carries the delete record (044 §2) and is nil on a live task.
+	// Every list and pickup path already hides deleted tasks, so a non-nil
+	// value only ever reaches a caller that asked for this task by id.
+	Tombstone *Tombstone `json:"tombstone,omitempty"`
+}
+
+// Tombstone is the delete record a soft-deleted task or document carries
+// (044 §2): who deleted it, when, and why. Justification is "" only for a
+// delete made on a dev instance, which does not require one (044 §3).
+type Tombstone struct {
+	DeletedAt     time.Time `json:"deleted_at"`
+	DeletedBy     string    `json:"deleted_by"`
+	Justification string    `json:"justification,omitempty"`
+}
+
+// DeleteInput is the request body for the delete endpoints (044 §5). The
+// justification is required on a prod instance and optional on a dev one; the
+// server owns that rule, because it is the only party that knows which
+// instance it is.
+type DeleteInput struct {
+	Justification string `json:"justification,omitempty"`
 }
 
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).

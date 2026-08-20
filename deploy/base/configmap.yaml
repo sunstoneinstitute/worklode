@@ -6,6 +6,11 @@ metadata:
   namespace: worklode
 data:
   LODE_CLUSTER_ENV_MAP: ""
+  # Which kind of instance this is (039 §3) — not the environment of the
+  # deployments it observes, which is LODE_CLUSTER_ENV_MAP above. prod is the
+  # default and the safe answer: a prod instance that believes it is dev drops
+  # decision records. Overlays for dev instances patch it to "dev".
+  LODE_INSTANCE_ENV: "prod"
   LODE_BRANCH_TEMPLATE: ""
   LODE_SKILL_SOURCES: ""
   LODE_EMBEDDING_URL: ""

@@ -307,3 +307,70 @@ func TestRecordLocalMerge(t *testing.T) {
 func TestRecordLocalMergeNilSafe(t *testing.T) {
 	(&server{}).recordLocalMerge(store.LocalMergeAdvanced)
 }
+
+// TestObserveDeleteCounts: every entity/op/outcome combination is
+// pre-initialised to zero (044 §6 wants justification_required legible as a
+// flat zero, not as no-data), and observeDelete increments the named one.
+func TestObserveDeleteCounts(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	for _, entity := range deleteEntities {
+		for _, op := range deleteOps {
+			for _, outcome := range deleteOutcomes {
+				if got := testutil.ToFloat64(s.deletes.WithLabelValues(entity, op, outcome)); got != 0 {
+					t.Fatalf("deletes{%s,%s,%s} = %v before any request, want a pre-initialised 0",
+						entity, op, outcome, got)
+				}
+			}
+		}
+	}
+
+	s.observeDelete(entityTask, opDelete, deleteJustificationRequired)
+	s.observeDelete(entityTask, opDelete, deleteOK)
+	s.observeDelete(entityTask, opUndelete, deleteOK)
+	s.observeDelete(entityDoc, opDelete, deleteNotFound)
+
+	for _, tc := range []struct {
+		entity, op, outcome string
+		want                float64
+	}{
+		{entityTask, opDelete, deleteJustificationRequired, 1},
+		{entityTask, opDelete, deleteOK, 1},
+		{entityTask, opUndelete, deleteOK, 1},
+		{entityDoc, opDelete, deleteNotFound, 1},
+		{entityDoc, opUndelete, deleteOK, 0},
+	} {
+		got := testutil.ToFloat64(s.deletes.WithLabelValues(tc.entity, tc.op, tc.outcome))
+		if got != tc.want {
+			t.Fatalf("deletes{%s,%s,%s} = %v, want %v", tc.entity, tc.op, tc.outcome, got, tc.want)
+		}
+	}
+}
+
+// TestDeleteOutcomeClassifies: only a missing row is not_found; an
+// already-deleted row (ErrInvalidInput) is an error, keeping 044 §6's outcome
+// set to the four values it names.
+func TestDeleteOutcomeClassifies(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"success", nil, deleteOK},
+		{"missing row", fmt.Errorf("task WL-9: %w", store.ErrNotFound), deleteNotFound},
+		{"already deleted", fmt.Errorf("already deleted: %w", store.ErrInvalidInput), deleteError},
+		{"anything else", errors.New("boom"), deleteError},
+	} {
+		if got := deleteOutcome(tc.err); got != tc.want {
+			t.Errorf("%s: deleteOutcome = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestObserveDeleteNilSafe: the handlers call it on a server a test may have
+// built without initMetrics.
+func TestObserveDeleteNilSafe(t *testing.T) {
+	(&server{}).observeDelete(entityTask, opDelete, deleteOK)
+}

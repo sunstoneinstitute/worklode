@@ -21,6 +21,11 @@ patches:
       - op: replace
         path: /data/LODE_CLUSTER_ENV_MAP
         value: "dev=dev,hzdev=dev,prod=prod,hzprod=prod,admin=prod"
+      # hzdev holds the dev instance (039 §2), so it is the one that does not
+      # demand a justification for a delete (044 §3).
+      - op: replace
+        path: /data/LODE_INSTANCE_ENV
+        value: "dev"
       - op: add
         path: /data/LODE_PUBLIC_URL
         value: "https://worklode.dev.sunstoneinstitute.ai"

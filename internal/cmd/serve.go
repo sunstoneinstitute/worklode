@@ -153,6 +153,17 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		}
 		webOpen = b
 	}
+	// LODE_INSTANCE_ENV says whether this is a dev or a prod instance (039
+	// §3); today it decides whether a delete must carry a justification (044
+	// §3). Validated here, before the store is opened, for the same reason
+	// LODE_WEB_OPEN is: an unrecognised value is a typo in a setting that
+	// changes what the server demands, and the operator should see the typo
+	// rather than a connection error. api.NewServer re-checks it, so a
+	// programmatic embedder cannot skip this.
+	instanceEnv, err := api.ParseInstanceEnv(os.Getenv("LODE_INSTANCE_ENV"))
+	if err != nil {
+		return err
+	}
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector())
 	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
@@ -177,6 +188,7 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
 		FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
 		ClusterEnvMap:       clusterEnv,
+		InstanceEnv:         instanceEnv,
 		BranchTemplate:      os.Getenv("LODE_BRANCH_TEMPLATE"),
 		OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
 		OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),

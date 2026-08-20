@@ -71,16 +71,22 @@ func containerTarget(children []childState) string {
 // out of a closed state, so the reopen shows in the timeline as a reopen.
 // Both transitions carry the triggering child's eventID, which is the correct
 // attribution for a derived move.
+//
+// A tombstoned parent is left alone (044 §4): its edges survive the delete, so
+// a live child transitioning would otherwise move — and emit events against —
+// a row nothing can see.
 func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64) error {
 	var state string
-	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, parentID).Scan(&state)
+	var deleted bool
+	err := tx.QueryRow(`SELECT state, deleted_at IS NOT NULL FROM tasks WHERE id = $1`,
+		parentID).Scan(&state, &deleted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", parentID, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("get parent %s: %w", parentID, err)
 	}
-	if state == "draft" {
+	if deleted || state == "draft" {
 		return nil
 	}
 
@@ -115,17 +121,21 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 
 // childStates returns parentID's direct child_of children — state plus the
 // per-repo closed verdict — in no particular order, since containerTarget only
-// counts them. Closedness comes from the same taskClosed predicate the
-// blocking queries and ChildProgress use, so a roll-up and the progress counts
-// read at the same moment agree. They can still drift afterwards: the roll-up
-// stores a state and only Transition re-runs it, while taskClosed also depends
-// on project_repos.done_state and the landed commit set, either of which can
-// change with no task transition to trigger a re-resolve.
+// counts them. Tombstoned children are not children for this purpose (044 §4),
+// so deleting the last unfinished one closes the parent — DeleteTask re-runs
+// this resolver for exactly that reason. Closedness comes from the same
+// taskClosed predicate the blocking queries and ChildProgress use, so a roll-up
+// and the progress counts read at the same moment agree. They can still drift
+// afterwards: the roll-up stores a state and only Transition re-runs it, while
+// taskClosed also depends on project_repos.done_state and the landed commit
+// set, either of which can change with no task transition to trigger a
+// re-resolve.
 func childStates(tx *sql.Tx, parentID string) ([]childState, error) {
 	rows, err := tx.Query(
 		`SELECT t.state, `+taskClosed("t")+`
 		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
-		  WHERE e.to_task = $1 AND e.type = 'child_of'`, parentID)
+		  WHERE e.to_task = $1 AND e.type = 'child_of'
+		    AND t.deleted_at IS NULL`, parentID)
 	if err != nil {
 		return nil, fmt.Errorf("children of %s: %w", parentID, err)
 	}

@@ -58,6 +58,9 @@ type DocFilter struct {
 	Project string
 	Kind    string
 	Status  string
+	// Deleted switches the list from live documents to tombstoned ones
+	// (044 §5). See TaskFilter.Deleted for why it is a switch.
+	Deleted bool
 }
 
 // logDocChange records one document mutation in the state log. Nine write
@@ -716,12 +719,17 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 // superseded, and a draft pushed straight to superseded would be unreachable
 // by every verb here — editable by none, acceptable by none, revisable by
 // none. A draft target is therefore left alone, and logs nothing.
+//
+// Nor does a tombstoned target move. It is found for the caller, not named by
+// them, and that is the case 044 §4 says a tombstone stops: flipping it to
+// superseded would mutate and log against a row nothing can see.
 func supersedeReplacedDocs(tx *sql.Tx, ts time.Time, docID, eventID int64) error {
 	rows, err := tx.Query(
-		`SELECT DISTINCT to_doc FROM doc_edges
-		  WHERE from_doc = $1 AND type = 'replaces'
-		    AND from_anchor IS NULL AND to_doc IS NOT NULL AND to_doc <> $1
-		  ORDER BY to_doc`, docID)
+		`SELECT DISTINCT e.to_doc FROM doc_edges e
+		   JOIN docs t ON t.id = e.to_doc AND t.deleted_at IS NULL
+		  WHERE e.from_doc = $1 AND e.type = 'replaces'
+		    AND e.from_anchor IS NULL AND e.to_doc IS NOT NULL AND e.to_doc <> $1
+		  ORDER BY e.to_doc`, docID)
 	if err != nil {
 		return fmt.Errorf("read replaces edges of doc %d: %w", docID, err)
 	}
@@ -1089,7 +1097,10 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 // resolveDocRef's resolution scope.
 //
 // Only references resolving to newDocID move: one resolving to some other
-// document was already re-pointed when that document was created.
+// document was already re-pointed when that document was created. Tombstoned
+// referring documents are skipped: the sweep finds them for the caller rather
+// than being named by them, and marking one `touched` would log a change
+// against a row nothing can see (044 §4).
 //
 // Collapsing two spellings of one target onto one row can collide with
 // doc_edges_unique, so a candidate whose re-pointed tuple another row already
@@ -1118,7 +1129,7 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 	rows, err := tx.Query(
 		`SELECT e.id, e.from_doc, coalesce(e.from_anchor,''), e.type, e.to_external
 		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
-		  WHERE d.project_id = $1 AND e.to_external IS NOT NULL
+		  WHERE d.project_id = $1 AND d.deleted_at IS NULL AND e.to_external IS NOT NULL
 		  ORDER BY e.id`, project)
 	if err != nil {
 		return fmt.Errorf("read unresolved edges of project %s: %w", project, err)
@@ -1187,7 +1198,7 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 		   FROM doc_coverage_completed_with cw
 		   JOIN doc_edges e ON e.id = cw.edge_id
 		   JOIN docs d ON d.id = e.from_doc
-		  WHERE d.project_id = $1 AND cw.to_external IS NOT NULL
+		  WHERE d.project_id = $1 AND d.deleted_at IS NULL AND cw.to_external IS NOT NULL
 		  ORDER BY cw.edge_id, cw.position`, project)
 	if err != nil {
 		return fmt.Errorf("read unresolved closure entries of project %s: %w", project, err)
@@ -1424,15 +1435,26 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 // 026 §4.3's NO-SPEC sentinel needs no case of its own: it matches none of the
 // three forms, so it falls through to to_external, which is where a
 // `covers: NO-SPEC` declaration belongs.
+//
+// A tombstone releases its slug and corpus number (migration 0034), so a live
+// and a deleted document may share either. Every arm therefore prefers the live
+// row and only falls back to a tombstoned one when no live row matches: a
+// tombstone must not shadow the document that replaced it, and — in the number
+// arm — must not count as the rival that makes a live corpus number ambiguous.
+// The fallback is what keeps a reference to a deleted document resolvable at
+// all, which 044 §4 needs for `lode show`.
 func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	base = strings.TrimSuffix(path.Base(base), ".md")
 	if base == "" || base == "." {
 		return 0, false, nil
 	}
 
+	// (deleted_at IS NULL) DESC puts the live row first; false sorts before
+	// true under DESC, so a tombstone is only reached when there is none.
 	var id int64
 	err := tx.QueryRow(
-		`SELECT id FROM docs WHERE project_id = $1 AND slug = $2`, project, base).Scan(&id)
+		`SELECT id FROM docs WHERE project_id = $1 AND slug = $2
+		  ORDER BY (deleted_at IS NULL) DESC, id LIMIT 1`, project, base).Scan(&id)
 	if err == nil {
 		return id, true, nil
 	}
@@ -1443,7 +1465,8 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	if sh, ok := designdoc.ParseShorthand(base); ok {
 		err := tx.QueryRow(
 			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
-			  WHERE d.project_id = $1 AND d.kind = $2 AND d.number = $3 AND p.key = $4`,
+			  WHERE d.project_id = $1 AND d.kind = $2 AND d.number = $3 AND p.key = $4
+			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`,
 			project, sh.Kind(), sh.Number, sh.Key).Scan(&id)
 		if err == nil {
 			return id, true, nil
@@ -1459,33 +1482,45 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	// here; resolving it to spec 025 on the shared prefix would write a wrong
 	// edge rather than a missing one.
 	if nf, ok := designdoc.ParseNumberForm(base); ok && nf.Rest == "" {
-		rows, err := tx.Query(
-			`SELECT id FROM docs
-			  WHERE project_id = $1 AND number = $2 AND kind IN ('spec','adr') LIMIT 2`, project, nf.Number)
-		if err != nil {
-			return 0, false, fmt.Errorf("resolve doc ref %q by number: %w", base, err)
-		}
-		defer rows.Close()
-		var ids []int64
-		for rows.Next() {
-			var candidate int64
-			if err := rows.Scan(&candidate); err != nil {
+		// Live rows first, tombstones only if there are none. Each pass is
+		// LIMIT 2, so ambiguity is decided within one liveness class: two live
+		// rows are ambiguous, and two tombstones are ambiguous only when no
+		// live row answered.
+		for _, liveness := range []string{"deleted_at IS NULL", "deleted_at IS NOT NULL"} {
+			ids, err := docsByNumber(tx, project, nf.Number, liveness)
+			if err != nil {
 				return 0, false, fmt.Errorf("resolve doc ref %q by number: %w", base, err)
 			}
-			ids = append(ids, candidate)
-		}
-		if err := rows.Err(); err != nil {
-			return 0, false, fmt.Errorf("resolve doc ref %q by number: %w", base, err)
-		}
-		if len(ids) == 1 {
-			return ids[0], true, nil
+			if len(ids) == 1 {
+				return ids[0], true, nil
+			}
+			if len(ids) > 1 {
+				return 0, false, nil
+			}
 		}
 	}
 	return 0, false, nil
 }
 
-// docColumns is the SELECT list scanDoc expects, in order.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at`
+// docsByNumber returns up to two spec/ADR ids in project with the given corpus
+// number, restricted to one liveness class. Two is all resolveDocRef needs: it
+// resolves exactly one match and calls anything more ambiguous.
+func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]int64, error) {
+	rows, err := tx.Query(
+		`SELECT id FROM docs
+		  WHERE project_id = $1 AND number = $2 AND kind IN ('spec','adr')
+		    AND `+liveness+`
+		  ORDER BY id LIMIT 2`, project, number)
+	if err != nil {
+		return nil, err
+	}
+	return scanColumn[int64](rows, "docs by number")
+}
+
+// docColumns is the SELECT list scanDoc expects, in order. The three
+// tombstone columns (migration 0034) are last so positional scans elsewhere
+// are unaffected by their addition; they are all-null or all-set together.
+const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -1496,10 +1531,14 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	var number sql.NullInt64
 	var issued sql.NullTime
 	var assignee, createdBy sql.NullString
+	var deletedAt sql.NullTime
+	var deletedBy, justification sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
-		&d.Status, &d.Version, &issued, &assignee, &createdBy, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		&d.Status, &d.Version, &issued, &assignee, &createdBy, &d.CreatedAt, &d.UpdatedAt,
+		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
 	}
+	d.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	d.Number = int(number.Int64)
 	if issued.Valid {
 		d.Issued = issued.Time.Format(docDateLayout)
@@ -1540,7 +1579,11 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 // ListDocs returns the matching documents in corpus order: kind, then number
 // (plans, which have none, last within their kind), then slug.
 func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) {
-	where := "TRUE"
+	// 044 §4: a tombstoned document is out of every list by default.
+	where := "deleted_at IS NULL"
+	if f.Deleted {
+		where = "deleted_at IS NOT NULL"
+	}
 	var args []any
 	for _, c := range []struct {
 		column string
@@ -1584,7 +1627,9 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 //   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
 //     §4.3), so it falls out of the join without a case of its own.
 //   - Only accepted documents on both ends participate: a draft spec is not
-//     yet owed planning, and a draft plan has not yet undertaken work.
+//     yet owed planning, and a draft plan has not yet undertaken work. A
+//     tombstoned document participates on neither end (044 §4) — it is neither
+//     owed planning nor able to discharge a section.
 //
 // A plan naming itself in its own `fullCoverageWith` closes its own section.
 // §2.1's closure test is only that each named plan is accepted and
@@ -1601,6 +1646,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		      WHERE e.type = 'covers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		        AND p.kind = 'plan' AND p.status = 'accepted'
+		        AND p.deleted_at IS NULL
 		 ),
 		 closed AS (
 		     SELECT c.id
@@ -1637,6 +1683,7 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		   JOIN doc_sections sec ON sec.doc_id = d.id
 		   LEFT JOIN resolved r ON r.doc_id = sec.doc_id AND r.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
+		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		  GROUP BY d.id
 		 HAVING count(*) FILTER (WHERE r.discharged IS NOT TRUE) > 0
@@ -1685,8 +1732,10 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 //
 // The successor's own status is deliberately not required: the edge itself is
 // the explanation 025 §3.3 asks for, and demanding an accepted successor would
-// report an explained section as bare. A `to_external` edge names no local
-// row and so explains nothing, whatever it once pointed at. Plans carry no
+// report an explained section as bare. Its *liveness* is required, though — a
+// tombstoned successor explains nothing, the same way it is not itself
+// reported here. A `to_external` edge names no local row and so explains
+// nothing, whatever it once pointed at. Plans carry no
 // sections (025 §9), so the JOIN against doc_sections excludes them
 // structurally, independent of the kind predicate below.
 //
@@ -1702,11 +1751,13 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 		`WITH replaced_section AS (
 		     SELECT DISTINCT e.to_doc AS doc_id, e.to_anchor AS anchor
 		       FROM doc_edges e
+		       JOIN docs s ON s.id = e.from_doc AND s.deleted_at IS NULL
 		      WHERE e.type = 'replaces'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
 		 ), replaced_doc AS (
 		     SELECT DISTINCT e.to_doc AS doc_id
 		       FROM doc_edges e
+		       JOIN docs s ON s.id = e.from_doc AND s.deleted_at IS NULL
 		      WHERE e.type = 'replaces'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NULL
 		 )
@@ -1717,6 +1768,7 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 		   JOIN doc_sections sec ON sec.doc_id = d.id
 		   LEFT JOIN replaced_section rs ON rs.doc_id = sec.doc_id AND rs.anchor = sec.anchor
 		  WHERE d.status = 'superseded'
+		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		    AND ($2 = '' OR d.kind = $2)
 		    AND NOT EXISTS (SELECT 1 FROM replaced_doc rd WHERE rd.doc_id = d.id)
@@ -1751,9 +1803,10 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 }
 
 // NeedsExecution returns the accepted plans whose task set holds at least one
-// task that is not closed. project narrows the answer; "" answers over every
-// project. "Closed" is taskClosed's notion, shared with the ready set and the
-// blocks predicate, so the three cannot drift on what done means.
+// live task that is not closed. project narrows the answer; "" answers over
+// every project. "Closed" is taskClosed's notion, shared with the ready set and
+// the blocks predicate, so the three cannot drift on what done means; a
+// tombstoned task is out on top of that (044 §4), matching planUnfinished.
 //
 // This departs from 025 §18's "unminted or unfinished" deliberately, as the
 // 2026-08-03 plan-acceptance plan records: through the accept path an
@@ -1766,9 +1819,11 @@ func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc
 		`SELECT `+docColumnsD+`
 		   FROM docs d
 		  WHERE d.kind = 'plan' AND d.status = 'accepted'
+		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
 		    AND EXISTS (SELECT 1 FROM tasks t
-		                 WHERE t.plan_doc = d.id AND NOT `+taskClosed("t")+`)
+		                 WHERE t.plan_doc = d.id AND t.deleted_at IS NULL
+		                   AND NOT `+taskClosed("t")+`)
 		  ORDER BY d.project_id, d.slug`, project)
 	if err != nil {
 		return nil, fmt.Errorf("list plans needing execution: %w", err)
@@ -1837,6 +1892,11 @@ var docEdgeInverse = map[string]string{
 // unresolved outbound edge (to_external) joins to nothing and leaves them
 // empty.
 //
+// Inbound edges from a tombstoned document are not listed: the edge is that
+// document's own declaration, so hiding the document hides what it declared.
+// Outbound edges are unfiltered — they are this document's frontmatter, and a
+// deleted target is still resolvable by id.
+//
 // Both lists are fully ordered, so a caller may compare them as sequences.
 func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.DocEdge, err error) {
 	outRows, err := s.db.QueryContext(ctx,
@@ -1862,7 +1922,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
 		        d.slug, d.kind, coalesce(d.number,0)
 		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
-		  WHERE e.to_doc = $1
+		  WHERE e.to_doc = $1 AND d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list edges into doc %d: %w", docID, err)
