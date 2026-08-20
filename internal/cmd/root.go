@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -67,6 +68,18 @@ func newAPIClientWithConfig() (*cli.Client, cli.Config, error) {
 		return nil, cli.Config{}, errors.New(`server URL not set: set LODE_SERVER, or add server = "https://..." to ~/.config/worklode/config.toml`)
 	}
 	return cli.NewClient(cfg), cfg, nil
+}
+
+// printJSON writes v as the command's --json output. Used by the commands
+// whose JSON shape is assembled client-side rather than passed through from
+// the server.
+func printJSON(cmd *cobra.Command, v any) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Errorf("encode result: %w", err)
+	}
+	printRaw(cmd, b)
+	return nil
 }
 
 // printRaw writes a raw JSON response body to cmd's stdout, adding a

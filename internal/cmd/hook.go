@@ -126,12 +126,13 @@ func hookTriggers() map[string]string {
 // unless the blank line is given a tab and so trailing whitespace.
 func printHookEvents(w io.Writer) {
 	triggers := hookTriggers()
+	events := hookrun.Events()
 	width := 0
-	for _, e := range hookrun.Events() {
+	for _, e := range events {
 		width = max(width, len(e.Name)) // event names are ASCII
 	}
 	fmt.Fprintf(w, "Worklode lifecycle hooks — `lode hook <event>`, payload on stdin:\n\n")
-	for _, e := range hookrun.Events() {
+	for _, e := range events {
 		trigger, ok := triggers[e.Name]
 		if !ok {
 			trigger = unboundTrigger

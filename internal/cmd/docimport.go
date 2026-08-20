@@ -22,11 +22,12 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -64,10 +65,6 @@ var importSubdirs = []struct{ sub, kind string }{{"specs", "spec"}, {"plans", "p
 
 // importLeadingNumber extracts a spec or ADR filename's corpus number.
 var importLeadingNumber = regexp.MustCompile(`^(\d+)-`)
-
-// importBareNumber is a reference that is nothing but a corpus number, the one
-// non-slug form the local resolver understands (mirroring store.resolveDocRef).
-var importBareNumber = regexp.MustCompile(`^(\d+)$`)
 
 func newDocImportCmd() *cobra.Command {
 	var scope scopeFlags
@@ -128,7 +125,7 @@ Stating a status needs the admin-only doc.import permission.`,
 				return err
 			}
 			if sc.Project == "" {
-				return fmt.Errorf(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
+				return errNoProject
 			}
 
 			resp, _, err := c.ListDocs(cmd.Context(), cli.DocListFilter{Project: sc.Project})
@@ -297,11 +294,8 @@ func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
 			}
 			// A bare number resolves only when exactly one spec or ADR carries
 			// it — a corpus can hold both a spec 25 and an ADR 25.
-			if m := importBareNumber.FindStringSubmatch(base); m != nil {
-				n, err := strconv.Atoi(m[1])
-				if err == nil && numbered[n] == 1 {
-					continue
-				}
+			if n, err := strconv.Atoi(base); err == nil && numbered[n] == 1 {
+				continue
 			}
 			out = append(out, unresolvedRef{slug: d.slug, ref: ref})
 		}
@@ -333,12 +327,7 @@ func importRefs(fm *designdoc.Frontmatter) []string {
 	}
 	add(fm.WasDerivedFrom)
 	for _, m := range []designdoc.AnchorMap{fm.Amends, fm.Replaces} {
-		keys := make([]string, 0, len(m))
-		for k := range m {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
+		for _, k := range slices.Sorted(maps.Keys(m)) {
 			for _, ref := range m[k] {
 				add(ref)
 			}

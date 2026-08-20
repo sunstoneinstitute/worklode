@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -151,12 +149,12 @@ func newProjectSetRepoCmd() *cobra.Command {
 
 // printFocus writes the human-readable "focus: a, b" (or "focus: (none)")
 // line for a project's focus list.
-func printFocus(cmd *cobra.Command, focus []string) {
+func printFocus(w io.Writer, focus []string) {
 	if len(focus) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "focus: (none)")
+		fmt.Fprintln(w, "focus: (none)")
 		return
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "focus: %s\n", strings.Join(focus, ", "))
+	fmt.Fprintf(w, "focus: %s\n", strings.Join(focus, ", "))
 }
 
 func newProjectFocusCmd() *cobra.Command {
@@ -178,18 +176,9 @@ func newProjectFocusCmd() *cobra.Command {
 			}
 
 			switch {
-			case clear:
-				p, raw, err := c.SetProjectFocus(cmd.Context(), id, []string{})
-				if err != nil {
-					return err
-				}
-				if jsonOut(cmd) {
-					printRaw(cmd, raw)
-					return nil
-				}
-				printFocus(cmd, p.Focus)
-				return nil
-			case len(concerns) > 0:
+			// --clear is "set to no concerns": args[1:] is already empty, and
+			// the guard above rejects the one input where the two differ.
+			case clear || len(concerns) > 0:
 				p, raw, err := c.SetProjectFocus(cmd.Context(), id, concerns)
 				if err != nil {
 					return err
@@ -198,7 +187,7 @@ func newProjectFocusCmd() *cobra.Command {
 					printRaw(cmd, raw)
 					return nil
 				}
-				printFocus(cmd, p.Focus)
+				printFocus(cmd.OutOrStdout(), p.Focus)
 				return nil
 			default:
 				p, err := c.GetProject(cmd.Context(), id)
@@ -206,14 +195,9 @@ func newProjectFocusCmd() *cobra.Command {
 					return err
 				}
 				if jsonOut(cmd) {
-					raw, err := json.Marshal(map[string]any{"id": p.ID, "focus": p.Focus})
-					if err != nil {
-						return fmt.Errorf("marshal focus: %w", err)
-					}
-					printRaw(cmd, raw)
-					return nil
+					return printJSON(cmd, map[string]any{"id": p.ID, "focus": p.Focus})
 				}
-				printFocus(cmd, p.Focus)
+				printFocus(cmd.OutOrStdout(), p.Focus)
 				return nil
 			}
 		},
@@ -327,9 +311,9 @@ func newProjectResolveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			wd, err := os.Getwd()
+			wd, err := workingDir()
 			if err != nil {
-				return fmt.Errorf("get working directory: %w", err)
+				return err
 			}
 			if refresh {
 				cli.ForgetRemote(cmd.Context(), c, wd)
@@ -340,15 +324,10 @@ func newProjectResolveCmd() *cobra.Command {
 			}
 
 			if jsonOut(cmd) {
-				b, err := json.Marshal(resolveResult{
+				return printJSON(cmd, resolveResult{
 					Project: sc.Project, Key: sc.Key, Source: string(sc.Source),
 					Path: sc.Path, Remote: sc.Remote, Cached: sc.Cached,
 				})
-				if err != nil {
-					return fmt.Errorf("encode result: %w", err)
-				}
-				printRaw(cmd, b)
-				return nil
 			}
 
 			o := cmd.OutOrStdout()
@@ -397,11 +376,7 @@ func runProjectShow(cmd *cobra.Command, project string, days int) error {
 	}
 	id := project
 	if id == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("get working directory: %w", err)
-		}
-		id = cli.ResolveScope(cmd.Context(), c, cfg, wd).Project
+		id = currentScope(cmd.Context(), c, cfg).Project
 	}
 	if id == "" {
 		o := cmd.OutOrStdout()
@@ -419,7 +394,7 @@ func runProjectShow(cmd *cobra.Command, project string, days int) error {
 		printRaw(cmd, raw)
 		return nil
 	}
-	printProjectDetail(cmd, detail, costWindowLabel(days))
+	printProjectDetail(cmd.OutOrStdout(), detail, costWindowLabel(days))
 	return nil
 }
 
@@ -442,10 +417,9 @@ func costWindowLabel(days int) string {
 
 // printProjectDetail renders `lode project show`: the project's identity,
 // focus, and repos, then one cost block per currency.
-func printProjectDetail(cmd *cobra.Command, d model.ProjectDetail, window string) {
-	out := cmd.OutOrStdout()
+func printProjectDetail(out io.Writer, d model.ProjectDetail, window string) {
 	fmt.Fprintf(out, "%s%s — %s\n", d.ID, keySuffix(d.Key), d.Name)
-	printFocus(cmd, d.Focus)
+	printFocus(out, d.Focus)
 	if len(d.Repos) > 0 {
 		fmt.Fprintln(out, "repos:")
 		tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)

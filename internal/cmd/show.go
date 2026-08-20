@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -54,14 +55,16 @@ var unshowableKindWords = map[string]string{
 	"DEL":  "deliverable",
 }
 
+const notYetAnEntity = "spec 029 §4 defines them; the entities land with spec 029"
+
 // unshowableReason is the parenthetical each "not showable yet" error ends
 // with, keyed by the singular kind word. Plans and milestones do not exist
 // yet; a deliverable does (spec 029 §3), and saying otherwise would send
 // someone looking for a row that is already there — so its reason names the
 // surfaces that do read it.
 var unshowableReason = map[string]string{
-	"plan":      "spec 029 §4 defines them; the entities land with spec 029",
-	"milestone": "spec 029 §4 defines them; the entities land with spec 029",
+	"plan":      notYetAnEntity,
+	"milestone": notYetAnEntity,
 	"deliverable": "the entity exists; only the project's Deliverables page and " +
 		"GET /api/v1/projects/{id}/deliverables read it so far",
 }
@@ -152,7 +155,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 
 			switch {
 			case kindSet:
-				if !validShowKind(kind) {
+				if !slices.Contains(showKinds, kind) {
 					return fmt.Errorf("unknown kind %q; valid kinds: %s", kind, strings.Join(showKinds, ", "))
 				}
 				if len(args) != 1 {
@@ -189,27 +192,12 @@ func init() {
 	rootCmd.AddCommand(newShowCmd())
 }
 
-// validShowKind reports whether kind is one of showKinds — the --kind flag's
-// own value, checked before any dispatch.
-func validShowKind(kind string) bool {
-	for _, k := range showKinds {
-		if k == kind {
-			return true
-		}
-	}
-	return false
-}
-
-// ordinalShapeError reports a kind flag's value failing its ordinal shape
-// (showOrdinalShape / the project any-non-empty-string rule): flag values are
-// bare ordinals, never shorthands, so the fix is either a bare ordinal on the
-// flag or the full id positionally — e.g. "--spec WL-SPEC-6" is told to pass
-// either "--spec 15" or the id "WL-SPEC-6" positionally. When value carries
-// no recoverable ordinal (exampleOrdinal falls back to "<n>" — an empty
-// string, or a non-numeric value with no typed-id shape), the positional
-// suggestion would be either dangling ("--spec  or the id  positionally") or
-// pointless (suggesting value itself positionally just fails again), so this
-// emits the shorter "takes a bare ordinal" form instead.
+// ordinalShapeError reports a kind flag's value failing its ordinal shape:
+// flag values are bare ordinals, never shorthands, so the fix is either a bare
+// ordinal on the flag or the full id positionally — "--spec WL-SPEC-6" is told
+// to pass either "--spec 15" or the id "WL-SPEC-6" positionally. When value
+// carries no recoverable ordinal the positional half of that suggestion would
+// dangle, so the shorter form is emitted instead.
 func ordinalShapeError(kind, value string) error {
 	if ex := exampleOrdinal(value); ex != "<n>" {
 		return fmt.Errorf("--%s takes a bare ordinal, not an id; pass either --%s %s or the id %s positionally", kind, kind, ex, value)
@@ -233,26 +221,20 @@ func exampleOrdinal(value string) string {
 // flag or from --kind <K> plus its positional — to the same routines the
 // typed-id path (dispatchShowPositional) uses.
 func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet bool) error {
-	if kind != "spec" && kind != "adr" {
-		if sectionSet {
-			return errors.New("--section applies only to specs and ADRs")
-		}
+	if sectionSet && kind != "spec" && kind != "adr" {
+		return errors.New("--section applies only to specs and ADRs")
+	}
+	// project has no shape entry: any non-empty string is a valid slug or id,
+	// and its own arm checks that.
+	if re, ok := showOrdinalShape[kind]; ok && !re.MatchString(value) {
+		return ordinalShapeError(kind, value)
 	}
 	switch kind {
 	case "task":
-		if !showOrdinalShape["task"].MatchString(value) {
-			return ordinalShapeError(kind, value)
-		}
 		return runTaskShow(cmd, value)
 	case "spec", "adr":
-		if !showOrdinalShape[kind].MatchString(value) {
-			return ordinalShapeError(kind, value)
-		}
 		return runDocShowByOrdinal(cmd, kind, value, section)
 	case "plan", "milestone", "deliverable":
-		if !showOrdinalShape[kind].MatchString(value) {
-			return ordinalShapeError(kind, value)
-		}
 		return fmt.Errorf("%s %s is not showable yet (%s)", kind, value, unshowableReason[kind])
 	case "project":
 		if value == "" {

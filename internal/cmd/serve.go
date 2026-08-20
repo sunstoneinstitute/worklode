@@ -120,173 +120,185 @@ func newServeCmd() *cobra.Command {
 		Use:   "serve",
 		Short: "Run the worklode HTTP server",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if dsn == "" {
-				return errors.New("no DSN: set --dsn or LODE_DSN")
-			}
-			clusterEnv, err := parseClusterEnvMap(os.Getenv("LODE_CLUSTER_ENV_MAP"))
-			if err != nil {
-				return err
-			}
-			// LODE_WEB_OPEN serves the web UI unauthenticated on an instance
-			// with no login provider (the local stack, CI). An unparseable
-			// value is a typo in a security-relevant setting, so it fails the
-			// boot rather than defaulting quietly to either answer — and it
-			// fails here, before the store is opened, so the operator sees the
-			// typo and not a connection error.
-			webOpen := false
-			if v := os.Getenv("LODE_WEB_OPEN"); v != "" {
-				b, err := strconv.ParseBool(v)
-				if err != nil {
-					return fmt.Errorf("LODE_WEB_OPEN: %q is not a boolean", v)
-				}
-				webOpen = b
-			}
-			reg := prometheus.NewRegistry()
-			reg.MustRegister(collectors.NewGoCollector())
-			reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-
-			st, err := store.Open(dsn, store.WithMetrics(reg))
-			if err != nil {
-				return err
-			}
-			defer st.Close()
-
-			// Built before NewServer so its boot-time skill sync (a background
-			// goroutine NewServer starts internally) shares the same shutdown
-			// signal as the lease sweeper below, instead of running uncancellable.
-			// Passing it is also what starts the doc-lifecycle subscriber —
-			// see the BackgroundCtx block at the end of NewServer.
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
-
-			handler, adminHandler, err := api.NewServer(st, api.Config{
-				BackgroundCtx:       ctx,
-				BootstrapToken:      os.Getenv("LODE_BOOTSTRAP_TOKEN"),
-				GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
-				FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
-				ClusterEnvMap:       clusterEnv,
-				BranchTemplate:      os.Getenv("LODE_BRANCH_TEMPLATE"),
-				OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
-				OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
-				PublicURL:           os.Getenv("LODE_PUBLIC_URL"),
-				SessionSecret:       os.Getenv("LODE_SESSION_SECRET"),
-				WebOpen:             webOpen,
-				GitHubClientID:      os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
-				GitHubClientSecret:  os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
-				TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
-				GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
-				GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
-				SecretsCatalogPath:  os.Getenv("LODE_SECRETS_CATALOG_PATH"),
-				SkillSources:        os.Getenv("LODE_SKILL_SOURCES"),
-				EmbeddingURL:        os.Getenv("LODE_EMBEDDING_URL"),
-				EmbeddingModel:      os.Getenv("LODE_EMBEDDING_MODEL"),
-				EmbeddingAPIKey:     os.Getenv("LODE_EMBEDDING_API_KEY"),
-				SkillScoreFloor:     os.Getenv("LODE_SKILL_SCORE_FLOOR"),
-				Metrics:             reg,
-			})
-			if err != nil {
-				return err
-			}
-
-			sweeperRuns := prometheus.NewCounterVec(prometheus.CounterOpts{
-				Name: "worklode_lease_sweeper_runs_total",
-				Help: "Lease sweeper runs by result.",
-			}, []string{"result"})
-			reg.MustRegister(sweeperRuns)
-			// Pre-initialise both series so alert expressions see 0, not no-data.
-			sweeperRuns.WithLabelValues("ok")
-			sweeperRuns.WithLabelValues("error")
-
-			// Background sweeper: expire stale leases every 60s until shutdown.
-			go func() {
-				ticker := time.NewTicker(60 * time.Second)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-ticker.C:
-						if n, err := st.ExpireLeases(ctx, time.Now().UTC()); errors.Is(err, context.Canceled) {
-							return
-						} else if err != nil {
-							sweeperRuns.WithLabelValues("error").Inc()
-							slog.Error("expire leases", "err", err)
-						} else {
-							sweeperRuns.WithLabelValues("ok").Inc()
-							if n > 0 {
-								slog.Info("expired leases", "count", n)
-							}
-						}
-					}
-				}
-			}()
-
-			proj, err := graphProjector(reg, st)
-			if err != nil {
-				return err
-			}
-			if proj != nil {
-				// Knowledge-graph projection (spec 006 §11): follow the
-				// state_log outbox and replace each dirty project's graph on
-				// graph-server every 10s until shutdown. Single projector by
-				// construction — one lode serve wired to LODE_GRAPHSERVER_URL
-				// — so graph-server's per-branch lock covers it for now;
-				// If-Match CAS (006 §13.3 item 6) is wanted before any second
-				// writer.
-				go func() {
-					ticker := time.NewTicker(10 * time.Second)
-					defer ticker.Stop()
-					for {
-						select {
-						case <-ctx.Done():
-							return
-						case <-ticker.C:
-							if n, err := proj.RunOnce(ctx); errors.Is(err, context.Canceled) {
-								return
-							} else if err != nil {
-								slog.Error("graph projection", "err", err)
-							} else if n > 0 {
-								slog.Info("projected project graphs", "count", n)
-							}
-						}
-					}
-				}()
-			}
-
-			// Every in-flight request derives from reqCtx, which shutdown
-			// cancels — see shutdownServers.
-			reqCtx, cancelRequests := context.WithCancel(context.Background())
-			defer cancelRequests()
-			baseCtx := func(net.Listener) context.Context { return reqCtx }
-
-			srv := &http.Server{Addr: listen, Handler: handler, BaseContext: baseCtx}
-			// Admin server (/healthz, /metrics) on a separate port so they are
-			// never reachable through the public ingress, which routes only the
-			// app port. Probes and in-cluster scraping hit this port directly.
-			adminSrv := &http.Server{Addr: adminListen, Handler: adminHandler, BaseContext: baseCtx}
-			errCh := make(chan error, 2)
-			go func() {
-				slog.Info("listening", "addr", listen)
-				errCh <- srv.ListenAndServe()
-			}()
-			go func() {
-				slog.Info("admin listening", "addr", adminListen)
-				errCh <- adminSrv.ListenAndServe()
-			}()
-
-			select {
-			case err := <-errCh:
-				return err
-			case <-ctx.Done():
-				slog.Info("shutting down")
-				return shutdownServers(cancelRequests, shutdownGrace, shutdownTimeout, srv, adminSrv)
-			}
+			return runServe(cmd, dsn, listen, adminListen)
 		},
 	}
 	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv("LODE_DSN"), "Postgres DSN (postgres://...); defaults to $LODE_DSN")
 	cmd.Flags().StringVar(&listen, "listen", ":8080", "address for the public app server (web UI, API, webhooks)")
 	cmd.Flags().StringVar(&adminListen, "admin-listen", ":9090", "address for the admin server (/healthz, /metrics)")
 	return cmd
+}
+
+// runServe boots the store, the API server and the background loops, then
+// serves until an interrupt or a listener error.
+func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
+	if dsn == "" {
+		return errors.New("no DSN: set --dsn or LODE_DSN")
+	}
+	clusterEnv, err := parseClusterEnvMap(os.Getenv("LODE_CLUSTER_ENV_MAP"))
+	if err != nil {
+		return err
+	}
+	// LODE_WEB_OPEN serves the web UI unauthenticated on an instance
+	// with no login provider (the local stack, CI). An unparseable
+	// value is a typo in a security-relevant setting, so it fails the
+	// boot rather than defaulting quietly to either answer — and it
+	// fails here, before the store is opened, so the operator sees the
+	// typo and not a connection error.
+	webOpen := false
+	if v := os.Getenv("LODE_WEB_OPEN"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("LODE_WEB_OPEN: %q is not a boolean", v)
+		}
+		webOpen = b
+	}
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewGoCollector())
+	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
+	st, err := store.Open(dsn, store.WithMetrics(reg))
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+
+	// Built before NewServer so its boot-time skill sync (a background
+	// goroutine NewServer starts internally) shares the same shutdown
+	// signal as the lease sweeper below, instead of running uncancellable.
+	// Passing it is also what starts the doc-lifecycle subscriber —
+	// see the BackgroundCtx block at the end of NewServer.
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	handler, adminHandler, err := api.NewServer(st, api.Config{
+		BackgroundCtx:       ctx,
+		BootstrapToken:      os.Getenv("LODE_BOOTSTRAP_TOKEN"),
+		GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
+		FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
+		ClusterEnvMap:       clusterEnv,
+		BranchTemplate:      os.Getenv("LODE_BRANCH_TEMPLATE"),
+		OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
+		OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
+		PublicURL:           os.Getenv("LODE_PUBLIC_URL"),
+		SessionSecret:       os.Getenv("LODE_SESSION_SECRET"),
+		WebOpen:             webOpen,
+		GitHubClientID:      os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
+		GitHubClientSecret:  os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
+		TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
+		GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
+		GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
+		SecretsCatalogPath:  os.Getenv("LODE_SECRETS_CATALOG_PATH"),
+		SkillSources:        os.Getenv("LODE_SKILL_SOURCES"),
+		EmbeddingURL:        os.Getenv("LODE_EMBEDDING_URL"),
+		EmbeddingModel:      os.Getenv("LODE_EMBEDDING_MODEL"),
+		EmbeddingAPIKey:     os.Getenv("LODE_EMBEDDING_API_KEY"),
+		SkillScoreFloor:     os.Getenv("LODE_SKILL_SCORE_FLOOR"),
+		Metrics:             reg,
+	})
+	if err != nil {
+		return err
+	}
+
+	startLeaseSweeper(ctx, st, reg)
+
+	proj, err := graphProjector(reg, st)
+	if err != nil {
+		return err
+	}
+	if proj != nil {
+		// Knowledge-graph projection (spec 006 §11): follow the
+		// state_log outbox and replace each dirty project's graph on
+		// graph-server every 10s until shutdown. Single projector by
+		// construction — one lode serve wired to LODE_GRAPHSERVER_URL
+		// — so graph-server's per-branch lock covers it for now;
+		// If-Match CAS (006 §13.3 item 6) is wanted before any second
+		// writer.
+		go everyUntilDone(ctx, 10*time.Second, proj.RunOnce, func(n int, err error) {
+			if err != nil {
+				slog.Error("graph projection", "err", err)
+			} else if n > 0 {
+				slog.Info("projected project graphs", "count", n)
+			}
+		})
+	}
+
+	// Every in-flight request derives from reqCtx, which shutdown
+	// cancels — see shutdownServers.
+	reqCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
+	baseCtx := func(net.Listener) context.Context { return reqCtx }
+
+	srv := &http.Server{Addr: listen, Handler: handler, BaseContext: baseCtx}
+	// Admin server (/healthz, /metrics) on a separate port so they are
+	// never reachable through the public ingress, which routes only the
+	// app port. Probes and in-cluster scraping hit this port directly.
+	adminSrv := &http.Server{Addr: adminListen, Handler: adminHandler, BaseContext: baseCtx}
+	errCh := make(chan error, 2)
+	go func() {
+		slog.Info("listening", "addr", listen)
+		errCh <- srv.ListenAndServe()
+	}()
+	go func() {
+		slog.Info("admin listening", "addr", adminListen)
+		errCh <- adminSrv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		slog.Info("shutting down")
+		return shutdownServers(cancelRequests, shutdownGrace, shutdownTimeout, srv, adminSrv)
+	}
+}
+
+// startLeaseSweeper expires stale leases every 60s until ctx is cancelled,
+// counting each run by result so an alert expression can see a sweeper that
+// has stopped succeeding.
+func startLeaseSweeper(ctx context.Context, st *store.Store, reg prometheus.Registerer) {
+	runs := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_lease_sweeper_runs_total",
+		Help: "Lease sweeper runs by result.",
+	}, []string{"result"})
+	reg.MustRegister(runs)
+	// Pre-initialise both series so alert expressions see 0, not no-data.
+	runs.WithLabelValues("ok")
+	runs.WithLabelValues("error")
+
+	go everyUntilDone(ctx, 60*time.Second, func(ctx context.Context) (int, error) {
+		return st.ExpireLeases(ctx, time.Now().UTC())
+	}, func(n int, err error) {
+		if err != nil {
+			runs.WithLabelValues("error").Inc()
+			slog.Error("expire leases", "err", err)
+			return
+		}
+		runs.WithLabelValues("ok").Inc()
+		if n > 0 {
+			slog.Info("expired leases", "count", n)
+		}
+	})
+}
+
+// everyUntilDone runs step on an interval until ctx is cancelled. A step that
+// fails because of that cancellation ends the loop; every other outcome goes
+// to report and the loop continues.
+func everyUntilDone(ctx context.Context, every time.Duration, step func(context.Context) (int, error), report func(n int, err error)) {
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			n, err := step(ctx)
+			if errors.Is(err, context.Canceled) {
+				return
+			}
+			report(n, err)
+		}
+	}
 }
 
 func init() {
