@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -33,14 +34,11 @@ func init() {
 }
 
 // layoutFrom builds the worktree layout for dir's repo. It reads ONLY the
-// repo-local worktree_dir (cli.WorktreeDirFrom), never the user-level config
-// — spec 008 §6 scopes worktree_dir to the checkout, and internal/hookrun's
-// guard resolves it the same way. Resolving from cfg.WorktreeDir (the merged,
-// user-config-inclusive value) would let a user-level setting silently
-// diverge from what every hook guard sees, which fails closed and quiet: the
-// CLI would create worktrees under one base while hooks NOP on another. A
-// misconfigured worktree_dir is a user error worth reporting, not a silent
-// fallback.
+// repo-local worktree_dir (cli.WorktreeDirFrom), never the merged
+// user-level value — spec 008 §6 scopes worktree_dir to the checkout, and
+// internal/hookrun's guard resolves it the same way. Reading the merged value
+// here would let the CLI create worktrees under one base while every hook
+// guard NOPs on another.
 func layoutFrom(dir string) (worktree.Layout, error) {
 	return worktree.NewLayout(cli.WorktreeDirFrom(dir))
 }
@@ -74,10 +72,7 @@ func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root st
 // --by <blocker-id>`) does not shear the alignment.
 func unboundHelp(l worktree.Layout, byName string) string {
 	const claim = "lode next [id]"
-	width := len(claim)
-	if len(byName) > width {
-		width = len(byName)
-	}
+	width := max(len(claim), len(byName))
 	var b strings.Builder
 	if byName != "" {
 		fmt.Fprintf(&b, "  %-*s  say which task to act on\n", width, byName)
@@ -150,6 +145,20 @@ func clearTaskBindingIfCurrent(cmd *cobra.Command, taskID string) {
 		return
 	}
 	clearTaskBinding(cmd, root)
+}
+
+// purgeTaskSecrets drops the task's materialized secrets, reporting failure on
+// stderr: the work is finished either way, so a purge error must not fail the
+// command that reports it.
+func purgeTaskSecrets(cmd *cobra.Command, taskID string) {
+	names, err := secrets.PurgeTask(taskID)
+	if err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purge: %v\n", err)
+		return
+	}
+	if len(names) > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purged %s\n", strings.Join(names, ", "))
+	}
 }
 
 // rollbackClaim undoes a `lode next` claim after a later step (worktree add,
@@ -309,16 +318,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 	runSecretsCeremony(ctx, cmd, c, taskID, dir, brief.Task.Secrets)
 
 	if jsonOut(cmd) {
-		out := nextResult{
+		return printJSON(cmd, nextResult{
 			Claimed: true, Worktree: dir, Branch: branch,
 			Brief: json.RawMessage(briefRaw),
-		}
-		b, err := json.Marshal(out)
-		if err != nil {
-			return fmt.Errorf("encode result: %w", err)
-		}
-		printRaw(cmd, b)
-		return nil
+		})
 	}
 
 	o := cmd.OutOrStdout()
@@ -433,11 +436,7 @@ func newDoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if names, err := secrets.PurgeTask(taskID); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purge: %v\n", err)
-			} else if len(names) > 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purged %s\n", strings.Join(names, ", "))
-			}
+			purgeTaskSecrets(cmd, taskID)
 			clearTaskBinding(cmd, root)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
@@ -484,11 +483,7 @@ func newBlockCmd() *cobra.Command {
 			if _, err := c.ReleaseLease(ctx, taskID); err != nil {
 				return fmt.Errorf("recorded %s blocked by %s, but failed to release the lease: %w", taskID, on, err)
 			}
-			if names, err := secrets.PurgeTask(taskID); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purge: %v\n", err)
-			} else if len(names) > 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "secrets: purged %s\n", strings.Join(names, ", "))
-			}
+			purgeTaskSecrets(cmd, taskID)
 			clearTaskBinding(cmd, root)
 			if jsonOut(cmd) {
 				printRaw(cmd, raw)
@@ -523,14 +518,6 @@ type statusResult struct {
 	SessionMarker bool                 `json:"session_marker"`
 	Project       string               `json:"project,omitempty"`
 	ProjectSource string               `json:"project_source"`
-}
-
-// orNone renders an empty scope as "-" rather than a blank column.
-func orNone(s string) string {
-	if s == "" {
-		return "-"
-	}
-	return s
 }
 
 // leaseState classifies lease relative to identity (this worktree) and now.
@@ -597,7 +584,7 @@ func newStatusCmd() *cobra.Command {
 			scope := cli.ResolveScope(cmd.Context(), c, cfg, wd)
 
 			if jsonOut(cmd) {
-				b, err := json.Marshal(statusResult{
+				return printJSON(cmd, statusResult{
 					Worktree:      root,
 					Task:          brief.Task,
 					LeaseState:    state,
@@ -608,16 +595,11 @@ func newStatusCmd() *cobra.Command {
 					Project:       scope.Project,
 					ProjectSource: string(scope.Source),
 				})
-				if err != nil {
-					return fmt.Errorf("encode result: %w", err)
-				}
-				printRaw(cmd, b)
-				return nil
 			}
 
 			o := cmd.OutOrStdout()
 			fmt.Fprintf(o, "worktree: %s\n", root)
-			fmt.Fprintf(o, "project:  %s (%s)\n", orNone(scope.Project), scope.Source)
+			fmt.Fprintf(o, "project:  %s (%s)\n", cmp.Or(scope.Project, "-"), scope.Source)
 			fmt.Fprintf(o, "task: %s — %s\n", brief.Task.ID, brief.Task.Title)
 			fmt.Fprintf(o, "state: %s   priority: %s\n", brief.Task.State, brief.Task.Priority)
 			switch state {
@@ -632,18 +614,7 @@ func newStatusCmd() *cobra.Command {
 				fmt.Fprintf(o, "lease: held, expires %s (renewed %s)\n",
 					brief.Lease.ExpiresAt.Local().Format(time.RFC3339), brief.Lease.RenewedAt.Local().Format(time.RFC3339))
 			}
-			if len(brief.OpenBlockers) > 0 {
-				fmt.Fprintln(o, "blocked by:")
-				for _, blk := range brief.OpenBlockers {
-					fmt.Fprintf(o, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
-				}
-			}
-			if len(brief.BlockingPlans) > 0 {
-				fmt.Fprintln(o, "blocked by plans:")
-				for _, p := range brief.BlockingPlans {
-					fmt.Fprintf(o, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
-				}
-			}
+			printBlockers(o, brief.OpenBlockers, brief.BlockingPlans)
 			marker := "absent"
 			if sessionPresent {
 				marker = "present"

@@ -95,7 +95,7 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 		}
 	}
 
-	pack := append(append([]secrets.Entry{}, baseline...), consented...)
+	pack := slices.Concat(baseline, consented)
 	if len(pack) == 0 {
 		if len(declined) == 0 {
 			return // auto-declined: leave every prior record untouched

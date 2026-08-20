@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,15 +20,6 @@ import (
 // validDocKinds in internal/api/docs.go (the server re-checks; this catches a
 // typo before the round trip).
 var docKinds = []string{"spec", "adr", "plan"}
-
-func validDocKind(k string) bool {
-	for _, v := range docKinds {
-		if v == k {
-			return true
-		}
-	}
-	return false
-}
 
 // resolveDocID resolves a document reference to its id (025 §14.3): a
 // positive integer is the id itself, taken without a round trip; anything
@@ -92,7 +84,7 @@ func newDocNewCmd() *cobra.Command {
 		Use:   "new",
 		Short: "Create a document (spec, ADR, or plan) in draft",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !validDocKind(kind) {
+			if !slices.Contains(docKinds, kind) {
 				return fmt.Errorf("unknown kind %q; valid kinds: %s", kind, strings.Join(docKinds, ", "))
 			}
 			body, err := readBodyFile(cmd, file)
@@ -108,7 +100,7 @@ func newDocNewCmd() *cobra.Command {
 				return err
 			}
 			if sc.Project == "" {
-				return fmt.Errorf(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
+				return errNoProject
 			}
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
 				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Assignee: assignee,

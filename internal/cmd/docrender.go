@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -138,12 +137,7 @@ func writeUnresolved(cmd *cobra.Command, err error) error {
 		fmt.Fprintln(cmd.OutOrStdout(), err.Error())
 		return nil
 	}
-	b, jerr := json.Marshal(unresolvedResult{Unresolved: err.Error()})
-	if jerr != nil {
-		return fmt.Errorf("encode result: %w", jerr)
-	}
-	printRaw(cmd, b)
-	return nil
+	return printJSON(cmd, unresolvedResult{Unresolved: err.Error()})
 }
 
 // writeDocShow prints content as raw bytes, or, under --json, as
@@ -154,14 +148,9 @@ func writeDocShow(cmd *cobra.Command, doc model.Doc, section string, content []b
 		cmd.OutOrStdout().Write(content)
 		return nil
 	}
-	b, err := json.Marshal(docShowResult{
+	return printJSON(cmd, docShowResult{
 		Doc: doc.ID, Slug: doc.Slug, Section: section, Content: string(content),
 	})
-	if err != nil {
-		return fmt.Errorf("encode result: %w", err)
-	}
-	printRaw(cmd, b)
-	return nil
 }
 
 // sectionSubtree returns the exact source text of the section anchored

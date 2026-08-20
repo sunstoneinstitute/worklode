@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -178,18 +177,9 @@ func newProjectFocusCmd() *cobra.Command {
 			}
 
 			switch {
-			case clear:
-				p, raw, err := c.SetProjectFocus(cmd.Context(), id, []string{})
-				if err != nil {
-					return err
-				}
-				if jsonOut(cmd) {
-					printRaw(cmd, raw)
-					return nil
-				}
-				printFocus(cmd, p.Focus)
-				return nil
-			case len(concerns) > 0:
+			// --clear is "set to no concerns": args[1:] is already empty, and
+			// the guard above rejects the one input where the two differ.
+			case clear || len(concerns) > 0:
 				p, raw, err := c.SetProjectFocus(cmd.Context(), id, concerns)
 				if err != nil {
 					return err
@@ -206,12 +196,7 @@ func newProjectFocusCmd() *cobra.Command {
 					return err
 				}
 				if jsonOut(cmd) {
-					raw, err := json.Marshal(map[string]any{"id": p.ID, "focus": p.Focus})
-					if err != nil {
-						return fmt.Errorf("marshal focus: %w", err)
-					}
-					printRaw(cmd, raw)
-					return nil
+					return printJSON(cmd, map[string]any{"id": p.ID, "focus": p.Focus})
 				}
 				printFocus(cmd, p.Focus)
 				return nil
@@ -340,15 +325,10 @@ func newProjectResolveCmd() *cobra.Command {
 			}
 
 			if jsonOut(cmd) {
-				b, err := json.Marshal(resolveResult{
+				return printJSON(cmd, resolveResult{
 					Project: sc.Project, Key: sc.Key, Source: string(sc.Source),
 					Path: sc.Path, Remote: sc.Remote, Cached: sc.Cached,
 				})
-				if err != nil {
-					return fmt.Errorf("encode result: %w", err)
-				}
-				printRaw(cmd, b)
-				return nil
 			}
 
 			o := cmd.OutOrStdout()

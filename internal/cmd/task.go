@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -58,6 +58,130 @@ func init() {
 	rootCmd.AddCommand(newTaskCmd())
 }
 
+// taskTransition is the shape of every cli.Client call that moves one task by
+// id; call sites pass a method expression, e.g. (*cli.Client).ReadyTask.
+type taskTransition func(*cli.Client, context.Context, string) (model.Task, []byte, error)
+
+// newTaskTransitionCmd builds a `lode task <verb> <id>` command that runs one
+// transition and prints the task it returns. clearBinding drops the current
+// worktree's task stamp when the transition ends the work on that task.
+func newTaskTransitionCmd(use, short string, clearBinding bool, call taskTransition) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := call(c, cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if clearBinding {
+				clearTaskBindingIfCurrent(cmd, id)
+			}
+			return renderTask(cmd, t, raw)
+		},
+	}
+}
+
+// renderTask prints one task as the package's standard single-row table, or
+// the server's raw response under --json.
+func renderTask(cmd *cobra.Command, t model.Task, raw []byte) error {
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
+	return nil
+}
+
+// taskEdge is the shape of every cli.Client call that adds or removes an edge
+// between two tasks.
+type taskEdge func(*cli.Client, context.Context, string, string) ([]byte, error)
+
+// newTaskEdgeCmd builds a `lode task <verb> <id> --<flag> <other-id>` command.
+// msg is the confirmation line, formatted with the subject id and the other
+// endpoint in that order.
+func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobra.Command {
+	var other string
+	cmd := &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			otherID, err := resolveTaskID(cmd.Context(), other, c, cfg)
+			if err != nil {
+				return err
+			}
+			return runTaskEdge(cmd, c, id, otherID, msg, call)
+		},
+	}
+	cmd.Flags().StringVar(&other, flag, "", flagHelp)
+	cmd.MarkFlagRequired(flag)
+	return cmd
+}
+
+// newTaskUnEdgeCmd builds a `lode task <verb> <id>` command that drops an edge
+// the caller named only one end of: find reads the other endpoint off the
+// task, and reports why there is nothing to drop when there is none.
+func newTaskUnEdgeCmd(use, short, msg string, find func(model.TaskDetail) (string, error), call taskEdge) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			// The edge is identified by both endpoints and the caller knows
+			// only one, so read the other back first.
+			t, _, err := c.GetTask(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			otherID, err := find(t)
+			if err != nil {
+				return err
+			}
+			return runTaskEdge(cmd, c, id, otherID, msg, call)
+		},
+	}
+}
+
+// runTaskEdge issues one edge call and prints its confirmation line.
+func runTaskEdge(cmd *cobra.Command, c *cli.Client, id, otherID, msg string, call taskEdge) error {
+	raw, err := call(c, cmd.Context(), id, otherID)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), msg+"\n", id, otherID)
+	return nil
+}
+
 // resolveBody returns the task body from --body / --body-file (spec 025 §18,
 // the gh convention): bodyFile wins when set, with "-" reading stdin. Flag
 // exclusivity is enforced by cobra (MarkFlagsMutuallyExclusive), not here.
@@ -103,7 +227,7 @@ func newTaskAddCmd() *cobra.Command {
 				return err
 			}
 			if sc.Project == "" {
-				return errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
+				return errNoProject
 			}
 			t, raw, err := c.CreateTask(cmd.Context(), model.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
@@ -113,12 +237,7 @@ func newTaskAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
+			return renderTask(cmd, t, raw)
 		},
 	}
 	addScopeFlags(cmd, &scope, "project id")
@@ -201,11 +320,7 @@ func resolveStatusFilter(statuses []string) []string {
 	}
 	var states []string
 	for _, s := range statuses {
-		for _, part := range strings.Split(s, ",") {
-			part = strings.TrimSpace(part)
-			if part == "" {
-				continue
-			}
+		for _, part := range splitNames(s) {
 			if part == "all" {
 				return nil
 			}
@@ -368,12 +483,7 @@ func newTaskEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
+			return renderTask(cmd, t, raw)
 		},
 	}
 	cmd.Flags().StringVar(&title, "title", "", "replace the task title (must not be blank)")
@@ -387,109 +497,26 @@ func newTaskEditCmd() *cobra.Command {
 	return cmd
 }
 
-// readBodyFile reads a task body from path, or from the command's stdin when
-// path is "-". Multi-line markdown bodies are awkward to pass as a flag value,
-// so `lode task edit --body-file -` is the pipe-friendly form.
+// readBodyFile reads a body from path, or from the command's stdin when path
+// is "-". Multi-line markdown bodies are awkward to pass as a flag value, so
+// `lode task edit --body-file -` is the pipe-friendly form.
 func readBodyFile(cmd *cobra.Command, path string) (string, error) {
-	if path == "-" {
-		text, err := io.ReadAll(cmd.InOrStdin())
-		if err != nil {
-			return "", fmt.Errorf("read body from stdin: %w", err)
-		}
-		return string(text), nil
-	}
-	text, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return string(text), nil
+	return resolveBody("", path, cmd.InOrStdin())
 }
 
 func newTaskReadyCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "ready <id>",
-		Short: "Publish a draft task (draft -> ready)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.ReadyTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("ready <id>", "Publish a draft task (draft -> ready)",
+		false, (*cli.Client).ReadyTask)
 }
 
 func newTaskReopenCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "reopen <id>",
-		Short: "Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.ReopenTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("reopen <id>", "Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)",
+		false, (*cli.Client).ReopenTask)
 }
 
 func newTaskReworkCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "rework <id>",
-		Short: "Send a task under review back to in_progress (e.g. changes requested)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.ReworkTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("rework <id>", "Send a task under review back to in_progress (e.g. changes requested)",
+		false, (*cli.Client).ReworkTask)
 }
 
 // currentWorktreeIdentity derives the worktree identity for the current
@@ -694,12 +721,7 @@ func newTaskAssignCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
+			return renderTask(cmd, t, raw)
 		},
 	}
 	cmd.Flags().StringVar(&to, "to", "", "actor id to assign the task to (default: yourself)")
@@ -707,215 +729,40 @@ func newTaskAssignCmd() *cobra.Command {
 }
 
 func newTaskUnassignCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "unassign <id>",
-		Short: "Clear a task's assignee",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.UnassignTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("unassign <id>", "Clear a task's assignee",
+		false, (*cli.Client).UnassignTask)
 }
 
 func newTaskStartCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "start <id>",
-		Short: "Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.StartTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("start <id>", "Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.",
+		false, (*cli.Client).StartTask)
 }
 
 func newTaskStopCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "stop <id>",
-		Short: "Put a started task back to ready; keeps the assignment.",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.StopTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("stop <id>", "Put a started task back to ready; keeps the assignment.",
+		false, (*cli.Client).StopTask)
 }
 
 func newTaskSubmitCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "submit <id>",
-		Short: "Move your in-progress task to review.",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.SubmitTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("submit <id>", "Move your in-progress task to review.",
+		false, (*cli.Client).SubmitTask)
 }
 
 func newTaskDoneCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "done <id>",
-		Short: "Mark a task merged (in_review -> merged)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.DoneTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			clearTaskBindingIfCurrent(cmd, id)
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("done <id>", "Mark a task merged (in_review -> merged)",
+		true, (*cli.Client).DoneTask)
 }
 
 func newTaskAbandonCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "abandon <id>",
-		Short: "Abandon a task from any non-terminal state",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			t, raw, err := c.AbandonTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			clearTaskBindingIfCurrent(cmd, id)
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			cli.TaskTable(cmd.OutOrStdout(), []model.Task{t})
-			return nil
-		},
-	}
-	return cmd
+	return newTaskTransitionCmd("abandon <id>", "Abandon a task from any non-terminal state",
+		true, (*cli.Client).AbandonTask)
 }
 
 func newTaskBlockCmd() *cobra.Command {
-	var by string
-	cmd := &cobra.Command{
-		Use:   "block <id>",
-		Short: "Record that another task blocks this one",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			by, err = resolveTaskID(cmd.Context(), by, c, cfg)
-			if err != nil {
-				return err
-			}
-			raw, err := c.Block(cmd.Context(), id, by)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now blocked by %s\n", id, by)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&by, "by", "", "id of the blocking task (required)")
-	cmd.MarkFlagRequired("by")
-	return cmd
+	return newTaskEdgeCmd("block <id>",
+		"Record that another task blocks this one",
+		"by", "id of the blocking task (required)",
+		"%s is now blocked by %s", (*cli.Client).Block)
 }
 
 func newTaskBriefCmd() *cobra.Command {
@@ -960,18 +807,7 @@ func printBrief(cmd *cobra.Command, b model.Brief) {
 	if b.Lease != nil {
 		fmt.Fprintf(out, "lease: %s (expires %s)\n", b.Lease.Worktree, b.Lease.ExpiresAt.Local().Format(time.RFC3339))
 	}
-	if len(b.OpenBlockers) > 0 {
-		fmt.Fprintln(out, "blocked by:")
-		for _, blk := range b.OpenBlockers {
-			fmt.Fprintf(out, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
-		}
-	}
-	if len(b.BlockingPlans) > 0 {
-		fmt.Fprintln(out, "blocked by plans:")
-		for _, p := range b.BlockingPlans {
-			fmt.Fprintf(out, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
-		}
-	}
+	printBlockers(out, b.OpenBlockers, b.BlockingPlans)
 	if b.Body != "" {
 		fmt.Fprintln(out)
 		cli.Markdown(out, b.Body)
@@ -1049,196 +885,66 @@ func printTaskCost(cmd *cobra.Command, tc model.TaskCost, window string) {
 	printCost(out, tc.Cost, window)
 }
 
-func newTaskUnblockCmd() *cobra.Command {
-	var by string
-	cmd := &cobra.Command{
-		Use:   "unblock <id>",
-		Short: "Remove a blocking edge from another task",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			by, err = resolveTaskID(cmd.Context(), by, c, cfg)
-			if err != nil {
-				return err
-			}
-			raw, err := c.Unblock(cmd.Context(), id, by)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer blocked by %s\n", id, by)
-			return nil
-		},
+// printBlockers renders what is holding a task up, shared by `lode task
+// brief`, `lode next` and `lode status`. Each section is omitted when empty.
+func printBlockers(out io.Writer, blockers []model.BriefBlocker, plans []model.DocRef) {
+	if len(blockers) > 0 {
+		fmt.Fprintln(out, "blocked by:")
+		for _, blk := range blockers {
+			fmt.Fprintf(out, "  - %s: %s (%s)\n", blk.ID, blk.Title, blk.State)
+		}
 	}
-	cmd.Flags().StringVar(&by, "by", "", "id of the blocking task (required)")
-	cmd.MarkFlagRequired("by")
-	return cmd
+	if len(plans) > 0 {
+		fmt.Fprintln(out, "blocked by plans:")
+		for _, p := range plans {
+			fmt.Fprintf(out, "  - %s: %s (%s)\n", p.Slug, p.Title, p.Status)
+		}
+	}
+}
+
+func newTaskUnblockCmd() *cobra.Command {
+	return newTaskEdgeCmd("unblock <id>",
+		"Remove a blocking edge from another task",
+		"by", "id of the blocking task (required)",
+		"%s is no longer blocked by %s", (*cli.Client).Unblock)
 }
 
 func newTaskParentCmd() *cobra.Command {
-	var under string
-	cmd := &cobra.Command{
-		Use:   "parent <id>",
-		Short: "File a task under a parent task",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			under, err = resolveTaskID(cmd.Context(), under, c, cfg)
-			if err != nil {
-				return err
-			}
-			raw, err := c.Parent(cmd.Context(), id, under)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now a child of %s\n", id, under)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&under, "under", "", "id of the parent to file it under (required)")
-	cmd.MarkFlagRequired("under")
-	return cmd
+	return newTaskEdgeCmd("parent <id>",
+		"File a task under a parent task",
+		"under", "id of the parent to file it under (required)",
+		"%s is now a child of %s", (*cli.Client).Parent)
 }
 
 func newTaskUnparentCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "unparent <id>",
-		Short: "Detach a task from its parent",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			// The edge is identified by both endpoints, and the caller only
-			// knows the child, so read the parent back first.
-			t, _, err := c.GetTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
+	return newTaskUnEdgeCmd("unparent <id>", "Detach a task from its parent",
+		"%s is no longer a child of %s",
+		func(t model.TaskDetail) (string, error) {
 			if t.Hierarchy.Parent == nil {
-				return fmt.Errorf("%s has no parent", id)
+				return "", fmt.Errorf("%s has no parent", t.Task.ID)
 			}
-			parent := t.Hierarchy.Parent.ID
-			raw, err := c.Unparent(cmd.Context(), id, parent)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer a child of %s\n", id, parent)
-			return nil
-		},
-	}
-	return cmd
+			return t.Hierarchy.Parent.ID, nil
+		}, (*cli.Client).Unparent)
 }
 
 func newTaskFollowUpCmd() *cobra.Command {
-	var of string
-	cmd := &cobra.Command{
-		Use:   "follow-up <id>",
-		Short: "Record that a task was spun out of the work on another task",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			origin, err := resolveTaskID(cmd.Context(), of, c, cfg)
-			if err != nil {
-				return err
-			}
-			raw, err := c.FollowUp(cmd.Context(), id, origin)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is now a follow-up to %s\n", id, origin)
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&of, "of", "", "id of the task this one was spun out of (required)")
-	cmd.MarkFlagRequired("of")
-	return cmd
+	return newTaskEdgeCmd("follow-up <id>",
+		"Record that a task was spun out of the work on another task",
+		"of", "id of the task this one was spun out of (required)",
+		"%s is now a follow-up to %s", (*cli.Client).FollowUp)
 }
 
 func newTaskUnfollowUpCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "unfollow-up <id>",
-		Short: "Drop a task's follow-up edge to its origin",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			// The edge is identified by both endpoints and the caller knows
-			// only one, so read the origin back first.
-			t, _, err := c.GetTask(cmd.Context(), id)
-			if err != nil {
-				return err
-			}
-			var origin string
+	return newTaskUnEdgeCmd("unfollow-up <id>", "Drop a task's follow-up edge to its origin",
+		"%s is no longer a follow-up to %s",
+		func(t model.TaskDetail) (string, error) {
 			for _, e := range t.Edges.Out {
 				if e.Type == "follow_up_to" {
-					origin = e.To
-					break
+					return e.To, nil
 				}
 			}
-			if origin == "" {
-				return fmt.Errorf("%s is not a follow-up to anything", id)
-			}
-			raw, err := c.UnfollowUp(cmd.Context(), id, origin)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s is no longer a follow-up to %s\n", id, origin)
-			return nil
-		},
-	}
-	return cmd
+			return "", fmt.Errorf("%s is not a follow-up to anything", t.Task.ID)
+		}, (*cli.Client).UnfollowUp)
 }
 
 func newTaskTreeCmd() *cobra.Command {

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -321,12 +320,7 @@ func newUninstallCmd() *cobra.Command {
 // reportInstall prints one line per integration, or the whole result as JSON.
 func reportInstall(cmd *cobra.Command, res installResult) error {
 	if jsonOut(cmd) {
-		b, err := json.Marshal(res)
-		if err != nil {
-			return err
-		}
-		printRaw(cmd, b)
-		return nil
+		return printJSON(cmd, res)
 	}
 	out := cmd.OutOrStdout()
 	if res.VCS != nil {
@@ -356,12 +350,7 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 // reportUninstall is reportInstall for the removal side.
 func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 	if jsonOut(cmd) {
-		b, err := json.Marshal(res)
-		if err != nil {
-			return err
-		}
-		printRaw(cmd, b)
-		return nil
+		return printJSON(cmd, res)
 	}
 	out := cmd.OutOrStdout()
 	if res.VCS != nil {
