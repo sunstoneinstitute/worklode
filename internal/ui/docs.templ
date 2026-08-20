@@ -19,21 +19,23 @@ templ Docs(v DocsView) {
 					if len(v.Docs) == 0 {
 						<p class="muted">No documents yet. Specs, ADRs and plans land here as they are authored.</p>
 					} else {
-						<table>
-							<tr><th>Reference</th><th>Title</th><th>Project</th><th>Status</th><th>Version</th></tr>
-							for _, d := range v.Docs {
-								<tr>
-									<td>
-										<a href={ d.URL }>{ d.Ref }</a>
-										<div class="muted small mono">{ d.Doc.Slug }</div>
-									</td>
-									<td>{ d.Doc.Title }</td>
-									<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
-									<td><span class={ "chip " + DocStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
-									<td class="mono">{ d.Doc.Version }</td>
-								</tr>
-							}
-						</table>
+						@tableWrap("Documents") {
+							<table>
+								<tr><th>Reference</th><th>Title</th><th>Project</th><th>Status</th><th>Version</th></tr>
+								for _, d := range v.Docs {
+									<tr>
+										<td>
+											<a href={ d.URL }>{ d.Ref }</a>
+											<div class="muted small mono">{ d.Doc.Slug }</div>
+										</td>
+										<td>{ d.Doc.Title }</td>
+										<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
+										<td><span class={ "chip " + DocStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
+										<td class="mono">{ d.Doc.Version }</td>
+									</tr>
+								}
+							</table>
+						}
 					}
 				</div>
 			</section>
@@ -70,23 +72,25 @@ templ Doc(v DocView) {
 				<section class="card">
 					<div class="hd"><h3>Sections</h3></div>
 					<div class="bd">
-						<table>
-							<tr><th>Anchor</th><th>Heading</th><th>Last revised in</th><th>Published</th></tr>
-							for _, sec := range v.Sections {
-								<tr>
-									<td class="mono">{ "#" + sec.Anchor }</td>
-									<td>{ sec.Heading }</td>
-									<td class="mono">{ sec.LastRevisedIn }</td>
-									<td>
-										if sec.Published {
-											<span class="chip ok">published</span>
-										} else {
-											<span class="chip plain">draft</span>
-										}
-									</td>
-								</tr>
-							}
-						</table>
+						@tableWrap("Sections") {
+							<table>
+								<tr><th>Anchor</th><th>Heading</th><th>Last revised in</th><th>Published</th></tr>
+								for _, sec := range v.Sections {
+									<tr>
+										<td class="mono">{ "#" + sec.Anchor }</td>
+										<td>{ sec.Heading }</td>
+										<td class="mono">{ sec.LastRevisedIn }</td>
+										<td>
+											if sec.Published {
+												<span class="chip ok">published</span>
+											} else {
+												<span class="chip plain">draft</span>
+											}
+										</td>
+									</tr>
+								}
+							</table>
+						}
 					</div>
 				</section>
 			}

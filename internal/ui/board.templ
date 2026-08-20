@@ -24,12 +24,14 @@ templ Board(v BoardView) {
 				<section class="card">
 					<div class="hd"><h3>Recent failures</h3></div>
 					<div class="bd">
-						<table>
-							<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
-							for _, f := range v.RecentFailures {
-								<tr><td class="mono">{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
-							}
-						</table>
+						@tableWrap("Recent failures") {
+							<table>
+								<tr><th>When</th><th>Cluster</th><th>Kind</th><th>Workload</th><th>Message</th></tr>
+								for _, f := range v.RecentFailures {
+									<tr><td class="mono">{ FmtTime(f.OccurredAt) }</td><td>{ f.Cluster }</td><td>{ f.Kind }</td><td>{ f.Workload }</td><td>{ f.Message }</td></tr>
+								}
+							</table>
+						}
 					</div>
 				</section>
 			}
