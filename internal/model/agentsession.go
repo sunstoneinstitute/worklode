@@ -6,12 +6,12 @@ import "time"
 const AgentOther = "other"
 
 // KnownAgents is the vocabulary of AgentSession.Agent, mirroring the
-// agent_sessions.agent CHECK constraint (migration 0004). It lives here
+// agent_sessions.agent CHECK constraint (migration 0033). It lives here
 // rather than in internal/store because both ends need it: the store rejects
 // anything outside it, and a client that reports an agent has to know what
 // the server will accept before it sends one.
 var KnownAgents = []string{
-	"claude-code", "codex", "cursor", "aider",
+	"claude-code", "codex", "copilot", "cursor", "aider",
 	"opencode", "pi", "amp", AgentOther,
 }
 

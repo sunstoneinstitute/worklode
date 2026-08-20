@@ -689,3 +689,17 @@ func TestTouchAgentSessionInsertRaceWithLeaseClose(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentSessionAcceptsCopilot pins that copilot is accepted end to end:
+// spec 024 adds it as a harness, and both the CHECK constraint (0033) and
+// the Go-side mirror (model.KnownAgents) must allow it or Touch fails before or
+// after reaching Postgres.
+func TestAgentSessionAcceptsCopilot(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/.worktrees/one")
+
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "copilot", "", "sess-copilot", nil); err != nil {
+		t.Fatalf("touch as copilot: %v", err)
+	}
+}

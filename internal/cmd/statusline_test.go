@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sunstoneinstitute/worklode/internal/harness"
 )
 
 // statusLineCommand returns the command string in a settings file's statusLine,
@@ -22,165 +24,6 @@ func statusLineCommand(t *testing.T, path string) string {
 	}
 	command, _ := entry["command"].(string)
 	return command
-}
-
-func TestInstallStatusLineWritesTheCommand(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-
-	action, err := installStatusLine(path)
-	if err != nil {
-		t.Fatalf("installStatusLine: %v", err)
-	}
-	if action != hookActionInstalled {
-		t.Fatalf("action = %q, want %q", action, hookActionInstalled)
-	}
-	if got := statusLineCommand(t, path); got != lodeStatusLineCommand {
-		t.Fatalf("statusLine command = %q, want %q", got, lodeStatusLineCommand)
-	}
-}
-
-// The slot holds exactly one command, so an install that finds someone else's
-// status line must decline rather than replace it.
-func TestInstallStatusLineKeepsAnExistingOne(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := writeSettingsFile(path, map[string]any{
-		"statusLine": map[string]any{"type": "command", "command": "~/bin/my-statusline"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	action, err := installStatusLine(path)
-	if err != nil {
-		t.Fatalf("installStatusLine: %v", err)
-	}
-	if action != hookActionKept {
-		t.Fatalf("action = %q, want %q", action, hookActionKept)
-	}
-	if got := statusLineCommand(t, path); got != "~/bin/my-statusline" {
-		t.Fatalf("statusLine command = %q, want it untouched", got)
-	}
-}
-
-func TestInstallStatusLineIsIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if _, err := installStatusLine(path); err != nil {
-		t.Fatal(err)
-	}
-	action, err := installStatusLine(path)
-	if err != nil {
-		t.Fatalf("second installStatusLine: %v", err)
-	}
-	if action != hookActionInstalled {
-		t.Fatalf("action = %q, want a converging re-install", action)
-	}
-	if got := statusLineCommand(t, path); got != lodeStatusLineCommand {
-		t.Fatalf("statusLine command = %q", got)
-	}
-}
-
-func TestInstallStatusLinePreservesOtherSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := writeSettingsFile(path, map[string]any{"model": "opus"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := installStatusLine(path); err != nil {
-		t.Fatal(err)
-	}
-	if got := readSettings(t, path)["model"]; got != "opus" {
-		t.Fatalf("model = %v, want it preserved", got)
-	}
-}
-
-func TestUninstallStatusLineRemovesOnlyOurs(t *testing.T) {
-	tests := []struct {
-		name        string
-		settings    map[string]any
-		wantAction  string
-		wantCommand string
-	}{
-		{
-			name:       "ours",
-			settings:   map[string]any{"statusLine": map[string]any{"type": "command", "command": lodeStatusLineCommand}},
-			wantAction: hookActionRemoved,
-		},
-		{
-			name:        "someone else's",
-			settings:    map[string]any{"statusLine": map[string]any{"type": "command", "command": "starship prompt"}},
-			wantAction:  hookActionKept,
-			wantCommand: "starship prompt",
-		},
-		{
-			name:       "no status line at all",
-			settings:   map[string]any{"model": "opus"},
-			wantAction: hookActionNone,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-			if err := writeSettingsFile(path, tt.settings); err != nil {
-				t.Fatal(err)
-			}
-			action, err := uninstallStatusLine(path)
-			if err != nil {
-				t.Fatalf("uninstallStatusLine: %v", err)
-			}
-			if action != tt.wantAction {
-				t.Fatalf("action = %q, want %q", action, tt.wantAction)
-			}
-			if got := statusLineCommand(t, path); got != tt.wantCommand {
-				t.Fatalf("statusLine command = %q, want %q", got, tt.wantCommand)
-			}
-		})
-	}
-}
-
-// A no-op uninstall must not rewrite the file — that would reformat someone's
-// settings JSON and bump its mtime for nothing.
-func TestUninstallStatusLineLeavesAMissingFileAlone(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	action, err := uninstallStatusLine(path)
-	if err != nil {
-		t.Fatalf("uninstallStatusLine: %v", err)
-	}
-	if action != hookActionNone {
-		t.Fatalf("action = %q, want %q", action, hookActionNone)
-	}
-	if fileExists(path) {
-		t.Fatal("uninstall created a settings file")
-	}
-}
-
-// The binary may be invoked by absolute path or carry flags, so recognizing
-// our own entry cannot be string equality.
-func TestIsLodeStatusLine(t *testing.T) {
-	tests := []struct {
-		command string
-		want    bool
-	}{
-		{"lode statusline", true},
-		{"/usr/local/bin/lode statusline", true},
-		{"  lode   statusline  ", true},
-		{"lode hook heartbeat", false},
-		{"lode", false},
-		{"my-lode statusline", false},
-		{"starship prompt", false},
-		{"", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.command, func(t *testing.T) {
-			got := isLodeStatusLine(map[string]any{"type": "command", "command": tt.command})
-			if got != tt.want {
-				t.Fatalf("isLodeStatusLine(%q) = %v, want %v", tt.command, got, tt.want)
-			}
-		})
-	}
-	if isLodeStatusLine("a bare string") {
-		t.Fatal("a non-object statusLine is not ours")
-	}
-	if isLodeStatusLine(map[string]any{"type": "command"}) {
-		t.Fatal("a statusLine with no command is not ours")
-	}
 }
 
 func TestResolveHookTargetsStatusLineDefaultsOn(t *testing.T) {
@@ -232,25 +75,28 @@ func TestInstallHooksWritesStatusLineOnlyWhenTargeted(t *testing.T) {
 	root := initGitRepo(t)
 	settingsPath := filepath.Join(root, ".claude", "settings.local.json")
 
-	res, err := installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode}, scopeLocal)
+	res, err := installHooks(discardCmd(), root, claudeTargets("", false), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
-	if res.StatusLine != nil {
-		t.Fatalf("status line result = %+v, want nil when not targeted", res.StatusLine)
+	if len(res.StatusLine) != 0 {
+		t.Fatalf("status line result = %+v, want none when not targeted", res.StatusLine)
 	}
 	if got := statusLineCommand(t, settingsPath); got != "" {
 		t.Fatalf("statusLine written when not targeted: %q", got)
 	}
 
-	res, err = installHooks(discardCmd(), root, hookTargets{agent: agentClaudeCode, statusLine: true}, scopeLocal)
+	res, err = installHooks(discardCmd(), root, claudeTargets("", true), harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("installHooks --statusline: %v", err)
 	}
-	if res.StatusLine == nil || res.StatusLine.Action != hookActionInstalled {
+	if len(res.StatusLine) != 1 || res.StatusLine[0].Action != harness.ActionInstalled {
 		t.Fatalf("status line result = %+v", res.StatusLine)
 	}
-	if got := statusLineCommand(t, settingsPath); got != lodeStatusLineCommand {
+	if got := res.StatusLine[0].Agent; got != claudeCode {
+		t.Fatalf("status line agent = %q, want %q", got, claudeCode)
+	}
+	if got := statusLineCommand(t, settingsPath); got != harness.StatusLineCommand {
 		t.Fatalf("statusLine command = %q", got)
 	}
 }
@@ -260,8 +106,8 @@ func TestInstallHooksWritesStatusLineOnlyWhenTargeted(t *testing.T) {
 // where nothing else would.
 func TestInstallHooksStatusLineEnablesTheWorktreeConfigExtension(t *testing.T) {
 	root := initGitRepo(t)
-	targets := hookTargets{agent: agentClaudeCode, statusLine: true}
-	if _, err := installHooks(discardCmd(), root, targets, scopeLocal); err != nil {
+	targets := claudeTargets("", true)
+	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks --no-vcs --statusline: %v", err)
 	}
 	out, err := exec.Command("git", "-C", root, "config", "--local", "--get", "extensions.worktreeConfig").Output()
@@ -275,16 +121,16 @@ func TestInstallHooksStatusLineEnablesTheWorktreeConfigExtension(t *testing.T) {
 
 func TestUninstallHooksUndoesTheStatusLine(t *testing.T) {
 	root := initGitRepo(t)
-	targets := hookTargets{vcs: vcsGit, agent: agentClaudeCode, statusLine: true}
-	if _, err := installHooks(discardCmd(), root, targets, scopeLocal); err != nil {
+	targets := claudeTargets(vcsGit, true)
+	if _, err := installHooks(discardCmd(), root, targets, harness.ScopeLocal); err != nil {
 		t.Fatalf("installHooks: %v", err)
 	}
 
-	res, err := uninstallHooks(root, targets, scopeLocal)
+	res, err := uninstallHooks(root, targets, harness.ScopeLocal)
 	if err != nil {
 		t.Fatalf("uninstallHooks: %v", err)
 	}
-	if res.StatusLine == nil || res.StatusLine.Action != hookActionRemoved {
+	if len(res.StatusLine) != 1 || res.StatusLine[0].Action != harness.ActionRemoved {
 		t.Fatalf("status line result = %+v", res.StatusLine)
 	}
 	if got := statusLineCommand(t, filepath.Join(root, ".claude", "settings.local.json")); got != "" {
@@ -297,8 +143,8 @@ func TestReportInstallStatusLineLines(t *testing.T) {
 		action string
 		want   string
 	}{
-		{hookActionInstalled, "status line set to `lode statusline`"},
-		{hookActionKept, "kept the status line already configured"},
+		{harness.ActionInstalled, "status line set to `lode statusline`"},
+		{harness.ActionKept, "kept the status line already configured"},
 		{"weird", `unexpected status line result "weird"`},
 	}
 	for _, tt := range tests {
@@ -307,9 +153,9 @@ func TestReportInstallStatusLineLines(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			cmd.Flags().Bool("json", false, "")
 			cmd.SetOut(&buf)
-			res := installResult{StatusLine: &statusLineInstall{
-				Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
-			}}
+			res := installResult{StatusLine: []statusLineInstall{{
+				Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
+			}}}
 			if err := reportInstall(cmd, res); err != nil {
 				t.Fatal(err)
 			}
@@ -325,9 +171,9 @@ func TestReportUninstallStatusLineLines(t *testing.T) {
 		action string
 		want   string
 	}{
-		{hookActionRemoved, "removed the status line"},
-		{hookActionKept, "left the status line"},
-		{hookActionNone, "no status line"},
+		{harness.ActionRemoved, "removed the status line"},
+		{harness.ActionKept, "left the status line"},
+		{harness.ActionNone, "no status line"},
 		{"weird", `unexpected status line result "weird"`},
 	}
 	for _, tt := range tests {
@@ -336,9 +182,9 @@ func TestReportUninstallStatusLineLines(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			cmd.Flags().Bool("json", false, "")
 			cmd.SetOut(&buf)
-			res := uninstallResult{StatusLine: &statusLineUninstall{
-				Agent: agentClaudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
-			}}
+			res := uninstallResult{StatusLine: []statusLineUninstall{{
+				Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: tt.action,
+			}}}
 			if err := reportUninstall(cmd, res); err != nil {
 				t.Fatal(err)
 			}
@@ -351,7 +197,7 @@ func TestReportUninstallStatusLineLines(t *testing.T) {
 
 func TestReportInstallJSONOmitsSkippedStatusLine(t *testing.T) {
 	var buf bytes.Buffer
-	if err := reportInstall(jsonCmd(&buf), installResult{Agent: &agentInstall{Agent: agentClaudeCode, Path: "p"}}); err != nil {
+	if err := reportInstall(jsonCmd(&buf), installResult{Agents: []agentInstall{{Agent: claudeCode, Path: "p"}}}); err != nil {
 		t.Fatal(err)
 	}
 	var got map[string]any

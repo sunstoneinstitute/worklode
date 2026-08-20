@@ -463,8 +463,8 @@ next day), and one session can span several leases as it moves between
 worktrees.
 
 The reporting agent comes from `LODE_AGENT`, defaulting to `claude-code`.
-Accepted values: `claude-code`, `codex`, `cursor`, `aider`, `opencode`, `pi`,
-`amp`, `other`. Anything else is recorded as `other`, with a warning naming
+Accepted values: `claude-code`, `codex`, `copilot`, `cursor`, `aider`,
+`opencode`, `pi`, `amp`, `other`. Anything else is recorded as `other`, with a warning naming
 the unrecognised value — a hook never fails its triggering event, so rejecting
 the id outright would just lose the session.
 
