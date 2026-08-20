@@ -4,8 +4,6 @@ covers:
   - docs/specs/026-design-doc-queries.md#sec-4.1
   - docs/specs/026-design-doc-queries.md#sec-9
   - docs/specs/026-design-doc-queries.md#sec-10
-requires:
-  - 2026-08-03-spec-shorthand-references.md
 ---
 # Design-doc queries 3/3: the commit-time anchor-permanence gate
 
@@ -16,8 +14,8 @@ requires:
 **Series:** Part 3 of the spec-026 plans. Part 1 (`…-1-corpus-and-list.md`) and
 part 2 (`…-2-consolidated-show.md`) cover the Go side (`internal/designdoc`,
 `lode doc`). This part is pure Python plus one hook entry, shares no code with
-them, and ships independently — the only cross-plan ordering is the
-`requires` above. Task numbers restart at 1 in every part.
+them, and ships independently, with no cross-plan ordering at all. Task
+numbers restart at 1 in every part.
 
 **Goal:** `scripts/secfrozen.py` — a pre-commit gate that refuses a commit
 which deletes or renames a published `{#sec-N}` anchor, breaks a frontmatter
@@ -54,9 +52,12 @@ grammar from `secfmt.py`, the way `secindex.py` already does.
   this plan reuses instead of extracting a module
 - `.pre-commit-config.yaml` — how `section-numbers` is wired; the new entry
   sits beside it with the opposite failure mode
-- `docs/plans/2026-08-03-spec-shorthand-references.md` — this plan consumes
-  its `parse_shorthand`/`read_project_key` (its task 4), hence the
-  `requires` edge
+- `docs/plans/2026-08-03-spec-shorthand-references.md` — this plan was
+  written to consume its `parse_shorthand`/`read_project_key` (its task 4).
+  It shipped without them instead: `secfrozen.py` implements no shorthand
+  grammar, and an edge value it cannot resolve to a path is reported
+  `unresolved` with the exit code unaffected (026 §4.2). The dependency is
+  moot and the `requires` edge is gone
 - `docs/authoring-design-docs.md` — the frontmatter shapes (`amends` maps,
   subject keys, reference forms) the extractor must parse
 
