@@ -75,3 +75,100 @@ func eventIDs(evs []Event) []int64 {
 	}
 	return out
 }
+
+func TestPollCandidates(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := s.AddRepo(ctx, "demo", "acme/app"); err != nil {
+		t.Fatalf("map repo: %v", err)
+	}
+
+	// Seed through RecordEvent: Transition logs to state_log, whose event_id
+	// is a NOT NULL FK to events (0001_baseline.up.sql:177), so it needs a
+	// real event id.
+	var inReview, merged string
+	if _, _, err := s.RecordEvent(ctx, "cli", "seed-"+t.Name(), "test.seed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			now := s.Now()
+			t1, err := CreateTask(tx, now, TaskInput{ProjectID: "demo", Title: "a", Priority: "medium", Kind: "bug"}, eventID)
+			if err != nil {
+				return err
+			}
+			inReview = t1.ID
+			t2, err := CreateTask(tx, now, TaskInput{ProjectID: "demo", Title: "b", Priority: "medium", Kind: "bug"}, eventID)
+			if err != nil {
+				return err
+			}
+			merged = t2.ID
+			// t1: in_review with an open PR. t2: only a task commit, ready.
+			if err := Transition(tx, now, inReview, "ready", "in_progress", eventID); err != nil {
+				return err
+			}
+			if err := Transition(tx, now, inReview, "in_progress", "in_review", eventID); err != nil {
+				return err
+			}
+			if _, err := UpsertPR(tx, PullRequest{
+				Repo: "acme/app", Number: 12, Title: "fix", State: "open",
+				HeadRef: inReview + "-fix",
+				HeadSHA: "1111111111111111111111111111111111111111",
+				URL:     "u", OpenedAt: now,
+			}, ""); err != nil {
+				return err
+			}
+			return InsertTaskCommit(tx, TaskCommit{
+				TaskID: merged, Repo: "acme/app",
+				SHA: "5555555555555555555555555555555555555555", Source: "pr", SeenAt: now,
+			})
+		}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	all, err := s.PollCandidates(ctx, "", "", nil)
+	if err != nil {
+		t.Fatalf("candidates: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("candidates = %+v; want both tasks", all)
+	}
+
+	one, err := s.PollCandidates(ctx, "", inReview, nil)
+	if err != nil {
+		t.Fatalf("task-bounded: %v", err)
+	}
+	if len(one) != 1 || one[0].TaskID != inReview || one[0].Repo != "acme/app" {
+		t.Fatalf("task-bounded = %+v; want only %s", one, inReview)
+	}
+
+	none, err := s.PollCandidates(ctx, "other/repo", "", nil)
+	if err != nil {
+		t.Fatalf("repo-bounded: %v", err)
+	}
+	if len(none) != 0 {
+		t.Fatalf("repo-bounded = %+v; want none", none)
+	}
+
+	unlanded, err := s.UnlandedTaskCommits(ctx, merged, "acme/app")
+	if err != nil {
+		t.Fatalf("unlanded: %v", err)
+	}
+	if len(unlanded) != 1 || unlanded[0] != "5555555555555555555555555555555555555555" {
+		t.Fatalf("unlanded = %v; want the seeded sha", unlanded)
+	}
+	// Once the sha is on main, it is no longer unlanded.
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		_, err := AppendMainCommit(tx, "acme/app", "5555555555555555555555555555555555555555", s.Now())
+		return err
+	}); err != nil {
+		t.Fatalf("append main commit: %v", err)
+	}
+	unlanded, err = s.UnlandedTaskCommits(ctx, merged, "acme/app")
+	if err != nil {
+		t.Fatalf("unlanded after landing: %v", err)
+	}
+	if len(unlanded) != 0 {
+		t.Fatalf("unlanded after landing = %v; want none", unlanded)
+	}
+}
