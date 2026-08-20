@@ -1,6 +1,10 @@
 package harness
 
-import "testing"
+import (
+	"path/filepath"
+	"reflect"
+	"testing"
+)
 
 func TestRegistryKnowsClaudeCode(t *testing.T) {
 	h, ok := Get("claude-code")
@@ -11,9 +15,30 @@ func TestRegistryKnowsClaudeCode(t *testing.T) {
 		t.Fatal("opencode has no v1 adapter and must not be registered")
 	}
 	ids := IDs()
-	for i := 1; i < len(ids); i++ {
-		if ids[i-1] >= ids[i] {
-			t.Fatalf("IDs() not sorted: %v", ids)
+	want := []string{"amp", "claude-code", "codex", "copilot"}
+	if !reflect.DeepEqual(ids, want) {
+		t.Fatalf("IDs() = %v, want %v (sorted, one per v1 adapter)", ids, want)
+	}
+}
+
+// Every registered adapter reports its unbindable events rather than
+// pretending to full coverage: Unbound must match missingEvents exactly.
+func TestUnboundMatchesEventTable(t *testing.T) {
+	// Every adapter's config location is redirected: this test installs, and
+	// must never reach the developer's own harness config.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("COPILOT_HOME", t.TempDir())
+	t.Setenv("AMP_SETTINGS_FILE", filepath.Join(t.TempDir(), "settings.json"))
+	for _, id := range IDs() {
+		h, _ := Get(id)
+		hi, err := h.InstallHooks(t.TempDir(), ScopeLocal)
+		if err != nil {
+			// claude-code needs a git repo; its own tests cover it.
+			continue
+		}
+		if want := missingEvents(h); !reflect.DeepEqual(hi.Unbound, want) {
+			t.Errorf("%s Unbound = %v, want %v", id, hi.Unbound, want)
 		}
 	}
 }
