@@ -270,14 +270,14 @@ type server struct {
 	navigations *prometheus.CounterVec
 
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
-	// deliverable, crew_add) and outcome; see webform.go and
+	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
 	// observeFormSubmission.
 	// These are the only web routes that write, so this is where a rejected
 	// or refused cockpit write becomes visible.
 	formSubmissions *prometheus.CounterVec
 
 	// crewChanges counts Crew membership changes, by surface (api, web),
-	// action (add), and outcome; see crew.go and observeCrewChange. Labels
+	// action (add, remove), and outcome; see crew.go and observeCrewChange. Labels
 	// are bounded on purpose: a project id, an actor id or a role label
 	// would each be unbounded cardinality, and none of the three belongs in
 	// a metric.
@@ -416,6 +416,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// honest placeholder.
 	r.web("GET /projects/{id}/crew", s.navWrap("crew", s.crewPage))
 	r.web("POST /projects/{id}/crew", s.navWrap("crew", s.addCrewMemberFromForm))
+	r.web("POST /projects/{id}/crew/remove", s.navWrap("crew", s.removeCrewMemberFromForm))
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
@@ -549,6 +550,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
 	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
+	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
 	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
 	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)

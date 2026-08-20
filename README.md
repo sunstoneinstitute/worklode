@@ -68,7 +68,11 @@ A project's Crew is who is working on it and what they do there: `lode
 project crew add <project> <actor>` adds one role-labelled member. The role
 is a free-form label and defaults to `member`; one actor may hold several,
 and `--lead` names the one accountable human (a project has at most one).
-The same roster is on the project's Crew page in the web cockpit.
+`lode project crew remove <project> <actor>` takes a member off again,
+dropping every role they hold at once — a member who still owns open work on
+the project is refused with each item named, and the lead cannot be removed
+while lead handoff is unimplemented. The same roster, with the same
+affordances, is on the project's Crew page in the web cockpit.
 
 Managing projects, actors, and tokens requires an admin actor; the
 bootstrap actor is admin, and `lode actor add --admin` creates more.

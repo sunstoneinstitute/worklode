@@ -26,15 +26,15 @@ func seedCrewActors(t *testing.T, st *store.Store, ids ...string) {
 	}
 }
 
-// crewEvents polls for the recorded crew.member_added events, newest last,
-// until at least want of them are readable. ListEvents is bounded by the
-// cluster-wide commit horizon (see pollEvents in events_test.go), so a
+// crewEventsOfType polls for the recorded crew events of one type, newest
+// last, until at least want of them are readable. ListEvents is bounded by
+// the cluster-wide commit horizon (see pollEvents in events_test.go), so a
 // freshly committed event can take a moment to become visible.
-func crewEvents(t *testing.T, st *store.Store, want int) []store.Event {
+func crewEventsOfType(t *testing.T, st *store.Store, typ string, want int) []store.Event {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		events, err := st.ListEvents(context.Background(), store.EventFilter{Type: "crew.member_added"})
+		events, err := st.ListEvents(context.Background(), store.EventFilter{Type: typ})
 		if err != nil {
 			t.Fatalf("list crew events: %v", err)
 		}
@@ -42,12 +42,28 @@ func crewEvents(t *testing.T, st *store.Store, want int) []store.Event {
 			return events
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("crew.member_added events = %d after polling, want %d "+
+			t.Fatalf("%s events = %d after polling, want %d "+
 				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
-				len(events), want)
+				typ, len(events), want)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// crewEvents polls for crew.member_added events.
+func crewEvents(t *testing.T, st *store.Store, want int) []store.Event {
+	t.Helper()
+	return crewEventsOfType(t, st, "crew.member_added", want)
+}
+
+// crewPayload is the shape spec 029 §8.4's subscribers read off both
+// crew.member_added and crew.member_removed.
+type crewPayload struct {
+	Project string   `json:"project"`
+	Actor   string   `json:"actor"`
+	Roles   []string `json:"roles"`
+	Lead    bool     `json:"lead"`
+	By      string   `json:"by"`
 }
 
 // TestAddCrewMemberAPI covers POST /api/v1/projects/{id}/participants: the
@@ -115,13 +131,7 @@ func TestAddCrewMemberAPI(t *testing.T) {
 	if last.Source != "cli" {
 		t.Errorf("event source = %q, want cli", last.Source)
 	}
-	var payload struct {
-		Project string   `json:"project"`
-		Actor   string   `json:"actor"`
-		Roles   []string `json:"roles"`
-		Lead    bool     `json:"lead"`
-		By      string   `json:"by"`
-	}
+	var payload crewPayload
 	if err := json.Unmarshal(last.Payload, &payload); err != nil {
 		t.Fatalf("decode payload %s: %v", last.Payload, err)
 	}
@@ -308,5 +318,265 @@ func TestAddCrewMemberFormCrossOrigin(t *testing.T) {
 	}
 	if len(crew) != 0 {
 		t.Fatalf("crew = %+v, want nothing written", crew)
+	}
+}
+
+// seedCrewTask creates one task in the project and assigns it to actor,
+// through the public API, so the removal guard has real open work to find.
+func seedCrewTask(t *testing.T, h http.Handler, token, project, actor, title string) string {
+	t.Helper()
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": project, "title": title, "body": "b",
+		"priority": "medium", "kind": "feature",
+	})
+	id, _ := task["id"].(string)
+	if id == "" {
+		t.Fatalf("created task has no id: %v", task)
+	}
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/assign", token,
+		map[string]any{"assignee": actor}); rr.Code != http.StatusOK {
+		t.Fatalf("assign %s to %s: status %d, body %s", id, actor, rr.Code, rr.Body.String())
+	}
+	return id
+}
+
+// TestRemoveCrewMemberAPI covers DELETE
+// /api/v1/projects/{id}/participants/{actor} in the order spec 029 §6.1's
+// rules fire: open work refuses with the items named, the lead is never
+// removable, and a clean removal drops every role the member held.
+func TestRemoveCrewMemberAPI(t *testing.T) {
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada", "bob")
+
+	for _, body := range []map[string]any{
+		{"actor": "ada", "role": "editor", "lead": true},
+		{"actor": "bob", "role": "reporter"},
+		{"actor": "bob", "role": "data-scientist"},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
+			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
+		}
+	}
+	taskID := seedCrewTask(t, h, token, "proj", "bob", "bob's open task")
+
+	// Open work refuses the removal, and the message carries the
+	// responsibility list the caller has to act on.
+	rr := doReq(t, h, "DELETE", "/api/v1/projects/proj/participants/bob", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("blocked removal status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), taskID+" (task, ready)") {
+		t.Fatalf("body = %s, want it to list %s (task, ready)", rr.Body.String(), taskID)
+	}
+
+	// The lead is never removable while lead handoff is unimplemented.
+	rr = doReq(t, h, "DELETE", "/api/v1/projects/proj/participants/ada", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("lead removal status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "lead handoff is not implemented") {
+		t.Fatalf("body = %s, want it to say why the lead cannot go", rr.Body.String())
+	}
+
+	// An actor who is not on the Crew at all.
+	rr = doReq(t, h, "DELETE", "/api/v1/projects/proj/participants/nosuch", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown member status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+
+	// With the work unassigned, the removal succeeds and takes both roles.
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+taskID+"/unassign", token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("unassign status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "DELETE", "/api/v1/projects/proj/participants/bob", token, nil)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("removal status = %d, want 204; body %s", rr.Code, rr.Body.String())
+	}
+	if rr.Body.Len() != 0 {
+		t.Errorf("204 carried a body: %s", rr.Body.String())
+	}
+	crew, err := st.ListParticipants(context.Background(), "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 || crew[0].ActorID != "ada" {
+		t.Fatalf("crew = %+v, want only ada", crew)
+	}
+
+	// The removal is one crew.member_removed event from the "cli" surface,
+	// naming the roles it removed — the fact a subscriber cannot recover
+	// once the rows are gone.
+	events := crewEventsOfType(t, st, "crew.member_removed", 1)
+	if len(events) != 1 {
+		t.Fatalf("crew.member_removed events = %d, want 1", len(events))
+	}
+	if events[0].Source != "cli" {
+		t.Errorf("event source = %q, want cli", events[0].Source)
+	}
+	var payload crewPayload
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("decode payload %s: %v", events[0].Payload, err)
+	}
+	if payload.Project != "proj" || payload.Actor != "bob" || payload.By != "alice" || payload.Lead {
+		t.Fatalf("payload = %+v, want project proj, actor bob, by alice, not lead", payload)
+	}
+	if strings.Join(payload.Roles, ",") != "data-scientist,reporter" {
+		t.Fatalf("payload roles = %v, want both roles that were removed", payload.Roles)
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="ok",surface="api"} 1`) {
+		t.Errorf("metrics missing the api remove counter:\n%s", metrics)
+	}
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="rejected",surface="api"} 3`) {
+		t.Errorf("metrics missing the api remove rejections:\n%s", metrics)
+	}
+	// Pre-initialised, so an instance where nobody has removed anyone reads
+	// as a flat zero rather than as no-data.
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="error",surface="web"} 0`) {
+		t.Errorf("the remove action is not pre-initialised to zero:\n%s", metrics)
+	}
+}
+
+// TestRemoveCrewMemberForm covers the roster page's per-row Remove button:
+// the button is there for every member but the lead, a good submit 303s back
+// to the roster, and the write is the same one the API makes, recorded from
+// the "web" surface.
+func TestRemoveCrewMemberForm(t *testing.T) {
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada", "bob")
+	for _, body := range []map[string]any{
+		{"actor": "ada", "role": "editor", "lead": true},
+		{"actor": "bob", "role": "reporter"},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
+			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
+		}
+	}
+
+	// The roster offers Remove for bob and not for the lead: exactly one
+	// hidden actor field, naming bob.
+	page := doReq(t, h, "GET", "/projects/proj/crew", "", nil).Body.String()
+	bodyContains(t, page, `action="/projects/proj/crew/remove"`, `value="bob"`, "Remove")
+	if strings.Contains(page, `<input type="hidden" name="actor" value="ada"/>`) {
+		t.Errorf("the lead was offered a Remove button:\n%s", page)
+	}
+
+	rr := doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"bob"}}, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != "/projects/proj/crew" {
+		t.Fatalf("Location = %q, want /projects/proj/crew", loc)
+	}
+	crew, err := st.ListParticipants(context.Background(), "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 || crew[0].ActorID != "ada" {
+		t.Fatalf("crew = %+v, want only ada", crew)
+	}
+
+	events := crewEventsOfType(t, st, "crew.member_removed", 1)
+	if events[0].Source != "web" {
+		t.Errorf("event source = %q, want web", events[0].Source)
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="ok",surface="web"} 1`) {
+		t.Errorf("metrics missing the web remove counter:\n%s", metrics)
+	}
+	if !strings.Contains(metrics, `worklode_web_form_submissions_total{form="crew_remove",outcome="created"} 1`) {
+		t.Errorf("metrics missing the crew_remove form counter:\n%s", metrics)
+	}
+}
+
+// TestRemoveCrewMemberFormBlocked is the responsibility review (spec 032 §6)
+// in its minimal honest form: a removal refused because the member still
+// owns open work comes back as the roster with that work listed and linked,
+// so the person can go and reassign or close it.
+func TestRemoveCrewMemberFormBlocked(t *testing.T) {
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada", "bob")
+	for _, body := range []map[string]any{
+		{"actor": "ada", "role": "editor", "lead": true},
+		{"actor": "bob", "role": "reporter"},
+	} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
+			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
+		}
+	}
+	taskID := seedCrewTask(t, h, token, "proj", "bob", "still bob's problem")
+
+	rr := doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"bob"}}, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	// The message names the member the way the roster does, the roster is
+	// still rendered around it, and every blocking item is there with a link
+	// to the task.
+	bodyContains(t, body,
+		"Bob Person still owns open work",
+		`<a href="/tasks/`+taskID+`">`+taskID+`</a>`,
+		"still bob&#39;s problem",
+		"(task, ready)",
+		"Ada Person")
+
+	// Nothing was written.
+	crew, err := st.ListParticipants(context.Background(), "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 2 {
+		t.Fatalf("crew = %+v, want both members still on it", crew)
+	}
+
+	// The lead's refusal has no responsibility list to show, so it comes
+	// back as the store's own sentence.
+	rr = doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"ada"}}, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("lead status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "lead handoff is not implemented")
+
+	// An actor who is not on the Crew.
+	rr = doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"nosuch"}}, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "not on this project&#39;s Crew")
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="remove",outcome="rejected",surface="web"} 3`) {
+		t.Errorf("metrics missing the web remove rejections:\n%s", metrics)
+	}
+}
+
+// TestRemoveCrewMemberFormCrossOrigin checks the removal route is same-origin
+// only, like every other cockpit form.
+func TestRemoveCrewMemberFormCrossOrigin(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada")
+	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token,
+		map[string]any{"actor": "ada"}); rr.Code != http.StatusCreated {
+		t.Fatalf("seed add status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr := doForm(t, h, "/projects/proj/crew/remove", url.Values{"actor": {"ada"}},
+		map[string]string{"Sec-Fetch-Site": "cross-site"})
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body %s", rr.Code, rr.Body.String())
+	}
+	crew, err := st.ListParticipants(context.Background(), "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 {
+		t.Fatalf("crew = %+v, want the member untouched", crew)
 	}
 }

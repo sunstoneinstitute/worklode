@@ -10,10 +10,17 @@ package ui
 // badge on the one accountable human (032 §6). An empty roster states that
 // honestly instead of showing a fabricated record.
 //
-// The add-member form below the roster is a plain server-rendered
-// <form method="post"> like the cockpit's other write affordances: no client
-// state, keyboard-usable, and a rejected submit re-renders the page with the
-// message and everything that was typed still in the fields.
+// The add-member form below the roster, and the per-row Remove button, are
+// plain server-rendered <form method="post"> affordances like the cockpit's
+// other writes: no client state, keyboard-usable, and a rejected submit
+// re-renders the page with the message and everything that was typed still
+// in the fields. The lead has no Remove button — lead handoff is not
+// implemented, so offering one would promise something the store refuses.
+//
+// A removal refused because the member still owns open work re-renders with
+// that work listed and linked: spec 032 §6's responsibility review in its
+// minimal honest form — the page names what has to be reassigned or closed
+// rather than reporting a bare refusal.
 
 import "strings"
 
@@ -27,6 +34,14 @@ templ Crew(v CrewView) {
 						<h3>Crew</h3>
 					</div>
 					<div class="bd">
+						<div aria-live="polite">
+							if v.RemoveError != "" {
+								<p class="formerr" role="alert">{ v.RemoveError }</p>
+								if len(v.Responsibilities) > 0 {
+									@crewResponsibilities(v.Responsibilities)
+								}
+							}
+						</div>
 						if len(v.Members) == 0 {
 							<p class="muted">
 								No Crew yet. Crew is the time-limited group of people
@@ -35,7 +50,7 @@ templ Crew(v CrewView) {
 						} else {
 							<div class="dod">
 								for _, m := range v.Members {
-									@crewRow(m)
+									@crewRow(m, v.RemoveAction)
 								}
 							</div>
 						}
@@ -84,10 +99,29 @@ templ crewAddForm(v CrewView) {
 	</section>
 }
 
+// crewResponsibilities lists the open work a member still owns, each item
+// linked to the task it names, so the person refusing to lose the work can
+// go and reassign or close it. The store's removal guard reads the same
+// query, so this list is exactly what is blocking the removal.
+templ crewResponsibilities(items []CrewWorkItem) {
+	<ul class="resp">
+		for _, it := range items {
+			<li>
+				<a href={ "/tasks/" + it.ID }>{ it.ID }</a>
+				{ " " }
+				{ it.Title }
+				{ " " }
+				<span class="def">({ it.Kind }, { it.State })</span>
+			</li>
+		}
+	</ul>
+}
+
 // crewRow renders one Crew member. The Lead badge is the only member marked
 // current: 032 §6 requires exactly one project lead be visually distinct as
-// the accountable human.
-templ crewRow(m CrewMember) {
+// the accountable human. Every other member carries a Remove button; the
+// lead does not, because lead handoff is not implemented.
+templ crewRow(m CrewMember, removeAction string) {
 	<div class="dodrow">
 		<div>
 			<div class="name">
@@ -107,6 +141,11 @@ templ crewRow(m CrewMember) {
 		<div class="st">
 			if m.IsLead {
 				<span class="chip lead"><span class="cd" aria-hidden="true"></span>Lead</span>
+			} else if removeAction != "" {
+				<form class="rowform" method="post" action={ removeAction }>
+					<input type="hidden" name="actor" value={ m.ActorID }/>
+					<button type="submit" class="btn">Remove</button>
+				</form>
 			}
 		</div>
 	</div>

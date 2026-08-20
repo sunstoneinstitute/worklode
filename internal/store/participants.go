@@ -285,3 +285,98 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 		"actor": actorID, "role": role, "lead": isLead, "by": addedBy,
 	})
 }
+
+// RemoveParticipant removes actorID from projectID's Crew — every role row
+// the member holds, in one act — inside the given ingest transaction.
+// Callers reach it through RecordEvent with event type
+// "crew.member_removed" (spec 029 §8.4), never directly, so the membership
+// fact and the event that records it commit together.
+//
+// Removal is member-level on purpose: dropping a single role label is out of
+// scope (remove, then re-add with the labels that still apply), because a
+// per-role removal has no distinct meaning in spec 029 §6.1 and would need
+// its own event type to stay honest.
+//
+// The rules fire in this order, and the order is part of the contract: an
+// actor who holds no row is ErrNotFound; the project lead cannot be removed
+// while lead handoff is unimplemented (ErrInvalidInput); a member who still
+// owns open work is refused with every item named, so the caller's message
+// carries the responsibility list (spec 029 §6.1, spec 032 §6). removedBy is
+// recorded in the change log only — it is not a stored column, so an empty
+// one on an open instance is simply an empty attribution, not a fabricated
+// actor. now is unused: a removal deletes rows rather than stamping one, and
+// the parameter is kept so both halves of the Crew mutation pair share one
+// shape at every call site.
+func RemoveParticipant(tx *sql.Tx, now time.Time, projectID, actorID, removedBy string, eventID int64) error {
+	// The signature carries no context, matching AddParticipant and
+	// AssignTask; the transaction was already opened against the caller's
+	// context by RecordEvent, so cancellation still reaches these queries.
+	ctx := context.Background()
+
+	// Lock the member's rows first: the guards below decide whether the
+	// delete may happen, and a concurrent add of a second role (or of the
+	// lead flag) between the check and the delete would otherwise slip past
+	// them.
+	rows, err := tx.QueryContext(ctx,
+		`SELECT role, is_lead FROM project_participants
+		  WHERE project_id = $1 AND actor_id = $2
+		  ORDER BY role
+		    FOR UPDATE`,
+		projectID, actorID)
+	if err != nil {
+		return fmt.Errorf("read crew rows for %s in project %s: %w", actorID, projectID, err)
+	}
+	var roles []string
+	var isLead bool
+	for rows.Next() {
+		var role string
+		var lead bool
+		if err := rows.Scan(&role, &lead); err != nil {
+			rows.Close()
+			return fmt.Errorf("read crew rows for %s in project %s: %w", actorID, projectID, err)
+		}
+		roles = append(roles, role)
+		if lead {
+			isLead = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("read crew rows for %s in project %s: %w", actorID, projectID, err)
+	}
+	rows.Close()
+
+	if len(roles) == 0 {
+		return fmt.Errorf("actor %s is not on project %s's crew: %w", actorID, projectID, ErrNotFound)
+	}
+	if isLead {
+		return fmt.Errorf("project lead cannot be removed; lead handoff is not implemented: %w", ErrInvalidInput)
+	}
+
+	// The same query the responsibility listing reads (spec 032 §6), run on
+	// this transaction so the guard and the listing can never disagree.
+	open, err := openWorkOwnedBy(ctx, tx, projectID, actorID)
+	if err != nil {
+		return err
+	}
+	if len(open) > 0 {
+		items := make([]string, len(open))
+		for i, w := range open {
+			items[i] = fmt.Sprintf("%s (%s, %s)", w.ID, w.Kind, w.State)
+		}
+		return fmt.Errorf("actor %s still owns open work on project %s: %s: %w",
+			actorID, projectID, strings.Join(items, ", "), ErrInvalidInput)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM project_participants WHERE project_id = $1 AND actor_id = $2`,
+		projectID, actorID,
+	); err != nil {
+		return fmt.Errorf("remove participant %s from project %s: %w", actorID, projectID, err)
+	}
+
+	return LogChange(tx, "project", projectID, eventID, map[string]any{
+		"field": "crew", "op": "remove",
+		"actor": actorID, "roles": roles, "lead": isLead, "by": removedBy,
+	})
+}

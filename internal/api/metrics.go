@@ -45,7 +45,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"action"})
 	s.crewChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_crew_changes_total",
-		Help: "Project Crew membership changes, by surface (api, web), action (add), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
+		Help: "Project Crew membership changes, by surface (api, web), action (add, remove), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
 	}, []string{"surface", "action", "outcome"})
 	s.cockpitProjections = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_cockpit_projection_requests_total",
@@ -61,7 +61,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"permission", "outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
-		Help: "Web UI creation-form submissions, by form (task, deliverable, crew_add) and outcome (created, invalid, forbidden, not_found, error).",
+		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
 	}, []string{"form", "outcome"})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
@@ -196,11 +196,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		}
 	}
 	for _, surface := range []string{"api", "web"} {
-		for _, outcome := range crewChangeOutcomes {
-			s.crewChanges.WithLabelValues(surface, "add", outcome)
+		for _, action := range crewChangeActions {
+			for _, outcome := range crewChangeOutcomes {
+				s.crewChanges.WithLabelValues(surface, action, outcome)
+			}
 		}
 	}
-	for _, form := range []string{"task", "deliverable", "crew_add"} {
+	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove"} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
@@ -336,15 +338,20 @@ func (s *server) observeAssignment(action string) {
 	s.assignments.WithLabelValues(action).Inc()
 }
 
+// crewChangeActions are every action label worklode_crew_changes_total
+// carries: the two membership mutations spec 029 §6.1 defines.
+var crewChangeActions = []string{"add", "remove"}
+
 // crewChangeOutcomes are every outcome label worklode_crew_changes_total
 // carries, pre-initialised so an instance where nobody has changed a Crew
 // reads as a flat zero rather than as no-data.
 var crewChangeOutcomes = []string{"ok", "rejected", "error"}
 
 // crewOutcome classifies a Crew change error for the
-// worklode_crew_changes_total outcome label. A refused add — an unknown
-// actor, a role already held, a second lead — is "rejected": it is the
-// caller's input, not a fault.
+// worklode_crew_changes_total outcome label. A refused change — an unknown
+// actor, a role already held, a second lead, a member who still owns open
+// work, the lead — is "rejected": it is the caller's input or the project's
+// state, not a fault.
 func crewOutcome(err error) string {
 	if err == nil {
 		return "ok"

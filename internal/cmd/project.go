@@ -122,13 +122,13 @@ func newProjectAddRepoCmd() *cobra.Command {
 
 // newProjectCrewCmd groups the Crew subcommands: who is on a project and
 // what they do on it (spec 029 §6.1). Listing the Crew arrives with the read
-// endpoint; adding is here.
+// endpoint; adding and removing are here.
 func newProjectCrewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "crew",
 		Short: "Manage a project's Crew",
 	}
-	cmd.AddCommand(newProjectCrewAddCmd())
+	cmd.AddCommand(newProjectCrewAddCmd(), newProjectCrewRemoveCmd())
 	return cmd
 }
 
@@ -167,6 +167,36 @@ func newProjectCrewAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&role, "role", "", "role label for this member (default: member)")
 	cmd.Flags().BoolVar(&lead, "lead", false, "make this member the project lead")
 	return cmd
+}
+
+// newProjectCrewRemoveCmd removes a member outright: every role they hold on
+// the project, in one act. Dropping one label of several is remove then
+// re-add, which is why there is no --role flag here.
+func newProjectCrewRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <project> <actor>",
+		Short: "Remove an actor from a project's Crew",
+		Long: "Remove an actor from a project's Crew, dropping every role they hold\n" +
+			"on the project at once.\n\n" +
+			"A member who still owns open work on the project cannot be removed: the\n" +
+			"refusal names each item, which has to be reassigned or closed first. The\n" +
+			"project lead cannot be removed at all while lead handoff is unimplemented.",
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			// The server's message carries the responsibility list verbatim;
+			// returning it unwrapped is what puts that list in front of the
+			// person who has to act on it.
+			if err := c.RemoveCrewMember(cmd.Context(), args[0], args[1]); err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "removed %s from project %s\n", args[1], args[0])
+			return nil
+		},
+	}
 }
 
 func newProjectSetRepoCmd() *cobra.Command {

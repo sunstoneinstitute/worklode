@@ -442,3 +442,75 @@ func TestProjectCrewAdd(t *testing.T) {
 		t.Fatalf("crew = %+v, want 2 members", crew)
 	}
 }
+
+// TestProjectCrewRemove covers `lode project crew remove` end to end: the
+// open-work guard's item list reaches the terminal verbatim, the lead cannot
+// be removed, and a clean removal drops every role the member held.
+func TestProjectCrewRemove(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	for _, id := range []string{"ada", "bob"} {
+		if err := st.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "ada", "--role", "editor", "--lead"); err != nil {
+		t.Fatalf("seed lead: %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
+		t.Fatalf("seed member: %v\noutput: %s", err, out)
+	}
+
+	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{
+		Project: "proj", Title: "bob's open task", Body: "b",
+		Priority: "medium", Kind: "feature",
+	})
+	if err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if _, _, err := c.AssignTask(ctx, task.ID, "bob"); err != nil {
+		t.Fatalf("assign task: %v", err)
+	}
+
+	// The guard's item list is what the person has to act on, so it reaches
+	// the terminal exactly as the server wrote it.
+	out, err := runLode(t, "project", "crew", "remove", "proj", "bob")
+	if err == nil {
+		t.Fatalf("open work: want an error, got nil\noutput: %s", out)
+	}
+	if !strings.Contains(err.Error(), task.ID+" (task, ready)") {
+		t.Fatalf("error = %v, want it to name %s (task, ready)", err, task.ID)
+	}
+
+	// The lead cannot go while handoff is unimplemented.
+	if out, err := runLode(t, "project", "crew", "remove", "proj", "ada"); err == nil {
+		t.Fatalf("lead removal: want an error, got nil\noutput: %s", out)
+	} else if !strings.Contains(err.Error(), "lead handoff is not implemented") {
+		t.Fatalf("lead removal error = %v, want it to say why", err)
+	}
+
+	if _, _, err := c.UnassignTask(ctx, task.ID); err != nil {
+		t.Fatalf("unassign task: %v", err)
+	}
+	out, err = runLode(t, "project", "crew", "remove", "proj", "bob")
+	if err != nil {
+		t.Fatalf("crew remove: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "removed bob from project proj") {
+		t.Fatalf("output = %q, want it to name the member and the project", out)
+	}
+
+	crew, err := st.ListParticipants(ctx, "proj")
+	if err != nil {
+		t.Fatalf("list participants: %v", err)
+	}
+	if len(crew) != 1 || crew[0].ActorID != "ada" {
+		t.Fatalf("crew = %+v, want only ada", crew)
+	}
+
+	// Removing them again is an error, not a silent success.
+	if out, err := runLode(t, "project", "crew", "remove", "proj", "bob"); err == nil {
+		t.Fatalf("second removal: want an error, got nil\noutput: %s", out)
+	}
+}

@@ -287,6 +287,27 @@ type CrewView struct {
 	AddAction string
 	Add       CrewFormValues
 	AddError  string
+
+	// RemoveAction is where each non-lead member's Remove button POSTs; the
+	// member is named in a hidden field. RemoveError is the one message a
+	// refused removal shows ("" otherwise), RemoveActor names the member it
+	// is about, and Responsibilities is that member's open work — spec 032
+	// §6's responsibility review: what has to be reassigned or closed before
+	// the removal can proceed (spec 029 §6.1).
+	RemoveAction     string
+	RemoveActor      string
+	RemoveError      string
+	Responsibilities []CrewWorkItem
+}
+
+// CrewWorkItem is one open item a Crew member owns, shown when their
+// removal is refused. Kind is "task" today (internal/store's OwnedWork);
+// approvals and decisions join it when their tables exist.
+type CrewWorkItem struct {
+	Kind  string
+	ID    string
+	Title string
+	State string
 }
 
 // CrewFormValues are the add-member form's fields as submitted. Role is a

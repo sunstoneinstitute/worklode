@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -303,5 +304,113 @@ func TestAddParticipant(t *testing.T) {
 	// existing "editor" row rather than creating a second one.
 	if err := add("ada", "  editor  ", false); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("untrimmed duplicate role: got %v", err)
+	}
+}
+
+// removeParticipant drives RemoveParticipant the way production does:
+// inside a RecordEvent transaction under the "crew.member_removed" event
+// type (spec 029 §8.4).
+func removeParticipant(t *testing.T, s *Store, projectID, actor, by string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "crew.member_removed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return RemoveParticipant(tx, s.Now(), projectID, actor, by, eventID)
+		})
+	return err
+}
+
+// TestRemoveParticipantGuard covers spec 029 §6.1's removal guard in the
+// order the rules fire: an unknown member, the lead, open work owned by the
+// member, and the removal itself clearing every role row at once.
+func TestRemoveParticipantGuard(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "RP1"); err != nil {
+		t.Fatalf("CreateProject p1: %v", err)
+	}
+	for _, id := range []string{"ada", "bob"} {
+		if err := s.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("CreateActor %s: %v", id, err)
+		}
+	}
+	if err := addParticipant(t, s, "p1", "ada", "editor", true, "ada"); err != nil {
+		t.Fatal(err)
+	}
+	for _, role := range []string{"reporter", "data-scientist"} {
+		if err := addParticipant(t, s, "p1", "bob", role, false, "ada"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "p1", Title: "open, assigned to bob", Body: "b",
+		Priority: "medium", Kind: "feature", CreatedBy: "ada",
+	})
+	if err := assignTask(t, s, taskTestNow, task.ID, "bob"); err != nil {
+		t.Fatalf("assign task to bob: %v", err)
+	}
+
+	remove := func(actor string) error { return removeParticipant(t, s, "p1", actor, "ada") }
+
+	// An actor who is not on the crew at all.
+	if err := remove("nosuch"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("removing a non-member: got %v, want ErrNotFound", err)
+	}
+
+	// Open work blocks the removal, and the message names the item so the
+	// caller can render the responsibility list (032 §6).
+	err := remove("bob")
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "task") {
+		t.Fatalf("open work must block removal with the item listed: %v", err)
+	}
+	if !strings.Contains(err.Error(), task.ID+" (task, ready)") {
+		t.Fatalf("message must list the item as <id> (<kind>, <state>): %v", err)
+	}
+
+	// Unassign the task; removal now succeeds and clears every role row.
+	if err := unassignTask(t, s, taskTestNow, task.ID); err != nil {
+		t.Fatalf("unassign task: %v", err)
+	}
+	if err := remove("bob"); err != nil {
+		t.Fatal(err)
+	}
+	crew, err := s.ListParticipants(ctx, "p1")
+	if err != nil {
+		t.Fatalf("ListParticipants: %v", err)
+	}
+	if len(crew) != 1 || crew[0].ActorID != "ada" {
+		t.Fatalf("crew = %+v, want only ada", crew)
+	}
+
+	// Removing the same member twice is ErrNotFound, not a silent no-op.
+	if err := remove("bob"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("second removal: got %v, want ErrNotFound", err)
+	}
+
+	// The lead is never removable while handoff is deferred.
+	if err := remove("ada"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("lead removal: got %v", err)
+	}
+
+	// The removal is in the change log, naming every role row it cleared.
+	var change []byte
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT change FROM state_log
+		  WHERE entity_kind = 'project' AND entity_id = 'p1'
+		    AND change->>'op' = 'remove'
+		  ORDER BY id DESC LIMIT 1`).Scan(&change); err != nil {
+		t.Fatalf("read state_log: %v", err)
+	}
+	var logged struct {
+		Actor string   `json:"actor"`
+		Roles []string `json:"roles"`
+		By    string   `json:"by"`
+	}
+	if err := json.Unmarshal(change, &logged); err != nil {
+		t.Fatalf("decode change %s: %v", change, err)
+	}
+	if logged.Actor != "bob" || logged.By != "ada" ||
+		!slices.Equal(logged.Roles, []string{"data-scientist", "reporter"}) {
+		t.Fatalf("change = %+v, want bob/[data-scientist reporter]/ada", logged)
 	}
 }

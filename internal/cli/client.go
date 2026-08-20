@@ -1183,6 +1183,18 @@ func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string,
 		model.AddCrewMemberInput{Actor: actor, Role: role, Lead: lead}, "crew member")
 }
 
+// RemoveCrewMember calls DELETE /api/v1/projects/{id}/participants/{actor},
+// removing every role that actor holds on the project in one act (spec 029
+// §6.1). The server answers 204 with no body. A removal refused because the
+// member still owns open work comes back as a *ClientError whose message
+// names each item, so the caller can print the responsibility list as the
+// server wrote it.
+func (c *Client) RemoveCrewMember(ctx context.Context, project, actor string) error {
+	_, err := c.do(ctx, http.MethodDelete,
+		"/api/v1/projects/"+url.PathEscape(project)+"/participants/"+url.PathEscape(actor), nil)
+	return err
+}
+
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
 // setting the terminal delivery state for an already-mapped repo.
 func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {
