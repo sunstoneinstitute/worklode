@@ -183,6 +183,11 @@ workflows to documents later stays open.
 
 ### 4.1 Shape
 
+> Pending `046-workflow-rule-engine.md#sec-2.1` (not yet effective)
+
+> **Amended by spec 046.** The object gains a third top-level key, `rules` —
+> the rule engine's ordered rule list (046 §2.1).
+
 `projects.workflows jsonb NULL`. `NULL` means "built-in default only" — the
 column is not backfilled, so existing projects change nothing (§4.3).
 
@@ -216,6 +221,12 @@ column is not backfilled, so existing projects change nothing (§4.3).
 `tasks.workflow text NULL` — the per-task override (§3).
 
 ### 4.2 Validation
+
+> Pending `046-workflow-rule-engine.md#sec-2.2` (not yet effective)
+
+> **Amended by spec 046.** Writes additionally validate the `rules` key
+> (046 §2.2): rule edges must be drawn from the core edges plus the §1.3
+> entry table, so no stored rule can name an edge the vocabulary forbids.
 
 Enforced in the store on every write of `projects.workflows` and
 `tasks.workflow`:
@@ -375,6 +386,12 @@ implementation. Obsidian's `state: string` is already untyped.
   <name>` sets the per-task override.
 
 ### 6.2 Event and review task
+
+> Pending `046-workflow-rule-engine.md#sec-5.4` (not yet effective)
+
+> **Amended by spec 046.** The minted review task also names the rules that
+> were added, removed, or changed — the same PUT carries both workflows and
+> rules (046 §5.4).
 
 Every accepted PUT appends a `project.workflows_set` event carrying the full
 new object and the actor — provenance for "who changed the machine, when,

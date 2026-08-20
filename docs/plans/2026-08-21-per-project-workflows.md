@@ -9,6 +9,8 @@ covers:
 - docs/specs/045-per-project-workflows.md#sec-6
 - docs/specs/045-per-project-workflows.md#sec-8
 - docs/specs/045-per-project-workflows.md#sec-9
+blocks:
+- 2026-08-21-workflow-rule-engine.md
 ---
 # Per-project workflows — implementation plan
 
