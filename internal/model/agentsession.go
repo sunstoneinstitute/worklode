@@ -2,6 +2,44 @@ package model
 
 import "time"
 
+// AgentOther is the agent id for a harness worklode has no dedicated id for.
+const AgentOther = "other"
+
+// KnownAgents is the vocabulary of AgentSession.Agent, mirroring the
+// agent_sessions.agent CHECK constraint (migration 0004). It lives here
+// rather than in internal/store because both ends need it: the store rejects
+// anything outside it, and a client that reports an agent has to know what
+// the server will accept before it sends one.
+var KnownAgents = []string{
+	"claude-code", "codex", "cursor", "aider",
+	"opencode", "pi", "amp", AgentOther,
+}
+
+// knownAgents indexes KnownAgents for lookup.
+var knownAgents = func() map[string]bool {
+	m := make(map[string]bool, len(KnownAgents))
+	for _, a := range KnownAgents {
+		m[a] = true
+	}
+	return m
+}()
+
+// AgentKnown reports whether agent is in KnownAgents.
+func AgentKnown(agent string) bool { return knownAgents[agent] }
+
+// NormalizeAgent maps agent into KnownAgents, folding anything unrecognised
+// onto AgentOther. Clients reporting a hand-configured agent id should pass
+// it through here first: recording an unfamiliar harness as "other" keeps the
+// session, where sending it verbatim gets the whole report rejected and the
+// session is lost. An empty agent stays empty — a caller with nothing to
+// report has a default to apply, not an unknown id to record.
+func NormalizeAgent(agent string) string {
+	if agent == "" || knownAgents[agent] {
+		return agent
+	}
+	return AgentOther
+}
+
 // AgentSession is the wire form of an agent session on a task's lease.
 // LeaseID identifies the lease this session is recorded against, not a
 // leaked surrogate key: (lease_id, agent, session_id) is the session's
