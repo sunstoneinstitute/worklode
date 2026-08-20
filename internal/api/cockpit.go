@@ -241,7 +241,7 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*model.
 		Work:              work,
 		SecondaryConcerns: secondary,
 		Repositories:      toCockpitRepositories(repos),
-		Cost:              toProjectCostJSON(cost),
+		Cost:              toCostReportJSON(cost),
 	}, nil
 }
 
