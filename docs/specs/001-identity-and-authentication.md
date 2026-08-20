@@ -1,6 +1,9 @@
 ---
 status: draft
 issued: 2026-07-31
+replaces:
+  ".":
+    - docs/plans/2026-07-19-keycloak-sso-3-cli-login.md
 ---
 # Spec 001 — Identity & authentication
 
