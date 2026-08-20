@@ -1436,7 +1436,7 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 // three forms, so it falls through to to_external, which is where a
 // `covers: NO-SPEC` declaration belongs.
 //
-// A tombstone releases its slug and corpus number (migration 0033), so a live
+// A tombstone releases its slug and corpus number (migration 0034), so a live
 // and a deleted document may share either. Every arm therefore prefers the live
 // row and only falls back to a tombstoned one when no live row matches: a
 // tombstone must not shadow the document that replaced it, and — in the number
@@ -1518,7 +1518,7 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 }
 
 // docColumns is the SELECT list scanDoc expects, in order. The three
-// tombstone columns (migration 0033) are last so positional scans elsewhere
+// tombstone columns (migration 0034) are last so positional scans elsewhere
 // are unaffected by their addition; they are all-null or all-set together.
 const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 

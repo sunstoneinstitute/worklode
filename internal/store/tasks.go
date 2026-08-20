@@ -389,7 +389,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // DEFAULT '[]'" (see migrations 0007 and 0024), so a bare cast is enough — no
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
 // 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
-// (migration 0033) are last for the same reason, and are all-null or all-set
+// (migration 0034) are last for the same reason, and are all-null or all-set
 // together. prefixedTaskColumns below requires each entry to be comma-free.
 const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification`
 

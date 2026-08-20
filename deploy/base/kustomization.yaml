@@ -78,5 +78,5 @@ configMapGenerator:
       - migrations/0032_blobs.down.sql
       - migrations/0033_agent_harnesses.up.sql
       - migrations/0033_agent_harnesses.down.sql
-      - migrations/0033_soft_delete.up.sql
-      - migrations/0033_soft_delete.down.sql
+      - migrations/0034_soft_delete.up.sql
+      - migrations/0034_soft_delete.down.sql
