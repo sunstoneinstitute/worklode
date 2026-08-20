@@ -221,20 +221,13 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 	if err != nil {
 		return nil, fmt.Errorf("open blockers of %s: %w", taskID, err)
 	}
-	defer rows.Close()
-
-	var out []model.Task
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("open blockers of %s", taskID), func(r rowScanner) (model.Task, error) {
 		var t model.Task
-		if err := rows.Scan(&t.ID, &t.Title, &t.State); err != nil {
-			return nil, fmt.Errorf("scan open blocker: %w", err)
+		if err := r.Scan(&t.ID, &t.Title, &t.State); err != nil {
+			return model.Task{}, err
 		}
-		out = append(out, t)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("open blockers of %s: %w", taskID, err)
-	}
-	return out, nil
+		return t, nil
+	})
 }
 
 // blockingPlans returns the unfinished plans ordered before taskID's own plan
@@ -254,18 +247,11 @@ func (s *Store) blockingPlans(ctx context.Context, taskID string) ([]model.DocRe
 	if err != nil {
 		return nil, fmt.Errorf("blocking plans of %s: %w", taskID, err)
 	}
-	defer rows.Close()
-
-	var out []model.DocRef
-	for rows.Next() {
+	return collectRows(rows, fmt.Sprintf("blocking plans of %s", taskID), func(r rowScanner) (model.DocRef, error) {
 		var ref model.DocRef
-		if err := rows.Scan(&ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
-			return nil, fmt.Errorf("scan blocking plan: %w", err)
+		if err := r.Scan(&ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
+			return model.DocRef{}, err
 		}
-		out = append(out, ref)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("blocking plans of %s: %w", taskID, err)
-	}
-	return out, nil
+		return ref, nil
+	})
 }

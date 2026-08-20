@@ -1,7 +1,9 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -38,23 +40,43 @@ var (
 	ErrRevisionExists = errors.New("revision already open")
 )
 
+// pgViolation reports whether err is a Postgres error with the given
+// SQLSTATE, optionally narrowed to one named constraint (an empty constraint
+// matches any).
+func pgViolation(err error, code, constraint string) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != code {
+		return false
+	}
+	return constraint == "" || pgErr.ConstraintName == constraint
+}
+
 // isUniqueViolation reports whether err is a Postgres unique-index violation
 // (SQLSTATE 23505), the backstop for claim races and duplicate edges.
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505"
-}
+func isUniqueViolation(err error) bool { return pgViolation(err, "23505", "") }
 
 // isUniqueViolationOn reports whether err is a unique violation on the named
 // constraint/index, for callers that need to know which backstop fired.
 func isUniqueViolationOn(err error, constraint string) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == constraint
+	return pgViolation(err, "23505", constraint)
 }
 
 // isCheckViolationOn reports whether err is a Postgres CHECK-constraint
 // violation (SQLSTATE 23514) on the named constraint.
 func isCheckViolationOn(err error, constraint string) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == "23514" && pgErr.ConstraintName == constraint
+	return pgViolation(err, "23514", constraint)
+}
+
+// requireOneAffected turns a single-row write that matched nothing into
+// notFound. Ten update paths in the package end this way; sharing the tail
+// keeps "the row was not there" reading the same at all of them.
+func requireOneAffected(res sql.Result, what string, notFound error) error {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s rows affected: %w", what, err)
+	}
+	if n == 0 {
+		return notFound
+	}
+	return nil
 }

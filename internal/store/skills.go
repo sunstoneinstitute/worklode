@@ -181,19 +181,7 @@ func (s *Store) ListSkills(ctx context.Context, includeDeleted bool) ([]Skill, e
 	if err != nil {
 		return nil, fmt.Errorf("list skills: %w", err)
 	}
-	defer rows.Close()
-	var out []Skill
-	for rows.Next() {
-		sk, err := scanSkill(rows)
-		if err != nil {
-			return nil, fmt.Errorf("list skills: %w", err)
-		}
-		out = append(out, *sk)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list skills: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "list skills", byValue(scanSkill))
 }
 
 // SkillsMissingEmbeddings returns live skills with no stored vectors at all,
@@ -209,19 +197,7 @@ func (s *Store) SkillsMissingEmbeddings(ctx context.Context) ([]Skill, error) {
 	if err != nil {
 		return nil, fmt.Errorf("skills missing embeddings: %w", err)
 	}
-	defer rows.Close()
-	var out []Skill
-	for rows.Next() {
-		sk, err := scanSkill(rows)
-		if err != nil {
-			return nil, fmt.Errorf("skills missing embeddings: %w", err)
-		}
-		out = append(out, *sk)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("skills missing embeddings: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "skills missing embeddings", byValue(scanSkill))
 }
 
 // SkillsByNames returns the named skills (deleted included, so brief pins can
@@ -244,19 +220,7 @@ func (s *Store) SkillsByNames(ctx context.Context, names []string) ([]Skill, err
 	if err != nil {
 		return nil, fmt.Errorf("skills by names: %w", err)
 	}
-	defer rows.Close()
-	var out []Skill
-	for rows.Next() {
-		sk, err := scanSkill(rows)
-		if err != nil {
-			return nil, fmt.Errorf("skills by names: %w", err)
-		}
-		out = append(out, *sk)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("skills by names: %w", err)
-	}
-	return out, nil
+	return collectRows(rows, "skills by names", byValue(scanSkill))
 }
 
 // dedupeFirst returns names with duplicates removed, keeping first occurrence

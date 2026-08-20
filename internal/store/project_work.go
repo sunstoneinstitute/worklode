@@ -14,7 +14,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -82,7 +81,7 @@ func (s *Store) ListProjectWorkFacts(ctx context.Context, projectID string) (out
 	defer func() { s.metrics.projectWorkRead(err) }()
 
 	rows, err := s.db.QueryContext(ctx, `
-SELECT `+prefixedTaskColumns("t")+`,
+SELECT `+taskColumnsT+`,
        parent.id, parent.title, parent.state,
        l.id, l.task_id, l.actor_id, l.worktree, l.acquired_at, l.renewed_at,
        l.expires_at, l.released_at,
@@ -234,17 +233,10 @@ SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
 }
 
 // scanProjectWorkFact scans one row of the ListProjectWorkFacts query: the
-// task columns (same shape and order as scanTask, duplicated rather than
-// composed because a *sql.Rows Scan call must consume every column of the
-// row in one call — scanTask's fixed 14-destination Scan cannot be reused
-// against a wider, joined row), followed by the nullable parent, lease, and
-// state-event columns.
+// task columns, read by scanTask through appendScan so the joined row's extra
+// destinations ride along in the one Scan call *sql.Rows requires, followed by
+// the nullable parent, lease, and state-event columns.
 func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
-	var t model.Task
-	var body, createdBy, concern, assignee sql.NullString
-	var skillsJSON, secretsCol string
-	var planDoc, aboutDoc sql.NullInt64
-
 	var parentID, parentTitle, parentState sql.NullString
 
 	var leaseID sql.NullInt64
@@ -255,44 +247,21 @@ func scanProjectWorkFact(row rowScanner) (*ProjectWorkFact, error) {
 	var eventSource, eventType sql.NullString
 	var eventAt sql.NullTime
 
-	if err := row.Scan(
-		&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
-		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy,
-		&t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
+	t, err := scanTask(appendScan{row, []any{
 		&parentID, &parentTitle, &parentState,
 		&leaseID, &leaseTaskID, &leaseActorID, &leaseWorktree,
 		&leaseAcquiredAt, &leaseRenewedAt, &leaseExpiresAt, &leaseReleasedAt,
 		&eventID, &eventSource, &eventType, &eventAt,
-	); err != nil {
+	}})
+	if err != nil {
 		return nil, err
 	}
+	// scanTask derives Branch; this projection has always shipped it empty
+	// and the board's wire shape is not this change's business. WL-183 picks
+	// which side is right.
+	t.Branch = ""
 
-	t.Body = body.String
-	t.Concern = concern.String
-	t.Assignee = assignee.String
-	t.CreatedBy = createdBy.String
-	t.CreatedAt = t.CreatedAt.UTC()
-	t.UpdatedAt = t.UpdatedAt.UTC()
-	if planDoc.Valid {
-		t.PlanDoc = planDoc.Int64
-	}
-	if aboutDoc.Valid {
-		t.AboutDoc = aboutDoc.Int64
-	}
-	if err := json.Unmarshal([]byte(skillsJSON), &t.Skills); err != nil {
-		return nil, fmt.Errorf("unmarshal task %s skills: %w", t.ID, err)
-	}
-	if t.Skills == nil {
-		t.Skills = []string{}
-	}
-	if err := json.Unmarshal([]byte(secretsCol), &t.Secrets); err != nil {
-		return nil, fmt.Errorf("unmarshal task %s secrets: %w", t.ID, err)
-	}
-	if t.Secrets == nil {
-		t.Secrets = []string{}
-	}
-
-	f := &ProjectWorkFact{Task: t}
+	f := &ProjectWorkFact{Task: *t}
 
 	if parentID.Valid {
 		f.Parent = &TaskRef{ID: parentID.String, Title: parentTitle.String, State: parentState.String}

@@ -175,12 +175,8 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				return fmt.Errorf("task %s has children and cannot be claimed: %w", taskID, ErrBadTransition)
 			}
 
-			var one int
-			if err := tx.QueryRow(`SELECT 1 FROM actors WHERE id = $1`, actorID).Scan(&one); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
-					return fmt.Errorf("actor %s: %w", actorID, ErrNotFound)
-				}
-				return fmt.Errorf("check actor %s: %w", actorID, err)
+			if err := requireActor(tx, actorID); err != nil {
+				return err
 			}
 
 			leased, err := hasActiveLease(tx, taskID)
@@ -408,16 +404,8 @@ func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
 // ActiveLease returns the active (unreleased) lease on taskID, or
 // ErrNotFound if there is none.
 func (s *Store) ActiveLease(ctx context.Context, taskID string) (*Lease, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID)
-	l, err := scanLease(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("no active lease on task %s: %w", taskID, ErrNotFound)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get active lease on %s: %w", taskID, err)
-	}
-	return l, nil
+	return scanActiveLeaseRow(s.db.QueryRowContext(ctx,
+		`SELECT `+leaseColumns+` FROM leases WHERE task_id = $1 AND released_at IS NULL`, taskID), taskID)
 }
 
 // ExpireLeases closes every active lease whose expires_at is before now and
