@@ -199,6 +199,13 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/events/stream":                  guarded(permEventStream),
 	"GET /api/v1/event-subscribers":              guarded(permEventRead),
 	"POST /api/v1/event-subscribers/{name}/seek": guarded(permEventAdmin),
+
+	// --- identity (spec 013) --------------------------------------------------
+	"GET /api/v1/whoami": guarded(permWhoAmI),
+
+	// --- reconciliation (spec 013) ---------------------------------------------
+	"GET /api/v1/repos/doctor": guarded(permReconcile),
+	"POST /api/v1/reconcile":   guarded(permReconcile),
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which

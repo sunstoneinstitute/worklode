@@ -170,6 +170,21 @@ func findRepoConfig(startDir string) (string, bool) {
 	}
 }
 
+// ConfigOrigins reports where config loading would look from startDir: the
+// user config path (and whether the file exists) and the repo-local
+// .worklode/.lode config the walk-up found, if any. lode doctor reports
+// these; LoadConfig remains the authority on what actually loads.
+func ConfigOrigins(startDir string) (userPath string, userFound bool, repoPath string, repoFound bool) {
+	if p, err := configPath(); err == nil {
+		userPath = p
+		if _, statErr := os.Stat(p); statErr == nil {
+			userFound = true
+		}
+	}
+	repoPath, repoFound = findRepoConfig(startDir)
+	return userPath, userFound, repoPath, repoFound
+}
+
 // WorktreeDirFrom returns the worktree base directory configured for
 // startDir's repo (spec 008 §5.1): a repo-local .worklode/config.toml's
 // worktree_dir, with the LODE_WORKTREE_DIR env override applied on top, or ""
@@ -1099,6 +1114,22 @@ func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string)
 	return doJSON[model.AddRepoResult](ctx, c, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", model.AddRepoInput{Repo: repo, DoneState: doneState}, "add-repo response")
 }
 
+// ReposDoctor calls GET /api/v1/repos/doctor. An empty repo reports every
+// mapped repo. Admin-only on the server.
+func (c *Client) ReposDoctor(ctx context.Context, repo string) (model.ReposDoctorResponse, []byte, error) {
+	q := url.Values{}
+	if repo != "" {
+		q.Set("repo", repo)
+	}
+	return doJSON[model.ReposDoctorResponse](ctx, c, http.MethodGet, withQuery("/api/v1/repos/doctor", q), nil, "repos doctor")
+}
+
+// Reconcile calls POST /api/v1/reconcile and returns the run report.
+// Admin-only on the server; synchronous.
+func (c *Client) Reconcile(ctx context.Context, in model.ReconcileInput) (model.ReconcileResponse, []byte, error) {
+	return doJSON[model.ReconcileResponse](ctx, c, http.MethodPost, "/api/v1/reconcile", in, "reconcile")
+}
+
 // SetRepoDoneState calls PATCH /api/v1/repos/{owner}/{name} (204, no body),
 // setting the terminal delivery state for an already-mapped repo.
 func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) ([]byte, error) {
@@ -1437,4 +1468,12 @@ func (c *Client) DetachBlob(ctx context.Context, id, hash string) error {
 func (c *Client) BlobGC(ctx context.Context, dryRun bool, graceHours *int) (model.BlobGCResponse, []byte, error) {
 	return doJSON[model.BlobGCResponse](ctx, c, http.MethodPost, "/api/v1/blobs/gc",
 		model.BlobGCRequest{DryRun: dryRun, GraceHours: graceHours}, "blob gc result")
+}
+
+// WhoAmI calls GET /api/v1/whoami: which actor the configured token belongs
+// to. A *ClientError with Status 401 means the token is not accepted; a
+// transport error means the server is unreachable — lode doctor tells those
+// two failures apart.
+func (c *Client) WhoAmI(ctx context.Context) (model.WhoAmI, []byte, error) {
+	return doJSON[model.WhoAmI](ctx, c, http.MethodGet, "/api/v1/whoami", nil, "whoami")
 }
