@@ -101,7 +101,7 @@ func Task(v TaskView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				} else {
-					var templ_7745c5c3_Var6 = []any{"chip " + StateChip(v.Task.State)}
+					var templ_7745c5c3_Var6 = []any{"chip " + stateChip(v.Task.State)}
 					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var6...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -194,7 +194,7 @@ func Task(v TaskView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var13 string
-				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(v.Task.CreatedAt))
+				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(v.Task.CreatedAt))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 31, Col: 62}
 				}
@@ -220,7 +220,7 @@ func Task(v TaskView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var15 string
-				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(v.Task.UpdatedAt))
+				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(v.Task.UpdatedAt))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 31, Col: 132}
 				}
@@ -270,7 +270,7 @@ func Task(v TaskView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var18 string
-					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(v.Holder.ExpiresAt))
+					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(v.Holder.ExpiresAt))
 					if templ_7745c5c3_Err != nil {
 						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 36, Col: 93}
 					}
@@ -386,7 +386,7 @@ func Task(v TaskView) templ.Component {
 							return templ_7745c5c3_Err
 						}
 						var templ_7745c5c3_Var24 string
-						templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(FmtBytes(b.Size))
+						templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(fmtBytes(b.Size))
 						if templ_7745c5c3_Err != nil {
 							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 64, Col: 71}
 						}
@@ -546,7 +546,7 @@ func Task(v TaskView) templ.Component {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var31 string
-							templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(row.At))
+							templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(row.At))
 							if templ_7745c5c3_Err != nil {
 								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 106, Col: 44}
 							}

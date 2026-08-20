@@ -104,7 +104,7 @@ func Cockpit(v CockpitView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var6 string
-				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(ModeLabel(v.ModeName))
+				templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(modeLabel(v.ModeName))
 				if templ_7745c5c3_Err != nil {
 					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 29, Col: 30}
 				}
@@ -156,7 +156,7 @@ func Cockpit(v CockpitView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				if v.Work.Len() == 0 {
+				if v.Work.count() == 0 {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<p class=\"muted small\">No active work.</p>")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -292,7 +292,7 @@ func pinnedFocus(f *CockpitFocus) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var12 string
-			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(f.PinnedAt))
+			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(f.PinnedAt))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 97, Col: 73}
 			}
@@ -310,7 +310,7 @@ func pinnedFocus(f *CockpitFocus) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var13 string
-			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(f.PinnedAt))
+			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(f.PinnedAt))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 99, Col: 46}
 			}
@@ -373,7 +373,7 @@ func workRow(item WorkRow) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var16 = []any{WorkRowWhoClass(item)}
+		var templ_7745c5c3_Var16 = []any{workRowWhoClass(item)}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var16...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -396,7 +396,7 @@ func workRow(item WorkRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var18 string
-		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(WorkRowInitials(item))
+		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(workRowInitials(item))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 116, Col: 66}
 		}
@@ -448,7 +448,7 @@ func workRow(item WorkRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var22 string
-		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(WorkRowActors(item))
+		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(workRowActors(item))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 120, Col: 39}
 		}
@@ -460,7 +460,7 @@ func workRow(item WorkRow) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var23 = []any{"chip " + EvidenceChip(item.EvidenceCategory)}
+		var templ_7745c5c3_Var23 = []any{"chip " + evidenceChip(item.EvidenceCategory)}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var23...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -483,7 +483,7 @@ func workRow(item WorkRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var25 string
-		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(EvidenceLabel(item.EvidenceCategory))
+		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(evidenceLabel(item.EvidenceCategory))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 123, Col: 146}
 		}
@@ -495,7 +495,7 @@ func workRow(item WorkRow) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var26 = []any{"chip " + StateChip(item.State)}
+		var templ_7745c5c3_Var26 = []any{"chip " + stateChip(item.State)}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var26...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -518,7 +518,7 @@ func workRow(item WorkRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var28 string
-		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(StateLabel(item.State))
+		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(stateLabel(item.State))
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 124, Col: 118}
 		}
@@ -581,7 +581,7 @@ func decisionCard(d *CockpitDecision) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var31 string
-			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(Initials(d.Accountable))
+			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(initials(d.Accountable))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/cockpit.templ`, Line: 141, Col: 91}
 			}

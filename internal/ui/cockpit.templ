@@ -26,7 +26,7 @@ templ Cockpit(v CockpitView) {
 					<div class="mode-banner">
 						<span class="mode-name" style="background:var(--ok-bg);color:var(--ok)">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"></path></svg>
-							{ ModeLabel(v.ModeName) } <span class="tg">B</span>
+							{ modeLabel(v.ModeName) } <span class="tg">B</span>
 						</span>
 						<span class="sub">{ v.ModeBasis }</span>
 					</div>
@@ -43,7 +43,7 @@ templ Cockpit(v CockpitView) {
 							</div>
 						</div>
 						<div class="bd wl">
-							if v.Work.Len() == 0 {
+							if v.Work.count() == 0 {
 								<p class="muted small">No active work.</p>
 							} else {
 								for _, item := range v.Work.Rows() {
@@ -94,9 +94,9 @@ templ pinnedFocus(f *CockpitFocus) {
 			<h3 id="focus-heading">Pinned focus</h3>
 			<div class="meta">
 				if f.PinnedBy != "" {
-					<span class="muted">by { f.PinnedBy } &middot; { FmtTime(f.PinnedAt) }</span>
+					<span class="muted">by { f.PinnedBy } &middot; { fmtTime(f.PinnedAt) }</span>
 				} else {
-					<span class="muted">{ FmtTime(f.PinnedAt) }</span>
+					<span class="muted">{ fmtTime(f.PinnedAt) }</span>
 				}
 			</div>
 		</div>
@@ -112,16 +112,16 @@ templ pinnedFocus(f *CockpitFocus) {
 // the projection supplies; no per-row cost is stored, so no cost is shown.
 templ workRow(item WorkRow) {
 	<div class="wlrow">
-		<div class={ WorkRowWhoClass(item) }>
-			<span class="avatar" aria-hidden="true">{ WorkRowInitials(item) }</span>
+		<div class={ workRowWhoClass(item) }>
+			<span class="avatar" aria-hidden="true">{ workRowInitials(item) }</span>
 		</div>
 		<div class="tl">
 			<div class="t"><a href={ item.URL }>{ item.ID } &mdash; { item.Title }</a></div>
-			<div class="s">{ WorkRowActors(item) }</div>
+			<div class="s">{ workRowActors(item) }</div>
 		</div>
 		<div class="rt">
-			<span class={ "chip " + EvidenceChip(item.EvidenceCategory) }><span class="cd" aria-hidden="true"></span>{ EvidenceLabel(item.EvidenceCategory) }</span>
-			<span class={ "chip " + StateChip(item.State) }><span class="cd" aria-hidden="true"></span>{ StateLabel(item.State) }</span>
+			<span class={ "chip " + evidenceChip(item.EvidenceCategory) }><span class="cd" aria-hidden="true"></span>{ evidenceLabel(item.EvidenceCategory) }</span>
+			<span class={ "chip " + stateChip(item.State) }><span class="cd" aria-hidden="true"></span>{ stateLabel(item.State) }</span>
 		</div>
 	</div>
 }
@@ -138,7 +138,7 @@ templ decisionCard(d *CockpitDecision) {
 		<div class="db">
 			<h3>{ d.Title }</h3>
 			if d.Accountable != "" {
-				<div class="who-owns"><span class="avatar" aria-hidden="true">{ Initials(d.Accountable) }</span><span><b>{ d.Accountable }</b></span></div>
+				<div class="who-owns"><span class="avatar" aria-hidden="true">{ initials(d.Accountable) }</span><span><b>{ d.Accountable }</b></span></div>
 			}
 			if d.Readiness != "" {
 				<div class="rest">

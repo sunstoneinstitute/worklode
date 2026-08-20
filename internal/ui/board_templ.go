@@ -138,7 +138,7 @@ func Board(v BoardView) templ.Component {
 								return templ_7745c5c3_Err
 							}
 							var templ_7745c5c3_Var7 string
-							templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(f.OccurredAt))
+							templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(f.OccurredAt))
 							if templ_7745c5c3_Err != nil {
 								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/board.templ`, Line: 31, Col: 53}
 							}
@@ -521,7 +521,7 @@ func boardRow(item model.BoardTask, variant string, blockedLabel bool) templ.Com
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var26 string
-			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(FmtTime(item.Holder.ExpiresAt))
+			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(item.Holder.ExpiresAt))
 			if templ_7745c5c3_Err != nil {
 				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/board.templ`, Line: 86, Col: 107}
 			}

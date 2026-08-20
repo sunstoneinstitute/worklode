@@ -30,7 +30,7 @@ templ Docs(v DocsView) {
 										</td>
 										<td>{ d.Doc.Title }</td>
 										<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
-										<td><span class={ "chip " + DocStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
+										<td><span class={ "chip " + docStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
 										<td class="mono">{ d.Doc.Version }</td>
 									</tr>
 								}
@@ -49,14 +49,14 @@ templ Doc(v DocView) {
 			<section class="card pad">
 				<h1>{ v.Doc.Title }</h1>
 				<p>
-					<span class={ "chip " + DocStatusChip(v.Doc.Status) }>{ v.Doc.Status }</span>
+					<span class={ "chip " + docStatusChip(v.Doc.Status) }>{ v.Doc.Status }</span>
 					<span class="chip plain">{ v.Ref }</span>
 					<span class="chip plain">version { v.Doc.Version }</span>
 					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a></span>
 				</p>
 				<p class="muted small mono">{ v.Doc.Slug }</p>
 				<p class="muted small">
-					Created { FmtTime(v.Doc.CreatedAt) } by { v.Doc.CreatedBy } &mdash; updated { FmtTime(v.Doc.UpdatedAt) }
+					Created { fmtTime(v.Doc.CreatedAt) } by { v.Doc.CreatedBy } &mdash; updated { fmtTime(v.Doc.UpdatedAt) }
 					if v.Doc.Issued != "" {
 						{ " · issued " + v.Doc.Issued }
 					}
@@ -65,7 +65,7 @@ templ Doc(v DocView) {
 					<p class="muted small">Assigned to { v.Doc.Assignee }</p>
 				}
 				if v.Revision != nil {
-					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ FmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
+					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ fmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
 				}
 			</section>
 			if len(v.Sections) > 0 {
