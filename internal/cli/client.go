@@ -170,6 +170,21 @@ func findRepoConfig(startDir string) (string, bool) {
 	}
 }
 
+// ConfigOrigins reports where config loading would look from startDir: the
+// user config path (and whether the file exists) and the repo-local
+// .worklode/.lode config the walk-up found, if any. lode doctor reports
+// these; LoadConfig remains the authority on what actually loads.
+func ConfigOrigins(startDir string) (userPath string, userFound bool, repoPath string, repoFound bool) {
+	if p, err := configPath(); err == nil {
+		userPath = p
+		if _, statErr := os.Stat(p); statErr == nil {
+			userFound = true
+		}
+	}
+	repoPath, repoFound = findRepoConfig(startDir)
+	return userPath, userFound, repoPath, repoFound
+}
+
 // WorktreeDirFrom returns the worktree base directory configured for
 // startDir's repo (spec 008 §5.1): a repo-local .worklode/config.toml's
 // worktree_dir, with the LODE_WORKTREE_DIR env override applied on top, or ""
