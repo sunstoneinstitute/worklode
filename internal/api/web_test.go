@@ -858,6 +858,9 @@ func TestProjectPage(t *testing.T) {
 	if err := st.AddRepo(context.Background(), "proj", "acme/widgets"); err != nil {
 		t.Fatalf("add repo: %v", err)
 	}
+	if err := st.SetProjectFocus(context.Background(), "proj", []string{"security", "usability"}); err != nil {
+		t.Fatalf("set project focus: %v", err)
+	}
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Scoped task", "priority": "low", "kind": "chore",
 	})
@@ -877,12 +880,15 @@ func TestProjectPage(t *testing.T) {
 		"Active work",         // the Operations work card renders the ready task
 		"Automation boundary", // the decision rail's honest automation-boundary card
 	)
-	// Mode B has no repositories panel (its Definition-of-done panel has no
-	// backing data and is omitted too), so a mapped repo must not leak into
-	// the rendered canvas — repositories remain covered by the JSON cockpit
-	// contract, not this page.
-	if strings.Contains(body, "acme/widgets") {
-		t.Errorf("project page unexpectedly rendered the mapped repo acme/widgets:\n%s", body)
+	// Mode B has neither a repositories panel nor a ranking-focus list (its
+	// Definition-of-done panel has no backing data and is omitted too), so
+	// neither a mapped repo nor the project's steering concerns may leak into
+	// the rendered canvas — both remain covered by the JSON cockpit contract,
+	// not this page (WL-164).
+	for _, absent := range []string{"acme/widgets", "security", "usability"} {
+		if strings.Contains(body, absent) {
+			t.Errorf("project page unexpectedly rendered %q:\n%s", absent, body)
+		}
 	}
 	// Project local nav, in the exact order docs/specs/032-project-cockpit.md
 	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
