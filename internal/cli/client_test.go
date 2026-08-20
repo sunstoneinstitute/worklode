@@ -931,6 +931,18 @@ func TestClientErrorRendering(t *testing.T) {
 	}
 }
 
+func TestClientWhoAmI(t *testing.T) {
+	_, c, _ := newTestServer(t)
+
+	who, _, err := c.WhoAmI(context.Background())
+	if err != nil {
+		t.Fatalf("WhoAmI: %v", err)
+	}
+	if who.ID != "alice" || who.Kind != "human" || !who.Admin {
+		t.Fatalf("WhoAmI = %+v; want the bootstrap admin actor alice", who)
+	}
+}
+
 func TestLoadConfigFileAndEnvOverride(t *testing.T) {
 	configTestHome(t)
 	content := "# a comment\nserver = \"https://file.example.com\"\ntoken = \"wl_filetoken\"\n\n"

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -317,5 +318,46 @@ func TestProjectShowWithNoCurrentProject(t *testing.T) {
 	}
 	if !strings.Contains(out, "no current project") || !strings.Contains(out, "--project") {
 		t.Fatalf("output = %q, want guidance on naming a project", out)
+	}
+}
+
+func TestProjectDoctorRendersReport(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/repos/doctor" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{
+			"repos": [{
+				"repo": "acme/app", "project": "demo",
+				"app_installed": null,
+				"mapped_at": "2026-07-30T00:00:00Z",
+				"last_event_at": null, "event_types": [],
+				"unapplied_events": 3, "stale": true
+			}],
+			"unmapped_senders": [{"repo": "acme/unmapped", "events": 2, "last_event_at": "2026-07-29T00:00:00Z"}]
+		}`)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+
+	out, err := runLode(t, "project", "doctor")
+	if err != nil {
+		t.Fatalf("project doctor: %v\n%s", err, out)
+	}
+	for _, want := range []string{"acme/app", "STALE", "acme/unmapped"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+
+	out, err = runLode(t, "project", "doctor", "--json")
+	if err != nil {
+		t.Fatalf("project doctor --json: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, `"stale": true`) && !strings.Contains(out, `"stale":true`) {
+		t.Fatalf("--json output does not round-trip stale:\n%s", out)
 	}
 }
