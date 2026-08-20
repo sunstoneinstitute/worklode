@@ -18,7 +18,7 @@ declared debt (see `docs/authoring-design-docs.md`,
 this skill — only report specs with **zero** referencing plans.
 
 For each gap, check whether it is already tracked: `lode task list --status
-all --json` and look for a `kind: spec` task whose title starts with `Plan
+all --json` and look for a `kind: design` task whose title starts with `Plan
 spec <N> —` (the convention already in use, e.g. `WL-22`). If one exists,
 report it instead of creating a duplicate.
 
@@ -30,7 +30,7 @@ If `--dry-run` is in $ARGUMENTS, stop here.
 Otherwise, for every untracked gap, run:
 
 ```
-lode task add --kind spec \
+lode task add --kind design \
   --title "Plan spec <N> — <title>" \
   --body "Write an implementation plan covering docs/specs/<file>. See docs/authoring-design-docs.md and the splitting-specs-into-plans skill." \
   --project <P> --json
