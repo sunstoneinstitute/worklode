@@ -3,7 +3,7 @@ package designdoc
 import (
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -33,27 +33,14 @@ var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 
 // planMintableKinds is the subset of task kinds a plan may mint (025 §9.1):
 // review tasks are created by the review lifecycle and spikes are inputs to
-// planning, so neither is plan-declarable.
+// planning, so neither is plan-declarable. Membership is tested with
+// slices.Contains, so the list is also the lookup — there is nothing to drift.
 var planMintableKinds = []string{"feature", "bug", "chore", "design"}
-
-// planMintableKindSet is planMintableKinds as a lookup set, built from it
-// rather than listed again so the two cannot drift from each other.
-var planMintableKindSet = toSet(planMintableKinds)
 
 // planPriorities is the priority values a task definition may declare
 // (docs/authoring-design-docs.md's key table); "medium" is the default when
 // the key is absent.
 var planPriorities = []string{"critical", "high", "medium", "low"}
-
-var planPrioritySet = toSet(planPriorities)
-
-func toSet(xs []string) map[string]bool {
-	m := make(map[string]bool, len(xs))
-	for _, x := range xs {
-		m[x] = true
-	}
-	return m
-}
 
 // planTaskFence is the yaml metadata block a task subsection opens with.
 // KnownFields makes a typoed key an error rather than a silent drop,
@@ -78,12 +65,10 @@ func PlanTasks(d *Document) ([]PlanTask, error) {
 			sections = append(sections, sec)
 		}
 	}
-	switch len(sections) {
-	case 0:
+	if len(sections) == 0 {
 		return nil, fmt.Errorf("plan defines no tasks: no \"## Tasks\" section")
-	case 1:
-		// fall through
-	default:
+	}
+	if len(sections) > 1 {
 		return nil, fmt.Errorf("plan has %d \"## Tasks\" sections, want exactly one", len(sections))
 	}
 	tasksSec := sections[0]
@@ -119,11 +104,15 @@ func PlanTasks(d *Document) ([]PlanTask, error) {
 // parsePlanTask parses one `### Task N — Title` subsection: the heading
 // shape, its yaml fence, and the fence's fields.
 func parsePlanTask(sec *Section) (PlanTask, error) {
-	heading := strings.TrimRight(sec.raw, "\r\n")
+	heading := strings.TrimRight(sec.headingSource(), "\r\n")
+	// A heading that does not match, and one whose title is only whitespace,
+	// are the same defect and report the same way.
+	badShape := func() error {
+		return fmt.Errorf("task heading %q: want \"Task <N> — <title>\" (em dash)", heading)
+	}
 	m := planTaskHeadingRE.FindStringSubmatch(strings.TrimSpace(sec.Title))
 	if m == nil {
-		return PlanTask{}, fmt.Errorf(
-			"task heading %q: want \"Task <N> — <title>\" (em dash)", heading)
+		return PlanTask{}, badShape()
 	}
 	number, err := strconv.Atoi(m[1])
 	if err != nil {
@@ -131,8 +120,7 @@ func parsePlanTask(sec *Section) (PlanTask, error) {
 	}
 	title := strings.TrimSpace(m[2])
 	if title == "" {
-		return PlanTask{}, fmt.Errorf(
-			"task heading %q: want \"Task <N> — <title>\" (em dash)", heading)
+		return PlanTask{}, badShape()
 	}
 
 	fenceSrc, body, found := splitPlanTaskFence(sec.Body)
@@ -152,7 +140,7 @@ func parsePlanTask(sec *Section) (PlanTask, error) {
 	// discoverable by querying the documents themselves, unlike a request
 	// (see kindAliasUses in internal/api/server.go).
 	meta.Kind, _ = ns.NormalizeTaskKind(meta.Kind)
-	if !planMintableKindSet[meta.Kind] {
+	if !slices.Contains(planMintableKinds, meta.Kind) {
 		return PlanTask{}, fmt.Errorf(
 			"task %d: kind %q is not plan-mintable; want one of %s",
 			number, meta.Kind, strings.Join(planMintableKinds, ", "))
@@ -162,7 +150,7 @@ func parsePlanTask(sec *Section) (PlanTask, error) {
 	if priority == "" {
 		priority = "medium"
 	}
-	if !planPrioritySet[priority] {
+	if !slices.Contains(planPriorities, priority) {
 		return PlanTask{}, fmt.Errorf(
 			"task %d: priority %q invalid; want one of %s",
 			number, priority, strings.Join(planPriorities, ", "))
@@ -186,16 +174,18 @@ func parsePlanTask(sec *Section) (PlanTask, error) {
 // ordinary body content, not metadata.
 func splitPlanTaskFence(body string) (fenceContent, rest string, found bool) {
 	lines := splitLines(body)
+	// TrimSpace already drops the \r a CRLF line carries.
+	lineText := func(i int) string { return strings.TrimSpace(lines[i].text(body)) }
 
 	i := 0
-	for i < len(lines) && strings.TrimSpace(strings.TrimRight(body[lines[i].start:lines[i].textEnd], "\r")) == "" {
+	for i < len(lines) && lineText(i) == "" {
 		i++
 	}
 	if i >= len(lines) {
 		return "", body, false
 	}
 
-	openLine := strings.TrimSpace(strings.TrimRight(body[lines[i].start:lines[i].textEnd], "\r"))
+	openLine := lineText(i)
 	var mark string
 	switch {
 	case strings.HasPrefix(openLine, "```"):
@@ -211,8 +201,7 @@ func splitPlanTaskFence(body string) (fenceContent, rest string, found bool) {
 
 	j := i + 1
 	for j < len(lines) {
-		line := strings.TrimSpace(strings.TrimRight(body[lines[j].start:lines[j].textEnd], "\r"))
-		if strings.HasPrefix(line, mark) {
+		if strings.HasPrefix(lineText(j), mark) {
 			break
 		}
 		j++
@@ -273,7 +262,7 @@ func findBlockedByCycle(defs []PlanTask) []int {
 		byNumber[def.Number] = def
 		numbers = append(numbers, def.Number)
 	}
-	sort.Ints(numbers)
+	slices.Sort(numbers)
 
 	const (
 		white = iota
@@ -295,11 +284,8 @@ func findBlockedByCycle(defs []PlanTask) []int {
 					return true
 				}
 			case gray:
-				for i, s := range stack {
-					if s == b {
-						cycle = append([]int(nil), stack[i:]...)
-						break
-					}
+				if i := slices.Index(stack, b); i >= 0 {
+					cycle = slices.Clone(stack[i:])
 				}
 				return true
 			}
