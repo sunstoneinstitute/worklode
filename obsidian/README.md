@@ -14,7 +14,7 @@ Given a mount root of `Worklode` (the default):
 ```
 Worklode/Worklode.md              # index: every synced project
 Worklode/<project>/<project>.md   # project note: doc/task roll-up by state
-Worklode/<project>/docs/<id>.md   # one note per synced document
+Worklode/<project>/docs/<slug>.md # one note per synced document
 Worklode/<project>/tasks/<id>.md  # one note per synced task
 Worklode/_conflicts/<project>/    # only with write-back on; see below
 ```
@@ -99,11 +99,12 @@ build.
   folders. A root that fails the check is refused whole, not partially
   honoured. Missing parent folders are created on the first write, and a
   purge removes the root itself while leaving its parents alone.
-- **Project, doc, and task ids stay single-segment.** Each becomes one folder
-  or file name under the root, so an id carrying `/`, `\`, `..`, or edge
-  whitespace is skipped and reported as a conflict rather than nesting the
-  note somewhere the mirror does not manage. Only the mount root — your own
-  setting, surveyed before anything is deleted under it — may span folders.
+- **Project and task ids, and doc slugs, stay single-segment.** Each becomes
+  one folder or file name under the root, so a value carrying `/`, `\`, `..`,
+  or edge whitespace is skipped and reported as a conflict rather than
+  nesting the note somewhere the mirror does not manage. Only the mount root
+  — your own setting, surveyed before anything is deleted under it — may span
+  folders.
 - **A sync deletes foreign notes under the mount root.** Every `.md` file
   under the root that the mirror does not currently produce is removed on each
   sync — including files the plugin never created. They are moved to the
