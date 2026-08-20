@@ -977,12 +977,15 @@ func TestListDocsSelectorConflicts(t *testing.T) {
 	createProject(t, st, "proj")
 
 	for name, c := range map[string]struct{ query, want string }{
-		"both selectors":           {"needs_planning=true&needs_execution=true", "disjoint"},
-		"planning with draft":      {"needs_planning=true&status=draft", "accepted"},
-		"planning with plan kind":  {"needs_planning=true&kind=plan", "spec"},
-		"execution with draft":     {"needs_execution=true&status=draft", "accepted"},
-		"execution with spec kind": {"needs_execution=true&kind=spec", "plan"},
-		"unparseable selector":     {"needs_planning=maybe", "needs_planning"},
+		"both selectors":               {"needs_planning=true&needs_execution=true", "disjoint"},
+		"planning with draft":          {"needs_planning=true&status=draft", "accepted"},
+		"planning with plan kind":      {"needs_planning=true&kind=plan", "spec"},
+		"execution with draft":         {"needs_execution=true&status=draft", "accepted"},
+		"execution with spec kind":     {"needs_execution=true&kind=spec", "plan"},
+		"unparseable selector":         {"needs_planning=maybe", "needs_planning"},
+		"bare superseded with draft":   {"bare_superseded=true&status=draft", "superseded"},
+		"bare superseded with plan":    {"bare_superseded=true&kind=plan", "spec or adr"},
+		"bare superseded and planning": {"bare_superseded=true&needs_planning=true", "mutually exclusive"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			rr := doReq(t, h, "GET", "/api/v1/docs?"+c.query, token, nil)
@@ -1007,6 +1010,33 @@ func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
 	resp := listDocs(t, h, token, "needs_planning=true&kind=spec&status=accepted&project=proj")
 	if len(resp.Docs) != 1 || resp.Docs[0].ID != spec.ID {
 		t.Fatalf("docs = %+v, want the spec alone", resp.Docs)
+	}
+}
+
+// TestListDocsBareSuperseded: the selector answers a superseded document
+// nothing explains — 025 §6 rule 2 — and carries the gap detail, not the
+// planning-gap shape, alongside it.
+func TestListDocsBareSuperseded(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	old := seedDoc(t, st, store.DocInput{
+		Project: "proj", Kind: "spec", Number: 6, Slug: "006-old", Body: docSpecBody,
+		CreatedBy: "alice", Status: "superseded",
+	})
+
+	resp := listDocs(t, h, token, "bare_superseded=true")
+	if len(resp.Docs) != 1 || resp.Docs[0].ID != old.ID {
+		t.Fatalf("docs = %+v, want the superseded doc alone", resp.Docs)
+	}
+	if len(resp.SupersessionGaps) != 1 {
+		t.Fatalf("supersession_gaps = %+v, want one entry", resp.SupersessionGaps)
+	}
+	gap := resp.SupersessionGaps[0]
+	if gap.Doc != old.ID || gap.Sections != 2 || len(gap.Unexplained) != 2 {
+		t.Fatalf("gap = %+v, want doc %d, 2 sections, both unexplained", gap, old.ID)
+	}
+	if resp.PlanningGaps != nil {
+		t.Errorf("planning_gaps = %+v, want it omitted for bare_superseded", resp.PlanningGaps)
 	}
 }
 

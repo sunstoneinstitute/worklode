@@ -421,11 +421,14 @@ func TestDocListSelectorConflicts(t *testing.T) {
 		args []string
 		want string
 	}{
-		"both selectors":           {[]string{"--needs-planning", "--needs-execution"}, "none of the others can be"},
-		"planning with draft":      {[]string{"--needs-planning", "--status", "draft"}, "accepted"},
-		"planning with plan kind":  {[]string{"--needs-planning", "--kind", "plan"}, "spec"},
-		"execution with draft":     {[]string{"--needs-execution", "--status", "draft"}, "accepted"},
-		"execution with spec kind": {[]string{"--needs-execution", "--kind", "spec"}, "plan"},
+		"both selectors":                 {[]string{"--needs-planning", "--needs-execution"}, "none of the others can be"},
+		"planning with draft":            {[]string{"--needs-planning", "--status", "draft"}, "accepted"},
+		"planning with plan kind":        {[]string{"--needs-planning", "--kind", "plan"}, "spec"},
+		"execution with draft":           {[]string{"--needs-execution", "--status", "draft"}, "accepted"},
+		"execution with spec kind":       {[]string{"--needs-execution", "--kind", "spec"}, "plan"},
+		"bare-superseded with draft":     {[]string{"--bare-superseded", "--status", "draft"}, "superseded"},
+		"bare-superseded with plan kind": {[]string{"--bare-superseded", "--kind", "plan"}, "spec or adr"},
+		"bare-superseded and planning":   {[]string{"--bare-superseded", "--needs-planning"}, "none of the others can be"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cmd := newDocListCmd()
@@ -435,6 +438,26 @@ func TestDocListSelectorConflicts(t *testing.T) {
 			err := cmd.Execute()
 			if err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("err = %v; want it to mention %q", err, c.want)
+			}
+		})
+	}
+}
+
+// TestCheckDocSelectorsAllowsBareSuperseded: --bare-superseded accepts no
+// restatement, or one that agrees with what it implies — status=superseded
+// and kind spec or adr, unlike --needs-planning/--needs-execution's single
+// implied kind.
+func TestCheckDocSelectorsAllowsBareSuperseded(t *testing.T) {
+	for name, c := range map[string]struct{ kind, status string }{
+		"no restatement":    {"", ""},
+		"kind spec":         {"spec", ""},
+		"kind adr":          {"adr", ""},
+		"status superseded": {"", "superseded"},
+		"both restated":     {"spec", "superseded"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := checkDocSelectors(c.kind, c.status, false, false, true); err != nil {
+				t.Fatalf("checkDocSelectors(%q, %q, bareSuperseded=true) = %v, want nil", c.kind, c.status, err)
 			}
 		})
 	}

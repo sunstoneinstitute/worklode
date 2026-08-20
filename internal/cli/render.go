@@ -244,6 +244,36 @@ func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap
 	tbl.flush(w)
 }
 
+// DocSupersessionTable prints the `lode doc list --bare-superseded` view: one
+// row per superseded document that has a section nothing explains — 025 §6
+// rule 2 (026 §2.4) — with the bare ratio and the anchors that need it. gaps
+// is keyed by document id, mirroring DocPlanningTable.
+func DocSupersessionTable(w io.Writer, docs []model.Doc, gaps []model.DocSupersessionGap) {
+	byDoc := make(map[int64]model.DocSupersessionGap, len(gaps))
+	for _, g := range gaps {
+		byDoc[g.Doc] = g
+	}
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "NUMBER"},
+		column{header: "SLUG"},
+		titleColumn("TITLE"),
+		column{header: "BARE"},
+		column{header: "UNEXPLAINED"},
+	)
+	for _, d := range docs {
+		g := byDoc[d.ID]
+		number := "-"
+		if d.Number != 0 {
+			number = strconv.Itoa(d.Number)
+		}
+		tbl.add(strconv.FormatInt(d.ID, 10), number, d.Slug, d.Title,
+			fmt.Sprintf("%d/%d", len(g.Unexplained), g.Sections),
+			strings.Join(g.Unexplained, " "))
+	}
+	tbl.flush(w)
+}
+
 // DocDetailRender prints one document: its metadata, body, sections, and
 // edges both ways — the `lode doc get` view.
 func DocDetailRender(w io.Writer, d model.DocDetail) {
