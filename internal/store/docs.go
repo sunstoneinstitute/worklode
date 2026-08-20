@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"maps"
 	"path"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -916,7 +915,7 @@ func resolveClosure(tx *sql.Tx, project string, refs []string) ([]closureRef, er
 		if ref == "" {
 			continue
 		}
-		cwBase, _ := cutFragment(ref) // plans take no anchors
+		cwBase, _ := designdoc.SplitFragment(ref) // plans take no anchors
 		cwDoc, cwResolved, err := resolveDocRef(tx, project, cwBase)
 		if err != nil {
 			return nil, err
@@ -988,7 +987,7 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 	}
 	seen := map[docEdgeRow]docEdgeSeen{}
 	for _, e := range frontmatterEdges(fm) {
-		base, fragment := cutFragment(e.ref)
+		base, fragment := designdoc.SplitFragment(e.ref)
 		toDoc, resolved, err := resolveDocRef(tx, project, base)
 		if err != nil {
 			return err
@@ -1135,7 +1134,7 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 	}
 
 	for _, c := range candidates {
-		base, fragment := cutFragment(c.ref)
+		base, fragment := designdoc.SplitFragment(c.ref)
 		toDoc, resolved, err := resolveDocRef(tx, project, base)
 		if err != nil {
 			return err
@@ -1204,7 +1203,7 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 	}
 
 	for _, r := range closures {
-		cwBase, _ := cutFragment(r.ref) // plans take no anchors
+		cwBase, _ := designdoc.SplitFragment(r.ref) // plans take no anchors
 		toDoc, resolved, err := resolveDocRef(tx, project, cwBase)
 		if err != nil {
 			return err
@@ -1374,89 +1373,43 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 	return strings.Join(parts, " blocks "), nil
 }
 
-// frontmatterEdges reads the acting-direction relations out of fm, in a
-// deterministic order. rebuildEdges dedupes what comes back, on the resolved
-// row rather than on the reference text.
+// frontmatterEdges reads the acting-direction relations out of fm — the walk
+// is designdoc.Frontmatter.Refs, the rel set designdoc.ActingRels — in the
+// deterministic order that walk fixes. rebuildEdges dedupes what comes back,
+// on the resolved row rather than on the reference text.
 //
 // The inverse spellings (isRequiredBy, blockedBy, amendedBy, isReplacedBy) are
-// skipped: one row read backward is the inverse (025 §14), so writing them too
-// would double every edge and let the two directions disagree. For plan
-// ordering that means only the blocking plan can declare it — `blockedBy:`
-// parses and writes nothing (WL-143).
+// what ActingRels leaves out: one row read backward is the inverse (025 §14),
+// so writing them too would double every edge and let the two directions
+// disagree. For plan ordering that means only the blocking plan can declare it
+// — `blockedBy:` parses and writes nothing (WL-143).
 //
-// An empty reference is dropped rather than written as an empty to_external —
-// a coverage entry qualified with a level but no `spec:`, say, names no
-// target at all.
+// covers reads the retired `implements` spelling too (026 §5.1); the
+// implements edge type stays reserved for components. Each entry's level and,
+// for a partial entry, its fullCoverageWith closure ride along with the ref;
+// rebuildEdges normalises and validates the level and resolves the closure.
+// fullCoverageWith beside full or none is invalid (026 §5.1) and contributes
+// nothing to any outcome, so it is dropped here rather than carried to a level
+// that cannot use it.
+//
+// blocks orders whole plan documents (025 §5, §9.3) — the ordering edge that
+// would otherwise need a container row to attach to. ns/ontology.ttl still
+// declares wl:blocks Task-to-Task; mirroring the document-level edge there is
+// WL-142.
 func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
-	if fm == nil {
-		return nil
-	}
 	var out []docEdgeRef
-	add := func(anchor, typ, ref string) {
-		if ref = strings.TrimSpace(ref); ref != "" {
-			out = append(out, docEdgeRef{fromAnchor: anchor, typ: typ, ref: ref})
-		}
-	}
-	// covers reads the retired `implements` spelling too (026 §5.1); the
-	// implements edge type stays reserved for components. Each entry's level
-	// and, for a partial entry, its fullCoverageWith closure ride along with
-	// the ref; rebuildEdges normalises and validates the level and resolves
-	// the closure. fullCoverageWith beside full or none is invalid (026
-	// §5.1) and contributes nothing to any outcome, so it is dropped here
-	// rather than carried to a level that cannot use it.
-	for _, entry := range fm.CoverageEntries() {
-		ref := strings.TrimSpace(entry.Spec)
-		if ref == "" {
-			continue
-		}
-		level := strings.TrimSpace(entry.Coverage)
-		var completedWith []string
-		if level == "partial" {
-			completedWith = entry.FullCoverageWith
-		}
-		out = append(out, docEdgeRef{
-			typ: "covers", ref: ref, coverage: level, completedWith: completedWith,
-		})
-	}
-	for _, ref := range fm.Requires {
-		add("", "requires", ref)
-	}
-	// blocks orders whole plan documents (025 §5, §9.3) — the ordering edge
-	// that would otherwise need a container row to attach to. ns/ontology.ttl
-	// still declares wl:blocks Task-to-Task; mirroring the document-level edge
-	// there is WL-142.
-	for _, ref := range fm.Blocks {
-		add("", "blocks", ref)
-	}
-	add("", "wasDerivedFrom", fm.WasDerivedFrom)
-	for _, m := range []struct {
-		typ string
-		src designdoc.AnchorMap
-	}{{"amends", fm.Amends}, {"replaces", fm.Replaces}} {
-		for _, k := range slices.Sorted(maps.Keys(m.src)) {
-			// "." is the document-level subject; anything else is one of this
-			// document's own anchors, with or without its leading '#'.
-			anchor := ""
-			if k != "." {
-				anchor = strings.TrimPrefix(k, "#")
-			}
-			for _, ref := range m.src[k] {
-				add(anchor, m.typ, ref)
+	for _, r := range fm.RefsFor(designdoc.ActingRels...) {
+		e := docEdgeRef{fromAnchor: r.SrcAnchor, typ: r.Rel, ref: r.Ref}
+		if r.Coverage != nil {
+			e.coverage = strings.TrimSpace(r.Coverage.Coverage)
+			if e.coverage == "partial" {
+				e.completedWith = r.Coverage.FullCoverageWith
 			}
 		}
+		out = append(out, e)
 	}
 	return out
 }
-
-// docBareNumber is a reference that is nothing but a corpus number, with or
-// without zero-padding ("25", "025"). Deliberately anchored end-to-end: a
-// number-*prefixed* reference is a filename, and "025-documents-2.md" that
-// matched no slug means the document is not here — resolving it to spec 025
-// on the shared prefix would write a wrong edge rather than a missing one.
-var docBareNumber = regexp.MustCompile(`^(\d+)$`)
-
-// docShorthand is 025 §14.3's <KEY>-<TYPE>-<n> reference, e.g. "WL-SPEC-25".
-var docShorthand = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
 
 // resolveDocRef finds the document in project that base names, base being a
 // reference with any "#…" fragment already removed. Resolution is
@@ -1487,15 +1440,11 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 		return 0, false, fmt.Errorf("resolve doc ref %q by slug: %w", base, err)
 	}
 
-	if m := docShorthand.FindStringSubmatch(base); m != nil {
-		n, convErr := strconv.Atoi(m[3])
-		if convErr != nil {
-			return 0, false, nil
-		}
+	if sh, ok := designdoc.ParseShorthand(base); ok {
 		err := tx.QueryRow(
 			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
 			  WHERE d.project_id = $1 AND d.kind = $2 AND d.number = $3 AND p.key = $4`,
-			project, strings.ToLower(m[2]), n, m[1]).Scan(&id)
+			project, sh.Kind(), sh.Number, sh.Key).Scan(&id)
 		if err == nil {
 			return id, true, nil
 		}
@@ -1505,14 +1454,14 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 		return 0, false, nil
 	}
 
-	if m := docBareNumber.FindStringSubmatch(base); m != nil {
-		n, convErr := strconv.Atoi(m[1])
-		if convErr != nil {
-			return 0, false, nil
-		}
+	// Bare numbers only — a number-*prefixed* reference is a filename, and
+	// "025-documents-2.md" that matched no slug means the document is not
+	// here; resolving it to spec 025 on the shared prefix would write a wrong
+	// edge rather than a missing one.
+	if nf, ok := designdoc.ParseNumberForm(base); ok && nf.Rest == "" {
 		rows, err := tx.Query(
 			`SELECT id FROM docs
-			  WHERE project_id = $1 AND number = $2 AND kind IN ('spec','adr') LIMIT 2`, project, n)
+			  WHERE project_id = $1 AND number = $2 AND kind IN ('spec','adr') LIMIT 2`, project, nf.Number)
 		if err != nil {
 			return 0, false, fmt.Errorf("resolve doc ref %q by number: %w", base, err)
 		}
@@ -1533,15 +1482,6 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 		}
 	}
 	return 0, false, nil
-}
-
-// cutFragment splits a trailing "#sec-…" fragment off a reference.
-func cutFragment(ref string) (base, fragment string) {
-	base, fragment, found := strings.Cut(ref, "#")
-	if !found {
-		return ref, ""
-	}
-	return base, fragment
 }
 
 // docColumns is the SELECT list scanDoc expects, in order.

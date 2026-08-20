@@ -3,7 +3,6 @@ package designdoc
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -157,11 +156,7 @@ func CorpusDocFromBody(docPath, kind string, body []byte) (CorpusDoc, error) {
 	cd.Path, cd.Kind = docPath, kind
 	if kind == "plan" {
 		// Sections deliberately unset: plans carry none (025 §9).
-		for _, ref := range doc.Frontmatter.CoverageEntries() {
-			base, frag := SplitFragment(ref.Spec)
-			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "covers", Target: base, TargetAnchor: frag})
-		}
-		cd.Edges = append(cd.Edges, anchorEdges(doc.Frontmatter)...)
+		cd.Edges = append(cd.Edges, planEdges(doc.Frontmatter)...)
 		return cd, nil
 	}
 	sections, err := sectionMetas(doc, name)
@@ -237,50 +232,38 @@ func sectionMetas(doc *Document, name string) ([]SectionMeta, error) {
 	return out, nil
 }
 
-// anchorRelOrder is the fixed rel order anchorEdges walks, both kinds' four
-// AnchorMap fields (025 §5.1) — implements is handled separately by loadPlans,
-// since it is a plan-only, document-level RefList rather than an AnchorMap.
-var anchorRelOrder = []struct {
-	rel string
-	get func(*Frontmatter) AnchorMap
-}{
-	{"amends", func(f *Frontmatter) AnchorMap { return f.Amends }},
-	{"amendedBy", func(f *Frontmatter) AnchorMap { return f.AmendedBy }},
-	{"replaces", func(f *Frontmatter) AnchorMap { return f.Replaces }},
-	{"isReplacedBy", func(f *Frontmatter) AnchorMap { return f.IsReplacedBy }},
+// anchorRels is the rel set anchorEdges keeps: both kinds' four AnchorMap
+// fields (025 §5.1). Unlike the store, the corpus records both directions —
+// it mirrors the corpus as authored, so an `amendedBy:` a document declares
+// about itself is a fact of that document.
+var anchorRels = []string{"amends", "amendedBy", "replaces", "isReplacedBy"}
+
+// planEdges is a plan's edges: its coverage assertions — the retired
+// `implements` spelling read as `covers` (026 §5.1) — followed by the anchor
+// relations every document kind can carry.
+func planEdges(fm *Frontmatter) []EdgeMeta {
+	return edgeMetas(fm.RefsFor(append([]string{"covers"}, anchorRels...)...))
 }
 
 // anchorEdges extracts the amends/amendedBy/replaces/isReplacedBy edges from
-// fm's four AnchorMaps, in a fixed rel order with map keys sorted, so output
-// is deterministic run to run.
+// fm's four AnchorMaps. Frontmatter.Refs fixes the order, so output is
+// deterministic run to run.
 func anchorEdges(fm *Frontmatter) []EdgeMeta {
-	if fm == nil {
-		return nil
-	}
-	var edges []EdgeMeta
-	for _, r := range anchorRelOrder {
-		m := r.get(fm)
-		for _, k := range slices.Sorted(maps.Keys(m)) {
-			srcAnchor := anchorMapSrcAnchor(k)
-			for _, ref := range m[k] {
-				target, targetAnchor := SplitFragment(ref)
-				edges = append(edges, EdgeMeta{
-					SrcAnchor: srcAnchor, Rel: r.rel,
-					Target: target, TargetAnchor: targetAnchor,
-				})
-			}
-		}
-	}
-	return edges
+	return edgeMetas(fm.RefsFor(anchorRels...))
 }
 
-// anchorMapSrcAnchor converts an AnchorMap key to a SectionMeta-shaped
-// anchor: "." (document-level) is "", "#sec-3" is "sec-3".
-func anchorMapSrcAnchor(key string) string {
-	if key == "." {
-		return ""
+// edgeMetas turns frontmatter references into corpus edges, splitting each
+// ref's "#sec-…" fragment off as the target anchor.
+func edgeMetas(refs []Ref) []EdgeMeta {
+	var edges []EdgeMeta
+	for _, r := range refs {
+		target, targetAnchor := SplitFragment(r.Ref)
+		edges = append(edges, EdgeMeta{
+			SrcAnchor: r.SrcAnchor, Rel: r.Rel,
+			Target: target, TargetAnchor: targetAnchor,
+		})
 	}
-	return strings.TrimPrefix(key, "#")
+	return edges
 }
 
 // loadPlans loads planDir's documents as CorpusDocs, in two passes: the
@@ -307,11 +290,7 @@ func loadPlans(planDir string) ([]CorpusDoc, error) {
 		if err != nil {
 			return nil, err
 		}
-		for _, ref := range doc.Frontmatter.CoverageEntries() {
-			base, frag := SplitFragment(ref.Spec)
-			cd.Edges = append(cd.Edges, EdgeMeta{Rel: "covers", Target: base, TargetAnchor: frag})
-		}
-		cd.Edges = append(cd.Edges, anchorEdges(doc.Frontmatter)...)
+		cd.Edges = append(cd.Edges, planEdges(doc.Frontmatter)...)
 		plans = append(plans, pending{doc: cd, specOrd: specOrd})
 	}
 	// Second pass: number within each spec-ordinal group, ascending filename
