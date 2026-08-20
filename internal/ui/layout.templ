@@ -47,26 +47,10 @@ templ Page(p PageProps) {
 	</html>
 }
 
-// globalNav renders the seven global destinations in the exact order
-// docs/specs/032-project-cockpit.md §2 requires (Home, Intake, Projects, Work,
-// Reviews, Deliveries, Knowledge), marking the one matching active as both
-// aria-current="page" and .active. Project-scoped pages pass "" — matching
-// none of these — since their project-local nav carries the current-page
-// marker instead; every page sets aria-current="page" exactly once.
-templ globalNav(active string) {
-	@globalLink("/", "Home", "home", active)
-	@globalLink("/intake", "Intake", "intake", active)
-	@globalLink("/projects", "Projects", "projects", active)
-	@globalLink("/work", "Work", "work", active)
-	@globalLink("/reviews", "Reviews", "reviews", active)
-	@globalLink("/deliveries", "Deliveries", "deliveries", active)
-	@globalLink("/knowledge", "Knowledge", "knowledge", active)
-}
-
-// globalLink renders one primary-nav anchor, marking it current when key
-// matches active. The label is emitted tight against the tags (>{label}<) so
-// the seven destinations keep their exact >Name< text markers.
-templ globalLink(href, label, key, active string) {
+// navLink renders one nav anchor — global or project-local — marking it
+// current when key matches active. The label is emitted tight against the tags
+// (>{label}<) so every destination keeps its exact >Name< text marker.
+templ navLink(href, label, key, active string) {
 	<a
 		href={ href }
 		if key == active {
@@ -77,29 +61,35 @@ templ globalLink(href, label, key, active string) {
 }
 
 // primaryNav is the Primary nav landmark carrying the seven global
-// destinations (moved here from the topbar). Every page renders it — global
-// pages as their sidebar's only block, project pages above the project
-// blocks — so global navigation is reachable everywhere (spec 032 §2).
+// destinations in the exact order docs/specs/032-project-cockpit.md §2
+// requires (Home, Intake, Projects, Work, Reviews, Deliveries, Knowledge),
+// marking the one matching active as both aria-current="page" and .active.
+// Every page renders it — global pages as their sidebar's only block, project
+// pages above the project blocks — so global navigation is reachable
+// everywhere (spec 032 §2). Project-scoped pages pass "" — matching none of
+// these — since their project-local nav carries the current-page marker
+// instead; every page sets aria-current="page" exactly once.
 templ primaryNav(active string) {
 	<nav aria-label="Primary" class="global">
-		@globalNav(active)
+		@navLink("/", "Home", "home", active)
+		@navLink("/intake", "Intake", "intake", active)
+		@navLink("/projects", "Projects", "projects", active)
+		@navLink("/work", "Work", "work", active)
+		@navLink("/reviews", "Reviews", "reviews", active)
+		@navLink("/deliveries", "Deliveries", "deliveries", active)
+		@navLink("/knowledge", "Knowledge", "knowledge", active)
 	</nav>
 }
 
-// globalSidebar renders the left column global pages share: the Primary nav
-// landmark alone, marking the one matching active as the current page.
-templ globalSidebar(active string) {
-	<div class="sidebar">
-		@primaryNav(active)
-	</div>
-}
-
 // globalShell wraps a global (non-project) page's content in the unified
-// two-column .shell frame: global sidebar left, content in the main landmark's
-// .canvas. Project pages use projectShell instead.
+// two-column .shell frame: the Primary nav landmark alone in the sidebar,
+// content in the main landmark's .canvas. Project pages use projectShell
+// instead.
 templ globalShell(active string) {
 	<div class="shell">
-		@globalSidebar(active)
+		<div class="sidebar">
+			@primaryNav(active)
+		</div>
 		<main id="main-content" class="main">
 			<div class="canvas">
 				{ children... }
@@ -148,25 +138,12 @@ templ sidebar(p CockpitProject, active string) {
 // matching active as aria-current="page". The Work item links to the
 // overview's #work anchor and is never marked current.
 templ localNav(projectID, active string) {
-	@localLink("/projects/"+projectID, "Overview", "overview", active)
-	@localLink("/projects/"+projectID+"/crew", "Crew", "crew", active)
+	@navLink("/projects/"+projectID, "Overview", "overview", active)
+	@navLink("/projects/"+projectID+"/crew", "Crew", "crew", active)
 	<a href={ "/projects/" + projectID + "#work" }>Work</a>
-	@localLink("/projects/"+projectID+"/deliverables", "Deliverables", "deliverables", active)
-	@localLink("/projects/"+projectID+"/reviews", "Reviews", "reviews", active)
-	@localLink("/projects/"+projectID+"/decisions", "Decisions", "decisions", active)
-	@localLink("/projects/"+projectID+"/documents", "Documents", "documents", active)
-	@localLink("/projects/"+projectID+"/activity", "Activity", "activity", active)
-}
-
-// localLink renders one project-local nav anchor, marking it current when key
-// matches active. The label is emitted tight against the tags (>{label}<) so
-// the eight destinations keep their exact >Name< text markers.
-templ localLink(href, label, key, active string) {
-	<a
-		href={ href }
-		if key == active {
-			class="active"
-			aria-current="page"
-		}
-	>{ label }</a>
+	@navLink("/projects/"+projectID+"/deliverables", "Deliverables", "deliverables", active)
+	@navLink("/projects/"+projectID+"/reviews", "Reviews", "reviews", active)
+	@navLink("/projects/"+projectID+"/decisions", "Decisions", "decisions", active)
+	@navLink("/projects/"+projectID+"/documents", "Documents", "documents", active)
+	@navLink("/projects/"+projectID+"/activity", "Activity", "activity", active)
 }
