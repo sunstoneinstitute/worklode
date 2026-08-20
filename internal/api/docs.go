@@ -411,11 +411,11 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
-// replaceDocEdges handles PUT /api/v1/docs/{id}/edges: pass 2 of a corpus
-// import. It re-resolves the document's frontmatter references against the
-// documents that exist now, turning the to_external placeholders an earlier
-// pass left behind — the corpus references forward as well as backward, so a
-// create-time resolution cannot see the whole of it — into real to_doc edges.
+// replaceDocEdges handles PUT /api/v1/docs/{id}/edges. It re-resolves the
+// document's frontmatter references against the documents that exist now,
+// turning to_external placeholders into real to_doc edges. CreateDoc re-points
+// references as their targets arrive, so this is a repair path — an import that
+// died between passes, say — not the mechanism import depends on.
 //
 // It carries no request body: the document's own stored body is the source,
 // and nothing else about the document changes. The response is the same
