@@ -1,0 +1,149 @@
+// Mirroring remote images into blobs (spec 021 §12). An issue body arrives
+// referencing https://user-images.githubusercontent.com/…; those URLs need
+// GitHub auth for private repos, do not last forever, and §8's renderer
+// blocks remote img src outright, so an imported bug report's screenshots
+// would render as nothing. Every remote reference therefore becomes a
+// /blob/<hash> through the same upload path as §5.
+//
+// The caller is promoteInbox (admin.go), not importInbox: see the call site
+// there for why.
+
+package api
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
+	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/safefetch"
+	"github.com/sunstoneinstitute/worklode/internal/store"
+)
+
+// mirrorHosts are the only hosts mirroring will fetch from. The import path
+// knows exactly which hosts it expects, so the allowlist can be this narrow.
+var mirrorHosts = []string{"githubusercontent.com", "github.com"}
+
+// Fetches are unauthenticated. §12 also asks for the installation's GitHub
+// App token on githubusercontent.com, which is what a private repo's images
+// need; without it those fetch 404 and keep their original URL like any other
+// per-image failure. safefetch.Get carries no request headers, so wiring the
+// token is a change to both packages and is not done here.
+
+// mirrorTimeout bounds the whole pass, not one fetch. safefetch already caps
+// a single fetch at 30 seconds, but the number of image references in a body
+// is chosen by whoever filed the issue, so without a whole-pass budget a
+// promote could be held open for as long as an attacker cares to write
+// `![](…)`. Images the budget cuts off keep their original URLs like any
+// other per-image failure.
+const mirrorTimeout = 60 * time.Second
+
+// maxMirroredImages bounds how many remote references one pass will fetch.
+// safefetch buffers up to maxBlobBytes per image in memory, and the number of
+// `![](…)` references in a body is chosen by whoever filed the issue; a bug
+// report with more than a handful of screenshots is already unusual, and
+// references beyond the cap keep their original URL -- the same failure mode
+// already documented above for any other per-image failure.
+const maxMirroredImages = 20
+
+// mirrorRemoteImages rewrites a body's remote image references to /blob/
+// URLs, uploading each through the normal blob path. Everything becomes a
+// blob, so nothing in a rendered body points off-site -- which is also what
+// makes the renderer's hard restriction on remote img src cost nothing.
+//
+// Failure is per-image and never fatal: the original URL stays, the failure
+// is logged, and the promote proceeds. A partially-mirrored body beats a
+// failed promote, and the renderer drops the leftover rather than turning it
+// into a tracking beacon.
+//
+// It performs network I/O, so it must be called before the caller's
+// transaction opens -- a slow origin must never hold a database lock.
+func (s *server) mirrorRemoteImages(ctx context.Context, body string) string {
+	if s.blobs == nil {
+		return body
+	}
+	remotes := blobref.RemoteImages(body)
+	if len(remotes) == 0 {
+		return body
+	}
+	f := s.mirrorFetcherForTest
+	if f == nil {
+		f = safefetch.New(mirrorHosts, maxBlobBytes)
+	}
+	ctx, cancel := context.WithTimeout(ctx, mirrorTimeout)
+	defer cancel()
+
+	mapping := map[string]string{}
+	stored, deduped := 0, 0
+	if len(remotes) > maxMirroredImages {
+		s.observeImageMirror(mirrorCapped, len(remotes)-maxMirroredImages)
+		remotes = remotes[:maxMirroredImages]
+	}
+	for _, src := range remotes {
+		data, _, err := f.Get(ctx, src)
+		if err != nil {
+			s.log.Warn("mirror image skipped", "url", src, "err", err)
+			s.observeImageMirror(mirrorFetchFailed, 1)
+			continue
+		}
+		// The origin's Content-Type is unverified, so the sniff is the
+		// authority -- as it is for uploadBlob.
+		mediaType := http.DetectContentType(data)
+		// A URL chosen by whoever filed the issue, whose bytes end up behind
+		// an <img src>, so anything that cannot render in place is not
+		// mirrored: storing arbitrary attacker-supplied bytes under an image
+		// reference buys a hosting primitive and a broken image, and the
+		// original URL left in place renders as nothing (§8) instead.
+		if !blobref.Embeddable(mediaType) {
+			s.log.Warn("mirror image skipped", "url", src, "media_type", mediaType)
+			s.observeImageMirror(mirrorNotEmbeddable, 1)
+			continue
+		}
+		sum := sha256.Sum256(data)
+		hash := hex.EncodeToString(sum[:])
+		// Dedup on the index row, not on a bare error: a database failure
+		// must not read as "not present" and re-PUT bytes that are there.
+		_, err = s.st.GetBlob(ctx, hash)
+		switch {
+		case err == nil:
+			deduped++
+		case errors.Is(err, store.ErrNotFound):
+			// Object before row, as uploadBlob does: an orphan object is
+			// collectable, a row pointing at nothing is a broken image.
+			if err := s.blobs.Put(ctx, blobstore.Key(hash),
+				bytes.NewReader(data), int64(len(data)), mediaType); err != nil {
+				s.log.Warn("mirror image put failed", "url", src, "err", err)
+				s.observeImageMirror(mirrorStoreFailed, 1)
+				continue
+			}
+			if _, err := s.st.InsertBlob(ctx, hash, mediaType, int64(len(data))); err != nil {
+				s.log.Warn("mirror image index failed", "url", src, "err", err)
+				s.observeImageMirror(mirrorStoreFailed, 1)
+				continue
+			}
+			stored++
+		default:
+			s.log.Warn("mirror image index lookup failed", "url", src, "err", err)
+			s.observeImageMirror(mirrorStoreFailed, 1)
+			continue
+		}
+		mapping[src] = "/blob/" + hash
+	}
+	out, err := blobref.ReplaceDestination(body, mapping)
+	if err != nil {
+		// Reference-style images are the only way to get here: the bytes are
+		// already stored, but the body cannot be rewritten piecemeal, so it
+		// is kept exactly as written rather than half-rewritten.
+		s.log.Warn("mirror rewrite failed", "err", err)
+		s.observeImageMirror(mirrorRewriteFailed, stored+deduped)
+		return body
+	}
+	s.observeImageMirror(mirrorStored, stored)
+	s.observeImageMirror(mirrorDeduplicated, deduped)
+	return out
+}

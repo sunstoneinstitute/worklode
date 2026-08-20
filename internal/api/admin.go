@@ -535,6 +535,18 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 
 	actorID := actorIDFrom(r)
 
+	// Mirror remote images here rather than at import (spec 021 §12): a
+	// promote is where an issue-derived body first becomes a task body, and
+	// `lode inbox import` carries no body at all — neither githubauth.Issue
+	// nor model.Issue has one, so there would be nothing there to rewrite.
+	// req.Body is mutated before recordEvent serialises req, so the event
+	// payload is the body that was stored, not the off-site URLs it was
+	// derived from; a payload still naming the remote URLs would make the
+	// provenance record disagree with tasks.body, and any replay of it would
+	// undo the mirroring. Deliberately outside recordEvent: this fetches over
+	// the network, and a slow origin must never hold a database lock.
+	req.Body = s.mirrorRemoteImages(r.Context(), req.Body)
+
 	var created *model.Task
 	err = s.recordEvent(r.Context(), "cli", "issue.promoted", req,
 		func(tx *sql.Tx, eventID int64) error {

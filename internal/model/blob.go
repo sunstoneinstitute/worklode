@@ -58,3 +58,21 @@ type AttachBlobInput struct {
 type AttachBlobResponse struct {
 	Status string `json:"status"`
 }
+
+// BlobGCRequest is the request body of POST /api/v1/blobs/gc (spec 021 §11).
+// GraceHours is a pointer so an omitted field falls back to the server's
+// default grace period rather than being read as an explicit zero.
+type BlobGCRequest struct {
+	DryRun     bool `json:"dry_run"`
+	GraceHours *int `json:"grace_hours"`
+}
+
+// BlobGCResponse is the response body of POST /api/v1/blobs/gc: what both GC
+// sweeps found, and — outside dry-run — deleted. Unreferenced and
+// OrphanObjects are always arrays, never null.
+type BlobGCResponse struct {
+	Unreferenced  []string `json:"unreferenced"`
+	OrphanObjects []string `json:"orphan_objects"`
+	Deleted       int      `json:"deleted"`
+	Errors        []string `json:"errors,omitempty"`
+}

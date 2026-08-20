@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
@@ -386,8 +387,12 @@ func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
 // outgoing child_of names the parent while an incoming one names a child.
 func taskView(t *model.Task, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
 	view := ui.TaskView{
-		Page:     ui.PageProps{Title: "worklode: " + t.ID},
-		Task:     *t,
+		Page: ui.PageProps{Title: "worklode: " + t.ID},
+		Task: *t,
+		// Sanitising happens here rather than in ui: internal/ui is a
+		// stdlib + internal/model leaf and cannot import mdrender's
+		// goldmark/bluemonday dependencies (ADR 036 §3, CLAUDE.md).
+		BodyHTML: mdrender.Body(t.Body),
 		Blocked:  blocked,
 		Timeline: timelineRows(entries),
 	}

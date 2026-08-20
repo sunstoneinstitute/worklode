@@ -122,7 +122,62 @@ func newTokenRevokeCmd() *cobra.Command {
 	return cmd
 }
 
+func newBlobCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "blob",
+		Short: "Manage content-addressed blobs",
+	}
+	cmd.AddCommand(newBlobGCCmd())
+	return cmd
+}
+
+// newBlobGCCmd runs both GC sweeps from spec 021 §11. --dry-run defaults to
+// true — running the real sweep should be a deliberate act, not the default
+// of a command an operator ran to see what would happen.
+func newBlobGCCmd() *cobra.Command {
+	var apply bool
+	var graceHours int
+	cmd := &cobra.Command{
+		Use:   "gc",
+		Short: "Collect unreferenced blobs and orphan objects",
+		Long: "Reports by default. Pass --apply to delete. Grace period keeps both\n" +
+			"sweeps clear of uploads in flight.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			res, raw, err := c.BlobGC(cmd.Context(), !apply, &graceHours)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			w := cmd.OutOrStdout()
+			verb := "would delete"
+			if apply {
+				verb = "deleted"
+			}
+			fmt.Fprintf(w, "%d unreferenced blob(s), %d orphan object(s); %s %d\n",
+				len(res.Unreferenced), len(res.OrphanObjects), verb, res.Deleted)
+			for _, e := range res.Errors {
+				fmt.Fprintf(cmd.ErrOrStderr(), "error: %s\n", e)
+			}
+			if len(res.Errors) > 0 {
+				return fmt.Errorf("%d gc error(s)", len(res.Errors))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&apply, "apply", false, "actually delete (default: report only)")
+	cmd.Flags().IntVar(&graceHours, "grace-hours", 24, "ignore blobs and objects newer than this")
+	return cmd
+}
+
 func init() {
 	rootCmd.AddCommand(newActorCmd())
 	rootCmd.AddCommand(newTokenCmd())
+	rootCmd.AddCommand(newBlobCmd())
 }

@@ -280,6 +280,7 @@ docs/specs/021-images-in-task-bodies.md:
     sec-13: "## 13. Configuration"
     sec-14: "## 14. Open questions"
     sec-15: "## 15. Acceptance criteria"
+    sec-15.1: "### 15.1 Verification state"
 docs/specs/022-prometheus-metrics.md:
   sections:
     sec-0: "## 0. Purpose & scope"

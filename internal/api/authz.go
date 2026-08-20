@@ -130,6 +130,10 @@ const (
 	// about the upload names the work it belongs to.
 	permBlobWrite Permission = "blob.write"
 	permBlobRead  Permission = "blob.read"
+	// permBlobAdmin covers the GC sweeps (spec 021 §11): they delete index
+	// rows and object-store bytes on every actor's behalf, which is instance
+	// administration, not ordinary blob authoring.
+	permBlobAdmin Permission = "blob.admin"
 
 	// permEventRead covers the read surfaces over the ordered event log
 	// (spec 025 §15/§18): the log itself and subscriber status. Any
@@ -212,6 +216,9 @@ var grants = map[Permission][]Role{
 	// in it. Narrowing this below task.read/web.read would render task pages
 	// with broken images rather than protect anything.
 	permBlobRead: {RoleUser, RoleAdmin},
+	// Admin-only: a GC sweep deletes data on every actor's behalf, so running
+	// one is an operational act, not ordinary blob authoring.
+	permBlobAdmin: {RoleAdmin},
 
 	permEventRead:   {RoleUser, RoleAdmin},
 	permEventAdmin:  {RoleAdmin},
