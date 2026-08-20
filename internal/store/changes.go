@@ -97,7 +97,10 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 // that, from body (TaskIDFromBody); it is only set if that task actually
 // exists. On update, task_id is set only if it is currently NULL — once
 // correlated, a PR keeps its task link even if a later delivery carries a
-// different (or no) correlation signal.
+// different (or no) correlation signal. task_id sits inside the guarded SET
+// below, so a delivery the guard rejects does not correlate either; a PR's
+// head-ref signal is identical on every one of its events, which leaves only
+// a body edit arriving out of order.
 //
 // # The non-regressing guard
 //
@@ -121,8 +124,7 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 // writes. Unknown on either side sorts as '-infinity': a legacy row with no
 // stored timestamp yields to the first event that carries one, so nothing
 // freezes, and an event with no timestamp yields to any row that has one,
-// because it cannot prove it is newer. Both unknown falls through to the
-// old unconditional behaviour.
+// because it cannot prove it is newer. Both unknown writes unconditionally.
 func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 	candidate := TaskIDFromRef(pr.HeadRef)
 	if candidate == "" {

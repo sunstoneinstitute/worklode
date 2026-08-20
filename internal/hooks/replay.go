@@ -2,9 +2,9 @@
 // never ran — *.ignored deliveries recorded before their repo was mapped.
 // Offline: the payload is intact in events.payload, so no GitHub call is
 // needed. Re-running is harmless because the applies are order-safe, not
-// merely idempotent: a replayed event is older than facts that already
-// landed, so the fact upserts are non-regressing (see store.UpsertPR) and
-// transitions are guarded on the from-state.
+// merely idempotent: a replayed event may be older than facts that already
+// landed, so the fact upserts are guarded to be non-regressing (see
+// store.UpsertPR) and transitions are guarded on the from-state.
 
 package hooks
 
