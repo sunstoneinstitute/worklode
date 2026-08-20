@@ -125,7 +125,10 @@ and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer for crash
 loops/OOM kills), and `lode inbox import` (backfill through the webhook store
 path, so re-running is safe).
 
-Cross-cutting pieces: worktree-bound leases (`internal/worktree`,
+Cross-cutting pieces: `internal/gitexec` (every `git` subprocess in the
+binary, so environment policy and error shape live in one place — a guard
+test fails the build on a direct `exec.Command("git", ...)` anywhere else),
+worktree-bound leases (`internal/worktree`,
 `internal/hookrun`), agent-session tracking priced from the agent's own
 transcript (`internal/transcript`, `store/pricing` — rates are effective-dated
 rows in `model_prices`, never hardcoded), the org skill registry with pgvector
