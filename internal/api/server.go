@@ -622,6 +622,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}
 		s.blobs = bs
 	}
+	// Fail the boot, not the first upload, on an unwritable spool directory:
+	// a read-only root filesystem with no volume mounted there 500s every
+	// upload while the pod reports healthy. Gated on s.blobs rather than on
+	// BlobEndpoint because the injected test store spools the same way.
+	if s.blobs != nil {
+		if err := checkSpoolWritable(cfg.BlobSpoolDir); err != nil {
+			return nil, nil, err
+		}
+	}
 
 	if cfg.BootstrapToken != "" {
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
