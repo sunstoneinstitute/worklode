@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -137,4 +139,75 @@ func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorPr
 		out = append(out, *ap)
 	}
 	return out, nil
+}
+
+// OwnedWork is one open item a Crew member owns, blocking their removal
+// (spec 029 §6.1). Kind is "task" today; approvals (spec 029 §7, plan C)
+// and decisions join this query when their tables exist.
+type OwnedWork struct {
+	Kind  string // "task"
+	ID    string
+	Title string
+	State string
+}
+
+// rowQueryer is the multi-row read surface OpenWorkOwnedBy needs: both
+// *sql.DB and *sql.Tx satisfy it, so the removal guard (task 7) can run the
+// same query inside the transaction that reassigns or unassigns the work
+// it finds.
+type rowQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// openWorkExcludedStates is the SQL "NOT IN (...)" literal list of every
+// state in deliveredStateSet (internal/store/tasks.go), sorted. Building it
+// from that set — rather than hand-listing states here — means a state
+// added to or removed from deliveredStateSet changes what "open" means for
+// the removal guard automatically; the two can never drift apart.
+var openWorkExcludedStates = func() string {
+	states := slices.Sorted(maps.Keys(deliveredStateSet))
+	quoted := make([]string, len(states))
+	for i, st := range states {
+		quoted[i] = "'" + st + "'"
+	}
+	return strings.Join(quoted, ", ")
+}()
+
+// openWorkOwnedBy runs the OpenWorkOwnedBy query against any rowQueryer, so
+// Task 7's removal guard can call it inside the same transaction that
+// reassigns or unassigns the work it finds. "Open" means the task's state
+// is not in deliveredStateSet (see openWorkExcludedStates).
+func openWorkOwnedBy(ctx context.Context, q rowQueryer, projectID, actorID string) ([]OwnedWork, error) {
+	rows, err := q.QueryContext(ctx,
+		`SELECT id, title, state
+		   FROM tasks
+		  WHERE project_id = $1 AND assignee = $2
+		    AND state NOT IN (`+openWorkExcludedStates+`)
+		  ORDER BY id`,
+		projectID, actorID)
+	if err != nil {
+		return nil, fmt.Errorf("open work owned by %s in project %s: %w", actorID, projectID, err)
+	}
+	defer rows.Close()
+
+	var out []OwnedWork
+	for rows.Next() {
+		w := OwnedWork{Kind: "task"}
+		if err := rows.Scan(&w.ID, &w.Title, &w.State); err != nil {
+			return nil, fmt.Errorf("open work owned by %s in project %s: %w", actorID, projectID, err)
+		}
+		out = append(out, w)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("open work owned by %s in project %s: %w", actorID, projectID, err)
+	}
+	return out, nil
+}
+
+// OpenWorkOwnedBy returns every open item actorID owns in projectID — the
+// removal guard's fact query (spec 029 §6.1) and the basis for a member's
+// responsibility listing (032 §6). An actor who owns nothing open returns
+// an empty slice, not an error.
+func (s *Store) OpenWorkOwnedBy(ctx context.Context, projectID, actorID string) ([]OwnedWork, error) {
+	return openWorkOwnedBy(ctx, s.db, projectID, actorID)
 }

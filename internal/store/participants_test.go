@@ -154,3 +154,51 @@ func TestListParticipants(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+// TestOpenWorkOwnedBy pins the removal guard's fact query (spec 029 §6.1):
+// only a task that is both assigned to the actor and still open (state not
+// in deliveredStateSet) counts as owned work blocking removal.
+func TestOpenWorkOwnedBy(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "OWB1"); err != nil {
+		t.Fatalf("CreateProject p1: %v", err)
+	}
+	if err := s.CreateActor(ctx, "ada", "human", "Ada Lovelace", false); err != nil {
+		t.Fatalf("CreateActor ada: %v", err)
+	}
+
+	openAssigned := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "p1", Title: "open, assigned to ada", Body: "b",
+		Priority: "medium", Kind: "feature", CreatedBy: "ada",
+	})
+	if err := assignTask(t, s, taskTestNow, openAssigned.ID, "ada"); err != nil {
+		t.Fatalf("assign openAssigned: %v", err)
+	}
+
+	deliveredAssigned := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "p1", Title: "merged, assigned to ada", Body: "b",
+		Priority: "medium", Kind: "feature", CreatedBy: "ada",
+	})
+	if err := assignTask(t, s, taskTestNow, deliveredAssigned.ID, "ada"); err != nil {
+		t.Fatalf("assign deliveredAssigned: %v", err)
+	}
+	walkTo(t, s, deliveredAssigned.ID, "merged")
+
+	createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "p1", Title: "open, unassigned", Body: "b",
+		Priority: "medium", Kind: "feature", CreatedBy: "ada",
+	})
+
+	got, err := s.OpenWorkOwnedBy(ctx, "p1", "ada")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Kind != "task" {
+		t.Fatalf("want exactly the open assigned task, got %+v", got)
+	}
+	if got[0].ID != openAssigned.ID || got[0].Title != "open, assigned to ada" || got[0].State != "ready" {
+		t.Fatalf("wrong task returned: %+v", got[0])
+	}
+}
