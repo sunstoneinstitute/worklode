@@ -89,23 +89,35 @@ func (c *RepoClient) DefaultBranch(ctx context.Context) (string, error) {
 // branch, via the compare API: base=sha, head=branch — "ahead" or
 // "identical" means the branch contains the sha. A 404 (unknown sha) is
 // false, not an error.
-func (c *RepoClient) CommitOnBranch(ctx context.Context, branch, sha string) (bool, error) {
+//
+// committed is the base commit's committer date, carried by the same
+// response. The poll engine needs it to append main_commits in the order the
+// commits actually landed; it is zero when GitHub omits it.
+func (c *RepoClient) CommitOnBranch(ctx context.Context, branch, sha string) (on bool, committed time.Time, err error) {
 	var cmp struct {
-		Status string `json:"status"`
+		Status     string `json:"status"`
+		BaseCommit struct {
+			Commit struct {
+				Committer struct {
+					Date time.Time `json:"date"`
+				} `json:"committer"`
+			} `json:"commit"`
+		} `json:"base_commit"`
 	}
 	u := fmt.Sprintf("%s/repos/%s/compare/%s...%s",
 		c.base, c.path, url.PathEscape(sha), url.PathEscape(branch))
 	code, err := githubJSON(ctx, http.MethodGet, u, c.auth, &cmp)
 	if err != nil {
-		return false, err
+		return false, time.Time{}, err
 	}
 	switch code {
 	case http.StatusOK:
-		return cmp.Status == "ahead" || cmp.Status == "identical", nil
+		on = cmp.Status == "ahead" || cmp.Status == "identical"
+		return on, cmp.BaseCommit.Commit.Committer.Date, nil
 	case http.StatusNotFound:
-		return false, nil
+		return false, time.Time{}, nil
 	default:
-		return false, fmt.Errorf("compare %s %s...%s: status %d", c.path, sha, branch, code)
+		return false, time.Time{}, fmt.Errorf("compare %s %s...%s: status %d", c.path, sha, branch, code)
 	}
 }
 

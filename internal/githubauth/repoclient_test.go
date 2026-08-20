@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 )
@@ -83,25 +84,33 @@ func TestRepoClientDefaultBranch(t *testing.T) {
 func TestRepoClientCommitOnBranch(t *testing.T) {
 	sha, off := "2222222222222222222222222222222222222222", "3333333333333333333333333333333333333333"
 	app := newFakeGitHub(t, map[string]string{
-		"/repos/acme/app/compare/" + sha + "...main": `{"status": "ahead"}`,
+		"/repos/acme/app/compare/" + sha + "...main": `{
+			"status": "ahead",
+			"base_commit": {"commit": {"committer": {"date": "2026-07-20T10:00:00Z"}}}
+		}`,
 		"/repos/acme/app/compare/" + off + "...main": `{"status": "diverged"}`,
 	})
 	rc, err := app.NewRepoClient(t.Context(), "acme/app")
 	if err != nil {
 		t.Fatalf("new repo client: %v", err)
 	}
-	on, err := rc.CommitOnBranch(t.Context(), "main", sha)
+	on, committed, err := rc.CommitOnBranch(t.Context(), "main", sha)
 	if err != nil || !on {
 		t.Fatalf("CommitOnBranch(ancestor) = %v, %v; want true", on, err)
 	}
-	on, err = rc.CommitOnBranch(t.Context(), "main", off)
+	// The committer date rides along on the compare response; the poll
+	// engine orders main_commits by it.
+	if want := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC); !committed.Equal(want) {
+		t.Fatalf("CommitOnBranch date = %v; want %v", committed, want)
+	}
+	on, _, err = rc.CommitOnBranch(t.Context(), "main", off)
 	if err != nil || on {
 		t.Fatalf("CommitOnBranch(diverged) = %v, %v; want false", on, err)
 	}
 	// An unknown sha 404s: not on the branch, not an error.
-	on, err = rc.CommitOnBranch(t.Context(), "main", "4444444444444444444444444444444444444444")
-	if err != nil || on {
-		t.Fatalf("CommitOnBranch(unknown) = %v, %v; want false, nil", on, err)
+	on, committed, err = rc.CommitOnBranch(t.Context(), "main", "4444444444444444444444444444444444444444")
+	if err != nil || on || !committed.IsZero() {
+		t.Fatalf("CommitOnBranch(unknown) = %v, %v, %v; want false, zero, nil", on, committed, err)
 	}
 }
 

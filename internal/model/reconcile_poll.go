@@ -7,7 +7,7 @@ type PollResult struct {
 	RunID      string       `json:"run_id"`
 	DryRun     bool         `json:"dry_run"`
 	Candidates int          `json:"candidates"`
-	Repaired   []TaskRepair `json:"repaired"`
+	Repaired   []TaskRepair `json:"repaired,omitempty"`
 	Errors     []string     `json:"errors,omitempty"`
 }
 

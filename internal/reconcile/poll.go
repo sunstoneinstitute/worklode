@@ -35,12 +35,17 @@ type Options struct {
 
 // repoFacts is everything gathered for one repo before the apply phase.
 type repoFacts struct {
-	repo          string
-	prs           []store.PullRequest // fresh facts, ready for UpsertPR
-	prBodies      map[int64]string
-	landedSHAs    []string            // shas GitHub confirms are on the default branch, sorted
-	landed        map[string]bool     // membership view of landedSHAs
-	taskSHAs      map[string][]string // task id -> the shas checked on its behalf, sorted
+	repo     string
+	prs      []store.PullRequest // fresh facts, ready for UpsertPR
+	prBodies map[int64]string
+	// landedSHAs are the shas GitHub confirms are on the default branch, in
+	// the order they landed — main_commits.id is the per-repo ordering every
+	// frontier comparison depends on and is permanent, so appending in any
+	// other order can over-advance a frontier.
+	landedSHAs    []string
+	landed        map[string]bool      // membership view of landedSHAs
+	landedAt      map[string]time.Time // sha -> GitHub's committer date (may be zero)
+	taskSHAs      map[string][]string  // task id -> the shas checked on its behalf, sorted
 	mergedCommits []store.TaskCommit
 	releases      []githubauth.ReleaseFacts
 	tasks         []store.PollCandidate
@@ -49,6 +54,12 @@ type repoFacts struct {
 // Poll runs engine 2. app must be non-nil; the API layer skips polling (with
 // an explanation) when the GitHub App is not configured.
 func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Options) (*model.PollResult, error) {
+	// The run id is the system event's external_id, and RecordEvent skips
+	// apply entirely on conflict. An empty one would collide with the last
+	// empty-id run and report repairs that never happened.
+	if opts.RunID == "" {
+		return nil, fmt.Errorf("reconcile poll: run id is required")
+	}
 	candidates, err := st.PollCandidates(ctx, opts.Repo, opts.Task, opts.Since)
 	if err != nil {
 		return nil, err
@@ -115,12 +126,17 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 	if err != nil {
 		return nil, fmt.Errorf("encode run summary: %w", err)
 	}
-	_, _, err = st.RecordEvent(ctx, "system", opts.RunID, "reconcile.poll", summary,
+	_, inserted, err := st.RecordEvent(ctx, "system", opts.RunID, "reconcile.poll", summary,
 		func(tx *sql.Tx, eventID int64) error {
 			return applyFacts(tx, st.Now(), eventID, gathered)
 		})
 	if err != nil {
 		return nil, err
+	}
+	if !inserted {
+		// RecordEvent skipped apply: nothing in res was written. Reporting
+		// success here would describe repairs that did not happen.
+		return nil, fmt.Errorf("reconcile poll: run id %q already recorded; no facts were applied", opts.RunID)
 	}
 	return res, nil
 }
@@ -142,6 +158,7 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 		repo:     repo,
 		prBodies: map[int64]string{},
 		landed:   map[string]bool{},
+		landedAt: map[string]time.Time{},
 		taskSHAs: map[string][]string{},
 		tasks:    tasks,
 	}
@@ -235,15 +252,27 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 	}
 	sort.Strings(ordered)
 	for _, sha := range ordered {
-		on, err := rc.CommitOnBranch(ctx, defaultBranch, sha)
+		on, committed, err := rc.CommitOnBranch(ctx, defaultBranch, sha)
 		if err != nil {
 			return nil, err
 		}
 		if on {
 			f.landed[sha] = true
+			f.landedAt[sha] = committed
 			f.landedSHAs = append(f.landedSHAs, sha)
 		}
 	}
+	// Append order is commit date, not the sha order the requests were made
+	// in: main_commits ids are permanent and a frontier read against them
+	// must not place a later commit below an earlier one. The sha tiebreak
+	// keeps equal (or missing) dates deterministic for --json.
+	sort.SliceStable(f.landedSHAs, func(i, j int) bool {
+		a, b := f.landedSHAs[i], f.landedSHAs[j]
+		if !f.landedAt[a].Equal(f.landedAt[b]) {
+			return f.landedAt[a].Before(f.landedAt[b])
+		}
+		return a < b
+	})
 
 	// Releases only matter for release-terminated repos; asking costs one
 	// request and applyFacts ignores unresolvable ones, so ask uniformly.
@@ -279,7 +308,13 @@ func applyFacts(tx *sql.Tx, now time.Time, eventID int64, gathered []*repoFacts)
 				return err
 			}
 			if known == nil {
-				if _, err := store.AppendMainCommit(tx, f.repo, sha, now); err != nil {
+				// pushed_at is when the commit landed, not when reconcile
+				// noticed; fall back to now when GitHub gave no date.
+				pushedAt := f.landedAt[sha]
+				if pushedAt.IsZero() {
+					pushedAt = now
+				}
+				if _, err := store.AppendMainCommit(tx, f.repo, sha, pushedAt); err != nil {
 					return err
 				}
 			}

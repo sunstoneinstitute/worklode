@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/reconcile"
@@ -20,7 +22,29 @@ const (
 	mergeSHA   = "2222222222222222222222222222222222222222"
 	otherSHA   = "3333333333333333333333333333333333333333"
 	releaseSHA = "4444444444444444444444444444444444444444"
+
+	// Two commits landing in one run whose commit-date order is the reverse
+	// of their sha order. See TestPollAppendsMainCommitsInCommitDateOrder.
+	lateCommitSHA  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // lower sha, later date
+	earlyCommitSHA = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" // higher sha, earlier date
 )
+
+// mergeCommittedAt is the fake merge commit's committer date; poll writes it
+// to main_commits.pushed_at.
+var (
+	mergeCommittedAt = time.Date(2026, 7, 20, 10, 5, 0, 0, time.UTC)
+	earlyCommittedAt = time.Date(2026, 7, 21, 10, 0, 0, 0, time.UTC)
+	lateCommittedAt  = time.Date(2026, 7, 22, 10, 0, 0, 0, time.UTC)
+	// staleUpdatedAt predates the fake PR's updated_at (2026-07-20T10:00:00Z).
+	staleUpdatedAt = time.Date(2026, 7, 19, 9, 0, 0, 0, time.UTC)
+)
+
+// compareBody is a compare-API response saying sha is on the branch, with the
+// base commit's committer date attached.
+func compareBody(at time.Time) string {
+	return `{"status": "ahead", "base_commit": {"commit": {"committer": {"date": "` +
+		at.Format(time.RFC3339) + `"}}}}`
+}
 
 func newFakeGitHub(t *testing.T, routes map[string]string) *githubauth.AppAuth {
 	t.Helper()
@@ -87,6 +111,11 @@ func seedStaleTask(t *testing.T, st *store.Store) (taskID string) {
 				Repo: "acme/app", Number: 12, Title: "fix", State: "open",
 				HeadRef: taskID + "-fix", HeadSHA: headSHA,
 				URL: "u", OpenedAt: now,
+				// Older than the fake PR's updated_at, so UpsertPR's
+				// non-regressing guard only lets the repair land because
+				// gatherRepo threads GitHub's updated_at through. A NULL here
+				// would pass the guard either way.
+				UpdatedAt: staleUpdatedAt,
 			}, "")
 			return err
 		}); err != nil {
@@ -106,7 +135,7 @@ func mergedPRRoutes(taskID string) map[string]string {
 			"updated_at": "2026-07-20T10:00:00Z",
 			"head": {"ref": "` + taskID + `-fix", "sha": "` + headSHA + `"}
 		}`,
-		"/repos/acme/app/compare/" + mergeSHA + "...main": `{"status": "ahead"}`,
+		"/repos/acme/app/compare/" + mergeSHA + "...main": compareBody(mergeCommittedAt),
 		"/repos/acme/app/compare/" + headSHA + "...main":  `{"status": "diverged"}`,
 		"/repos/acme/app/releases":                        `[]`,
 	}
@@ -141,6 +170,17 @@ func TestPollRepairsMergedWhileDown(t *testing.T) {
 	// repo's whole landed set.
 	if got := res.Repaired[0].CommitsLanded; len(got) != 1 || got[0] != mergeSHA {
 		t.Fatalf("commits landed = %v; want [%s]", got, mergeSHA)
+	}
+	// The stored PR row is repaired too. Unlike the task state (which the
+	// commit correlation alone would advance), this write only survives
+	// UpsertPR's non-regressing guard because gatherRepo threads GitHub's
+	// updated_at through against the seeded, older one.
+	prs, err := st.PRsForTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("PRs for task: %v", err)
+	}
+	if len(prs) != 1 || prs[0].State != "merged" || prs[0].MergeSHA == nil || *prs[0].MergeSHA != mergeSHA {
+		t.Fatalf("stored PR = %+v; want state merged with merge_sha %s", prs, mergeSHA)
 	}
 
 	// The transition attributes to the reconcile.poll system event.
@@ -347,6 +387,117 @@ func TestPollDryRunReportsWithoutWriting(t *testing.T) {
 	}
 	if got := taskState(t, st, taskID); got != "in_review" {
 		t.Fatalf("dry-run advanced the task to %q; want untouched in_review", got)
+	}
+}
+
+// seedTwoCommitTask seeds a task correlated only through two unlanded
+// task_commits rows (no PR), so one poll run appends two main_commits.
+func seedTwoCommitTask(t *testing.T, st *store.Store) (taskID string) {
+	t.Helper()
+	ctx := context.Background()
+	if err := st.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := st.AddRepo(ctx, "demo", "acme/app"); err != nil {
+		t.Fatalf("map repo: %v", err)
+	}
+	if _, _, err := st.RecordEvent(ctx, "cli", "seed-two-"+t.Name(), "test.seed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			now := st.Now()
+			task, err := store.CreateTask(tx, now, store.TaskInput{
+				ProjectID: "demo", Title: "two commits", Priority: "medium", Kind: "bug",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			for _, hop := range [][2]string{{"ready", "in_progress"}, {"in_progress", "in_review"}} {
+				if err := store.Transition(tx, now, taskID, hop[0], hop[1], eventID); err != nil {
+					return err
+				}
+			}
+			for _, sha := range []string{lateCommitSHA, earlyCommitSHA} {
+				if err := store.InsertTaskCommit(tx, store.TaskCommit{
+					TaskID: taskID, Repo: "acme/app", SHA: sha,
+					Source: "local_merge", SeenAt: now,
+				}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+		t.Fatalf("seed two-commit task: %v", err)
+	}
+	return taskID
+}
+
+// mainCommit reads one main_commits row (id is the permanent per-repo
+// ordering seq) through a throwaway event's transaction.
+func mainCommit(t *testing.T, st *store.Store, sha string) (id int64, pushedAt time.Time) {
+	t.Helper()
+	if _, _, err := st.RecordEvent(context.Background(), "cli", "read-"+t.Name()+"-"+sha, "test.read", nil,
+		func(tx *sql.Tx, _ int64) error {
+			return tx.QueryRow(
+				`SELECT id, pushed_at FROM main_commits WHERE repo = $1 AND sha = $2`,
+				"acme/app", sha).Scan(&id, &pushedAt)
+		}); err != nil {
+		t.Fatalf("read main_commit %s: %v", sha, err)
+	}
+	return id, pushedAt.UTC()
+}
+
+// main_commits.id is the permanent per-repo ordering every frontier
+// comparison reads (covered(), TasksBelowFrontier). A run that lands more
+// than one commit must append them in the order they landed: here the two
+// shas' commit-date order is the reverse of their sha order, so appending in
+// sha order would give the later commit the lower id and let a release cut
+// before it read as covering it.
+func TestPollAppendsMainCommitsInCommitDateOrder(t *testing.T) {
+	st := store.OpenTestStore(t)
+	seedTwoCommitTask(t, st)
+	app := newFakeGitHub(t, map[string]string{
+		"/repos/acme/app": `{"default_branch": "main"}`,
+		"/repos/acme/app/compare/" + lateCommitSHA + "...main":  compareBody(lateCommittedAt),
+		"/repos/acme/app/compare/" + earlyCommitSHA + "...main": compareBody(earlyCommittedAt),
+		"/repos/acme/app/releases":                              `[]`,
+	})
+
+	if _, err := reconcile.Poll(context.Background(), st, app, reconcile.Options{RunID: "run-order"}); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	earlyID, earlyPushed := mainCommit(t, st, earlyCommitSHA)
+	lateID, latePushed := mainCommit(t, st, lateCommitSHA)
+	if earlyID >= lateID {
+		t.Fatalf("main_commits ids = early %d, late %d; want the earlier commit to have the lower id "+
+			"(sha order would invert it: %s < %s)", earlyID, lateID, lateCommitSHA, earlyCommitSHA)
+	}
+	// pushed_at records when the commit landed, not when reconcile noticed.
+	if !earlyPushed.Equal(earlyCommittedAt) || !latePushed.Equal(lateCommittedAt) {
+		t.Fatalf("pushed_at = %v, %v; want %v, %v", earlyPushed, latePushed, earlyCommittedAt, lateCommittedAt)
+	}
+}
+
+// RecordEvent skips apply on a duplicate (source, external_id), so a reused
+// run id would return a fully populated report describing writes that never
+// happened. Both a reused and an empty run id must be errors.
+func TestPollRejectsReusedAndEmptyRunID(t *testing.T) {
+	st := store.OpenTestStore(t)
+	taskID := seedStaleTask(t, st)
+	app := newFakeGitHub(t, mergedPRRoutes(taskID))
+	ctx := context.Background()
+
+	if _, err := reconcile.Poll(ctx, st, app, reconcile.Options{}); err == nil {
+		t.Fatal("poll with an empty run id succeeded; want an error")
+	}
+	if _, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-dup"}); err != nil {
+		t.Fatalf("first poll: %v", err)
+	}
+	_, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-dup"})
+	if err == nil {
+		t.Fatal("poll with a reused run id succeeded; want an error naming it")
+	}
+	if !strings.Contains(err.Error(), "run-dup") {
+		t.Fatalf("error = %v; want it to name the duplicate run id", err)
 	}
 }
 
