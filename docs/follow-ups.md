@@ -106,11 +106,11 @@ outright once it is fixed over annotating it as resolved.
   `tasks.assignee` only, so a task an agent claimed (lease holder, no assignee) is
   invisible to it. Joining active leases would make "everything X is working on"
   one query instead of two.
-- `[P2]` **`lode task list --mine`**: blocked on there being no caller identity in the
-  CLI — no `whoami` route, no `Client.WhoAmI`, and `cli.Config` stores no actor
-  id (`lode login` prints `res.ActorID` and discards it). Persisting the actor id
-  at login, or adding the route, unblocks it; until then `--assignee <actor>` is
-  the explicit form.
+- `[P2]` **`lode task list --mine`**: blocked on `cli.Config` not persisting the
+  caller's actor id — `lode login` prints `res.ActorID` and discards it. The
+  `whoami` route and `Client.WhoAmI` now exist (spec 013); persisting the actor
+  id at login unblocks this. Until then `--assignee <actor>` is the explicit
+  form.
 - `[P2]` **PR closed without merge**: release the lease and surface the task on the
   board (today it stays `in_review`; `lode task rework` is the manual path).
 - `[P2]` **Bulk inbox dismiss**: `lode inbox dismiss` takes one issue at a time, which

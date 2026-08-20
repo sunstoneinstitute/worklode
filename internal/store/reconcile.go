@@ -7,6 +7,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -111,6 +112,69 @@ func (s *Store) PollCandidates(ctx context.Context, repo, task string, since *ti
 	return out, nil
 }
 
+// RepoIngestion is one mapped repo's ingestion health: what project doctor
+// reports (spec 013 §lode project doctor).
+type RepoIngestion struct {
+	Repo        string
+	ProjectID   string
+	MappedAt    time.Time
+	LastEventAt *time.Time // nil: this repo has never sent a webhook
+	EventTypes  []string   // distinct event types seen, sorted
+	Unapplied   int        // events still awaiting replay
+}
+
+// RepoIngestionHealth returns per-repo ingestion health for every mapped
+// repo (or just one, when repo is non-empty), ordered by repo. Events
+// correlate to repos by the delivery payload's repository.full_name; this
+// scans the events table and is an operator-frequency query, not a hot path.
+func (s *Store) RepoIngestionHealth(ctx context.Context, repo string) ([]RepoIngestion, error) {
+	q := `SELECT pr.repo, pr.project_id, pr.mapped_at,
+	             e.last_event_at, COALESCE(e.event_types, '[]'::jsonb), COALESCE(e.unapplied, 0)
+	      FROM project_repos pr
+	      LEFT JOIN LATERAL (
+	          SELECT max(received_at) AS last_event_at,
+	                 jsonb_agg(DISTINCT type) AS event_types,
+	                 count(*) FILTER (WHERE applied_at IS NULL) AS unapplied
+	          FROM events
+	          WHERE source = 'github'
+	            AND payload->'repository'->>'full_name' = pr.repo
+	      ) e ON true`
+	var args []any
+	if repo != "" {
+		args = append(args, repo)
+		q += ` WHERE pr.repo = $1`
+	}
+	q += ` ORDER BY pr.repo`
+
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("repo ingestion health: %w", err)
+	}
+	defer rows.Close()
+
+	var out []RepoIngestion
+	for rows.Next() {
+		var ri RepoIngestion
+		var types []byte
+		if err := rows.Scan(&ri.Repo, &ri.ProjectID, &ri.MappedAt, &ri.LastEventAt, &types, &ri.Unapplied); err != nil {
+			return nil, fmt.Errorf("scan repo ingestion health: %w", err)
+		}
+		if err := json.Unmarshal(types, &ri.EventTypes); err != nil {
+			return nil, fmt.Errorf("decode event types for %s: %w", ri.Repo, err)
+		}
+		ri.MappedAt = ri.MappedAt.UTC()
+		if ri.LastEventAt != nil {
+			u := ri.LastEventAt.UTC()
+			ri.LastEventAt = &u
+		}
+		out = append(out, ri)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repo ingestion health: %w", err)
+	}
+	return out, nil
+}
+
 // UnlandedTaskCommits returns a task's recorded commit shas in repo that are
 // not yet known to be on the default branch (absent from main_commits),
 // sorted. These are what the poll engine checks against GitHub.
@@ -136,6 +200,44 @@ func (s *Store) UnlandedTaskCommits(ctx context.Context, taskID, repo string) ([
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("unlanded commits for %s in %s: %w", taskID, repo, err)
+	}
+	return out, nil
+}
+
+// UnmappedSender is a repo that has sent webhooks but maps to no project.
+type UnmappedSender struct {
+	Repo        string
+	Events      int
+	LastEventAt time.Time
+}
+
+// UnmappedSenders returns repos seen in github deliveries that have no
+// project mapping, ordered by repo.
+func (s *Store) UnmappedSenders(ctx context.Context) ([]UnmappedSender, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT e.payload->'repository'->>'full_name', count(*), max(e.received_at)
+		 FROM events e
+		 WHERE e.source = 'github'
+		   AND e.payload->'repository'->>'full_name' IS NOT NULL
+		   AND NOT EXISTS (SELECT 1 FROM project_repos pr
+		                   WHERE pr.repo = e.payload->'repository'->>'full_name')
+		 GROUP BY 1 ORDER BY 1`)
+	if err != nil {
+		return nil, fmt.Errorf("unmapped senders: %w", err)
+	}
+	defer rows.Close()
+
+	var out []UnmappedSender
+	for rows.Next() {
+		var u UnmappedSender
+		if err := rows.Scan(&u.Repo, &u.Events, &u.LastEventAt); err != nil {
+			return nil, fmt.Errorf("scan unmapped sender: %w", err)
+		}
+		u.LastEventAt = u.LastEventAt.UTC()
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("unmapped senders: %w", err)
 	}
 	return out, nil
 }

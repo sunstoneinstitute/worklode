@@ -188,6 +188,13 @@ type server struct {
 	// when nil, addRepo skips done_state discovery.
 	appAuth *githubauth.AppAuth
 
+	// hookMetrics is the webhook/replay instrument set (internal/hooks),
+	// shared by the webhook handlers and POST /api/v1/reconcile's replay
+	// call. Set in registerRoutes, right after hooks.NewMetrics(reg); every
+	// *hooks.Metrics method is nil-safe (internal/hooks/metrics.go), so
+	// callers don't need it non-nil.
+	hookMetrics *hooks.Metrics
+
 	// embedder is nil unless an embedding provider is configured; recommend
 	// then runs pins-only. skillSyncer is nil unless skill sources are
 	// configured; sync then 422s. skillSyncMu serializes concurrent sync
@@ -431,6 +438,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 		return true
 	}
 	hookMetrics := hooks.NewMetrics(reg)
+	s.hookMetrics = hookMetrics
 	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 
@@ -514,6 +522,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
 	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
 	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
+	r.api("GET /api/v1/repos/doctor", s.reposDoctor)
 
 	r.api("POST /api/v1/actors", s.createActor)
 	r.api("POST /api/v1/actors/{id}/tokens", s.createToken)
@@ -533,6 +542,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/events/stream", s.streamEvents)
 	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
 	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
+
+	r.api("GET /api/v1/whoami", s.whoami)
+	r.api("POST /api/v1/reconcile", s.reconcile)
 
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
