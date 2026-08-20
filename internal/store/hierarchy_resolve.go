@@ -122,10 +122,9 @@ func ResolveHierarchy(tx *sql.Tx, now time.Time, parentID string, eventID int64)
 // childStates returns parentID's direct child_of children — state plus the
 // per-repo closed verdict — in no particular order, since containerTarget only
 // counts them. Tombstoned children are not children for this purpose (044 §4),
-// so deleting the last unfinished one closes the parent.
-// Closedness comes from the same taskClosed predicate the
-// blocking queries and ChildProgress use, so a roll-up and the progress counts
-// read at the same moment agree. They can still drift afterwards: the roll-up
+// so deleting the last unfinished one closes the parent. Closedness comes from
+// the same taskClosed predicate the blocking queries and ChildProgress use, so
+// a roll-up and the progress counts read at the same moment agree. They can still drift afterwards: the roll-up
 // stores a state and only Transition re-runs it, while taskClosed also depends
 // on project_repos.done_state and the landed commit set, either of which can
 // change with no task transition to trigger a re-resolve.
