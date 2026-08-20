@@ -621,21 +621,23 @@ claims and the gap between them is the useful part.
 
 | # | State | Where |
 |---|---|---|
-| 1 | partial | Hash and dedup response asserted; `TestInsertBlobIdempotent` covers "no second row". "No second `PutObject`" is unasserted — `blobstore.Fake` counts no calls |
+| 1 | verified | Hash and dedup response asserted; `TestInsertBlobIdempotent` covers "no second row"; `TestBlobLifecycle` (e2e) asserts the object store holds three objects after four uploads, which is what "no second `PutObject`" is observable as |
 | 2 | partial | `413` asserted at 100 MiB + 1. The bounded-heap half is implemented (`TeeReader` to a spool file) but nothing measures it |
 | 3 | partial | Both auth paths and the refusal asserted. The presigned response's headers are **live-bucket work** (WL-206) |
-| 4 | partial | Two-PNG rewrite asserted against a stub server; the two-row database half asserted separately at one PNG. No single test spans both |
-| 5 | partial | Body edit, flag clearing and GC each asserted alone. Nothing runs the chain end to end, and no test asserts the *other* blob survives the sweep |
+| 4 | partial | `TestBlobLifecycle` (e2e) spans upload → body citing two PNGs → two `blobs` rows and two `task_blobs` rows at `embedded = true` through the real stack. The `--body-file` local-path rewrite that produces those citations is still asserted against a stub server only |
+| 5 | verified | `TestBlobLifecycle` (e2e) runs the chain: the body edit drops one image, its row goes, `blob gc` at zero grace collects that blob and its object, and the still-cited image and the attached log survive the sweep and still serve |
 | 6 | verified | Split across a cmd test and a store test, but every clause is covered |
 | 7 | verified | `TestHostileBodies` covers all four payloads plus ~45 more; `TestTaskPageRendersMarkdown` proves it on the real page |
 | 8 | partial | Mirror and refusal both asserted. No test proves `user-images.githubusercontent.com` passes the allowlist — the mirror test bypasses the host check |
-| 9 | partial | Absolute URLs asserted. `media_type` and `embedded` are populated but unasserted |
-| 10 | partial | Deletion past the grace period asserted; "one newer is not" is asserted for the row sweep only. Every GC test passes `grace_hours: 0`, so the 24-hour default is never exercised |
+| 9 | verified | Absolute URLs asserted; `TestBlobLifecycle` (e2e) asserts `media_type` and `embedded` per blob, across an embedded image and an attached log |
+| 10 | verified | `TestBlobLifecycle` (e2e) runs the orphan sweep at the 24-hour default: an object aged 48 hours is deleted, one placed now is not, and neither is a `blobs` row younger than the grace period |
 | 11 | partial | Cascade and `ON DELETE RESTRICT` asserted. "Leaves blobs another task references" is untested — and unreachable in the product, which has no task-delete surface |
 | 12 | verified | `501` asserted for upload and for GC; full suite green |
 
-Two structural gaps behind that table. The **e2e suite touches blobs nowhere at all** — every
-criterion above is discharged by package tests, which is exactly why 4, 5 and 8 are stitched
-together from a stub-server CLI test and a separate store test rather than proven once through
-the real stack. And **no live bucket exists**, so criterion 3's presigned-response half is
-deferred whole (§2, WL-206); a single session against a real bucket discharges it.
+One structural gap remains behind that table: **no live bucket exists**, so criterion 3's
+presigned-response half is deferred whole (§2, WL-206); a single session against a real bucket
+discharges it. The e2e gap is closed — `e2e/blobs_test.go` walks upload, dedup, a body citing
+two images, an explicit attachment, the `/blob/{hash}` redirect for both a bearer token and a
+browser, the rendered task page, the brief, and both GC sweeps in one pass over the real stack,
+substituting only the object store (`blobstore.Fake` for Hetzner, as `OpenTestStore` stands in
+for the production database).
