@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -20,6 +21,7 @@ func toBriefJSON(b *store.Brief) model.Brief {
 		GoverningDesign:    b.GoverningDesign,
 		AffectedComponents: b.AffectedComponents,
 		DefinitionOfDone:   b.DefinitionOfDone,
+		Blobs:              make([]model.TaskBlob, 0, len(b.Blobs)),
 		Skills: model.SkillRecommendation{
 			Pinned:   make([]model.PinnedSkill, 0, len(b.PinnedSkills)),
 			Matches:  []model.SkillMatch{},
@@ -43,6 +45,7 @@ func toBriefJSON(b *store.Brief) model.Brief {
 	for _, sk := range b.PinnedSkills {
 		out.Skills.Pinned = append(out.Skills.Pinned, toPinnedSkillJSON(sk))
 	}
+	out.Blobs = append(out.Blobs, b.Blobs...)
 	return out
 }
 
@@ -63,6 +66,12 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := toBriefJSON(b)
+	// Absolute, not root-relative: an agent fetching a brief is not
+	// same-origin with the server and has nothing to resolve /blob/ against.
+	base := strings.TrimRight(s.cfg.PublicURL, "/")
+	for i := range out.Blobs {
+		out.Blobs[i].URL = base + "/blob/" + out.Blobs[i].Hash
+	}
 	if !withSkills {
 		writeJSON(w, http.StatusOK, out)
 		return

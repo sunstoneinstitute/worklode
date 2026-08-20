@@ -78,6 +78,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(blobServeOutcomes, ", ") +
 			"). Sustained 'not_found' means task bodies reference blobs the index has lost, which renders as broken images.",
 	}, []string{"outcome"})
+	s.taskBlobRefs = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_task_blob_refs_total",
+		Help: "Explicit task blob references changed by the attach/detach endpoints, by action (" +
+			strings.Join(taskBlobRefActions, ", ") +
+			"). Only the declared half of the reference graph: embedded references follow the task body and are not counted here.",
+	}, []string{"action"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
 		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
@@ -123,7 +129,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
-		s.blobUploads, s.blobServes,
+		s.blobUploads, s.blobServes, s.taskBlobRefs,
 		s.kindAliasUses)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
@@ -165,6 +171,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range blobServeOutcomes {
 		s.blobServes.WithLabelValues(outcome)
+	}
+	for _, action := range taskBlobRefActions {
+		s.taskBlobRefs.WithLabelValues(action)
 	}
 	// Every alias on every surface, because the whole point of this counter is
 	// to prove nothing still sends the deprecated spelling before the alias is
@@ -411,6 +420,9 @@ var (
 		"unconfigured",  // no bucket on this instance
 		"storage_error", // presign failed, or the index read did
 	}
+	// taskBlobRefActions is the complete, bounded label set for
+	// worklode_task_blob_refs_total.
+	taskBlobRefActions = []string{"attached", "detached"}
 )
 
 // observeBlobUpload records one POST /api/v1/blobs, called exactly once on
@@ -433,4 +445,14 @@ func (s *server) observeBlobServe(outcome string) {
 		return
 	}
 	s.blobServes.WithLabelValues(outcome).Inc()
+}
+
+// observeTaskBlobRef records one attach or detach of a task's explicit blob
+// reference. Called on the success path of attachTaskBlob and detachTaskBlob
+// only. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeTaskBlobRef(action string) {
+	if s.taskBlobRefs == nil {
+		return
+	}
+	s.taskBlobRefs.WithLabelValues(action).Inc()
 }

@@ -48,6 +48,10 @@ type TaskDetail struct {
 	Lease         *Lease         `json:"lease,omitempty"`
 	AgentSessions []AgentSession `json:"agent_sessions,omitempty"`
 	Hierarchy     TaskHierarchy  `json:"hierarchy"`
+	// Blobs are the task's images and attachments (spec 021 §3). Attached
+	// blobs appear nowhere in the body markdown, so a reader that only
+	// renders Body would never learn they exist.
+	Blobs []TaskBlob `json:"blobs,omitempty"`
 }
 
 // TaskListDetail is one row of GET /api/v1/tasks?detail=true: the base task

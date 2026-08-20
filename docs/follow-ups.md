@@ -562,3 +562,27 @@ while dogfooding it against the real corpus.
   config key" claim is true again — WL-147 made `spec_corpus`/`plan_corpus`
   accepted-and-ignored — but the flag it offers in their place was never built,
   and the corpus location is no longer a client-side question at all.
+
+## From WL-38 — task blob references and CLI (2026-08-20)
+
+- `[P2]` **`lode task attach`/`detach` bypass `recordEvent`.** Every other
+  mutating task handler in `internal/api` writes through it, so an attach or
+  detach leaves no row in `events` and no entry in the task timeline — the
+  reference graph changes with no provenance. Its own change rather than a
+  patch here, because it moves `AttachBlob`/`DetachBlob` off `*Store` and onto
+  `*sql.Tx` so the write and its event commit together.
+- `[P2]` **`blobref.Extract` sees only `ast.Image`, so a raw-HTML
+  `<img src="/blob/…">` is not counted as an embedded reference.** Not
+  reachable today — nothing renders raw HTML in a task body — but `Extract`
+  is documented as the authority for the `embedded` flag, and plan 3 brings
+  both HTML rendering and the GC that deletes unreferenced blobs. An
+  uncounted reference there is a live image whose bytes get collected, so
+  settle it before plan 3 starts: either count raw-HTML `img` sources or
+  state in 021 that only markdown image syntax references a blob.
+- `[P4]` **Spec 021 §7's warning for a local file behind a plain link is not
+  implemented.** §7 says a link to a local file "is left alone and reported
+  as a warning — use `lode task attach` for those". `uploadBodyImages`
+  (`internal/cmd/task.go`) does leave it alone, correctly, but says nothing,
+  so an author who wrote `[shot](./shot.png)` gets a task whose link resolves
+  nowhere and no hint why. `blobref` already walks `ast.Link`, so this is a
+  second exported helper and one `Fprintf`.

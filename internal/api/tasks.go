@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
@@ -145,6 +146,10 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 					return err
 				}
 			}
+			if err := store.ReconcileEmbedded(tx, now, t.ID,
+				blobref.Extract(req.Body), actorID); err != nil {
+				return err
+			}
 			return nil
 		})
 	if err != nil {
@@ -224,6 +229,18 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	if parent != nil {
 		resp.Hierarchy.Parent = &model.TaskParent{ID: parent.ID, Title: parent.Title, State: parent.State}
 	}
+
+	blobs, err := s.st.ListTaskBlobs(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	resp.Blobs = make([]model.TaskBlob, 0, len(blobs))
+	for _, b := range blobs {
+		b.URL = "/blob/" + b.Hash
+		resp.Blobs = append(resp.Blobs, b)
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -470,6 +487,17 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 				if err := store.Transition(tx, s.st.Now(), id, stateFrom, *req.State, eventID); err != nil {
 					return err
 				}
+			}
+			// Reconcile against the body as stored, not as patched: a PATCH
+			// that leaves the body alone must still reconcile against the
+			// body that is actually there.
+			body, err := store.TaskBody(tx, id)
+			if err != nil {
+				return err
+			}
+			if err := store.ReconcileEmbedded(tx, s.st.Now(), id,
+				blobref.Extract(body), actorIDFrom(r)); err != nil {
+				return err
 			}
 			return nil
 		})

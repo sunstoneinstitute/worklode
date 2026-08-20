@@ -159,7 +159,7 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "ready"},
 		Hierarchy: model.TaskHierarchy{Parent: &model.TaskParent{ID: "WL-1", Title: "Container", State: "in_progress"}},
-	})
+	}, "")
 	if got := buf.String(); !strings.Contains(got, "parent:   WL-1") {
 		t.Fatalf("output has no parent line:\n%s", got)
 	}
@@ -169,7 +169,7 @@ func TestTaskDetailRenderHierarchy(t *testing.T) {
 		Task: model.Task{ID: "WL-1", Title: "Container", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "in_progress"},
 		Hierarchy: model.TaskHierarchy{Progress: model.TaskProgress{Closed: 3, Total: 7}},
-	})
+	}, "")
 	if got := buf.String(); !strings.Contains(got, "progress: 3/7") {
 		t.Fatalf("output has no progress line:\n%s", got)
 	}
@@ -183,7 +183,7 @@ func TestTaskDetailRenderLeaseShowsWorktree(t *testing.T) {
 		Task: model.Task{ID: "WL-2", Title: "Piece", Project: "proj", Priority: "medium",
 			Kind: "feature", State: "in_progress"},
 		Lease: &model.Lease{ActorID: "stig", Worktree: "host:/.worktrees/wl-2"},
-	})
+	}, "")
 	if got := buf.String(); !strings.Contains(got, "worktree: host:/.worktrees/wl-2") {
 		t.Fatalf("output has no worktree line:\n%s", got)
 	}
@@ -206,7 +206,7 @@ func TestTaskDetailRenderSessions(t *testing.T) {
 				InputTokens: &in, OutputTokens: &out, CostAmount: &cost, CostCurrency: "USD"},
 			{Agent: "codex", SessionID: "sess-2"},
 		},
-	})
+	}, "")
 	got := buf.String()
 	for _, want := range []string{"sessions:", "claude-code", "sess-1", "12.3k", "4.1k", "0.42", "codex", "sess-2", "active"} {
 		if !strings.Contains(got, want) {
@@ -483,5 +483,38 @@ func TestTimelineSummaryEdgeChange(t *testing.T) {
 	}
 	if got, want := timelineSummary(removed), "edge removed: WL-1 blocks WL-2"; got != want {
 		t.Fatalf("timelineSummary(remove) = %q, want %q", got, want)
+	}
+}
+
+// TestMarkdownAbsolutizesBlobURLs checks MarkdownWithBase rewrites a
+// root-relative /blob/ reference to an absolute one against the given
+// server, so a rendered body is terminal-clickable and unambiguous off the
+// web UI.
+func TestMarkdownAbsolutizesBlobURLs(t *testing.T) {
+	var buf bytes.Buffer
+	MarkdownWithBase(&buf, "![x](/blob/"+strings.Repeat("a", 64)+")\n", "https://wl.example")
+	if !strings.Contains(buf.String(), "https://wl.example/blob/"+strings.Repeat("a", 64)) {
+		t.Fatalf("blob URL not absolutized:\n%s", buf.String())
+	}
+}
+
+// TestTaskDetailRendersAttachments checks the attachments table names an
+// attached blob's file, media type, and size -- fields the body markdown
+// never carries for a blob that is not embedded.
+func TestTaskDetailRendersAttachments(t *testing.T) {
+	var buf bytes.Buffer
+	TaskDetailRender(&buf, model.TaskDetail{
+		Task: model.Task{ID: "WL-1", Title: "crash"},
+		Blobs: []model.TaskBlob{{
+			Hash: "abc123", Filename: "crash.log",
+			MediaType: "text/plain", Size: 4096, Attached: true,
+			URL: "/blob/abc123",
+		}},
+	}, "")
+	out := buf.String()
+	for _, want := range []string{"attachments:", "crash.log", "text/plain"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
 	}
 }

@@ -1,17 +1,21 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -51,6 +55,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskBriefCmd(),
 		newTaskCostCmd(),
 		newTaskSkillsCmd(),
+		newTaskAttachCmd(),
+		newTaskDetachCmd(),
 	)
 	return cmd
 }
@@ -200,10 +206,78 @@ func resolveBody(body, bodyFile string, stdin io.Reader) (string, error) {
 	return string(b), nil
 }
 
+// uploadBodyImages uploads every local relative image the body references and
+// returns the body with those destinations rewritten to /blob/<hash>.
+//
+// Uploads complete before the create/update call, so the task is written once
+// with final content and the server's embedded reconciliation sees the
+// rewritten body. A missing file fails the whole command rather than
+// producing a task whose body points at images that were never uploaded.
+func uploadBodyImages(ctx context.Context, c *cli.Client, body, baseDir string, out io.Writer) (string, error) {
+	locals := blobref.LocalImages(body)
+	if len(locals) == 0 {
+		return body, nil
+	}
+	base, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	// The containment check has to compare resolved paths, because os.Open
+	// follows symlinks: a bundle carrying `shot.png -> /etc/shadow` would
+	// otherwise pass a purely lexical test and upload that file's bytes.
+	base, err = filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", fmt.Errorf("resolve %s: %w", baseDir, err)
+	}
+	mapping := make(map[string]string, len(locals))
+	for _, rel := range locals {
+		// A markdown destination is URL-escaped, the filesystem name is not,
+		// so `./my%20file.png` has to be decoded before it is opened. The raw
+		// destination stays the rewrite key: it is the string actually
+		// written in the body, and the two differ. Decoding belongs here and
+		// not in blobref, which only ever deals in body text.
+		name := rel
+		if dec, err := url.PathUnescape(rel); err == nil {
+			name = dec
+		}
+		abs := filepath.Join(base, name)
+		// Lstat before EvalSymlinks so a genuinely missing file still
+		// reports "no such file" rather than a confusing resolve error.
+		if _, err := os.Lstat(abs); err != nil {
+			return "", fmt.Errorf("image %q: %w", rel, err)
+		}
+		abs, err = filepath.EvalSymlinks(abs)
+		if err != nil {
+			return "", fmt.Errorf("image %q: %w", rel, err)
+		}
+		if !withinDir(base, abs) {
+			return "", fmt.Errorf("image %q resolves outside %s", rel, base)
+		}
+		blob, err := c.UploadFile(ctx, abs)
+		if err != nil {
+			return "", fmt.Errorf("upload %q: %w", rel, err)
+		}
+		mapping[rel] = blob.URL
+		fmt.Fprintf(out, "uploaded %s (%s, %d bytes)\n", rel, blob.MediaType, blob.Size)
+	}
+	return blobref.ReplaceDestination(body, mapping)
+}
+
+// withinDir reports whether path is dir or below it. filepath.Rel rather than
+// a string prefix, which would accept /foo/bar for a /foo/ba base. Both
+// arguments must already be absolute and symlink-resolved.
+func withinDir(dir, path string) bool {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func newTaskAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var title, body, bodyFile, priority, kind, concern, parent, followUpTo string
-	var draft bool
+	var draft, noUpload bool
 	var skills []string
 	var secretNames []string
 	cmd := &cobra.Command{
@@ -218,6 +292,13 @@ func newTaskAddCmd() *cobra.Command {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
+			}
+			if bodyFile != "" && bodyFile != "-" && !noUpload {
+				body, err = uploadBodyImages(cmd.Context(), c, body,
+					filepath.Dir(bodyFile), cmd.OutOrStdout())
+				if err != nil {
+					return err
+				}
 			}
 			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
 			if err != nil {
@@ -240,8 +321,10 @@ func newTaskAddCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&title, "title", "", "task title (required)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
-	cmd.Flags().StringVar(&bodyFile, "body-file", "", "read the task body from a file (\"-\" for stdin)")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "",
+		"read the body from this file (- for stdin); local images referenced from a file are uploaded and rewritten")
 	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
+	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
@@ -362,7 +445,7 @@ func runTaskShow(cmd *cobra.Command, arg string) error {
 		printRaw(cmd, raw)
 		return nil
 	}
-	cli.TaskDetailRender(cmd.OutOrStdout(), t)
+	cli.TaskDetailRender(cmd.OutOrStdout(), t, cfg.ServerURL)
 	return nil
 }
 
@@ -425,7 +508,7 @@ func printSkills(cmd *cobra.Command, skills []string) {
 
 func newTaskEditCmd() *cobra.Command {
 	var title, body, bodyFile, concern, priority string
-	var needsDecomposition bool
+	var needsDecomposition, noUpload bool
 	var secretNames []string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
@@ -476,6 +559,17 @@ func newTaskEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// bodyFile != "-" means the body came from a real file with a
+			// base directory to resolve local images against; --body and
+			// --body-file - (stdin) never rewrite (no base directory).
+			if in.Body != nil && cmd.Flags().Changed("body-file") && bodyFile != "-" && !noUpload {
+				rewritten, err := uploadBodyImages(cmd.Context(), c, *in.Body,
+					filepath.Dir(bodyFile), cmd.OutOrStdout())
+				if err != nil {
+					return err
+				}
+				in.Body = &rewritten
+			}
 			t, raw, err := c.EditTask(cmd.Context(), id, in)
 			if err != nil {
 				return err
@@ -485,7 +579,9 @@ func newTaskEditCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&title, "title", "", "replace the task title (must not be blank)")
 	cmd.Flags().StringVar(&body, "body", "", "replace the task body with this text")
-	cmd.Flags().StringVar(&bodyFile, "body-file", "", "replace the task body with the contents of this file (- for stdin)")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "",
+		"replace the task body with the contents of this file (- for stdin); local images referenced from a file are uploaded and rewritten")
+	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
@@ -1061,4 +1157,120 @@ func newTaskDecomposeCmd() *cobra.Command {
 		`child title (repeatable; one per child, e.g. --into "A" --into "B" --into "C")`)
 	cmd.MarkFlagRequired("into")
 	return cmd
+}
+
+// newTaskAttachCmd is `lode task attach`: upload one or more files and
+// reference them from a task. Images and videos (blobref.Embeddable) are
+// appended to the body as markdown so they render inline; everything else is
+// attached only (spec 021 §3).
+func newTaskAttachCmd() *cobra.Command {
+	var noEmbed bool
+	cmd := &cobra.Command{
+		Use:   "attach <task-id> <file>...",
+		Short: "Upload files and attach them to a task",
+		Long: "Images and videos are appended to the task body as markdown so they render\n" +
+			"inline; every other type is attached only. Use - to read one blob from stdin,\n" +
+			"which pairs with a clipboard tool: pngpaste - | lode task attach WL-42 -",
+		Args: cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(ctx, args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+
+			task, _, err := c.GetTask(ctx, id)
+			if err != nil {
+				return err
+			}
+			body := task.Body
+			var appended bool
+
+			for _, path := range args[1:] {
+				var blob model.BlobResponse
+				name := filepath.Base(path)
+				if path == "-" {
+					data, err := io.ReadAll(cmd.InOrStdin())
+					if err != nil {
+						return fmt.Errorf("read stdin: %w", err)
+					}
+					if len(data) == 0 {
+						return fmt.Errorf("stdin is empty")
+					}
+					name = "pasted"
+					blob, err = c.UploadBlob(ctx, bytes.NewReader(data), int64(len(data)))
+					if err != nil {
+						return err
+					}
+				} else {
+					blob, err = c.UploadFile(ctx, path)
+					if err != nil {
+						return err
+					}
+				}
+
+				if !noEmbed && blobref.Embeddable(blob.MediaType) {
+					if body != "" && !strings.HasSuffix(body, "\n") {
+						body += "\n"
+					}
+					body += fmt.Sprintf("\n![%s](%s)\n", name, blob.URL)
+					appended = true
+					fmt.Fprintf(cmd.OutOrStdout(), "embedded %s (%s)\n", name, blob.Hash[:12])
+					continue
+				}
+				if err := c.AttachBlob(ctx, id, blob.Hash, name); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "attached %s (%s)\n", name, blob.Hash[:12])
+			}
+
+			if appended {
+				if _, _, err := c.EditTask(ctx, id, model.EditTaskInput{Body: &body}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&noEmbed, "no-embed", false,
+		"attach images without appending them to the body")
+	return cmd
+}
+
+// newTaskDetachCmd is `lode task detach`: clear an explicit reference from a
+// task to an already-uploaded blob. A row the body still embeds survives
+// with only its declared half cleared (spec 021 §3), so a still-embedded
+// hash gets a warning rather than a silent no-op.
+func newTaskDetachCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "detach <task-id> <hash>",
+		Short: "Remove an attached blob from a task",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			refs, err := c.ListTaskBlobs(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			for _, r := range refs {
+				if r.Hash == args[1] && r.Embedded {
+					fmt.Fprintf(cmd.ErrOrStderr(),
+						"warning: the body still embeds %s; it stays until the body stops citing it\n",
+						args[1][:12])
+				}
+			}
+			return c.DetachBlob(cmd.Context(), id, args[1])
+		},
+	}
 }

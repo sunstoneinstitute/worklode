@@ -24,3 +24,37 @@ type BlobResponse struct {
 	Size      int64  `json:"size"`
 	URL       string `json:"url"`
 }
+
+// TaskBlob is one row of a task's blob reference graph (spec 021 §1), joined
+// to the blob it names. Embedded is derived from the body on every task
+// write; Attached is declared by `lode task attach` and survives body edits.
+// URL is the root-relative /blob/<hash> reference, filled in at the HTTP
+// boundary — the store leaves it empty, because a reference's address is a
+// serving concern, not a storage one.
+type TaskBlob struct {
+	Hash      string `json:"hash"`
+	Filename  string `json:"filename"`
+	MediaType string `json:"media_type"`
+	Size      int64  `json:"size"`
+	Embedded  bool   `json:"embedded"`
+	Attached  bool   `json:"attached"`
+	URL       string `json:"url"`
+}
+
+// TaskBlobsResponse is the response body of GET /api/v1/tasks/{id}/blobs.
+// Blobs is always an array, never null.
+type TaskBlobsResponse struct {
+	Blobs []TaskBlob `json:"blobs"`
+}
+
+// AttachBlobInput is the request body of POST /api/v1/tasks/{id}/blobs:
+// an already-uploaded hash, plus the filename to display and serve it under.
+type AttachBlobInput struct {
+	Hash     string `json:"hash"`
+	Filename string `json:"filename"`
+}
+
+// AttachBlobResponse is the response body of POST /api/v1/tasks/{id}/blobs.
+type AttachBlobResponse struct {
+	Status string `json:"status"`
+}

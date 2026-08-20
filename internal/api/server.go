@@ -287,6 +287,13 @@ type server struct {
 	blobUploads *prometheus.CounterVec
 	blobServes  *prometheus.CounterVec
 
+	// taskBlobRefs counts the explicit half of a task's blob reference graph
+	// changed by the attach/detach endpoints, by action; see blobs.go and
+	// observeTaskBlobRef. The embedded half follows the task body via
+	// ReconcileEmbedded and is not counted here — it is not a distinct
+	// caller action.
+	taskBlobRefs *prometheus.CounterVec
+
 	// kindAliasUses counts requests naming a deprecated task kind that was
 	// normalised to its current name, by alias and surface; see
 	// kindalias.go. A sustained zero across these surfaces is not the whole
@@ -429,6 +436,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
 	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
 	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
+	r.api("GET /api/v1/tasks/{id}/blobs", s.listTaskBlobs)
+	r.api("POST /api/v1/tasks/{id}/blobs", s.attachTaskBlob)
+	r.api("DELETE /api/v1/tasks/{id}/blobs/{hash}", s.detachTaskBlob)
 
 	r.api("POST /api/v1/docs", s.createDoc)
 	r.api("GET /api/v1/docs", s.listDocs)
@@ -883,8 +893,8 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists → 409, anything else → 500 with a generic body (the detail
-// is logged, not leaked).
+// ErrRevisionExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
+// generic body (the detail is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -895,8 +905,13 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	// the caller has to act on.
 	case errors.Is(err, store.ErrForbidden):
 		writeErr(w, http.StatusForbidden, err.Error())
+	// A body citing a hash with no blob row: user error, not a server fault.
+	// Matched on the sentinel and not on the constraint name, because the
+	// other direction of that same FK -- a GC deleting a blob a task still
+	// references -- is a server bug that has to stay a logged 500.
 	case errors.Is(err, store.ErrBadTransition),
 		errors.Is(err, store.ErrCycle),
+		errors.Is(err, store.ErrUnknownBlob),
 		errors.Is(err, store.ErrInvalidInput):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
 	case errors.Is(err, store.ErrLeased),
