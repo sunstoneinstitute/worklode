@@ -496,7 +496,7 @@ func TestIsLodeStatusLine(t *testing.T) {
 	}
 }
 
-// Events() and boundNames() are both derived from claudeBindings, so what this
+// Events() and boundNames(claudeBindings) are both derived from claudeBindings, so what this
 // pins is that the derivation is faithful: every binding install writes is
 // reachable through the event it runs and through the bound-name list, in the
 // same spelling. Heartbeat is checked by hand because its fan-out to four
@@ -504,11 +504,11 @@ func TestIsLodeStatusLine(t *testing.T) {
 func TestBoundNamesMatchEvents(t *testing.T) {
 	events := (ClaudeCode{}).Events()
 	bound := map[string]bool{}
-	for _, n := range boundNames() {
+	for _, n := range boundNames(claudeBindings) {
 		bound[n] = true
 	}
 	if len(bound) != len(claudeBindings) {
-		t.Fatalf("boundNames() = %v, want one entry per binding", boundNames())
+		t.Fatalf("boundNames(claudeBindings) = %v, want one entry per binding", boundNames(claudeBindings))
 	}
 	for _, b := range claudeBindings {
 		if !strings.HasPrefix(b.Command, lodeHookPrefix) {
@@ -521,7 +521,7 @@ func TestBoundNamesMatchEvents(t *testing.T) {
 			t.Errorf("Events()[%s] = %v, want it to name %s", event, events[event], name)
 		}
 		if !bound[name] {
-			t.Errorf("boundNames() = %v, want it to name %s", boundNames(), name)
+			t.Errorf("boundNames(claudeBindings) = %v, want it to name %s", boundNames(claudeBindings), name)
 		}
 	}
 	if got := events[Heartbeat]; len(got) != 4 {

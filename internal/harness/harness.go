@@ -121,3 +121,16 @@ func Detected(repoDir string) []string {
 	}
 	return out
 }
+
+// missingEvents lists AllEvents entries absent from h.Events(), in AllEvents
+// order. Every adapter reports degraded coverage the same way.
+func missingEvents(h Harness) []Event {
+	events := h.Events()
+	var out []Event
+	for _, e := range AllEvents {
+		if len(events[e]) == 0 {
+			out = append(out, e)
+		}
+	}
+	return out
+}

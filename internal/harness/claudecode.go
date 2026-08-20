@@ -9,23 +9,9 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// lodeHookPrefix marks a settings entry as Worklode's. JSON has no comments,
-// so the command itself is the marker: install strips every entry with this
-// prefix before writing the current set, which makes a re-run converge rather
-// than duplicate.
-const lodeHookPrefix = "lode hook "
-
 // StatusLineCommand is what the status-line install binds, and — by the
 // same command-as-marker trick — how uninstall recognizes its own entry.
 const StatusLineCommand = "lode statusline"
-
-// claudeBinding is one Claude Code hook binding. An empty Matcher means the
-// binding applies to every occurrence of the event.
-type claudeBinding struct {
-	Event   string
-	Matcher string
-	Command string
-}
 
 // claudeBindings is every Claude Code event Worklode listens to. Heartbeat is
 // bound to four events because Stop alone leaves a live session looking dead:
@@ -39,7 +25,7 @@ type claudeBinding struct {
 // worktrees are covered by session-start and the worktree-enter binding
 // below; `lode hook worktree-create`/`worktree-remove` stay callable from
 // scripts.
-var claudeBindings = []claudeBinding{
+var claudeBindings = []hookBinding{
 	{Event: "SessionStart", Command: "lode hook session-start"},
 	{Event: "SessionEnd", Command: "lode hook session-end"},
 	{Event: "Stop", Command: "lode hook heartbeat"},
@@ -86,17 +72,9 @@ func (ClaudeCode) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	return []SkillTarget{{Dir: filepath.Join(home, ".claude", "skills"), PerSkill: true}}, nil
 }
 
-// Events is claudeBindings read the other way round: the command a binding
-// runs names the Worklode event, so the event table cannot restate — and so
-// cannot drift from — what install actually writes (spec 008 §17.1).
-func (ClaudeCode) Events() map[Event][]string {
-	out := map[Event][]string{}
-	for _, b := range claudeBindings {
-		event := Event(strings.TrimPrefix(b.Command, lodeHookPrefix))
-		out[event] = append(out[event], nativeName(b))
-	}
-	return out
-}
+// Events is claudeBindings read the other way round, so the event table
+// cannot drift from what install actually writes (spec 008 §17.1).
+func (ClaudeCode) Events() map[Event][]string { return eventsFor(claudeBindings) }
 
 // InstallHooks writes Worklode's bindings into the scope's settings file for
 // the repo containing repoDir. Every Worklode event claude-code can express
@@ -109,7 +87,7 @@ func (ClaudeCode) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	if err := installClaudeHooks(path); err != nil {
 		return HookInstall{}, err
 	}
-	return HookInstall{Path: path, Bound: boundNames()}, nil
+	return HookInstall{Path: path, Bound: boundNames(claudeBindings)}, nil
 }
 
 // UninstallHooks removes Worklode's bindings from the scope's settings file
@@ -152,24 +130,6 @@ func (ClaudeCode) UninstallStatusLine(repoDir, scope string) (StatusLineAction, 
 	return StatusLineAction{Path: path, Action: action}, nil
 }
 
-// boundNames lists the harness-native event names an install writes.
-func boundNames() []string {
-	out := make([]string, 0, len(claudeBindings))
-	for _, b := range claudeBindings {
-		out = append(out, nativeName(b))
-	}
-	return out
-}
-
-// nativeName is how one binding is spelled outside the adapter: the Claude
-// Code event, qualified by its matcher when it has one.
-func nativeName(b claudeBinding) string {
-	if b.Matcher == "" {
-		return b.Event
-	}
-	return b.Event + ":" + b.Matcher
-}
-
 // settingsPathForScope resolves the settings file for scope, relative to the
 // git worktree root containing dir.
 func settingsPathForScope(dir, scope string) (string, error) {
@@ -196,16 +156,7 @@ func ClaudeSettingsPath(root, scope string) (string, error) {
 // path, replacing any bindings a previous install left behind and preserving
 // every other setting.
 func installClaudeHooks(path string) error {
-	settings, err := ReadJSONFile(path)
-	if err != nil {
-		return err
-	}
-	hooks, _ := stripLodeHooks(settingsHooks(settings))
-	for _, b := range claudeBindings {
-		hooks[b.Event] = appendBinding(hooks[b.Event], b)
-	}
-	settings["hooks"] = hooks
-	return WriteJSONFile(path, settings)
+	return installGroupedHooks(path, claudeBindings)
 }
 
 // PropagateToWorktree mirrors root's local-scope Claude Code
@@ -244,31 +195,9 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 }
 
 // uninstallClaudeHooks removes Worklode's bindings from the settings file at
-// path, reporting ActionNone or ActionRemoved (the same vocabulary the git
-// hooks use). A missing file, or one with no `lode hook` entries to strip, is
-// ActionNone and leaves the file untouched — a no-op must not reformat
-// someone's settings JSON or bump its mtime.
+// path, reporting ActionNone or ActionRemoved.
 func uninstallClaudeHooks(path string) (action string, err error) {
-	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-		return ActionNone, nil
-	}
-	settings, err := ReadJSONFile(path)
-	if err != nil {
-		return "", err
-	}
-	hooks, changed := stripLodeHooks(settingsHooks(settings))
-	if !changed {
-		return ActionNone, nil
-	}
-	if len(hooks) == 0 {
-		delete(settings, "hooks")
-	} else {
-		settings["hooks"] = hooks
-	}
-	if err := WriteJSONFile(path, settings); err != nil {
-		return "", err
-	}
-	return ActionRemoved, nil
+	return uninstallGroupedHooks(path)
 }
 
 // installStatusLine points the settings file at `lode statusline`, but only
@@ -340,88 +269,4 @@ func isLodeStatusLine(v any) bool {
 		}
 	}
 	return false
-}
-
-// settingsHooks returns the settings' "hooks" object, or an empty one when it
-// is absent or not an object.
-func settingsHooks(settings map[string]any) map[string]any {
-	hooks, ok := settings["hooks"].(map[string]any)
-	if !ok {
-		return map[string]any{}
-	}
-	return hooks
-}
-
-// appendBinding adds b to an event's existing group list, which may be nil or
-// a non-list left by hand-editing (in which case it is replaced).
-func appendBinding(existing any, b claudeBinding) []any {
-	groups, _ := existing.([]any)
-	group := map[string]any{
-		"hooks": []any{map[string]any{"type": "command", "command": b.Command}},
-	}
-	if b.Matcher != "" {
-		group["matcher"] = b.Matcher
-	}
-	return append(groups, group)
-}
-
-// stripLodeHooks removes every `lode hook` entry from a hooks object, dropping
-// groups and events that end up empty so an uninstall leaves no residue. Any
-// third-party hook sharing an event is preserved. changed reports whether any
-// entry was actually removed, so a caller can tell a genuine removal from a
-// no-op and skip rewriting the file for the latter.
-func stripLodeHooks(hooks map[string]any) (out map[string]any, changed bool) {
-	out = map[string]any{}
-	for event, raw := range hooks {
-		groups, ok := raw.([]any)
-		if !ok {
-			// Not a shape we wrote; leave it exactly as found.
-			out[event] = raw
-			continue
-		}
-		var kept []any
-		for _, g := range groups {
-			group, ok := g.(map[string]any)
-			if !ok {
-				kept = append(kept, g)
-				continue
-			}
-			entries, ok := group["hooks"].([]any)
-			if !ok {
-				kept = append(kept, g)
-				continue
-			}
-			var keptEntries []any
-			for _, e := range entries {
-				if isLodeHookEntry(e) {
-					changed = true
-					continue
-				}
-				keptEntries = append(keptEntries, e)
-			}
-			if len(keptEntries) == 0 {
-				continue
-			}
-			group["hooks"] = keptEntries
-			kept = append(kept, group)
-		}
-		if len(kept) == 0 {
-			continue
-		}
-		out[event] = kept
-	}
-	return out, changed
-}
-
-// isLodeHookEntry reports whether one hook entry runs a `lode hook` command.
-func isLodeHookEntry(e any) bool {
-	entry, ok := e.(map[string]any)
-	if !ok {
-		return false
-	}
-	command, ok := entry["command"].(string)
-	if !ok {
-		return false
-	}
-	return strings.HasPrefix(strings.TrimSpace(command), lodeHookPrefix)
 }
