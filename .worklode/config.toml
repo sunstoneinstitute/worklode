@@ -1,4 +1,2 @@
 current_project = "worklode"
 project_key = "WL"
-spec_corpus = "docs/specs"
-plan_corpus = "docs/plans"

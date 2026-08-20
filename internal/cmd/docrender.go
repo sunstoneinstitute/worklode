@@ -13,6 +13,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // normalizeSection turns a --section value into a canonical anchor. It drops
@@ -30,41 +31,44 @@ func normalizeSection(s string) string {
 
 // runDocShow renders a SPEC or ADR document, or one of its sections,
 // cat-style (spec 026 §3). It backs every SPEC/ADR path through `lode show`
-// (show.go): the typed-id dispatch (expectedKind "", since ResolveRef's own
-// <KEY>-<TYPE>-<n> shorthand form already runs designdoc.CheckKind), and the
+// (show.go): the typed-id dispatch (expectedKind "", since resolveDocRef's
+// own <KEY>-<TYPE>-<n> shorthand form already kind-checks), and the
 // --spec/--adr/--kind flags via runDocShowByOrdinal (expectedKind "SPEC" or
-// "ADR"). It needs no server: the corpus is read straight off disk, so it
-// works with no LODE_SERVER set.
+// "ADR").
 //
-// expectedKind, when non-empty, is independently verified against the
-// resolved document's frontmatter with designdoc.CheckKind — the same check
-// ResolveRef's shorthand form runs internally, so this is not a second
-// implementation of the mismatch rule. It exists because ResolveRef's other
-// resolution forms (a bare number, notably — the fallback runDocShowByOrdinal
-// uses when the project key is unknown) never run that check themselves: a
-// flag's kind must still be enforced even when there is no local shorthand
-// to route it through.
+// Documents come from the backbone, not from disk: the project scope is
+// resolved the usual way (config, else the git remote), GET /api/v1/docs
+// supplies the candidates resolveDocRef matches the ref against, and GET
+// /api/v1/docs/{id} supplies the body — list responses carry none. So this
+// needs a reachable server, and works in a checkout with no documents on
+// disk at all.
+//
+// expectedKind, when non-empty, is verified with checkDocKind, the same check
+// the shorthand form runs — not a second implementation of the mismatch rule.
+// It exists because the other resolution forms (a bare number, notably — the
+// fallback runDocShowByOrdinal uses when the project key is unknown) never
+// run it themselves: a flag's kind must still be enforced when there is no
+// shorthand to route it through.
 func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	section = normalizeSection(section)
 
-	cwd, err := os.Getwd()
+	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
-		return fmt.Errorf("get working directory: %w", err)
+		return err
 	}
-	corpus := designdoc.FindCorpus(cwd)
-	if corpora, err := cli.CorporaFrom(cwd); err == nil && corpora.SpecDir != "" {
-		corpus = corpora.SpecDir
+	ctx := cmd.Context()
+	wd, err := os.Getwd()
+	if err != nil {
+		wd = ""
 	}
-	if corpus == "" {
-		return errors.New("not inside a worklode repo (no .worklode directory found)")
-	}
+	scope := cli.ResolveScope(ctx, c, cfg, wd)
 
-	cfg, err := cli.LoadConfig()
+	list, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: scope.Project})
 	if err != nil {
 		return err
 	}
 
-	resolved, err := designdoc.ResolveRef(corpus, cfg.ProjectKey, ref)
+	doc, refSection, err := resolveDocRef(list.Docs, cfg.ProjectKey, ref)
 	if err != nil {
 		var unresolved *designdoc.UnresolvedError
 		if errors.As(err, &unresolved) {
@@ -75,39 +79,37 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	}
 
 	if expectedKind != "" {
-		if err := designdoc.CheckKind(resolved.Path, expectedKind); err != nil {
+		if err := checkDocKind(doc, expectedKind); err != nil {
 			return err
 		}
 	}
 
-	if resolved.Section != "" && section != "" && resolved.Section != section {
-		return fmt.Errorf("ref %q carries #%s but --section %s was passed; they disagree", ref, resolved.Section, section)
+	if refSection != "" && section != "" && refSection != section {
+		return fmt.Errorf("ref %q carries #%s but --section %s was passed; they disagree", ref, refSection, section)
 	}
 	if section == "" {
-		section = resolved.Section
+		section = refSection
 	}
 
-	if section == "" {
-		data, err := os.ReadFile(resolved.Path)
-		if err != nil {
-			return err
-		}
-		return writeDocShow(cmd, resolved.Path, "", data)
-	}
-
-	data, err := os.ReadFile(resolved.Path)
+	detail, _, err := c.GetDoc(ctx, doc.ID)
 	if err != nil {
 		return err
 	}
-	doc, err := designdoc.Parse(data)
+	data := []byte(detail.Body)
+
+	if section == "" {
+		return writeDocShow(cmd, doc, "", data)
+	}
+
+	parsed, err := designdoc.Parse(data)
 	if err != nil {
-		return fmt.Errorf("parse %s: %w", resolved.Path, err)
+		return fmt.Errorf("parse %s: %w", doc.Slug, err)
 	}
-	text, ok := sectionSubtree(data, doc, section)
+	text, ok := sectionSubtree(data, parsed, section)
 	if !ok {
-		return fmt.Errorf("no section %s in %s", section, resolved.Path)
+		return fmt.Errorf("no section %s in %s", section, doc.Slug)
 	}
-	return writeDocShow(cmd, resolved.Path, section, []byte(text))
+	return writeDocShow(cmd, doc, section, []byte(text))
 }
 
 // unresolvedResult is the --json shape of a tier-3 UnresolvedError.
@@ -115,9 +117,14 @@ type unresolvedResult struct {
 	Unresolved string `json:"unresolved"`
 }
 
-// docShowResult is the --json shape of `lode doc show` (026 §3).
+// docShowResult is the --json shape of `lode show` for a spec or ADR (026
+// §3). Doc and Slug identify the rendered document; they replaced a "path"
+// field that named the corpus file, which no longer exists now that documents
+// are read from the backbone. 026 does not pin this shape, and nothing
+// machine-readable consumed "path".
 type docShowResult struct {
-	Path    string `json:"path"`
+	Doc     int64  `json:"doc"`
+	Slug    string `json:"slug"`
 	Section string `json:"section"`
 	Content string `json:"content"`
 }
@@ -139,16 +146,16 @@ func writeUnresolved(cmd *cobra.Command, err error) error {
 	return nil
 }
 
-// writeDocShow prints content as raw bytes, or as the {"path", "section",
-// "content"} JSON shape 026 §3 wants for --json, with content set to exactly
-// what the non-JSON path would have printed.
-func writeDocShow(cmd *cobra.Command, path, section string, content []byte) error {
+// writeDocShow prints content as raw bytes, or, under --json, as
+// docShowResult with content set to exactly what the non-JSON path would
+// have printed.
+func writeDocShow(cmd *cobra.Command, doc model.Doc, section string, content []byte) error {
 	if !jsonOut(cmd) {
 		cmd.OutOrStdout().Write(content)
 		return nil
 	}
 	b, err := json.Marshal(docShowResult{
-		Path: path, Section: section, Content: string(content),
+		Doc: doc.ID, Slug: doc.Slug, Section: section, Content: string(content),
 	})
 	if err != nil {
 		return fmt.Errorf("encode result: %w", err)
