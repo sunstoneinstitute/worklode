@@ -425,5 +425,110 @@ class TestCanonical(unittest.TestCase):
             ("replaces", "docs/specs/001-a.md", ".", "docs/plans/p.md", "."))
 
 
+class TestCycles(unittest.TestCase):
+    """026 §4.1: an amends/replaces cycle in the section-level graph is
+    refused, even when task 2's mirror check finds each edge correctly
+    recorded from both sides."""
+
+    def pair(self, a_front="", b_front=""):
+        r = Repo()
+        r.write("docs/specs/001-a.md", doc(front=a_front, n="001"))
+        r.write("docs/specs/002-b.md", doc(front=b_front, n="002"))
+        r.commit()
+        return r
+
+    def cycle_pair(self, status="draft"):
+        """A#sec-1 <-> B#sec-2 mutual amends, correctly mirrored both ways
+        -- a 2-cycle that a naive per-recording check could mistake for a
+        clean mirror pair."""
+        r = Repo()
+        r.write("docs/specs/001-a.md", doc(status=status, n="001", front=(
+            edge("amends", "#sec-1", "002-b.md#sec-2")
+            + edge("amendedBy", "#sec-1", "002-b.md#sec-2"))))
+        r.write("docs/specs/002-b.md", doc(status=status, n="002", front=(
+            edge("amends", "#sec-2", "001-a.md#sec-1")
+            + edge("amendedBy", "#sec-2", "001-a.md#sec-1"))))
+        r.commit()
+        return r
+
+    def test_two_document_loop_refused(self):
+        r = self.cycle_pair(status="accepted")
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn(
+            "docs/specs/001-a.md#sec-1 -> docs/specs/002-b.md#sec-2 -> "
+            "docs/specs/001-a.md#sec-1", p.stderr)
+
+    def test_mirrored_pair_is_not_a_cycle(self):
+        """Task 2's mirrored-pair corpus: one edge, recorded from both
+        sides. Direction canonicalisation, not edge counting, is what tells
+        this apart from a loop."""
+        r = self.pair(
+            edge("amends", "#sec-1", "002-b.md#sec-2"),
+            edge("amendedBy", "#sec-2", "001-a.md#sec-1"),
+        )
+        p = r.run()
+        self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_three_document_loop_refused(self):
+        r = Repo()
+        r.write("docs/specs/001-a.md", doc(n="001", front=(
+            edge("replaces", "#sec-1", "002-b.md#sec-2")
+            + edge("isReplacedBy", "#sec-1", "003-c.md#sec-3"))))
+        r.write("docs/specs/002-b.md", doc(n="002", front=(
+            edge("replaces", "#sec-2", "003-c.md#sec-3")
+            + edge("isReplacedBy", "#sec-2", "001-a.md#sec-1"))))
+        r.write("docs/specs/003-c.md", doc(n="003", front=(
+            edge("replaces", "#sec-3", "001-a.md#sec-1")
+            + edge("isReplacedBy", "#sec-3", "002-b.md#sec-2"))))
+        r.commit()
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("001-a.md#sec-1", p.stderr)
+        self.assertIn("002-b.md#sec-2", p.stderr)
+        self.assertIn("003-c.md#sec-3", p.stderr)
+
+    def test_self_amendment_refused(self):
+        """A loop within one document is the same error."""
+        front = (
+            'amends:\n'
+            '  "#sec-1":\n'
+            '    - 001-a.md#sec-2\n'
+            '  "#sec-2":\n'
+            '    - 001-a.md#sec-1\n'
+            'amendedBy:\n'
+            '  "#sec-1":\n'
+            '    - 001-a.md#sec-2\n'
+            '  "#sec-2":\n'
+            '    - 001-a.md#sec-1\n'
+        )
+        r = Repo()
+        r.write("docs/specs/001-a.md", doc(front=front, n="001"))
+        r.commit()
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("001-a.md#sec-1", p.stderr)
+        self.assertIn("001-a.md#sec-2", p.stderr)
+
+    def test_doc_scoped_edges_never_cycle(self):
+        """§4.1 scopes acyclicity to the section-level graph; doc-scoped
+        edges are §3.2 banners never inlined, so they cannot recurse."""
+        r = self.pair(
+            edge("amends", ".", "002-b.md")
+            + edge("amendedBy", ".", "002-b.md"),
+            edge("amends", ".", "001-a.md")
+            + edge("amendedBy", ".", "001-a.md"),
+        )
+        p = r.run()
+        self.assertEqual(p.returncode, 0, p.stderr)
+
+    def test_draft_cycle_still_refused(self):
+        """Effectiveness (§3.1) is a read-time gate; acceptance is a status
+        flip that would never re-present the edges here."""
+        r = self.cycle_pair(status="draft")
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

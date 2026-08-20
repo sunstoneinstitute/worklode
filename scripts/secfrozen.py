@@ -331,10 +331,12 @@ def endpoint(doc, frag):
     return doc if frag == "." else f"{doc}#{frag}"
 
 
-def check_mirrors(root, roots):
+def check_mirrors(edges):
     """026 section 4: an edge derivable from only one of its two documents is
-    a refusal naming the file that is missing its half."""
-    edges, refusals, notes = edge_set(root, roots)
+    a refusal naming the file that is missing its half. `edges` is the
+    caller's single edge_set() call, shared with the cycle check so the
+    corpus is parsed once."""
+    refusals = []
     for edge in sorted(edges):
         relation, acting, acting_frag, target, target_frag = edge
         seen = edges[edge]
@@ -350,20 +352,88 @@ def check_mirrors(root, roots):
             f"{endpoint(target, target_frag)} is recorded from one side only "
             f"— {missing} needs a matching {key} entry keyed "
             f"\"{subject_key(frag)}\"")
-    return refusals, notes
+    return refusals
+
+
+def find_cycle(graph):
+    """graph: {node: sorted list of successor nodes}. Returns the first loop
+    as [n1, n2, ..., n1], or None. Deterministic: nodes and successors are
+    visited in sorted order, so the same corpus always names the same loop.
+
+    Iterative DFS with an explicit stack of [node, next-successor-index]
+    frames -- no recursion, so no risk of exhausting Python's call stack on
+    a pathological corpus. WHITE/GRAY/BLACK is the standard three-colour
+    scheme: GRAY means "on the current DFS path", and meeting a GRAY node
+    again is exactly a cycle back to it.
+    """
+    WHITE, GRAY, BLACK = 0, 1, 2
+    color = {}
+    for start in sorted(graph):
+        if color.get(start, WHITE) != WHITE:
+            continue
+        color[start] = GRAY
+        stack = [[start, 0]]
+        while stack:
+            node, i = stack[-1]
+            succs = graph.get(node, ())
+            if i >= len(succs):
+                color[node] = BLACK
+                stack.pop()
+                continue
+            stack[-1][1] += 1
+            succ = succs[i]
+            state = color.get(succ, WHITE)
+            if state == GRAY:
+                idx = next(j for j, (n, _) in enumerate(stack) if n == succ)
+                return [n for n, _ in stack[idx:]] + [succ]
+            if state == WHITE:
+                color[succ] = GRAY
+                stack.append([succ, 0])
+    return None
+
+
+def check_cycles(edges):
+    """026 section 4.1: refuse a corpus whose amends/replaces edges close a
+    loop. Scoped to the section-level graph only (ruling 1): a node is
+    entered only when both its ends are section-scoped, since doc-scoped
+    edges are section 3.2 banners that are never inlined and so cannot
+    recurse. `amends` and `replaces` both mean "this newer section acts on
+    that older one" and share one graph (ruling 2); acting -> target.
+
+    Reuses the caller's edge_set() tuples -- a correctly mirrored edge is
+    already one canonical tuple (task 2), which is what keeps a mirror pair
+    from reading as a false 2-cycle here.
+    """
+    graph = {}
+    for relation, acting, acting_frag, target, target_frag in edges:
+        if acting_frag == "." or target_frag == ".":
+            continue
+        graph.setdefault(endpoint(acting, acting_frag), set()).add(
+            endpoint(target, target_frag))
+    graph = {node: sorted(succs) for node, succs in graph.items()}
+    cycle = find_cycle(graph)
+    if cycle is None:
+        return []
+    return [
+        f"amends/replaces cycle: {' -> '.join(cycle)}\n"
+        "  A cycle means a document claims to amend something that "
+        "transitively\n  amends it (026 §4.1). Remove or re-target one of "
+        "these edges — no later\n  reader can repair a published loop."
+    ]
 
 
 def main():
     roots = sys.argv[1:] or list(DEFAULT_ROOTS)
     root = repo_root()
     permanence = check_permanence(root, roots)
-    mirrors, notes = check_mirrors(root, roots)
-    # task 3 extends this with the acyclicity finding over edge_set()
+    edges, edge_refusals, notes = edge_set(root, roots)
+    mirrors = edge_refusals + check_mirrors(edges)
+    cycles = check_cycles(edges)
     for note in notes:
         err(f"secfrozen: unresolved: {note}")
-    if not (permanence or mirrors):
+    if not (permanence or mirrors or cycles):
         return 0
-    for r in permanence + mirrors:
+    for r in permanence + mirrors + cycles:
         err(f"secfrozen: {r}")
     if permanence:
         err("\nPublished anchors are frozen (025 §3, 026 §4.1). Restore the "
