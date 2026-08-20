@@ -303,7 +303,8 @@ func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Durat
 // initNavMetrics pre-initialises the navigation series for every destination
 // the registered routes wrap (see navWrap), so a page that has not been
 // visited yet reports zero rather than being absent from the scrape. Called
-// after route registration, since that is what determines the set.
+// from NewServer once registerRoutes has returned — not from inside it, where
+// a route registered below the call would silently lose its zero-series.
 // Nil-safe like the observers, for tests that build a *server directly.
 func (s *server) initNavMetrics() {
 	if s.navigations == nil {
