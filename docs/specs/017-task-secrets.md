@@ -5,6 +5,15 @@ requires:
 - docs/specs/004-execution-backbone.md
 - docs/specs/008-worklode-plugin.md
 - docs/specs/016-org-wide-skills.md
+amendedBy:
+  "#sec-1":
+  - 042-secret-templates.md#sec-2
+  "#sec-3":
+  - 042-secret-templates.md#sec-3
+  "#sec-4":
+  - 042-secret-templates.md#sec-4
+  "#sec-6":
+  - 042-secret-templates.md#sec-5
 ---
 # Spec 017 — Task-declared secrets
 
@@ -36,6 +45,11 @@ materialized set for remote executors. **v2** adds deferred grants via mobile ap
 forward-compatible.
 
 ## 1. Names & catalog {#sec-1}
+
+> **Amended by spec 042 §2.** An entry whose value would exceed the OS
+> keystore item cap (a full kubeconfig) is declared as a plaintext `template`
+> (a sibling ConfigMap key) plus `cred.<PLACEHOLDER>` references — only the
+> credentials take the `op://` path — with an optional `env` exported name.
 
 **Namespace.** Secret names are env-var style (`^[A-Z][A-Z0-9_]*$`) and **org-unique** — never
 per-project, because a repo may participate in multiple projects. Examples: `GIT_SIGNING_KEY`,
@@ -83,6 +97,12 @@ names the executor will need. The `lode-secrets` skill (below) makes that a stan
 
 ## 3. Claim-time ceremony & materialization {#sec-3}
 
+> **Amended by spec 042 §3.** A templated entry materializes one keystore item
+> per credential, named `<NAME>__<PLACEHOLDER>`; consent and the
+> `secrets_materialized` event stay at entry granularity, and the local
+> manifest additionally records the entry's item names, exported env name, and
+> template text so exec stays offline.
+
 Claim time is the one moment a human is guaranteed present (they just ran `/lode-next`), so that
 is when consent and decryption happen — everything after may be unattended.
 
@@ -120,6 +140,12 @@ server-side and cannot purge a laptop keystore; stale items are removed by the n
 that notices the lease is gone (resume, exit, or `lode doctor`).
 
 ## 4. Execution: `lode secrets exec` {#sec-4}
+
+> **Amended by spec 042 §4.** For a templated entry, exec renders the template
+> with the keystore credentials into `.worklode/secrets/<NAME>` (0600) and
+> injects the exported env name pointing at that path instead of a value. The
+> rendered file lives until purge (materialized lifetime = worktree lifetime);
+> exec remains `syscall.Exec`.
 
 ```
 lode secrets exec [--] <command> [args…]
@@ -161,6 +187,10 @@ public or not. v1 ships it in the worklode plugin's skill set (008); once 016 is
 also be a pinned org-wide skill, which is what "always loaded" ultimately means there.
 
 ## 6. Degradation {#sec-6}
+
+> **Amended by spec 042 §5.** Adds the templated-entry failure rows: catalog
+> validation failures fail loudly server-side; render and env-name-collision
+> failures at exec are block signals.
 
 | Condition | Behavior |
 |---|---|
