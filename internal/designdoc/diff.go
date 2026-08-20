@@ -30,8 +30,8 @@ type SectionDiff struct {
 // anchor within one document, the first occurrence wins; a duplicate is a
 // lint-grade defect a different check owns, not this diff.
 //
-// depthLimit governs TooDeep: an anchored candidate section whose Level
-// exceeds it is unaddressable content masquerading as a node (025 §6.1).
+// depthLimit governs TooDeep, which is DepthViolations' rule over candidate
+// alone — accepted plays no part in it.
 //
 // Both passes walk anchors in sorted order, so every result slice is stable.
 func CompareSections(accepted, candidate *Document, depthLimit int) SectionDiff {
@@ -60,12 +60,43 @@ func CompareSections(accepted, candidate *Document, depthLimit int) SectionDiff 
 				diff.Changed = append(diff.Changed, anchor)
 			}
 		}
-		if candSec.Level > depthLimit {
-			diff.TooDeep = append(diff.TooDeep, anchor)
-		}
 	}
 
+	diff.TooDeep = tooDeepAnchors(candidate, depthLimit)
+
 	return diff
+}
+
+// DepthViolations reports the 025 §6.1 depth rule over one document: an
+// anchored section deeper than limit is unaddressable content masquerading as
+// a node. It needs no prior version, which makes it the whole gate wherever
+// there is nothing to diff against — a first accept, and `lode doc anchors`.
+// Strings are the same ones SectionDiff.Violations() would emit for TooDeep.
+func DepthViolations(d *Document, limit int) []string {
+	var out []string
+	for _, anchor := range tooDeepAnchors(d, limit) {
+		out = append(out, tooDeepViolation(anchor))
+	}
+	return out
+}
+
+// tooDeepAnchors returns d's anchored sections deeper than limit, sorted, so
+// callers get stable output; on a duplicate anchor the first occurrence wins.
+func tooDeepAnchors(d *Document, limit int) []string {
+	secs := anchoredSections(d)
+	var out []string
+	for _, anchor := range slices.Sorted(maps.Keys(secs)) {
+		if secs[anchor].Level > limit {
+			out = append(out, anchor)
+		}
+	}
+	return out
+}
+
+// tooDeepViolation is the one wording of the depth finding, shared by
+// DepthViolations and SectionDiff.Violations().
+func tooDeepViolation(anchor string) string {
+	return fmt.Sprintf("%s: exceeds the configured section depth limit (025 §6.1)", anchor)
 }
 
 // Violations returns human-readable strings naming each offending anchor —
@@ -85,8 +116,7 @@ func (d SectionDiff) Violations() []string {
 			anchor, nums[0], nums[1]))
 	}
 	for _, anchor := range d.TooDeep {
-		out = append(out, fmt.Sprintf(
-			"%s: exceeds the configured section depth limit (025 §6.1)", anchor))
+		out = append(out, tooDeepViolation(anchor))
 	}
 	return out
 }

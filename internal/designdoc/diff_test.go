@@ -287,3 +287,87 @@ func TestTitle(t *testing.T) {
 		})
 	}
 }
+
+// TestDepthViolations pins the candidate-only 025 §6.1 rule: which anchors it
+// fires on, the sorted order it reports them in, and that an anchorless or
+// duplicate-suppressed heading never participates.
+func TestDepthViolations(t *testing.T) {
+	tests := []struct {
+		name       string
+		src        string
+		limit      int
+		wantAnchor []string
+	}{
+		{
+			name:  "every anchored section within the limit",
+			src:   "# Spec\n\n## 1. First {#sec-1}\n\nBody.\n\n### 1.1 Sub {#sec-1-1}\n\nBody.\n",
+			limit: DepthLimit,
+		},
+		{
+			name:       "one section below the limit",
+			src:        "# Spec\n\n## 1. First {#sec-1}\n\nBody.\n\n#### 1.1.1 Deep {#sec-1-1-1}\n\nBody.\n",
+			limit:      DepthLimit,
+			wantAnchor: []string{"sec-1-1-1"},
+		},
+		{
+			name: "several offenders come back sorted, not in document order",
+			src: "# Spec\n\n" +
+				"#### 2. Zed {#sec-z}\n\nBody.\n\n" +
+				"#### 1. Alpha {#sec-a}\n\nBody.\n",
+			limit:      DepthLimit,
+			wantAnchor: []string{"sec-a", "sec-z"},
+		},
+		{
+			name:  "an anchorless deep heading is content, not a node",
+			src:   "# Spec\n\n## 1. First {#sec-1}\n\nBody.\n\n#### Deep but anchorless\n\nBody.\n",
+			limit: DepthLimit,
+		},
+		{
+			name: "duplicate anchor: the shallow first occurrence wins",
+			src: "# Spec\n\n" +
+				"## 1. First {#sec-1}\n\nBody.\n\n" +
+				"#### 1. First again {#sec-1}\n\nBody.\n",
+			limit: DepthLimit,
+		},
+		{
+			name: "duplicate anchor: the deep first occurrence wins",
+			src: "# Spec\n\n" +
+				"#### 1. First {#sec-1}\n\nBody.\n\n" +
+				"## 1. First again {#sec-1}\n\nBody.\n",
+			limit:      DepthLimit,
+			wantAnchor: []string{"sec-1"},
+		},
+		{
+			name:       "the limit is the caller's, not the package default",
+			src:        "# Spec\n\n## 1. First {#sec-1}\n\nBody.\n\n### 1.1 Sub {#sec-1-1}\n\nBody.\n",
+			limit:      2,
+			wantAnchor: []string{"sec-1-1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := mustParse(t, tt.src)
+
+			got := DepthViolations(doc, tt.limit)
+			if len(got) != len(tt.wantAnchor) {
+				t.Fatalf("DepthViolations() = %v, want %d entries", got, len(tt.wantAnchor))
+			}
+			for i, anchor := range tt.wantAnchor {
+				if !strings.Contains(got[i], anchor) {
+					t.Errorf("DepthViolations()[%d] = %q, want it to name %q", i, got[i], anchor)
+				}
+			}
+
+			// The rule has one implementation: what CompareSections reports as
+			// TooDeep for this candidate must be the same anchors, so a caller
+			// that wants only the depth gate can stop calling it.
+			diff := CompareSections(&Document{}, doc, tt.limit)
+			assertAnchors(t, "TooDeep", diff.TooDeep, tt.wantAnchor)
+			if !reflect.DeepEqual(diff.Violations(), got) {
+				t.Errorf("CompareSections(empty, doc).Violations() = %v, want it to equal DepthViolations() = %v",
+					diff.Violations(), got)
+			}
+		})
+	}
+}
