@@ -622,11 +622,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		}
 		s.blobs = bs
 	}
-	// Fail the boot, not the first upload, on an unwritable spool directory.
-	// The upload handler spools every request through os.CreateTemp there, so
-	// a read-only root filesystem with no writable volume mounted (the
-	// deployment's default posture) turns every POST /api/v1/blobs into a 500
-	// that nothing surfaces until a user tries to attach a screenshot.
+	// Fail the boot, not the first upload, on an unwritable spool directory:
+	// a read-only root filesystem with no volume mounted there 500s every
+	// upload while the pod reports healthy. Gated on s.blobs rather than on
+	// BlobEndpoint because the injected test store spools the same way.
 	if s.blobs != nil {
 		if err := checkSpoolWritable(cfg.BlobSpoolDir); err != nil {
 			return nil, nil, err

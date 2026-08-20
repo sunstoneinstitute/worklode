@@ -12,7 +12,6 @@ data:
   LODE_EMBEDDING_MODEL: ""
   LODE_SKILL_SCORE_FLOOR: ""
   LODE_SECRETS_CATALOG_PATH: "/etc/worklode/secrets-catalog/catalog.toml"
-  # Must match the blob-spool volumeMount path in deployment.yaml. The root
-  # filesystem is read-only, so leaving this unset (os.TempDir()) makes every
-  # blob upload fail EROFS.
+  # Must match the blob-spool volumeMount in deployment.yaml; unset means
+  # os.TempDir(), which is on the read-only root.
   LODE_BLOB_SPOOL_DIR: "/var/spool/worklode/blobs"

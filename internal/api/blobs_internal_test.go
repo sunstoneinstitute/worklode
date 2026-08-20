@@ -6,10 +6,8 @@ import (
 	"testing"
 )
 
-// TestCheckSpoolWritable covers the boot-time probe directly, without a store:
-// it must accept a writable directory, reject one it cannot create a file in,
-// and name the offending path so an operator reading the crash loop knows
-// which volume is missing.
+// TestCheckSpoolWritable covers the probe without a store. The error must name
+// the path: it is all an operator gets from the crash loop.
 func TestCheckSpoolWritable(t *testing.T) {
 	if err := checkSpoolWritable(t.TempDir()); err != nil {
 		t.Fatalf("writable dir: %v", err)
@@ -30,7 +28,7 @@ func TestCheckSpoolWritable(t *testing.T) {
 }
 
 // TestCheckSpoolWritableLeavesNothingBehind: the probe runs on every boot, so
-// a crash-looping pod must not fill its own spool volume with probe files.
+// a crash-looping pod must not fill its own spool volume.
 func TestCheckSpoolWritableLeavesNothingBehind(t *testing.T) {
 	dir := t.TempDir()
 	for range 3 {

@@ -289,11 +289,8 @@ func TestServeBlobRequiresSessionWithProvider(t *testing.T) {
 	}
 }
 
-// TestNewServerRejectsUnwritableSpoolDir pins the boot-time check: a
-// deployment with blob storage configured and a spool directory it cannot
-// write to must fail to start. The alternative — booting healthy and 500ing
-// every upload — is what a read-only root filesystem with no mounted volume
-// produces, and it stays invisible until someone attaches a screenshot.
+// TestNewServerRejectsUnwritableSpoolDir pins the wiring of the boot-time
+// check: gated on blob storage being configured, and fatal when it is.
 func TestNewServerRejectsUnwritableSpoolDir(t *testing.T) {
 	st := newTestStore(t)
 	missing := filepath.Join(t.TempDir(), "not-mounted")

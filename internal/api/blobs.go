@@ -43,7 +43,10 @@ func checkSpoolWritable(dir string) error {
 	}
 	name := f.Name()
 	f.Close()
-	return os.Remove(name)
+	// The create is the whole test. A failed unlink leaves one empty file
+	// behind and is not a reason to refuse to serve.
+	_ = os.Remove(name)
+	return nil
 }
 
 // blobResponse projects a stored blob onto the wire shape the endpoints
