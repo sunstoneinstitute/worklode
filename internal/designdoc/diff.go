@@ -25,10 +25,12 @@ type SectionDiff struct {
 }
 
 // CompareSections diffs accepted against candidate over their anchored
-// sections only — an anchorless heading is content within its nearest
-// anchored ancestor (025 §6.1) and never participates. On a duplicate
-// anchor within one document, the first occurrence wins; a duplicate is a
-// lint-grade defect a different check owns, not this diff.
+// sections only. An anchorless heading is never a node of its own: it is
+// content within its nearest anchored ancestor (025 §6.1) and is diffed as
+// part of that ancestor — see effectiveContent. An anchorless heading with no
+// anchored ancestor at all belongs to no section and so is diffed by nobody.
+// On a duplicate anchor within one document, the first occurrence wins; a
+// duplicate is a lint-grade defect a different check owns, not this diff.
 //
 // depthLimit governs TooDeep, which is DepthViolations' rule over candidate
 // alone — accepted plays no part in it.
@@ -56,7 +58,7 @@ func CompareSections(accepted, candidate *Document, depthLimit int) SectionDiff 
 				diff.Renumbered = append(diff.Renumbered, anchor)
 				diff.renumbers[anchor] = [2]string{accSec.Number, candSec.Number}
 			}
-			if strings.TrimSpace(accSec.Body) != strings.TrimSpace(candSec.Body) {
+			if effectiveContent(accSec) != effectiveContent(candSec) {
 				diff.Changed = append(diff.Changed, anchor)
 			}
 		}
@@ -119,6 +121,41 @@ func (d SectionDiff) Violations() []string {
 		out = append(out, tooDeepViolation(anchor))
 	}
 	return out
+}
+
+// effectiveContent is the text 025 §6.1 counts as s's own: its Body plus the
+// heading and body of every anchorless descendant. Section.Body stops at the
+// next heading of any level, so comparing bodies alone misses an edit confined
+// to an anchorless subheading and leaves claims against s falsely fresh.
+//
+// An anchored descendant is a node in its own right, so the walk stops there.
+// An anchorless descendant's heading does participate — renaming "####
+// Tie-breaking" changes the section holding it — while rewording an *anchored*
+// heading is not a change (025 §3), which is why s's own heading is excluded.
+//
+// Pieces are whitespace-trimmed and newline-joined, so the result is as
+// insensitive to surrounding blank lines as the single-Body comparison was.
+func effectiveContent(s *Section) string {
+	parts := appendUnanchored([]string{strings.TrimSpace(s.Body)}, s)
+	return strings.Join(parts, "\n")
+}
+
+// appendUnanchored appends s's anchorless descendants' headings and bodies to
+// parts in document order, stopping at every anchored section. A heading
+// contributes its parsed fields rather than its source line, so reformatting
+// one is not a content change — over-stamping last_revised_in mass-invalidates
+// valid claims, which 025 §6 rule 5 forbids as squarely as under-stamping.
+func appendUnanchored(parts []string, s *Section) []string {
+	for _, child := range s.Children {
+		if child.Anchor != "" {
+			continue
+		}
+		parts = append(parts,
+			fmt.Sprintf("%d %s %s", child.Level, child.Number, child.Title),
+			strings.TrimSpace(child.Body))
+		parts = appendUnanchored(parts, child)
+	}
+	return parts
 }
 
 // anchoredSections indexes d's anchored sections by anchor. Anchorless
