@@ -672,11 +672,12 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 }
 
 // workBuckets is the per-project bucketing of work facts shared by the
-// board (assembleBoard) and Home's card counts — the one place "blocked" is
-// computed for a web surface. Blocked means a ready task with at least one
-// open blocker or blocking plan (ProjectWorkFact.Blocked); in_progress and
-// in_review tasks bucket by state; done tasks bucket nowhere. Order within
-// each bucket matches the input order.
+// board (assembleBoard) and Home's card counts. Blocked means a ready task
+// with at least one open blocker or blocking plan (ProjectWorkFact.Blocked);
+// in_progress and in_review tasks bucket by state; done tasks bucket
+// nowhere. Order within each bucket matches the input order. The
+// /projects/{id} cockpit (cockpit.go) computes the same ready&&Blocked()
+// rule separately, for its own response shape.
 type workBuckets struct {
 	InProgress, InReview, Ready, Blocked []store.ProjectWorkFact
 }
@@ -722,8 +723,8 @@ func lastActivity(facts []store.ProjectWorkFact) time.Time {
 // UI-neutral bulk reader (parent/lease/blocker facts in one read), rather
 // than a dedicated Store.Board method — there is no additional query
 // complexity to hide behind a store API. Shared by the JSON /api/v1/board
-// handler and the GET / and GET /projects/{id} web pages, so the bucket
-// logic lives in exactly one place.
+// handler and the GET /work web page; Home's card counts share only the
+// bucketing (bucketWorkFacts), not this assembly.
 //
 // recent_failures is simplified from the full deployments->artifacts join
 // described in the design to the last 10 runtime events store-wide, and is

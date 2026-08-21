@@ -51,6 +51,13 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		}
 	}
 
+	// Used in error messages below so projectID == "" (the all-projects
+	// form) reads as "all projects" instead of "project : ...".
+	errDesc := "project " + projectID
+	if projectID == "" {
+		errDesc = "all projects"
+	}
+
 	query := `SELECT pp.project_id, pp.actor_id, a.display_name, pp.role, pp.is_lead, pp.added_at
 	            FROM project_participants pp
 	            JOIN actors a ON a.id = pp.actor_id`
@@ -63,7 +70,7 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list participants for project %s: %w", projectID, err)
+		return nil, fmt.Errorf("list participants for %s: %w", errDesc, err)
 	}
 	defer rows.Close()
 
@@ -82,7 +89,7 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		var isLead bool
 		var addedAt time.Time
 		if err := rows.Scan(&pID, &actorID, &displayName, &role, &isLead, &addedAt); err != nil {
-			return nil, fmt.Errorf("list participants for project %s: %w", projectID, err)
+			return nil, fmt.Errorf("list participants for %s: %w", errDesc, err)
 		}
 		k := key{pID, actorID}
 		p, ok := byKey[k]
@@ -100,7 +107,7 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list participants for project %s: %w", projectID, err)
+		return nil, fmt.Errorf("list participants for %s: %w", errDesc, err)
 	}
 
 	out := make([]Participant, 0, len(order))
