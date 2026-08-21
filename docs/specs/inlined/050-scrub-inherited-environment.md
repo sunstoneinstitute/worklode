@@ -70,8 +70,9 @@ Injection happens after the scrub, so a materialized name that is itself
 credential-shaped — `GITHUB_TOKEN`, most of the catalog — is unaffected by the
 deny rules. The deny-list judges *inherited* names only.
 
-The matching is case-insensitive. Secret names are upper-case by grammar
-(017 §1), but an inherited name is whatever the operator's shell exported.
+Step 2 matches case-insensitively: an inherited name is whatever the operator's
+shell exported. Step 1 does not, because a materialized name is upper-case by
+the 017 §1 grammar.
 
 **017 §10's acceptance criterion 4 reads, as amended:** in the claimed
 worktree, `lode secrets exec -- env` shows the materialized names and the shell
@@ -84,10 +85,14 @@ appears in any file, log, or event row.
 
 **Keep, whatever else matches.** `PATH`, `HOME`, `SHELL`, `USER`, `LOGNAME`,
 `PWD`, `OLDPWD`, `TMPDIR`, `TERM`, `TERMINFO`, `LANG`, `LANGUAGE`, `TZ`,
-`COLUMNS`, `LINES`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, and the `LC_` and `XDG_`
-namespaces. The keep set is consulted first, so a deny pattern cannot grow far
-enough to break the plumbing by accident. `SSH_AUTH_SOCK` is a deliberate
-member: it is an ambient credential channel, but the Linux keystore (017 §3) is
+`COLUMNS`, `LINES`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, `GIT_AUTHOR_NAME`,
+`GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and the `LC_`
+and `XDG_` namespaces. The keep set is consulted first, so a deny pattern
+cannot grow far enough to break the plumbing by accident — the git identity
+pair is here precisely because `AUTHOR` contains `AUTH`, and a child that kept
+the committer variables while losing the author ones would commit under a
+mismatched identity or fail outright. `SSH_AUTH_SOCK` is a deliberate member
+too: it is an ambient credential channel, but the Linux keystore (017 §3) is
 encrypted to a key held in ssh-agent and `git push` over ssh needs it, so
 stripping it would break `lode` itself inside the child.
 
@@ -98,16 +103,20 @@ key is presented to):
 
 `AWS_`, `AZURE_`, `GCP_`, `CLOUDSDK_`, `ANTHROPIC_`, `OPENAI_`, `VAULT_`, `OP_`.
 
-**Deny by name** — files of ambient credentials whose names carry none of the
-tokens below: `KUBECONFIG`, `NETRC`, `DOCKER_CONFIG`, `PGPASSFILE`.
+**Deny by name** — files and directories of ambient credentials whose names
+carry none of the tokens below: `KUBECONFIG`, `NETRC`, `DOCKER_CONFIG`,
+`PGPASSFILE`, `GNUPGHOME`.
 
 **Deny by shape** — a name containing any of `TOKEN`, `SECRET`, `PASSWORD`,
-`PASSWD`, `PASSPHRASE`, `CREDENTIAL`, `AUTH`, `APIKEY`, or ending `_KEY` (or
+`PASSWD`, `PWD`, `PASSPHRASE`, `CRED`, `AUTH`, `APIKEY`, or ending `_KEY` (or
 containing `_KEY_`). Substring rather than suffix matching, because the shape
 appears in every position: `GITHUB_TOKEN`, `TOKEN_FOR_REGISTRY`,
-`GOOGLE_APPLICATION_CREDENTIALS`. `KEY` alone is not a pattern — that would
-take `KEYCLOAK_URL` and `KEYBOARD_LAYOUT` with it — so the `_KEY` tail carries
-`GIT_SIGNING_KEY` and `AWS_SECRET_ACCESS_KEY` while `KEYCLOAK_URL` stays.
+`GOOGLE_APPLICATION_CREDENTIALS`. The tokens are the short forms on purpose —
+`CRED` takes `*_CREDS` and `*_CREDS_FILE` as well as `CREDENTIALS`, and `PWD`
+takes MySQL's `MYSQL_PWD`, which is safe only because `PWD` and `OLDPWD` are in
+the keep set. `KEY` alone is not a pattern — that would take `KEYCLOAK_URL` and
+`KEYBOARD_LAYOUT` with it — so the `_KEY` tail carries `GIT_SIGNING_KEY` and
+`AWS_SECRET_ACCESS_KEY` while `KEYCLOAK_URL` stays.
 
 **Where the line is.** The list covers names that *look like* credentials.
 It deliberately does not try to cover credentials that do not: a token in

@@ -11,12 +11,17 @@ import (
 // deny pattern can never grow far enough to break the plumbing by accident.
 // `SSH_AUTH_SOCK` is deliberately here rather than denied — the Linux keystore
 // (017 §3) is encrypted to a key held in ssh-agent, and git push over ssh
-// needs it, so stripping it would break `lode` itself in the child.
+// needs it, so stripping it would break `lode` itself in the child. The git
+// identity variables are here because `AUTHOR` contains `AUTH`: they carry a
+// name and an address, and a child that kept the committer pair but lost the
+// author pair would commit under a mismatched identity or fail outright.
 var keepNames = map[string]bool{
 	"PATH": true, "HOME": true, "SHELL": true, "USER": true, "LOGNAME": true,
 	"PWD": true, "OLDPWD": true, "TMPDIR": true, "TERM": true, "TERMINFO": true,
 	"LANG": true, "LANGUAGE": true, "TZ": true, "COLUMNS": true, "LINES": true,
 	"SSH_AUTH_SOCK": true, "SSH_AGENT_PID": true,
+	"GIT_AUTHOR_NAME": true, "GIT_AUTHOR_EMAIL": true,
+	"GIT_COMMITTER_NAME": true, "GIT_COMMITTER_EMAIL": true,
 }
 
 // keepPrefixes are namespaces kept whole for the same reason: locale settings
@@ -37,15 +42,18 @@ var denyPrefixes = []string{
 // denyNames are credential-bearing variables whose names carry none of the
 // tokens below: each points at a file of ambient credentials.
 var denyNames = map[string]bool{
-	"KUBECONFIG": true, "NETRC": true, "DOCKER_CONFIG": true, "PGPASSFILE": true,
+	"KUBECONFIG": true, "NETRC": true, "DOCKER_CONFIG": true,
+	"PGPASSFILE": true, "GNUPGHOME": true,
 }
 
 // denyTokens are the credential-shaped substrings. Substring rather than
 // suffix matching, because the shape appears in every position
-// (`TOKEN_FOR_X`, `X_TOKEN`, `GH_TOKEN_2`).
+// (`TOKEN_FOR_X`, `X_TOKEN`, `GH_TOKEN_2`). `CRED` rather than `CREDENTIAL`
+// so `*_CREDS` and `*_CREDS_FILE` are covered; `PWD` for `MYSQL_PWD`, which is
+// safe only because `PWD` and `OLDPWD` are in the keep set checked first.
 var denyTokens = []string{
-	"TOKEN", "SECRET", "PASSWORD", "PASSWD", "PASSPHRASE",
-	"CREDENTIAL", "AUTH", "APIKEY",
+	"TOKEN", "SECRET", "PASSWORD", "PASSWD", "PWD", "PASSPHRASE",
+	"CRED", "AUTH", "APIKEY",
 }
 
 // CredentialShaped reports whether an inherited environment variable name
@@ -87,8 +95,8 @@ func CredentialShaped(name string) bool {
 }
 
 // ChildEnv returns the environment for a `lode secrets exec` child: parent
-// with every assignment to one of names stripped, then every credential-shaped
-// inherited assignment stripped, then injected appended.
+// minus every assignment whose name is materialized or credential-shaped, then
+// injected appended.
 //
 // Stripping names is what makes injected authoritative: execve keeps duplicate
 // entries and getenv returns the first, so appending alone would hand the child

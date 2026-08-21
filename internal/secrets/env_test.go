@@ -18,8 +18,9 @@ func TestCredentialShaped(t *testing.T) {
 		"GITHUB_TOKEN", "GH_TOKEN", "TOKEN_FOR_REGISTRY", "NPM_TOKEN",
 		"STRIPE_SECRET_KEY", "PGPASSWORD", "SSH_PASSPHRASE",
 		"DOCKER_AUTH_CONFIG", "SLACK_APIKEY", "GIT_SIGNING_KEY",
+		"MYSQL_PWD", "GOOGLE_GHA_CREDS_PATH",
 		// Files of ambient credentials.
-		"KUBECONFIG", "NETRC", "DOCKER_CONFIG", "PGPASSFILE",
+		"KUBECONFIG", "NETRC", "DOCKER_CONFIG", "PGPASSFILE", "GNUPGHOME",
 		// Whatever case the operator's shell exported it in.
 		"aws_secret_access_key", "anthropic_api_key",
 	}
@@ -33,7 +34,11 @@ func TestCredentialShaped(t *testing.T) {
 		// Plumbing the child needs to function.
 		"PATH", "HOME", "SHELL", "USER", "PWD", "TMPDIR", "TERM",
 		"LANG", "LC_ALL", "LC_TIME", "TZ", "XDG_RUNTIME_DIR",
-		"SSH_AUTH_SOCK", "SSH_AGENT_PID",
+		"SSH_AUTH_SOCK", "SSH_AGENT_PID", "PWD", "OLDPWD",
+		// The git identity the child commits under: `AUTHOR` contains `AUTH`,
+		// so keeping all four together is what the keep set is for.
+		"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL",
+		"GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
 		// Ordinary configuration that happens to sit near the patterns.
 		"KEYCLOAK_URL", "GITHUB_REPOSITORY", "GOPATH", "EDITOR", "COLORTERM",
 	}
@@ -52,13 +57,21 @@ func TestChildEnvStripsAmbientCredentials(t *testing.T) {
 		"PATH=/usr/bin:/bin",
 		"HOME=/home/op",
 		"LANG=en_US.UTF-8",
+		// Keep-before-deny at the exported-function level: both contain a
+		// denied token, and losing either breaks the keystore or `git commit`.
+		"SSH_AUTH_SOCK=/run/user/1000/keyring/ssh",
+		"GIT_AUTHOR_EMAIL=op@example.com",
 		"ANTHROPIC_API_KEY=test-value",
 		"AWS_ACCESS_KEY_ID=AKIAOPERATOR",
 		"GOOGLE_APPLICATION_CREDENTIALS=/home/op/gcp.json",
 	}
 	got := ChildEnv(parent, []string{"A_TOKEN"}, []string{"A_TOKEN=from-keystore"})
 
-	for _, want := range []string{"PATH=/usr/bin:/bin", "HOME=/home/op", "LANG=en_US.UTF-8", "A_TOKEN=from-keystore"} {
+	for _, want := range []string{
+		"PATH=/usr/bin:/bin", "HOME=/home/op", "LANG=en_US.UTF-8",
+		"SSH_AUTH_SOCK=/run/user/1000/keyring/ssh", "GIT_AUTHOR_EMAIL=op@example.com",
+		"A_TOKEN=from-keystore",
+	} {
 		if !slices.Contains(got, want) {
 			t.Errorf("child env is missing %q: %v", want, got)
 		}
