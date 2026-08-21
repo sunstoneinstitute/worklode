@@ -501,6 +501,7 @@ docs/specs/038-worklode-in-a-cloud-sandbox.md:
     sec-4.3: "### 4.3 Identity"
     sec-4.4: "### 4.4 Secrets"
     sec-5: "## 5. Seams for backbone-initiated dispatch"
+    sec-5.1: "### 5.1 Why not an external agent runtime, yet"
     sec-6: "## 6. Testing"
     sec-7: "## 7. Out of scope"
     sec-8: "## 8. Open questions"
