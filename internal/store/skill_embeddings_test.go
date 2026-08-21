@@ -30,13 +30,13 @@ func TestSkillEmbeddingsRecommend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recommend: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "tdd" || got[0].Score < 0.99 {
+	if len(got) != 1 || got[0].Name != "p:tdd" || got[0].Score < 0.99 {
 		t.Fatalf("recommend: %+v", got)
 	}
 
 	// Floor at 0 returns both, best-first, max over chunks.
 	got, err = s.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0)
-	if err != nil || len(got) != 2 || got[0].Name != "tdd" {
+	if err != nil || len(got) != 2 || got[0].Name != "p:tdd" {
 		t.Fatalf("recommend all: %+v err=%v", got, err)
 	}
 
@@ -177,7 +177,7 @@ func TestRecommendSkillsLimitTruncates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recommend: %v", err)
 	}
-	if len(got) != 2 || got[0].Name != "tdd" || got[1].Name != "debugging" {
+	if len(got) != 2 || got[0].Name != "p:tdd" || got[1].Name != "p:debugging" {
 		t.Fatalf("limit truncation: %+v", got)
 	}
 }
@@ -279,7 +279,7 @@ func TestRecommendSkillsSkipsSkillWithoutEmbeddings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("recommend: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "tdd" {
+	if len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("expected only the embedded skill: %+v", got)
 	}
 }

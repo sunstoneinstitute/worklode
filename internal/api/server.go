@@ -1035,6 +1035,10 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrUnknownBlob),
 		errors.Is(err, store.ErrInvalidInput):
 		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+	// The name names several skills: the caller has to qualify it, and the
+	// store's message lists the candidates they must choose between.
+	case errors.Is(err, store.ErrAmbiguousSkill):
+		writeErr(w, http.StatusConflict, err.Error())
 	case errors.Is(err, store.ErrLeased),
 		errors.Is(err, store.ErrBlocked),
 		errors.Is(err, store.ErrRepoTaken),

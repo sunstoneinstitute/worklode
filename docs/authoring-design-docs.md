@@ -52,7 +52,7 @@ Prose: files to touch, the test that proves it.
 |---|---|---|---|
 | `kind` | yes | — | `feature`, `bug`, `chore`, `design` — never `review`/`spike`, which plans don't mint |
 | `priority` | no | `medium` | `critical`, `high`, `medium`, `low` |
-| `skills` | no | none | skill-registry names, `plugin:skill` form where plugin-shipped |
+| `skills` | no | none | skill-registry names. `plugin:skill` is the registry's identity (037 §4); a bare name resolves while it names one skill, and reports the candidates once it names several |
 | `blockedBy` | no | none | task numbers **in this file**; becomes `blocks` edges at mint |
 
 No other keys. The prose after the block is the task body verbatim; the steps

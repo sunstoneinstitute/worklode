@@ -34,6 +34,9 @@ var (
 	maxSkillBytes   = 8 << 20
 	maxSourceBytes  = 64 << 20
 	maxSkillEntries = skillhash.MaxEntries
+	// A plugin manifest is a few hundred bytes of JSON; only its "name" is
+	// read. Unlike the skill caps this bounds a single file, not a dir.
+	maxManifestBytes = 64 << 10
 )
 
 // FetchFunc downloads a repo tarball at a ref (githubauth.AppAuth.Tarball).
@@ -165,14 +168,15 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 	if err != nil {
 		return sum, err
 	}
-	dirs, commit, err := sy.skillDirs(tb, src)
+	tree, err := sy.skillDirs(tb, src)
 	if err != nil {
 		return sum, err
 	}
+	dirs, commit := tree.dirs, tree.commit
 	var seen []string
-	from := map[string]string{} // skill name -> dir that already claimed it
+	from := map[string]string{} // qualified name -> dir that already claimed it
 	for _, d := range dirs {
-		u, err := buildUpsert(src, commit, d.dir, d.files)
+		u, err := buildUpsert(src, commit, d.dir, d.files, sy.qualifierFor(src, tree.manifests, d.dir))
 		if err != nil {
 			sy.warn(src, "skipping skill dir", "dir", d.dir, "err", err)
 			continue
@@ -182,13 +186,17 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 			sy.warn(src, "skill upsert failed", "skill", u.Name, "dir", d.dir, "err", err)
 			continue
 		}
-		// Two dirs declaring one name collide in the registry, last write
-		// winning. Only the skill authors can fix that, so just report it.
-		if prev, dup := from[u.Name]; dup {
-			sy.warn(src, "duplicate skill name", "skill", u.Name, "first", prev, "second", d.dir)
+		// Two dirs declaring one name under one plugin collide in the
+		// registry, last write winning. Two plugins shipping the same skill
+		// name no longer collide — that is what the qualifier is for — so
+		// this now fires only on a genuine within-plugin duplicate, which
+		// only the skill authors can fix. Just report it.
+		qn := u.Qualifier + ":" + u.Name
+		if prev, dup := from[qn]; dup {
+			sy.warn(src, "duplicate skill name", "skill", qn, "first", prev, "second", d.dir)
 		}
-		from[u.Name] = d.dir
-		seen = append(seen, u.Name)
+		from[qn] = d.dir
+		seen = append(seen, qn)
 		sum.Synced++
 		if changed {
 			sum.Changed++
@@ -271,6 +279,17 @@ type file struct {
 	exec bool
 }
 
+// sourceTree is what one source tarball yielded: the skill dirs the glob
+// matched, and every plugin manifest found anywhere in the tree, keyed by the
+// plugin's root dir. Manifests are collected separately because they sit
+// above skill-dir depth by construction and are metadata about a skill rather
+// than part of it — see qualifierFor.
+type sourceTree struct {
+	dirs      []*skillDir
+	manifests map[string]string // plugin root dir -> plugin name
+	commit    string
+}
+
 type skillDir struct {
 	dir   string
 	files map[string]file // paths relative to dir
@@ -290,16 +309,18 @@ func sortedDirs(m map[string]*skillDir) []*skillDir {
 }
 
 // skillDirs walks the tarball and groups files by the skill dir (the glob
-// match) that owns them, ordered by path. Also extracts the commit sha from
-// the root dir name ("owner-repo-<sha>/").
-func (sy *Syncer) skillDirs(tgz []byte, src Source) ([]*skillDir, string, error) {
+// match) that owns them, ordered by path, collecting plugin manifests as it
+// goes. Also extracts the commit sha from the root dir name
+// ("owner-repo-<sha>/").
+func (sy *Syncer) skillDirs(tgz []byte, src Source) (*sourceTree, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(tgz))
 	if err != nil {
-		return nil, "", fmt.Errorf("gunzip tarball: %w", err)
+		return nil, fmt.Errorf("gunzip tarball: %w", err)
 	}
 	tr := tar.NewReader(gz)
 	segs := strings.Count(src.Glob, "/") + 1
 	dirs := map[string]*skillDir{}
+	manifests := map[string]string{}
 	total := 0
 	var commit string
 	for {
@@ -308,7 +329,7 @@ func (sy *Syncer) skillDirs(tgz []byte, src Source) ([]*skillDir, string, error)
 			break
 		}
 		if err != nil {
-			return nil, "", fmt.Errorf("read tarball: %w", err)
+			return nil, fmt.Errorf("read tarball: %w", err)
 		}
 		root, rel, ok := strings.Cut(path.Clean(h.Name), "/")
 		if !ok || rel == "" {
@@ -323,6 +344,25 @@ func (sy *Syncer) skillDirs(tgz []byte, src Source) ([]*skillDir, string, error)
 			continue
 		}
 		parts := strings.Split(rel, "/")
+		if root, ok := pluginManifestRoot(parts); ok {
+			if h.Typeflag != tar.TypeReg {
+				continue
+			}
+			// Read here or not at all: the reader only yields the current
+			// entry's bytes. Manifests are a few hundred bytes; the cap is
+			// there so a file that merely sits at that path cannot be pulled
+			// into memory whole.
+			blob, err := io.ReadAll(io.LimitReader(tr, int64(maxManifestBytes)))
+			if err != nil {
+				return nil, fmt.Errorf("read %s: %w", h.Name, err)
+			}
+			if name := pluginName(blob); name != "" {
+				manifests[root] = name
+			} else {
+				sy.warn(src, "plugin manifest has no usable name", "path", rel)
+			}
+			continue
+		}
 		if len(parts) <= segs { // file directly at or above skill-dir depth
 			continue
 		}
@@ -365,13 +405,13 @@ func (sy *Syncer) skillDirs(tgz []byte, src Source) ([]*skillDir, string, error)
 		}
 		content, err := io.ReadAll(io.LimitReader(tr, h.Size))
 		if err != nil {
-			return nil, "", fmt.Errorf("read %s: %w", h.Name, err)
+			return nil, fmt.Errorf("read %s: %w", h.Name, err)
 		}
 		d.files[strings.Join(parts[segs:], "/")] = file{data: content, exec: h.Mode&0o111 != 0}
 		d.bytes += len(content)
 		total += len(content)
 		if total > maxSourceBytes {
-			return nil, "", fmt.Errorf("skill dirs exceed %d bytes", maxSourceBytes)
+			return nil, fmt.Errorf("skill dirs exceed %d bytes", maxSourceBytes)
 		}
 	}
 	// A dir with no SKILL.md is not a skill. That is expected under a glob
@@ -387,10 +427,10 @@ func (sy *Syncer) skillDirs(tgz []byte, src Source) ([]*skillDir, string, error)
 		}
 		out = append(out, d)
 	}
-	return out, commit, nil
+	return &sourceTree{dirs: out, manifests: manifests, commit: commit}, nil
 }
 
-func buildUpsert(src Source, commit, dir string, files map[string]file) (*store.SkillUpsert, error) {
+func buildUpsert(src Source, commit, dir string, files map[string]file, qualifier string) (*store.SkillUpsert, error) {
 	md := string(files["SKILL.md"].data)
 	name, description := parseFrontmatter(md)
 	if name == "" {
@@ -411,7 +451,8 @@ func buildUpsert(src Source, commit, dir string, files map[string]file) (*store.
 		return nil, err
 	}
 	return &store.SkillUpsert{
-		Name: name, Description: description,
+		Qualifier: qualifier,
+		Name:      name, Description: description,
 		SourceRepo: src.Repo, SourcePath: dir,
 		GitCommit: commit, ContentHash: contentHash(files),
 		SkillMD: md, Frontmatter: fm, Archive: archive,

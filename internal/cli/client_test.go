@@ -28,6 +28,7 @@ import (
 func seedSkill(t *testing.T, st *store.Store, name, description string) {
 	t.Helper()
 	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Qualifier:   "acme",
 		Name:        name,
 		Description: description,
 		SourceRepo:  "acme/skills",
@@ -1603,8 +1604,8 @@ func TestClientSkillsList(t *testing.T) {
 	for _, sk := range skills {
 		names[sk.Name] = sk
 	}
-	if names["tdd"].Hash != "h-tdd" || names["tdd"].Description != "Red-green-refactor discipline" {
-		t.Fatalf("Skills[tdd] = %+v", names["tdd"])
+	if names["acme:tdd"].Hash != "h-tdd" || names["acme:tdd"].Description != "Red-green-refactor discipline" {
+		t.Fatalf("Skills[tdd] = %+v", names["acme:tdd"])
 	}
 }
 
@@ -1616,7 +1617,7 @@ func TestClientSkillGet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Skill: %v", err)
 	}
-	if sk.Name != "tdd" || sk.Hash != "h-tdd" {
+	if sk.Name != "acme:tdd" || sk.Hash != "h-tdd" {
 		t.Fatalf("Skill = %+v", sk)
 	}
 	if len(raw) == 0 {

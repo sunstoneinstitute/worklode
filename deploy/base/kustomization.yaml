@@ -88,3 +88,5 @@ configMapGenerator:
       - migrations/0037_docs_number_matches_kind.down.sql
       - migrations/0038_approvals.up.sql
       - migrations/0038_approvals.down.sql
+      - migrations/0039_skill_qualifier.up.sql
+      - migrations/0039_skill_qualifier.down.sql
