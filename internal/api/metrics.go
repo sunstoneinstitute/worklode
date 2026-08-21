@@ -76,7 +76,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"result"})
 	s.listExpansions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_list_expansions_total",
-		Help: "List endpoint requests that asked for an expansion, by endpoint (tasks, docs) and expansion (detail, body).",
+		Help: "List endpoint requests that asked for an expansion, by endpoint (tasks, docs) and expansion (detail, body, tree).",
 	}, []string{"endpoint", "expansion"})
 	s.blobUploads = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_blob_uploads_total",

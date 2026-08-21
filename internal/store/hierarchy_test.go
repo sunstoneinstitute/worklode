@@ -1202,3 +1202,144 @@ func TestDecomposeUnknownParent(t *testing.T) {
 		t.Fatalf("error = %v, want ErrNotFound", err)
 	}
 }
+
+// TestTaskTree pins the whole-hierarchy read `lode task tree` makes in one
+// request (WL-169): the roots are the containers with no parent of their own,
+// each carries the same roll-up ChildProgress computes, and the children come
+// back with them whatever their state.
+func TestTaskTree(t *testing.T) {
+	s := openTaskStore(t)
+	top := createTask(t, s, taskTestNow, containerInput())
+	done := createTask(t, s, taskTestNow, defaultTaskInput())
+	open := createTask(t, s, taskTestNow, defaultTaskInput())
+	for _, k := range []string{done.ID, open.ID} {
+		if err := addEdge(t, s, k, top.ID, "child_of"); err != nil {
+			t.Fatalf("child_of %s: %v", k, err)
+		}
+	}
+	// A container that is itself a child: it belongs under its own parent,
+	// not as a second root.
+	if err := addEdge(t, s, createTask(t, s, taskTestNow, defaultTaskInput()).ID, open.ID, "child_of"); err != nil {
+		t.Fatalf("grandchild: %v", err)
+	}
+	loose := createTask(t, s, taskTestNow, defaultTaskInput())
+	walkTo(t, s, done.ID, "merged")
+
+	nodes, err := s.TaskTree(t.Context(), TaskTreeFilter{Project: "horndb"})
+	if err != nil {
+		t.Fatalf("TaskTree: %v", err)
+	}
+	var roots []string
+	for _, n := range nodes {
+		roots = append(roots, n.Parent.ID)
+	}
+	if len(nodes) != 1 || nodes[0].Parent.ID != top.ID {
+		t.Fatalf("roots = %v, want [%s] (a container with a parent is not a root, and %s has no children)",
+			roots, top.ID, loose.ID)
+	}
+	if want := (model.TaskProgress{Closed: 1, Total: 2}); nodes[0].Progress != want {
+		t.Fatalf("progress = %+v, want %+v", nodes[0].Progress, want)
+	}
+	if got := taskIDs(nodes[0].Children); !slices.Contains(got, done.ID) || !slices.Contains(got, open.ID) || len(got) != 2 {
+		t.Fatalf("children = %v, want both %s and %s", got, done.ID, open.ID)
+	}
+}
+
+// TestTaskTreeStatesNarrowContainersNotChildren pins what the state filter
+// means for a tree: it selects which containers are reported, never which of
+// their children are — otherwise the progress counts and the rows under a
+// parent would describe different sets.
+func TestTaskTreeStatesNarrowContainersNotChildren(t *testing.T) {
+	s := openTaskStore(t)
+	container := createTask(t, s, taskTestNow, containerInput())
+	kid := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, kid.ID, container.ID, "child_of"); err != nil {
+		t.Fatalf("child_of: %v", err)
+	}
+	walkTo(t, s, kid.ID, "in_progress")
+
+	nodes, err := s.TaskTree(t.Context(), TaskTreeFilter{
+		Project: "horndb", States: []string{stateOf(t, s, container.ID)},
+	})
+	if err != nil {
+		t.Fatalf("TaskTree: %v", err)
+	}
+	if len(nodes) != 1 || len(nodes[0].Children) != 1 || nodes[0].Children[0].ID != kid.ID {
+		t.Fatalf("nodes = %+v, want the container with its one child", nodes)
+	}
+
+	nodes, err = s.TaskTree(t.Context(), TaskTreeFilter{Project: "horndb", States: []string{"abandoned"}})
+	if err != nil {
+		t.Fatalf("TaskTree abandoned: %v", err)
+	}
+	if len(nodes) != 0 {
+		t.Fatalf("nodes = %+v, want none: no container is abandoned", nodes)
+	}
+}
+
+// TestTaskTreeRoot pins the single-container form: it reports that task and
+// its children whatever the task's own parentage, and an unknown id is
+// ErrNotFound rather than an empty tree.
+func TestTaskTreeRoot(t *testing.T) {
+	s := openTaskStore(t)
+	top := createTask(t, s, taskTestNow, containerInput())
+	mid := createTask(t, s, taskTestNow, containerInput())
+	leaf := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, mid.ID, top.ID, "child_of"); err != nil {
+		t.Fatalf("mid child_of top: %v", err)
+	}
+	if err := addEdge(t, s, leaf.ID, mid.ID, "child_of"); err != nil {
+		t.Fatalf("leaf child_of mid: %v", err)
+	}
+
+	nodes, err := s.TaskTree(t.Context(), TaskTreeFilter{Project: "horndb", Root: mid.ID})
+	if err != nil {
+		t.Fatalf("TaskTree root: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0].Parent.ID != mid.ID {
+		t.Fatalf("nodes = %+v, want just %s", nodes, mid.ID)
+	}
+	if got := taskIDs(nodes[0].Children); !slices.Equal(got, []string{leaf.ID}) {
+		t.Fatalf("children = %v, want [%s]", got, leaf.ID)
+	}
+
+	if _, err := s.TaskTree(t.Context(), TaskTreeFilter{Root: "HDB-999"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("error = %v, want ErrNotFound", err)
+	}
+}
+
+// TestChildrenOfIsBulk pins the query the tree is built on: one call answers
+// for every parent at once, keyed by parent, with the closedness flag
+// ListTasks fills in and no row for a parent with no children.
+func TestChildrenOfIsBulk(t *testing.T) {
+	s := openTaskStore(t)
+	a := createTask(t, s, taskTestNow, containerInput())
+	b := createTask(t, s, taskTestNow, containerInput())
+	childless := createTask(t, s, taskTestNow, containerInput())
+	ka := createTask(t, s, taskTestNow, defaultTaskInput())
+	kb := createTask(t, s, taskTestNow, defaultTaskInput())
+	if err := addEdge(t, s, ka.ID, a.ID, "child_of"); err != nil {
+		t.Fatalf("ka: %v", err)
+	}
+	if err := addEdge(t, s, kb.ID, b.ID, "child_of"); err != nil {
+		t.Fatalf("kb: %v", err)
+	}
+	walkTo(t, s, ka.ID, "merged")
+
+	got, err := s.ChildrenOf(t.Context(), []string{a.ID, b.ID, childless.ID})
+	if err != nil {
+		t.Fatalf("ChildrenOf: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("children = %+v, want entries for %s and %s only", got, a.ID, b.ID)
+	}
+	if len(got[a.ID]) != 1 || got[a.ID][0].ID != ka.ID || !got[a.ID][0].Closed {
+		t.Fatalf("children of %s = %+v, want the merged %s marked closed", a.ID, got[a.ID], ka.ID)
+	}
+	if len(got[b.ID]) != 1 || got[b.ID][0].ID != kb.ID || got[b.ID][0].Closed {
+		t.Fatalf("children of %s = %+v, want the open %s", b.ID, got[b.ID], kb.ID)
+	}
+	if _, err := s.ChildrenOf(t.Context(), nil); err != nil {
+		t.Fatalf("ChildrenOf(nil): %v", err)
+	}
+}

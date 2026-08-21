@@ -238,6 +238,130 @@ func (s *Store) ParentMap(ctx context.Context, projectID string) (map[string]str
 	return out, nil
 }
 
+// ChildrenOf returns the live direct children of every id in ids, keyed by
+// parent id and ordered within each parent exactly as ListTasks orders its
+// results. Parents with no children are absent from the map. One query for
+// the rows and one for their closedness, whatever the number of parents — the
+// bulk form of ListTasks{Parent: id}, so a caller rendering a whole hierarchy
+// does not issue a request per container.
+func (s *Store) ChildrenOf(ctx context.Context, ids []string) (map[string][]model.Task, error) {
+	out := map[string][]model.Task{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+taskColumnsT+`, e.to_task
+		   FROM task_edges e JOIN tasks t ON t.id = e.from_task
+		  WHERE e.to_task = ANY($1) AND e.type = 'child_of'
+		    AND t.deleted_at IS NULL`+taskListOrder("t"), ids)
+	if err != nil {
+		return nil, fmt.Errorf("children of tasks: %w", err)
+	}
+	out, err = groupRows(rows, "children of tasks", func(r rowScanner) (string, model.Task, error) {
+		var parent string
+		t, err := scanTask(appendScan{r, []any{&parent}})
+		if err != nil {
+			return "", model.Task{}, err
+		}
+		return parent, *t, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Closedness is a second query for the reason ListTasks gives: taskClosed
+	// binds aliases that would collide with the join above.
+	var childIDs []string
+	for _, kids := range out {
+		for _, k := range kids {
+			childIDs = append(childIDs, k.ID)
+		}
+	}
+	closed, err := s.ClosedTaskIDs(ctx, childIDs)
+	if err != nil {
+		return nil, fmt.Errorf("children of tasks: %w", err)
+	}
+	for parent, kids := range out {
+		for i := range kids {
+			kids[i].Closed = closed[kids[i].ID]
+		}
+		out[parent] = kids
+	}
+	return out, nil
+}
+
+// TaskTreeFilter selects which containers a TaskTree covers. Root names a
+// single task to report (with its children) whatever its own parentage;
+// Project and States narrow the whole-project form, where the roots are the
+// containers that are not themselves someone's child.
+type TaskTreeFilter struct {
+	Project string
+	States  []string
+	Root    string
+}
+
+// TaskTree returns one node per container — the container, its derived
+// progress, and its direct children — in ListTasks order. It is the whole
+// `lode task tree` view in one read: the client used to fetch the containers
+// and then one child list per container, an N+1 against the API (WL-169).
+//
+// Children are every live child whatever its state, so the counts in Progress
+// and the rows under a parent describe the same set; States narrows which
+// containers appear, never which children they report. A Root that does not
+// exist is ErrNotFound.
+func (s *Store) TaskTree(ctx context.Context, f TaskTreeFilter) ([]model.TaskTreeNode, error) {
+	var parents []model.Task
+	if f.Root != "" {
+		t, err := s.GetTask(ctx, f.Root)
+		if err != nil {
+			return nil, err
+		}
+		parents = []model.Task{*t}
+	} else {
+		listed, err := s.ListTasks(ctx, TaskFilter{
+			Project: f.Project, States: f.States, HasChildren: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		// Only the roots: a container that is itself a subtask already shows
+		// up under its own parent, and listing it twice would double-count
+		// the tree.
+		parentOf, err := s.ParentMap(ctx, f.Project)
+		if err != nil {
+			return nil, err
+		}
+		for _, t := range listed {
+			if parentOf[t.ID] == "" {
+				parents = append(parents, t)
+			}
+		}
+	}
+
+	ids := make([]string, 0, len(parents))
+	for _, p := range parents {
+		ids = append(ids, p.ID)
+	}
+	children, err := s.ChildrenOf(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	nodes := make([]model.TaskTreeNode, 0, len(parents))
+	for _, p := range parents {
+		kids := children[p.ID]
+		// The same roll-up ChildProgress computes, off rows already read:
+		// both count live children and both call a child closed by the
+		// per-repo predicate the Closed flag carries.
+		progress := model.TaskProgress{Total: len(kids)}
+		for _, k := range kids {
+			if k.Closed {
+				progress.Closed++
+			}
+		}
+		nodes = append(nodes, model.TaskTreeNode{Parent: p, Progress: progress, Children: kids})
+	}
+	return nodes, nil
+}
+
 // Decompose creates parentID's children in one transaction: needs_decomposition
 // clears and each title becomes a draft child inheriting the parent's project,
 // priority, concern, and kind. The parent's kind is not touched (004 §6.10) —

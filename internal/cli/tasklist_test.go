@@ -52,3 +52,25 @@ func TestListTasksDocFilters(t *testing.T) {
 		t.Fatalf("ListTasks URI = %q, want no document parameters", *uri)
 	}
 }
+
+// TestTaskTreeURI pins the one request `lode task tree` makes: the whole
+// hierarchy comes from GET /api/v1/tasks?tree=true, filtered by project and
+// state, with root naming the single container form (WL-169).
+func TestTaskTreeURI(t *testing.T) {
+	c, uri := tasklistStub(t)
+	ctx := context.Background()
+
+	if _, _, err := c.TaskTree(ctx, cli.TaskTreeFilter{Project: "wl", States: []string{"ready", "in_progress"}}); err != nil {
+		t.Fatalf("TaskTree: %v", err)
+	}
+	if *uri != "/api/v1/tasks?project=wl&state=ready&state=in_progress&tree=true" {
+		t.Fatalf("TaskTree URI = %q", *uri)
+	}
+
+	if _, _, err := c.TaskTree(ctx, cli.TaskTreeFilter{Project: "wl", Root: "WL-1"}); err != nil {
+		t.Fatalf("TaskTree root: %v", err)
+	}
+	if *uri != "/api/v1/tasks?project=wl&root=WL-1&tree=true" {
+		t.Fatalf("TaskTree root URI = %q", *uri)
+	}
+}

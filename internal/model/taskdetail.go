@@ -33,6 +33,22 @@ type TaskHierarchy struct {
 	Progress TaskProgress `json:"progress"`
 }
 
+// TaskTreeNode is one container, its derived progress, and its direct
+// children — the unit `lode task tree` renders. Children carries every live
+// child whatever its state, so Progress and the listed children always count
+// the same set.
+type TaskTreeNode struct {
+	Parent   Task         `json:"parent"`
+	Progress TaskProgress `json:"progress"`
+	Children []Task       `json:"children"`
+}
+
+// TaskTreeResponse is the wire form of GET /api/v1/tasks?tree=true: the whole
+// hierarchy in one response, so a client never fetches children per parent.
+type TaskTreeResponse struct {
+	Nodes []TaskTreeNode `json:"nodes"`
+}
+
 // TaskDetail is the wire form of GET /api/v1/tasks/{id}: a Task plus its
 // blocked status, edges, hierarchy, and (when active) lease. AgentSessions is
 // populated only alongside Lease — the sessions recorded against it — so a
