@@ -57,16 +57,6 @@ wl:DesignDoc a owl:Class ;
         prov:wasGeneratedBy (§12, the task that wrote it), prov:wasRevisionOf and
         prov:wasAttributedTo (§4) on documents, and all three have prov:Entity as their domain.""" .
 
-wl:Plan a owl:Class ;
-    rdfs:subClassOf foaf:Document , prov:Entity ;
-    wl:layer wlc:execution ;
-    rdfs:comment """An executable document: a bundle of task definitions with instructions
-        attached. Reviewable and accept-gated like a DesignDoc, but spent once executed, freely
-        mutable, and carrying no frozen section anchors — nothing may pin a claim to a plan.
-        A sibling of DesignDoc, never a subclass: 025 §2 dropped wl:Plan because the section
-        lock would be harmful here, and 025 §9 restored it on that same reasoning. Acceptance
-        mints its tasks (025 §9.2).""" .
-
 wl:ADR a owl:Class ;
     rdfs:subClassOf wl:DesignDoc ;
     wl:layer wlc:intent .
@@ -86,11 +76,13 @@ wl:Section a owl:Class ;
 wl:Plan a owl:Class ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:execution ;
-    rdfs:comment """An executable document: accepting it mints its tasks (025 §4-§5). A sibling of
-        wl:DesignDoc, not a subclass — a plan is spent by execution rather than superseded, and
-        takes no wl:Section parts and no anchors. 025 §2 dropped the class when plan-shaped work
-        was a task subtree; 025 §9 (accepted) reintroduced plans as documents, mirrored here by
-        spec 025 §17.""" .
+    rdfs:comment """An executable document: a bundle of task definitions with instructions
+        attached, minted as tasks when it is accepted (025 §9.2). Reviewable and accept-gated
+        like a DesignDoc, but spent by execution rather than superseded, freely mutable, and
+        taking no wl:Section parts and no frozen anchors — nothing may pin a claim to a plan.
+        A sibling of wl:DesignDoc, never a subclass: 025 §2 dropped the class when plan-shaped
+        work was a task subtree; 025 §9 (accepted) reintroduced plans as documents, mirrored
+        here by spec 025 §17.""" .
 
 wl:Deliverable a owl:Class ;
     wl:layer wlc:intent ;
