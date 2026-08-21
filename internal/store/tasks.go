@@ -237,7 +237,6 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 	if !legalTransitions[[2]string{from, to}] {
 		return fmt.Errorf("task %s: %s -> %s: %w", taskID, from, to, ErrBadTransition)
 	}
-
 	var current string
 	err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&current)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -245,6 +244,22 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 	}
 	if err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
+	}
+	return transitionKnown(tx, now, taskID, current, from, to, eventID)
+}
+
+// transitionKnown is Transition for a caller that already read the task's
+// state in this transaction under FOR UPDATE: current is that read. Holding
+// the row lock is what makes passing the value in equivalent to re-reading it
+// — nothing else can move the task until the transaction ends — so a caller
+// whose read was unlocked must call Transition and pay for the re-read.
+//
+// The from/current split is kept rather than collapsed: from is what the
+// caller believes and current is what the row says, and the mismatch between
+// them is the ErrBadTransition this function reports.
+func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string, eventID int64) error {
+	if !legalTransitions[[2]string{from, to}] {
+		return fmt.Errorf("task %s: %s -> %s: %w", taskID, from, to, ErrBadTransition)
 	}
 	// Only a move touching a forbidden state pays for the children lookup.
 	if containerForbiddenStates[from] || containerForbiddenStates[to] {
@@ -261,7 +276,7 @@ func Transition(tx *sql.Tx, now time.Time, taskID, from, to string, eventID int6
 		return fmt.Errorf("task %s is in state %s, not %s: %w", taskID, current, from, ErrBadTransition)
 	}
 
-	_, err = tx.Exec(
+	_, err := tx.Exec(
 		`UPDATE tasks SET state = $1, updated_at = $2 WHERE id = $3`,
 		to, now.UTC(), taskID,
 	)
@@ -645,6 +660,29 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	return out, nil
 }
 
+// taskProjects reads the project of each named task inside the given
+// transaction, in one round trip. Ids that name no row are simply absent from
+// the result — the caller decides what a missing endpoint means.
+func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
+	rows, err := tx.Query(`SELECT id, project_id FROM tasks WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("check tasks %s: %w", strings.Join(ids, ", "), err)
+	}
+	defer rows.Close()
+	out := make(map[string]string, len(ids))
+	for rows.Next() {
+		var id, project string
+		if err := rows.Scan(&id, &project); err != nil {
+			return nil, fmt.Errorf("scan task project: %w", err)
+		}
+		out[id] = project
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("check tasks %s: %w", strings.Join(ids, ", "), err)
+	}
+	return out, nil
+}
+
 // AddEdge inserts a typed edge between two existing tasks inside the given
 // transaction. Self-edges are rejected for all three types. A child_of edge
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
@@ -660,28 +698,28 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 	if fromTask == toTask {
 		return fmt.Errorf("self-edge %s %s %s not allowed: %w", fromTask, typ, toTask, ErrInvalidInput)
 	}
-	project := map[string]string{}
+	// Both endpoints in one round trip: Decompose and acceptPlanDoc call
+	// AddEdge once per child, so a per-endpoint query costs two round trips
+	// per edge. A missing row is still reported fromTask-first, which is the
+	// order the per-endpoint loop reported in.
+	project, err := taskProjects(tx, fromTask, toTask)
+	if err != nil {
+		return err
+	}
 	for _, id := range []string{fromTask, toTask} {
-		var p string
-		err := tx.QueryRow(`SELECT project_id FROM tasks WHERE id = $1`, id).Scan(&p)
-		if errors.Is(err, sql.ErrNoRows) {
+		if _, ok := project[id]; !ok {
 			return fmt.Errorf("task %s: %w", id, ErrNotFound)
 		}
-		if err != nil {
-			return fmt.Errorf("check task %s: %w", id, err)
-		}
-		project[id] = p
 	}
 	if typ == "child_of" {
 		if err := checkHierarchy(tx, fromTask, toTask, project); err != nil {
 			return err
 		}
 	}
-	_, err := tx.Exec(
+	if _, err := tx.Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, $3, $4)`,
 		fromTask, toTask, typ, now.UTC(),
-	)
-	if err != nil {
+	); err != nil {
 		// The partial unique index is the backstop for a second parent racing
 		// checkHierarchy's read; both report the same shape.
 		if isUniqueViolationOn(err, "task_edges_single_parent") {

@@ -166,7 +166,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 			return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
 		}
 	}
-	if err := rebuildEdges(tx, id, in.Project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 	// A reference resolves once, at write time, so references already stored
@@ -241,7 +241,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	if err := rebuildSections(tx, id, kind, parsed.doc, version); err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, id, project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, id, kind, project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -277,7 +277,7 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := rebuildEdges(tx, id, d.project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
 		return err
 	}
 	return logDocChange(tx, id, eventID,
@@ -562,7 +562,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, id, d.project, candidate.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, id, d.kind, d.project, candidate.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 
@@ -1034,7 +1034,7 @@ func closureEqual(a, b []closureRef) bool {
 // rather than inventing a fourth state. A partial edge's fullCoverageWith
 // closure is resolved the same way doc_edges resolves its own targets and
 // stored in doc_coverage_completed_with, in authored order.
-func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontmatter) error {
+func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
 	}
@@ -1046,7 +1046,7 @@ func rebuildEdges(tx *sql.Tx, docID int64, project string, fm *designdoc.Frontma
 			return err
 		}
 		if e.typ == "blocks" {
-			if err := checkPlanOrdering(tx, docID, e.ref, toDoc, resolved); err != nil {
+			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved); err != nil {
 				return err
 			}
 		}
@@ -1307,7 +1307,10 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 // so no set can ever close — and plans stay mutable at any status, so it is
 // only the write closing the cycle that can catch it. Both are refused here,
 // the way AddEdge refuses a child_of cycle between tasks (WL-144).
-func checkPlanOrdering(tx *sql.Tx, docID int64, ref string, toDoc int64, resolved bool) error {
+// fromKind is the source document's own kind, which every caller already
+// holds (from lockDoc or from the create input) — re-reading it here would
+// cost a query per blocks edge in the frontmatter.
+func checkPlanOrdering(tx *sql.Tx, docID int64, fromKind, ref string, toDoc int64, resolved bool) error {
 	if !resolved {
 		return fmt.Errorf(
 			"blocks edge from doc %d names %q, which no plan in this project resolves to (025 §5): %w",
@@ -1318,18 +1321,18 @@ func checkPlanOrdering(tx *sql.Tx, docID int64, ref string, toDoc int64, resolve
 			"blocks edge from doc %d names %q, itself: a plan cannot block itself (025 §5): %w",
 			docID, ref, ErrInvalidInput)
 	}
-	for _, end := range []struct {
-		id   int64
-		side string
-	}{{docID, "from"}, {toDoc, "to"}} {
-		var kind string
-		if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1`, end.id).Scan(&kind); err != nil {
-			return fmt.Errorf("read kind of doc %d: %w", end.id, err)
-		}
-		if kind != "plan" {
-			return fmt.Errorf("blocks orders plan documents, but the %s end (doc %d) is a %s (025 §5): %w",
-				end.side, end.id, kind, ErrInvalidInput)
-		}
+	// The from end first, matching the order the two-query loop reported in.
+	if fromKind != "plan" {
+		return fmt.Errorf("blocks orders plan documents, but the from end (doc %d) is a %s (025 §5): %w",
+			docID, fromKind, ErrInvalidInput)
+	}
+	var toKind string
+	if err := tx.QueryRow(`SELECT kind FROM docs WHERE id = $1`, toDoc).Scan(&toKind); err != nil {
+		return fmt.Errorf("read kind of doc %d: %w", toDoc, err)
+	}
+	if toKind != "plan" {
+		return fmt.Errorf("blocks orders plan documents, but the to end (doc %d) is a %s (025 §5): %w",
+			toDoc, toKind, ErrInvalidInput)
 	}
 	back, err := blocksPath(tx, toDoc, docID)
 	if err != nil {

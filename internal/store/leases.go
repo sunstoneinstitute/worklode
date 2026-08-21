@@ -197,8 +197,9 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				return fmt.Errorf("task %s: %w", taskID, ErrBlocked)
 			}
 
-			// Task not in ready → ErrBadTransition.
-			if err := Transition(tx, now, taskID, "ready", "in_progress", eventID); err != nil {
+			// Task not in ready → ErrBadTransition. state came from the
+			// FOR UPDATE read above, so the transition needs no re-read.
+			if err := transitionKnown(tx, now, taskID, state, "ready", "in_progress", eventID); err != nil {
 				return err
 			}
 
