@@ -98,6 +98,29 @@ func scanArtifact(row rowScanner) (*Artifact, error) {
 	return &a, nil
 }
 
+// AllArtifactsByID returns every artifacts row keyed by id, so the deploy
+// deriver can resolve deployments.artifact_id → prov:used in one pass rather
+// than one lookup per deployment.
+func (s *Store) AllArtifactsByID(ctx context.Context) (map[int64]Artifact, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+artifactColumns+` FROM artifacts`)
+	if err != nil {
+		return nil, fmt.Errorf("all artifacts by id: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64]Artifact{}
+	for rows.Next() {
+		a, err := scanArtifact(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan artifact: %w", err)
+		}
+		out[a.ID] = *a
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("all artifacts by id: %w", err)
+	}
+	return out, nil
+}
+
 // ArtifactsBySourceSHA returns every artifact built from sourceSHA, ordered
 // by id.
 func (s *Store) ArtifactsBySourceSHA(ctx context.Context, sha string) ([]Artifact, error) {

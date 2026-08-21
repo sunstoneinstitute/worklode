@@ -435,3 +435,80 @@ func ReleaseFrontier(tx *sql.Tx, repo string) (*int64, error) {
 	}
 	return nullableID(id), nil
 }
+
+// ReleaseFrontierRow is one repo's release-frontier row resolved to the
+// commit sha it covers, for the deploy deriver's wl:cutFrom projection
+// (spelled wl:covers until 026 §6.1 took that name for Plan→Section).
+type ReleaseFrontierRow struct {
+	Repo string
+	Tag  string
+	SHA  string
+}
+
+// AllReleaseFrontiers returns every release frontier joined to its covering
+// commit's sha, ordered by repo then tag.
+func (s *Store) AllReleaseFrontiers(ctx context.Context) ([]ReleaseFrontierRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT rf.repo, rf.tag, mc.sha
+		FROM release_frontiers rf JOIN main_commits mc ON mc.id = rf.main_id
+		ORDER BY rf.repo, rf.tag`)
+	if err != nil {
+		return nil, fmt.Errorf("all release frontiers: %w", err)
+	}
+	return collectRows(rows, "all release frontiers", func(r rowScanner) (ReleaseFrontierRow, error) {
+		var row ReleaseFrontierRow
+		err := r.Scan(&row.Repo, &row.Tag, &row.SHA)
+		return row, err
+	})
+}
+
+// HasMainCommit reports whether sha is a recorded main_commits row for
+// repo — the CommitKnown guard graphproj.ArtifactTriples requires (006
+// §11.1).
+func (s *Store) HasMainCommit(ctx context.Context, repo, sha string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM main_commits WHERE repo = $1 AND sha = $2)`,
+		repo, sha).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("has main commit %s %s: %w", repo, sha, err)
+	}
+	return exists, nil
+}
+
+// KnownMainCommits is the bulk form of HasMainCommit: which of the given
+// (repo, sha) pairs name a recorded main_commits row, in one query. Only the
+// present pairs are keyed in the result, so an absent key means "not known".
+// keys is empty-safe and issues no query.
+//
+// The deploy deriver prefetches through this rather than calling
+// HasMainCommit per artifact: it replaces the whole observed/deploy graph, so
+// a per-lookup error must propagate and fail the run instead of degrading
+// into "commit unknown" and quietly PUTting a graph missing every
+// prov:wasDerivedFrom edge over the good one.
+func (s *Store) KnownMainCommits(ctx context.Context, keys []RepoSHA) (map[RepoSHA]bool, error) {
+	out := map[RepoSHA]bool{}
+	if len(keys) == 0 {
+		return out, nil
+	}
+	repos, shas := splitRepoSHAs(keys)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, sha FROM main_commits
+		 WHERE (repo, sha) IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
+		repos, shas)
+	if err != nil {
+		return nil, fmt.Errorf("known main commits for %d pairs: %w", len(keys), err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k RepoSHA
+		if err := rows.Scan(&k.Repo, &k.SHA); err != nil {
+			return nil, fmt.Errorf("scan known main commit: %w", err)
+		}
+		out[k] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("known main commits for %d pairs: %w", len(keys), err)
+	}
+	return out, nil
+}

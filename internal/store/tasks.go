@@ -849,6 +849,23 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 	return out, in, nil
 }
 
+// AllBlockEdges returns every 'blocks' edge, ordered by from_task then
+// to_task, for the overview's critical-path join (007: the DAG spans
+// backbone blocks edges plus KG requires edges, and the deriver needs the
+// whole edge set at once rather than one task's edges via ListEdges).
+func (s *Store) AllBlockEdges(ctx context.Context) ([]Edge, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT from_task, to_task FROM task_edges WHERE type = 'blocks' ORDER BY from_task, to_task`)
+	if err != nil {
+		return nil, fmt.Errorf("all block edges: %w", err)
+	}
+	return collectRows(rows, "all block edges", func(r rowScanner) (Edge, error) {
+		e := Edge{Type: "blocks"}
+		err := r.Scan(&e.FromTask, &e.ToTask)
+		return e, err
+	})
+}
+
 // TaskEdges is one task's edges, in the same split ListEdges returns.
 type TaskEdges struct {
 	Out []Edge
