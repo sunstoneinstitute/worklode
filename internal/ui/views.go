@@ -31,14 +31,11 @@ type PageProps struct {
 	ActiveGlobal string
 }
 
-// --- board (Home / Work) ----------------------------------------------------
+// --- board (Work) ------------------------------------------------------------
 
-// BoardView is the org-wide board shared by Home ("/") and Work ("/work"):
-// same data, only the heading and ActiveGlobal differ (IsHome switches the
-// heading).
+// BoardView is the org-wide board rendered at Work ("/work").
 type BoardView struct {
 	Page           PageProps
-	IsHome         bool
 	InboxCount     int
 	Projects       []BoardProject
 	RecentFailures []BoardFailure

@@ -29,7 +29,6 @@ func pages(t *testing.T) map[string]string {
 	comps := map[string]templ.Component{
 		"board": Board(BoardView{
 			Page:           PageProps{Title: "Home", ActiveGlobal: "home"},
-			IsHome:         true,
 			Projects:       []BoardProject{{ID: "p", Name: "Project", Ready: []model.BoardTask{{Task: model.Task{ID: "T-1", Title: "t"}}}}},
 			RecentFailures: []BoardFailure{{OccurredAt: now, Cluster: "c", Kind: "k", Workload: "w", Message: "m"}},
 		}),

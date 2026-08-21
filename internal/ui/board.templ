@@ -1,8 +1,8 @@
 package ui
 
-// board.templ renders the org-wide board shared by Home ("/") and Work
-// ("/work"): each project's In progress / In review / Ready / Blocked buckets
-// as worklist rows, plus recent runtime failures. Restyled from the former
+// board.templ renders the org-wide board shown at Work ("/work"): each
+// project's In progress / In review / Ready / Blocked buckets as worklist
+// rows, plus recent runtime failures. Restyled from the former
 // internal/api/board.templ tables into the design system's .card + .wl rows.
 
 import "github.com/sunstoneinstitute/worklode/internal/model"
@@ -10,12 +10,7 @@ import "github.com/sunstoneinstitute/worklode/internal/model"
 templ Board(v BoardView) {
 	@Page(v.Page) {
 		@globalShell(v.Page.ActiveGlobal) {
-			if v.IsHome {
-				<h1>Home</h1>
-				<h2>Current work</h2>
-			} else {
-				<h1>Work</h1>
-			}
+			<h1>Work</h1>
 			<p class="muted small">Inbox: { v.InboxCount } new issue{ pluralSuffix(v.InboxCount) }</p>
 			for _, proj := range v.Projects {
 				@boardProject(proj)

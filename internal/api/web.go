@@ -262,17 +262,11 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 }
 
 // workPage handles GET /work: task-oriented saved queries and the ready
-// frontier (spec 032 §2). Part 1 renders the org-wide board — the one Home
-// used to show as well, before Home became the actor's project list.
+// frontier (spec 032 §2). Part 1 renders the org-wide board, built from the
+// same assembleBoard used by GET /api/v1/board, plus a count of new
+// (untriaged) inbox issues — the board Home used to show as well, before Home
+// became the actor's project list.
 func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
-	s.renderBoard(w, r, "work", "worklode: work")
-}
-
-// renderBoard builds the org-wide board, built from the same assembleBoard
-// used by GET /api/v1/board, plus a count of new (untriaged) inbox issues,
-// and renders it under the given ActiveGlobal/title. workPage is its only
-// caller: Home is the actor's project list now, not the board.
-func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGlobal, title string) {
 	ctx := r.Context()
 
 	board, err := s.assembleBoard(ctx, "")
@@ -286,7 +280,7 @@ func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGloba
 		return
 	}
 
-	view := boardView(board, newIssues, activeGlobal == "home", title, activeGlobal)
+	view := boardView(board, newIssues, "worklode: work", "work")
 	s.renderWeb(w, r, http.StatusOK, "board page", ui.Board(view))
 }
 

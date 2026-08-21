@@ -18,12 +18,10 @@ import (
 )
 
 // boardView maps the org-wide board (shared with GET /api/v1/board) plus the
-// untriaged-inbox count into the ui board view. isHome selects the Home
-// heading over the Work heading; active/title drive the shell.
-func boardView(b *model.BoardResponse, inboxCount int, isHome bool, title, active string) ui.BoardView {
+// untriaged-inbox count into the ui board view. active/title drive the shell.
+func boardView(b *model.BoardResponse, inboxCount int, title, active string) ui.BoardView {
 	v := ui.BoardView{
 		Page:       ui.PageProps{Title: title, ActiveGlobal: active},
-		IsHome:     isHome,
 		InboxCount: inboxCount,
 		Projects:   make([]ui.BoardProject, 0, len(b.Projects)),
 	}
