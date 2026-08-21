@@ -216,6 +216,7 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 				// value sorts as '-infinity' and the write is dropped for any
 				// PR a webhook already timestamped.
 				UpdatedAt: gh.UpdatedAt,
+				Author:    gh.User.Login,
 			})
 			f.prBodies[gh.Number] = gh.Body
 			if gh.Merged {

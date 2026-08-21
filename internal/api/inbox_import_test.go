@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -657,5 +658,113 @@ func TestImportClosedUnmergedPRStoresNoMergedAt(t *testing.T) {
 	}
 	if pr.MergedAt != nil {
 		t.Fatalf("merged_at = %v, want nil for a closed-unmerged PR", pr.MergedAt)
+	}
+}
+
+// TestImportSetsPRAuthorEnablingSelfApprovalRefusal reproduces WL-244: a PR
+// first seen through backfill import must carry its author immediately, not
+// only after a later webhook fills it in. While author is unset,
+// store.IsSelfApproval cannot prove anything either way, so the approver who
+// authored the PR could self-approve it during that window (029 §7.1's
+// default refusal). The second half — actually deciding through
+// store.DecideApproval — is what catches a fix that sets Author but leaves
+// it unused, or a passing GetPR check that hides a still-broken decide path.
+func TestImportSetsPRAuthorEnablingSelfApprovalRefusal(t *testing.T) {
+	st0 := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st0.CreateProject(ctx, "proj", "Proj", "PR"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := st0.AddRepo(ctx, "proj", "acme/widgets"); err != nil {
+		t.Fatalf("add repo: %v", err)
+	}
+	if err := st0.CreateActor(ctx, "someone", "human", "Someone", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	var taskID string
+	extID, err := randomExternalID()
+	if err != nil {
+		t.Fatalf("random external id: %v", err)
+	}
+	if _, _, err := st0.RecordEvent(ctx, "cli", extID, "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := store.CreateTask(tx, st0.Now(), store.TaskInput{
+				ProjectID: "proj", Title: "self-serve", Priority: "low", Kind: "bug", CreatedBy: "someone",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			return nil
+		}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+
+	pulls := []map[string]any{{
+		"number": 1, "title": "self-serve work", "state": "open",
+		"html_url": "https://gh/pr/1", "created_at": "2026-01-01T00:00:00Z",
+		"updated_at": "2026-01-02T00:00:00Z",
+		"head":       map[string]any{"ref": taskID + "-fix", "sha": "cafe"},
+		"user":       map[string]any{"login": "octo"},
+	}}
+	app := importGitHub(t, nil, pulls)
+	s := &server{st: st0, cfg: Config{}, log: slog.Default(), appAuth: app}
+	post := func(body map[string]any) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "/api/v1/inbox/import", bytes.NewReader(b))
+		rr := httptest.NewRecorder()
+		s.importInbox(rr, req)
+		return rr
+	}
+
+	rr := post(map[string]any{"repo": "acme/widgets", "state": "all", "include_prs": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body)
+	}
+
+	pr, err := st0.GetPR(ctx, "acme/widgets", 1)
+	if err != nil {
+		t.Fatalf("get pr: %v", err)
+	}
+	if pr.TaskID == nil || *pr.TaskID != taskID {
+		t.Fatalf("pr task_id = %v, want %s — the fixture's head_ref must correlate for this test to mean anything", pr.TaskID, taskID)
+	}
+	if pr.Author != "octo" {
+		t.Fatalf("author = %q, want octo — backfill import must capture the PR author so self-approval can be refused before any webhook arrives", pr.Author)
+	}
+
+	// Materialize an approval on this PR exactly as the webhook review
+	// ingest would, then prove the author it names cannot decide it.
+	if err := st0.UpsertHumanActor(ctx, "octo-actor", "Octo", false, "octo", "", nil); err != nil {
+		t.Fatalf("upsert actor: %v", err)
+	}
+	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
+		return store.InsertAwaitingApproval(tx, st0.Now(), "pr",
+			store.PREntityID("acme/widgets", 1), "cafe", nil, nil)
+	}); err != nil {
+		t.Fatalf("insert awaiting approval: %v", err)
+	}
+	rows, err := st0.ListAwaitingApprovals(ctx)
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	var approvalID int64
+	for _, row := range rows {
+		if row.EntityID == store.PREntityID("acme/widgets", 1) {
+			approvalID = row.ID
+		}
+	}
+	if approvalID == 0 {
+		t.Fatalf("seeded approval not found in the awaiting queue")
+	}
+
+	err = st0.Tx(ctx, func(tx *sql.Tx) error {
+		_, err := store.DecideApproval(tx, store.DecideInput{
+			ApprovalID: approvalID, Decision: "approve", ActorID: "octo-actor", Now: st0.Now(),
+		})
+		return err
+	})
+	if !errors.Is(err, store.ErrSelfApproval) {
+		t.Fatalf("decide by the PR's own author = %v, want ErrSelfApproval", err)
 	}
 }

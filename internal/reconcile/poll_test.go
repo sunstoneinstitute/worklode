@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"database/sql"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -498,6 +499,83 @@ func TestPollRejectsReusedAndEmptyRunID(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "run-dup") {
 		t.Fatalf("error = %v; want it to name the duplicate run id", err)
+	}
+}
+
+// TestPollSetsPRAuthorEnablingSelfApprovalRefusal reproduces WL-244: a PR
+// first seen through the reconcile poll must carry its author immediately,
+// not only after a later webhook fills it in. While author is unset,
+// store.IsSelfApproval cannot prove anything either way, so the approver who
+// authored the PR could self-approve it during that window (029 §7.1's
+// default refusal). The second half — actually deciding through
+// store.DecideApproval — is what catches a fix that sets Author but leaves
+// it unused.
+func TestPollSetsPRAuthorEnablingSelfApprovalRefusal(t *testing.T) {
+	st := store.OpenTestStore(t)
+	taskID := seedStaleTask(t, st)
+	routes := map[string]string{
+		"/repos/acme/app": `{"default_branch": "main"}`,
+		"/repos/acme/app/pulls/12": `{
+			"number": 12, "title": "fix", "state": "open",
+			"body": "", "html_url": "u",
+			"created_at": "2026-07-19T09:00:00Z",
+			"updated_at": "2026-07-21T10:00:00Z",
+			"head": {"ref": "` + taskID + `-fix", "sha": "` + headSHA + `"},
+			"user": {"login": "octo"}
+		}`,
+		"/repos/acme/app/releases": `[]`,
+	}
+	app := newFakeGitHub(t, routes)
+	ctx := context.Background()
+
+	if _, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-author"}); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+
+	pr, err := st.GetPR(ctx, "acme/app", 12)
+	if err != nil {
+		t.Fatalf("get pr: %v", err)
+	}
+	if pr.TaskID == nil || *pr.TaskID != taskID {
+		t.Fatalf("pr task_id = %v, want %s — the seeded head_ref must correlate for this test to mean anything", pr.TaskID, taskID)
+	}
+	if pr.Author != "octo" {
+		t.Fatalf("author = %q, want octo — the poll engine must capture the PR author so self-approval can be refused before any webhook arrives", pr.Author)
+	}
+
+	// Materialize an approval on this PR exactly as the webhook review
+	// ingest would, then prove the author it names cannot decide it.
+	if err := st.UpsertHumanActor(ctx, "octo-actor", "Octo", false, "octo", "", nil); err != nil {
+		t.Fatalf("upsert actor: %v", err)
+	}
+	if err := st.Tx(ctx, func(tx *sql.Tx) error {
+		return store.InsertAwaitingApproval(tx, st.Now(), "pr",
+			store.PREntityID("acme/app", 12), headSHA, nil, nil)
+	}); err != nil {
+		t.Fatalf("insert awaiting approval: %v", err)
+	}
+	rows, err := st.ListAwaitingApprovals(ctx)
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	var approvalID int64
+	for _, row := range rows {
+		if row.EntityID == store.PREntityID("acme/app", 12) {
+			approvalID = row.ID
+		}
+	}
+	if approvalID == 0 {
+		t.Fatalf("seeded approval not found in the awaiting queue")
+	}
+
+	err = st.Tx(ctx, func(tx *sql.Tx) error {
+		_, err := store.DecideApproval(tx, store.DecideInput{
+			ApprovalID: approvalID, Decision: "approve", ActorID: "octo-actor", Now: st.Now(),
+		})
+		return err
+	})
+	if !errors.Is(err, store.ErrSelfApproval) {
+		t.Fatalf("decide by the PR's own author = %v, want ErrSelfApproval", err)
 	}
 }
 
