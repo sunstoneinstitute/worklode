@@ -17,17 +17,5 @@
         ]
       }
     ]
-  },
-  "enabledPlugins": {
-    "lode@worklode": true,
-    "mattpocock-skills@claude-plugins-official": true
-  },
-  "extraKnownMarketplaces": {
-    "worklode": {
-      "source": {
-        "source": "github",
-        "repo": "sunstoneinstitute/worklode"
-      }
-    }
   }
 }
