@@ -79,10 +79,10 @@ wl:Plan a owl:Class ;
     rdfs:comment """An executable document: a bundle of task definitions with instructions
         attached, minted as tasks when it is accepted (025 §9.2). Reviewable and accept-gated
         like a DesignDoc, but spent by execution rather than superseded, freely mutable, and
-        taking no wl:Section parts and no frozen anchors — nothing may pin a claim to a plan.
-        A sibling of wl:DesignDoc, never a subclass: 025 §2 dropped the class when plan-shaped
-        work was a task subtree; 025 §9 (accepted) reintroduced plans as documents, mirrored
-        here by spec 025 §17.""" .
+        taking no wl:Section parts and no frozen anchors — the section lock that protects a
+        spec would be harmful here, so nothing may pin a claim to a plan (025 §2). A sibling
+        of wl:DesignDoc, never a subclass: 025 §9 reintroduced plans as documents on that
+        same reasoning, mirrored here by spec 025 §17.""" .
 
 wl:Deliverable a owl:Class ;
     wl:layer wlc:intent ;
@@ -453,9 +453,12 @@ wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
         (025 §5, §9.3): every task in this plan is held while any task in the blocking plan's
         set is open. A distinct property, never a widened wl:dependsOn, so the Task→Task
         closure stays type-homogeneous (ADR-0004) and ?t wl:dependsOn+ ?x never walks across
-        document ordering. Transitive: a held plan keeps its own set open, so ordering
-        composes down a chain. The plan frontmatter keys are `blocks`/`blockedBy`; the
-        backbone row is a doc_edges 'blocks' edge between the two plan documents.""" .
+        document ordering. Transitive, so plan-ordering reachability is a property path
+        (?p wl:blockedByPlan+ ?x) with no reasoner. Declared by the document-level plan
+        frontmatter keys `blocks`/`blockedBy` (025 §5) — document references, unlike the
+        task-level `blockedBy` numbers inside a plan's ## Tasks, which mint Task→Task
+        wl:blocks edges (025 §9.2) — and stored as a doc_edges 'blocks' row between the
+        two plan documents.""" .
 
 wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
     wl:layer wlc:execution ;
