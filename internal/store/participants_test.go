@@ -158,6 +158,71 @@ func TestListParticipants(t *testing.T) {
 	}
 }
 
+// TestListParticipantsAllProjects pins ListParticipants(ctx, "") — the
+// bulk form Home's card grid needs to avoid an N+1 read (spec 029, plan D
+// task 5). It must return every project's roster in one query, each row
+// carrying its own ProjectID, grouped project id ascending with lead first
+// within a project. bob holds a role on both p1 and p2 with a different
+// label on each: folding on actor id alone (instead of (project id, actor
+// id)) would merge his two rows into one and lose one of the roles, which
+// is exactly the bug this test exists to catch.
+func TestListParticipantsAllProjects(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "LPA1"); err != nil {
+		t.Fatalf("CreateProject p1: %v", err)
+	}
+	if err := s.CreateProject(ctx, "p2", "P2", "LPA2"); err != nil {
+		t.Fatalf("CreateProject p2: %v", err)
+	}
+	for _, id := range []string{"ada", "bob"} {
+		if err := s.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("CreateActor %s: %v", id, err)
+		}
+	}
+
+	if err := addParticipant(t, s, "p1", "ada", "editor", true, "ada"); err != nil {
+		t.Fatal(err)
+	}
+	if err := addParticipant(t, s, "p1", "bob", "member", false, "ada"); err != nil {
+		t.Fatal(err)
+	}
+	// bob again on p2, with a different role than on p1.
+	if err := addParticipant(t, s, "p2", "bob", "reviewer", false, "ada"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListParticipants(ctx, "")
+	if err != nil {
+		t.Fatalf("ListParticipants(\"\"): %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("want 3 rows across both projects, got %d: %+v", len(got), got)
+	}
+
+	// Grouped p1 before p2; within p1, the lead (ada) comes first.
+	if got[0].ProjectID != "p1" || got[0].ActorID != "ada" || !got[0].IsLead ||
+		!slices.Equal(got[0].Roles, []string{"editor"}) {
+		t.Fatalf("row 0 wrong: %+v", got[0])
+	}
+	if got[1].ProjectID != "p1" || got[1].ActorID != "bob" || got[1].IsLead ||
+		!slices.Equal(got[1].Roles, []string{"member"}) {
+		t.Fatalf("row 1 wrong: %+v", got[1])
+	}
+	if got[2].ProjectID != "p2" || got[2].ActorID != "bob" || got[2].IsLead ||
+		!slices.Equal(got[2].Roles, []string{"reviewer"}) {
+		t.Fatalf("row 2 wrong: %+v", got[2])
+	}
+
+	// Every row must carry its own ProjectID (not left blank).
+	for i, row := range got {
+		if row.ProjectID == "" {
+			t.Fatalf("row %d has empty ProjectID: %+v", i, row)
+		}
+	}
+}
+
 // TestOpenWorkOwnedBy pins the removal guard's fact query (spec 029 §6.1):
 // only a task that is both assigned to the actor and still open (state not
 // in deliveredStateSet) counts as owned work blocking removal.
