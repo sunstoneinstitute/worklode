@@ -65,14 +65,15 @@ jobs:
 
           # The obsidian job is the only one scoped to a subtree: the plugin is
           # the repo's sole Node package, nothing in the Go build imports it,
-          # and it ships separately — so a PR that touches neither obsidian/
+          # and it ships separately — so a PR that touches neither
+          # plugins/obsidian/
           # nor its own workflow cannot change its result. Decided here rather
           # than with a `paths:` filter because a reusable workflow cannot take
           # one. Deliberately independent of `run` below: `can-be-tested`
           # authorises CI on an untrusted PR, it does not make an untouched
           # subtree worth rebuilding.
           if [ -z "$CHANGED" ] \
-             || echo "$CHANGED" | grep -qE '^obsidian/|^\.github/workflows/_obsidian\.yml$'; then
+             || echo "$CHANGED" | grep -qE '^plugins/obsidian/|^\.github/workflows/_obsidian\.yml$'; then
             echo "obsidian=true" >> "$GITHUB_OUTPUT"
           else
             echo "obsidian=false" >> "$GITHUB_OUTPUT"

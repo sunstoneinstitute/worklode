@@ -1,6 +1,6 @@
 ---
 name: worklode-lode-plugin
-description: Use when working in plugins/ — the /lode:* slash commands, the lode-worker agent, and the plugin marketplace. Triggers: "add a slash command", "a new /lode: command", "the lode plugin", "disable-model-invocation", "plugin marketplace", "marketplace.json", "the codex plugin", "sync-codex-marketplace", "plugin install". Also use after changing the lode CLI — "renamed a lode command", "removed a flag", "changed --json output", "TestAgentSurfaces failed", "the skills reference a command that no longer exists" — because the plugin skills hardcode invocations. Not for implementing the Go CLI itself.
+description: Use when working in plugins/claude/lode/ or its marketplace mirrors — the /lode:* slash commands, the lode-worker agent, and the plugin marketplace. Triggers: "add a slash command", "a new /lode: command", "the lode plugin", "disable-model-invocation", "plugin marketplace", "marketplace.json", "the codex plugin", "sync-codex-marketplace", "plugin install". Also use after changing the lode CLI — "renamed a lode command", "removed a flag", "changed --json output", "TestAgentSurfaces failed", "the skills reference a command that no longer exists" — because the plugin skills hardcode invocations. Not for implementing the Go CLI itself or the Obsidian plugin in plugins/obsidian/.
 ---
 
 # The lode plugin

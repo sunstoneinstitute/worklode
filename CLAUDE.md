@@ -31,11 +31,12 @@ itself, but load it by name if it has not:
   the `worklode-docs-authoring` skill.
 - **Adding or changing a database migration** under `deploy/base/migrations/`.
   See the `worklode-migrations` skill.
-- **Touching `obsidian/`** — the TypeScript Obsidian plugin, its pnpm
+- **Touching `plugins/obsidian/`** — the TypeScript Obsidian plugin, its pnpm
   toolchain, and its hand-kept wire types. See the
   `worklode-obsidian-mirror` skill.
-- **Touching `plugins/`** — the `/lode:*` slash commands, the `lode-worker`
-  agent, the marketplace, and the generated Codex mirror. See
+- **Touching `plugins/claude/lode/` or its marketplace mirrors** — the
+  `/lode:*` slash commands, the `lode-worker` agent, the marketplace, and the
+  generated Codex mirror. See
   the `worklode-lode-plugin` skill.
 - **Working on the cockpit UI** — `internal/ui`, `templ` components, the
   Tailwind build, the `go generate` loop. See the `worklode-cockpit-ui` skill.
