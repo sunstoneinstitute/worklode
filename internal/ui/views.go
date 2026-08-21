@@ -632,6 +632,16 @@ func homeActivity(t time.Time) string {
 	return "Last activity " + fmtTime(t)
 }
 
+// homeRoleChip returns the .chip variant class for a Home card's role badge,
+// reusing the Lead affordance's existing accent styling (crew.templ) for
+// "Lead" and the neutral variant for "Member".
+func homeRoleChip(badge string) string {
+	if badge == "Lead" {
+		return "lead"
+	}
+	return "plain"
+}
+
 // --- CLI login (spec 001 §8.7) ----------------------------------------------
 
 // CLICodeView is the manual-`lode login` page: the one-time code the user

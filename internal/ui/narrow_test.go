@@ -49,7 +49,15 @@ func pages(t *testing.T) map[string]string {
 			Page: PageProps{Title: "T"}, Doc: model.Doc{ID: 1, Slug: "s", Title: "T"},
 			Sections: []model.DocSection{{Anchor: "sec-1", Heading: "1. H"}},
 		}),
-		"projects":     Projects(ProjectsView{Page: PageProps{Title: "Projects", ActiveGlobal: "projects"}, Projects: []model.Project{{ID: "p", Name: "Project"}}}),
+		"projects": Projects(ProjectsView{Page: PageProps{Title: "Projects", ActiveGlobal: "projects"}, Projects: []model.Project{{ID: "p", Name: "Project"}}}),
+		"home": Home(HomeView{
+			Page: PageProps{Title: "Home", ActiveGlobal: "home"},
+			Mode: "actor",
+			Cards: []HomeCard{
+				{ProjectID: "p1", Name: "Alpha", Key: "ALP", RoleBadge: "Lead", Signal: "You lead this project", InProgress: 2, InReview: 1, Blocked: 1, CrewInitials: []string{"SB", "JD"}, CrewMore: 3, LastActivity: now},
+				{ProjectID: "p2", Name: "Beta", Key: "BET", RoleBadge: "Member", Signal: "You are on this project", InProgress: 0, InReview: 0, Blocked: 0, CrewInitials: []string{"AB"}},
+			},
+		}),
 		"deliverables": Deliverables(DeliverablesView{Page: PageProps{Title: "Deliverables"}, Project: proj, Deliverables: []DeliverableRow{{ID: "d", Name: "D", URL: "https://example.org/x", CreatedAt: now}}}),
 		"newtask":      NewTask(NewTaskView{Form: FormShell{Page: PageProps{Title: "New task"}, Project: proj}}),
 		"placeholder":  Placeholder(PlaceholderView{Page: PageProps{Title: "Crew"}, Heading: "Crew", Project: &proj}),
@@ -160,6 +168,8 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{".prose{overflow-wrap:anywhere", "an unbroken token in a task body must not widen the page (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal", "a work row's title wraps below 880px instead of truncating to nothing (WCAG 1.4.10)"},
 		{".fieldrow.checkinput{width:24px;height:24px", "the draft checkbox meets the minimum target size (WCAG 2.5.8)"},
+		{".homegrid{display:grid;grid-template-columns:1fr1fr", "Home's two-column grid must stay fixed, never auto-fit/auto-fill (spec 032 §10)"},
+		{"@media(max-width:820px){.homegrid{grid-template-columns:1fr;}}", "Home's grid must collapse to one column below 820px (spec 032 §10)"},
 	} {
 		if !strings.Contains(flat, c.want) {
 			t.Errorf("app.css no longer declares %q: %s", c.want, c.why)
