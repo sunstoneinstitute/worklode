@@ -19,6 +19,7 @@ import (
 func seedSkill(t *testing.T, st *store.Store, name, description string) {
 	t.Helper()
 	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Qualifier:   "acme",
 		Name:        name,
 		Description: description,
 		SourceRepo:  "acme/skills",
@@ -56,7 +57,7 @@ func TestSkillsEndpoints(t *testing.T) {
 		t.Fatalf("get: %d", rr.Code)
 	}
 	got := decodeMap(t, rr)
-	if got["name"] != "tdd" || got["hash"] != "h-tdd" {
+	if got["name"] != "acme:tdd" || got["hash"] != "h-tdd" {
 		t.Fatalf("get body: %v", got)
 	}
 
@@ -161,7 +162,7 @@ func TestRecommendWithProvider(t *testing.T) {
 		t.Fatalf("matches: %v", body["matches"])
 	}
 	m0, _ := matches[0].(map[string]any)
-	if m0["name"] != "tdd" {
+	if m0["name"] != "acme:tdd" {
 		t.Fatalf("match name: %v", m0["name"])
 	}
 	if score, ok := m0["score"].(float64); !ok || score < 0.99 {
@@ -186,7 +187,7 @@ func TestRecommendWithProvider(t *testing.T) {
 		t.Fatalf("pinned by task: %v", body["pinned"])
 	}
 	p0, _ := pinned[0].(map[string]any)
-	if p0["name"] != "tdd" {
+	if p0["name"] != "acme:tdd" {
 		t.Fatalf("pinned name: %v", p0["name"])
 	}
 	if p0["content"] == "" || p0["content"] == nil {

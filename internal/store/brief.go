@@ -123,15 +123,19 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 }
 
 // ResolvePins resolves pinned skill names into skills with content, in pin
-// order, deduped. A pin in "plugin:skill" form resolves exactly when the
-// registry name is qualified; when the exact name misses, the segment after
-// the pin's first colon is tried against the registry as a fallback name —
-// the skill-identifier rule of 025 §9.1. An exact hit is authoritative for
-// its own name and never consults the fallback. An unknown pin produces a
-// "not found" warning; a pin that resolves to a soft-deleted skill still
-// comes back with its content, plus a "removed from its source repo"
-// warning — a brief must never break because a skill was withdrawn or
-// misspelled upstream.
+// order, deduped. Pins resolve through ResolveSkillRefs, so a pin written in
+// "plugin:skill" form hits the qualified registry name exactly, a bare pin
+// hits while it names one skill, and a qualified pin naming a plugin the org
+// never synced still falls back to the segment after its first colon — the
+// skill-identifier rule of 025 §9.1.
+//
+// Every way a pin can fail to name one skill is a warning, never an error: a
+// brief must not break because a skill was withdrawn, misspelled upstream, or
+// shipped by two plugins at once. An unknown pin warns "not found"; a pin that
+// names several qualified skills warns "ambiguous" and lists them, since
+// picking one would silently give the task a skill nobody chose; a pin that
+// resolves to a soft-deleted skill still comes back with its content, plus a
+// "removed from its source repo" warning.
 //
 // Dedupe is on the resolved skill, not the pin: the fallback lets two pins
 // ("tdd" and "superpowers:tdd") name one registry row, and inlining that
@@ -142,64 +146,32 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 // The brief and POST /api/v1/skills/recommend both go through here, so the
 // two agree on the warning text without hand-copying it.
 func (s *Store) ResolvePins(ctx context.Context, pins []string) ([]Skill, []string, error) {
-	names := dedupeFirst(pins)
-
-	skills, err := s.SkillsByNames(ctx, names)
+	res, err := s.ResolveSkillRefs(ctx, pins)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)
-	}
-	found := make(map[string]Skill, len(skills))
-	for _, sk := range skills {
-		found[sk.Name] = sk
-	}
-
-	// Still-unresolved, colon-qualified pins get a second pass against the
-	// segment after their first colon (deduped) — an unqualified registry
-	// name a plugin-qualified pin should still hit.
-	suffixOf := make(map[string]string, len(names))
-	var suffixes []string
-	for _, name := range names {
-		if _, ok := found[name]; ok {
-			continue
-		}
-		if _, suffix, ok := strings.Cut(name, ":"); ok {
-			suffixOf[name] = suffix
-			suffixes = append(suffixes, suffix)
-		}
-	}
-	fallback := make(map[string]Skill, len(suffixes))
-	if len(suffixes) > 0 {
-		hits, err := s.SkillsByNames(ctx, dedupeFirst(suffixes))
-		if err != nil {
-			return nil, nil, fmt.Errorf("resolve pinned skills: %w", err)
-		}
-		for _, sk := range hits {
-			fallback[sk.Name] = sk
-		}
 	}
 
 	var pinned []Skill
 	var warnings []string
-	seen := make(map[string]bool, len(names))
-	for _, name := range names {
-		sk, ok := found[name]
-		if !ok {
-			if suffix, has := suffixOf[name]; has {
-				sk, ok = fallback[suffix]
-			}
-		}
-		if !ok {
-			warnings = append(warnings, "pinned skill not found: "+name)
+	seen := make(map[int64]bool, len(res))
+	for _, r := range res {
+		switch {
+		case r.Skill == nil && len(r.Candidates) > 0:
+			warnings = append(warnings, "pinned skill is ambiguous: "+r.Ref+
+				" matches "+strings.Join(r.Candidates, ", "))
+			continue
+		case r.Skill == nil:
+			warnings = append(warnings, "pinned skill not found: "+r.Ref)
 			continue
 		}
-		if sk.Deleted {
-			warnings = append(warnings, "pinned skill removed from its source repo: "+name)
+		if r.Skill.Deleted {
+			warnings = append(warnings, "pinned skill removed from its source repo: "+r.Ref)
 		}
-		if seen[sk.Name] {
+		if seen[r.Skill.ID] {
 			continue
 		}
-		seen[sk.Name] = true
-		pinned = append(pinned, sk)
+		seen[r.Skill.ID] = true
+		pinned = append(pinned, *r.Skill)
 	}
 	return pinned, warnings, nil
 }

@@ -203,8 +203,8 @@ func TestTaskBriefSkillsPinned(t *testing.T) {
 		t.Fatalf("pinned = %v, want one entry", skills["pinned"])
 	}
 	p0, _ := pinned[0].(map[string]any)
-	if p0["name"] != "tdd" || p0["content"] == "" || p0["content"] == nil {
-		t.Fatalf("pinned[0] = %v, want tdd with content", p0)
+	if p0["name"] != "acme:tdd" || p0["content"] == "" || p0["content"] == nil {
+		t.Fatalf("pinned[0] = %v, want acme:tdd with content", p0)
 	}
 	matches, _ := skills["matches"].([]any)
 	if len(matches) != 0 {

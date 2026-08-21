@@ -121,7 +121,7 @@ func (s *Store) RecommendSkills(ctx context.Context, query []float32, limit int,
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT s.name, s.description, coalesce(v.content_hash, ''),
+		SELECT s.qualifier || ':' || s.name, s.description, coalesce(v.content_hash, ''),
 		       max(1 - (e.embedding <=> $1::vector)) AS score
 		FROM skill_embeddings e
 		JOIN skills s ON s.id = e.skill_id

@@ -79,7 +79,7 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 
 	pinnedNames := make(map[string]bool, len(b.PinnedSkills))
 	for _, sk := range b.PinnedSkills {
-		pinnedNames[sk.Name] = true
+		pinnedNames[sk.QualifiedName()] = true
 	}
 	if s.embedder != nil {
 		out.Skills.Provider = "openai-compatible"
