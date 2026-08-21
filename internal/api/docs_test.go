@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -720,6 +721,13 @@ func TestReAcceptPlanMintsAddedDeclaration(t *testing.T) {
 		t.Fatalf("first accept minted %d tasks, want 2", len(first.Tasks))
 	}
 
+	// The no-op path below must not swallow the assignee gate: another actor
+	// re-accepting an accepted plan is still 403.
+	bobToken := docActor(t, st, "bob")
+	if rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), bobToken, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("other actor re-accept status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+
 	// Re-accepting at the same version: the event id collides, apply is
 	// skipped, and the endpoint says so by answering with the document and no
 	// minted tasks rather than by refusing.
@@ -763,6 +771,22 @@ Do the third thing.
 		if second.Tasks[0].ID == task.ID {
 			t.Errorf("re-accept returned an already-minted task %s", task.ID)
 		}
+	}
+
+	// The event says what actually happened: the second acceptance left
+	// "accepted", not "draft" — an append-only log may not record a transition
+	// the document never made.
+	events := eventsOfType(t, h, token, "wl:DocumentAccepted")
+	if len(events) != 2 {
+		t.Fatalf("wl:DocumentAccepted events = %d, want 2", len(events))
+	}
+	fromStatuses := make([]any, 0, len(events))
+	for _, e := range events {
+		ev, _ := e.(map[string]any)
+		fromStatuses = append(fromStatuses, eventPayload(t, ev)["wl:fromStatus"])
+	}
+	if !slices.Contains(fromStatuses, any("wlc:draft")) || !slices.Contains(fromStatuses, any("wlc:accepted")) {
+		t.Errorf("wl:fromStatus values = %v, want one wlc:draft and one wlc:accepted", fromStatuses)
 	}
 }
 

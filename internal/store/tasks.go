@@ -1046,6 +1046,11 @@ var blockedCondition = `e.type = 'blocks'
 // because the document is still draft (§7's literal sentence would read that
 // empty set as finished; §10 calls an unminted set unfinished).
 //
+// An accepted plan carrying a declaration that has no row yet (025 §9.2)
+// counts as finished once its minted tasks close. That is the same limit
+// NeedsExecution documents: the declaration is in the body, and this predicate
+// reads rows. Re-accepting the plan mints it and the gate closes again.
+//
 // "Open" is taskClosed's complement, so this and blockedCondition cannot drift
 // on what closed means. It binds `bt` on top of the aliases taskClosed binds.
 // Every surface that reports plan-to-plan blocking renders this one predicate

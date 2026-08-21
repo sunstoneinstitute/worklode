@@ -951,6 +951,10 @@ so nothing else moves a plan's version, and acceptance is keyed on the document'
 version (§15.3): the bump is what distinguishes a re-acceptance after an edit from a retry of
 the same acceptance. Re-accepting at a version already accepted therefore mints nothing and
 answers with the document unchanged — the no-op an unedited plan should be, never a refusal.
+It re-arms §15.4's review rule for plans by the same token: submitting a plan edited since its
+last submission mints a fresh review task once the previous one has closed, which is what
+§15.4 already does for a spec re-accepted after its design task closed, and correct — the
+edited plan is a new thing to review.
 
 A plan's task set is the query `tasks WHERE plan_doc = <doc>` — §1's rule applied to the case
 that most tempted a row. A root task would own no fact of its own: its state was computed from

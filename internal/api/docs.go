@@ -489,9 +489,13 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	now := s.st.Now()
 	var accepted *model.Doc
 	var minted []model.Task
+	// From is the status the document is actually leaving, not a constant: a
+	// plan re-accepted while accepted leaves "accepted" (025 §9.2), and an
+	// event saying otherwise would put a transition that did not happen in the
+	// append-only log.
 	ev := eventbus.DocumentAccepted{
 		Doc: store.DocIRI(*doc), Actor: actorID, At: now,
-		Version: doc.Version, From: "wlc:draft", To: "wlc:accepted",
+		Version: doc.Version, From: "wlc:" + doc.Status, To: "wlc:accepted",
 	}
 	_, inserted, err := eventbus.Emit(r.Context(), s.st, docSource, ev,
 		func(tx *sql.Tx, eventID int64) error {

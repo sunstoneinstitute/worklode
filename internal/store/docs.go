@@ -315,6 +315,10 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 // instead (see acceptPlanDoc) — the second return is that minted set, in
 // definition order, and nil for a spec or ADR.
 //
+// A plan is also accepted from accepted: re-acceptance is how a declaration
+// added to an accepted plan reaches the task set (§9.2), and it mints only
+// what has no row yet.
+//
 // The depth limit is evaluated at publication (025 §6 rule 6), so a first
 // accept still rejects an anchored heading below designdoc.DepthLimit even
 // though rules 1-3 exempt drafts.
@@ -467,7 +471,7 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	// say nothing about what changed.
 	change := map[string]string{"field": "status", "old": d.status, "new": "accepted"}
 	if d.status == "accepted" {
-		change = map[string]string{"field": "plan_tasks", "minted": strconv.Itoa(len(tasks))}
+		change = map[string]string{"field": "plan_tasks", "new": strconv.Itoa(len(tasks))}
 	}
 	if err := logDocChange(tx, id, eventID, change); err != nil {
 		return nil, nil, err
@@ -2179,11 +2183,15 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 // tombstoned task is out on top of that (044 §4), matching planUnfinished.
 //
 // This departs from 025 §18's "unminted or unfinished" deliberately, as the
-// 2026-08-03 plan-acceptance plan records: through the accept path an
-// accepted-but-unminted plan cannot exist, and the only accepted plans with no
-// task set are the importer's *spent* plans, which must not be reported as
+// 2026-08-03 plan-acceptance plan records: the accepted plans with no task set
+// at all are the importer's *spent* plans, which must not be reported as
 // pending work. The ordering need §18's "unminted" arm served is covered by
 // the plan-to-plan blocks predicate (planBlockedCondition).
+//
+// A declaration added to an accepted plan and not yet re-accepted (025 §9.2)
+// is invisible here, because whether one exists is a fact about the body and
+// not about any row. Re-accepting the plan is what makes it visible; nothing
+// SQL can see says it is owed.
 func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+docColumnsD+`

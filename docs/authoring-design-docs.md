@@ -38,6 +38,11 @@ declaration to add work to an accepted plan, and retitle one only when you mean
 to withdraw that task and declare another. Once a plan has minted tasks, an
 edit that leaves its `## Tasks` section unreadable is refused.
 
+Re-acceptance mints; it never edits. A `blockedBy` added under a declaration
+that already has a task is not wired — the edge would change when an existing
+task becomes claimable, and re-acceptance leaves existing rows alone. Add that
+edge with `lode task block <task> --by <blocker>` when you need it.
+
 ````markdown
 ### Task 1 — Short imperative title
 

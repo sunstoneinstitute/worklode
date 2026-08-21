@@ -2415,6 +2415,79 @@ func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
 	}
 }
 
+// TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles: 0043 backfills
+// plan_task_key from tasks.title, and nothing before it stopped two
+// declarations in one plan from sharing a title. The earliest row keeps the
+// title — the key a re-accept then matches that declaration to — and the rest
+// are disambiguated, so the partial unique index can be created and no
+// existing row is lost.
+func TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles(t *testing.T) {
+	s := OpenUnmigratedTestStore(t)
+	if err := s.Migrate(migrationsThrough(t, 42)); err != nil {
+		t.Fatalf("migrate through 0042: %v", err)
+	}
+	db := s.DBForTests()
+	if _, err := db.Exec(`INSERT INTO projects (id, name, key) VALUES ('p1','P1','P1')`); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	var planID int64
+	if err := db.QueryRow(
+		`INSERT INTO docs (project_id, kind, slug, title, body, created_at, updated_at)
+		 VALUES ('p1', 'plan', 'dup-plan', 'Dup plan', 'body', now(), now()) RETURNING id`,
+	).Scan(&planID); err != nil {
+		t.Fatalf("seed plan doc: %v", err)
+	}
+	// Inserted directly: the store is held at 0042, where tasks has no
+	// plan_task_key column for CreateTask to write.
+	for i, id := range []string{"P1-1", "P1-2", "P1-3"} {
+		created := taskTestNow.Add(time.Duration(i) * time.Second)
+		title := "Same title"
+		if id == "P1-3" {
+			title = "Its own title"
+		}
+		if _, err := db.Exec(
+			`INSERT INTO tasks (id, project_id, title, body, priority, kind, state,
+			                    created_at, updated_at, plan_doc)
+			 VALUES ($1, 'p1', $2, 'b', 'medium', 'feature', 'draft', $3, $3, $4)`,
+			id, title, created, planID); err != nil {
+			t.Fatalf("seed task %s: %v", id, err)
+		}
+	}
+
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate to latest: %v", err)
+	}
+
+	keys := map[string]string{}
+	rows, err := db.Query(`SELECT id, plan_task_key FROM tasks ORDER BY id`)
+	if err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, key string
+		if err := rows.Scan(&id, &key); err != nil {
+			t.Fatalf("scan key: %v", err)
+		}
+		keys[id] = key
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	if len(keys) != 3 {
+		t.Fatalf("kept %d tasks, want all 3", len(keys))
+	}
+	if keys["P1-1"] != "Same title" {
+		t.Errorf("earliest duplicate key = %q, want the title itself", keys["P1-1"])
+	}
+	if keys["P1-2"] == "Same title" || keys["P1-2"] == "" {
+		t.Errorf("later duplicate key = %q, want it disambiguated", keys["P1-2"])
+	}
+	if keys["P1-3"] != "Its own title" {
+		t.Errorf("unique title key = %q, want the title itself", keys["P1-3"])
+	}
+}
+
 // TestDocAcceptPlanParseFailureRefusesAndStaysDraft: a plan whose body fails
 // designdoc.PlanTasks refuses to accept, wrapped as ErrInvalidInput, and its
 // status stays draft — the status flip and the mint never run.

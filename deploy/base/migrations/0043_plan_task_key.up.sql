@@ -12,6 +12,12 @@
 
 ALTER TABLE tasks ADD COLUMN plan_task_key text;
 
+-- Backfill from tasks.title, which is the one source this migration has and
+-- the very source the column exists to stop trusting: a task renamed since it
+-- was minted gets a key its declaration no longer spells, and the first
+-- re-accept of that plan mints the declaration again. That is bounded — it
+-- costs one duplicate draft task, which is closable — and it ends here: every
+-- task minted from now on records the key at mint. See docs/follow-ups.md.
 UPDATE tasks SET plan_task_key = title WHERE plan_doc IS NOT NULL;
 
 -- Nothing before this migration stopped two declarations in one plan sharing

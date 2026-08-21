@@ -2,4 +2,4 @@
 
 DROP INDEX IF EXISTS tasks_plan_task_key;
 ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_plan_task_key_with_plan_doc;
-ALTER TABLE tasks DROP COLUMN plan_task_key;
+ALTER TABLE tasks DROP COLUMN IF EXISTS plan_task_key;
