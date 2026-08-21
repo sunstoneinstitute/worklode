@@ -651,18 +651,3 @@ while dogfooding it against the real corpus.
   visible in `git status`, since `info/exclude` does not hide tracked files, so
   it is recoverable. Worth either matching `withinStore`'s rigour or saying so
   in the comment.
-
-## From WL-246 — a failed apply loses the delivery it arrived on (2026-08-21)
-
-- `[P2]` **A GitHub delivery whose apply fails is unrecoverable.**
-  `Store.RecordEvent` (`internal/store/events.go`) inserts the event row and
-  runs `apply` in one transaction, so any apply error rolls the row back too.
-  The handler then answers 500, and GitHub Apps do not redeliver — the fact is
-  gone, and the replay engine (spec 013 engine 1) cannot help because it walks
-  `events` for rows with a null `applied_at` and there is no row. WL-246 removed
-  the shutdown-cancellation case that made this fire during every rolling
-  deploy, but the shape stays: recording the delivery and applying it are one
-  atomic unit when only the *apply* should be retryable. Splitting them — commit
-  the row, then apply, leaving `applied_at` null on failure — puts every future
-  failure back inside the replayer's reach. `lode reconcile poll` (engine 2)
-  repairs PR facts after the fact and is the manual remedy today.
