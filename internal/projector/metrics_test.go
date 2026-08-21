@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -91,6 +92,37 @@ func TestMetricsFailingRunIncrementsErrorLeavesProjects(t *testing.T) {
 	}
 	if got := counterValue(t, reg, "worklode_graph_projection_project_failures_total", "", ""); got != 1 {
 		t.Errorf("project_failures_total after recovery = %v, want 1 (counters do not go down)", got)
+	}
+}
+
+// TestMetricsGaugeCountsUntouchedQuarantine covers the branch the recovery
+// case above does not: a quarantined project whose backoff has not elapsed is
+// not attempted at all this run, and the gauge must still report it — the
+// gauge is the number of projects owing a projection, not the number the last
+// run happened to touch.
+func TestMetricsGaugeCountsUntouchedQuarantine(t *testing.T) {
+	s, p, f, reg := newMetricsProjector(t)
+	ctx := t.Context()
+	base := time.Now().UTC()
+	p.SetClock(func() time.Time { return base })
+	createTask(t, s, "m5", "alpha", "poison")
+
+	f.setFail(true)
+	for i := 1; i <= 2; i++ { // attempt 2 sets a retryBase wait
+		if _, err := p.RunOnce(ctx); err == nil {
+			t.Fatalf("run %d against a failing endpoint returned nil error", i)
+		}
+	}
+
+	f.setFail(false)
+	if n, err := p.RunOnce(ctx); n != 0 || err != nil {
+		t.Fatalf("run inside the backoff = %d, %v; want 0, nil", n, err)
+	}
+	if got := gaugeValue(t, reg, "worklode_graph_projection_quarantined_projects"); got != 1 {
+		t.Errorf("quarantined_projects = %v, want 1 (still owed, just not due)", got)
+	}
+	if got := counterValue(t, reg, "worklode_graph_projection_project_failures_total", "", ""); got != 2 {
+		t.Errorf("project_failures_total = %v, want 2", got)
 	}
 }
 

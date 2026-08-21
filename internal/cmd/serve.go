@@ -231,9 +231,12 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		// — so graph-server's per-branch lock covers it for now;
 		// If-Match CAS (006 §13.3 item 6) is wanted before any second
 		// writer.
+		// n and err are not exclusive: a run that isolates one failing
+		// project still projects its healthy siblings, so the error line
+		// carries the count too.
 		go everyUntilDone(ctx, 10*time.Second, proj.RunOnce, func(n int, err error) {
 			if err != nil {
-				slog.Error("graph projection", "err", err)
+				slog.Error("graph projection", "projected", n, "err", err)
 			} else if n > 0 {
 				slog.Info("projected project graphs", "count", n)
 			}

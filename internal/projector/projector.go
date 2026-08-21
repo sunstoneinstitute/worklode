@@ -13,10 +13,10 @@
 // per project: the watermark is global, so a project that cannot be written
 // is quarantined in graph_projection_failures and retried on its own backoff
 // schedule while the watermark advances past every project that did succeed.
-// One task mutation writes
-// no outbox row — SetTaskSkills (internal/store/tasks.go) — which is
-// harmless since skills are not projected; the only effect is a
-// dct:modified that lags until the task's next real event.
+// One task mutation writes no outbox row — SetTaskSkills
+// (internal/store/tasks.go) — which is harmless since skills are not
+// projected; the only effect is a dct:modified that lags until the task's
+// next real event.
 package projector
 
 import (
@@ -99,7 +99,10 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 	still := len(quarantined)
 
 	// A dirty project is attempted whatever its backoff says: fresh content
-	// is the event most likely to clear a content-specific rejection.
+	// is the event most likely to clear a content-specific rejection, and the
+	// bypass costs nothing above baseline — a dirty project is one the
+	// projector would render and PUT anyway, so the render the backoff saves
+	// is only the one for a project with no new events.
 	dirty := make(map[string]bool, len(projects))
 	for _, id := range projects {
 		dirty[id] = true
@@ -119,7 +122,9 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 			n++
 			if _, was := prior[id]; was {
 				if cerr := p.st.ClearProjectionFailure(ctx, id); cerr != nil {
-					errs = append(errs, cerr)
+					// The stale row costs one redundant re-PUT next
+					// time it comes due, which is idempotent.
+					errs = append(errs, fmt.Errorf("projector: %w", cerr))
 					continue
 				}
 				still--
@@ -132,8 +137,14 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 		errs = append(errs, perr)
 		next := failure(prior[id], id, now, perr)
 		if rerr := p.st.RecordProjectionFailure(ctx, next); rerr != nil {
-			errs = append(errs, rerr)
-			quarantineWritten = false
+			errs = append(errs, fmt.Errorf("projector: %w", rerr))
+			// Only a *first* failure needs the checkpoint held back: a
+			// repeat one already has a row remembering the debt, and
+			// freezing the watermark over it would reinstate exactly the
+			// blast radius this quarantine exists to remove.
+			if next.Attempts == 1 {
+				quarantineWritten = false
+			}
 			continue
 		}
 		if next.Attempts == 1 {

@@ -266,9 +266,26 @@ func TestOneFailingProjectDoesNotBlockAnother(t *testing.T) {
 		t.Errorf("alpha accepted PUTs = %d; want 0", got)
 	}
 
+	first, err := s.ProjectionFailures(ctx)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("quarantine = %+v, %v; want one alpha row", first, err)
+	}
+
 	// beta is done: with the checkpoint past both, only alpha comes back.
 	if n, err := p.RunOnce(ctx); n != 0 || err == nil {
 		t.Fatalf("second RunOnce = %d, %v; want 0 and alpha's error", n, err)
+	}
+	// A repeat failure advances the attempt count but not the start of the
+	// outage: how long alpha has been stuck is what an operator reads.
+	again, err := s.ProjectionFailures(ctx)
+	if err != nil || len(again) != 1 {
+		t.Fatalf("quarantine after retry = %+v, %v; want one alpha row", again, err)
+	}
+	if again[0].Attempts != 2 {
+		t.Errorf("attempts = %d; want 2", again[0].Attempts)
+	}
+	if !again[0].FirstFailedAt.Equal(first[0].FirstFailedAt) {
+		t.Errorf("first_failed_at moved: %v -> %v", first[0].FirstFailedAt, again[0].FirstFailedAt)
 	}
 	if got := f.count(iri.ProjectGraph("beta")); got != 1 {
 		t.Errorf("beta re-projected on alpha's retry: PUTs = %d; want 1", got)
