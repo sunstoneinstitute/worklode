@@ -2725,6 +2725,70 @@ func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
 	}
 }
 
+// subheadingSpecBody is a spec whose sec-2 holds an anchorless "#### Tie-
+// breaking" block — legal per 025 §6.1, which makes a heading deeper than the
+// addressability limit content within its nearest anchored ancestor rather
+// than a node of its own.
+const subheadingSpecBody = `---
+status: draft
+issued: 2026-08-01
+---
+
+# Documents in the backbone
+
+Intro prose.
+
+## 1. Scope {#sec-1}
+
+Scope body.
+
+## 2. Model {#sec-2}
+
+Model body.
+
+#### Tie-breaking
+
+Oldest first.
+`
+
+// TestDocAcceptRevisionStampsAnchorlessSubheadingEdit: an edit confined to an
+// anchorless subheading moves its anchored ancestor's last_revised_in in the
+// database. Section.Body stops at the next heading of any level, so a diff
+// over bodies alone would accept this revision as touching nothing and leave
+// every coverage claim against sec-2 falsely fresh — the silent-staleness half
+// of 025 §6 rule 5.
+func TestDocAcceptRevisionStampsAnchorlessSubheadingEdit(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-subheading",
+		Body: subheadingSpecBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	revised := strings.NewReplacer(
+		"status: draft", "status: accepted",
+		"Oldest first.", "Highest priority first.",
+	).Replace(subheadingSpecBody)
+	if err := updateRevision(t, s, doc.ID, revised); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+
+	want := []model.DocSection{
+		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Published: true},
+		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 2, Published: true},
+	}
+	if got := docSections(t, s, doc.ID); !slices.Equal(got, want) {
+		t.Errorf("sections =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
 // TestDocAcceptSupersedesEveryReplacedDoc: a document replacing several
 // accepted documents flips and logs all of them, not just the first — the
 // flip is one UPDATE ... RETURNING over the target set.
