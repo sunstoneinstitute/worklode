@@ -2050,8 +2050,8 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 }
 
 // TestDocAcceptPlanInvariant: before accept, no task carries the plan's id;
-// after, the count equals the definition count; a second accept is
-// ErrInvalidInput, so the set can never double-mint (025 §9.2 AC2).
+// after, the count equals the definition count; a second accept of the same
+// body mints nothing, so the set can never double-mint (025 §9.2 AC2).
 func TestDocAcceptPlanInvariant(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
@@ -2071,11 +2071,17 @@ func TestDocAcceptPlanInvariant(t *testing.T) {
 		t.Fatalf("tasks with plan_doc after accept = %d, want %d", after, len(minted))
 	}
 
-	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("second accept err = %v, want ErrInvalidInput", err)
+	// Re-accepting an unedited plan is a no-op, not a refusal: every
+	// declaration already has a row, so there is nothing to mint (025 §9.2).
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("second accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("second accept minted %d tasks, want none", len(again))
 	}
 	if got := countTasksWithPlanDoc(t, s, doc.ID); got != after {
-		t.Fatalf("tasks with plan_doc after rejected second accept = %d, want unchanged %d", got, after)
+		t.Fatalf("tasks with plan_doc after the second accept = %d, want unchanged %d", got, after)
 	}
 }
 
@@ -2146,6 +2152,339 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("readyCandidates after task1 merged omitted %s", task2)
+	}
+}
+
+// planMintBodyFourth is planMintBody with a fourth declaration appended,
+// blocked by task 1, and Task 2's prose rewritten: the shape of a plan edited
+// after acceptance (025 §9.2).
+var planMintBodyFourth = strings.Replace(planMintBody,
+	"Do the second thing.", "Do the second thing, differently.", 1) + `
+### Task 4 — Fourth task
+
+` + "```yaml" + `
+kind: chore
+priority: high
+blockedBy: [1]
+` + "```" + `
+
+Do the fourth thing.
+`
+
+// taskSnapshot is the part of a minted task a re-accept must not touch.
+type taskSnapshot struct {
+	Title, Body, Kind, Priority, State string
+	UpdatedAt                          time.Time
+}
+
+func snapshotTask(t *testing.T, s *Store, id string) taskSnapshot {
+	t.Helper()
+	task, err := s.GetTask(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetTask(%s): %v", id, err)
+	}
+	return taskSnapshot{
+		Title: task.Title, Body: task.Body, Kind: task.Kind,
+		Priority: task.Priority, State: task.State, UpdatedAt: task.UpdatedAt,
+	}
+}
+
+// TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations: an accepted plan stays
+// freely mutable, so re-accepting one mints the declarations that have no row
+// yet and leaves every existing row alone (025 §9.2) — including a row whose
+// declaration's prose changed, and one that has since left draft. The new
+// task's declared blockedBy is wired even though its blocker was minted by the
+// first accept.
+func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "remint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if len(minted) != 3 {
+		t.Fatalf("first accept minted %d tasks, want 3", len(minted))
+	}
+	// Execution has started on task 1: a re-accept must not walk it back.
+	if err := transition(t, s, taskTestNow, minted[0].ID, "draft", "ready"); err != nil {
+		t.Fatalf("transition %s to ready: %v", minted[0].ID, err)
+	}
+	before := map[string]taskSnapshot{}
+	for _, task := range minted {
+		before[task.ID] = snapshotTask(t, s, task.ID)
+	}
+
+	if _, err := updateDocBody(t, s, doc.ID, planMintBodyFourth); err != nil {
+		t.Fatalf("UpdateDocBody on the accepted plan: %v", err)
+	}
+
+	accepted, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("re-accept: %v", err)
+	}
+	if accepted.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", accepted.Status)
+	}
+	if len(again) != 1 {
+		t.Fatalf("re-accept minted %d tasks, want 1", len(again))
+	}
+	if again[0].Title != "Fourth task" || again[0].Kind != "chore" || again[0].Priority != "high" {
+		t.Errorf("minted %+v, want the fourth declaration", again[0])
+	}
+	if got := countTasksWithPlanDoc(t, s, doc.ID); got != 4 {
+		t.Errorf("tasks with plan_doc = %d, want 4", got)
+	}
+
+	for id, want := range before {
+		if got := snapshotTask(t, s, id); got != want {
+			t.Errorf("task %s = %+v after the re-accept, want it untouched (%+v)", id, got, want)
+		}
+	}
+
+	// The new task's blockedBy names a task the first accept minted, so the
+	// edge crosses the two accepts.
+	var edgeType string
+	err = s.db.QueryRow(`SELECT type FROM task_edges WHERE from_task = $1 AND to_task = $2`,
+		minted[0].ID, again[0].ID).Scan(&edgeType)
+	if err != nil {
+		t.Fatalf("read edge %s -> %s: %v", minted[0].ID, again[0].ID, err)
+	}
+	if edgeType != "blocks" {
+		t.Errorf("edge type = %q, want blocks", edgeType)
+	}
+}
+
+// TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp: an edit that adds no
+// declaration — prose rewritten under an existing one — leaves the re-accept
+// with nothing to mint, and that is a success rather than an error (025 §9.2).
+func TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "noop-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	before := map[string]taskSnapshot{}
+	for _, task := range minted {
+		before[task.ID] = snapshotTask(t, s, task.ID)
+	}
+
+	edited := strings.Replace(planMintBody, "Do the first thing.", "Do the first thing, carefully.", 1)
+	if _, err := updateDocBody(t, s, doc.ID, edited); err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("re-accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("re-accept minted %d tasks, want none", len(again))
+	}
+	if got := countTasksWithPlanDoc(t, s, doc.ID); got != len(minted) {
+		t.Errorf("tasks with plan_doc = %d, want unchanged %d", got, len(minted))
+	}
+	for id, want := range before {
+		if got := snapshotTask(t, s, id); got != want {
+			t.Errorf("task %s = %+v after the no-op re-accept, want it untouched (%+v)", id, got, want)
+		}
+	}
+}
+
+// TestDocAcceptPlanReAcceptNeverRemintsDeletedTask: a soft-deleted task keeps
+// its declaration's key, so the withdrawal survives the next re-accept
+// (025 §9.2 — withdrawing work is a task transition, and re-acceptance leaves
+// existing rows alone).
+func TestDocAcceptPlanReAcceptNeverRemintsDeletedTask(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "withdrawn-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if err := deleteTask(t, s, minted[2].ID, "stig", "not needed after all"); err != nil {
+		t.Fatalf("delete %s: %v", minted[2].ID, err)
+	}
+
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("re-accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("re-accept minted %d tasks, want none: the declaration still has its row", len(again))
+	}
+}
+
+// TestDocUpdateBodyMintedPlanRequiresReadableTasks: once a plan has minted
+// tasks, a body edit that leaves its ## Tasks section unreadable is refused at
+// the write rather than surfacing as drift at the next accept (025 §9.2). The
+// body does not move.
+func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "drift-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+
+	for name, body := range map[string]string{
+		"section removed":  "---\nstatus: accepted\n---\n\n# A plan\n\nNo tasks here.\n",
+		"kindless fence":   strings.Replace(planMintBody, "kind: feature\n", "", 1),
+		"duplicate titles": strings.Replace(planMintBody, "Task 3 — Third task", "Task 3 — First task", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := updateDocBody(t, s, doc.ID, body)
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("err = %v, want ErrInvalidInput", err)
+			}
+			got, err := s.GetDoc(t.Context(), doc.ID)
+			if err != nil {
+				t.Fatalf("GetDoc: %v", err)
+			}
+			if got.Body != planMintBody {
+				t.Errorf("body moved to %q, want the refused edit not to land", got.Body)
+			}
+		})
+	}
+}
+
+// TestDocUpdateBodyUnmintedPlanTasksUnchecked: the readable-## Tasks rule
+// binds only once something is minted. A draft plan is written a paragraph at
+// a time, and an accepted plan that minted nothing is §9.2's historical
+// import; neither has a task set to drift from.
+func TestDocUpdateBodyUnmintedPlanTasksUnchecked(t *testing.T) {
+	s := openDocStore(t)
+	draft := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "draft-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	half := "---\nstatus: draft\n---\n\n# A plan\n\nStill thinking.\n"
+	if _, err := updateDocBody(t, s, draft.ID, half); err != nil {
+		t.Fatalf("UpdateDocBody on an unaccepted plan: %v", err)
+	}
+
+	imported := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "imported-plan", Body: planBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	if _, err := updateDocBody(t, s, imported.ID, half); err != nil {
+		t.Fatalf("UpdateDocBody on an accepted plan that minted nothing: %v", err)
+	}
+}
+
+// TestDocUpdateBodyPlanBumpsVersion: a plan is edited in place rather than
+// revised (025 §9), so its body edit is the next version of the document —
+// which is what lets the acceptance event of §15.3, keyed on IRI and version,
+// tell a re-accept after an edit from a retry of the same accept.
+func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "versioned-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if doc.Version != 1 {
+		t.Fatalf("version = %d, want 1", doc.Version)
+	}
+	updated, err := updateDocBody(t, s, doc.ID,
+		strings.Replace(planMintBody, "Do the first thing.", "Do it now.", 1))
+	if err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Errorf("version = %d, want 2", updated.Version)
+	}
+
+	// A draft spec's body edit is not a publication, so its version holds.
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 91, Slug: "091-x", Body: specBody, CreatedBy: "stig",
+	})
+	editedSpec, err := updateDocBody(t, s, spec.ID, specBody+"\nmore\n")
+	if err != nil {
+		t.Fatalf("UpdateDocBody on a draft spec: %v", err)
+	}
+	if editedSpec.Version != 1 {
+		t.Errorf("spec version = %d, want 1", editedSpec.Version)
+	}
+}
+
+// TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles: 0043 backfills
+// plan_task_key from tasks.title, and nothing before it stopped two
+// declarations in one plan from sharing a title. The earliest row keeps the
+// title — the key a re-accept then matches that declaration to — and the rest
+// are disambiguated, so the partial unique index can be created and no
+// existing row is lost.
+func TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles(t *testing.T) {
+	s := OpenUnmigratedTestStore(t)
+	if err := s.Migrate(migrationsThrough(t, 42)); err != nil {
+		t.Fatalf("migrate through 0042: %v", err)
+	}
+	db := s.DBForTests()
+	if _, err := db.Exec(`INSERT INTO projects (id, name, key) VALUES ('p1','P1','P1')`); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	var planID int64
+	if err := db.QueryRow(
+		`INSERT INTO docs (project_id, kind, slug, title, body, created_at, updated_at)
+		 VALUES ('p1', 'plan', 'dup-plan', 'Dup plan', 'body', now(), now()) RETURNING id`,
+	).Scan(&planID); err != nil {
+		t.Fatalf("seed plan doc: %v", err)
+	}
+	// Inserted directly: the store is held at 0042, where tasks has no
+	// plan_task_key column for CreateTask to write.
+	for i, id := range []string{"P1-1", "P1-2", "P1-3"} {
+		created := taskTestNow.Add(time.Duration(i) * time.Second)
+		title := "Same title"
+		if id == "P1-3" {
+			title = "Its own title"
+		}
+		if _, err := db.Exec(
+			`INSERT INTO tasks (id, project_id, title, body, priority, kind, state,
+			                    created_at, updated_at, plan_doc)
+			 VALUES ($1, 'p1', $2, 'b', 'medium', 'feature', 'draft', $3, $3, $4)`,
+			id, title, created, planID); err != nil {
+			t.Fatalf("seed task %s: %v", id, err)
+		}
+	}
+
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate to latest: %v", err)
+	}
+
+	keys := map[string]string{}
+	rows, err := db.Query(`SELECT id, plan_task_key FROM tasks ORDER BY id`)
+	if err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, key string
+		if err := rows.Scan(&id, &key); err != nil {
+			t.Fatalf("scan key: %v", err)
+		}
+		keys[id] = key
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	if len(keys) != 3 {
+		t.Fatalf("kept %d tasks, want all 3", len(keys))
+	}
+	if keys["P1-1"] != "Same title" {
+		t.Errorf("earliest duplicate key = %q, want the title itself", keys["P1-1"])
+	}
+	if keys["P1-2"] == "Same title" || keys["P1-2"] == "" {
+		t.Errorf("later duplicate key = %q, want it disambiguated", keys["P1-2"])
+	}
+	if keys["P1-3"] != "Its own title" {
+		t.Errorf("unique title key = %q, want the title itself", keys["P1-3"])
 	}
 }
 

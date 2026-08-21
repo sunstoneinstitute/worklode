@@ -386,7 +386,7 @@ func newDocEditCmd() *cobra.Command {
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accept <id-or-slug>",
-		Short: "Accept a document (draft -> accepted); only the assignee may accept it",
+		Short: "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the assignee may accept it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

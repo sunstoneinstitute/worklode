@@ -522,3 +522,39 @@ func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
 		t.Errorf("planMintableKinds = %v, want %v", got, want)
 	}
 }
+
+// TestPlanTasksDuplicateTitles: a title is a declaration's identity across a
+// re-accept (025 §9.2), so two declarations spelled the same way are refused
+// at the parse rather than resolved by a coin flip at the mint.
+func TestPlanTasksDuplicateTitles(t *testing.T) {
+	d := mustParsePlan(t, `## Tasks
+
+### Task 1 — Same title
+
+`+"```yaml"+`
+kind: feature
+`+"```"+`
+
+First.
+
+### Task 2 — Same title
+
+`+"```yaml"+`
+kind: chore
+`+"```"+`
+
+Second.
+`)
+	_, err := PlanTasks(d)
+	if err == nil {
+		t.Fatal("PlanTasks: want error, got nil")
+	}
+	if !strings.Contains(err.Error(), "Same title") {
+		t.Errorf("error = %q, want it to name the shared title", err)
+	}
+	for _, n := range []string{"1", "2"} {
+		if !strings.Contains(err.Error(), n) {
+			t.Errorf("error = %q, want it to name task %s", err, n)
+		}
+	}
+}
