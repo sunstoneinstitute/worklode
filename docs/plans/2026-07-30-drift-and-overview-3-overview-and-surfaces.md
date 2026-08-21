@@ -31,7 +31,8 @@ are read-only (the one mutation, `POST /api/v1/derive`, is admin-gated).
 
 **Tech Stack:** Go 1.26, cobra CLI, PostgreSQL via `database/sql`,
 standard-library testing, SPARQL 1.1 Protocol over `net/http`, Oxigraph
-(docker) as the test endpoint, `html/template` for the web view.
+(docker) as the test endpoint, `templ` components in `internal/ui` for the
+web view.
 
 **Spec:** `docs/specs/007-drift-and-overview.md`, read with its amendments:
 `docs/specs/025-documents-in-the-backbone.md` §5–§6, §10 and
@@ -43,8 +44,72 @@ and what is owned elsewhere.
 **Prerequisites (landed by parts 1–2):** all four derivers behind
 `derive.Run`, `internal/cmd/overview.go` holding the `derive` command
 (extended here with the read commands), and the store reads
-(`store.Frontier`, `AllBlockEdges`, `TaskPRs`, `AllDeployments`,
-`AllArtifactsByID`, `HasMainCommit`, `AllReleaseFrontiers`).
+(`store.Frontier`, `AllBlockEdges`, `TaskPRs`, `ListDeployments(ctx, "")`,
+`AllArtifactsByID`, `KnownMainCommits`/`HasMainCommit`,
+`AllReleaseFrontiers`).
+
+What parts 1–2 actually shipped, where it differs from what this plan
+assumed when it was written (checked against `main` 2026-08-21, PR #201/#202):
+
+- **No `store.AllDeployments`.** `ListDeployments(ctx, "")`
+  (`internal/store/artifacts.go`) already returns every deployment in the
+  ordering this series needs, so a second method would have been pure
+  duplication. `derive.DeployTriples` calls it directly; nothing in part 3
+  reads deployments itself.
+- **`derive.Run` takes a fifth argument**, `opts derive.Options`
+  (`internal/derive/run.go`, WL-268): `Options{AllowEmpty bool}` is the
+  refuse-to-empty-a-graph guard. A run whose payload holds no triples is
+  refused with `derive.ErrWouldEmptyGraph` — no PUT — when the graph already
+  carries a stored document and `AllowEmpty` is off. A graph with no stored
+  document is always written, so a source whose *first* result is empty needs
+  no opt-in; the flag only decides what happens when a previously non-empty
+  graph would be emptied. Task 12 records the per-deriver decision.
+- **`derive.PRAffectsTriples` returns three values**,
+  `(doc []byte, skippedRepos []string, err error)`. `skippedRepos` names the
+  repos the run could not read a `.worklode/components.yaml` from — no
+  manifest, or (since PR #202) the GitHub App not installed on the repo. Both
+  are routine facts about one repo and must not abort an org-wide run, which
+  is exactly why the value has to be surfaced: discarded, an org-wide manifest
+  or App-installation outage reaches the operator only as an opaque
+  `ErrWouldEmptyGraph`. Part 1's `runDeriveLocal` sets the precedent — its
+  non-fatal skips are collected in `notes` and printed after the results,
+  never dropped. Task 12 does the server-side equivalent.
+- **`store.Frontier` returns `[]model.Task`**, whose project field is
+  `Project` (wire names, ADR 036), not `ProjectID`.
+
+**Drift against `main` this plan has not yet been rewritten for.** The four
+below are conventions `main` adopted after this plan was written; each one is
+enforced by a boot-time check or a guard test, so the executor hits them
+whatever the plan says. The code blocks below are spot-corrected where the fix
+is a line (route registration, file paths); the designs around them are not
+reworked. Where the two still disagree, `main` wins — and a disagreement
+bigger than a line is a plan defect to fix at the planning tier, not something
+to improvise around:
+
+1. **Routes are registered through the guard table, not `mux.Handle`.**
+   `internal/api/router.go` holds `routeGuards`, a pattern → permission map;
+   handlers register with `r.api(pattern, handler)` and `NewServer` panics on
+   a pattern the table does not name and fails on an entry no route uses. All
+   six routes in Task 12 need a row, and `POST /api/v1/derive` needs an
+   admin-only permission in `authz.go`'s `grants` (there is no
+   `requireAdmin` wrapper to call).
+2. **The cockpit is `templ`, not `html/template`.** `internal/api/templates/`
+   no longer exists; pages are components in `internal/ui` (see
+   `board.templ`) rendered through `go generate`, and `internal/ui` may import
+   only stdlib, `internal/model` and the templ runtime. Task 14's
+   `drift.html` becomes `internal/ui/drift.templ`.
+3. **`internal/cmd` decides, `internal/cli` renders.** Every human-readable
+   view is a `cli.*Table`/`cli.*Render` function in `internal/cli/render.go`
+   taking an `io.Writer`; `internal/cmd/renderrule_test.go` fails a
+   hand-built `tabwriter` in a command. Task 13's five tabwriter blocks move
+   to `internal/cli`, leaving each `RunE` to fetch, pick `--json`, and call
+   one render function.
+4. **ADR 036: one model.** Shapes that cross the HTTP boundary are declared
+   once in `internal/model` — that covers `FrontierTask`, `Overview`,
+   `Drift`, `DriftEdge`, `Deviation`, `Gap` and `CriticalPath`, leaving
+   `internal/overview` the query and analysis plumbing. `derive.Result` is
+   already json-tagged in `internal/derive`; serializing it from a handler is
+   the same question and gets the same answer.
 
 Design calls this plan inherits (recorded in part 1, restated because they
 shape Tasks 11–13):
@@ -70,18 +135,21 @@ shape Tasks 11–13):
 | `internal/overview/oxigraph_test.go` | acceptance vs. Oxigraph: planted violation, stale intent, deviation suppression + expiry, gaps |
 | `internal/api/overview.go` | handlers: overview, drift, gaps, frontier, critical-path, derive |
 | `internal/api/overview_test.go` | auth gates, JSON shapes, 503 when graph unconfigured, frontier ordering |
-| `internal/api/templates/drift.html` | drift board web view (violations + stale intent, read-only) |
+| `internal/ui/drift.templ` | drift board web view (violations + stale intent, read-only) |
 
 **Modified files**
 
 | Path | Change |
 |---|---|
 | `internal/api/server.go` | routes for the five reads + `POST /api/v1/derive`; `GET /drift` web route |
+| `internal/api/router.go` | a `routeGuards` row per new route (see the drift note above) |
+| `internal/api/authz.go` | the admin-only permission `POST /api/v1/derive` requires |
 | `internal/api/web.go` | `driftPage` handler |
 | `internal/cmd/serve.go` | wire `overview.Service` + server-side derivers from the `LODE_GRAPHSERVER_*` env (share `graphProjector`'s client) |
 | `internal/cmd/overview.go` | add `lode overview/drift/gaps/frontier/critical-path` beside part 1's `derive` |
 | `internal/cmd/overview_test.go` | flag wiring + `--json` passthrough against a fake server |
 | `internal/cli/client.go` | `Overview`, `Drift`, `Gaps`, `Frontier`, `CriticalPath`, `RunDerive` |
+| `internal/cli/render.go` | the human-readable table for each of the five reads |
 | `README.md` | document the commands, the deriver contract, and `POST /api/v1/derive` |
 
 **Test commands**
@@ -700,7 +768,7 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]FrontierTas
 	out := make([]FrontierTask, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, FrontierTask{
-			ID: t.ID, Title: t.Title, Project: t.ProjectID,
+			ID: t.ID, Title: t.Title, Project: t.Project,
 			Priority: t.Priority, Concern: t.Concern,
 			FanOut: fanOut[t.ID], Depth: a.Depth[t.ID], IsCritical: a.Critical[t.ID],
 		})
@@ -1173,15 +1241,19 @@ In `internal/api/server.go`:
   `RunDerivers func(context.Context) ([]derive.Result, error)`; copy both in
   `NewServer` (default `Overview` to `&overview.Service{Store: st}` when
   nil, so the frontier works without any graph);
-- register routes next to the existing `/api/v1` block:
+- register routes next to the existing `/api/v1` block, and give each pattern
+  a `routeGuards` row in `internal/api/router.go` — the five reads under the
+  read permission the rest of the API uses, `POST /api/v1/derive` under a new
+  admin-only permission in `authz.go`'s `grants` (it writes to the graph).
+  `NewServer` panics on an unguarded pattern, so the rows are not optional:
 
 ```go
-	mux.Handle("GET /api/v1/overview", s.auth(s.getOverview))
-	mux.Handle("GET /api/v1/drift", s.auth(s.getDrift))
-	mux.Handle("GET /api/v1/gaps", s.auth(s.getGaps))
-	mux.Handle("GET /api/v1/frontier", s.auth(s.getFrontier))
-	mux.Handle("GET /api/v1/critical-path", s.auth(s.getCriticalPath))
-	mux.Handle("POST /api/v1/derive", s.auth(requireAdmin(s.postDerive)))
+	r.api("GET /api/v1/overview", s.getOverview)
+	r.api("GET /api/v1/drift", s.getDrift)
+	r.api("GET /api/v1/gaps", s.getGaps)
+	r.api("GET /api/v1/frontier", s.getFrontier)
+	r.api("GET /api/v1/critical-path", s.getCriticalPath)
+	r.api("POST /api/v1/derive", s.postDerive)
 ```
 
 In `internal/cmd/serve.go`, the projector already builds its
@@ -1202,7 +1274,13 @@ overview service and the derivers (`graphClient` below; nil when
 			if err != nil {
 				return out, err
 			}
-			res, err := derive.Run(ctx, graphClient, iri.ObservedGraph("deploy"), doc)
+			// AllowEmpty: false. The deploy document can only be empty if
+			// the deriver itself broke: it opens with the fixed environment
+			// vocabulary (graphproj.EnvironmentTriples), which depends on no
+			// row and is never empty, so "no triples" here means the deriver
+			// stopped producing, not that the estate is empty.
+			res, err := derive.Run(ctx, graphClient, iri.ObservedGraph("deploy"), doc,
+				derive.Options{})
 			if err != nil {
 				return out, err
 			}
@@ -1212,12 +1290,37 @@ overview service and the derivers (`graphClient` below; nil when
 			if err != nil {
 				return out, err
 			}
-			doc, _, err = derive.PRAffectsTriples(ctx, prs, reader)
+			doc, skipped, err := derive.PRAffectsTriples(ctx, prs, reader)
 			if err != nil {
 				return out, err
 			}
-			res, err = derive.Run(ctx, graphClient, iri.ObservedGraph("pr-affects"), doc)
+			// Never discarded: a repo with no manifest, or one the GitHub App
+			// is not installed on, is skipped rather than fatal, so an
+			// org-wide manifest or installation outage is otherwise silent
+			// until the guard below turns it into an opaque
+			// ErrWouldEmptyGraph. The local derivers report their non-fatal
+			// skips in `lode derive`'s output (runDeriveLocal's `notes`);
+			// this is the server-side equivalent — logged for the operator,
+			// and named in the error the admin's POST comes back with.
+			if len(skipped) > 0 {
+				slog.Warn("pr-affects deriver skipped repos",
+					"count", len(skipped), "repos", skipped)
+			}
+			// AllowEmpty: false. Unlike go-imports — legitimately empty in a
+			// single-component repo, where every import edge is intra-
+			// component by construction (WL-268) — pr-affects has no such
+			// structural reason to be empty: it emits an edge for every
+			// task-bound PR touching a manifest-matched path, and the
+			// backbone has many. Empty means the inputs went away (manifests
+			// unreadable, App uninstalled, TaskPRs returning nothing), which
+			// is precisely the case that must not silently replace the graph.
+			res, err = derive.Run(ctx, graphClient, iri.ObservedGraph("pr-affects"), doc,
+				derive.Options{})
 			if err != nil {
+				if len(skipped) > 0 {
+					return out, fmt.Errorf("%w (repos skipped this run: %s)",
+						err, strings.Join(skipped, ", "))
+				}
 				return out, err
 			}
 			return append(out, res), nil
@@ -1225,8 +1328,17 @@ overview service and the derivers (`graphClient` below; nil when
 	}
 ```
 
-(`appAuth` is built the way `internal/api/server.go:85` builds it; hoist a
-shared constructor if serve.go does not already have one.)
+(Imports grow `log/slog` — already used elsewhere in `serve.go` — plus `fmt`
+and `strings`. `appAuth` is built the way `internal/api/server.go:85` builds
+it; hoist a shared constructor if serve.go does not already have one.)
+
+Neither deriver opts into `AllowEmpty`, so neither needs the flag spelled out;
+`derive.Options{}` is passed explicitly rather than relying on a zero value
+appearing by accident, and the comment above each call is the record of the
+decision. If a deployment legitimately reaches an empty pr-affects graph — a
+fresh org with no manifests yet — the first run writes it (an unwritten graph
+is never guarded) and later runs short-circuit on the matching hash; only a
+transition from content to nothing is refused, which is the intent.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -1656,8 +1768,8 @@ git commit -m "Add the lode overview, drift, gaps, frontier and critical-path co
 ## Task 14: Drift board web view
 
 **Files:**
-- Create: `internal/api/templates/drift.html`
-- Modify: `internal/api/web.go`, `internal/api/server.go`
+- Create: `internal/ui/drift.templ` (plus its generated `drift_templ.go`)
+- Modify: `internal/api/web.go`, `internal/api/server.go`, `internal/api/router.go`
 - Test: `internal/api/web_test.go` (append)
 
 - [ ] **Step 1: Write the failing test**
@@ -1689,10 +1801,12 @@ Expected: FAIL — 404.
 
 - [ ] **Step 3: Implement**
 
-`internal/api/templates/drift.html` — same skeleton as `board.html` (head,
-nav, styles); body renders four of the spec's five views (spec status is
-deferred with 4.3/4.4). The frontier and critical path come from the
-backbone and render even without a graph endpoint:
+`internal/ui/drift.templ` — same shell as `board.templ`; body renders four of
+the spec's five views (spec status is deferred with 4.3/4.4). The frontier and
+critical path come from the backbone and render even without a graph endpoint.
+The markup below is the intent, written in the `html/template` this plan was
+drafted against; transcribe it into templ syntax against `board.templ` and run
+`go generate` (drift note 2 above):
 
 ```html
 <h2>Ready frontier</h2>
@@ -1722,11 +1836,13 @@ In `internal/api/web.go` add `driftPage` (mirror `boardPage`): build the
 view model from `s.overview.Frontier`, `s.overview.CriticalPath`,
 `s.overview.DriftReport` and `s.overview.GapReport`, treating
 `overview.ErrNoGraph` from the latter two as `GraphEnabled: false` rather
-than an error; execute a `tmplDrift` parsed in `NewServer` like the other
-three templates. Register in `server.go` next to the other web routes:
+than an error; render the `ui.Drift` component the way the other pages render
+theirs. Register in `server.go` next to the other web routes, with a
+`routeGuards` row under the same read permission the rest of the cockpit
+uses:
 
 ```go
-	mux.HandleFunc("GET /drift", s.webAuth(s.driftPage))
+	r.web("GET /drift", s.navWrap("drift", s.driftPage))
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
