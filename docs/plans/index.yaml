@@ -1027,6 +1027,17 @@ docs/plans/2026-08-20-secret-templates.md:
     task-3-ceremony-and-pack-materialize-credential-items: "### Task 3 — Ceremony and pack materialize credential items"
     task-4-exec-renders-purge-unlinks-status-reports: "### Task 4 — Exec renders, purge unlinks, status reports"
     task-5-deployment-example-skill-and-surfaces: "### Task 5 — Deployment example, skill, and surfaces"
+docs/plans/2026-08-21-cloud-sandbox-provisioning.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-scriptsbootstrapsh-the-one-description-of-the-environment: "### Task 1 — scripts/bootstrap.sh, the one description of the environment"
+    task-2-ci-consumes-bootstrapsh-instead-of-restating-tool-setup: "### Task 2 — CI consumes bootstrap.sh instead of restating tool setup"
+    task-3-dockerbase-the-minimum-that-can-claim-a-task: "### Task 3 — docker/base: the minimum that can claim a task"
+    task-4-dockergeneric-base-plus-the-bootstrap-toolchains: "### Task 4 — docker/generic: base plus the bootstrap toolchains"
+    task-5-content-addressed-worker-image-tags: "### Task 5 — Content-addressed worker image tags"
+    task-6-ci-job-images-build-and-image-and-script-agree: "### Task 6 — CI job: images build, and image and script agree"
+    task-7-e2e-environment-only-authentication: "### Task 7 — e2e: environment-only authentication"
 docs/plans/2026-08-21-per-project-workflows.md:
   sections:
     tasks: "## Tasks"
