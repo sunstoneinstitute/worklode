@@ -275,17 +275,25 @@ func Run(ctx context.Context, opts Options) int {
 	return 0
 }
 
-// resolveDir picks the working directory: the payload's cwd, else $PWD, else
-// the process working directory.
+// resolveDir picks the working directory: the payload's cwd, else the
+// process's actual working directory, else $PWD.
+//
+// Process cwd outranks $PWD for hooks with no payload cwd (git's own hooks,
+// which send none): git runs a hook with its cwd set to the repository it
+// acted on, but $PWD is a shell-maintained env var no subprocess updates, so
+// `git -C /other/repo merge` leaves $PWD naming the invoking shell's own
+// directory while the hook process's real cwd is /other/repo. Trusting $PWD
+// there resolves the wrong repository (WL-68). $PWD is kept only as a
+// last-resort fallback for the rare case os.Getwd() itself fails (e.g. the
+// cwd was removed out from under the process).
 func resolveDir(p Payload) string {
 	if p.Cwd != "" {
 		return p.Cwd
 	}
-	if pwd := os.Getenv("PWD"); pwd != "" {
-		return pwd
+	if wd, err := os.Getwd(); err == nil {
+		return wd
 	}
-	wd, _ := os.Getwd()
-	return wd
+	return os.Getenv("PWD")
 }
 
 func dispatch(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
