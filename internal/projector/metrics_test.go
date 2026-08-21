@@ -73,6 +73,25 @@ func TestMetricsFailingRunIncrementsErrorLeavesProjects(t *testing.T) {
 	if got := counterValue(t, reg, "worklode_graph_projection_projects_total", "", ""); got != 0 {
 		t.Errorf("projects_total = %v, want 0 (nothing was successfully PUT)", got)
 	}
+	if got := counterValue(t, reg, "worklode_graph_projection_project_failures_total", "", ""); got != 1 {
+		t.Errorf("project_failures_total = %v, want 1", got)
+	}
+	if got := gaugeValue(t, reg, "worklode_graph_projection_quarantined_projects"); got != 1 {
+		t.Errorf("quarantined_projects = %v, want 1", got)
+	}
+
+	// The gauge is a level, not a counter: recovery must bring it back down,
+	// which is what makes a *sustained* non-zero value the alertable signal.
+	f.setFail(false)
+	if _, err := p.RunOnce(t.Context()); err != nil {
+		t.Fatalf("recovery RunOnce: %v", err)
+	}
+	if got := gaugeValue(t, reg, "worklode_graph_projection_quarantined_projects"); got != 0 {
+		t.Errorf("quarantined_projects after recovery = %v, want 0", got)
+	}
+	if got := counterValue(t, reg, "worklode_graph_projection_project_failures_total", "", ""); got != 1 {
+		t.Errorf("project_failures_total after recovery = %v, want 1 (counters do not go down)", got)
+	}
 }
 
 // TestNilMetricsRecordsNothing exercises both the success and error paths
@@ -162,6 +181,16 @@ func counterValue(t *testing.T, g prometheus.Gatherer, family, label, value stri
 		return 0
 	}
 	return m.GetCounter().GetValue()
+}
+
+// gaugeValue reads an unlabelled gauge family's value from g.
+func gaugeValue(t *testing.T, g prometheus.Gatherer, family string) float64 {
+	t.Helper()
+	m := findMetric(t, g, family, "", "")
+	if m == nil {
+		return 0
+	}
+	return m.GetGauge().GetValue()
 }
 
 // histogramCount reads an unlabelled histogram family's observation count
