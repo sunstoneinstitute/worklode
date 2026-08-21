@@ -159,6 +159,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 					OpenedAt:  pr.CreatedAt,
 					MergedAt:  mergedAt,
 					UpdatedAt: pr.UpdatedAt,
+					Author:    pr.Author,
 				}, pr.Body); err != nil {
 					return err
 				}

@@ -50,6 +50,13 @@ type PRFacts struct {
 		Ref string `json:"ref"`
 		SHA string `json:"sha"`
 	} `json:"head"`
+	// User.Login is the PR's author (store.PullRequest.Author). Leaving it
+	// unread would let a PR the poller first observes sit with a NULL
+	// author — and therefore an unrefusable self-approval (029 §7.1) —
+	// until some later webhook delivery fills it in (WL-244).
+	User struct {
+		Login string `json:"login"`
+	} `json:"user"`
 }
 
 // HeadRef and HeadSHA give PRFacts the flat accessors the poller uses.

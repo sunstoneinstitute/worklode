@@ -41,6 +41,11 @@ type PullRequest struct {
 	MergeCommitSHA *string
 	HeadRef        string
 	HeadSHA        string
+	// Author is the PR's GitHub login (store.PullRequest.Author). Setting it
+	// from this first read matters: leaving it empty would let a PR sit with
+	// a NULL author — and therefore an unrefusable self-approval (029 §7.1)
+	// — until some later webhook delivery fills it in (WL-244).
+	Author string
 }
 
 // listQuery builds the shared per-page query string. sort=updated with
@@ -145,6 +150,9 @@ func (a *AppAuth) ListPulls(ctx context.Context, repo, state string, maxPages in
 				Ref string `json:"ref"`
 				SHA string `json:"sha"`
 			} `json:"head"`
+			User struct {
+				Login string `json:"login"`
+			} `json:"user"`
 		}
 		u := a.BaseURL + "/repos/" + path + "/pulls?" + listQuery(state, page).Encode()
 		code, err := githubJSON(ctx, http.MethodGet, u, auth, &raw)
@@ -162,6 +170,7 @@ func (a *AppAuth) ListPulls(ctx context.Context, repo, state string, maxPages in
 				UpdatedAt: pr.UpdatedAt, MergedAt: pr.MergedAt,
 				MergeCommitSHA: pr.MergeCommitSHA,
 				HeadRef:        pr.Head.Ref, HeadSHA: pr.Head.SHA,
+				Author: pr.User.Login,
 			})
 		}
 		if len(raw) < maxPerPage {
