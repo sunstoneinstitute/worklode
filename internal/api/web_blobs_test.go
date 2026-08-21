@@ -72,7 +72,7 @@ func TestTaskPageRendersMarkdown(t *testing.T) {
 		"img-src 'self'",
 		"media-src 'self'",
 		"script-src 'self'",
-		"style-src 'self' 'unsafe-inline'",
+		"style-src 'self'",
 		"font-src 'self'",
 		"object-src 'none'",
 		"base-uri 'none'",
