@@ -34,6 +34,16 @@ type TaskInput struct {
 	// Written only by AcceptDoc's plan branch (025 §9.2) — no other caller
 	// sets it.
 	PlanDoc int64
+	// PlanTaskKey is the title of the ## Tasks declaration this task was
+	// minted from — the declaration's identity, which a re-accept matches
+	// against to mint only what has no row yet (025 §9.2). Required exactly
+	// when PlanDoc is set (a CHECK constraint holds the pair together), and
+	// written only by AcceptDoc's plan branch.
+	//
+	// It is stored rather than derived from Title because a minted task's
+	// title is execution fact: editing it must not detach the task from its
+	// declaration and have the next re-accept mint a duplicate.
+	PlanTaskKey string
 	// AboutDoc is the document this task is about (0 = none) — the review or
 	// design task's reference to the document that triggered its minting
 	// (025 §15.4). Distinct from PlanDoc.
@@ -192,10 +202,10 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, about_doc)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15)`,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16)`,
 		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
-		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullID(in.AboutDoc),
+		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)

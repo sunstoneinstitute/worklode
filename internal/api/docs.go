@@ -517,7 +517,18 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		// not even admit, so the refusal AcceptDoc would have raised is raised
 		// here instead. Typing the event must not quietly change what the
 		// endpoint answers.
-		err := s.st.CheckDocAcceptable(r.Context(), id, actorID)
+		settled, err := s.st.CheckDocAcceptable(r.Context(), id, actorID)
+		if settled {
+			// An accepted plan re-accepted at a version already accepted:
+			// every declaration in this body has a row, so the accept has
+			// nothing left to do (025 §9.2). Answering with the document and
+			// an empty minted set says exactly that. A plan edited since
+			// carries a new version, so this is not the path it takes. The op
+			// is already counted as a success above; counting it again here
+			// would make one request two.
+			writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *doc})
+			return
+		}
 		if err == nil {
 			// Unreachable by construction: a failed accept rolls its event
 			// back with it, so an event at this version implies the document

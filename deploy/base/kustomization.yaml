@@ -96,3 +96,5 @@ configMapGenerator:
       - migrations/0041_graph_projection_failures.down.sql
       - migrations/0042_reserve_spec_adr_keys.up.sql
       - migrations/0042_reserve_spec_adr_keys.down.sql
+      - migrations/0043_plan_task_key.up.sql
+      - migrations/0043_plan_task_key.down.sql

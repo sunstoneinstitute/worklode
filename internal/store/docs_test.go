@@ -2050,8 +2050,8 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 }
 
 // TestDocAcceptPlanInvariant: before accept, no task carries the plan's id;
-// after, the count equals the definition count; a second accept is
-// ErrInvalidInput, so the set can never double-mint (025 §9.2 AC2).
+// after, the count equals the definition count; a second accept of the same
+// body mints nothing, so the set can never double-mint (025 §9.2 AC2).
 func TestDocAcceptPlanInvariant(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
@@ -2071,11 +2071,17 @@ func TestDocAcceptPlanInvariant(t *testing.T) {
 		t.Fatalf("tasks with plan_doc after accept = %d, want %d", after, len(minted))
 	}
 
-	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("second accept err = %v, want ErrInvalidInput", err)
+	// Re-accepting an unedited plan is a no-op, not a refusal: every
+	// declaration already has a row, so there is nothing to mint (025 §9.2).
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("second accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("second accept minted %d tasks, want none", len(again))
 	}
 	if got := countTasksWithPlanDoc(t, s, doc.ID); got != after {
-		t.Fatalf("tasks with plan_doc after rejected second accept = %d, want unchanged %d", got, after)
+		t.Fatalf("tasks with plan_doc after the second accept = %d, want unchanged %d", got, after)
 	}
 }
 
