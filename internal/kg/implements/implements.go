@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -69,16 +70,20 @@ func Parse(data []byte) (*File, error) {
 	}
 	for i := range f.Implements {
 		e := &f.Implements[i]
-		e.Section = expand(e.Section)
-		docSlug, err := sectionDoc(e.Section)
+		docSlug, anchor, err := sectionDoc(expand(e.Section))
 		if err != nil {
 			return nil, fmt.Errorf("implements entry %d: %w", i, err)
 		}
-		e.Pinned = expand(e.Pinned)
-		pinSlug, err := pinnedDoc(e.Pinned)
+		pinSlug, version, err := pinnedDoc(expand(e.Pinned))
 		if err != nil {
 			return nil, fmt.Errorf("implements entry %d: %w", i, err)
 		}
+		// Re-mint rather than keep the input string: the parsed parts have
+		// been validated, so minting through internal/kg/iri is what makes
+		// "Parse normalizes to full IRIs" true by construction instead of by
+		// the input happening to be spelled canonically.
+		e.Section = iri.Section(docSlug, anchor)
+		e.Pinned = iri.DocVersion(pinSlug, version)
 		if pinSlug != docSlug {
 			return nil, fmt.Errorf("implements entry %d: pinned %q names doc %q, but the section belongs to %q",
 				i, e.Pinned, pinSlug, docSlug)
@@ -106,32 +111,40 @@ func expand(v string) string {
 }
 
 // sectionDoc validates a section IRI — id/section/<doc-slug>/<anchor> — and
-// returns its doc slug.
-func sectionDoc(iri string) (string, error) {
-	rest, ok := strings.CutPrefix(iri, sectionPrefix)
+// returns its doc slug and anchor. The parameter is not named iri: that is
+// the package this file mints through.
+func sectionDoc(ref string) (docSlug, anchor string, err error) {
+	rest, ok := strings.CutPrefix(ref, sectionPrefix)
 	if !ok {
-		return "", fmt.Errorf("section %q is not a %s IRI", iri, sectionPrefix)
+		return "", "", fmt.Errorf("section %q is not a %s IRI", ref, sectionPrefix)
 	}
 	slug, anchor, ok := strings.Cut(rest, "/")
 	if !ok || slug == "" || strings.Contains(anchor, "/") {
-		return "", fmt.Errorf("section %q is not id/section/<doc-slug>/<anchor>", iri)
+		return "", "", fmt.Errorf("section %q is not id/section/<doc-slug>/<anchor>", ref)
 	}
 	if !designdoc.ValidAnchor(anchor) {
-		return "", fmt.Errorf("section %q: anchor %q does not match the sec- grammar", iri, anchor)
+		return "", "", fmt.Errorf("section %q: anchor %q does not match the sec- grammar", ref, anchor)
 	}
-	return slug, nil
+	return slug, anchor, nil
 }
 
 // pinnedDoc validates a versioned doc IRI — id/doc/<slug>/v<n> (025 §4) —
-// and returns its doc slug.
-func pinnedDoc(iri string) (string, error) {
-	rest, ok := strings.CutPrefix(iri, docPrefix)
+// and returns its doc slug and version number.
+func pinnedDoc(ref string) (docSlug string, version int, err error) {
+	rest, ok := strings.CutPrefix(ref, docPrefix)
 	if !ok {
-		return "", fmt.Errorf("pinned %q is not a %s IRI", iri, docPrefix)
+		return "", 0, fmt.Errorf("pinned %q is not a %s IRI", ref, docPrefix)
 	}
-	slug, version, ok := strings.Cut(rest, "/")
-	if !ok || slug == "" || !versionRE.MatchString(version) {
-		return "", fmt.Errorf("pinned %q is not id/doc/<slug>/v<n>", iri)
+	slug, v, ok := strings.Cut(rest, "/")
+	if !ok || slug == "" || !versionRE.MatchString(v) {
+		return "", 0, fmt.Errorf("pinned %q is not id/doc/<slug>/v<n>", ref)
 	}
-	return slug, nil
+	// versionRE has already held v to v[1-9][0-9]*, so the only way Atoi can
+	// fail here is a version too large for an int — still an error, never a
+	// silent zero.
+	n, err := strconv.Atoi(strings.TrimPrefix(v, "v"))
+	if err != nil {
+		return "", 0, fmt.Errorf("pinned %q: version %q is out of range", ref, v)
+	}
+	return slug, n, nil
 }

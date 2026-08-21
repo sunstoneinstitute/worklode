@@ -82,6 +82,42 @@ lifecycle, §6 deriver graph writes and coverage/staleness queries, §9
 authorship triples, §10 server surfaces and web view, all §2–§5 vocabulary
 (TTL), and the ADR-0006 amendment.
 
+## Execution record (WL-44, 2026-08-21)
+
+The plan sat long enough that seven of its eleven tasks were overtaken by
+other routes. The audit before execution found this, task by task; the task
+bodies below are left as written, because what they *say* is still what the
+code does — only who built it changed.
+
+| Task | State at execution | Landed as |
+|---|---|---|
+| 1 — widen `tasks.kind` | **done elsewhere** | migrations `0017_narrow_task_kinds` then `0025_rename_spec_kind_to_design`; the six kinds are `feature, bug, chore, design, review, spike` (`spec` was renamed `design`, not kept). `validKinds` is now `ns.Set(ns.TaskKinds)` — derived from `ns/concept.ttl`, not a hand-written map |
+| 2 — `ls:`→`wl:` rename | **done elsewhere** | the spec-corpus consolidation series (plans `2026-08-11`…`2026-08-14`). The occurrences left in `docs/` are prose *about* the rename in those plans, 025 §17's own Old/New table, and `fold.yaml`/`mapping.yaml` provenance — all historical mentions that respelling would corrupt. AC1's grep is satisfied for spec bodies, not for the record of the change |
+| 3 — section/versioned-doc IRIs | **remaining** | `iri.Section`, `iri.DocVersion` (this task) |
+| 4 — parse sections and anchors | **done elsewhere** | `internal/designdoc` (`Parse`, `Document`, `Section`), a fuller parser than Task 4 specified: source-preserving, editable, ported from `scripts/secfmt.py` so the hook and the code agree on what a section is |
+| 5 — lint anchors | **done elsewhere** | `designdoc.LintAnchors`. The anchor *grammar* had no exported form, so this task added `designdoc.ValidAnchor` beside it — the one thing Task 5 specified that was missing |
+| 6 — `lode doc anchors` | **done elsewhere** | `internal/cmd/doc.go` (`newDocAnchorsCmd`), alongside the rest of `lode doc` |
+| 7 — version-diff gate | **done elsewhere** | `designdoc.CompareSections`, `SectionDiff`, `Violations`, `DepthViolations`, `DepthLimit` |
+| 8–10 — `implements.yaml`, claim derivation, `wl:implements` triples | **remaining** | `internal/kg/implements` (this task) |
+
+Two corrections the remaining tasks needed, both from drift:
+
+- Tasks 8–9 import `internal/kg/section`, a package that was never created —
+  `internal/designdoc` is where section parsing landed. `ValidAnchor` comes
+  from there.
+- Task 10's `Triples` body does not satisfy Task 10's own
+  `TestTriplesEdgeIsPinFree`: it emits one triple per claim, so two claims
+  differing only in pin emit the edge twice. The shipped version deduplicates
+  on (component, section), which is what the test — and the "the pin is not
+  part of the edge" comment — always meant.
+
+**Still not built, and now formally unowned: the `observed/repo-implements`
+deriver.** This plan defers it to spec 007's plan; spec 007's plan 1 defers it
+back here (`2026-07-30-drift-and-overview-1-repo-derivers.md:57`). Nobody owns
+it, and it needs two decisions before it can be written — open questions 2 and
+3 below. Filed as **WL-275**, a design task: the decisions first, the deriver
+after.
+
 ---
 
 ## File Structure
@@ -1899,7 +1935,7 @@ Deferred table below, so nobody mistakes it for a gap.
 | `wl:Section`, `wl:lastRevisedIn`, `wl:DesignDoc`/`ADR`/`Spec` TTL, `wlc:DesignDocStatus` without `implemented`, `wlc:TaskKind` (six), disjointness updates, widened `wl:status` domain, DCAT/PROV version properties, §7 SHACL shapes | **already in `ns/*.ttl`** — the 025/026 vocabulary extraction landed all of it (including `wl:implements`); anything a later diff finds missing follows the amend-spec-then-mirror-`ns/` route |
 | ADR-0006 amendment (versioned sibling IRIs as a named exception) | data-platform's ADR corpus — cross-repo, still owed |
 | Versioned named graphs, the single-transaction publication, `lode doc list/show/coverage/revise/publish`, `lode drift --docs`, the web view, crit-gated revisions, the server-side depth-limit setting | blocked on the graph server (spec 009, cross-repo) and 007's overview surface |
-| The `observed/repo-implements` deriver (fetch manifests at branch head, named-graph PUT, push/schedule triggers) and the coverage/stale/orphan standing queries | spec 007's plan, consuming this plan's `implements` package |
+| The `observed/repo-implements` deriver (fetch manifests at branch head, named-graph PUT, push/schedule triggers) and the coverage/stale/orphan standing queries | **WL-275** — the two blocking decisions first (open questions 2, 3), then the deriver. Consumes this plan's `implements` package, which now exists |
 | `prov:wasGeneratedBy` authorship projection (§9) | 006 projection work |
 | Onboarding the existing `docs/specs/` corpus | candidate spec 020 (014's text said "spec 015", already taken by the runtime layer; renumbered in 014); explicitly out of scope per 014 §Adoption |
 
@@ -1922,18 +1958,35 @@ Deferred table below, so nobody mistakes it for a gap.
    `wl:implements` edge is the likely shape — but that is a vocabulary
    decision to make by amending 006 and mirroring `ns/`. Until then
    `implements.Claim` carries the pin in Go and `Triples` emits only the
-   edge.
-3. **AC1 is literally unsatisfiable while prose describes the rename.**
+   edge. **Still open**, and the first of the two things blocking the
+   deriver: without a pin encoding the stale-claim query cannot be written,
+   which is half of what the deriver exists for.
+3. **Who runs the deriver, and therefore what its graph is called.** 007
+   §1.1 lists `observed/repo-implements` as server-side and org-global —
+   "computed server-side over already-ingested, all-repo state by a single
+   writer" — which needs the server to enumerate mapped repos and read both
+   `.worklode/implements.yaml` and `.worklode/components.yaml` at each
+   default-branch head (`derive.GitHubReader.FileAt` can do the reads; the
+   repo enumeration has no source yet). But the inputs are repo-local files,
+   and the two derivers that read repo-local files — `go-imports`,
+   `repo-layout` — run from the checkout via `runDeriveLocal`
+   (`internal/cmd/overview.go`), where adding a third source is about thirty
+   lines. 007 §1.1 anticipates the move ("if a source ever moves from
+   server-run to per-repo-run, its graph moves to the per-repo shape with
+   it"), so choosing repo-local is legitimate but is an amendment to 007
+   §1.1, not an implementation detail. Deciding this is planning-tier work,
+   which is why WL-44 filed it as WL-275 rather than picking.
+4. **AC1 is literally unsatisfiable while prose describes the rename.**
    Resolved here by rewording historical mentions to the colon-free form
    (`` `ls` ``), including 025 §17's own table. If reviewers prefer keeping
    `ls:` verbatim in the rename table, AC1's wording needs a carve-out in the
    spec instead — one or the other, not both.
-4. **Depth limit lives in a flag until the server setting exists.**
+5. **Depth limit lives in a flag until the server setting exists.**
    §10 makes it a server setting because it governs expressible claims
    installation-wide. `lode doc anchors --depth-limit` is an interim
    authoring aid only; the publication path must read the server value, and
    the flag should then become an override-for-preview or be removed.
-5. **Spec numbering collision — resolved.** 014 named "candidate spec 015"
+6. **Spec numbering collision — resolved.** 014 named "candidate spec 015"
    for onboarding, but 015 is already the runtime layer (and 016/017/018/019
    exist). Renumbered to candidate spec 020 in 014; the genuine `wl:Deployment`
    (015) reference there is unaffected.
