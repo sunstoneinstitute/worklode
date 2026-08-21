@@ -90,3 +90,5 @@ configMapGenerator:
       - migrations/0038_approvals.down.sql
       - migrations/0039_skill_qualifier.up.sql
       - migrations/0039_skill_qualifier.down.sql
+      - migrations/0040_catalog_evidence.up.sql
+      - migrations/0040_catalog_evidence.down.sql
