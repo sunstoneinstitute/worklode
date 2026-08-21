@@ -868,6 +868,82 @@ func TestDocGetAndList(t *testing.T) {
 	}
 }
 
+// TestResolveDocRef covers the ref grammar the doc verbs take: an id, a slug,
+// a slug nobody holds, and a slug two projects hold.
+func TestResolveDocRef(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	got, err := s.ResolveDocRef(t.Context(), strconv.FormatInt(spec.ID, 10))
+	if err != nil {
+		t.Fatalf("ResolveDocRef(id): %v", err)
+	}
+	if got.ID != spec.ID {
+		t.Errorf("ResolveDocRef(id) = %d, want %d", got.ID, spec.ID)
+	}
+	got, err = s.ResolveDocRef(t.Context(), "025-x")
+	if err != nil {
+		t.Fatalf("ResolveDocRef(slug): %v", err)
+	}
+	if got.ID != spec.ID {
+		t.Errorf("ResolveDocRef(slug) = %d, want %d", got.ID, spec.ID)
+	}
+	if _, err := s.ResolveDocRef(t.Context(), "no-such-slug"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("ResolveDocRef(unmatched) = %v, want ErrNotFound", err)
+	}
+
+	// Slugs are unique per project, not globally, so the same slug in a
+	// second project is ambiguous rather than resolvable.
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
+		t.Fatal(err)
+	}
+	mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	_, err = s.ResolveDocRef(t.Context(), "025-x")
+	if !errors.Is(err, ErrInvalidInput) || !strings.Contains(err.Error(), "025-x") {
+		t.Fatalf("ResolveDocRef(ambiguous) = %v, want ErrInvalidInput naming the slug", err)
+	}
+}
+
+// TestResolveDocRefFallsBackToTombstones pins the half `lode doc undelete
+// <slug>` depends on: a deleted document has left every list, so a resolver
+// that stopped at the live rows could not name it (044 §4). A live document
+// with that slug still wins.
+func TestResolveDocRefFallsBackToTombstones(t *testing.T) {
+	s := openDocStore(t)
+	gone := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	if err := deleteDoc(t, s, gone.ID, "stig", "noise"); err != nil {
+		t.Fatalf("DeleteDoc: %v", err)
+	}
+
+	got, err := s.ResolveDocRef(t.Context(), "025-x")
+	if err != nil {
+		t.Fatalf("ResolveDocRef(tombstoned slug): %v", err)
+	}
+	if got.ID != gone.ID || got.Tombstone == nil {
+		t.Fatalf("ResolveDocRef(tombstoned slug) = %+v, want the tombstoned %d", got, gone.ID)
+	}
+
+	// A live document reusing the slug shadows the tombstone rather than
+	// making the ref ambiguous.
+	live := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	got, err = s.ResolveDocRef(t.Context(), "025-x")
+	if err != nil {
+		t.Fatalf("ResolveDocRef(live over tombstone): %v", err)
+	}
+	if got.ID != live.ID {
+		t.Fatalf("ResolveDocRef(live over tombstone) = %d, want the live %d", got.ID, live.ID)
+	}
+}
+
 // TestReplaceDocEdges is the corpus import's second pass: a frontmatter
 // reference that resolved to nothing when the document was created becomes a
 // real edge once its target exists. Nothing authored moves — and unlike

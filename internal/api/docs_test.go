@@ -433,6 +433,55 @@ func TestListDocs(t *testing.T) {
 	}
 }
 
+// TestResolveDocRef: GET /api/v1/docs/resolve answers the one document a ref
+// names, so a `lode doc <verb> <slug>` costs an indexed lookup rather than a
+// listing of the corpus. The route sits in front of GET /api/v1/docs/{id} and
+// must not be read as an id.
+func TestResolveDocRef(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
+	})
+
+	for _, ref := range []string{"025-x", strconv.FormatInt(spec.ID, 10)} {
+		rr := doReq(t, h, "GET", "/api/v1/docs/resolve?ref="+ref, token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("resolve %q: status = %d, body %s", ref, rr.Code, rr.Body.String())
+		}
+		var got model.Doc
+		decodeInto(t, rr, &got)
+		if got.ID != spec.ID {
+			t.Errorf("resolve %q = %d, want %d", ref, got.ID, spec.ID)
+		}
+		// The resolver answers an id, not a corpus text.
+		if got.Body != "" {
+			t.Errorf("resolve %q carries a body of %d bytes, want none", ref, len(got.Body))
+		}
+	}
+
+	if rr := doReq(t, h, "GET", "/api/v1/docs/resolve", token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("resolve with no ref: status = %d, want 422", rr.Code)
+	}
+	if rr := doReq(t, h, "GET", "/api/v1/docs/resolve?ref=nope", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("resolve unmatched: status = %d, want 404", rr.Code)
+	}
+
+	// Slugs are unique per project, not globally: the server refuses rather
+	// than picking one, and says so in a way the caller can act on.
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "other", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
+	})
+	rr := doReq(t, h, "GET", "/api/v1/docs/resolve?ref=025-x", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("resolve ambiguous: status = %d, want 422", rr.Code)
+	}
+	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "025-x") || !strings.Contains(msg, "numeric id") {
+		t.Errorf("error = %q, want it to name the slug and the way out", msg)
+	}
+}
+
 // TestListDocsOmitsBodies: a corpus is many documents of many kilobytes each
 // and no list consumer reads the markdown, so the list projection carries none
 // of it. GET /api/v1/docs/{id} is where a body comes from.

@@ -1627,6 +1627,53 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 	return d, nil
 }
 
+// ResolveDocRef resolves a document reference to its row (025 §14.3): a
+// positive integer is the id itself, anything else is matched against slugs,
+// exact match only — corpus-number and SPEC/ADR shorthand resolution stay
+// unbuilt. The rule lives here, beside the data, so resolving a ref costs one
+// indexed lookup instead of a listing of the whole corpus, and so every
+// client answers a given ref the same way.
+//
+// Slugs are unique per project, not globally, so a slug naming documents in
+// two projects is ErrInvalidInput rather than an arbitrary pick; the caller
+// disambiguates with a numeric id. A slug matching no live document falls
+// back to the tombstoned ones — 044 §4 keeps a deleted row addressable, and
+// `lode doc undelete <slug>` has no other way to name it. Live documents win
+// outright, since the fallback applies only when no live document matched, so
+// a tombstone never shadows a live document.
+func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, error) {
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
+		return s.GetDoc(ctx, id)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+docColumns+` FROM docs WHERE slug = $1 ORDER BY project_id, id`, ref)
+	if err != nil {
+		return nil, fmt.Errorf("resolve doc %q: %w", ref, err)
+	}
+	matches, err := collectRows(rows, "resolve doc", byValue(scanDoc))
+	if err != nil {
+		return nil, err
+	}
+	var live []model.Doc
+	for _, d := range matches {
+		if d.Tombstone == nil {
+			live = append(live, d)
+		}
+	}
+	if len(live) > 0 {
+		matches = live
+	}
+	switch len(matches) {
+	case 1:
+		return &matches[0], nil
+	case 0:
+		return nil, fmt.Errorf("no document with id or slug %q: %w", ref, ErrNotFound)
+	default:
+		return nil, fmt.Errorf("slug %q matches %d documents; pass a numeric id to disambiguate: %w",
+			ref, len(matches), ErrInvalidInput)
+	}
+}
+
 // ListDocs returns the matching documents in corpus order: kind, then number
 // (plans, which have none, last within their kind), then slug.
 func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) {
