@@ -43,11 +43,9 @@ func TestFetchesAndCaps(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// AllowLoopbackForTest lets the guard reach httptest; production never
-	// sets it.
-	f := safefetch.New(nil, 10)
-	f.AllowLoopbackForTest = true
-	f.AllowAnyHostForTest = true
+	// The escapes let the guard reach httptest; production, which has no way
+	// to construct a Fetcher with them, never does.
+	f := safefetch.NewForTest(nil, 10, safefetch.TestEscapes{Loopback: true, AnyHost: true})
 	if _, _, err := f.Get(context.Background(), srv.URL); err == nil {
 		t.Fatal("expected size cap to reject a 100-byte body with a 10-byte limit")
 	}
@@ -67,9 +65,7 @@ func loopbackURL(t *testing.T, srv *httptest.Server) string {
 }
 
 func loopbackFetcher(maxBytes int64) *safefetch.Fetcher {
-	f := safefetch.New([]string{"localhost"}, maxBytes)
-	f.AllowLoopbackForTest = true
-	return f
+	return safefetch.NewForTest([]string{"localhost"}, maxBytes, safefetch.TestEscapes{Loopback: true})
 }
 
 func TestFetchesBodyAndContentType(t *testing.T) {
@@ -278,8 +274,7 @@ func TestIPLiteralNeverSatisfiesAllowlist(t *testing.T) {
 		t.Fatal("metadata IP accepted")
 	}
 
-	any := safefetch.New(nil, 1<<20)
-	any.AllowAnyHostForTest = true
+	any := safefetch.NewForTest(nil, 1<<20, safefetch.TestEscapes{AnyHost: true})
 	_, _, err := any.Get(context.Background(), "https://169.254.169.254/x")
 	if err == nil || !strings.Contains(err.Error(), "blocked address range") {
 		t.Fatalf("want a blocked-range error, got %v", err)
@@ -288,8 +283,7 @@ func TestIPLiteralNeverSatisfiesAllowlist(t *testing.T) {
 
 // localhost must fail on the address check too, not only the allowlist.
 func TestLoopbackNameFailsAddressCheck(t *testing.T) {
-	f := safefetch.New(nil, 1<<20)
-	f.AllowAnyHostForTest = true
+	f := safefetch.NewForTest(nil, 1<<20, safefetch.TestEscapes{AnyHost: true})
 	_, _, err := f.Get(context.Background(), "https://localhost/x.png")
 	if err == nil || !strings.Contains(err.Error(), "blocked address range") {
 		t.Fatalf("want a blocked-range error for localhost, got %v", err)
@@ -299,8 +293,7 @@ func TestLoopbackNameFailsAddressCheck(t *testing.T) {
 // GCP's metadata name resolves to 169.254.169.254 where it resolves at all;
 // either way it must never be fetched.
 func TestCloudMetadataNameRejected(t *testing.T) {
-	f := safefetch.New(nil, 1<<20)
-	f.AllowAnyHostForTest = true
+	f := safefetch.NewForTest(nil, 1<<20, safefetch.TestEscapes{AnyHost: true})
 	if _, _, err := f.Get(context.Background(), "https://metadata.google.internal/computeMetadata/v1/"); err == nil {
 		t.Fatal("metadata.google.internal accepted")
 	}
@@ -309,8 +302,7 @@ func TestCloudMetadataNameRejected(t *testing.T) {
 // One representative address per blocked range. IPv4-mapped IPv6 forms are
 // included because Go's net.IP predicates do not all normalise them.
 func TestBlockedRanges(t *testing.T) {
-	f := safefetch.New(nil, 1<<20)
-	f.AllowAnyHostForTest = true
+	f := safefetch.NewForTest(nil, 1<<20, safefetch.TestEscapes{AnyHost: true})
 
 	for _, ip := range []string{
 		// IPv4
@@ -364,8 +356,7 @@ func TestBlockedRanges(t *testing.T) {
 // The complement: ordinary public addresses are not in the table. A cancelled
 // context stops the request at the dial, so the assertion needs no network.
 func TestPublicAddressesNotBlocked(t *testing.T) {
-	f := safefetch.New(nil, 1<<20)
-	f.AllowAnyHostForTest = true
+	f := safefetch.NewForTest(nil, 1<<20, safefetch.TestEscapes{AnyHost: true})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
