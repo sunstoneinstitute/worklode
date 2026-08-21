@@ -145,7 +145,7 @@ templ decisionCard(d *CockpitDecision) {
 		<div class="db">
 			<h3>{ d.Title }</h3>
 			if d.Accountable != "" {
-				<div class="who-owns"><span class="avatar" aria-hidden="true">{ initials(d.Accountable) }</span><span><b>{ d.Accountable }</b></span></div>
+				<div class="who-owns"><span class="avatar" aria-hidden="true">{ Initials(d.Accountable) }</span><span><b>{ d.Accountable }</b></span></div>
 			}
 			if d.Readiness != "" {
 				<div class="rest">

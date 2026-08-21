@@ -671,6 +671,49 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// workBuckets is the per-project bucketing of work facts shared by the
+// board (assembleBoard) and Home's card counts. Blocked means a ready task
+// with at least one open blocker or blocking plan (ProjectWorkFact.Blocked);
+// in_progress and in_review tasks bucket by state; done tasks bucket
+// nowhere. Order within each bucket matches the input order. The
+// /projects/{id} cockpit (cockpit.go) computes the same ready&&Blocked()
+// rule separately, for its own response shape.
+type workBuckets struct {
+	InProgress, InReview, Ready, Blocked []store.ProjectWorkFact
+}
+
+// bucketWorkFacts buckets one project's facts the way assembleBoard and
+// Home's card counts both need, so "blocked" is computed in exactly one
+// place for the web surface.
+func bucketWorkFacts(facts []store.ProjectWorkFact) workBuckets {
+	var b workBuckets
+	for _, f := range facts {
+		switch {
+		case f.Task.State == "in_progress":
+			b.InProgress = append(b.InProgress, f)
+		case f.Task.State == "in_review":
+			b.InReview = append(b.InReview, f)
+		case f.Task.State == "ready" && f.Blocked():
+			b.Blocked = append(b.Blocked, f)
+		case f.Task.State == "ready":
+			b.Ready = append(b.Ready, f)
+		}
+	}
+	return b
+}
+
+// lastActivity returns the newest Task.UpdatedAt across facts (all states,
+// done included), or the zero time for an empty slice.
+func lastActivity(facts []store.ProjectWorkFact) time.Time {
+	var newest time.Time
+	for _, f := range facts {
+		if f.Task.UpdatedAt.After(newest) {
+			newest = f.Task.UpdatedAt
+		}
+	}
+	return newest
+}
+
 // assembleBoard builds the board for one project (projectFilter set) or
 // every project (projectFilter ""): each project's tasks bucketed by state
 // (in_progress with lease holder, in_review, ready, blocked) plus, when
@@ -680,8 +723,8 @@ func (s *server) board(w http.ResponseWriter, r *http.Request) {
 // UI-neutral bulk reader (parent/lease/blocker facts in one read), rather
 // than a dedicated Store.Board method — there is no additional query
 // complexity to hide behind a store API. Shared by the JSON /api/v1/board
-// handler and the GET / and GET /projects/{id} web pages, so the bucket
-// logic lives in exactly one place.
+// handler and the GET /work web page; Home's card counts share only the
+// bucketing (bucketWorkFacts), not this assembly.
 //
 // recent_failures is simplified from the full deployments->artifacts join
 // described in the design to the last 10 runtime events store-wide, and is
@@ -727,26 +770,25 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 			InProgress: []model.BoardTask{}, InReview: []model.BoardTask{},
 			Ready: []model.BoardTask{}, Blocked: []model.BoardTask{},
 		}
-		for _, f := range byProject[p.ID] {
-			t := f.Task
-			bt := model.BoardTask{Task: t}
-			if f.Parent != nil {
-				bt.Parent = f.Parent.ID
-			}
-			switch {
-			case t.State == "in_progress":
-				if f.Lease != nil {
+		buckets := bucketWorkFacts(byProject[p.ID])
+		toBoardTasks := func(fs []store.ProjectWorkFact, holders bool) []model.BoardTask {
+			out := make([]model.BoardTask, 0, len(fs))
+			for _, f := range fs {
+				bt := model.BoardTask{Task: f.Task}
+				if f.Parent != nil {
+					bt.Parent = f.Parent.ID
+				}
+				if holders && f.Lease != nil {
 					bt.Holder = &model.Holder{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
 				}
-				bp.InProgress = append(bp.InProgress, bt)
-			case t.State == "in_review":
-				bp.InReview = append(bp.InReview, bt)
-			case t.State == "ready" && f.Blocked():
-				bp.Blocked = append(bp.Blocked, bt)
-			case t.State == "ready":
-				bp.Ready = append(bp.Ready, bt)
+				out = append(out, bt)
 			}
+			return out
 		}
+		bp.InProgress = toBoardTasks(buckets.InProgress, true)
+		bp.InReview = toBoardTasks(buckets.InReview, false)
+		bp.Ready = toBoardTasks(buckets.Ready, false)
+		bp.Blocked = toBoardTasks(buckets.Blocked, false)
 		resp.Projects = append(resp.Projects, bp)
 	}
 

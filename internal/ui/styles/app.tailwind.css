@@ -355,6 +355,27 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .btn .sc{font-size:11px;font-weight:500;opacity:.75}
 .btn.ghost{background:transparent}
 
+/* ---------- home project grid ---------- */
+/* Fixed two-column grid, never auto-fit/auto-fill: "two cards on a laptop" is
+ * a guarantee, not something that happens to emerge from the available
+ * width. Collapses to one column at the same 820px the shell itself does not
+ * yet break at, so a narrow viewport gets full-width cards well before the
+ * layout is otherwise constrained. */
+.homegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.homegrid{grid-template-columns:1fr}}
+/* The whole card is one <a> (032 §10: keyboard-operable, no nested
+ * interactive element), so it needs its own focus-visible outline via the
+ * shell-wide :focus-visible rule rather than a link-text underline. */
+.homecard{display:block;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:14px 16px;color:var(--ink)}
+.homecard:hover{text-decoration:none}
+.hc-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hc-name{font-weight:600;font-size:15px}
+.hc-signal{margin-top:6px}
+.hc-counts{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
+.hc-crew{display:flex;align-items:center;gap:6px;margin-top:10px}
+.hc-crew .avatar{width:24px;height:24px;font-size:9px}
+.hc-activity{margin-top:10px}
+
 /* ---------- creation forms (new task, declared deliverable) ---------- */
 /* Hand-authored rather than utility-shaped: the controls need consistent
  * sizing across input/select/textarea and a target height that clears WCAG
