@@ -21,12 +21,31 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
+// defaultReplayBatch caps how many candidate events one run reads. Every
+// candidate is materialised with its whole delivery payload (up to
+// maxGitHubBody each), and the unscoped org-wide run is the scheduled case
+// (spec 013 §2), so an unbounded read is a backlog-sized allocation. A run
+// that fills its batch says so in ReplayResult.Truncated; re-running drains
+// the rest, because an applied event leaves the candidate set.
+const defaultReplayBatch = 500
+
+// maxReplayErrors caps the reported error list. It is the reconcile
+// response body's "replay" section, so a backlog where every apply fails
+// must not turn into a megabyte of JSON; the overflow is counted in
+// ReplayResult.ErrorsOmitted instead.
+const maxReplayErrors = 100
+
 // ReplayOptions bounds the candidate set and supplies the wiring the applies
 // need. Zero values disable each bound.
 type ReplayOptions struct {
 	Repo   string
 	Since  *time.Time
 	DryRun bool
+
+	// Limit caps the candidate batch; 0 means defaultReplayBatch. There is
+	// no unbounded setting: the whole point of the batch is that no caller
+	// reads an unbounded backlog into memory.
+	Limit int
 
 	// Log, ResolveBranch and Metrics mirror what the webhook handler gives
 	// its applier; all are optional. A nil Log falls back to slog.Default().
@@ -44,8 +63,18 @@ type ReplayOptions struct {
 // real GitHub event — the timeline reads "applied late". Events whose repo
 // is still unmapped are left untouched for a later run. A single event whose
 // apply fails is reported and skipped; a store failure aborts the run.
+//
+// One run covers at most a batch of candidates (opts.Limit, default
+// defaultReplayBatch); a full batch is reported as truncated so the caller
+// knows to run again.
 func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.ReplayResult, error) {
-	evs, err := st.UnappliedGitHubEvents(ctx, store.UnappliedFilter{Repo: opts.Repo, Since: opts.Since})
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = defaultReplayBatch
+	}
+	evs, err := st.UnappliedGitHubEvents(ctx, store.UnappliedFilter{
+		Repo: opts.Repo, Since: opts.Since, Limit: limit,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -53,13 +82,20 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 	if log == nil {
 		log = slog.Default()
 	}
-	res := &model.ReplayResult{DryRun: opts.DryRun, Candidates: len(evs)}
+	res := &model.ReplayResult{DryRun: opts.DryRun, Candidates: len(evs), Truncated: len(evs) == limit}
+	addErr := func(format string, args ...any) {
+		if len(res.Errors) >= maxReplayErrors {
+			res.ErrorsOmitted++
+			return
+		}
+		res.Errors = append(res.Errors, fmt.Sprintf(format, args...))
+	}
 	a := &applier{st: st, log: log, resolveBranch: opts.ResolveBranch, metrics: opts.Metrics}
 
 	for _, ev := range evs {
 		var env envelope
 		if err := json.Unmarshal(ev.Payload, &env); err != nil {
-			res.Errors = append(res.Errors, fmt.Sprintf("event %d: parse payload: %v", ev.ID, err))
+			addErr("event %d: parse payload: %v", ev.ID, err)
 			opts.Metrics.replayOutcome("error")
 			continue
 		}
@@ -87,7 +123,7 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 		apply := markApplied(st, a.applyForType(ctx, ev.Type, env, ev.Payload))
 		txErr := st.Tx(ctx, func(tx *sql.Tx) error { return apply(tx, ev.ID) })
 		if txErr != nil {
-			res.Errors = append(res.Errors, fmt.Sprintf("event %d (%s): %v", ev.ID, ev.Type, txErr))
+			addErr("event %d (%s): %v", ev.ID, ev.Type, txErr)
 			opts.Metrics.replayOutcome("error")
 			continue
 		}

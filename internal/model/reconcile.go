@@ -5,12 +5,19 @@ import "time"
 // ReplayResult is one reconcile replay run's report (spec 013 §2.1). It is
 // the "replay" section of the POST /api/v1/reconcile response body, so ADR
 // 036 puts it here rather than in internal/hooks.
+// Truncated and ErrorsOmitted report the two caps the run works under: the
+// candidate batch is bounded so a large backlog is not read into memory at
+// once, and the error list is bounded so a bad backlog cannot produce an
+// unboundedly large response body. Both are re-run signals, not failures —
+// replay is re-runnable, and applied events leave the candidate set.
 type ReplayResult struct {
 	DryRun        bool     `json:"dry_run"`
 	Candidates    int      `json:"candidates"`
 	Replayed      int      `json:"replayed"`
 	StillUnmapped int      `json:"still_unmapped"`
+	Truncated     bool     `json:"truncated,omitempty"`
 	Errors        []string `json:"errors,omitempty"`
+	ErrorsOmitted int      `json:"errors_omitted,omitempty"`
 }
 
 // WhoAmI is the response of GET /api/v1/whoami (spec 013): the calling
