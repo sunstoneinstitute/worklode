@@ -53,6 +53,15 @@ export class ObsidianVaultWriter implements VaultWriter {
     return this.adapter.read(`${root}/${path}`);
   }
 
+  /** Whether a vault-relative path exists as a file or folder. Used by
+   *  src/main.ts to check the mount root's own parent (mountRootParent)
+   *  before a sync's first write would otherwise create it silently --
+   *  unlike every other method here, the path is not relative to any root,
+   *  so it is not run through assertInsideRoot. */
+  async exists(path: string): Promise<boolean> {
+    return this.adapter.exists(path);
+  }
+
   /** Creates every missing ancestor directory (root itself included) before
    *  writing -- adapter.write does not create parent folders, and every
    *  desired path but the index is nested at least one directory deep. */
