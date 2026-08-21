@@ -552,6 +552,13 @@ kind are different concepts that happen to share a name in the relational schema
 
 ## 7. Reasoning architecture (OWL / SHACL / SPARQL)
 
+> Pending `049-validate-project-graphs-as-a-union.md#sec-3` (not yet effective)
+
+> **Amended by ADR 049.** SHACL validation of *projected* data runs over the
+> union of the project named graphs (plus the TBox), never over a single
+> project graph — a cross-project edge's foreign endpoint is typed only in
+> its home graph.
+
 Reasoning runs in **three tiers**; each idiom pays off in exactly one, so the vocabulary is built
 to the tier that can use it.
 
@@ -773,6 +780,14 @@ Slashes inside a local id remain permissible (slash namespace, opaque path), as 
 ---
 
 ## 11. Projection: backbone → graph
+
+> Pending `049-validate-project-graphs-as-a-union.md#sec-2` (not yet effective)
+
+> **Amended by ADR 049.** A project's named graph is subject-complete and
+> object-open: every projected triple whose subject the project owns, and no
+> triple about any other subject. A cross-project edge's foreign endpoint
+> stays a bare, untyped object IRI in that graph; the projector emits no type
+> stub and mirrors no foreign task.
 
 **Authority stays split**: the **backbone owns execution facts** (task state, leases,
 `blocks`/`child_of`); the **graph owns design facts** (Component, DesignDoc, `governs`,
