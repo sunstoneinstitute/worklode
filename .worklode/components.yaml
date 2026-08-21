@@ -1,0 +1,7 @@
+# Component-boundary manifest (spec 007 §2.2). Worklode is a
+# single-component repo: the whole-repo form.
+repo: github.com/sunstoneinstitute/worklode
+components:
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/worklode
+    name: worklode
+    paths: ["**"]
