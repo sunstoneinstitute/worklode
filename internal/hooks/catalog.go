@@ -81,7 +81,9 @@ func NewCatalogHandler(st *store.Store, secret string, log *slog.Logger, m *Metr
 	return &catalogHandler{st: st, secret: secret, log: log, metrics: m}
 }
 
-// catalogEvent is the payload a catalog emitter posts.
+// catalogEvent is the payload a catalog emitter posts. Catalog is parsed but
+// not projected onto an evidence column: which instance reported is a
+// property of the delivery, and the stored event payload keeps it.
 type catalogEvent struct {
 	Event      string          `json:"event"`
 	Artifact   string          `json:"artifact"`
