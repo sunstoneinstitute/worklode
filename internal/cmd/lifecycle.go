@@ -382,7 +382,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 	if err != nil {
 		return err
 	}
-	identity, err := worktree.Identity(root)
+	identity, err := worktree.IdentityOf(root)
 	if err != nil {
 		return err
 	}
@@ -572,7 +572,7 @@ func runStatus(cmd *cobra.Command) error {
 	if err != nil {
 		return err
 	}
-	identity, err := worktree.Identity(root)
+	identity, err := worktree.IdentityOf(root)
 	if err != nil {
 		return err
 	}
