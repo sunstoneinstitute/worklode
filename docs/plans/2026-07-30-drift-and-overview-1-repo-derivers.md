@@ -723,6 +723,19 @@ git commit -m "Derive component dependencies from Go imports"
 - Test: `internal/derive/layout_test.go`
 - Modify: `docs/specs/007-drift-and-overview.md` (amendment), `ns/ontology.ttl`
 
+> **Corrected contract (WL-267, landed after WL-28).** The deriver's input is
+> the repo's **tracked files** (`git ls-files` through `internal/gitexec`),
+> not the filesystem walk Steps 2–4 below specify; a root that is not inside a
+> git work tree falls back to the walk, which is what keeps the temp-dir
+> fixtures in Step 2 valid. A walk enumerates `.gitignore`d build output —
+> `bin/`, `data/`, `wl`, `*.db` in worklode's own repo, none dot-prefixed — so
+> the document's content hash changed with whether anyone had run a build,
+> violating §2's "Deterministic. Same inputs -> same triples": Task 3's hash
+> short-circuit never fired, and part 3's `lode gaps` (Task 13) would report `bin` as a
+> component coverage gap. `LayoutTriples` therefore takes a `context.Context`
+> first argument. Read the code below as the shape of the triple emission
+> only; `internal/derive/layout.go` is the enumeration of record.
+
 - [ ] **Step 1: Mint `wl:unmatchedPath`**
 
 Per CLAUDE.md's ordering, amend the spec first (a short amendment on spec
