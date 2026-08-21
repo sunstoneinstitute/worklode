@@ -34,7 +34,7 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	}
 
 	docs := map[string][]byte{} // observed source → document
-	layout, err := derive.LayoutTriples(root, host, owner, name, m)
+	layout, err := derive.LayoutTriples(ctx, root, host, owner, name, m)
 	if err != nil {
 		return "", err
 	}
