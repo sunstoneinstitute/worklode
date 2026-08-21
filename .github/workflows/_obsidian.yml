@@ -1,0 +1,41 @@
+name: obsidian
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  # corepack downloads the pnpm version pinned in package.json's
+  # packageManager; without this it stops to ask.
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+
+jobs:
+  obsidian:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: plugins/obsidian
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      # corepack runs after setup-node so its shims bind to that Node, and
+      # supplies pnpm itself — no extra third-party action to pin. setup-node's
+      # own `cache:` is not used: it resolves the store path before pnpm exists.
+      - run: corepack enable pnpm
+      - run: echo "PNPM_STORE=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.PNPM_STORE }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('plugins/obsidian/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
