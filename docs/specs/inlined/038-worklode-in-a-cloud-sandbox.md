@@ -190,6 +190,34 @@ Four seams keep that true, and each is load-bearing today rather than speculativ
 Nothing here requires dispatch to exist. The point is that when it arrives, no part of §4 is
 rewritten to accommodate it.
 
+### 5.1 Why not an external agent runtime, yet
+
+An external runtime — a controller that owns launching and managing the pods behind this seam — is
+the obvious candidate for filling §5 without building anything. Two were evaluated and both are
+declined for now, on evidence rather than taste. The evidence lives in the research notes; this
+section records the outcome and what would reopen it.
+
+`kagent-dev/kagent` (`docs/research/kagent-integration.md`) is declined structurally. It has no
+task-scoped checkout and no lease lifecycle, so it substitutes for none of §1's unchanged concerns,
+and it keeps execution history in its own database — a second owner of facts the backbone owns.
+What this seam needs from an executor — start a container from the tag the checkout implies, inject
+the environment, run `lode next --json`, let it exit — is a Kubernetes `Job`.
+
+`kubernetes-sigs/agent-sandbox` (`docs/research/agent-sandbox-evaluation.md`) is the right shape —
+a pod-lifecycle controller storing no more state than a `Job` does — and its measured warm-pool
+allocation (12 ms, against 465 ms for a cold `Job` with a cached image) genuinely answers the
+cold-start cost. It is declined because that advantage is unreachable from this spec's design: a
+`SandboxClaim` carrying `spec.env` — the obvious way to deliver §4.3's token and a task id —
+silently cold-starts. Warm pools require claiming a generic pod and pushing the task into it
+afterwards, which changes the substance of two of §5's seams (token acquisition, entry point)
+rather than substituting behind them.
+
+**The trigger to revisit is a design decision, not a maturity milestone: deciding that dispatch
+drives a running pod rather than parameterising a new one.** When 032's agent pools are designed
+that way, evaluate agent-sandbox first — against a plain `Job` as the baseline it must beat, and
+only once warm-pool adoption has gone a full release line without a correctness fix. The
+agent-sandbox note's §7 lists which sections of this spec that adoption would amend.
+
 ## 6. Testing
 
 - **Environment authentication.** A session holding only `LODE_SERVER` and `LODE_TOKEN`, with no
@@ -205,6 +233,8 @@ rewritten to accommodate it.
 
 - **Backbone-initiated dispatch.** §5 names its seams and stops there. Holding cloud credentials and
   driving a provider's sandbox API is 032's work.
+- **An external agent runtime.** Declined with a named trigger (§5.1), not forgotten — the seam
+  stays filled by worklode's own code.
 - **Task secrets.** 017 owns them (§4.4).
 - **A tool manager.** Declined with a named trigger (§2.1), not forgotten.
 - **A cross-platform system-package schema.** Declined on cost (§2.2).
