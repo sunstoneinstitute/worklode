@@ -16,7 +16,10 @@ superseded`; `proposed` was retired — a document under review just stays
 - **Plan** — an executable document, unnumbered, no addressable sections
   (plans are not DesignDocs). Its `## Tasks` block is what `lode doc accept`
   mints into real tasks — accepting a plan is the only way its tasks come
-  into existence; nothing mints a root/container row above them.
+  into existence; nothing mints a root/container row above them. An accepted
+  plan stays editable: re-accept it to mint declarations added since, which
+  leaves every already-minted task alone (a declaration's identity is its
+  title, so keep titles unique and retitle only to withdraw).
 
 ## Authoring flow
 
@@ -27,7 +30,7 @@ lode doc edit <id-or-slug> --file <file>                    # replace a draft's 
 lode doc revise <id-or-slug> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
 lode doc revise <id-or-slug> --discard                      # withdraw it without landing: assignee or its author
 lode doc submit <id-or-slug>                                # records a review event; mints a review task
-lode doc accept <id-or-slug>                                # assignee-gated; accepting a plan mints its tasks
+lode doc accept <id-or-slug>                                # assignee-gated; on a plan, mints the declarations that have no task yet
 ```
 
 Draft the markdown — frontmatter included — in a scratch file first; it's an
