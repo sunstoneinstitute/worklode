@@ -35,6 +35,7 @@ type storeMetrics struct {
 	projectWorkReads *prometheus.CounterVec
 	docOps           *prometheus.CounterVec
 	docTasksMinted   prometheus.Counter
+	skillAmbiguous   prometheus.Counter
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -71,8 +72,12 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_doc_plan_tasks_minted_total",
 			Help: "Tasks minted across all plan-document accepts (025 §9.2).",
 		}),
+		skillAmbiguous: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_skill_name_ambiguous_total",
+			Help: "Bare skill-name lookups matching more than one qualified skill (037 §4).",
+		}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous)
 	// Pre-initialise both sweeper series so alert expressions see 0, not
 	// no-data, on a server whose sweeper has not ticked yet.
 	m.sweeperRuns.WithLabelValues("ok")
@@ -147,6 +152,16 @@ func (m *storeMetrics) planTasksMinted(n int) {
 		return
 	}
 	m.docTasksMinted.Add(float64(n))
+}
+
+// skillNameAmbiguous records one bare skill-name lookup that matched more than
+// one qualified skill. Unlabeled: the name would be unbounded, and this only
+// needs to answer "are pins silently degrading", not "which pin".
+func (m *storeMetrics) skillNameAmbiguous() {
+	if m == nil {
+		return
+	}
+	m.skillAmbiguous.Inc()
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the

@@ -18,6 +18,7 @@ import (
 // this type to model.Skill and model.PinnedSkill.
 type Skill struct {
 	ID          int64
+	Qualifier   string // plugin that ships it; the <plugin> of <plugin>:<name>
 	Name        string
 	Description string
 	SourceRepo  string
@@ -37,6 +38,7 @@ type SkillMatch struct {
 
 // SkillUpsert is one skill dir as found in a source repo at sync time.
 type SkillUpsert struct {
+	Qualifier   string
 	Name        string
 	Description string
 	SourceRepo  string
@@ -56,6 +58,11 @@ func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (int64, bool, er
 	if u.ContentHash == "" {
 		return 0, false, fmt.Errorf("skill %s: content hash required: %w", u.Name, ErrInvalidInput)
 	}
+	// The qualifier is half the skill's identity (037 §4.2); without it two
+	// plugins' same-named skills are one row again.
+	if u.Qualifier == "" {
+		return 0, false, fmt.Errorf("skill %s: qualifier required: %w", u.Name, ErrInvalidInput)
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -69,13 +76,13 @@ func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (int64, bool, er
 		SELECT s.id, s.source_repo, coalesce(v.content_hash, '')
 		FROM skills s
 		LEFT JOIN skill_versions v ON v.id = s.latest_version_id
-		WHERE s.name = $1`, u.Name).Scan(&id, &repo, &latestHash)
+		WHERE s.qualifier = $1 AND s.name = $2`, u.Qualifier, u.Name).Scan(&id, &repo, &latestHash)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		if err := tx.QueryRowContext(ctx, `
-			INSERT INTO skills (name, description, source_repo, source_path)
-			VALUES ($1, $2, $3, $4) RETURNING id`,
-			u.Name, u.Description, u.SourceRepo, u.SourcePath).Scan(&id); err != nil {
+			INSERT INTO skills (qualifier, name, description, source_repo, source_path)
+			VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+			u.Qualifier, u.Name, u.Description, u.SourceRepo, u.SourcePath).Scan(&id); err != nil {
 			return 0, false, fmt.Errorf("insert skill %s: %w", u.Name, err)
 		}
 	case err != nil:
@@ -114,9 +121,10 @@ func (s *Store) UpsertSkill(ctx context.Context, u SkillUpsert) (int64, bool, er
 	return id, true, tx.Commit()
 }
 
-// SoftDeleteSkillsExcept marks every live skill from sourceRepo whose name is
-// not in keep as deleted, returning how many were marked. A nil or empty
-// keep marks every live skill from that repo as deleted.
+// SoftDeleteSkillsExcept marks every live skill from sourceRepo whose
+// qualified name is not in keep as deleted, returning how many were marked.
+// keep holds qualified names (<plugin>:<name>), which is what a sync collects.
+// A nil or empty keep marks every live skill from that repo as deleted.
 func (s *Store) SoftDeleteSkillsExcept(ctx context.Context, sourceRepo string, keep []string) (int64, error) {
 	if keep == nil {
 		keep = []string{}
@@ -128,7 +136,7 @@ func (s *Store) SoftDeleteSkillsExcept(ctx context.Context, sourceRepo string, k
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE skills SET deleted_at = $3
 		WHERE source_repo = $1 AND deleted_at IS NULL
-		  AND name NOT IN (SELECT jsonb_array_elements_text($2::jsonb))`,
+		  AND qualifier || ':' || name NOT IN (SELECT jsonb_array_elements_text($2::jsonb))`,
 		sourceRepo, string(keepJSON), s.Now())
 	if err != nil {
 		return 0, fmt.Errorf("soft delete skills from %s: %w", sourceRepo, err)
@@ -142,7 +150,7 @@ func (s *Store) SoftDeleteSkillsExcept(ctx context.Context, sourceRepo string, k
 
 // skillSelect ends after the LEFT JOIN; callers append JOIN/WHERE/ORDER BY.
 const skillSelect = `
-	SELECT s.id, s.name, s.description, s.source_repo, s.source_path,
+	SELECT s.id, s.qualifier, s.name, s.description, s.source_repo, s.source_path,
 	       coalesce(v.content_hash, ''), coalesce(v.skill_md, ''),
 	       s.deleted_at IS NOT NULL
 	FROM skills s
@@ -150,7 +158,7 @@ const skillSelect = `
 
 func scanSkill(row rowScanner) (*Skill, error) {
 	var sk Skill
-	err := row.Scan(&sk.ID, &sk.Name, &sk.Description, &sk.SourceRepo, &sk.SourcePath,
+	err := row.Scan(&sk.ID, &sk.Qualifier, &sk.Name, &sk.Description, &sk.SourceRepo, &sk.SourcePath,
 		&sk.ContentHash, &sk.SkillMD, &sk.Deleted)
 	if err != nil {
 		return nil, err
@@ -158,16 +166,24 @@ func scanSkill(row rowScanner) (*Skill, error) {
 	return &sk, nil
 }
 
-// GetSkill returns one skill (deleted or not) by name.
-func (s *Store) GetSkill(ctx context.Context, name string) (*Skill, error) {
-	sk, err := scanSkill(s.db.QueryRowContext(ctx, skillSelect+` WHERE s.name = $1`, name))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("skill %s: %w", name, ErrNotFound)
-	}
+// GetSkill returns one skill (deleted or not) by reference: either the
+// qualified name (<plugin>:<name>) or a bare name that matches exactly one
+// skill. A bare name matching more than one reports ErrAmbiguousSkill naming
+// the candidates rather than picking one (037 §4.2).
+func (s *Store) GetSkill(ctx context.Context, ref string) (*Skill, error) {
+	res, err := s.ResolveSkillRefs(ctx, []string{ref})
 	if err != nil {
-		return nil, fmt.Errorf("get skill %s: %w", name, err)
+		return nil, err
 	}
-	return sk, nil
+	r := res[0]
+	switch {
+	case r.Skill != nil:
+		return r.Skill, nil
+	case len(r.Candidates) > 0:
+		return nil, r.ambiguousErr()
+	default:
+		return nil, fmt.Errorf("skill %s: %w", ref, ErrNotFound)
+	}
 }
 
 // ListSkills returns skills ordered by name, excluding soft-deleted ones
@@ -202,25 +218,20 @@ func (s *Store) SkillsMissingEmbeddings(ctx context.Context) ([]Skill, error) {
 
 // SkillsByNames returns the named skills (deleted included, so brief pins can
 // warn rather than vanish), ordered as asked and deduped to first occurrence;
-// missing names are simply absent.
+// names that resolve to nothing, or ambiguously, are simply absent. Callers
+// that must tell those two apart use ResolveSkillRefs.
 func (s *Store) SkillsByNames(ctx context.Context, names []string) ([]Skill, error) {
-	if len(names) == 0 {
-		return nil, nil
-	}
-	names = dedupeFirst(names)
-	namesJSON, err := json.Marshal(names)
+	res, err := s.ResolveSkillRefs(ctx, names)
 	if err != nil {
-		return nil, fmt.Errorf("skills by names: %w", err)
+		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, skillSelect+`
-		JOIN (SELECT value AS want, ordinality
-		      FROM jsonb_array_elements_text($1::jsonb) WITH ORDINALITY) w
-		  ON w.want = s.name
-		ORDER BY w.ordinality`, string(namesJSON))
-	if err != nil {
-		return nil, fmt.Errorf("skills by names: %w", err)
+	var out []Skill
+	for _, r := range res {
+		if r.Skill != nil {
+			out = append(out, *r.Skill)
+		}
 	}
-	return collectRows(rows, "skills by names", byValue(scanSkill))
+	return out, nil
 }
 
 // dedupeFirst returns names with duplicates removed, keeping first occurrence
@@ -237,13 +248,17 @@ func dedupeFirst(names []string) []string {
 	return out
 }
 
-// SkillArchive returns the stored tar.gz for one exact version.
+// SkillArchive returns the stored tar.gz for one exact version. name is a
+// skill reference, resolved by GetSkill's rules.
 func (s *Store) SkillArchive(ctx context.Context, name, hash string) ([]byte, error) {
+	sk, err := s.GetSkill(ctx, name)
+	if err != nil {
+		return nil, err
+	}
 	var archive []byte
-	err := s.db.QueryRowContext(ctx, `
-		SELECT v.archive FROM skill_versions v
-		JOIN skills s ON s.id = v.skill_id
-		WHERE s.name = $1 AND v.content_hash = $2`, name, hash).Scan(&archive)
+	err = s.db.QueryRowContext(ctx, `
+		SELECT archive FROM skill_versions
+		WHERE skill_id = $1 AND content_hash = $2`, sk.ID, hash).Scan(&archive)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("skill archive %s@%s: %w", name, hash, ErrNotFound)
 	}

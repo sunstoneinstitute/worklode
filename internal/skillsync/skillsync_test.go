@@ -288,10 +288,11 @@ func TestSkillDirsDropsOversize(t *testing.T) {
 		"skills/slim/SKILL.md": skillMD,
 	})
 	sy := &Syncer{}
-	dirs, commit, err := sy.skillDirs(tb, testSource)
+	tree, err := sy.skillDirs(tb, testSource)
 	if err != nil {
 		t.Fatalf("skillDirs: %v", err)
 	}
+	dirs, commit := tree.dirs, tree.commit
 	if commit != "aaa111" {
 		t.Fatalf("commit: %q", commit)
 	}
@@ -314,10 +315,11 @@ func TestSkillDirsDropsOverEntryCount(t *testing.T) {
 	}
 	var logbuf bytes.Buffer
 	sy := &Syncer{Log: slog.New(slog.NewTextHandler(&logbuf, nil))}
-	dirs, _, err := sy.skillDirs(tarballOf(t, "acme-p-aaa111", files), testSource)
+	tree, err := sy.skillDirs(tarballOf(t, "acme-p-aaa111", files), testSource)
 	if err != nil {
 		t.Fatalf("skillDirs: %v", err)
 	}
+	dirs := tree.dirs
 	if len(dirs) != 1 || dirs[0].dir != "skills/slim" {
 		t.Fatalf("dirs: %+v", dirs)
 	}
@@ -333,7 +335,7 @@ func TestBuildUpsertRejectsUnusableName(t *testing.T) {
 	for _, name := range []string{"../escape", "a/b", ".hidden", ".", ".."} {
 		md := "---\nname: " + name + "\ndescription: d\n---\n\nbody"
 		files := map[string]file{"SKILL.md": {data: []byte(md)}}
-		if _, err := buildUpsert(testSource, "aaa111", "skills/x", files); err == nil {
+		if _, err := buildUpsert(testSource, "aaa111", "skills/x", files, "p"); err == nil {
 			t.Fatalf("name %q: want an ingest error", name)
 		}
 	}
@@ -382,10 +384,11 @@ func TestSkillDirsSkipsSymlinks(t *testing.T) {
 	})
 	var logbuf bytes.Buffer
 	sy := &Syncer{Log: slog.New(slog.NewTextHandler(&logbuf, nil))}
-	dirs, _, err := sy.skillDirs(tb, testSource)
+	tree, err := sy.skillDirs(tb, testSource)
 	if err != nil {
 		t.Fatalf("skillDirs: %v", err)
 	}
+	dirs := tree.dirs
 	if len(dirs) != 1 {
 		t.Fatalf("dirs: %+v", dirs)
 	}
@@ -406,14 +409,15 @@ func TestExecutableBitSurvives(t *testing.T) {
 		"skills/one/scripts/check.sh": {body: "#!/bin/sh\ntrue\n", mode: 0o755, typ: tar.TypeReg},
 	})
 	sy := &Syncer{}
-	dirs, commit, err := sy.skillDirs(tb, testSource)
-	if err != nil || len(dirs) != 1 {
-		t.Fatalf("skillDirs: %+v %v", dirs, err)
+	tree, err := sy.skillDirs(tb, testSource)
+	if err != nil || len(tree.dirs) != 1 {
+		t.Fatalf("skillDirs: %+v %v", tree, err)
 	}
+	dirs, commit := tree.dirs, tree.commit
 	if !dirs[0].files["scripts/check.sh"].exec || dirs[0].files["SKILL.md"].exec {
 		t.Fatalf("exec bits: %+v", dirs[0].files)
 	}
-	u, err := buildUpsert(testSource, commit, dirs[0].dir, dirs[0].files)
+	u, err := buildUpsert(testSource, commit, dirs[0].dir, dirs[0].files, "p")
 	if err != nil {
 		t.Fatalf("buildUpsert: %v", err)
 	}
@@ -607,7 +611,7 @@ func TestSyncAllProviderChangeReembeds(t *testing.T) {
 		t.Fatalf("old-space vectors survived: %+v err=%v", got, err)
 	}
 	got, err := st.RecommendSkills(ctx, []float32{0, 1, 0}, 5, 0.5)
-	if err != nil || len(got) != 1 || got[0].Name != "tdd" {
+	if err != nil || len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("new-space recommend: %+v err=%v", got, err)
 	}
 	if log := logbuf.String(); !strings.Contains(log, "fake:a") || !strings.Contains(log, "fake:b") {
@@ -700,7 +704,7 @@ func TestSyncAllRetriesFailedEmbed(t *testing.T) {
 		t.Fatalf("second summary: %+v", sum)
 	}
 	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
-	if err != nil || len(got) != 1 || got[0].Name != "tdd" {
+	if err != nil || len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("convergence did not embed: %+v err=%v", got, err)
 	}
 }
@@ -735,7 +739,7 @@ func TestSyncAllFailedReembedDropsStaleVectors(t *testing.T) {
 		t.Fatalf("v1 vectors survived a failed re-embed of v2: %+v", got)
 	}
 	got, err := st.RecommendSkills(ctx, []float32{0, 1, 0}, 5, 0.5)
-	if err != nil || len(got) != 1 || got[0].Name != "tdd" {
+	if err != nil || len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("v2 not embedded by the same pass: %+v err=%v", got, err)
 	}
 }
