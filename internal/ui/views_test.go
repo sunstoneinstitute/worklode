@@ -128,3 +128,65 @@ func TestHomeOpenModeZeroProjects(t *testing.T) {
 		t.Error("zero-project open mode must render no homecard")
 	}
 }
+
+// TestDeliverableChipFollowsReportedState pins the page's one substantive
+// judgment: a deliverable stores no state (spec 029 §3.2), so the chip is
+// whatever the newest evidence reported about the declared address, and
+// "Declared" only while nothing has reported one.
+func TestDeliverableChipFollowsReportedState(t *testing.T) {
+	for _, c := range []struct{ state, chip, label string }{
+		{"", "declared", "Declared"},
+		{"published", "ok", "Published"},
+		{"updated", "ok", "Updated"},
+		{"deprecated", "warn", "Deprecated"},
+		{"removed", "crit", "Removed"},
+		{"failed", "crit", "Failed"},
+	} {
+		if got := deliverableChip(c.state); got != c.chip {
+			t.Errorf("deliverableChip(%q) = %q, want %q", c.state, got, c.chip)
+		}
+		if got := deliverableLabel(c.state); got != c.label {
+			t.Errorf("deliverableLabel(%q) = %q, want %q", c.state, got, c.label)
+		}
+	}
+}
+
+// TestDeliverablesPageShowsTheReport renders the page with one reported and
+// one unreported row: the reported one shows its state and the time the
+// emitter reported, the unreported one still says Declared, and the page no
+// longer claims that nothing can report at all.
+func TestDeliverablesPageShowsTheReport(t *testing.T) {
+	reportedAt := time.Date(2026, 8, 19, 9, 12, 0, 0, time.UTC)
+	var b strings.Builder
+	err := Deliverables(DeliverablesView{
+		Page:    PageProps{Title: "Deliverables"},
+		Project: CockpitProject{ID: "p", Name: "Project", Key: "P"},
+		Deliverables: []DeliverableRow{
+			{
+				ID: "P-DEL-1", Name: "Casualties", CreatedAt: reportedAt,
+				Artifact:      "bigquery://sunstone-prod/cow/casualties",
+				ReportedState: "published", ReportedAt: &reportedAt,
+			},
+			{ID: "P-DEL-2", Name: "Methodology", CreatedAt: reportedAt},
+		},
+	}).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("render Deliverables: %v", err)
+	}
+	body := b.String()
+
+	for _, want := range []string{
+		`class="chip ok"`, "Published",
+		"bigquery://sunstone-prod/cow/casualties",
+		"reported 2026-08-19 09:12",
+		`class="chip declared"`, "Declared",
+		"poll prober",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page is missing %q", want)
+		}
+	}
+	if strings.Contains(body, "are not built yet") {
+		t.Error("the page still says no emitter can report a deliverable state")
+	}
+}

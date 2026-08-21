@@ -84,6 +84,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /auth/callback":          open("finishes the login flow"),
 	"POST /hooks/github":          open("authenticated by HMAC signature, not by an actor"),
 	"POST /hooks/flux":            open("authenticated by HMAC signature, not by an actor"),
+	"POST /hooks/catalog":         open("authenticated by HMAC signature, not by an actor"),
 	"GET /auth/oidc/config":       open("issuer discovery the CLI needs before it can log in"),
 	"POST /auth/oidc/token":       open("exchanges a verified Keycloak ID token for a wl_ token"),
 	"GET /.well-known/lode-login": open("login-endpoint discovery, by definition pre-login"),

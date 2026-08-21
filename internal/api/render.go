@@ -152,8 +152,9 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 }
 
 // deliverablesView maps a project's declared deliverables into the project's
-// Deliverables page. No row carries a state, because none is stored (spec 029
-// §3.2) — the page says so once rather than per row.
+// Deliverables page. A row's state is not stored (spec 029 §3.2): it is the
+// newest evidence reported against the declared address, carried on the read
+// projection, and empty until an emitter reports one.
 func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.DeliverablesView {
 	v := ui.DeliverablesView{
 		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Deliverables"},
@@ -164,12 +165,15 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.D
 	}
 	for _, d := range items {
 		v.Deliverables = append(v.Deliverables, ui.DeliverableRow{
-			ID:          d.ID,
-			Name:        d.Name,
-			Description: d.Description,
-			URL:         d.URL,
-			CreatedBy:   d.CreatedBy,
-			CreatedAt:   d.CreatedAt,
+			ID:            d.ID,
+			Name:          d.Name,
+			Description:   d.Description,
+			URL:           d.URL,
+			CreatedBy:     d.CreatedBy,
+			CreatedAt:     d.CreatedAt,
+			Artifact:      d.Artifact,
+			ReportedState: d.ReportedState,
+			ReportedAt:    d.ReportedAt,
 		})
 	}
 	return v
