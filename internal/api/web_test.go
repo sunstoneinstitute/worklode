@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -513,8 +515,29 @@ func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
 	}
 }
 
+// TestHomePage covers Home's open-mode degradation (constraints: no actor,
+// LODE_WEB_OPEN): every project, newest activity first, and never a role
+// badge or a signal line — those claim a relationship an anonymous viewer
+// does not have.
 func TestHomePage(t *testing.T) {
-	_, h, _ := newTestServer(t)
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj1")
+	createProject(t, st, "proj2")
+
+	// A driven clock, because task timestamps are truncated to the second:
+	// two tasks created in the same wall-clock second would tie, and the tie
+	// break is project id ascending — which is the order this test is about
+	// proving Home does not use.
+	now := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	st.SetNowFunc(func() time.Time { return now })
+
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj1", "title": "Older work", "priority": "medium", "kind": "feature",
+	})
+	now = now.Add(time.Hour)
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj2", "title": "Newer work", "priority": "medium", "kind": "feature",
+	})
 
 	rr := doReq(t, h, "GET", "/", "", nil)
 	if rr.Code != http.StatusOK {
@@ -523,7 +546,137 @@ func TestHomePage(t *testing.T) {
 	body := rr.Body.String()
 	assertShell(t, body)
 	assertOneAriaCurrent(t, body)
-	bodyContains(t, body, "<h1>Home</h1>", "Current work")
+	bodyContains(t, body, "<h1>Home</h1>")
+	if strings.Contains(body, "Current work") {
+		t.Errorf("open-mode Home still renders the retired board framing %q", "Current work")
+	}
+	assertOrder(t, body, `href="/projects/proj2"`, `href="/projects/proj1"`)
+
+	main := mainContent(t, body)
+	for _, unwanted := range []string{"You lead", "awaiting you", "You are on this project", ">Lead<", ">Member<"} {
+		if strings.Contains(main, unwanted) {
+			t.Errorf("open-mode Home claims a viewer relationship it cannot know: %q\n%s", unwanted, main)
+		}
+	}
+}
+
+// TestHomePageActorTiers drives Home as a logged-in person and pins the tier
+// order from the plan's global constraints: approvals awaiting you, then
+// projects you lead, then projects you are on. The seeded activity runs the
+// other way round (pawait is the oldest, pmember the newest), so a page that
+// sorted by activity alone would render the exact reverse.
+func TestHomePageActorTiers(t *testing.T) {
+	st, h, iss := newOIDCServer(t, api.Config{})
+	token := seedActor(t, st, "alice", "human", "Alice", true)
+
+	createProject(t, st, "pawait")
+	createProject(t, st, "plead")
+	createProject(t, st, "pmember")
+
+	// Driven clock: task timestamps truncate to the second, so activity has
+	// to be spaced deliberately for "tier beats recency" to mean anything.
+	now := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	st.SetNowFunc(func() time.Time { return now })
+
+	awaitTask := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "pawait", "title": "Awaiting work", "priority": "medium", "kind": "feature",
+	})["id"].(string)
+
+	// Seeded before the other two projects' tasks so pawait stays the least
+	// recently active project whatever the PR upsert touches.
+	seedEvent(t, st, "home-approval", func(tx *sql.Tx, _ int64) error {
+		if _, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: "acme/widgets", Number: 7, Title: "Awaiting PR", State: "open",
+			HeadRef: awaitTask + "-awaiting", HeadSHA: "shaawait",
+			URL: "https://github.com/acme/widgets/pull/7", OpenedAt: st.Now(),
+		}, ""); err != nil {
+			return err
+		}
+		role := "science-leads"
+		return store.InsertAwaitingApproval(tx, st.Now(), "pr",
+			store.PREntityID("acme/widgets", 7), "shaawait", &role, nil)
+	})
+
+	now = now.Add(time.Hour)
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "plead", "title": "Lead work", "priority": "medium", "kind": "feature",
+	})
+	now = now.Add(time.Hour)
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "pmember", "title": "Member work", "priority": "medium", "kind": "feature",
+	})
+
+	// The groups claim is what reaches the approval's required_role: the
+	// awaiting tier is earned by the group, not by being named personally.
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user", "science-leads"},
+	}
+	session := webLogin(t, h, "grace")
+
+	// Crew rows come after login: the actor row is minted by the callback.
+	seedEvent(t, st, "home-crew", func(tx *sql.Tx, eventID int64) error {
+		if err := store.AddParticipant(tx, st.Now(), "plead", "grace", "engineer", true, "alice", eventID); err != nil {
+			return err
+		}
+		return store.AddParticipant(tx, st.Now(), "pmember", "grace", "engineer", false, "alice", eventID)
+	})
+
+	rr := withSession(t, h, "GET", "/", session, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	bodyContains(t, body, "<h1>Home</h1>")
+
+	main := mainContent(t, body)
+	assertOrder(t, main,
+		`href="/projects/pawait"`, "1 approval awaiting you",
+		`href="/projects/plead"`, "You lead this project",
+		`href="/projects/pmember"`, "You are on this project",
+	)
+	// One Lead badge and one Member badge: the awaiting card is a
+	// non-member's, so it carries no role at all.
+	if got := strings.Count(main, ">Lead<"); got != 1 {
+		t.Errorf("Lead badge count = %d, want 1\n%s", got, main)
+	}
+	if got := strings.Count(main, ">Member<"); got != 1 {
+		t.Errorf("Member badge count = %d, want 1\n%s", got, main)
+	}
+}
+
+// TestHomePageEmptyState covers the second required degradation: a signed-in
+// actor on no project, with nothing awaiting them, is told so and pointed at
+// the portfolio — never given a card for a project they are not on.
+func TestHomePageEmptyState(t *testing.T) {
+	st, h, iss := newOIDCServer(t, api.Config{})
+	token := seedActor(t, st, "alice", "human", "Alice", true)
+	createProject(t, st, "proj1")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj1", "title": "Somebody else's work", "priority": "medium", "kind": "feature",
+	})
+
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user"},
+	}
+	session := webLogin(t, h, "grace")
+
+	rr := withSession(t, h, "GET", "/", session, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+
+	main := mainContent(t, body)
+	bodyContains(t, main, "You are not on any project yet.", `href="/projects"`, "Browse all projects")
+	if strings.Contains(main, "homecard") {
+		t.Errorf("empty state renders a project card:\n%s", main)
+	}
 }
 
 func TestWorkPageOrgBoard(t *testing.T) {

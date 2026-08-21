@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -210,6 +211,61 @@ func TestObserveNavigation(t *testing.T) {
 func TestObserveNavigationNilSafe(t *testing.T) {
 	s := &server{}
 	s.observeNavigation("home", "ok")
+}
+
+func TestObserveHomeRender(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeHomeRender(homeModeActor)
+	s.observeHomeRender(homeModeActor)
+	s.observeHomeRender(homeModeOpen)
+
+	for _, tc := range []struct {
+		mode string
+		want float64
+	}{
+		{homeModeActor, 2},
+		{homeModeOpen, 1},
+		// Pre-initialised, so an instance nobody has landed empty on reads as
+		// a flat zero rather than as no-data.
+		{homeModeEmpty, 0},
+	} {
+		if got := testutil.ToFloat64(s.homeRenders.WithLabelValues(tc.mode)); got != tc.want {
+			t.Fatalf("homeRenders{mode=%s} = %v, want %v", tc.mode, got, tc.want)
+		}
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var modes []string
+	for _, mf := range mfs {
+		if mf.GetName() != "worklode_web_home_renders_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				modes = append(modes, l.GetName()+"="+l.GetValue())
+			}
+		}
+	}
+	// The label is bounded to exactly the three modes: never a project id.
+	want := []string{"mode=actor", "mode=empty", "mode=open"}
+	slices.Sort(modes)
+	if !slices.Equal(modes, want) {
+		t.Fatalf("worklode_web_home_renders_total series = %v, want %v", modes, want)
+	}
+}
+
+// TestObserveHomeRenderNilSafe checks a *server built without initMetrics
+// (as tests in this package do) does not panic when homePage calls
+// observeHomeRender.
+func TestObserveHomeRenderNilSafe(t *testing.T) {
+	s := &server{}
+	s.observeHomeRender(homeModeOpen)
 }
 
 func TestObserveListExpansion(t *testing.T) {

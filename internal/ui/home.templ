@@ -1,0 +1,60 @@
+package ui
+
+// home.templ renders the Home project list (spec 032 §9, first slice): the
+// actor's tiered project cards in "actor" mode, every project by last
+// activity with no role badge or signal in "open" mode (no actor —
+// LODE_WEB_OPEN, or a login provider not yet configured), or the honest
+// empty state for an actor on no projects and nothing awaiting them
+// ("empty"). Never a fabricated card.
+
+templ Home(v HomeView) {
+	@Page(v.Page) {
+		@globalShell(v.Page.ActiveGlobal) {
+			<h1>Home</h1>
+			if v.Mode == "empty" {
+				<p class="muted">You are not on any project yet. <a href="/projects">Browse all projects</a></p>
+			} else if len(v.Cards) == 0 {
+				<p class="muted">No projects yet.</p>
+			} else {
+				<div class="homegrid">
+					for _, c := range v.Cards {
+						@homeCard(c)
+					}
+				</div>
+			}
+		}
+	}
+}
+
+// homeCard renders one project card as a single link (032 §10:
+// keyboard-operable, no nested interactive elements) carrying identity, the
+// optional role badge and signal line, the counts strip (label text plus
+// number, never colour alone), the crew row, and the last-activity line.
+templ homeCard(c HomeCard) {
+	<a class="homecard" href={ "/projects/" + c.ProjectID }>
+		<div class="hc-head">
+			<div class="hc-name">{ c.Name }</div>
+			<span class="chip plain mono">{ c.Key }</span>
+			if c.RoleBadge != "" {
+				<span class={ "chip " + homeRoleChip(c.RoleBadge) }>{ c.RoleBadge }</span>
+			}
+		</div>
+		if c.Signal != "" {
+			<p class="hc-signal small muted">{ c.Signal }</p>
+		}
+		<div class="hc-counts small muted">
+			<span>In progress { c.InProgress }</span>
+			<span>In review { c.InReview }</span>
+			<span>Blocked { c.Blocked }</span>
+		</div>
+		<div class="hc-crew">
+			for _, initials := range c.CrewInitials {
+				<span class="avatar" aria-hidden="true">{ initials }</span>
+			}
+			if c.CrewMore > 0 {
+				<span class="chip plain">+{ c.CrewMore }</span>
+			}
+		</div>
+		<p class="hc-activity small muted">{ homeActivity(c.LastActivity) }</p>
+	</a>
+}

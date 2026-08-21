@@ -31,14 +31,11 @@ type PageProps struct {
 	ActiveGlobal string
 }
 
-// --- board (Home / Work) ----------------------------------------------------
+// --- board (Work) ------------------------------------------------------------
 
-// BoardView is the org-wide board shared by Home ("/") and Work ("/work"):
-// same data, only the heading and ActiveGlobal differ (IsHome switches the
-// heading).
+// BoardView is the org-wide board rendered at Work ("/work").
 type BoardView struct {
 	Page           PageProps
-	IsHome         bool
 	InboxCount     int
 	Projects       []BoardProject
 	RecentFailures []BoardFailure
@@ -535,10 +532,12 @@ func modeLabel(mode string) string {
 	}
 }
 
-// initials returns up to two uppercase initials for a display name, for the
-// avatar badges in the Active-work list and decision rail. An empty name
-// yields "" (a blank avatar), never a fabricated placeholder.
-func initials(name string) string {
+// Initials returns up to two uppercase initials for a display name, for the
+// avatar badges in the Active-work list and decision rail, and for
+// internal/api's Home card crew mapping (assembled facts carry full names,
+// never truncated ones). An empty name yields "" (a blank avatar), never a
+// fabricated placeholder.
+func Initials(name string) string {
 	out := make([]rune, 0, 2)
 	for _, field := range strings.Fields(name) {
 		// Fields never yields an empty string, so there is always a first rune.
@@ -566,9 +565,9 @@ func workRowWhoClass(item WorkRow) string {
 // (unassigned — a blank avatar, never invented).
 func workRowInitials(item WorkRow) string {
 	if item.Delegate != "" {
-		return initials(item.Delegate)
+		return Initials(item.Delegate)
 	}
-	return initials(item.Owner)
+	return Initials(item.Owner)
 }
 
 // workRowActors renders a work row's who-line: the delegated agent acting on
@@ -593,6 +592,51 @@ func pluralSuffix(n int) string {
 		return "s"
 	}
 	return ""
+}
+
+// --- home project list -------------------------------------------------------
+
+// HomeView is the Home project list (spec 032 §9, first slice). Mode is
+// "actor" (signed-in, has cards), "open" (no actor — all projects, no role
+// badge or signal), or "empty" (an actor on no projects); it also labels the
+// worklode_web_home_renders_total metric, so the three values are fixed.
+type HomeView struct {
+	Page  PageProps
+	Mode  string
+	Cards []HomeCard
+}
+
+// HomeCard is one project card, density B: identity, role badge ("Lead",
+// "Member", or "" when the viewer has no role), the one-line signal saying
+// why the card sits where it does ("" in open mode), the three-count strip,
+// up to five crew initials plus an overflow count, and last activity (zero
+// time = no tasks yet). The whole card links to /projects/{ProjectID}.
+type HomeCard struct {
+	ProjectID, Name, Key          string
+	RoleBadge                     string
+	Signal                        string
+	InProgress, InReview, Blocked int
+	CrewInitials                  []string
+	CrewMore                      int
+	LastActivity                  time.Time
+}
+
+// homeActivity renders a card's last-activity line, honest about absence.
+func homeActivity(t time.Time) string {
+	if t.IsZero() {
+		return "No activity yet"
+	}
+	return "Last activity " + fmtTime(t)
+}
+
+// homeRoleChip returns the .chip variant class for a Home card's role badge,
+// reusing the Lead affordance's existing accent styling (crew.templ) for
+// "Lead" and the neutral variant for "Member".
+func homeRoleChip(badge string) string {
+	if badge == "Lead" {
+		return "lead"
+	}
+	return "plain"
 }
 
 // --- CLI login (spec 001 §8.7) ----------------------------------------------

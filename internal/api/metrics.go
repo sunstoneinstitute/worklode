@@ -55,6 +55,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_web_navigation_requests_total",
 		Help: "Web UI navigation requests, by destination and outcome (ok, not_found, error).",
 	}, []string{"destination", "outcome"})
+	s.homeRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_home_renders_total",
+		Help: "Home page renders, by mode (" + strings.Join(homeRenderModes, ", ") +
+			"). A rising \"empty\" share means people are landing on a Home with nothing on it, and a stuck \"open\" share on an instance that has a login provider means requests are arriving unauthenticated. Bounded by construction: no project or task id is a label here.",
+	}, []string{"mode"})
 	s.authzDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_authz_decisions_total",
 		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
@@ -167,7 +172,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.formSubmissions, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
@@ -209,6 +214,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 				s.crewChanges.WithLabelValues(surface, action, outcome)
 			}
 		}
+	}
+	// All three Home modes, so "nobody has hit the empty state" reads as a
+	// flat zero rather than as no-data.
+	for _, mode := range homeRenderModes {
+		s.homeRenders.WithLabelValues(mode)
 	}
 	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove"} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
@@ -431,6 +441,26 @@ func (s *server) observeNavigation(destination, outcome string) {
 		return
 	}
 	s.navigations.WithLabelValues(destination, outcome).Inc()
+}
+
+// The three Home render modes (see homePage), which are also this metric's
+// only label values. ui.HomeView.Mode carries the same string into the
+// template, so the label and the rendered markup cannot drift apart.
+const (
+	homeModeActor = "actor"
+	homeModeOpen  = "open"
+	homeModeEmpty = "empty"
+)
+
+var homeRenderModes = []string{homeModeActor, homeModeOpen, homeModeEmpty}
+
+// observeHomeRender records one Home page render, by mode.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeHomeRender(mode string) {
+	if s.homeRenders == nil {
+		return
+	}
+	s.homeRenders.WithLabelValues(mode).Inc()
 }
 
 // formOutcome classifies a creation-form error for the
