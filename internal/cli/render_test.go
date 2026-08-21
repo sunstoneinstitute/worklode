@@ -784,3 +784,25 @@ func TestReconcileRenderNamesDryRun(t *testing.T) {
 		}
 	}
 }
+
+// The two caps a replay run works under are re-run signals, so the human
+// view has to name them — a truncated batch and a trimmed error list are
+// invisible in the counts alone.
+func TestReconcileRenderNamesCaps(t *testing.T) {
+	var buf bytes.Buffer
+	ReconcileRender(&buf, model.ReconcileResponse{
+		RunID: "r2",
+		Replay: &model.ReplayResult{Candidates: 500, Replayed: 400, Truncated: true,
+			Errors: []string{"boom"}, ErrorsOmitted: 99},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"  error: boom",
+		"  ... and 99 more error(s), not reported",
+		"  batch full: more candidates remain, run again",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
