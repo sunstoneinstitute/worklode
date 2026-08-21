@@ -826,7 +826,53 @@ func TestResumeResolvesLayoutFromTargetDirNotCwd(t *testing.T) {
 
 // --- lode done ----------------------------------------------------------
 
-func TestDoneCompletesTaskAndReleasesLease(t *testing.T) {
+// TestDoneSubmitsForReviewAndReleasesLease: `lode done` hands the worktree's
+// task off for review and closes the lease. It is the WL-96 regression — the
+// task is in_progress with no PR anywhere, and `done` must not claim `merged`,
+// which asserts the work landed on the default branch.
+func TestDoneSubmitsForReviewAndReleasesLease(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Finish this")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+	if _, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v", err)
+	}
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-finish-this")
+
+	t.Chdir(dir)
+	out, err := runLode(t, "done", "--json")
+	if err != nil {
+		t.Fatalf("lode done: %v\noutput: %s", err, out)
+	}
+	var reported model.Task
+	if err := json.Unmarshal([]byte(out), &reported); err != nil {
+		t.Fatalf("decode lode done --json %q: %v", out, err)
+	}
+	if reported.State != "in_review" {
+		t.Errorf("reported state = %q, want in_review", reported.State)
+	}
+
+	detail, _, err := c.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if detail.State == "merged" {
+		t.Fatalf("task state = merged: lode done jumped to merged with no PR opened")
+	}
+	if detail.State != "in_review" {
+		t.Fatalf("task state = %q, want in_review", detail.State)
+	}
+	if detail.Lease != nil {
+		t.Fatalf("task lease after done = %+v, want nil", detail.Lease)
+	}
+}
+
+// TestDoneOnAlreadySubmittedTask: a worker that ran `lode task submit` before
+// `lode done` still gets its lease released instead of a transition error.
+func TestDoneOnAlreadySubmittedTask(t *testing.T) {
 	st, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	task := createTestTask(t, c, "Finish this")
@@ -842,15 +888,15 @@ func TestDoneCompletesTaskAndReleasesLease(t *testing.T) {
 	t.Chdir(dir)
 	out, err := runLode(t, "done", "--json")
 	if err != nil {
-		t.Fatalf("lode done: %v\noutput: %s", err, out)
+		t.Fatalf("lode done on an in_review task: %v\noutput: %s", err, out)
 	}
 
 	detail, _, err := c.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("get task: %v", err)
 	}
-	if detail.State != "merged" {
-		t.Fatalf("task state = %q, want merged", detail.State)
+	if detail.State != "in_review" {
+		t.Fatalf("task state = %q, want in_review", detail.State)
 	}
 	if detail.Lease != nil {
 		t.Fatalf("task lease after done = %+v, want nil", detail.Lease)
