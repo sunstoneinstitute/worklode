@@ -6,7 +6,10 @@
 // local id are permitted (slash namespace, opaque path).
 package iri
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // Namespace roots (006 §10). Untyped constants so callers can build
 // prefixes directly, e.g. iri.IDNS + "task/".
@@ -57,6 +60,20 @@ func Component(slug string) string {
 // Doc returns the instance IRI of a design document.
 func Doc(slug string) string {
 	return IDNS + "doc/" + slug
+}
+
+// Section returns the IRI of an addressable design-document section
+// (025 §3): id/section/<doc-slug>/<anchor>. The anchor is assigned at first
+// publication and never changes, so the IRI is as durable as the document's.
+func Section(docSlug, anchor string) string {
+	return IDNS + "section/" + docSlug + "/" + anchor
+}
+
+// DocVersion returns the immutable versioned sibling IRI of a design
+// document (025 §4): id/doc/<slug>/v<n>. Everything links to the canonical
+// Doc IRI by default; versioned IRIs appear only in pinned claims.
+func DocVersion(slug string, version int) string {
+	return IDNS + "doc/" + slug + "/v" + strconv.Itoa(version)
 }
 
 // Deliverable returns the instance IRI of a deliverable.
