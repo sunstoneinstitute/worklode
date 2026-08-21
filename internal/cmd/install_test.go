@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
@@ -443,9 +444,9 @@ func TestInstallHooksSkipsOptedOutIntegrations(t *testing.T) {
 	if res2.VCS != nil {
 		t.Fatalf("VCS result = %+v, want nil when the VCS is skipped", res2.VCS)
 	}
-	hooksDir, err := resolveHooksDir(root2)
+	hooksDir, err := githooks.Dir(root2)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("githooks.Dir: %v", err)
 	}
 	if fileExists(filepath.Join(hooksDir, "pre-commit")) {
 		t.Fatal("--no-vcs wrote a pre-commit hook")
@@ -463,8 +464,8 @@ func TestUninstallHooksUndoesInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstallHooks: %v", err)
 	}
-	if res.VCS == nil || actionFor(t, res.VCS.Hooks, "pre-commit") != hookActionRemoved {
-		t.Fatalf("VCS result = %+v, want action %q", res.VCS, hookActionRemoved)
+	if res.VCS == nil || actionFor(t, res.VCS.Hooks, "pre-commit") != githooks.ActionRemoved {
+		t.Fatalf("VCS result = %+v, want action %q", res.VCS, githooks.ActionRemoved)
 	}
 	if fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
 		t.Fatal("pre-commit still present after uninstall")
@@ -553,8 +554,8 @@ func TestUninstallHooksReturnsPartialResultOnAgentFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("uninstallHooks with corrupt settings: err = nil, want a parse error")
 	}
-	if res.VCS == nil || actionFor(t, res.VCS.Hooks, "pre-commit") != hookActionRemoved {
-		t.Fatalf("partial result VCS = %+v, want action %q: the git hook step already succeeded", res.VCS, hookActionRemoved)
+	if res.VCS == nil || actionFor(t, res.VCS.Hooks, "pre-commit") != githooks.ActionRemoved {
+		t.Fatalf("partial result VCS = %+v, want action %q: the git hook step already succeeded", res.VCS, githooks.ActionRemoved)
 	}
 	if fileExists(filepath.Join(res.VCS.HooksDir, "pre-commit")) {
 		t.Fatal("pre-commit still present: the VCS uninstall step should have removed it")
@@ -574,9 +575,9 @@ func TestInstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	if err == nil {
 		t.Fatal("install with corrupt settings: err = nil, want a parse error")
 	}
-	hooksDir, herr := resolveHooksDir(root)
+	hooksDir, herr := githooks.Dir(root)
 	if herr != nil {
-		t.Fatalf("resolveHooksDir: %v", herr)
+		t.Fatalf("githooks.Dir: %v", herr)
 	}
 	if !fileExists(filepath.Join(hooksDir, "pre-commit")) {
 		t.Fatal("pre-commit was not installed despite the VCS step succeeding")
@@ -599,9 +600,9 @@ func TestUninstallCmdReportsPartialResultBeforeFailing(t *testing.T) {
 	if err == nil {
 		t.Fatal("uninstall with corrupt settings: err = nil, want a parse error")
 	}
-	hooksDir, herr := resolveHooksDir(root)
+	hooksDir, herr := githooks.Dir(root)
 	if herr != nil {
-		t.Fatalf("resolveHooksDir: %v", herr)
+		t.Fatalf("githooks.Dir: %v", herr)
 	}
 	if fileExists(filepath.Join(hooksDir, "pre-commit")) {
 		t.Fatal("pre-commit still present: the VCS uninstall step should have removed it despite the later agent failure")
@@ -618,7 +619,7 @@ func TestReportUninstallUnknownVCSActionIsHonest(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 	res := uninstallResult{VCS: &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
-		Hooks: []hookRemoval{{Hook: "pre-commit", Action: "bogus"}}}}
+		Hooks: []githooks.Removal{{Hook: "pre-commit", Action: "bogus"}}}}
 	if err := reportUninstall(cmd, res); err != nil {
 		t.Fatalf("reportUninstall: %v", err)
 	}
@@ -669,7 +670,7 @@ func TestReportInstallLinesWithChainTarget(t *testing.T) {
 
 	res := installResult{
 		VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
-			Hooks: []hookChain{{Hook: "pre-commit", ChainedTo: "/repo/.git/hooks/pre-commit.pre-lode"}}},
+			Hooks: []githooks.Chain{{Hook: "pre-commit", ChainedTo: "/repo/.git/hooks/pre-commit.pre-lode"}}},
 		Agents: []agentInstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json",
 			Bound: []string{"SessionStart"}}},
 	}
@@ -690,7 +691,7 @@ func TestReportInstallNoChainLineWhenNothingToChainTo(t *testing.T) {
 	cmd.SetOut(&buf)
 
 	res := installResult{VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
-		Hooks: []hookChain{{Hook: "pre-commit"}}}}
+		Hooks: []githooks.Chain{{Hook: "pre-commit"}}}}
 	if err := reportInstall(cmd, res); err != nil {
 		t.Fatalf("reportInstall: %v", err)
 	}
@@ -704,16 +705,16 @@ func TestReportUninstallVCSActions(t *testing.T) {
 	for _, tc := range []struct {
 		name, action, want string
 	}{
-		{"removed", hookActionRemoved, "git: removed pre-commit hook from /repo/.git/hooks\n"},
-		{"restored", hookActionRestored, "git: removed pre-commit hook from /repo/.git/hooks and restored the previous one\n"},
-		{"none", hookActionNone, "git: no Worklode pre-commit hook in /repo/.git/hooks\n"},
+		{"removed", githooks.ActionRemoved, "git: removed pre-commit hook from /repo/.git/hooks\n"},
+		{"restored", githooks.ActionRestored, "git: removed pre-commit hook from /repo/.git/hooks and restored the previous one\n"},
+		{"none", githooks.ActionNone, "git: no Worklode pre-commit hook in /repo/.git/hooks\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			var buf bytes.Buffer
 			cmd.SetOut(&buf)
 			res := uninstallResult{VCS: &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
-				Hooks: []hookRemoval{{Hook: "pre-commit", Action: tc.action}}}}
+				Hooks: []githooks.Removal{{Hook: "pre-commit", Action: tc.action}}}}
 			if err := reportUninstall(cmd, res); err != nil {
 				t.Fatalf("reportUninstall: %v", err)
 			}
@@ -728,8 +729,8 @@ func TestReportUninstallAgentActions(t *testing.T) {
 	for _, tc := range []struct {
 		name, action, want string
 	}{
-		{"removed", hookActionRemoved, "claude-code: removed hooks from /repo/.claude/settings.local.json\n"},
-		{"none", hookActionNone, "claude-code: no Worklode hooks in /repo/.claude/settings.local.json\n"},
+		{"removed", harness.ActionRemoved, "claude-code: removed hooks from /repo/.claude/settings.local.json\n"},
+		{"none", harness.ActionNone, "claude-code: no Worklode hooks in /repo/.claude/settings.local.json\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
@@ -761,7 +762,7 @@ func TestReportInstallJSON(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := jsonCmd(&buf)
 	res := installResult{VCS: &vcsInstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
-		Hooks: []hookChain{{Hook: "pre-commit"}}}}
+		Hooks: []githooks.Chain{{Hook: "pre-commit"}}}}
 	if err := reportInstall(cmd, res); err != nil {
 		t.Fatalf("reportInstall: %v", err)
 	}
@@ -782,24 +783,24 @@ func TestReportUninstallJSON(t *testing.T) {
 	cmd := jsonCmd(&buf)
 	res := uninstallResult{
 		VCS: &vcsUninstall{VCS: vcsGit, HooksDir: "/repo/.git/hooks",
-			Hooks: []hookRemoval{{Hook: "pre-commit", Action: hookActionRemoved}}},
-		Agents: []agentUninstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: hookActionNone}},
+			Hooks: []githooks.Removal{{Hook: "pre-commit", Action: githooks.ActionRemoved}}},
+		Agents: []agentUninstall{{Agent: claudeCode, Path: "/repo/.claude/settings.local.json", Action: harness.ActionNone}},
 	}
 	if err := reportUninstall(cmd, res); err != nil {
 		t.Fatalf("reportUninstall: %v", err)
 	}
 	var decoded struct {
-		VCS    struct{ Hooks []hookRemoval } `json:"vcs"`
-		Agents []struct{ Action string }     `json:"agents"`
+		VCS    struct{ Hooks []githooks.Removal } `json:"vcs"`
+		Agents []struct{ Action string }          `json:"agents"`
 	}
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("decode %s: %v", buf.String(), err)
 	}
-	if got := actionFor(t, decoded.VCS.Hooks, "pre-commit"); got != hookActionRemoved {
-		t.Fatalf("vcs pre-commit action = %q, want %q", got, hookActionRemoved)
+	if got := actionFor(t, decoded.VCS.Hooks, "pre-commit"); got != githooks.ActionRemoved {
+		t.Fatalf("vcs pre-commit action = %q, want %q", got, githooks.ActionRemoved)
 	}
-	if len(decoded.Agents) != 1 || decoded.Agents[0].Action != hookActionNone {
-		t.Fatalf("agents = %+v, want one entry with action %q", decoded.Agents, hookActionNone)
+	if len(decoded.Agents) != 1 || decoded.Agents[0].Action != harness.ActionNone {
+		t.Fatalf("agents = %+v, want one entry with action %q", decoded.Agents, harness.ActionNone)
 	}
 }
 
@@ -854,17 +855,17 @@ func TestUninstallCmdJSONIncludesActionOnBothSides(t *testing.T) {
 	}
 
 	var decoded struct {
-		VCS    struct{ Hooks []hookRemoval } `json:"vcs"`
-		Agents []struct{ Action string }     `json:"agents"`
+		VCS    struct{ Hooks []githooks.Removal } `json:"vcs"`
+		Agents []struct{ Action string }          `json:"agents"`
 	}
 	if err := json.Unmarshal(buf.Bytes(), &decoded); err != nil {
 		t.Fatalf("decode %s: %v", buf.String(), err)
 	}
-	if got := actionFor(t, decoded.VCS.Hooks, "pre-commit"); got != hookActionRemoved {
-		t.Fatalf("vcs pre-commit action = %q, want %q", got, hookActionRemoved)
+	if got := actionFor(t, decoded.VCS.Hooks, "pre-commit"); got != githooks.ActionRemoved {
+		t.Fatalf("vcs pre-commit action = %q, want %q", got, githooks.ActionRemoved)
 	}
-	if len(decoded.Agents) != 1 || decoded.Agents[0].Action != hookActionRemoved {
-		t.Fatalf("agents = %+v, want one entry with action %q", decoded.Agents, hookActionRemoved)
+	if len(decoded.Agents) != 1 || decoded.Agents[0].Action != harness.ActionRemoved {
+		t.Fatalf("agents = %+v, want one entry with action %q", decoded.Agents, harness.ActionRemoved)
 	}
 }
 

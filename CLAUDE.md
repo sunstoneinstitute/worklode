@@ -145,6 +145,8 @@ path, so re-running is safe).
 Cross-cutting pieces: `internal/gitexec` (every `git` subprocess in the
 binary, so environment policy and error shape live in one place — a guard
 test fails the build on a direct `exec.Command("git", ...)` anywhere else),
+the files `lode install` manages — git hooks in `internal/githooks`, agent
+settings in `internal/harness` — neither of which `internal/cmd` reimplements,
 worktree-bound leases (`internal/worktree`,
 `internal/hookrun`), agent-session tracking priced from the agent's own
 transcript (`internal/transcript`, `store/pricing` — rates are effective-dated
