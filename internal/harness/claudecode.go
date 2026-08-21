@@ -104,30 +104,61 @@ func (ClaudeCode) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
 	return HookUninstall{Path: path, Action: action}, nil
 }
 
-// InstallStatusLine points the scope's settings file at `lode statusline`.
-func (ClaudeCode) InstallStatusLine(repoDir, scope string) (StatusLineAction, error) {
+// InstallWithStatusLine is InstallHooks plus the status line. Both live in the
+// one settings file, so both mutations are applied to a single read and
+// committed by a single write: the pair either lands or does not, and a
+// declined status line (ActionKept) still costs nothing extra.
+func (ClaudeCode) InstallWithStatusLine(repoDir, scope string) (HookInstall, error) {
 	path, err := settingsPathForScope(repoDir, scope)
 	if err != nil {
-		return StatusLineAction{}, err
+		return HookInstall{}, err
 	}
-	action, err := installStatusLine(path)
+	settings, err := ReadJSONFile(path)
 	if err != nil {
-		return StatusLineAction{}, err
+		return HookInstall{}, err
 	}
-	return StatusLineAction{Path: path, Action: action}, nil
+	applyGroupedHooks(settings, claudeBindings)
+	action := applyStatusLine(settings)
+	if err := writeJSONFile(path, settings); err != nil {
+		return HookInstall{}, err
+	}
+	return HookInstall{
+		Path:       path,
+		Bound:      boundNames(claudeBindings),
+		StatusLine: &StatusLineAction{Path: path, Action: action},
+	}, nil
 }
 
-// UninstallStatusLine removes our status line from the scope's settings file.
-func (ClaudeCode) UninstallStatusLine(repoDir, scope string) (StatusLineAction, error) {
+// UninstallWithStatusLine is UninstallHooks plus the status line, over the same
+// single read-modify-write. The file is written only when one of the two
+// actually removed something, so an uninstall that finds nothing of ours — or
+// only a status line someone else configured — leaves the file byte-identical.
+func (ClaudeCode) UninstallWithStatusLine(repoDir, scope string) (HookUninstall, error) {
 	path, err := settingsPathForScope(repoDir, scope)
 	if err != nil {
-		return StatusLineAction{}, err
+		return HookUninstall{}, err
 	}
-	action, err := uninstallStatusLine(path)
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return HookUninstall{
+			Path: path, Action: ActionNone,
+			StatusLine: &StatusLineAction{Path: path, Action: ActionNone},
+		}, nil
+	}
+	settings, err := ReadJSONFile(path)
 	if err != nil {
-		return StatusLineAction{}, err
+		return HookUninstall{}, err
 	}
-	return StatusLineAction{Path: path, Action: action}, nil
+	hooks := stripGroupedHooks(settings)
+	statusLine := stripStatusLine(settings)
+	if hooks == ActionRemoved || statusLine == ActionRemoved {
+		if err := writeJSONFile(path, settings); err != nil {
+			return HookUninstall{}, err
+		}
+	}
+	return HookUninstall{
+		Path: path, Action: hooks,
+		StatusLine: &StatusLineAction{Path: path, Action: statusLine},
+	}, nil
 }
 
 // settingsPathForScope resolves the settings file for scope, relative to the
@@ -183,15 +214,15 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 	if err != nil {
 		return err
 	}
-	if err := installClaudeHooks(dirPath); err != nil {
+	settings, err := ReadJSONFile(dirPath)
+	if err != nil {
 		return err
 	}
+	applyGroupedHooks(settings, claudeBindings)
 	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {
-		if _, err := installStatusLine(dirPath); err != nil {
-			return err
-		}
+		applyStatusLine(settings)
 	}
-	return nil
+	return writeJSONFile(dirPath, settings)
 }
 
 // uninstallClaudeHooks removes Worklode's bindings from the settings file at
@@ -200,54 +231,37 @@ func uninstallClaudeHooks(path string) (action string, err error) {
 	return uninstallGroupedHooks(path)
 }
 
-// installStatusLine points the settings file at `lode statusline`, but only
-// when no status line is configured. A status line is a personal choice and a
-// slot that holds exactly one command, so replacing one the user chose would
-// be a silent theft rather than an install; that case reports ActionKept
-// and leaves the file untouched. A re-run over our own entry rewrites it in
-// place, so install converges.
-func installStatusLine(path string) (action string, err error) {
-	settings, err := ReadJSONFile(path)
-	if err != nil {
-		return "", err
-	}
+// applyStatusLine points an already-read settings object at `lode statusline`,
+// but only when no status line is configured. A status line is a personal
+// choice and a slot that holds exactly one command, so replacing one the user
+// chose would be a silent theft rather than an install; that case reports
+// ActionKept and leaves settings untouched. A re-run over our own entry
+// rewrites it in place, so install converges.
+func applyStatusLine(settings map[string]any) (action string) {
 	if existing, ok := settings["statusLine"]; ok && !isLodeStatusLine(existing) {
-		return ActionKept, nil
+		return ActionKept
 	}
 	settings["statusLine"] = map[string]any{
 		"type":    "command",
 		"command": StatusLineCommand,
 	}
-	if err := writeJSONFile(path, settings); err != nil {
-		return "", err
-	}
-	return ActionInstalled, nil
+	return ActionInstalled
 }
 
-// uninstallStatusLine removes our status line from the settings file at path.
-// A missing file, no status line at all, or someone else's is left exactly as
-// found — ActionNone and ActionKept respectively — because a no-op
-// must not reformat someone's settings JSON or bump its mtime.
-func uninstallStatusLine(path string) (action string, err error) {
-	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-		return ActionNone, nil
-	}
-	settings, err := ReadJSONFile(path)
-	if err != nil {
-		return "", err
-	}
+// stripStatusLine removes our status line from an already-read settings
+// object. No status line at all, or someone else's, leaves settings exactly as
+// read — ActionNone and ActionKept respectively — so the caller knows not to
+// write.
+func stripStatusLine(settings map[string]any) (action string) {
 	existing, ok := settings["statusLine"]
 	if !ok {
-		return ActionNone, nil
+		return ActionNone
 	}
 	if !isLodeStatusLine(existing) {
-		return ActionKept, nil
+		return ActionKept
 	}
 	delete(settings, "statusLine")
-	if err := writeJSONFile(path, settings); err != nil {
-		return "", err
-	}
-	return ActionRemoved, nil
+	return ActionRemoved
 }
 
 // isLodeStatusLine reports whether a statusLine setting runs `lode statusline`.

@@ -36,7 +36,12 @@ func ReadJSONFile(path string) (map[string]any, error) {
 // writeJSONFile writes settings back to path, creating the parent directory
 // if needed. Output is indented and newline-terminated so a committed
 // settings file stays readable and diffs cleanly.
-func writeJSONFile(path string, settings map[string]any) error {
+//
+// It is a var so tests can count writes: an adapter that owns two surfaces in
+// one file (claude-code's hooks and status line) must fold them into a single
+// read-modify-write, and the write count is the only way to observe that from
+// outside.
+var writeJSONFile = func(path string, settings map[string]any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", filepath.Dir(path), err)
 	}
