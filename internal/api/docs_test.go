@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -695,6 +696,107 @@ func TestAcceptDoc(t *testing.T) {
 	}
 	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "plan") {
 		t.Errorf("error = %q, want it to say a plan cannot be accepted yet", msg)
+	}
+}
+
+// TestReAcceptPlanMintsAddedDeclaration: the whole re-accept path through the
+// endpoint (025 §9.2). A plan edited after acceptance carries a new version,
+// so its accept event is a new event and the mint runs, returning only the
+// declaration that had no row; re-accepting the same version again mints
+// nothing and still answers 200 with the document.
+func TestReAcceptPlanMintsAddedDeclaration(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "remint-plan", Body: docPlanMintBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first accept status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var first model.AcceptDocResponse
+	decodeInto(t, rr, &first)
+	if len(first.Tasks) != 2 {
+		t.Fatalf("first accept minted %d tasks, want 2", len(first.Tasks))
+	}
+
+	// The no-op path below must not swallow the assignee gate: another actor
+	// re-accepting an accepted plan is still 403.
+	bobToken := docActor(t, st, "bob")
+	if rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), bobToken, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("other actor re-accept status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+
+	// Re-accepting at the same version: the event id collides, apply is
+	// skipped, and the endpoint says so by answering with the document and no
+	// minted tasks rather than by refusing.
+	rr = doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unedited re-accept status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	var settled model.AcceptDocResponse
+	decodeInto(t, rr, &settled)
+	if settled.Status != "accepted" || len(settled.Tasks) != 0 {
+		t.Errorf("unedited re-accept = %+v, want the accepted doc and no minted tasks", settled)
+	}
+
+	edited := docPlanMintBody + `
+### Task 3 — Third task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do the third thing.
+`
+	rr = doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("edit status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("re-accept status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var second model.AcceptDocResponse
+	decodeInto(t, rr, &second)
+	if len(second.Tasks) != 1 {
+		t.Fatalf("re-accept minted %d tasks, want 1", len(second.Tasks))
+	}
+	if second.Tasks[0].Title != "Third task" {
+		t.Errorf("minted %q, want the added declaration", second.Tasks[0].Title)
+	}
+	for _, task := range first.Tasks {
+		if second.Tasks[0].ID == task.ID {
+			t.Errorf("re-accept returned an already-minted task %s", task.ID)
+		}
+	}
+
+	// The event says what actually happened: the second acceptance left
+	// "accepted", not "draft" — an append-only log may not record a transition
+	// the document never made. Read from the table rather than through
+	// /api/v1/events, whose commit-horizon predicate (025 §15) may not have
+	// caught up with an event committed a moment ago.
+	rows, err := st.DBForTests().Query(
+		`SELECT payload->>'wl:fromStatus' FROM events WHERE type = 'wl:DocumentAccepted' ORDER BY id`)
+	if err != nil {
+		t.Fatalf("read acceptance events: %v", err)
+	}
+	defer rows.Close()
+	var fromStatuses []string
+	for rows.Next() {
+		var from string
+		if err := rows.Scan(&from); err != nil {
+			t.Fatalf("scan wl:fromStatus: %v", err)
+		}
+		fromStatuses = append(fromStatuses, from)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read acceptance events: %v", err)
+	}
+	if !slices.Equal(fromStatuses, []string{"wlc:draft", "wlc:accepted"}) {
+		t.Errorf("wl:fromStatus values = %v, want [wlc:draft wlc:accepted]", fromStatuses)
 	}
 }
 

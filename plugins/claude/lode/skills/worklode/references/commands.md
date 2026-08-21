@@ -30,7 +30,7 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
-- `lode doc accept` — Accept a document (draft -> accepted); only the assignee may accept it
+- `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the assignee may accept it
 - `lode doc anchors` — Lint a markdown file's anchors (and, for a plan, its task definitions)
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification

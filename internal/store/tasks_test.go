@@ -1282,16 +1282,19 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 		t.Fatalf("insert plan b: %v", err)
 	}
 
+	// PlanTaskKey travels with PlanDoc: a CHECK constraint holds the pair
+	// together, because a minted task must say which declaration it covers
+	// (025 §9.2).
 	inA1 := defaultTaskInput()
-	inA1.PlanDoc = planA
+	inA1.PlanDoc, inA1.PlanTaskKey = planA, "A first"
 	a1 := createTask(t, s, taskTestNow, inA1)
 
 	inA2 := defaultTaskInput()
-	inA2.PlanDoc = planA
+	inA2.PlanDoc, inA2.PlanTaskKey = planA, "A second"
 	a2 := createTask(t, s, taskTestNow, inA2)
 
 	inB := defaultTaskInput()
-	inB.PlanDoc = planB
+	inB.PlanDoc, inB.PlanTaskKey = planB, "B first"
 	b1 := createTask(t, s, taskTestNow, inB)
 
 	unplanned := createTask(t, s, taskTestNow, defaultTaskInput())

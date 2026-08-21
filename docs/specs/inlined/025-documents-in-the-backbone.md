@@ -921,6 +921,41 @@ it, both deliberately:
   execution fact and outlives the declaration it came from; withdrawing work is a task
   transition, not a document edit.
 
+**Which declarations have no row yet.** A declaration's identity is its **title**, recorded on
+the task it mints and matched against on every later acceptance. It is recorded rather than
+re-read from the minted task's own title, because that title is execution fact and may be
+edited afterwards — a task renamed during execution must not detach from its declaration and
+have the next acceptance mint a duplicate. It is the title rather than the task number because
+§9.1's numbers renumber the moment a declaration is inserted, and a key that moves identifies
+nothing. Three consequences, all deliberate:
+
+- **Titles are unique within a plan.** Two declarations spelled the same way would have one
+  identity between them, so acceptance refuses the plan instead of picking a row.
+- **Retitling a declaration withdraws it and declares another.** A rename cannot be told from a
+  removal plus an addition, and the rule above already settles both: the existing task stays,
+  untouched, and the retitled declaration mints a new one. Retitle deliberately.
+- **`blockedBy` is wired only for the tasks that acceptance actually minted** (§9.1). An edge
+  into a task that already exists would change how it ranks and when it is claimable, which is
+  a change to an existing row. A soft-deleted task keeps its declaration's identity for the
+  same reason: withdrawn work stays withdrawn rather than being minted again.
+
+**The document may not drift out from under a minted set.** Once a plan has minted anything, a
+body edit that leaves its `## Tasks` section unreadable — no section, an unparseable
+declaration, two declarations sharing a title — is refused at the edit rather than discovered
+at the next acceptance. A plan that has minted nothing is exempt: a draft is written a
+paragraph at a time, and an accepted plan with an empty task set is the historical import
+above.
+
+**A plan's body edit is its next version.** Plans are edited in place rather than revised (§9),
+so nothing else moves a plan's version, and acceptance is keyed on the document's IRI and
+version (§15.3): the bump is what distinguishes a re-acceptance after an edit from a retry of
+the same acceptance. Re-accepting at a version already accepted therefore mints nothing and
+answers with the document unchanged — the no-op an unedited plan should be, never a refusal.
+It re-arms §15.4's review rule for plans by the same token: submitting a plan edited since its
+last submission mints a fresh review task once the previous one has closed, which is what
+§15.4 already does for a spec re-accepted after its design task closed, and correct — the
+edited plan is a new thing to review.
+
 A plan's task set is the query `tasks WHERE plan_doc = <doc>` — §1's rule applied to the case
 that most tempted a row. A root task would own no fact of its own: its state was computed from
 its children (004 §6.5), its body restated the document's, it was never claimable and never
@@ -1753,7 +1788,7 @@ The document and event surface, backed by the backbone store:
 | `lode doc list --needs-execution` | Accepted plans whose task set is unminted or unfinished |
 | `lode doc list --bare-superseded` | Superseded documents whose sections nothing replaces — §6 rule 2, read as a query |
 | `lode doc todo <ref> [--deps]` | One spec's remaining work, ordered: planning gaps, unaccepted plans, unexecuted plans (026 §2.5) |
-| `lode doc accept <id>` | The manual commit; on a plan, mints its tasks (§9.2) |
+| `lode doc accept <id>` | The manual commit; on a plan, mints the tasks its declarations have no row for yet (§9.2) |
 | `lode doc revise <slug>` | Open a candidate revision (§7.2) |
 | `lode doc publish <slug>` | Run the §6 constraints, then the §4 transaction |
 | `lode doc anchors <slug>` | List anchors with depth and addressability; the lint an author runs before publishing |
@@ -2035,3 +2070,7 @@ Two further pieces of work follow from this spec without belonging to it:
     store.
 37. `lode task add` accepts `--body-file`; `--body` and `--body-file` are mutually
     exclusive.
+38. Re-accepting an accepted plan mints only the declarations that have no row yet, changes no
+    existing minted task, and is a no-op rather than an error when the plan declares nothing
+    new; once a plan has minted tasks, a body edit leaving its `## Tasks` section unreadable is
+    refused at the edit.
