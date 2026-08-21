@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
@@ -227,7 +228,7 @@ type vcsInstall struct {
 	HooksDir string `json:"hooks_dir"`
 	// Hooks is one entry per managed git hook, in install order, each naming
 	// what it chains to.
-	Hooks []hookChain `json:"hooks"`
+	Hooks []githooks.Chain `json:"hooks"`
 }
 
 type agentInstall struct {
@@ -270,7 +271,7 @@ type vcsUninstall struct {
 	HooksDir string `json:"hooks_dir"`
 	// Hooks is one entry per managed git hook, in the same order, each
 	// naming what the uninstall did to it.
-	Hooks []hookRemoval `json:"hooks"`
+	Hooks []githooks.Removal `json:"hooks"`
 }
 
 type agentUninstall struct {
@@ -300,7 +301,7 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		}
 	}
 	if targets.vcs != "" {
-		hooksDir, chains, err := installGitHooks(dir)
+		hooksDir, chains, err := githooks.Install(dir)
 		if err != nil {
 			return res, err
 		}
@@ -447,7 +448,7 @@ func installSkills(res *installResult, dir string) error {
 func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallResult, error) {
 	var res uninstallResult
 	if targets.vcs != "" {
-		hooksDir, removals, err := uninstallGitHooks(dir)
+		hooksDir, removals, err := githooks.Uninstall(dir)
 		if err != nil {
 			return res, err
 		}
@@ -694,12 +695,12 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 	if res.VCS != nil {
 		for _, h := range res.VCS.Hooks {
 			switch h.Action {
-			case hookActionRestored:
+			case githooks.ActionRestored:
 				fmt.Fprintf(out, "%s: removed %s hook from %s and restored the previous one\n",
 					res.VCS.VCS, h.Hook, res.VCS.HooksDir)
-			case hookActionRemoved:
+			case githooks.ActionRemoved:
 				fmt.Fprintf(out, "%s: removed %s hook from %s\n", res.VCS.VCS, h.Hook, res.VCS.HooksDir)
-			case hookActionNone:
+			case githooks.ActionNone:
 				fmt.Fprintf(out, "%s: no Worklode %s hook in %s\n", res.VCS.VCS, h.Hook, res.VCS.HooksDir)
 			default:
 				fmt.Fprintf(out, "%s: unexpected uninstall result %q for %s in %s\n",

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/hookrun"
 )
@@ -134,8 +135,8 @@ func hookTriggers() map[string]string {
 		}
 	}
 	triggers := map[string]string{}
-	for _, h := range gitHooks {
-		triggers[h.name] = "git " + h.name
+	for _, h := range githooks.Managed {
+		triggers[h.Name] = "git " + h.Name
 	}
 	for event, entries := range byEvent {
 		triggers[event] = strings.Join(entries, "; ")

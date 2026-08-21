@@ -8,3 +8,7 @@ the checklist in `docs/agent-surfaces.md` — agent-facing markdown across this
 repo and the `sunstoneinstitute/claude-plugins` marketplace hardcodes these
 invocations. `go test -trimpath ./internal/cmd -run TestAgentSurfaces` names
 the in-tree ones that broke; the doc covers the rest.
+
+What `lode install` writes is not decided here: git hook files are
+`internal/githooks`, agent settings files are `internal/harness`. This package
+picks the targets, calls one of them, and reports the result.
