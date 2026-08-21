@@ -152,13 +152,17 @@ func TestParseClusterEnvMap(t *testing.T) {
 	}
 }
 
-// TestGraphProjector: unset LODE_GRAPHSERVER_URL disables projection;
-// URL-only configures an unauthenticated client; a half-configured auth
-// triple (graphserver.FromEnv's contract) fails the boot rather than
-// silently disabling. Each case sets all four LODE_GRAPHSERVER_* variables
-// explicitly, since t.Setenv restores after the test but a var left set from
-// an earlier case would otherwise leak into the next one's meaning.
-func TestGraphProjector(t *testing.T) {
+// TestGraphClientFromEnv: unset LODE_GRAPHSERVER_URL disables the graph
+// (projection and the graph-backed overview reads alike); URL-only configures
+// an unauthenticated client; a half-configured auth triple
+// (graphserver.FromEnv's contract) fails the boot rather than silently
+// disabling. Each case sets all four LODE_GRAPHSERVER_* variables explicitly,
+// since t.Setenv restores after the test but a var left set from an earlier
+// case would otherwise leak into the next one's meaning.
+//
+// graphProjector follows the client, so the projector assertion rides along
+// here: one env read per process is the point of the split.
+func TestGraphClientFromEnv(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		url      string
@@ -168,7 +172,7 @@ func TestGraphProjector(t *testing.T) {
 		wantNil  bool
 		wantErr  bool
 	}{
-		{name: "unset disables projection", url: "", tokenURL: "", clientID: "", secret: "", wantNil: true},
+		{name: "unset disables the graph", url: "", tokenURL: "", clientID: "", secret: "", wantNil: true},
 		{name: "url only", url: "http://localhost:9999", tokenURL: "", clientID: "", secret: "", wantNil: false},
 		{name: "half-configured auth fails boot", url: "http://localhost:9999", tokenURL: "http://localhost:9999/token", clientID: "", secret: "", wantErr: true},
 	} {
@@ -178,16 +182,23 @@ func TestGraphProjector(t *testing.T) {
 			t.Setenv("LODE_GRAPHSERVER_CLIENT_ID", tc.clientID)
 			t.Setenv("LODE_GRAPHSERVER_CLIENT_SECRET", tc.secret)
 
-			p, err := graphProjector(prometheus.NewRegistry(), nil)
+			gc, err := graphClientFromEnv()
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("graphProjector() = %v, nil, want an error", p)
+					t.Fatalf("graphClientFromEnv() = %v, nil, want an error", gc)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("graphProjector(): %v", err)
+				t.Fatalf("graphClientFromEnv(): %v", err)
 			}
+			if tc.wantNil && gc != nil {
+				t.Fatalf("graphClientFromEnv() = %v, want nil (graph disabled)", gc)
+			}
+			if !tc.wantNil && gc == nil {
+				t.Fatal("graphClientFromEnv() = nil, want a client")
+			}
+			p := graphProjector(prometheus.NewRegistry(), nil, gc)
 			if tc.wantNil && p != nil {
 				t.Fatalf("graphProjector() = %v, want nil (projection disabled)", p)
 			}

@@ -170,6 +170,19 @@ const (
 	// act across every project's repos, not just the caller's own work.
 	permReconcile Permission = "reconcile"
 
+	// permOverviewRead covers spec 007's five read surfaces: the roll-up,
+	// drift, gaps, the frontier mirror and the critical path. Its own
+	// capability rather than a flavour of task.read because what it discloses
+	// is a different object — the org-wide shape of the work and where the
+	// code has drifted from the design, joined across the backbone and the
+	// knowledge graph — rather than the tasks a working actor reads.
+	permOverviewRead Permission = "overview.read"
+	// permDeriveRun covers POST /api/v1/derive: running the server-side
+	// derivers. Admin-only, on both counts that separate an operational act
+	// from an ordinary one — it replaces org-wide named graphs wholesale, and
+	// it spends GitHub App API calls across every repo the org has mapped.
+	permDeriveRun Permission = "derive.run"
+
 	// permApprovalDecide covers deciding an approval (spec 029 §7.3): POST
 	// /approvals/{id}/decide, the web surface's only decision act. The route
 	// is additionally gated by requireSession, an authentication-method check
@@ -262,6 +275,12 @@ var grants = map[Permission][]Role{
 	permWhoAmI: {RoleUser, RoleAdmin},
 
 	permReconcile: {RoleAdmin},
+
+	// Every authenticated actor: the overview reads are how anyone working
+	// the tracker sees what is ready and what has drifted. Running the
+	// derivers is admin-only — see permDeriveRun.
+	permOverviewRead: {RoleUser, RoleAdmin},
+	permDeriveRun:    {RoleAdmin},
 
 	// Every authenticated actor, because who may decide a *given* approval is
 	// not a role question: 029 §7.1 gates it on the approval's own

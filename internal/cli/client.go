@@ -1601,3 +1601,54 @@ func (c *Client) BlobGC(ctx context.Context, dryRun bool, graceHours *int) (mode
 func (c *Client) WhoAmI(ctx context.Context) (model.WhoAmI, []byte, error) {
 	return doJSON[model.WhoAmI](ctx, c, http.MethodGet, "/api/v1/whoami", nil, "whoami")
 }
+
+// --- drift & overview (spec 007) -------------------------------------------
+
+// Overview calls GET /api/v1/overview: the one-screen roll-up. An empty
+// project rolls up every project.
+func (c *Client) Overview(ctx context.Context, project string) (model.Overview, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	return doJSON[model.Overview](ctx, c, http.MethodGet, withQuery("/api/v1/overview", q), nil, "overview")
+}
+
+// Drift calls GET /api/v1/drift. With acknowledged the response also carries
+// the accepted deviations, active and expired.
+func (c *Client) Drift(ctx context.Context, acknowledged bool) (model.Drift, []byte, error) {
+	q := url.Values{}
+	if acknowledged {
+		q.Set("acknowledged", "1")
+	}
+	return doJSON[model.Drift](ctx, c, http.MethodGet, withQuery("/api/v1/drift", q), nil, "drift")
+}
+
+// Gaps calls GET /api/v1/gaps: components with no governing doc, and repo
+// paths no component claims.
+func (c *Client) Gaps(ctx context.Context) (model.GapList, []byte, error) {
+	return doJSON[model.GapList](ctx, c, http.MethodGet, "/api/v1/gaps", nil, "gaps")
+}
+
+// Frontier calls GET /api/v1/frontier: the ready set in pickup order,
+// annotated with the overview-only criticality measures.
+func (c *Client) Frontier(ctx context.Context, project string) (model.FrontierList, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	return doJSON[model.FrontierList](ctx, c, http.MethodGet, withQuery("/api/v1/frontier", q), nil, "frontier")
+}
+
+// CriticalPath calls GET /api/v1/critical-path: the estimate-free critical
+// path over blocks + requires, plus any cycles found on the way.
+func (c *Client) CriticalPath(ctx context.Context) (model.CriticalPath, []byte, error) {
+	return doJSON[model.CriticalPath](ctx, c, http.MethodGet, "/api/v1/critical-path", nil, "critical path")
+}
+
+// RunDerive calls POST /api/v1/derive: run the server-side derivers
+// (pr-affects, deploy). The repo-local derivers run from a checkout instead,
+// through `lode derive` without --server.
+func (c *Client) RunDerive(ctx context.Context) (model.DeriveResponse, []byte, error) {
+	return doJSON[model.DeriveResponse](ctx, c, http.MethodPost, "/api/v1/derive", nil, "derive results")
+}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Branch is the fixed graph-server branch the work graph lives on — the
@@ -35,19 +36,9 @@ func checkGraphIRI(graphIRI string) error {
 	return nil
 }
 
-// Result reports one deriver run.
-type Result struct {
-	Graph   string `json:"graph"`
-	Hash    string `json:"hash"`
-	Skipped bool   `json:"skipped"`
-	Bytes   int    `json:"bytes"`
-	// Empty reports that the deriver produced no triples at all. Legitimate
-	// for some sources (worklode's own go-imports: one whole-repo component,
-	// so every import edge is intra-component and dropped by design), and the
-	// signature of a broken input for the rest — so it is reported, never
-	// inferred from Bytes by each caller.
-	Empty bool `json:"empty"`
-}
+// Result reports one deriver run. It is an alias: the shape crosses the HTTP
+// boundary, so ADR 036 declares it once, in internal/model.
+type Result = model.DeriveResult
 
 // ErrWouldEmptyGraph is returned when a run holding no triples would replace
 // a graph that currently holds content, and Options.AllowEmpty is off.

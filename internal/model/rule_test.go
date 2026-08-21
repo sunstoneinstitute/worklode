@@ -37,10 +37,13 @@ const (
 // scanned are the packages the rules are checked against, as paths relative
 // to internal/model.
 var scanned = map[string]mode{
-	"../api":   modeWire,
-	"../cli":   modeWire,
-	"../cmd":   modeNamed,
-	"../hooks": modeBodies,
+	"../api": modeWire,
+	"../cli": modeWire,
+	"../cmd": modeNamed,
+	// internal/overview produces the shapes internal/api serializes and
+	// internal/cli decodes — both ends are ours, so §2 applies here too.
+	"../overview": modeWire,
+	"../hooks":    modeBodies,
 }
 
 // allowed lists the json-tagged structs that legitimately stay outside

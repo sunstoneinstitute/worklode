@@ -64,6 +64,37 @@ func TestAllBlockEdges(t *testing.T) {
 	}
 }
 
+// TestAllBlockEdgesExcludesDeletedEndpoints: soft delete leaves task_edges
+// alone (044 §4), so the filter has to be in the read. Otherwise a deleted
+// task enters the overview's critical path, and AllBlockEdges disagrees with
+// BlockingFanOut on the same screen.
+func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := context.Background()
+	a := createTask(t, s, taskTestNow, defaultTaskInput())
+	b := createTask(t, s, taskTestNow, defaultTaskInput())
+	c := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	for _, e := range [][2]string{{a.ID, b.ID}, {b.ID, c.ID}} {
+		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+			t.Fatalf("addEdge blocks %s->%s: %v", e[0], e[1], err)
+		}
+	}
+	// Deleting b takes out both the edge it blocks (a->b, deleted head) and
+	// the edge it blocks with (b->c, deleted tail).
+	if err := deleteTask(t, s, b.ID, "stig", "no longer needed"); err != nil {
+		t.Fatalf("deleteTask: %v", err)
+	}
+
+	edges, err := s.AllBlockEdges(ctx)
+	if err != nil {
+		t.Fatalf("AllBlockEdges: %v", err)
+	}
+	if len(edges) != 0 {
+		t.Fatalf("AllBlockEdges = %+v; want no edge touching the deleted task", edges)
+	}
+}
+
 // TestFrontierMirrorsClaimNextOrder checks Frontier's own contract — rank
 // order out, fan-out map populated — and guards the sharing that makes the
 // mirror hold: both surfaces run rankedFrontier, so a change that gives one

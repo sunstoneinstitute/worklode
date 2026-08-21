@@ -853,9 +853,17 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 // to_task, for the overview's critical-path join (007: the DAG spans
 // backbone blocks edges plus KG requires edges, and the deriver needs the
 // whole edge set at once rather than one task's edges via ListEdges).
+//
+// Both ends are filtered to live tasks (044 §4). Soft delete leaves the
+// task_edges rows in place, so without the joins a deleted task would enter
+// the critical path and inflate a live task's depth — and the same surface
+// reads BlockingFanOut, which does filter, so the two must agree.
 func (s *Store) AllBlockEdges(ctx context.Context) ([]Edge, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT from_task, to_task FROM task_edges WHERE type = 'blocks' ORDER BY from_task, to_task`)
+		`SELECT e.from_task, e.to_task FROM task_edges e
+		   JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
+		   JOIN tasks b ON b.id = e.to_task   AND b.deleted_at IS NULL
+		  WHERE e.type = 'blocks' ORDER BY e.from_task, e.to_task`)
 	if err != nil {
 		return nil, fmt.Errorf("all block edges: %w", err)
 	}

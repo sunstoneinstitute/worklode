@@ -1,0 +1,164 @@
+package ui
+
+// drift.templ renders the drift board at /drift — spec 007's read surface,
+// the graph-backed expert view Knowledge covers (layout.templ's primaryNav
+// doc comment), which is why the page marks "knowledge" current rather than
+// taking an eighth nav destination.
+//
+// The page is read-only by construction: spec 007 is a set of reads over
+// derived facts, and nothing on it can be acted on here — resolving drift
+// means changing a declaration or the code, not clicking a button. So it
+// renders no form and no POST affordance, and internal/api's
+// TestDriftPageRendersWithoutGraph holds that.
+
+import (
+	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
+
+templ Drift(v DriftView) {
+	@Page(v.Page) {
+		@globalShell(v.Page.ActiveGlobal) {
+			<h1>Drift</h1>
+			<p class="muted small">The ready frontier and the estimate-free critical path come from the backbone; violations, stale intent and gaps come from the knowledge graph.</p>
+			@driftFrontier(v.Frontier)
+			@driftCriticalPath(v.CriticalPath)
+			if v.GraphEnabled {
+				@driftEdges("Violations", "observed, not declared or acknowledged", v.Drift.Violations)
+				@driftEdges("Stale intent", "declared, not observed", v.Drift.StaleIntent)
+				@driftGaps(v.Gaps)
+			} else {
+				<section class="card">
+					<div class="hd"><h3>Violations, stale intent and gaps</h3></div>
+					<div class="bd">
+						<p class="muted">knowledge graph not configured &mdash; set LODE_GRAPHSERVER_URL and run the derivers for drift and gap views.</p>
+					</div>
+				</section>
+			}
+		}
+	}
+}
+
+// driftFrontier renders the ready set in backbone rank order, annotated with
+// the overview-only critical-path measures. Depth and fan-out are shown
+// because they are why a row is critical, not as decoration.
+templ driftFrontier(tasks []model.FrontierTask) {
+	<section class="card">
+		<div class="hd"><h3>Ready frontier</h3></div>
+		<div class="bd">
+			if len(tasks) == 0 {
+				<p class="muted">Nothing is ready.</p>
+			} else {
+				@tableWrap("Ready frontier") {
+					<table>
+						<tr><th>Task</th><th>Priority</th><th>Concern</th><th>Fan-out</th><th>Depth</th><th>Critical</th></tr>
+						for _, t := range tasks {
+							<tr>
+								<td>
+									<a href={ "/tasks/" + t.ID } class="mono">{ t.ID }</a>
+									if t.Title != "" {
+										<div class="muted small">{ t.Title }</div>
+									}
+								</td>
+								<td><span class="chip plain">{ t.Priority }</span></td>
+								<td>{ t.Concern }</td>
+								<td class="mono">{ t.FanOut }</td>
+								<td class="mono">{ t.Depth }</td>
+								<td>
+									if t.IsCritical {
+										<span class="chip warn">critical</span>
+									}
+								</td>
+							</tr>
+						}
+					</table>
+				}
+			}
+		</div>
+	</section>
+}
+
+// driftCriticalPath renders the longest dependency chain by depth, plus any
+// cycle the analysis found. A cycle has no depth, so it is reported on its
+// own rather than folded into the table.
+templ driftCriticalPath(cp model.CriticalPath) {
+	<section class="card">
+		<div class="hd">
+			<h3>Critical path</h3>
+			<span class="meta">chain length { cp.MaxDepth }</span>
+		</div>
+		<div class="bd">
+			if len(cp.Tasks) == 0 {
+				<p class="muted">No dependency chain: nothing blocks anything else.</p>
+			} else {
+				@tableWrap("Critical path") {
+					<table>
+						<tr><th>Depth</th><th>Task</th><th>Fan-out</th></tr>
+						for _, t := range cp.Tasks {
+							<tr>
+								<td class="mono">{ t.Depth }</td>
+								<td><a href={ "/tasks/" + t.ID } class="mono">{ t.ID }</a></td>
+								<td class="mono">{ t.FanOut }</td>
+							</tr>
+						}
+					</table>
+				}
+			}
+			for _, cycle := range cp.Cycles {
+				<p class="small"><span class="chip crit">cycle</span> <span class="mono">{ strings.Join(cycle, " -> ") }</span></p>
+			}
+		</div>
+	</section>
+}
+
+// driftEdges renders one direction of the 4.1 drift report: the dct:requires
+// edges present in exactly one layer. basis names which layers the difference
+// is between, so a reader knows what the rows mean without the spec open.
+templ driftEdges(heading, basis string, edges []model.DriftEdge) {
+	<section class="card">
+		<div class="hd">
+			<h3>{ heading }</h3>
+			<span class="meta">{ basis }</span>
+		</div>
+		<div class="bd">
+			if len(edges) == 0 {
+				<p class="muted">None.</p>
+			} else {
+				@tableWrap(heading) {
+					<table>
+						<tr><th>From</th><th>Requires</th></tr>
+						for _, e := range edges {
+							<tr><td class="mono">{ e.From }</td><td class="mono">{ e.To }</td></tr>
+						}
+					</table>
+				}
+			}
+		</div>
+	</section>
+}
+
+// driftGaps renders the 4.2 findings: a component with no governing document,
+// or a repository path no component claims.
+templ driftGaps(gaps []model.Gap) {
+	<section class="card">
+		<div class="hd">
+			<h3>Gaps</h3>
+			<span class="meta">no governing document, or an unmatched path</span>
+		</div>
+		<div class="bd">
+			if len(gaps) == 0 {
+				<p class="muted">None.</p>
+			} else {
+				@tableWrap("Gaps") {
+					<table>
+						<tr><th>Subject</th><th>Path</th></tr>
+						for _, g := range gaps {
+							<tr><td class="mono">{ gapSubject(g) }</td><td class="mono">{ g.Path }</td></tr>
+						}
+					</table>
+				}
+			}
+		</div>
+	</section>
+}
