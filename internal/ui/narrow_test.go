@@ -169,6 +169,7 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{".fieldrow.checkinput{width:24px;height:24px", "the draft checkbox meets the minimum target size (WCAG 2.5.8)"},
 		{".homegrid{display:grid;grid-template-columns:1fr1fr", "Home's two-column grid must stay fixed, never auto-fit/auto-fill (spec 032 §10)"},
 		{"@media(max-width:820px){.homegrid{grid-template-columns:1fr;}}", "Home's grid must collapse to one column below 820px (spec 032 §10)"},
+		{".proj-name{font-size:19px;line-height:1.2;margin:8px010px;min-width:0;overflow-wrap:anywhere", "an unbroken project name must not overrun the 236px sidebar at desktop widths, not just below 880px (WL-90)"},
 	} {
 		if !strings.Contains(flat, c.want) {
 			t.Errorf("app.css no longer declares %q: %s", c.want, c.why)
