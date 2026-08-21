@@ -1,51 +1,12 @@
-package cmd
+package githooks
 
 import (
-	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
-
-// lodeBinary caches the built CLI for the whole package run. Go caches
-// compilation but never the link step, so each build costs seconds — and
-// every test here only execs the binary, so one copy serves them all.
-var lodeBinary struct {
-	once sync.Once
-	path string
-	err  error
-	out  []byte
-}
-
-// buildLodeBinary builds the lode CLI (cmd/lode) once per package run and
-// returns the path to the binary. Debug symbols are stripped: nothing here
-// debugs the child, and stripping cuts the link time several-fold.
-func buildLodeBinary(t *testing.T) string {
-	t.Helper()
-	lodeBinary.once.Do(func() {
-		dir, err := os.MkdirTemp("", "lode-bin")
-		if err != nil {
-			lodeBinary.err = err
-			return
-		}
-		bin := filepath.Join(dir, "lode")
-		build := exec.Command("go", "build", "-ldflags=-s -w", "-o", bin, "./cmd/lode")
-		build.Dir = store.ModuleRootForTests()
-		lodeBinary.out, lodeBinary.err = build.CombinedOutput()
-		if lodeBinary.err == nil {
-			lodeBinary.path = bin
-		}
-	})
-	if lodeBinary.err != nil {
-		t.Fatalf("go build lode: %v\n%s", lodeBinary.err, lodeBinary.out)
-	}
-	return lodeBinary.path
-}
 
 func readFile(t *testing.T, path string) string {
 	t.Helper()
@@ -65,9 +26,9 @@ func fileMode(t *testing.T, path string) os.FileMode {
 	return info.Mode()
 }
 
-// chainFor returns what the named hook chains to in an installGitHooks
+// chainFor returns what the named hook chains to in an Install
 // result, failing the test if the hook is missing from it.
-func chainFor(t *testing.T, chains []hookChain, hook string) string {
+func chainFor(t *testing.T, chains []Chain, hook string) string {
 	t.Helper()
 	for _, c := range chains {
 		if c.Hook == hook {
@@ -78,8 +39,8 @@ func chainFor(t *testing.T, chains []hookChain, hook string) string {
 	return ""
 }
 
-// actionFor is chainFor for an uninstallGitHooks result.
-func actionFor(t *testing.T, removals []hookRemoval, hook string) string {
+// actionFor is chainFor for an Uninstall result.
+func actionFor(t *testing.T, removals []Removal, hook string) string {
 	t.Helper()
 	for _, r := range removals {
 		if r.Hook == hook {
@@ -92,13 +53,13 @@ func actionFor(t *testing.T, removals []hookRemoval, hook string) string {
 
 // --- fresh install -----------------------------------------------------
 
-func TestInstallGitHooksFreshInstall(t *testing.T) {
+func TestInstallFreshInstall(t *testing.T) {
 	root := initGitRepo(t)
 
-	hooksDir, chains, err := installGitHooks(root)
+	hooksDir, chains, err := Install(root)
 	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	if chainedTo != "" {
 		t.Fatalf("chainedTo = %q, want empty (nothing to chain)", chainedTo)
@@ -106,8 +67,8 @@ func TestInstallGitHooksFreshInstall(t *testing.T) {
 
 	preCommitPath := filepath.Join(hooksDir, "pre-commit")
 	content := readFile(t, preCommitPath)
-	if !strings.Contains(content, hookMarker) {
-		t.Fatalf("pre-commit missing marker %q: %q", hookMarker, content)
+	if !strings.Contains(content, Marker) {
+		t.Fatalf("pre-commit missing marker %q: %q", Marker, content)
 	}
 	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
 	if content != want {
@@ -125,19 +86,19 @@ func TestInstallGitHooksFreshInstall(t *testing.T) {
 
 // --- idempotent ----------------------------------------------------------
 
-func TestInstallGitHooksIdempotent(t *testing.T) {
+func TestInstallIdempotent(t *testing.T) {
 	root := initGitRepo(t)
 
-	hooksDir, chains1, err := installGitHooks(root)
+	hooksDir, chains1, err := Install(root)
 	if err != nil {
-		t.Fatalf("first installGitHooks: %v", err)
+		t.Fatalf("first Install: %v", err)
 	}
 	preCommitPath := filepath.Join(hooksDir, "pre-commit")
 	first := readFile(t, preCommitPath)
 
-	_, chains2, err := installGitHooks(root)
+	_, chains2, err := Install(root)
 	if err != nil {
-		t.Fatalf("second installGitHooks: %v", err)
+		t.Fatalf("second Install: %v", err)
 	}
 	second := readFile(t, preCommitPath)
 
@@ -155,11 +116,11 @@ func TestInstallGitHooksIdempotent(t *testing.T) {
 
 // --- existing third-party hook preserved ----------------------------------
 
-func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
+func TestInstallPreservesThirdPartyHook(t *testing.T) {
 	root := initGitRepo(t)
-	hooksDir, err := resolveHooksDir(root)
+	hooksDir, err := Dir(root)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("Dir: %v", err)
 	}
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatalf("mkdir hooks dir: %v", err)
@@ -170,10 +131,10 @@ func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
 		t.Fatalf("write third-party pre-commit: %v", err)
 	}
 
-	_, chains, err := installGitHooks(root)
+	_, chains, err := Install(root)
 	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
 	if chainedTo != preLodePath {
@@ -189,9 +150,9 @@ func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
 	}
 
 	// Re-run: must not re-rename or clobber the preserved original.
-	_, chains2, err := installGitHooks(root)
+	_, chains2, err := Install(root)
 	if err != nil {
-		t.Fatalf("second installGitHooks: %v", err)
+		t.Fatalf("second Install: %v", err)
 	}
 	chainedTo2 := chainFor(t, chains2, "pre-commit")
 	if chainedTo2 != preLodePath {
@@ -207,16 +168,16 @@ func TestInstallGitHooksPreservesThirdPartyHook(t *testing.T) {
 
 // --- .pre-commit-config.yaml present ---------------------------------------
 
-func TestInstallGitHooksChainsToPreCommitFramework(t *testing.T) {
+func TestInstallChainsToPreCommitFramework(t *testing.T) {
 	root := initGitRepo(t)
 	if err := os.WriteFile(filepath.Join(root, ".pre-commit-config.yaml"), []byte("repos: []\n"), 0o644); err != nil {
 		t.Fatalf("write .pre-commit-config.yaml: %v", err)
 	}
 
-	hooksDir, chains, err := installGitHooks(root)
+	hooksDir, chains, err := Install(root)
 	chainedTo := chainFor(t, chains, "pre-commit")
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	if chainedTo != "pre-commit" {
 		t.Fatalf("chainedTo = %q, want %q", chainedTo, "pre-commit")
@@ -227,9 +188,9 @@ func TestInstallGitHooksChainsToPreCommitFramework(t *testing.T) {
 	}
 
 	// Re-run stays converged (still chains to the framework, no accumulation).
-	_, chains2, err := installGitHooks(root)
+	_, chains2, err := Install(root)
 	if err != nil {
-		t.Fatalf("second installGitHooks: %v", err)
+		t.Fatalf("second Install: %v", err)
 	}
 	chainedTo2 := chainFor(t, chains2, "pre-commit")
 	if chainedTo2 != "pre-commit" {
@@ -242,16 +203,16 @@ func TestInstallGitHooksChainsToPreCommitFramework(t *testing.T) {
 
 // --- honors core.hooksPath ---------------------------------------------------
 
-func TestInstallGitHooksHonorsCoreHooksPath(t *testing.T) {
+func TestInstallHonorsCoreHooksPath(t *testing.T) {
 	root := initGitRepo(t)
 	custom := filepath.Join(root, "custom-hooks")
 	if out, err := exec.Command("git", "-C", root, "config", "core.hooksPath", custom).CombinedOutput(); err != nil {
 		t.Fatalf("git config core.hooksPath: %v\n%s", err, out)
 	}
 
-	hooksDir, _, err := installGitHooks(root)
+	hooksDir, _, err := Install(root)
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	if hooksDir != custom {
 		t.Fatalf("hooksDir = %q, want %q", hooksDir, custom)
@@ -261,69 +222,26 @@ func TestInstallGitHooksHonorsCoreHooksPath(t *testing.T) {
 	}
 }
 
-// --- installed hook + guard NOP: `git commit` succeeds without a lode server -
-
-func TestInstallGitHooksCommitSucceedsWithoutServer(t *testing.T) {
-	bin := buildLodeBinary(t)
-	root := initGitRepo(t)
-
-	if _, _, err := installGitHooks(root); err != nil {
-		t.Fatalf("installGitHooks: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write file.txt: %v", err)
-	}
-	add := exec.Command("git", "-C", root, "add", "file.txt")
-	if out, err := add.CombinedOutput(); err != nil {
-		t.Fatalf("git add: %v\n%s", err, out)
-	}
-
-	commit := exec.Command("git", "-C", root, "-c", "commit.gpgsign=false", "commit", "-m", "add file.txt")
-	commit.Env = append(os.Environ(),
-		"PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
-	)
-	// Guarantee no ambient config points the hook at a real backbone.
-	commit.Env = append(commit.Env, "LODE_SERVER=", "LODE_TOKEN=")
-	var out bytes.Buffer
-	commit.Stdout = &out
-	commit.Stderr = &out
-	if err := commit.Run(); err != nil {
-		t.Fatalf("git commit failed: %v\n%s", err, out.String())
-	}
+// initGitRepo inits a git repo in a temp directory of its own and returns its
+// path as git resolves it.
+func initGitRepo(t *testing.T) string {
+	t.Helper()
+	return initGitRepoInDir(t, t.TempDir())
 }
 
-// initGitRepoInDir inits a git repo with one commit at the given dir and
-// returns its path resolved to git's own toplevel (macOS /var symlink). Unlike
-// initGitRepo it lets the caller choose the directory, so a test can put the
-// repo under a path containing a space.
+// initGitRepoInDir inits a git repo at the given dir and returns its path
+// resolved to git's own toplevel (macOS /var symlink). Unlike initGitRepo it
+// lets the caller choose the directory, so a test can put the repo under a
+// path containing a space. No commit is made: nothing here needs history,
+// only a repo git can resolve a hooks directory for.
 func initGitRepoInDir(t *testing.T, dir string) string {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
-	run := func(args ...string) {
-		t.Helper()
-		// commit.gpgsign=false: the developer's global config may enable
-		// signing, which a temp-repo test commit must not depend on.
-		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
-		c.Dir = dir
-		c.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
+	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
+		t.Fatalf("git init %s: %v\n%s", dir, err, out)
 	}
-	run("init")
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	run("add", "README.md")
-	run("commit", "-m", "initial commit")
-
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		t.Fatalf("rev-parse toplevel: %v", err)
@@ -331,77 +249,51 @@ func initGitRepoInDir(t *testing.T, dir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// --- ISSUE 1: chain target with spaces is quoted and still runs --------------
+// --- chain target with spaces is quoted -------------------------------------
 
-func TestInstallGitHooksQuotesChainTargetWithSpaces(t *testing.T) {
-	bin := buildLodeBinary(t)
+// TestInstallQuotesChainTargetWithSpaces: an unquoted target path with a space
+// is word-split by /bin/sh before lode sees it, silently dropping the chained
+// hook. That the quoted form actually runs under git is covered end to end by
+// internal/cmd's hook-script test, which has the built binary to run.
+func TestInstallQuotesChainTargetWithSpaces(t *testing.T) {
 	// A repo path containing a space (common on macOS).
 	root := initGitRepoInDir(t, filepath.Join(t.TempDir(), "My Repo"))
 
-	hooksDir, err := resolveHooksDir(root)
+	hooksDir, err := Dir(root)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("Dir: %v", err)
 	}
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatalf("mkdir hooks dir: %v", err)
 	}
-	// Seed a distinctive third-party hook that touches a sentinel when it runs.
-	sentinel := filepath.Join(t.TempDir(), "third-party-ran")
 	preCommitPath := filepath.Join(hooksDir, "pre-commit")
-	thirdParty := "#!/bin/sh\ntouch '" + sentinel + "'\n"
+	thirdParty := "#!/bin/sh\necho third-party\n"
 	if err := os.WriteFile(preCommitPath, []byte(thirdParty), 0o755); err != nil {
 		t.Fatalf("write third-party pre-commit: %v", err)
 	}
 
-	_, chains, err := installGitHooks(root)
-	chainedTo := chainFor(t, chains, "pre-commit")
+	_, chains, err := Install(root)
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
-	if chainedTo != preLodePath {
+	if chainedTo := chainFor(t, chains, "pre-commit"); chainedTo != preLodePath {
 		t.Fatalf("chainedTo = %q, want %q", chainedTo, preLodePath)
 	}
-
-	// The generated --next clause must single-quote the space-containing path.
 	content := readFile(t, preCommitPath)
 	wantLine := "--next '" + preLodePath + "' \"$@\""
 	if !strings.Contains(content, wantLine) {
 		t.Fatalf("pre-commit = %q, want it to contain %q", content, wantLine)
 	}
-
-	// And a real commit must actually run the preserved third-party hook.
-	if err := os.WriteFile(filepath.Join(root, "file.txt"), []byte("hi\n"), 0o644); err != nil {
-		t.Fatalf("write file.txt: %v", err)
-	}
-	if out, err := exec.Command("git", "-C", root, "add", "file.txt").CombinedOutput(); err != nil {
-		t.Fatalf("git add: %v\n%s", err, out)
-	}
-	commit := exec.Command("git", "-C", root, "-c", "commit.gpgsign=false", "commit", "-m", "add file.txt")
-	commit.Env = append(os.Environ(),
-		"PATH="+filepath.Dir(bin)+string(os.PathListSeparator)+os.Getenv("PATH"),
-		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
-		"LODE_SERVER=", "LODE_TOKEN=",
-	)
-	var out bytes.Buffer
-	commit.Stdout = &out
-	commit.Stderr = &out
-	if err := commit.Run(); err != nil {
-		t.Fatalf("git commit failed: %v\n%s", err, out.String())
-	}
-	if !fileExists(sentinel) {
-		t.Fatalf("preserved third-party hook did not run (sentinel %s missing) — chain target was word-split", sentinel)
-	}
 }
 
 // --- ISSUE 2: refuse to clobber an unrecognized hook beside .pre-lode --------
 
-func TestInstallGitHooksRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
+func TestInstallRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
 	root := initGitRepo(t)
-	hooksDir, err := resolveHooksDir(root)
+	hooksDir, err := Dir(root)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("Dir: %v", err)
 	}
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatalf("mkdir hooks dir: %v", err)
@@ -414,8 +306,8 @@ func TestInstallGitHooksRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
 	if err := os.WriteFile(preCommitPath, []byte(original), 0o755); err != nil {
 		t.Fatalf("write original pre-commit: %v", err)
 	}
-	if _, _, err := installGitHooks(root); err != nil {
-		t.Fatalf("first installGitHooks: %v", err)
+	if _, _, err := Install(root); err != nil {
+		t.Fatalf("first Install: %v", err)
 	}
 	preLodePath := filepath.Join(hooksDir, "pre-commit.pre-lode")
 
@@ -426,9 +318,9 @@ func TestInstallGitHooksRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
 	}
 
 	// Re-running must refuse rather than silently drop newHook.
-	_, _, err = installGitHooks(root)
+	_, _, err = Install(root)
 	if err == nil {
-		t.Fatalf("installGitHooks: err = nil, want a refusal error")
+		t.Fatalf("Install: err = nil, want a refusal error")
 	}
 	if !strings.Contains(err.Error(), "refusing to overwrite") {
 		t.Fatalf("error = %q, want it to mention refusing to overwrite", err.Error())
@@ -444,44 +336,44 @@ func TestInstallGitHooksRefusesUnrecognizedHookBesidePreLode(t *testing.T) {
 
 // --- uninstall ---------------------------------------------------------------
 
-func TestUninstallGitHooksRemovesOurHook(t *testing.T) {
+func TestUninstallRemovesOurHook(t *testing.T) {
 	root := initGitRepo(t)
-	hooksDir, _, err := installGitHooks(root)
+	hooksDir, _, err := Install(root)
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 
-	gotDir, removals, err := uninstallGitHooks(root)
+	gotDir, removals, err := Uninstall(root)
 	action := actionFor(t, removals, "pre-commit")
 	if err != nil {
-		t.Fatalf("uninstallGitHooks: %v", err)
+		t.Fatalf("Uninstall: %v", err)
 	}
 	if gotDir != hooksDir {
 		t.Fatalf("hooksDir = %q, want %q", gotDir, hooksDir)
 	}
-	if action != hookActionRemoved {
-		t.Fatalf("action = %q, want %q", action, hookActionRemoved)
+	if action != ActionRemoved {
+		t.Fatalf("action = %q, want %q", action, ActionRemoved)
 	}
 	if fileExists(filepath.Join(hooksDir, "pre-commit")) {
 		t.Fatal("pre-commit still present after uninstall")
 	}
 
 	// Re-running on an already-clean repo is a no-op, not an error.
-	_, removals2, err := uninstallGitHooks(root)
+	_, removals2, err := Uninstall(root)
 	if err != nil {
-		t.Fatalf("second uninstallGitHooks: %v", err)
+		t.Fatalf("second Uninstall: %v", err)
 	}
 	action2 := actionFor(t, removals2, "pre-commit")
-	if action2 != hookActionNone {
-		t.Fatalf("second run action = %q, want %q", action2, hookActionNone)
+	if action2 != ActionNone {
+		t.Fatalf("second run action = %q, want %q", action2, ActionNone)
 	}
 }
 
-func TestUninstallGitHooksRestoresPreservedHook(t *testing.T) {
+func TestUninstallRestoresPreservedHook(t *testing.T) {
 	root := initGitRepo(t)
-	hooksDir, err := resolveHooksDir(root)
+	hooksDir, err := Dir(root)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("Dir: %v", err)
 	}
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatalf("mkdir hooks dir: %v", err)
@@ -491,17 +383,17 @@ func TestUninstallGitHooksRestoresPreservedHook(t *testing.T) {
 	if err := os.WriteFile(preCommitPath, []byte(thirdParty), 0o755); err != nil {
 		t.Fatalf("write third-party pre-commit: %v", err)
 	}
-	if _, _, err := installGitHooks(root); err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+	if _, _, err := Install(root); err != nil {
+		t.Fatalf("Install: %v", err)
 	}
 
-	_, removals, err := uninstallGitHooks(root)
+	_, removals, err := Uninstall(root)
 	action := actionFor(t, removals, "pre-commit")
 	if err != nil {
-		t.Fatalf("uninstallGitHooks: %v", err)
+		t.Fatalf("Uninstall: %v", err)
 	}
-	if action != hookActionRestored {
-		t.Fatalf("action = %q, want %q", action, hookActionRestored)
+	if action != ActionRestored {
+		t.Fatalf("action = %q, want %q", action, ActionRestored)
 	}
 	if got := readFile(t, preCommitPath); got != thirdParty {
 		t.Fatalf("pre-commit after uninstall = %q, want the original third-party hook %q", got, thirdParty)
@@ -514,11 +406,11 @@ func TestUninstallGitHooksRestoresPreservedHook(t *testing.T) {
 	}
 }
 
-func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
+func TestUninstallLeavesForeignHookAlone(t *testing.T) {
 	root := initGitRepo(t)
-	hooksDir, err := resolveHooksDir(root)
+	hooksDir, err := Dir(root)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("Dir: %v", err)
 	}
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatalf("mkdir hooks dir: %v", err)
@@ -529,13 +421,13 @@ func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
 		t.Fatalf("write foreign pre-commit: %v", err)
 	}
 
-	_, removals, err := uninstallGitHooks(root)
+	_, removals, err := Uninstall(root)
 	action := actionFor(t, removals, "pre-commit")
 	if err != nil {
-		t.Fatalf("uninstallGitHooks: %v", err)
+		t.Fatalf("Uninstall: %v", err)
 	}
-	if action != hookActionNone {
-		t.Fatalf("action = %q, want %q", action, hookActionNone)
+	if action != ActionNone {
+		t.Fatalf("action = %q, want %q", action, ActionNone)
 	}
 	if got := readFile(t, preCommitPath); got != foreign {
 		t.Fatalf("foreign pre-commit was modified: %q", got)
@@ -544,20 +436,20 @@ func TestUninstallGitHooksLeavesForeignHookAlone(t *testing.T) {
 
 // --- the merge-reporting hooks ------------------------------------------------
 
-// TestInstallGitHooksInstallsEveryManagedHook: every hook in gitHooks is a
+// TestInstallInstallsEveryManagedHook: every hook in Managed is a
 // signal the backbone would otherwise miss — a lease that stops being renewed,
 // a merge nobody reports, a commit with no task on it — so install must write
-// all of them and uninstall must take all of them away. Derived from gitHooks
+// all of them and uninstall must take all of them away. Derived from Managed
 // rather than restated, so adding one cannot leave this test behind.
-func TestInstallGitHooksInstallsEveryManagedHook(t *testing.T) {
+func TestInstallInstallsEveryManagedHook(t *testing.T) {
 	root := initGitRepo(t)
 
-	hooksDir, chains, err := installGitHooks(root)
+	hooksDir, chains, err := Install(root)
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
-	for _, h := range gitHooks {
-		hook := h.name
+	for _, h := range Managed {
+		hook := h.Name
 		path := filepath.Join(hooksDir, hook)
 		content := readFile(t, path)
 		if !strings.Contains(content, "exec lode hook "+hook+" \"$@\"") {
@@ -571,14 +463,14 @@ func TestInstallGitHooksInstallsEveryManagedHook(t *testing.T) {
 		}
 	}
 
-	_, removals, err := uninstallGitHooks(root)
+	_, removals, err := Uninstall(root)
 	if err != nil {
-		t.Fatalf("uninstallGitHooks: %v", err)
+		t.Fatalf("Uninstall: %v", err)
 	}
-	for _, h := range gitHooks {
-		hook := h.name
-		if got := actionFor(t, removals, hook); got != hookActionRemoved {
-			t.Fatalf("%s uninstall action = %q, want %q", hook, got, hookActionRemoved)
+	for _, h := range Managed {
+		hook := h.Name
+		if got := actionFor(t, removals, hook); got != ActionRemoved {
+			t.Fatalf("%s uninstall action = %q, want %q", hook, got, ActionRemoved)
 		}
 		if fileExists(filepath.Join(hooksDir, hook)) {
 			t.Fatalf("%s still present after uninstall", hook)
@@ -586,18 +478,18 @@ func TestInstallGitHooksInstallsEveryManagedHook(t *testing.T) {
 	}
 }
 
-// TestInstallGitHooksFrameworkChainIsPreCommitOnly: running the pre-commit
+// TestInstallFrameworkChainIsPreCommitOnly: running the pre-commit
 // binary bare executes its pre-commit stage, which is the wrong thing to fire
 // from post-merge or post-commit.
-func TestInstallGitHooksFrameworkChainIsPreCommitOnly(t *testing.T) {
+func TestInstallFrameworkChainIsPreCommitOnly(t *testing.T) {
 	root := initGitRepo(t)
 	if err := os.WriteFile(filepath.Join(root, ".pre-commit-config.yaml"), []byte("repos: []\n"), 0o644); err != nil {
 		t.Fatalf("write .pre-commit-config.yaml: %v", err)
 	}
 
-	_, chains, err := installGitHooks(root)
+	_, chains, err := Install(root)
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	if got := chainFor(t, chains, "pre-commit"); got != "pre-commit" {
 		t.Fatalf("pre-commit chainedTo = %q, want the framework", got)
@@ -609,13 +501,13 @@ func TestInstallGitHooksFrameworkChainIsPreCommitOnly(t *testing.T) {
 	}
 }
 
-// TestInstallGitHooksPreservesThirdPartyPostMerge: the preserve-and-chain
+// TestInstallPreservesThirdPartyPostMerge: the preserve-and-chain
 // contract is per hook, not pre-commit's alone.
-func TestInstallGitHooksPreservesThirdPartyPostMerge(t *testing.T) {
+func TestInstallPreservesThirdPartyPostMerge(t *testing.T) {
 	root := initGitRepo(t)
-	hooksDir, err := resolveHooksDir(root)
+	hooksDir, err := Dir(root)
 	if err != nil {
-		t.Fatalf("resolveHooksDir: %v", err)
+		t.Fatalf("Dir: %v", err)
 	}
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
 		t.Fatalf("mkdir hooks dir: %v", err)
@@ -626,9 +518,9 @@ func TestInstallGitHooksPreservesThirdPartyPostMerge(t *testing.T) {
 		t.Fatalf("write third-party post-merge: %v", err)
 	}
 
-	_, chains, err := installGitHooks(root)
+	_, chains, err := Install(root)
 	if err != nil {
-		t.Fatalf("installGitHooks: %v", err)
+		t.Fatalf("Install: %v", err)
 	}
 	preLodePath := postMergePath + ".pre-lode"
 	if got := chainFor(t, chains, "post-merge"); got != preLodePath {
@@ -639,12 +531,12 @@ func TestInstallGitHooksPreservesThirdPartyPostMerge(t *testing.T) {
 	}
 
 	// And uninstall puts it back.
-	_, removals, err := uninstallGitHooks(root)
+	_, removals, err := Uninstall(root)
 	if err != nil {
-		t.Fatalf("uninstallGitHooks: %v", err)
+		t.Fatalf("Uninstall: %v", err)
 	}
-	if got := actionFor(t, removals, "post-merge"); got != hookActionRestored {
-		t.Fatalf("post-merge uninstall action = %q, want %q", got, hookActionRestored)
+	if got := actionFor(t, removals, "post-merge"); got != ActionRestored {
+		t.Fatalf("post-merge uninstall action = %q, want %q", got, ActionRestored)
 	}
 	if got := readFile(t, postMergePath); got != thirdParty {
 		t.Fatalf("post-merge after uninstall = %q, want the original %q", got, thirdParty)
@@ -657,20 +549,20 @@ func TestInstallGitHooksPreservesThirdPartyPostMerge(t *testing.T) {
 // name "$@" twice, or exactly one of the two sees git's arguments — and for
 // commit-msg those arguments are the message file it exists to edit.
 func TestChainedArgsHookForwardsGitArgsBothWays(t *testing.T) {
-	for _, h := range gitHooks {
-		script := renderHookScript(h, "/path/to/other-hook")
+	for _, h := range Managed {
+		script := renderScript(h, "/path/to/other-hook")
 		got := strings.Count(script, `"$@"`)
 		want := 1
-		if h.args {
+		if h.Args {
 			want = 2
 		}
 		if got != want {
-			t.Errorf("chained %s script has %d \"$@\" (want %d):\n%s", h.name, got, want, script)
+			t.Errorf("chained %s script has %d \"$@\" (want %d):\n%s", h.Name, got, want, script)
 		}
 		// Unchained, the trailing "$@" already reaches the handler, so an args
 		// hook needs no second copy.
-		if n := strings.Count(renderHookScript(h, ""), `"$@"`); n != 1 {
-			t.Errorf("unchained %s script has %d \"$@\" (want 1)", h.name, n)
+		if n := strings.Count(renderScript(h, ""), `"$@"`); n != 1 {
+			t.Errorf("unchained %s script has %d \"$@\" (want 1)", h.Name, n)
 		}
 	}
 }
@@ -678,9 +570,56 @@ func TestChainedArgsHookForwardsGitArgsBothWays(t *testing.T) {
 // TestCommitMsgHookIsNotFrameworkChained: running the pre-commit binary bare
 // executes its pre-commit stage, which is not what commit-msg should fire.
 func TestCommitMsgHookIsNotFrameworkChained(t *testing.T) {
-	for _, h := range gitHooks {
-		if h.name == "commit-msg" && h.framework {
+	for _, h := range Managed {
+		if h.Name == "commit-msg" && h.Framework {
 			t.Fatal("commit-msg must not chain to the pre-commit framework")
 		}
+	}
+}
+
+// --- Installed ----------------------------------------------------------------
+
+// TestInstalled: `lode doctor` asks this rather than re-deriving "is our hook
+// there" from Marker, so it has to answer all three states — no repo, repo
+// without our hooks, repo with them — and keep a foreign pre-commit false.
+func TestInstalled(t *testing.T) {
+	root := initGitRepo(t)
+
+	hooksDir, installed, err := Installed(root)
+	if err != nil {
+		t.Fatalf("Installed before install: %v", err)
+	}
+	if installed {
+		t.Fatal("Installed = true before any install")
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	foreign := "#!/bin/sh\necho not ours\n"
+	if err := os.WriteFile(filepath.Join(hooksDir, "pre-commit"), []byte(foreign), 0o755); err != nil {
+		t.Fatalf("write foreign pre-commit: %v", err)
+	}
+	if _, installed, err := Installed(root); err != nil || installed {
+		t.Fatalf("Installed with a foreign pre-commit = %v (err %v), want false", installed, err)
+	}
+
+	if _, _, err := Install(root); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	gotDir, installed, err := Installed(root)
+	if err != nil {
+		t.Fatalf("Installed after install: %v", err)
+	}
+	if !installed {
+		t.Fatal("Installed = false after a successful install")
+	}
+	if gotDir != hooksDir {
+		t.Fatalf("hooksDir = %q, want %q", gotDir, hooksDir)
+	}
+
+	// Outside a git repo it is an error, which is what lets doctor report
+	// "not in a git repository" rather than "hook missing".
+	if _, _, err := Installed(t.TempDir()); err == nil {
+		t.Fatal("Installed outside a git repo: err = nil, want a resolve failure")
 	}
 }
