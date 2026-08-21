@@ -233,6 +233,62 @@ func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
 	}
 }
 
+// TestSecretsExecScrubsAmbientCredentials is 017 §4's acceptance criterion as
+// amended by ADR 050, run end to end: with the operator's shell exporting
+// ANTHROPIC_API_KEY, `lode secrets exec -- env` in a claimed worktree hands the
+// child the materialized names and the shell plumbing, and not that key.
+func TestSecretsExecScrubsAmbientCredentials(t *testing.T) {
+	keyring.MockInit()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	initSecretsWorktree(t, "WL-9")
+	t.Setenv("ANTHROPIC_API_KEY", "test-value")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "operator-aws-secret")
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(home, "gcp.json"))
+
+	if err := secrets.Put("WL-9", "A_TOKEN", "val-A_TOKEN"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"A_TOKEN"}}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	var gotEnv []string
+	restore := execFn
+	execFn = func(bin string, argv, env []string) error {
+		gotEnv = env
+		return nil
+	}
+	defer func() { execFn = restore }()
+
+	cmd := newSecretsExecCmd()
+	cmd.SetArgs([]string{"--", "env"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+
+	for _, name := range []string{"ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GOOGLE_APPLICATION_CREDENTIALS"} {
+		if got := envValues(gotEnv, name); len(got) != 0 {
+			t.Errorf("ambient credential %s reached the child: %v", name, got)
+		}
+	}
+	for _, kv := range gotEnv {
+		if strings.Contains(kv, "test-value") || strings.Contains(kv, "operator-aws-secret") {
+			t.Errorf("an ambient credential value survived under another name: %q", kv)
+		}
+	}
+	if got := envValues(gotEnv, "A_TOKEN"); len(got) != 1 || got[0] != "val-A_TOKEN" {
+		t.Errorf("A_TOKEN = %v; want exactly [\"val-A_TOKEN\"]", got)
+	}
+	// The plumbing the child needs is still there: scrubbing must not turn
+	// into an allow-list that breaks PATH or HOME.
+	for _, name := range []string{"PATH", "HOME"} {
+		if got := envValues(gotEnv, name); len(got) != 1 {
+			t.Errorf("%s entries = %v; want the child to inherit exactly one", name, got)
+		}
+	}
+}
+
 // TestSecretsExecPassesFlagsToTheChild: an agent writes `lode secrets exec
 // kubectl get pods -n foo`, not the `--` form. Cobra must not claim the
 // wrapped command's flags as its own.

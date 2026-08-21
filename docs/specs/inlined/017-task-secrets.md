@@ -163,7 +163,8 @@ that notices the lease is gone (resume, exit, or `lode doctor`).
 ## 4. Execution: `lode secrets exec`
 
 > Pending `042-secret-templates.md#sec-4` (not yet effective)  
-> Pending `048-exit-purge-on-a-gone-lease.md#sec-2` (not yet effective)
+> Pending `048-exit-purge-on-a-gone-lease.md#sec-2` (not yet effective)  
+> Pending `050-scrub-inherited-environment.md#sec-2` (not yet effective)
 
 > **Amended by spec 042 §4.** For a templated entry, exec renders the template
 > with the keystore credentials into `.worklode/secrets/<NAME>` (0600) and
@@ -176,6 +177,13 @@ that notices the lease is gone (resume, exit, or `lode doctor`).
 > "lease gone" answer, because 012 §4's multi-task session exits while its
 > lease is still held. Removal, `/lode-done` and `/lode-block` stay
 > unconditional and local-only.
+
+> **Amended by ADR 050 §2.** The inherited half of the child's environment is
+> stated: the child keeps the parent environment minus every credential-shaped
+> name (a deny-list — `ANTHROPIC_API_KEY`, `AWS_*`, anything containing
+> `TOKEN`/`SECRET`/`PASSWORD`/`AUTH`, ADR 050 §3), keeping the shell plumbing
+> `PATH`, `HOME`, `TMPDIR` and the locale variables. Materialized names are
+> injected after the scrub, so a credential-shaped secret name is unaffected.
 
 ```
 lode secrets exec [--] <command> [args…]
@@ -281,6 +289,13 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
   values.
 
 ## 10. Acceptance criteria
+
+> Pending `050-scrub-inherited-environment.md#sec-2` (not yet effective)
+
+> **Amended by ADR 050 §2.** Criterion 4 also requires the negative case: the
+> same `lode secrets exec -- env` shows no credential-shaped variable inherited
+> from the operator's shell — in particular no `ANTHROPIC_API_KEY` exported
+> there — while the shell plumbing of ADR 050 §3's keep set is present.
 
 1. `lode task add --secrets KUBECONFIG_HZDEV,OPENALEX_API_KEY …` stores the list; the task brief
    shows it; a name absent from the catalog surfaces as a brief warning, not an error.

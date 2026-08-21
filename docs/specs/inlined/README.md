@@ -47,3 +47,4 @@ These files do that resolution once.
 - [`047-loader-sensitive-secret-names.md`](047-loader-sensitive-secret-names.md) — ADR 047 — Loader-sensitive names are not secret names (draft)
 - [`048-exit-purge-on-a-gone-lease.md`](048-exit-purge-on-a-gone-lease.md) — ADR 048 — Exit purges secrets only on a definitely gone lease (draft)
 - [`049-validate-project-graphs-as-a-union.md`](049-validate-project-graphs-as-a-union.md) — ADR 049 — Cross-project edges stay untyped; SHACL validates the union of project graphs (draft)
+- [`050-scrub-inherited-environment.md`](050-scrub-inherited-environment.md) — ADR 050 — The `lode secrets exec` child inherits a scrubbed environment (draft)
