@@ -1059,3 +1059,13 @@ docs/plans/2026-08-21-workflow-rule-engine.md:
     task-5-executor-the-workflow-rules-subscriber: "### Task 5 — Executor: the `workflow-rules` subscriber"
     task-6-review-task-names-rule-changes: "### Task 6 — Review task names rule changes"
     task-7-e2e-rules-through-the-public-surface: "### Task 7 — e2e: rules through the public surface"
+docs/plans/2026-08-21-worklode-prod-in-the-admin-cluster.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-create-the-admin-overlay: "### Task 1 — Create the admin overlay"
+    task-2-enforce-the-overlay-invariants-in-ci: "### Task 2 — Enforce the overlay invariants in CI"
+    task-3-point-the-promotion-pipeline-and-docs-at-admin: "### Task 3 — Point the promotion pipeline and docs at admin"
+    task-4-cutover-preflight-and-runbook: "### Task 4 — Cutover preflight and runbook"
+    task-5-execute-the-cutover: "### Task 5 — Execute the cutover"
+    task-6-retire-the-hzprod-overlay-and-the-spent-runbook: "### Task 6 — Retire the hzprod overlay and the spent runbook"
