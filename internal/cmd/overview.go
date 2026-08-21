@@ -57,11 +57,12 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 		if !ok {
 			continue
 		}
+		graph := iri.RepoObservedGraph(source, host, owner, name)
 		if dryRun {
-			fmt.Fprintf(&b, "# %s\n%s", iri.ObservedGraph(source), doc)
+			fmt.Fprintf(&b, "# %s\n%s", graph, doc)
 			continue
 		}
-		res, err := derive.Run(ctx, c, iri.ObservedGraph(source), doc)
+		res, err := derive.Run(ctx, c, graph, doc)
 		if err != nil {
 			return b.String(), err
 		}
