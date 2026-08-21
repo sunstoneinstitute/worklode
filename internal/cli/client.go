@@ -610,6 +610,31 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskLis
 	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", q), nil, "task list")
 }
 
+// TaskTreeFilter selects the hierarchy TaskTree returns. Root names a single
+// container to report; Project and States narrow the whole-project form.
+type TaskTreeFilter struct {
+	Project string
+	States  []string
+	Root    string
+}
+
+// TaskTree calls GET /api/v1/tasks?tree=true: every container in scope with
+// its progress and its direct children, in one request. The server assembles
+// the tree so a client never fetches children per container.
+func (c *Client) TaskTree(ctx context.Context, f TaskTreeFilter) (model.TaskTreeResponse, []byte, error) {
+	q := url.Values{"tree": {"true"}}
+	if f.Project != "" {
+		q.Set("project", f.Project)
+	}
+	for _, s := range f.States {
+		q.Add("state", s)
+	}
+	if f.Root != "" {
+		q.Set("root", f.Root)
+	}
+	return doJSON[model.TaskTreeResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", q), nil, "task tree")
+}
+
 // GetTask calls GET /api/v1/tasks/{id}.
 func (c *Client) GetTask(ctx context.Context, id string) (model.TaskDetail, []byte, error) {
 	return doJSON[model.TaskDetail](ctx, c, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(id), nil, "task")

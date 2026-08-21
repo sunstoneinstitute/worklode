@@ -243,7 +243,7 @@ func TestTaskDetailRenderSessions(t *testing.T) {
 
 func TestTreeRender(t *testing.T) {
 	var buf bytes.Buffer
-	TreeRender(&buf, []TreeNode{{
+	TreeRender(&buf, []model.TaskTreeNode{{
 		Parent:   model.Task{ID: "WL-1", Title: "Container", State: "in_progress"},
 		Progress: model.TaskProgress{Closed: 1, Total: 2},
 		Children: []model.Task{

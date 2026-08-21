@@ -1069,57 +1069,22 @@ func newTaskTreeCmd() *cobra.Command {
 				return err
 			}
 
-			// Each parent and its progress, before its children are fetched.
-			type parentNode struct {
-				task     model.Task
-				progress model.TaskProgress
-			}
-			var parents []parentNode
+			// One request for the whole tree: the server picks the containers,
+			// rolls up their progress, and returns their children with them
+			// (WL-169). An id narrows it to that container's subtree.
+			f := cli.TaskTreeFilter{Project: sc.Project, States: resolveStatusFilter(nil)}
 			if len(args) == 1 {
 				id, err := resolveTaskIDInScope(cmd.Context(), args[0], c, sc)
 				if err != nil {
 					return err
 				}
-				t, _, err := c.GetTask(cmd.Context(), id)
-				if err != nil {
-					return err
-				}
-				parents = []parentNode{{task: t.Task, progress: t.Hierarchy.Progress}}
-			} else {
-				// has_children selects containers — no kind declares one. The
-				// roots are the ones with no parent of their own, so a
-				// subtask's parent is not listed a second time.
-				resp, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{
-					Project: sc.Project, HasChildren: true, States: resolveStatusFilter(nil),
-				})
-				if err != nil {
-					return err
-				}
-				// One GetTask per parent, for the progress the list omits.
-				for _, e := range resp.Tasks {
-					detail, _, err := c.GetTask(cmd.Context(), e.ID)
-					if err != nil {
-						return err
-					}
-					if detail.Hierarchy.Parent != nil {
-						continue
-					}
-					parents = append(parents, parentNode{task: e, progress: detail.Hierarchy.Progress})
-				}
+				f.Root = id
 			}
-
-			// One more round trip per parent, for its children.
-			nodes := make([]cli.TreeNode, 0, len(parents))
-			for _, e := range parents {
-				kids, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Parent: e.task.ID})
-				if err != nil {
-					return err
-				}
-				nodes = append(nodes, cli.TreeNode{
-					Parent: e.task, Progress: e.progress, Children: kids.Tasks,
-				})
+			resp, _, err := c.TaskTree(cmd.Context(), f)
+			if err != nil {
+				return err
 			}
-			cli.TreeRender(cmd.OutOrStdout(), nodes)
+			cli.TreeRender(cmd.OutOrStdout(), resp.Nodes)
 			return nil
 		},
 	}

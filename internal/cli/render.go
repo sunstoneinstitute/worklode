@@ -963,18 +963,11 @@ func EventSubscriberTable(w io.Writer, subs []model.EventSubscriberStatus) {
 	tw.Flush()
 }
 
-// TreeNode is one parent and its direct children, with the parent's derived
-// progress — the unit `lode task tree` renders.
-type TreeNode struct {
-	Parent   model.Task
-	Progress model.TaskProgress
-	Children []model.Task
-}
-
 // TreeRender prints each parent with its progress, then its children indented
 // one level. Subtasks — the third tier the depth cap allows — are not
-// expanded.
-func TreeRender(w io.Writer, nodes []TreeNode) {
+// expanded. The nodes come from the server as model.TaskTreeNode: the tree is
+// one response, not a fetch per parent.
+func TreeRender(w io.Writer, nodes []model.TaskTreeNode) {
 	if len(nodes) == 0 {
 		fmt.Fprintln(w, "no tasks with children")
 		return
