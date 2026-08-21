@@ -49,6 +49,15 @@ func newCatalogEnvWith(t *testing.T, secret string, m *hooks.Metrics) *catalogEn
 	}
 }
 
+// catalogHandlerNoDB builds the handler over a nil store. The 503, signature
+// and payload paths all return before the handler reaches its store, so the
+// cases most worth having green without Postgres are asserted here rather than
+// behind a fixture that skips. The cross-check that such a delivery records no
+// event does need a database, and lives in a subtest that skips on its own.
+func catalogHandlerNoDB(secret string, m *hooks.Metrics) http.Handler {
+	return hooks.NewCatalogHandler(nil, secret, nil, m)
+}
+
 // seedDeliverable declares a deliverable in project "demo" with the given
 // artifact address, which is what makes it a routing target.
 func (e *catalogEnv) seedDeliverable(t *testing.T, name, artifact string) string {
@@ -140,14 +149,19 @@ func catalogBody(artifact, state string) []byte {
 // TestCatalogSecretUnconfigured: a server with no secret refuses every
 // delivery rather than accepting unauthenticated ones.
 func TestCatalogSecretUnconfigured(t *testing.T) {
-	e := newCatalogEnvWith(t, "", nil)
-	rr := catalogDeliver(t, e.h, "d-1", catalogBody(catalogArtifact, "published"))
+	rr := catalogDeliver(t, catalogHandlerNoDB("", nil), "d-1",
+		catalogBody(catalogArtifact, "published"))
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
 	}
-	if got := e.catalogEventCount(t); got != 0 {
-		t.Fatalf("recorded %d event(s), want 0", got)
-	}
+
+	t.Run("records no event", func(t *testing.T) {
+		e := newCatalogEnvWith(t, "", nil)
+		catalogDeliver(t, e.h, "d-1", catalogBody(catalogArtifact, "published"))
+		if got := e.catalogEventCount(t); got != 0 {
+			t.Fatalf("recorded %d event(s), want 0", got)
+		}
+	})
 }
 
 // TestCatalogSignatureRejected: a bad or absent signature is 401, records no
@@ -155,38 +169,48 @@ func TestCatalogSecretUnconfigured(t *testing.T) {
 func TestCatalogSignatureRejected(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
-	e := newCatalogEnvWith(t, catalogTestSecret, m)
+	h := catalogHandlerNoDB(catalogTestSecret, m)
 	body := catalogBody(catalogArtifact, "published")
+
+	deliverUnsigned := func(t *testing.T, h http.Handler, sig string) int {
+		req := httptest.NewRequest("POST", "/hooks/catalog", bytes.NewReader(body))
+		if sig != "" {
+			req.Header.Set("X-Signature", sig)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr.Code
+	}
 
 	for _, tc := range []struct{ name, sig string }{
 		{"missing", ""},
 		{"wrong", "sha256=" + hex.EncodeToString(make([]byte, 32))},
 		{"malformed", "not-a-signature"},
 	} {
-		req := httptest.NewRequest("POST", "/hooks/catalog", bytes.NewReader(body))
-		if tc.sig != "" {
-			req.Header.Set("X-Signature", tc.sig)
+		if code := deliverUnsigned(t, h, tc.sig); code != http.StatusUnauthorized {
+			t.Errorf("%s signature: status = %d, want 401", tc.name, code)
 		}
-		rr := httptest.NewRecorder()
-		e.h.ServeHTTP(rr, req)
-		if rr.Code != http.StatusUnauthorized {
-			t.Errorf("%s signature: status = %d, want 401", tc.name, rr.Code)
-		}
-	}
-	if got := e.catalogEventCount(t); got != 0 {
-		t.Fatalf("recorded %d event(s), want 0", got)
 	}
 	if got := testutil.ToFloat64(m.Events().WithLabelValues("catalog", "invalid", "rejected")); got != 3 {
 		t.Fatalf("events{catalog,invalid,rejected} = %v, want 3", got)
 	}
+
+	t.Run("records no event", func(t *testing.T) {
+		e := newCatalogEnvWith(t, catalogTestSecret, nil)
+		if code := deliverUnsigned(t, e.h, ""); code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", code)
+		}
+		if got := e.catalogEventCount(t); got != 0 {
+			t.Fatalf("recorded %d event(s), want 0", got)
+		}
+	})
 }
 
 // TestCatalogPayloadRejected: a signed but unusable payload is 400 and
 // records nothing. The state set is closed, so an unknown state cannot reach
 // the CHECK constraint or the metric label.
 func TestCatalogPayloadRejected(t *testing.T) {
-	e := newCatalogEnv(t)
-	for _, tc := range []struct {
+	bad := []struct {
 		name string
 		body []byte
 	}{
@@ -195,15 +219,25 @@ func TestCatalogPayloadRejected(t *testing.T) {
 		{"blank artifact", catalogBody("   ", "published")},
 		{"missing state", []byte(`{"artifact":"` + catalogArtifact + `"}`)},
 		{"unknown state", catalogBody(catalogArtifact, "vanished")},
-	} {
-		rr := catalogDeliver(t, e.h, "d-"+tc.name, tc.body)
+	}
+
+	h := catalogHandlerNoDB(catalogTestSecret, nil)
+	for _, tc := range bad {
+		rr := catalogDeliver(t, h, "d-"+tc.name, tc.body)
 		if rr.Code != http.StatusBadRequest {
 			t.Errorf("%s: status = %d, want 400", tc.name, rr.Code)
 		}
 	}
-	if got := e.catalogEventCount(t); got != 0 {
-		t.Fatalf("recorded %d event(s), want 0", got)
-	}
+
+	t.Run("records no event", func(t *testing.T) {
+		e := newCatalogEnv(t)
+		for _, tc := range bad {
+			catalogDeliver(t, e.h, "d-"+tc.name, tc.body)
+		}
+		if got := e.catalogEventCount(t); got != 0 {
+			t.Fatalf("recorded %d event(s), want 0", got)
+		}
+	})
 }
 
 // TestCatalogFilesEvidenceAgainstDeclarer is the happy path: the fact lands
