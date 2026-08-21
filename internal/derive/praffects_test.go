@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -95,6 +96,28 @@ func TestPRAffectsTriplesSkipsManifestlessRepoOnce(t *testing.T) {
 	}
 	if got := rr.fileAtCalls["sunstoneinstitute/unmapped"]; got != 1 {
 		t.Fatalf("FileAt calls for the manifest-less repo = %d, want 1", got)
+	}
+}
+
+// TestPRAffectsTriplesSortsSkippedRepos pins the sort on skippedRepos: the
+// set is built by ranging a map, so with two or more entries the report is
+// order-dependent unless it is sorted. The PRs are fed in reverse
+// alphabetical order so an unsorted result would come out wrong at least
+// sometimes.
+func TestPRAffectsTriplesSortsSkippedRepos(t *testing.T) {
+	prs := []store.PRRef{
+		{Repo: "sunstoneinstitute/zeta", Number: 1, TaskID: "WL-1"},
+		{Repo: "sunstoneinstitute/alpha", Number: 2, TaskID: "WL-2"},
+		{Repo: "sunstoneinstitute/mid", Number: 3, TaskID: "WL-3"},
+	}
+	rr := &fakeRepoReader{manifests: map[string]string{}}
+	_, skipped, err := derive.PRAffectsTriples(context.Background(), prs, rr)
+	if err != nil {
+		t.Fatalf("PRAffectsTriples: %v", err)
+	}
+	want := []string{"sunstoneinstitute/alpha", "sunstoneinstitute/mid", "sunstoneinstitute/zeta"}
+	if !slices.Equal(skipped, want) {
+		t.Fatalf("skipped = %v, want %v in sorted order", skipped, want)
 	}
 }
 

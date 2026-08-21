@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -122,6 +123,36 @@ func TestFileAtDecodesWrappedBase64AndSendsAuth(t *testing.T) {
 	}
 }
 
+// TestFileAtEscapesPathSegments pins escapeRepoPath: a path segment holding
+// a space or a "#" must be percent-escaped per segment, with the "/"
+// separators left alone. Unescaped, the "#" would truncate the request URL
+// at what the client treats as a fragment and the read would silently ask
+// for the wrong file.
+func TestFileAtEscapesPathSegments(t *testing.T) {
+	const path = "docs/release notes/v1#final.md"
+	const wantEscaped = "/repos/acme/app/contents/docs/release%20notes/v1%23final.md"
+	var gotEscaped string
+	rc, _ := newRepoFileClient(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		// Keyed on the decoded path, which is what the server sees after it
+		// unescapes what escapeRepoPath produced.
+		"/repos/acme/app/contents/" + path: func(w http.ResponseWriter, r *http.Request) {
+			gotEscaped = r.URL.EscapedPath()
+			fmt.Fprintf(w, `{"content": %q, "encoding": "base64"}`,
+				base64.StdEncoding.EncodeToString([]byte("ok")))
+		},
+	})
+	got, err := rc.FileAt(t.Context(), path)
+	if err != nil {
+		t.Fatalf("FileAt: %v", err)
+	}
+	if string(got) != "ok" {
+		t.Fatalf("FileAt = %q, want %q", got, "ok")
+	}
+	if gotEscaped != wantEscaped {
+		t.Fatalf("request path = %q, want %q", gotEscaped, wantEscaped)
+	}
+}
+
 func TestFileAtNotFound(t *testing.T) {
 	rc, _ := newRepoFileClient(t, map[string]func(w http.ResponseWriter, r *http.Request){
 		"/repos/acme/app/contents/missing.yaml": func(w http.ResponseWriter, r *http.Request) {
@@ -192,5 +223,48 @@ func TestPRFilesPaginatesUntilShortPage(t *testing.T) {
 		if pp != "100" {
 			t.Fatalf("per_page = %q, want 100", pp)
 		}
+	}
+}
+
+// TestPRFilesAtGitHubsTruncationBoundary covers the case the page cap used to
+// collide with: GitHub truncates /pulls/{n}/files at 3000 changed files, so a
+// PR at or over that limit returns 30 full pages and no short page. That is
+// routine truncation, not an impossible PR, and it must come back as 3000
+// filenames rather than an error — the empty page 31 is what ends the loop.
+func TestPRFilesAtGitHubsTruncationBoundary(t *testing.T) {
+	const fullPages = 30
+	page := make([]string, 100)
+	for i := range page {
+		page[i] = fmt.Sprintf(`{"filename":"f%d.go"}`, i)
+	}
+	fullBody := "[" + strings.Join(page, ",") + "]"
+
+	rc, rec := newRepoFileClient(t, map[string]func(w http.ResponseWriter, r *http.Request){
+		"/repos/acme/app/pulls/7/files": func(w http.ResponseWriter, r *http.Request) {
+			n, _ := strconv.Atoi(r.URL.Query().Get("page"))
+			if n >= 1 && n <= fullPages {
+				io.WriteString(w, fullBody)
+				return
+			}
+			io.WriteString(w, `[]`)
+		},
+	})
+
+	files, err := rc.PRFiles(t.Context(), 7)
+	if err != nil {
+		t.Fatalf("PRFiles at GitHub's 3000-file cap: %v — full page %d must not be treated as an over-cap PR", err, fullPages)
+	}
+	if len(files) != fullPages*100 {
+		t.Fatalf("len(files) = %d, want %d", len(files), fullPages*100)
+	}
+
+	var pages int
+	for _, r := range rec.all() {
+		if r.path == "/repos/acme/app/pulls/7/files" {
+			pages++
+		}
+	}
+	if pages != fullPages+1 {
+		t.Fatalf("pages requested = %d, want %d — the empty page past the cap is what terminates the loop", pages, fullPages+1)
 	}
 }

@@ -31,11 +31,11 @@ func escapeRepoPath(p string) string {
 }
 
 // FileAt fetches path at the repo's default branch head via the contents
-// API. GitHub wraps the base64 body at 60 characters, which
-// base64.StdEncoding rejects outright, so the newlines are stripped before
-// decoding. A file over 1 MB comes back with encoding "none" and no content
-// (GitHub's cutoff for this endpoint) — reported as an error rather than
-// silently returned as empty bytes.
+// API. GitHub wraps the base64 body at 60 characters; no pre-processing is
+// needed, because encoding/base64's decoders ignore \r and \n by contract.
+// A file over 1 MB comes back with encoding "none" and no content (GitHub's
+// cutoff for this endpoint) — reported as an error rather than silently
+// returned as empty bytes.
 func (c *RepoClient) FileAt(ctx context.Context, path string) ([]byte, error) {
 	var payload struct {
 		Content  string `json:"content"`
@@ -56,19 +56,23 @@ func (c *RepoClient) FileAt(ctx context.Context, path string) ([]byte, error) {
 	if payload.Encoding == "none" {
 		return nil, fmt.Errorf("get content %s %s: file exceeds the contents API's size limit (encoding=none)", c.path, path)
 	}
-	clean := strings.NewReplacer("\n", "", "\r", "").Replace(payload.Content)
-	data, err := base64.StdEncoding.DecodeString(clean)
+	data, err := base64.StdEncoding.DecodeString(payload.Content)
 	if err != nil {
 		return nil, fmt.Errorf("decode content %s %s: %w", c.path, path, err)
 	}
 	return data, nil
 }
 
-// maxPRFilesPages caps PRFiles' pagination at maxPerPage*maxPRFilesPages
-// (3000) changed files. A PR that large is a fact worth surfacing as an
-// error — not an unbounded loop, and not a silently truncated file list
-// feeding wl:affects, which would just omit edges with no trace of why.
-const maxPRFilesPages = 30
+// maxPRFilesPages caps PRFiles' pagination. It sits one page past GitHub's
+// own hard cap of 3000 changed files on this endpoint (maxPerPage*30)
+// deliberately: a PR at exactly that cap returns a full page 30, so the
+// short-page check never fires and a 30-page limit would error on GitHub's
+// routine truncation rather than on anything wrong. Page 31 comes back empty
+// and terminates the loop normally. The cap still exists — the loop must not
+// be unbounded, and a silently truncated file list feeding wl:affects would
+// omit edges with no trace of why — it just no longer collides with the
+// boundary it was meant to sit outside.
+const maxPRFilesPages = 31
 
 // PRFiles lists a pull request's changed file paths, paging the same way
 // ListIssues/ListPulls do (list.go): per_page=maxPerPage, page-number
@@ -97,6 +101,6 @@ func (c *RepoClient) PRFiles(ctx context.Context, number int64) ([]string, error
 			return out, nil
 		}
 	}
-	return nil, fmt.Errorf("list pr files %s#%d: exceeds %d changed files (page cap %d)",
-		c.path, number, maxPerPage*maxPRFilesPages, maxPRFilesPages)
+	return nil, fmt.Errorf("list pr files %s#%d: %d full pages with no short page (%d changed files, past GitHub's 3000-file cap for this endpoint)",
+		c.path, number, maxPRFilesPages, maxPerPage*maxPRFilesPages)
 }

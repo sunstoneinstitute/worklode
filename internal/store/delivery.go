@@ -475,3 +475,40 @@ func (s *Store) HasMainCommit(ctx context.Context, repo, sha string) (bool, erro
 	}
 	return exists, nil
 }
+
+// KnownMainCommits is the bulk form of HasMainCommit: which of the given
+// (repo, sha) pairs name a recorded main_commits row, in one query. Only the
+// present pairs are keyed in the result, so an absent key means "not known".
+// keys is empty-safe and issues no query.
+//
+// The deploy deriver prefetches through this rather than calling
+// HasMainCommit per artifact: it replaces the whole observed/deploy graph, so
+// a per-lookup error must propagate and fail the run instead of degrading
+// into "commit unknown" and quietly PUTting a graph missing every
+// prov:wasDerivedFrom edge over the good one.
+func (s *Store) KnownMainCommits(ctx context.Context, keys []RepoSHA) (map[RepoSHA]bool, error) {
+	out := map[RepoSHA]bool{}
+	if len(keys) == 0 {
+		return out, nil
+	}
+	repos, shas := splitRepoSHAs(keys)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, sha FROM main_commits
+		 WHERE (repo, sha) IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
+		repos, shas)
+	if err != nil {
+		return nil, fmt.Errorf("known main commits for %d pairs: %w", len(keys), err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k RepoSHA
+		if err := rows.Scan(&k.Repo, &k.SHA); err != nil {
+			return nil, fmt.Errorf("scan known main commit: %w", err)
+		}
+		out[k] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("known main commits for %d pairs: %w", len(keys), err)
+	}
+	return out, nil
+}

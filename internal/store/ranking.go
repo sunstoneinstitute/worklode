@@ -117,18 +117,21 @@ func (s *Store) projectFocusMap(ctx context.Context, projectIDs []string) (map[s
 	return out, nil
 }
 
-// Frontier returns the ready, unblocked, unleased tasks in the exact rank
-// order ClaimNext consumes, plus the blocking fan-out map — the read-only
-// overview mirror of the authoritative frontier (spec 007 §3.4). It claims
-// nothing, and it is deliberately not wired through ClaimNext (nor is
-// ClaimNext refactored to call it): keeping the two implementations
-// independent is what makes a mirror test between them a real check rather
-// than a tautology.
-func (s *Store) Frontier(ctx context.Context, projectID string) ([]model.Task, map[string]int, error) {
-	candidates, err := s.readyCandidates(ctx, projectID, "")
+// rankedFrontier is the ranking pipeline both Frontier and ClaimNext run:
+// the ready set for (projectID, kind), ordered by rankTasks under the given
+// focus mode, plus the blocking fan-out map the ranking used. It writes
+// nothing. An empty ready set short-circuits before the fan-out and focus
+// queries — neither has anything to say about no tasks — and yields a nil
+// slice with a non-nil empty map.
+func (s *Store) rankedFrontier(ctx context.Context, projectID, kind string, strictFocus bool) ([]model.Task, map[string]int, error) {
+	candidates, err := s.readyCandidates(ctx, projectID, kind)
 	if err != nil {
 		return nil, nil, err
 	}
+	if len(candidates) == 0 {
+		return nil, map[string]int{}, nil
+	}
+
 	fanOut, err := s.BlockingFanOut(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -151,7 +154,27 @@ func (s *Store) Frontier(ctx context.Context, projectID string) ([]model.Task, m
 	for i, t := range candidates {
 		in[i] = rankInput{Task: t, Focus: focus[t.Project], FanOut: fanOut[t.ID]}
 	}
-	return rankTasks(in, false), fanOut, nil
+	return rankTasks(in, strictFocus), fanOut, nil
+}
+
+// Frontier returns the ready, unblocked, unleased tasks in the exact rank
+// order ClaimNext consumes, plus the blocking fan-out map — the read-only
+// overview mirror of the authoritative frontier (spec 007 §3.4). It claims
+// nothing.
+//
+// It shares rankedFrontier with ClaimNext rather than reimplementing the
+// pipeline, so the two orders agree by construction;
+// TestFrontierMirrorsClaimNextOrder is a cheap regression guard against that
+// sharing being undone, not an independent check of the ranking itself
+// (rankTasks has its own tests for that).
+//
+// The two arguments Frontier does not take are deliberate, not an oversight:
+// no kind filter and soft focus (critical priority still outranks focus).
+// The overview is a read-only view of the whole queue as it stands, so it
+// must not narrow itself the way one worker's claim call does — a strict- or
+// kind-filtered claim is a different question, asked through ClaimNext.
+func (s *Store) Frontier(ctx context.Context, projectID string) ([]model.Task, map[string]int, error) {
+	return s.rankedFrontier(ctx, projectID, "", false)
 }
 
 // rankInput carries the per-candidate inputs rankTasks needs beyond the task
@@ -261,53 +284,26 @@ type ClaimNextResult struct {
 	Lease   *Lease
 }
 
-// ClaimNext ranks the ready set (see readyCandidates and rankTasks) and
-// atomically claims the top candidate via Claim, falling through to the next
-// ranked candidate whenever a claim loses the race (ErrLeased, ErrBlocked,
+// ClaimNext ranks the ready set (rankedFrontier — the same pipeline Frontier
+// reads, here with the caller's kind filter and focus mode) and atomically
+// claims the top candidate via Claim, falling through to the next ranked
+// candidate whenever a claim loses the race (ErrLeased, ErrBlocked,
 // ErrBadTransition) — Claim's own transaction is what makes each attempt
 // atomic; ClaimNext just retries in rank order. An empty ready set is not an
 // error: it returns Claimed=false, Task=nil. DryRun returns the top-ranked
 // candidate without writing anything (no lease, no state change).
 func (s *Store) ClaimNext(ctx context.Context, opts ClaimNextOpts) (*ClaimNextResult, error) {
-	candidates, err := s.readyCandidates(ctx, opts.ProjectID, opts.Kind)
+	ranked, fanOut, err := s.rankedFrontier(ctx, opts.ProjectID, opts.Kind, opts.StrictFocus)
 	if err != nil {
 		return nil, err
 	}
-	if len(candidates) == 0 {
+	if len(ranked) == 0 {
 		// A dry run is a read, not a claim attempt.
 		if !opts.DryRun {
 			s.metrics.claim("claim_next", "none")
 		}
 		return &ClaimNextResult{Claimed: false}, nil
 	}
-
-	fanOut, err := s.BlockingFanOut(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	var projectIDs []string
-	seen := map[string]bool{}
-	for _, t := range candidates {
-		if !seen[t.Project] {
-			seen[t.Project] = true
-			projectIDs = append(projectIDs, t.Project)
-		}
-	}
-	focusByProject, err := s.projectFocusMap(ctx, projectIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	rin := make([]rankInput, len(candidates))
-	for i, t := range candidates {
-		rin[i] = rankInput{
-			Task:   t,
-			Focus:  focusByProject[t.Project],
-			FanOut: fanOut[t.ID],
-		}
-	}
-	ranked := rankTasks(rin, opts.StrictFocus)
 
 	if opts.DryRun {
 		top := ranked[0]

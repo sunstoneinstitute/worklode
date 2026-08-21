@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
@@ -25,13 +26,20 @@ func TestTaskPRs(t *testing.T) {
 	if _, err := upsertPR(t, s, unbound, ""); err != nil {
 		t.Fatalf("upsertPR unbound: %v", err)
 	}
+	// Bound but abandoned: its files never landed, so 007 §2.3 keeps it out.
+	closed := defaultPR(task.ID)
+	closed.Number = 3
+	closed.State = "closed"
+	if _, err := upsertPR(t, s, closed, ""); err != nil {
+		t.Fatalf("upsertPR closed: %v", err)
+	}
 
 	prs, err := s.TaskPRs(context.Background())
 	if err != nil {
 		t.Fatalf("TaskPRs: %v", err)
 	}
 	if len(prs) != 1 || prs[0].Repo != "sunstoneinstitute/demo" || prs[0].Number != 1 || prs[0].TaskID != task.ID {
-		t.Fatalf("TaskPRs = %+v; want the one task-bound PR", prs)
+		t.Fatalf("TaskPRs = %+v; want the one open task-bound PR", prs)
 	}
 }
 
@@ -56,6 +64,11 @@ func TestAllBlockEdges(t *testing.T) {
 	}
 }
 
+// TestFrontierMirrorsClaimNextOrder checks Frontier's own contract — rank
+// order out, fan-out map populated — and guards the sharing that makes the
+// mirror hold: both surfaces run rankedFrontier, so a change that gives one
+// of them a private pipeline again shows up here. It is not an independent
+// check of the ranking; rankTasks' own tests are that.
 func TestFrontierMirrorsClaimNextOrder(t *testing.T) {
 	s := openClaimNextStore(t)
 	ctx := context.Background()
@@ -155,5 +168,56 @@ func TestAllReleaseFrontiersAndHasMainCommit(t *testing.T) {
 	ok, err = s.HasMainCommit(context.Background(), "acme/app", "unknown-sha")
 	if err != nil || ok {
 		t.Fatalf("HasMainCommit(unknown) = %v, %v; want false, nil", ok, err)
+	}
+}
+
+// TestKnownMainCommits covers the bulk commit guard the deploy deriver
+// prefetches through: one query answers every pair, a pair whose sha belongs
+// to a different repo is not a match (main_commits is UNIQUE (repo, sha), so
+// a sha alone is not a key), and empty input issues no query at all.
+func TestKnownMainCommits(t *testing.T) {
+	s := openArtifactsStore(t)
+	ctx := context.Background()
+
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		if _, err := AppendMainCommit(tx, "acme/app", "sha-a", artifactsTestNow); err != nil {
+			return err
+		}
+		_, err := AppendMainCommit(tx, "acme/other", "sha-b", artifactsTestNow)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("seed main commits: %v", err)
+	}
+
+	got, err := s.KnownMainCommits(ctx, []RepoSHA{
+		{Repo: "acme/app", SHA: "sha-a"},
+		{Repo: "acme/other", SHA: "sha-b"},
+		{Repo: "acme/app", SHA: "sha-b"}, // right sha, wrong repo
+		{Repo: "acme/app", SHA: "never-seen"},
+	})
+	if err != nil {
+		t.Fatalf("KnownMainCommits: %v", err)
+	}
+	for _, k := range []RepoSHA{{Repo: "acme/app", SHA: "sha-a"}, {Repo: "acme/other", SHA: "sha-b"}} {
+		if !got[k] {
+			t.Errorf("KnownMainCommits missing %+v", k)
+		}
+	}
+	for _, k := range []RepoSHA{{Repo: "acme/app", SHA: "sha-b"}, {Repo: "acme/app", SHA: "never-seen"}} {
+		if got[k] {
+			t.Errorf("KnownMainCommits reported %+v as known", k)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("KnownMainCommits = %v; want only the two present pairs keyed", got)
+	}
+
+	empty, err := s.KnownMainCommits(ctx, nil)
+	if err != nil {
+		t.Fatalf("KnownMainCommits(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("KnownMainCommits(nil) = %v; want an empty non-nil map and no query", empty)
 	}
 }
