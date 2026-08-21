@@ -229,6 +229,26 @@ func TestIdentitySubdirectory(t *testing.T) {
 	}
 }
 
+func TestIdentityOfMatchesIdentity(t *testing.T) {
+	dir := initGitRepo(t)
+
+	root, ok := worktree.Root(dir)
+	if !ok {
+		t.Fatalf("Root(%s): ok = false", dir)
+	}
+	want, err := worktree.Identity(dir)
+	if err != nil {
+		t.Fatalf("Identity: %v", err)
+	}
+	got, err := worktree.IdentityOf(root)
+	if err != nil {
+		t.Fatalf("IdentityOf: %v", err)
+	}
+	if got != want {
+		t.Fatalf("IdentityOf(%q) = %q, want %q", root, got, want)
+	}
+}
+
 func TestIdentityOutsideGit(t *testing.T) {
 	if _, err := worktree.Identity(t.TempDir()); err == nil {
 		t.Fatalf("Identity outside a git worktree: err = nil, want error")

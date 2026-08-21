@@ -145,6 +145,14 @@ func Identity(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%s is not inside a git worktree: %w", path, err)
 	}
+	return IdentityOf(root)
+}
+
+// IdentityOf is Identity for a caller that already holds the worktree root
+// (from Root, say): it formats the identity without forking git a second time
+// for an answer it has. root must be a worktree root — it is trusted, not
+// resolved.
+func IdentityOf(root string) (string, error) {
 	host, err := os.Hostname()
 	if err != nil {
 		return "", fmt.Errorf("determine hostname: %w", err)
