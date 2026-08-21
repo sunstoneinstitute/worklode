@@ -280,6 +280,39 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	}
 }
 
+// TestNextPrintsWorktreePathAsSoonAsCreated proves the worktree path is
+// reported the moment the worktree exists, not only in the final summary
+// after the brief fetch and secrets ceremony succeed — a later failure in
+// those steps rolls the worktree back (rollbackClaim), and the operator
+// needs to have already seen where it was.
+func TestNextPrintsWorktreePathAsSoonAsCreated(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Early worktree print")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "next", task.ID)
+	if err != nil {
+		t.Fatalf("lode next: %v\noutput: %s", err, out)
+	}
+
+	wantDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-early-worktree-print")
+	earlyLine := "worktree: " + wantDir
+	earlyIdx := strings.Index(out, earlyLine)
+	if earlyIdx < 0 {
+		t.Fatalf("output does not contain %q\noutput: %s", earlyLine, out)
+	}
+	claimedIdx := strings.Index(out, "claimed "+task.ID)
+	if claimedIdx < 0 {
+		t.Fatalf("output does not contain the claimed summary line\noutput: %s", out)
+	}
+	if earlyIdx > claimedIdx {
+		t.Fatalf("worktree path printed at %d, want before the claimed summary at %d\noutput: %s", earlyIdx, claimedIdx, out)
+	}
+}
+
 // TestNextHonorsConfiguredWorktreeDir proves `lode next` resolves its layout
 // from the repo-scoped worktree_dir (LODE_WORKTREE_DIR here, cheapest to set)
 // rather than hardcoding worktree.DefaultBase — the one thing layoutFrom
