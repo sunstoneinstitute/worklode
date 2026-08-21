@@ -51,8 +51,8 @@ none of their packages; it only calls them.
 | Plan | Provides (consumed here) |
 |---|---|
 | `docs/plans/2026-07-30-knowledge-graph-{1-graph-foundations,2-projector}.md` (landed — WL-25/WL-26) | part 1: `internal/kg/iri` (plain-string constructors + the exported namespace constants), `internal/graphproj` (`Term`/`Triple`/`Document`, the `graphproj/graphtest` Oxigraph harness), the `ns/*.ttl` vocabulary checks; part 2: `internal/projector` and the `LODE_GRAPHSERVER_*` client wiring in `serve.go` (`graphserver.FromEnv`) |
-| `docs/plans/2026-08-19-component-boundary-manifest.md` (successor to the superseded `2026-07-30-platform-graph-design.md` Tasks 2–3 — WL-109) | `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2.2), Worklode's own manifest. `internal/kg/iri` (IRI grammar) moved to `2026-07-30-knowledge-graph-1-graph-foundations.md` and has landed (WL-25) |
-| `docs/plans/2026-07-30-runtime-layer.md` | the runtime row→triple functions in `internal/graphproj` (`ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCutFromTriples`, `CommitKnown`) — exactly the row→triple functions 006 §11.1 says "007's observed/deploy deriver will emit". (`Triple`/`Document` themselves landed with knowledge-graph part 1.) |
+| `docs/plans/2026-08-19-component-boundary-manifest.md` (successor to the superseded `2026-07-30-platform-graph-design.md` Tasks 2–3; planned under WL-109, execution task WL-120 — unlanded) | `internal/kg/manifest` (`Parse`, `(*Manifest).Match` — first-match-wins `**` globs over `.worklode/components.yaml`, spec 007 §2.2), Worklode's own manifest. `internal/kg/iri` (IRI grammar) moved to `2026-07-30-knowledge-graph-1-graph-foundations.md` and has landed (WL-25) |
+| `docs/plans/2026-07-30-runtime-layer.md` (landed — WL-27) | the runtime row→triple functions in `internal/graphproj/runtime.go` (`ArtifactTriples`, `DeploymentTriples`, `EnvironmentTriples`, `CommitTriples`, `ReleaseCutFromTriples`; the commit guard `CommitKnown` landed as `func(repo, sha string) bool` — see that plan's execution notes) — exactly the row→triple functions 006 §11.1 says "007's observed/deploy deriver will emit". (`Triple`/`Document` themselves landed with knowledge-graph part 1.) |
 | `docs/plans/2026-07-30-reconciliation-{1-replay-engine,2-cli-surface,3-poll-engine}.md` | nothing consumed directly; noted because the series owns `lode doctor` and `internal/reconcile`, which this series must not touch |
 | `docs/plans/2026-07-30-design-documents-as-graph-objects.md` | nothing consumed; owns everything this series defers to "the 014 plan" — `internal/kg/implements`, the `observed/repo-implements` deriver, sections, `lode doc` |
 | `docs/plans/2026-07-30-data-platform-kg-requirements.md` | owns `internal/graphserver` (the prod graph-server client — GSP + read-only `/sparql` only; landed) and the spec 009 hand-off issues. This series writes and reads through that client — see design call 9 |
@@ -66,25 +66,29 @@ responsibility split stands.
 Shipped on main today, reused as-is:
 
 - Ready-set + ranking (the authoritative frontier, D8/D9):
-  `internal/store/ranking.go:61` (`readyCandidates`), `:179` (`rankTasks`,
-  key `(is_critical, concern_rank, priority, fan_out)` where backbone
-  `is_critical` = `priority == "critical"`, `:185`), `:18`
-  (`BlockingFanOut`, transitive over `blocks`).
+  `internal/store/ranking.go` — `readyCandidates`; `rankTasks` (key
+  `(is_critical, concern_rank, priority, fan_out)` where backbone
+  `is_critical` = `priority == "critical"`); `BlockingFanOut` (transitive
+  over `blocks`).
 - Deploy/runtime ingestion (deriver 4's input, D6): `internal/hooks/flux.go`,
-  `internal/hooks/deployment.go`, `internal/hooks/github.go:400`
+  `internal/hooks/deployment.go`, `internal/hooks/github.go`
   (`applyRelease`); rows in `internal/store/artifacts.go` (`Artifact`,
   `Deployment`, `ListDeployments`), `internal/store/delivery.go`
   (`main_commits`, `release_frontiers`).
-- PR→Task join (deriver 3's join): `internal/store/changes.go:99`
-  (`TaskIDFromRef`, branch `wt/<id>-<slug>`), `:118` (`TaskIDFromBody`);
-  `UpsertPR` binds `pull_requests.task_id` at ingest. The spec's resolved
-  Q1 (join via mirrored Issues / `Closes #N`) waits on Task↔Issue mirroring
-  (004/008); until then the existing relational join is the join.
-- Read-only web UI to extend: `internal/api/server.go:234-239` routes,
-  `internal/api/web.go`, `internal/api/templates/`.
+- PR→Task join (deriver 3's join): `TaskIDFromRef`
+  (`internal/store/branchname.go`, matching the configured branch template —
+  default `{{ .id }}-{{ .slug }}`) and `TaskIDFromBody`
+  (`internal/store/changes.go`); `UpsertPR` binds `pull_requests.task_id` at
+  ingest. The spec's resolved Q1 (join via mirrored Issues / `Closes #N`)
+  waits on Task↔Issue mirroring (004/008); until then the existing
+  relational join is the join.
+- Read-only web cockpit to extend: handlers in `internal/api/web.go`, pages
+  as `templ` components in `internal/ui`; every new route must be named in
+  `internal/api/router.go`'s `routeGuards` table or the server refuses to
+  boot.
 - GitHub App installation tokens for server-side API reads:
-  `internal/githubauth/app.go:94` (`InstallationToken`), held by the api
-  server (`internal/api/server.go:116`).
+  `internal/githubauth/app.go` (`AppAuth.InstallationToken`), built by the
+  api server (`newAppAuth`, `internal/api/server.go`).
 
 Not implemented anywhere (this series' scope): every deriver, every standing
 query, critical path, `lode overview/drift/gaps/frontier/critical-path`, the
@@ -1106,10 +1110,13 @@ func newDeriveCmd() *cobra.Command {
 }
 ```
 
-`gitRemoteOrigin` is three lines of `exec.Command("git", "-C", dir,
-"remote", "get-url", "origin")` mirroring `internal/cli/gitremote.go`
-(that function is unexported in another package; do not export it, copy the
-pattern). Register per the package convention (`board.go:52`):
+`gitRemoteOrigin` is three lines calling
+`gitexec.CmdContext(ctx, dir, "remote", "get-url", "origin").Output()`,
+mirroring `internal/cli/gitremote.go` (that function is unexported in
+another package; do not export it, copy the pattern). Never a direct
+`exec.Command("git", ...)` — `internal/gitexec` is the one place worklode
+shells out to git, and its rule test fails the build on any other call
+site. Register per the package convention (the `init` in `board.go`):
 
 ```go
 func init() { rootCmd.AddCommand(newDeriveCmd()) }
@@ -1165,10 +1172,10 @@ The full-series map is split across the three parts; this part covers:
    derive time. If ingestion is preferred later, `PRAffectsTriples` keeps
    its signature and only the `RepoReader` implementation changes.
 4. **PR→Task join** uses the shipped relational binding
-   (`pull_requests.task_id` via `wt/<id>-<slug>` / body ref,
-   `internal/store/changes.go:99,118`), not the spec's resolved-Q1 Issue
-   mirror — mirroring does not exist yet (004/008). Swap the join when it
-   lands.
+   (`pull_requests.task_id` via branch-template head ref / body ref —
+   `TaskIDFromRef` in `internal/store/branchname.go`, `TaskIDFromBody` in
+   `internal/store/changes.go`), not the spec's resolved-Q1 Issue mirror —
+   mirroring does not exist yet (004/008). Swap the join when it lands.
 5. **Cross-repo import edges** (deriver 1) are not built: they need a
    module-path→component index across all repos' manifests, which no spec
    currently places. v1 emits intra-repo cross-component edges only.
