@@ -21,6 +21,23 @@ func insertRawSession(t *testing.T, s *Store, leaseID int64, agent, sessionID st
 	return err
 }
 
+// sessionRowID reads the surrogate primary key of the session addressed by
+// its natural key. The store returns model.AgentSession, which does not carry
+// the row id (ADR 036); a test that needs to prove two calls hit the same row
+// asks the database directly.
+func sessionRowID(t *testing.T, s *Store, leaseID int64, agent, sessionID string) int64 {
+	t.Helper()
+	var id int64
+	if err := s.db.QueryRow(
+		`SELECT id FROM agent_sessions
+		  WHERE lease_id = $1 AND agent = $2 AND external_session_id = $3`,
+		leaseID, agent, sessionID,
+	).Scan(&id); err != nil {
+		t.Fatalf("read agent session row id: %v", err)
+	}
+	return id
+}
+
 // leaseForTest claims a fresh task and returns the resulting lease.
 // createTask leaves the task in "ready", so it is claimable as-is.
 func leaseForTest(t *testing.T, s *Store, worktree string) *Lease {
@@ -116,6 +133,7 @@ func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first touch: %v", err)
 	}
+	rowID := sessionRowID(t, s, lease.ID, "claude-code", "sess-1")
 	if sess.LeaseID != lease.ID {
 		t.Fatalf("lease id: got %d, want %d", sess.LeaseID, lease.ID)
 	}
@@ -137,8 +155,8 @@ func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second touch: %v", err)
 	}
-	if again.ID != sess.ID {
-		t.Fatalf("heartbeat created a new row: %d then %d", sess.ID, again.ID)
+	if got := sessionRowID(t, s, lease.ID, "claude-code", "sess-1"); got != rowID {
+		t.Fatalf("heartbeat created a new row: %d then %d", rowID, got)
 	}
 	if !again.StartedAt.Equal(sess.StartedAt) {
 		t.Fatalf("heartbeat moved started_at: %v then %v", sess.StartedAt, again.StartedAt)
@@ -194,14 +212,14 @@ func TestTouchAgentSessionEmptyVersionIsNull(t *testing.T) {
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
 
-	sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil)
-	if err != nil {
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
 
 	var version sql.NullString
 	if err := s.db.QueryRow(
-		`SELECT agent_version FROM agent_sessions WHERE id = $1`, sess.ID,
+		`SELECT agent_version FROM agent_sessions WHERE id = $1`,
+		sessionRowID(t, s, lease.ID, "claude-code", "sess-1"),
 	).Scan(&version); err != nil {
 		t.Fatalf("read agent_version: %v", err)
 	}
@@ -458,6 +476,7 @@ func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first touch: %v", err)
 	}
+	rowID := sessionRowID(t, s, lease.ID, "claude-code", "sess-1")
 
 	*now = now.Add(time.Hour)
 	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{}); err != nil {
@@ -472,8 +491,8 @@ func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
 	if reopened.EndedAt != nil {
 		t.Fatalf("reopened session should have ended_at cleared, got %v", *reopened.EndedAt)
 	}
-	if reopened.ID != sess.ID {
-		t.Fatalf("reopen created a new row: %d then %d", sess.ID, reopened.ID)
+	if got := sessionRowID(t, s, lease.ID, "claude-code", "sess-1"); got != rowID {
+		t.Fatalf("reopen created a new row: %d then %d", rowID, got)
 	}
 	if !reopened.StartedAt.Equal(sess.StartedAt) {
 		t.Fatalf("reopen moved started_at: %v then %v", sess.StartedAt, reopened.StartedAt)
