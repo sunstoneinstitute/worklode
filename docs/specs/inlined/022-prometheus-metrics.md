@@ -117,15 +117,30 @@ sync (summary plus error) records both its items and an `error` run.
 
 ## 5. Webhooks (`internal/hooks`)
 
-`worklode_webhook_events_total{source, event, result}` — one CounterVec shared by both
-handlers via their constructors.
+`worklode_webhook_events_total{source, event, result}` — one CounterVec shared by every
+signed ingest handler via their constructors.
 
-- `source`: `github` | `flux`.
+- `source`: `github` | `flux` | `catalog`.
 - `event`: for GitHub, the `X-GitHub-Event` value if it is one the handler switches on
   (`issues`, `push`, `pull_request`, `pull_request_review`, `deployment_status`,
-  `workflow_run`, `release`), else `other` — bounded cardinality. For Flux, `flux`.
+  `workflow_run`, `release`), else `other` — bounded cardinality. For Flux, `flux`. For
+  the data catalog (spec 029 §3.2), the artifact state the delivery reported —
+  `published` | `updated` | `deprecated` | `removed` | `failed` — or `invalid` for a
+  delivery rejected before a state could be read. The handler validates the state
+  against that closed set before taking the label, so an emitter cannot leak
+  cardinality through it.
 - `result`: `ok` | `rejected` (signature/auth failure) | `ignored` (event type or action
-  the handler drops) | `error`.
+  the handler drops) | `unrouted` (catalog only: the delivery was authentic and is
+  stored, but no open entity had declared the artifact it names, so it produced no
+  evidence) | `error`.
+
+`worklode_catalog_evidence_total{state, entity_kind}` — evidence rows the data-catalog
+ingest wrote, counted after its transaction commits so a rolled-back delivery counts
+none. `state` is the artifact state above; `entity_kind` is `deliverable` | `task` |
+`doc`. Both are bounded by the `artifact_evidence` CHECK constraints. It is a second
+metric rather than a label on the first because one delivery fans out to every open
+declarer of the address: `worklode_webhook_events_total` answers "did the delivery
+land", this one answers "what did it change".
 
 ## 6. Embeddings (`internal/embed`)
 
