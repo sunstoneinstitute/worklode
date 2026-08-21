@@ -10,8 +10,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/reconcile"
@@ -47,9 +51,50 @@ func compareBody(at time.Time) string {
 		at.Format(time.RFC3339) + `"}}}}`
 }
 
+// pathCounts records how many requests the fake GitHub served per path, so a
+// test can assert the requests a run did *not* spend.
+type pathCounts struct {
+	mu sync.Mutex
+	n  map[string]int
+}
+
+func (c *pathCounts) hit(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.n[path]++
+}
+
+// compares is the number of branch-membership questions asked of GitHub:
+// githubauth's CommitOnBranch is one compare request per sha.
+func (c *pathCounts) compares() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	total := 0
+	for path, n := range c.n {
+		if strings.Contains(path, "/compare/") {
+			total += n
+		}
+	}
+	return total
+}
+
+func (c *pathCounts) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.n = map[string]int{}
+}
+
 func newFakeGitHub(t *testing.T, routes map[string]string) *githubauth.AppAuth {
 	t.Helper()
+	app, _ := newCountingGitHub(t, routes)
+	return app
+}
+
+func newCountingGitHub(t *testing.T, routes map[string]string) (*githubauth.AppAuth, *pathCounts) {
+	t.Helper()
+	calls := &pathCounts{n: map[string]int{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.hit(r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/repos/acme/app/installation":
@@ -71,7 +116,7 @@ func newFakeGitHub(t *testing.T, routes map[string]string) *githubauth.AppAuth {
 	if err != nil {
 		t.Fatalf("generate key: %v", err)
 	}
-	return &githubauth.AppAuth{AppID: "1", Key: key, BaseURL: srv.URL}
+	return &githubauth.AppAuth{AppID: "1", Key: key, BaseURL: srv.URL}, calls
 }
 
 // seedStaleTask: the backbone believes the PR is open (task in_review), but
@@ -576,6 +621,55 @@ func TestPollSetsPRAuthorEnablingSelfApprovalRefusal(t *testing.T) {
 	})
 	if !errors.Is(err, store.ErrSelfApproval) {
 		t.Fatalf("decide by the PR's own author = %v, want ErrSelfApproval", err)
+	}
+}
+
+// TestPollStopsRecheckingSettledSHAs is WL-203. Every branch-membership
+// question costs one GitHub request against the repo's installation token, and
+// the scheduled run is org-wide (013 §2.2), so a question whose answer is
+// already recorded must not be asked again. Two of them accumulate per merged
+// PR: the merge sha, which the previous run appended to main_commits, and the
+// PR's head sha, which a squash merge never lands at all — the fake's
+// `head...main` route answers "diverged" forever, so without the guards the
+// second and every later run keeps paying for both.
+func TestPollStopsRecheckingSettledSHAs(t *testing.T) {
+	st := store.OpenTestStore(t)
+	taskID := seedStaleTask(t, st)
+	app, calls := newCountingGitHub(t, mergedPRRoutes(taskID))
+	ctx := context.Background()
+
+	if _, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-settle-1"}); err != nil {
+		t.Fatalf("first poll: %v", err)
+	}
+	// The premise: the first run does spend requests, so a second run spending
+	// none is a real saving and not an artifact of the fixture.
+	if got := calls.compares(); got == 0 {
+		t.Fatal("first run asked GitHub nothing; the test cannot show the second run avoiding anything")
+	}
+	if got := taskState(t, st, taskID); got != "merged" {
+		t.Fatalf("task state after the first run = %q; want merged", got)
+	}
+
+	calls.reset()
+	m := reconcile.NewMetrics(prometheus.NewRegistry())
+	if _, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-settle-2", Metrics: m}); err != nil {
+		t.Fatalf("second poll: %v", err)
+	}
+	if got := calls.compares(); got != 0 {
+		t.Fatalf("second run spent %d branch-membership requests; want 0 — %s is already in main_commits "+
+			"and %s can never land on a squash merge", got, mergeSHA, headSHA)
+	}
+	checks := func(outcome string) float64 {
+		return testutil.ToFloat64(m.CommitChecks().WithLabelValues(outcome))
+	}
+	if got := checks("skipped_landed"); got != 1 {
+		t.Errorf("poll_commit_checks{skipped_landed} = %v, want 1 (the merge sha)", got)
+	}
+	if got := checks("skipped_settled"); got != 1 {
+		t.Errorf("poll_commit_checks{skipped_settled} = %v, want 1 (the head sha its merge sha settled)", got)
+	}
+	if got := checks("checked"); got != 0 {
+		t.Errorf("poll_commit_checks{checked} = %v, want 0", got)
 	}
 }
 
