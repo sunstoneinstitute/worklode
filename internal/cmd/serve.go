@@ -218,7 +218,10 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		return err
 	}
 
-	startLeaseSweeper(ctx, st, reg)
+	// The lease sweeper's loop and counter live in internal/store (022 §4);
+	// serve.go supplies only the registry (via store.WithMetrics above) and
+	// the shutdown context.
+	st.StartLeaseSweeper(ctx)
 
 	proj, err := graphProjector(reg, st)
 	if err != nil {
@@ -269,34 +272,6 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		slog.Info("shutting down")
 		return shutdownServers(cancelRequests, shutdownGrace, shutdownTimeout, srv, adminSrv)
 	}
-}
-
-// startLeaseSweeper expires stale leases every 60s until ctx is cancelled,
-// counting each run by result so an alert expression can see a sweeper that
-// has stopped succeeding.
-func startLeaseSweeper(ctx context.Context, st *store.Store, reg prometheus.Registerer) {
-	runs := prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "worklode_lease_sweeper_runs_total",
-		Help: "Lease sweeper runs by result.",
-	}, []string{"result"})
-	reg.MustRegister(runs)
-	// Pre-initialise both series so alert expressions see 0, not no-data.
-	runs.WithLabelValues("ok")
-	runs.WithLabelValues("error")
-
-	go everyUntilDone(ctx, 60*time.Second, func(ctx context.Context) (int, error) {
-		return st.ExpireLeases(ctx, time.Now().UTC())
-	}, func(n int, err error) {
-		if err != nil {
-			runs.WithLabelValues("error").Inc()
-			slog.Error("expire leases", "err", err)
-			return
-		}
-		runs.WithLabelValues("ok").Inc()
-		if n > 0 {
-			slog.Info("expired leases", "count", n)
-		}
-	})
 }
 
 // everyUntilDone runs step on an interval until ctx is cancelled. A step that
