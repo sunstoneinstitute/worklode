@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -287,7 +288,7 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 }
 
 // listTasks handles
-// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=.
+// GET /api/v1/tasks?project=&state=&priority=&kind=&parent=&assignee=&has_children=&repo=&updated_since=&plan_doc=&about_doc=&deleted=&detail=&tree=&root=.
 // state is repeatable and/or comma-separated; has_children=true narrows to
 // containers; updated_since is an RFC3339 instant that narrows to the tasks
 // touched at or after it (the incremental fetch a polling mirror makes);
@@ -296,7 +297,8 @@ func (s *server) getTaskCost(w http.ResponseWriter, r *http.Request) {
 // that reference that document (025 §15.4); deleted=true switches the list
 // from live tasks to tombstoned ones (044 §5); detail=true adds "blocked" and
 // "edges" to each row (see model.TaskListDetail) at the cost of two extra
-// bulk queries.
+// bulk queries; tree=true answers with the hierarchy instead of a flat list
+// (see listTaskTree), and root names the single container it covers.
 func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	// Normalised so `lode task list --kind spec` keeps returning the rows
@@ -309,6 +311,18 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 				states = append(states, p)
 			}
 		}
+	}
+	// tree=true answers with the hierarchy instead of a flat list, and is
+	// checked before the remaining filters because it reads only project and
+	// state (plus root); see listTaskTree.
+	tree, err := queryBool(q, "tree")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if tree {
+		s.listTaskTree(w, r, q, states)
+		return
 	}
 	// The repo filter takes any remote URL form as well as owner/name, and is
 	// normalized here rather than in the client for resolveProjectByRemote's
@@ -409,6 +423,40 @@ func (s *server) listTasks(w http.ResponseWriter, r *http.Request) {
 		te := edges[tasks[i].ID]
 		row.Edges.Out, row.Edges.In = edgesToJSON(te.Out, te.In)
 		resp.Tasks = append(resp.Tasks, row)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// listTaskTree answers GET /api/v1/tasks?tree=true&project=&state=&root=
+// with model.TaskTreeResponse: every container in scope, its derived
+// progress, and its direct children, in one response. Without it a client
+// rendering the hierarchy fetches the containers and then one child list per
+// container — an N+1 against this endpoint (WL-169).
+//
+// project and state narrow which containers appear, exactly as they narrow
+// the flat list; children come back whatever their state, so the progress
+// counts and the listed children describe the same set. root reports that one
+// task and its children instead, whatever its own parentage. The other list
+// filters do not apply and are ignored.
+func (s *server) listTaskTree(w http.ResponseWriter, r *http.Request, q url.Values, states []string) {
+	s.observeListExpansion("tasks", "tree")
+	nodes, err := s.st.TaskTree(r.Context(), store.TaskTreeFilter{
+		Project: q.Get("project"),
+		States:  states,
+		Root:    q.Get("root"),
+	})
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	resp := model.TaskTreeResponse{Nodes: make([]model.TaskTreeNode, 0, len(nodes))}
+	for _, n := range nodes {
+		// [] rather than null for a container whose children are all
+		// tombstoned, so a client can range over the field unconditionally.
+		if n.Children == nil {
+			n.Children = []model.Task{}
+		}
+		resp.Nodes = append(resp.Nodes, n)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

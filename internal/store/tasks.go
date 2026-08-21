@@ -543,6 +543,20 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 	return t, nil
 }
 
+// taskListOrder renders the ORDER BY every task listing shares, over the
+// given table alias: priority first (critical first), then the same order as
+// CompareTaskIDs — key lexically, then the numeric suffix, so WL-9 precedes
+// WL-10 — but done in the database. Shared so a second listing (the tree's
+// children) cannot order its rows differently from ListTasks.
+func taskListOrder(alias string) string {
+	return ` ORDER BY CASE ` + alias + `.priority
+	         WHEN 'critical' THEN 0
+	         WHEN 'high' THEN 1
+	         WHEN 'medium' THEN 2
+	         ELSE 3
+	       END, split_part(` + alias + `.id, '-', 1), CAST(split_part(` + alias + `.id, '-', 2) AS INTEGER)`
+}
+
 // ListTasks returns tasks matching the filter, ordered by priority (critical
 // first), then by task id in CompareTaskIDs order (key lexically, suffix
 // numerically, so WL-9 precedes WL-10).
@@ -603,14 +617,7 @@ func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, erro
 	if len(conds) > 0 {
 		q += ` WHERE ` + strings.Join(conds, ` AND `)
 	}
-	// Same order as CompareTaskIDs — key lexically, then the numeric suffix,
-	// so WL-9 precedes WL-10 — but done in the database.
-	q += ` ORDER BY CASE priority
-	         WHEN 'critical' THEN 0
-	         WHEN 'high' THEN 1
-	         WHEN 'medium' THEN 2
-	         ELSE 3
-	       END, split_part(id, '-', 1), CAST(split_part(id, '-', 2) AS INTEGER)`
+	q += taskListOrder("tasks")
 
 	rows, err := s.db.QueryContext(ctx, q, args.vals...)
 	if err != nil {

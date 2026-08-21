@@ -173,3 +173,79 @@ func TestListTasksByParentAndHasChildren(t *testing.T) {
 		t.Fatalf("parents = %v, want [%s]", tasks, container)
 	}
 }
+
+// TestListTasksTree pins the one-request hierarchy read (WL-169): tree=true
+// answers with every root container, its roll-up, and its children, so a
+// client never issues a child list per container.
+func TestListTasksTree(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	container := createContainer(t, h, token, "proj", "Container")
+	child := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Piece", "priority": "medium", "kind": "feature",
+		"parent": container,
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Loose", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks?tree=true&project=proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	nodes := decodeMap(t, rr)["nodes"].([]any)
+	if len(nodes) != 1 {
+		t.Fatalf("nodes = %v, want just the container (a childless task is no root)", nodes)
+	}
+	node := nodes[0].(map[string]any)
+	if node["parent"].(map[string]any)["id"] != container {
+		t.Fatalf("parent = %v, want %s", node["parent"], container)
+	}
+	kids := node["children"].([]any)
+	if len(kids) != 1 || kids[0].(map[string]any)["id"] != child["id"] {
+		t.Fatalf("children = %v, want [%v]", kids, child["id"])
+	}
+	if got := node["progress"].(map[string]any)["total"]; got != float64(1) {
+		t.Fatalf("progress total = %v, want 1", got)
+	}
+
+	// root narrows the tree to one container.
+	rr = doReq(t, h, "GET", "/api/v1/tasks?tree=true&root="+container, token, nil)
+	nodes = decodeMap(t, rr)["nodes"].([]any)
+	if len(nodes) != 1 || nodes[0].(map[string]any)["parent"].(map[string]any)["id"] != container {
+		t.Fatalf("root tree = %v, want just %s", nodes, container)
+	}
+	rr = doReq(t, h, "GET", "/api/v1/tasks?tree=true&root=PROJ-999", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown root status = %d, want 404", rr.Code)
+	}
+
+	// A non-boolean tree is named, not read as off — the stance every other
+	// boolean query parameter takes.
+	rr = doReq(t, h, "GET", "/api/v1/tasks?tree=yes%20please", token, nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rr.Code)
+	}
+}
+
+// TestListTasksTreeChildrenIgnoreStateFilter pins that state narrows which
+// containers a tree reports, never which of their children it lists: the
+// progress counts and the listed children must describe the same set.
+func TestListTasksTreeChildrenIgnoreStateFilter(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	container := createContainer(t, h, token, "proj", "Container")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Draft piece", "priority": "medium", "kind": "feature",
+		"parent": container, "draft": true,
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks?tree=true&project=proj&state=ready", token, nil)
+	nodes := decodeMap(t, rr)["nodes"].([]any)
+	if len(nodes) != 1 {
+		t.Fatalf("nodes = %v, want the ready container", nodes)
+	}
+	if kids := nodes[0].(map[string]any)["children"].([]any); len(kids) != 1 {
+		t.Fatalf("children = %v, want the draft child listed even though state=ready", kids)
+	}
+}
