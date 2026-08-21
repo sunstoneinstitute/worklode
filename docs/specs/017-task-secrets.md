@@ -9,6 +9,7 @@ amendedBy:
   "#sec-1":
   - 042-secret-templates.md#sec-2
   - 043-secrets-catalog-home.md#sec-2
+  - 047-loader-sensitive-secret-names.md#sec-2
   "#sec-3":
   - 042-secret-templates.md#sec-3
   "#sec-4":
@@ -60,6 +61,12 @@ forward-compatible.
 > `dataFrom.extract`; `catalog.toml` and each 042 template are field labels on
 > that item. Changes are 1Password edits, not deployment-repo PRs; the mount
 > path and everything the server does are unchanged.
+
+> **Amended by ADR 047 §2.** The grammar additionally denies loader-sensitive
+> names: anything beginning `LD_` or `DYLD_`, plus an enumerated set of shell
+> and language-runtime loading variables (`PATH`, `IFS`, `ENV`, `BASH_ENV`,
+> `PYTHONPATH`, …) listed in ADR 047 §3. A name matching the pattern but naming
+> one of those is rejected at every gate.
 
 **Namespace.** Secret names are env-var style (`^[A-Z][A-Z0-9_]*$`) and **org-unique** — never
 per-project, because a repo may participate in multiple projects. Examples: `GIT_SIGNING_KEY`,

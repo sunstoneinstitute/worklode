@@ -1,0 +1,120 @@
+---
+status: draft
+issued: 2026-08-21
+kind: adr
+requires:
+- 017-task-secrets.md
+- 042-secret-templates.md
+amends:
+  "#sec-2":
+  - 017-task-secrets.md#sec-1
+  - 042-secret-templates.md#sec-2
+---
+# ADR 047 — Loader-sensitive names are not secret names
+
+## 0. Decision {#sec-0}
+
+The spec 017 §1 secret-name grammar gains a **deny-list**. A name that matches
+`^[A-Z][A-Z0-9_]*$` is still rejected if it also names a variable that redirects
+how the child process loads code: the `LD_` and `DYLD_` namespaces, and an
+enumerated set of shell and language-runtime loader variables (§3).
+
+The deny-list lives beside the grammar in `internal/secrets.ValidName`, which is
+the single gate every storer and transmitter of a secret name already calls.
+Nothing else grows a copy.
+
+## 1. The problem {#sec-1}
+
+`lode secrets exec` (017 §4) reads the bound task's materialized items and
+assigns them into the child's environment before `syscall.Exec`. The name half
+of each assignment comes from the catalog, and the grammar is the only thing
+that constrains it.
+
+`^[A-Z][A-Z0-9_]*$` accepts `PATH`, `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `IFS`
+and `BASH_ENV`. A catalog entry under any of those names does not hand the child
+a credential — it changes which binary the child runs, which shared object it
+maps, or how the shell it invokes splits words. The secret's *value* becomes
+code the child loads.
+
+This is defence in depth, not a live hole. The catalog is admin-controlled
+(ADR 043 moved it to a 1Password item whose write ACL is the control), so
+today the only way to place such an entry is to already hold the authority to
+edit the catalog. The argument for the deny-list is that the grammar is the
+documented contract three layers validate against, and a contract that permits
+`LD_PRELOAD` as a secret name is wrong independently of who can currently
+exercise it.
+
+## 2. What the grammar is now {#sec-2}
+
+A secret name is valid when it matches `^[A-Z][A-Z0-9_]*$` **and** is not
+loader-sensitive. Loader-sensitive means either:
+
+- it begins with `LD_` or `DYLD_` — the glibc and dyld dynamic-loader
+  namespaces, every member of which exists to alter loading; or
+- it appears in the enumerated list in §3.
+
+The check is exact and case-sensitive, which costs nothing: the grammar already
+admits only upper-case names, so `ld_preload` and `Ld_Preload` are rejected by
+the grammar before the deny-list is consulted.
+
+**Spec 042 borrows this grammar, and inherits the deny-list with it.** A
+templated entry's `env` key is the name the entry is exported under at exec
+time, so it reaches the child environment exactly as an entry name does and the
+deny-list matters there most of all. `cred.<PLACEHOLDER>` names never enter an
+environment — they are substituted into template text — but they take the same
+grammar by 042 §2 and keep taking it here, because one gate for both is worth
+more than the freedom to call a placeholder `PATH`.
+
+Rejection is an ordinary invalid-name rejection at every existing gate — the
+task `secrets` field at the API and the store, `lode secrets pack`, the catalog
+parser, the local manifest, and the keystore. A catalog carrying a denied name
+fails to parse rather than serving the entry, which is the same posture 017 §1
+already takes for a malformed table header.
+
+## 3. The list {#sec-3}
+
+Prefixes: `LD_`, `DYLD_`.
+
+| Name | Why |
+|---|---|
+| `PATH` | Selects which executable every unqualified command resolves to |
+| `CDPATH` | Redirects `cd` in scripts, so a relative path resolves elsewhere |
+| `IFS` | Word splitting; the classic re-parse of an otherwise safe command |
+| `ENV` | POSIX `sh` startup file, read by non-interactive `sh`/`dash`/`ksh` |
+| `BASH_ENV` | Same for non-interactive `bash` |
+| `GCONV_PATH` | glibc loads gconv modules — shared objects — from it |
+| `LOCPATH` | glibc loads locale data from it |
+| `NLSPATH` | glibc message catalogs; a format-string vector |
+| `PYTHONPATH`, `PYTHONHOME`, `PYTHONSTARTUP` | Module search path, stdlib root, and a script the interpreter runs |
+| `NODE_OPTIONS`, `NODE_PATH` | `--require` a module at startup; module search path |
+| `PERL5LIB`, `PERLLIB`, `PERL5OPT` | Module search path; `-M` a module at startup |
+| `RUBYLIB`, `RUBYOPT` | Module search path; `-r` a library at startup |
+| `CLASSPATH`, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS` | Class search path; JVM arguments including `-javaagent` |
+
+`_JAVA_OPTIONS` belongs to the same family and needs no entry: the grammar
+requires a leading letter, so it never validated.
+
+**Where the line is.** The list covers variables that decide *what code gets
+loaded or executed*. It deliberately stops short of variables that merely tune
+behaviour (`TZ`, `LANG`, `MALLOC_*`) and of tool-specific execution hooks
+(`GIT_SSH_COMMAND`, `GIT_EXTERNAL_DIFF`, `PAGER`, `EDITOR`). Those are a larger
+and more open-ended set; a secret named for one of them is a catalog mistake
+rather than a loading redirect, and enumerating them here would trade a
+defensible boundary for an unbounded list.
+
+## 4. Consequences {#sec-4}
+
+**A legitimate name in the denied set has no escape hatch.** There is no
+override flag and no per-entry opt-out: `KUBECONFIG_HZDEV` is a name, `PATH` is
+not. If a real need for one ever appears, it is a change to this list, argued on
+its own terms, not a flag that makes the gate advisory.
+
+**The error message changes.** `invalidSecretNameMsg` no longer prints the bare
+pattern, because a caller told only `must match ^[A-Z][A-Z0-9_]*$` after
+submitting `PATH` would read the rejection as a bug. The message now names both
+halves of the contract.
+
+**The list will drift from reality.** New runtimes ship new loader variables,
+and this list is a snapshot. It is a defence-in-depth layer over an
+admin-controlled catalog, so drift degrades it slowly rather than opening a
+hole, and adding an entry is a one-line change with a test beside it.
