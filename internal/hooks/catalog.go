@@ -39,7 +39,10 @@ package hooks
 //
 // A delivery no declaration matches still lands in events, with no evidence
 // rows and an "unrouted" ack, the way the GitHub hook records an unmapped
-// repo's delivery: a declaration added later can be reconciled by replay.
+// repo's delivery. The payload is kept so a declaration added later can be
+// filed from it, but nothing files it yet: reconcile's replayer is scoped to
+// source = 'github' (store.ReplayCandidates), so an unrouted catalog delivery
+// stays unrouted. WL-256.
 
 import (
 	"crypto/sha256"
