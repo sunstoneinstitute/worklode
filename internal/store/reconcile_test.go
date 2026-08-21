@@ -68,6 +68,39 @@ func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
 	}
 }
 
+// A candidate read carries whole delivery payloads, so the caller must be
+// able to bound it — and the bound has to keep the oldest-first order, or a
+// batched replay would skip events instead of resuming after them.
+func TestUnappliedGitHubEventsLimit(t *testing.T) {
+	s := OpenTestStore(t)
+	ctx := context.Background()
+
+	first := recordGitHubEvent(t, s, "l-1", "push.ignored",
+		`{"repository":{"full_name":"acme/app"}}`)
+	second := recordGitHubEvent(t, s, "l-2", "push.ignored",
+		`{"repository":{"full_name":"acme/app"}}`)
+	recordGitHubEvent(t, s, "l-3", "push.ignored",
+		`{"repository":{"full_name":"acme/app"}}`)
+
+	got, err := s.UnappliedGitHubEvents(ctx, UnappliedFilter{Limit: 2})
+	if err != nil {
+		t.Fatalf("limit: %v", err)
+	}
+	if ids := eventIDs(got); len(ids) != 2 || ids[0] != first || ids[1] != second {
+		t.Fatalf("limited ids = %v; want the two oldest [%d %d]", ids, first, second)
+	}
+
+	// The limit binds as an argument, not by string interpolation, and it
+	// composes with the other filters.
+	got, err = s.UnappliedGitHubEvents(ctx, UnappliedFilter{Repo: "acme/app", Limit: 1})
+	if err != nil {
+		t.Fatalf("repo+limit: %v", err)
+	}
+	if ids := eventIDs(got); len(ids) != 1 || ids[0] != first {
+		t.Fatalf("repo+limit ids = %v; want [%d]", ids, first)
+	}
+}
+
 func eventIDs(evs []Event) []int64 {
 	out := make([]int64, len(evs))
 	for i, e := range evs {

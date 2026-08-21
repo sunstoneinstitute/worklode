@@ -119,6 +119,13 @@ newer row (see `store.UpsertPR`), and `Transition` guards on the from-state. The
 reconcile can find outstanding work without rescanning history. The down migration drops the
 column; the repo's `migrate up`/`down` round-trip check covers it.
 
+**Batch size.** One run reads a bounded batch of candidates (oldest first), not the whole backlog:
+each candidate carries its entire delivery payload, and the unscoped org-wide run is exactly the
+caller whose backlog can be arbitrarily large. A run that fills its batch reports `truncated`, and
+the reported error list is capped the same way (the surplus is counted, not listed) because that
+list is part of the API response body. Both are re-run signals — an applied event leaves the
+candidate set, so running again continues after the last batch rather than repeating it.
+
 ### 2.2 Engine 2 — poll GitHub
 
 Candidate tasks: not `done`/`abandoned`, plus tasks that have landed but sit below their repo's
