@@ -237,7 +237,9 @@ func newSecretsExecCmd() *cobra.Command {
 		Long: "Resolves the task from the wt/<id>-<slug> worktree guard, reads that task's " +
 			"items from the OS keystore, injects them as environment variables, and execs. " +
 			"Values exist only in the child process. The injected set is exactly the task's " +
-			"materialized names — not the catalog, not the operator's secrets.",
+			"materialized names — not the catalog, not the operator's secrets. Inherited " +
+			"credential-shaped variables (AWS_*, ANTHROPIC_API_KEY, *TOKEN, *SECRET, …) are " +
+			"stripped; the shell plumbing (PATH, HOME, locale) is kept.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			layout, err := layoutFrom(".")
@@ -265,29 +267,13 @@ func newSecretsExecCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return execFn(bin, args, childEnv(os.Environ(), m.Materialized, injected))
+			return execFn(bin, args, secrets.ChildEnv(os.Environ(), m.Materialized, injected))
 		},
 	}
 	// The wrapped command's flags are its own: without this, cobra claims
 	// `lode secrets exec kubectl get pods -n foo`'s -n and fails.
 	cmd.Flags().SetInterspersed(false)
 	return cmd
-}
-
-// childEnv returns parent with every assignment to one of names stripped,
-// then injected appended. execve keeps duplicate entries and getenv returns
-// the first, so appending alone would hand the child the operator's ambient
-// value instead of the task's (spec 017 §4: "not the operator's shell
-// environment").
-func childEnv(parent, names, injected []string) []string {
-	out := make([]string, 0, len(parent)+len(injected))
-	for _, kv := range parent {
-		if k, _, ok := strings.Cut(kv, "="); ok && slices.Contains(names, k) {
-			continue
-		}
-		out = append(out, kv)
-	}
-	return append(out, injected...)
 }
 
 // splitNames splits a comma-separated name list, dropping empties.

@@ -661,3 +661,11 @@ docs/specs/049-validate-project-graphs-as-a-union.md:
     sec-3: "## 3. Validation scope"
     sec-4: "## 4. Consequences"
     sec-5: "## 5. Rejected alternatives"
+docs/specs/050-scrub-inherited-environment.md:
+  sections:
+    sec-0: "## 0. Decision"
+    sec-1: "## 1. The problem"
+    sec-2: "## 2. What the child inherits"
+    sec-3: "## 3. The list"
+    sec-4: "## 4. What this does not cover"
+    sec-5: "## 5. Consequences"
