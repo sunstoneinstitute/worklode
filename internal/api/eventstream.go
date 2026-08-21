@@ -128,7 +128,14 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	s.observeEventStreamOpen()
 	defer s.observeEventStreamClose()
 
-	ctx := r.Context()
+	// The stream ends on shutdown as well as on client hangup. bgCtx is
+	// cancelled by SIGTERM, so watching it here is what lets shutdown drain
+	// ordinary requests instead of cancelling every in-flight context to get
+	// rid of this one (see shutdownServers in internal/cmd/serve.go).
+	ctx, endStream := context.WithCancel(r.Context())
+	defer endStream()
+	defer context.AfterFunc(s.bgCtx, endStream)()
+
 	if cursor < 0 {
 		var err error
 		if cursor, err = s.streamHead(ctx, typ); err != nil {

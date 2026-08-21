@@ -50,12 +50,10 @@ func parseClusterEnvMap(s string) (map[string]string, error) {
 	return m, nil
 }
 
-const (
-	// shutdownGrace is how long in-flight requests get to finish on their own
-	// before their context is cancelled; shutdownTimeout is the whole budget.
-	shutdownGrace   = 2 * time.Second
-	shutdownTimeout = 10 * time.Second
-)
+// shutdownTimeout is the whole budget a graceful shutdown gets: long enough
+// for an in-flight write to commit, well inside Kubernetes' default 30s
+// termination grace period.
+const shutdownTimeout = 10 * time.Second
 
 // graphProjector builds the knowledge-graph projector when
 // LODE_GRAPHSERVER_URL is set (spec 006 §11): the same LODE_GRAPHSERVER_*
@@ -77,13 +75,15 @@ func graphProjector(reg prometheus.Registerer, st *store.Store) (*projector.Proj
 // error, treating http.ErrServerClosed as success.
 //
 // cancelRequests cancels the context every in-flight request derives from
-// (http.Server.BaseContext). Shutdown waits for handlers and never cancels
-// them, and the event-log SSE stream returns only when its request context is
-// done — so without this a single open `lode event tail --follow` would hold
-// shutdown until the deadline and turn every SIGTERM into a non-zero exit.
-// Ordinary requests still get grace to finish untouched; the servers are shut
-// down concurrently so a slow one cannot spend another's budget.
-func shutdownServers(cancelRequests context.CancelFunc, grace, timeout time.Duration, srvs ...*http.Server) error {
+// (http.Server.BaseContext). It is the whole-budget backstop and nothing
+// finer: cutting an in-flight request short rolls its transaction back, so
+// the caller gets a 500 and a GitHub webhook delivery — which is never
+// retried — is lost for good (WL-246). Every request therefore gets the full
+// timeout to commit. The event-log SSE stream, the one handler that would
+// otherwise never return on its own, ends on the background context instead
+// (see streamEvents); the servers are shut down concurrently so a slow one
+// cannot spend another's budget.
+func shutdownServers(cancelRequests context.CancelFunc, timeout time.Duration, srvs ...*http.Server) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -102,16 +102,11 @@ func shutdownServers(cancelRequests context.CancelFunc, grace, timeout time.Dura
 		all <- firstErr
 	}()
 
-	timer := time.NewTimer(grace)
-	defer timer.Stop()
-	select {
-	case err := <-all:
-		return err // everything drained inside the grace window
-	case <-timer.C:
-	case <-ctx.Done():
-	}
+	// Shutdown returns ctx.Err() of its own accord once the budget is spent,
+	// so waiting on all needs no second timer.
+	err := <-all
 	cancelRequests()
-	return <-all
+	return err
 }
 
 func newServeCmd() *cobra.Command {
@@ -270,7 +265,7 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		return err
 	case <-ctx.Done():
 		slog.Info("shutting down")
-		return shutdownServers(cancelRequests, shutdownGrace, shutdownTimeout, srv, adminSrv)
+		return shutdownServers(cancelRequests, shutdownTimeout, srv, adminSrv)
 	}
 }
 
