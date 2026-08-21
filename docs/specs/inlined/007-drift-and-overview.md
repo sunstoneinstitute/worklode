@@ -99,6 +99,8 @@ Five derivers share a contract, including a fifth — `observed/repo-implements`
   component gets a trivial whole-repo manifest (or a default).
 - **Output:** `<repo> dct:hasPart <component>` linking the `doap:Project` (repo layer) to
   each Component *(006)*.
+- **Also output:** `<repo> wl:unmatchedPath "<top-level path prefix>"` for each top-level
+  path matched by no component — the coverage-gap input to §3.2.
 - **Output graph:** `observed/repo-layout`.
 - The manifest is also the **path→component index** consumed by derivers 1 and 3; it is the single
   place component boundaries are declared.
