@@ -159,10 +159,16 @@ func TestOpenDeclarationsForArtifactMatchesExactly(t *testing.T) {
 // the tiebreak for two stamped the same instant. Asserted through
 // GetDeliverable because that join is the only reader — testing a separate
 // helper would pin a rule the production path does not use.
+//
+// The deliverable declares the address the evidence is about. That is not
+// incidental: the projection correlates the two, so evidence about an address
+// this deliverable never declared does not surface here (asserted at the end).
 func TestReportedStateIsTheNewestEvidence(t *testing.T) {
 	s := openTaskStore(t)
 	ctx := t.Context()
-	d, err := createDeliverable(s, DeliverableInput{ProjectID: "horndb", Name: "casualties"})
+	d, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "horndb", Name: "casualties", Artifact: testArtifact,
+	})
 	if err != nil {
 		t.Fatalf("create deliverable: %v", err)
 	}
@@ -197,6 +203,17 @@ func TestReportedStateIsTheNewestEvidence(t *testing.T) {
 	fileEvidence(t, s, evidence("deliverable", d.ID, "deprecated", t0.Add(time.Hour)))
 	if got := reported("after the tie"); got.ReportedState != "deprecated" {
 		t.Fatalf("reported after tie = %s, want deprecated", got.ReportedState)
+	}
+
+	// Newest of all, but about an address this deliverable never declared.
+	// The projection reports state *for the declared address*, so an
+	// uncorrelated join here would show a fact about someone else's artifact.
+	other := evidence("deliverable", d.ID, "removed", t0.Add(2*time.Hour))
+	other.Artifact = "gs://sunstone-prod/some-other-dataset"
+	fileEvidence(t, s, other)
+	if got := reported("after an unrelated address"); got.ReportedState != "deprecated" {
+		t.Fatalf("reported = %s after evidence about another address, want deprecated",
+			got.ReportedState)
 	}
 }
 
