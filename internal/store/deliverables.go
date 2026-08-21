@@ -53,7 +53,8 @@ const deliverableSelect = deliverableColumns + `,
 
 // deliverableFrom pairs the table with the latest evidence filed against the
 // deliverable, if any. Latest is by the emitter's own clock with id as the
-// tiebreak, matching LatestArtifactEvidence.
+// tiebreak: a fact reported late about an earlier moment does not displace a
+// newer one. This is the only reader of artifact_evidence.
 const deliverableFrom = `FROM deliverables
 	LEFT JOIN LATERAL (
 	    SELECT e.state, e.occurred_at FROM artifact_evidence e

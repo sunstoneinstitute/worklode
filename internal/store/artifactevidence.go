@@ -10,9 +10,7 @@
 package store
 
 import (
-	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -114,36 +112,8 @@ func InsertArtifactEvidence(tx *sql.Tx, eventID int64, ev model.ArtifactEvidence
 	return n > 0, nil
 }
 
-// artifactEvidenceColumns is the SELECT list scanArtifactEvidence expects.
-const artifactEvidenceColumns = `entity_kind, entity_id, artifact_uri, source,
-	state, provenance, version, url, detail, occurred_at`
-
-func scanArtifactEvidence(row rowScanner) (*model.ArtifactEvidence, error) {
-	var ev model.ArtifactEvidence
-	var detail []byte
-	if err := row.Scan(&ev.EntityKind, &ev.EntityID, &ev.Artifact, &ev.Source,
-		&ev.State, &ev.Provenance, &ev.Version, &ev.URL, &detail, &ev.OccurredAt); err != nil {
-		return nil, err
-	}
-	ev.Detail = detail
-	return &ev, nil
-}
-
-// LatestArtifactEvidence returns the newest fact reported about the entity's
-// declared artifact, or nil when nothing has reported yet. Newest is by
-// occurred_at — the emitter's own clock — with id as the tiebreak, so two
-// facts stamped the same second resolve to the one filed last.
-func (s *Store) LatestArtifactEvidence(ctx context.Context, entityKind, entityID string) (*model.ArtifactEvidence, error) {
-	ev, err := scanArtifactEvidence(s.db.QueryRowContext(ctx,
-		`SELECT `+artifactEvidenceColumns+` FROM artifact_evidence
-		 WHERE entity_kind = $1 AND entity_id = $2
-		 ORDER BY occurred_at DESC, id DESC LIMIT 1`,
-		entityKind, entityID))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("latest artifact evidence for %s %s: %w", entityKind, entityID, err)
-	}
-	return ev, nil
-}
+// There is deliberately no "read the latest evidence for an entity" helper
+// here. The only reader today is the deliverable projection, which joins it in
+// (deliverables.go's deliverableFrom); a second spelling of "newest by
+// occurred_at, id" would be a second place for that rule to drift. Add one
+// when a second entity kind needs the read, not before.

@@ -154,10 +154,12 @@ func TestOpenDeclarationsForArtifactMatchesExactly(t *testing.T) {
 	}
 }
 
-// TestLatestArtifactEvidenceOrdering pins that the newest fact wins by the
-// emitter's own clock, with id as the tiebreak for two stamped the same
-// instant — and that an entity nobody reported on reads as nil, not an error.
-func TestLatestArtifactEvidenceOrdering(t *testing.T) {
+// TestReportedStateIsTheNewestEvidence pins the projection's ordering: the
+// newest fact wins by the emitter's own clock, not by filing order, with id as
+// the tiebreak for two stamped the same instant. Asserted through
+// GetDeliverable because that join is the only reader — testing a separate
+// helper would pin a rule the production path does not use.
+func TestReportedStateIsTheNewestEvidence(t *testing.T) {
 	s := openTaskStore(t)
 	ctx := t.Context()
 	d, err := createDeliverable(s, DeliverableInput{ProjectID: "horndb", Name: "casualties"})
@@ -165,9 +167,17 @@ func TestLatestArtifactEvidenceOrdering(t *testing.T) {
 		t.Fatalf("create deliverable: %v", err)
 	}
 
-	got, err := s.LatestArtifactEvidence(ctx, "deliverable", d.ID)
-	if err != nil || got != nil {
-		t.Fatalf("LatestArtifactEvidence before any report = %+v, %v; want nil, nil", got, err)
+	reported := func(what string) *model.Deliverable {
+		t.Helper()
+		got, err := s.GetDeliverable(ctx, d.ID)
+		if err != nil {
+			t.Fatalf("GetDeliverable %s: %v", what, err)
+		}
+		return got
+	}
+
+	if got := reported("before any report"); got.ReportedState != "" || got.ReportedAt != nil {
+		t.Fatalf("before any report = %q at %v, want empty", got.ReportedState, got.ReportedAt)
 	}
 
 	t0 := taskTestNow
@@ -176,22 +186,17 @@ func TestLatestArtifactEvidenceOrdering(t *testing.T) {
 	// Older by occurred_at but filed last: it must not win.
 	fileEvidence(t, s, evidence("deliverable", d.ID, "failed", t0.Add(-time.Hour)))
 
-	got, err = s.LatestArtifactEvidence(ctx, "deliverable", d.ID)
-	if err != nil {
-		t.Fatalf("LatestArtifactEvidence: %v", err)
-	}
-	if got.State != "updated" || !got.OccurredAt.Equal(t0.Add(time.Hour)) {
-		t.Fatalf("latest = %s at %v, want updated at %v", got.State, got.OccurredAt, t0.Add(time.Hour))
+	got := reported("after three reports")
+	if got.ReportedState != "updated" || got.ReportedAt == nil ||
+		!got.ReportedAt.Equal(t0.Add(time.Hour)) {
+		t.Fatalf("reported = %s at %v, want updated at %v",
+			got.ReportedState, got.ReportedAt, t0.Add(time.Hour))
 	}
 
 	// Same instant as the winner, filed after it: id breaks the tie.
 	fileEvidence(t, s, evidence("deliverable", d.ID, "deprecated", t0.Add(time.Hour)))
-	got, err = s.LatestArtifactEvidence(ctx, "deliverable", d.ID)
-	if err != nil {
-		t.Fatalf("LatestArtifactEvidence after tie: %v", err)
-	}
-	if got.State != "deprecated" {
-		t.Fatalf("latest after tie = %s, want deprecated", got.State)
+	if got := reported("after the tie"); got.ReportedState != "deprecated" {
+		t.Fatalf("reported after tie = %s, want deprecated", got.ReportedState)
 	}
 }
 
