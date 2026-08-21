@@ -40,12 +40,14 @@ import (
 )
 
 // Config carries server configuration. The webhook secrets and cluster/env
-// map are consumed by the /hooks/github and /hooks/flux endpoints.
+// map are consumed by the /hooks/github, /hooks/flux and /hooks/catalog
+// endpoints.
 type Config struct {
-	BootstrapToken      string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
-	GitHubWebhookSecret string            // LODE_GITHUB_WEBHOOK_SECRET
-	FluxWebhookSecret   string            // LODE_FLUX_WEBHOOK_SECRET
-	ClusterEnvMap       map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
+	BootstrapToken       string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
+	GitHubWebhookSecret  string            // LODE_GITHUB_WEBHOOK_SECRET
+	FluxWebhookSecret    string            // LODE_FLUX_WEBHOOK_SECRET
+	CatalogWebhookSecret string            // LODE_CATALOG_WEBHOOK_SECRET
+	ClusterEnvMap        map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// InstanceEnv (LODE_INSTANCE_ENV) is which kind of instance this is: "dev"
 	// or "prod", nothing else, empty meaning prod (039 §3). It is not
@@ -491,6 +493,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	s.hookMetrics = hookMetrics
 	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
+	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
 	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.

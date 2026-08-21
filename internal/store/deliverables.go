@@ -4,7 +4,9 @@
 // or closed — and it stores no state, because §3.2 makes deliverable state
 // something emitters and probers report, never something a human asserts by
 // closing a task. Only the three descriptive fields §3.1 gives a custom
-// deliverable (name, description, optional URL) live here.
+// deliverable (name, description, optional URL) live in the row; the artifact
+// address it is verified by is a declaration (see artifactevidence.go), and
+// the state reported against that address is joined on read.
 package store
 
 import (
@@ -24,15 +26,51 @@ type DeliverableInput struct {
 	Name        string
 	Description string
 	URL         string
-	CreatedBy   string
+	// Artifact is the address the deliverable is verified by (029 §3.1), or
+	// "" when it declares none. It is not stored on the row: it becomes an
+	// artifact_declarations entry, which is what the catalog ingest routes on.
+	Artifact  string
+	CreatedBy string
 }
 
 // deliverableSeqKind is the deliverable's row key in project_entity_seq and
 // the type segment of its id (spec 029 §4's COW-DEL-3).
 const deliverableSeqKind = "DEL"
 
-// deliverableColumns is the SELECT list shared by every deliverable read.
+// deliverableColumns is the deliverables table's own column list, in insert
+// and scan order.
 const deliverableColumns = `id, project_id, name, description, url, created_by, created_at, updated_at`
+
+// deliverableSelect is what a read projects: the stored columns, then the
+// declared artifact address and the newest state reported about that address.
+// The last two are joined, never stored — 029 §3.2 keeps deliverable state a
+// reported fact, so the row itself has nothing to say about it.
+const deliverableSelect = deliverableColumns + `,
+	COALESCE(decl.artifact_uri, ''), COALESCE(ev.state, ''), ev.occurred_at`
+
+// deliverableFrom pairs the table with the declared address and the latest
+// evidence filed against that same address. The two LATERALs are chained on
+// purpose: artifact_declarations is unique per (kind, id, artifact_uri), so a
+// deliverable can hold more than one declaration, and evidence picked without
+// correlating on decl.artifact_uri could pair one address with a state
+// reported about another. The projection shows the first declaration by id and
+// only what was reported about it.
+//
+// Latest is by the emitter's own clock with id as the tiebreak: a fact
+// reported late about an earlier moment does not displace a newer one. This is
+// the only reader of artifact_evidence.
+const deliverableFrom = `FROM deliverables
+	LEFT JOIN LATERAL (
+	    SELECT ad.artifact_uri FROM artifact_declarations ad
+	     WHERE ad.entity_kind = 'deliverable' AND ad.entity_id = deliverables.id
+	     ORDER BY ad.id LIMIT 1
+	) decl ON true
+	LEFT JOIN LATERAL (
+	    SELECT e.state, e.occurred_at FROM artifact_evidence e
+	     WHERE e.entity_kind = 'deliverable' AND e.entity_id = deliverables.id
+	       AND e.artifact_uri = decl.artifact_uri
+	     ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1
+	) ev ON true`
 
 // CreateDeliverable allocates the next <KEY>-DEL-<n> id from the project's
 // DEL counter and inserts the deliverable inside the given transaction. Like
@@ -83,6 +121,7 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 		CreatedBy:   in.CreatedBy,
 		CreatedAt:   ts,
 		UpdatedAt:   ts,
+		Artifact:    strings.TrimSpace(in.Artifact),
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO deliverables (`+deliverableColumns+`)
@@ -91,18 +130,30 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 	); err != nil {
 		return nil, fmt.Errorf("insert deliverable %s: %w", id, err)
 	}
+	if d.Artifact != "" {
+		if err := DeclareArtifact(tx, now, "deliverable", d.ID, d.Artifact); err != nil {
+			return nil, err
+		}
+	}
 	return d, nil
 }
 
-// scanDeliverable reads one row selected with deliverableColumns.
+// scanDeliverable reads one row selected with deliverableSelect. It is the
+// single scan point for both readers, so neither can drift on the projection.
 func scanDeliverable(row rowScanner) (*model.Deliverable, error) {
 	var d model.Deliverable
 	var createdBy sql.NullString
+	var reportedAt sql.NullTime
 	if err := row.Scan(&d.ID, &d.Project, &d.Name, &d.Description, &d.URL,
-		&createdBy, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		&createdBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.Artifact, &d.ReportedState, &reportedAt); err != nil {
 		return nil, err
 	}
 	d.CreatedBy = createdBy.String
+	if reportedAt.Valid {
+		t := reportedAt.Time
+		d.ReportedAt = &t
+	}
 	return &d, nil
 }
 
@@ -111,7 +162,7 @@ func scanDeliverable(row rowScanner) (*model.Deliverable, error) {
 // that need the project to exist (every current one) load it first.
 func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]model.Deliverable, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+deliverableColumns+` FROM deliverables
+		`SELECT `+deliverableSelect+` `+deliverableFrom+`
 		 WHERE project_id = $1 ORDER BY created_at, id`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("list deliverables for %s: %w", projectID, err)
@@ -127,7 +178,7 @@ func (s *Store) ListDeliverables(ctx context.Context, projectID string) ([]model
 // does not exist.
 func (s *Store) GetDeliverable(ctx context.Context, id string) (*model.Deliverable, error) {
 	d, err := scanDeliverable(s.db.QueryRowContext(ctx,
-		`SELECT `+deliverableColumns+` FROM deliverables WHERE id = $1`, id))
+		`SELECT `+deliverableSelect+` `+deliverableFrom+` WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
