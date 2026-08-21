@@ -15,9 +15,9 @@ amends:
 ## 0. Decision {#sec-0}
 
 The org secrets catalog is not a file in any git repository. It is a
-**1Password item** named `worklode-secrets-catalog`, and each environment's
-overlay projects it into the cluster as a Kubernetes **Secret** of the same
-name via an ExternalSecret. `catalog.toml` — and each spec 042 template — is a
+**1Password item** named `worklode-secrets-catalog` — one per environment's
+vault — and each environment's overlay projects its vault's item into the
+cluster as a Kubernetes **Secret** of the same name via an ExternalSecret. `catalog.toml` — and each spec 042 template — is a
 field label on that item; the server mounts the projected Secret and reads
 `catalog.toml` from it exactly as before.
 
@@ -47,7 +47,10 @@ outlives the entry.
 ## 2. Where the catalog lives {#sec-2}
 
 The catalog is a 1Password item, `worklode-secrets-catalog`, in the same vault
-each environment's `worklode-secrets` item already lives in. Each field label
+each environment's `worklode-secrets` item already lives in. Vaults are
+per-cluster (`<cluster>-app-worklode`, the convention behind the
+ClusterSecretStore names below), so that is one item **per environment**, not
+one org item; what that costs is a consequence in §4. Each field label
 on that item becomes a key of the projected Secret: `catalog.toml` holds the
 TOML, and a spec 042 template (`kubeconfig-hzdev.yaml`) is a sibling field
 label on the same item.
@@ -105,6 +108,24 @@ a repository's `CODEOWNERS`. That is a real reduction in review and is accepted
 deliberately: the catalog holds no values, and its content is a list of
 pointers whose blast radius is bounded by 1Password's own access control on the
 items pointed at.
+
+**The authoritative map is now one copy per environment.** 017 §1 defines the
+catalog as one org-wide map, but vaults are per-cluster, so each environment's
+vault carries its own `worklode-secrets-catalog` item — hzdev's and hzprod's
+today, a third when the admin-cluster prod deployment lands. The copies do not
+race — a worklode server only ever serves its own cluster's item — but an
+org-wide entry is one edit per vault, nothing mechanical detects drift between
+them, and a name that resolves against one environment's server warns as
+missing against another's. The operational rule: an org-wide entry is mirrored
+by hand into every vault whose cluster runs a worklode server; an entry
+meaningful in only one environment may deliberately exist only there. If hand
+mirroring proves error-prone, that is churn evidence for Q17.4 below.
+
+**Edits propagate on ESO's clock, not git's.** A 1Password edit reaches the
+server only after the ExternalSecret's `refreshInterval` (1h) and the
+kubelet's Secret-volume sync — up to about an hour, silently, where the PR
+flow this replaces at least made propagation observable through Flux. The
+manual override is ESO's `force-sync` annotation on the ExternalSecret.
 
 **ESO reconciliation is all-or-nothing.** A malformed field on the item — or a
 missing one, if a `data:` list is ever added — fails the whole ExternalSecret,
