@@ -413,12 +413,23 @@ func runResume(cmd *cobra.Command, dir string) error {
 	return nil
 }
 
-// newDoneCmd builds `lode done`.
+// newDoneCmd builds `lode done`: the worktree's "my work here is finished"
+// verb. It submits the task for review (in_progress -> in_review) and closes
+// the lease; it never moves the task to `merged`. `merged` means the work
+// landed on the default branch (spec 004 §5.1) — a fact only the PR-merge
+// webhook, the delivery resolver, or a human running `lode task done <id>`
+// for a change that carries no PR can know. An agent finishing in a worktree
+// knows none of it: the branch may not even be pushed yet.
 func newDoneCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "done",
-		Short: "Mark the current worktree's task merged and release its lease",
-		Args:  cobra.NoArgs,
+		Short: "Submit the current worktree's task for review and release its lease",
+		Long: "Submit the current worktree's task for review and release its lease.\n\n" +
+			"The task moves to in_review, not merged: `merged` records that the\n" +
+			"work landed on the default branch, which the PR-merge webhook reports.\n" +
+			"For a change that will never have a PR, close it with `lode task done\n" +
+			"<id>` once it has actually landed.",
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -428,13 +439,17 @@ func newDoneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			taskID, root, err := resolveWorktreeTask(layout, ".", "lode task done <id>")
+			taskID, root, err := resolveWorktreeTask(layout, ".", "lode task submit <id>")
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.DoneTask(cmd.Context(), taskID)
+			ctx := cmd.Context()
+			t, raw, err := submitForReview(ctx, c, taskID)
 			if err != nil {
 				return err
+			}
+			if _, err := c.ReleaseLease(ctx, taskID); err != nil {
+				return fmt.Errorf("submitted %s for review, but failed to release the lease: %w", taskID, err)
 			}
 			purgeTaskSecrets(cmd, taskID)
 			clearTaskBinding(cmd, root)
@@ -443,12 +458,33 @@ func newDoneCmd() *cobra.Command {
 				return nil
 			}
 			o := cmd.OutOrStdout()
-			fmt.Fprintf(o, "%s done\n\n", t.ID)
+			fmt.Fprintf(o, "%s submitted for review; lease released\n\n", t.ID)
+			fmt.Fprintf(o, "  push the branch and open its PR — merging it moves %s to merged\n", t.ID)
 			fmt.Fprintf(o, "  git worktree remove %s\n", root)
 			return nil
 		},
 	}
 	return cmd
+}
+
+// submitForReview moves taskID to in_review, tolerating a task already there:
+// a worker that ran `lode task submit` before `lode done` should still get its
+// lease released rather than a transition error. Any other refusal is the
+// server's to report, unchanged.
+func submitForReview(ctx context.Context, c *cli.Client, taskID string) (model.Task, []byte, error) {
+	t, raw, err := c.SubmitTask(ctx, taskID)
+	if err == nil {
+		return t, raw, nil
+	}
+	detail, _, getErr := c.GetTask(ctx, taskID)
+	if getErr != nil || detail.State != "in_review" {
+		return model.Task{}, nil, err
+	}
+	raw, marshalErr := json.Marshal(detail.Task)
+	if marshalErr != nil {
+		return model.Task{}, nil, err
+	}
+	return detail.Task, raw, nil
 }
 
 // newBlockCmd builds `lode block --on <blocker-id>`.
