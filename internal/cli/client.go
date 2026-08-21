@@ -1041,6 +1041,15 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 		model.UpdateDocBodyInput{Body: body})
 }
 
+// DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
+// open candidate without landing it and freeing the document's one candidate
+// slot. Either the document's assignee or the revision's author may (025
+// §7.2); anyone else gets 403. The document itself is unchanged, and is what
+// the response carries.
+func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodDelete, docPath(id, "/revision"), nil)
+}
+
 // AcceptDocRevision calls POST /api/v1/docs/{id}/revision/accept, landing the
 // open candidate as the document's next version. A candidate that breaks the
 // 025 §6 anchor rules is refused with the violations named.

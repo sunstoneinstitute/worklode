@@ -43,8 +43,8 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
   Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --project, --repo, --status
 - `lode doc new` — Create a document (spec, ADR, or plan) in draft
   Flags: --assignee, --file, --kind, --number, --project, --repo, --slug
-- `lode doc revise` — Open, update, or land a document's candidate revision
-  Flags: --accept, --file
+- `lode doc revise` — Open, update, land, or discard a document's candidate revision
+  Flags: --accept, --discard, --file
 - `lode doc submit` — Submit a document for review (records a review event; the document's status does not change)
 - `lode doc todo` — What is left before a spec is fully implemented
   Flags: --deps

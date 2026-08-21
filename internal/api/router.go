@@ -147,6 +147,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/accept":          guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revise":          guarded(permDocWrite),
 	"PUT /api/v1/docs/{id}/revision":         guarded(permDocWrite),
+	"DELETE /api/v1/docs/{id}/revision":      guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revision/accept": guarded(permDocWrite),
 	// The document half of 044 §5; see the task entries above.
 	"DELETE /api/v1/docs/{id}":        guarded(permDocWrite),

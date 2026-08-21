@@ -22,6 +22,7 @@ lode doc anchors <file>                             # local lint: anchors, plan 
 lode doc new --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <id-or-slug> --file <file>            # replace a draft's body
 lode doc revise <id-or-slug> --file <file>          # candidate revision on an accepted doc
+lode doc revise <id-or-slug> --discard              # withdraw it unlanded: assignee or its author
 lode doc submit <id-or-slug>                        # mints the review task
 lode doc accept <id-or-slug>                        # assignee-gated; a plan's accept mints its tasks
 ```

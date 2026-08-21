@@ -25,6 +25,7 @@ lode doc anchors <file>                                    # local lint before c
 lode doc new --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
 lode doc edit <id-or-slug> --file <file>                    # replace a draft's body
 lode doc revise <id-or-slug> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
+lode doc revise <id-or-slug> --discard                      # withdraw it without landing: assignee or its author
 lode doc submit <id-or-slug>                                # records a review event; mints a review task
 lode doc accept <id-or-slug>                                # assignee-gated; accepting a plan mints its tasks
 ```

@@ -479,6 +479,63 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 		map[string]string{"field": "revision", "new": "updated"})
 }
 
+// DiscardRevision withdraws a document's open candidate revision without
+// landing it — the close-without-merging half of the pull request 025 §7.2
+// says a revision structurally is. Deleting the row frees the
+// one-candidate-per-document slot, so the next ReviseDoc succeeds immediately
+// instead of hitting ErrRevisionExists. ErrNotFound if no revision is open.
+//
+// Gated on the document's assignee or the revision's created_by: anyone with
+// doc.write may propose a revision, and either its author or the document's
+// assignee may withdraw it. That pairing is what keeps ReviseDoc open — an
+// unwanted candidate can always be cleared by someone.
+//
+// Unlike AcceptRevision this checks no status: a candidate left behind on a
+// document that has since been superseded is exactly the litter discard
+// exists to remove.
+//
+// Nothing is stamped, so now goes unused; the signature matches the other
+// document writers, as ReplaceDocEdges' does.
+func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	// The revision is read before the gate because the gate depends on its
+	// created_by. Nothing is disclosed by that ordering: whether a candidate
+	// is open is already on the detail endpoint for any doc.read holder.
+	var createdBy sql.NullString
+	var body string
+	err = tx.QueryRow(
+		`SELECT created_by, body FROM doc_revisions WHERE doc_id = $1 FOR UPDATE`, id).
+		Scan(&createdBy, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load revision of doc %d: %w", id, err)
+	}
+	if err := checkRevisionDiscarder(id, d.assignee, createdBy.String, actorID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {
+		return nil, fmt.Errorf("discard revision of doc %d: %w", id, err)
+	}
+	// The one state_log row in this file that carries a body, because this is
+	// the one verb after which the text is nowhere else: doc_revisions has no
+	// history and the delete is hard, the docs row never held a candidate, and
+	// the request that asked for the discard names no body to record. An
+	// accepted body stays on the document; an edited one is in the update's
+	// own event payload.
+	if err := logDocChange(tx, id, eventID, map[string]string{
+		"field": "revision", "new": "discarded", "discarded_body": body,
+	}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
+}
+
 // AcceptRevision lands a document's open candidate revision: it runs the
 // 025 §6 constraint check against the accepted version and, when clean, swaps
 // the body, bumps the version, rebuilds sections and edges, stamps
@@ -668,6 +725,23 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 		return fmt.Errorf("doc %d is assigned to %s, not %s: %w", id, assignee, actorID, ErrForbidden)
 	}
 	return nil
+}
+
+// checkRevisionDiscarder gates withdrawing an open candidate on the document's
+// assignee or the revision's author. Wider than checkDocAssignee on purpose:
+// accepting is the maintainer's act, but closing a proposal without merging it
+// is also the proposer's, which is what lets ReviseDoc stay open to any
+// doc.write holder (025 §7.2's pull-request analogy).
+//
+// An empty actorID matches nobody, including a revision or document whose own
+// column is empty.
+func checkRevisionDiscarder(id int64, assignee, createdBy, actorID string) error {
+	if actorID != "" && (actorID == assignee || actorID == createdBy) {
+		return nil
+	}
+	return fmt.Errorf(
+		"revision of doc %d was opened by %q and the doc is assigned to %q: %q may discard neither: %w",
+		id, createdBy, assignee, actorID, ErrForbidden)
 }
 
 // CheckDocAcceptable re-runs AcceptDoc's gates without accepting anything, and
@@ -2067,7 +2141,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
-// create|update|accept|revise|edges.
+// create|update|accept|revise|discard|edges.
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —

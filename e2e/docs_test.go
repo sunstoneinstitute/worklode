@@ -243,7 +243,23 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("sections after accept = %+v, want both published", detail.Sections)
 	}
 
-	// 5. Open a revision, then edit it to drop sec-2's number while keeping
+	// 5. A revision is structurally a pull request (025 §7.2): actor B may
+	// open one against actor A's document even though B cannot accept it, and
+	// A — the assignee — may withdraw it without landing anything, freeing the
+	// one-candidate slot for the steps below.
+	if _, _, err := actorB.ReviseDoc(ctx, doc.ID); err != nil {
+		t.Fatalf("revise doc as a non-assignee: %v", err)
+	}
+	if _, _, err := actorA.DiscardDocRevision(ctx, doc.ID); err != nil {
+		t.Fatalf("discard a non-assignee's revision as the assignee: %v", err)
+	}
+	if _, _, err := actorA.DiscardDocRevision(ctx, doc.ID); err == nil {
+		t.Fatal("discard with nothing open: want an error, got nil")
+	} else if status := clientErrStatus(t, err); status != http.StatusNotFound {
+		t.Fatalf("discard with nothing open: status = %d, want 404 (err %v)", status, err)
+	}
+
+	// 6. Open a revision, then edit it to drop sec-2's number while keeping
 	// its anchor: this is the form that reaches the diff (renumbering while
 	// keeping the anchor is a lintAnchors defect refused at parse time), and
 	// AcceptDocRevision must reject it citing 025 §6 rule 3.
@@ -266,7 +282,15 @@ func TestDocLifecycle(t *testing.T) {
 		}
 	}
 
-	// 6. Replace the open revision with one that adds sec-1a and edits only
+	// 7. Actor B is neither the assignee nor this candidate's author, so B
+	// cannot withdraw it either — the discard gate is the pair, not doc.write.
+	if _, _, err := actorB.DiscardDocRevision(ctx, doc.ID); err == nil {
+		t.Fatal("third-party discard: want an error, got nil")
+	} else if status := clientErrStatus(t, err); status != http.StatusForbidden {
+		t.Fatalf("third-party discard: status = %d, want 403 (err %v)", status, err)
+	}
+
+	// 8. Replace the open revision with one that adds sec-1a and edits only
 	// sec-2's body: this must be accepted, landing as version 2 with
 	// last_revised_in moved on exactly sec-2 (025 §6 rule 5).
 	if _, _, err := actorA.UpdateDocRevision(ctx, doc.ID, specRevisedBody); err != nil {
@@ -308,7 +332,7 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("sec-1a published = false, want true (accept publishes every current anchor)")
 	}
 
-	// 7. The plan half: a plan carries no number and no anchors, and its body
+	// 9. The plan half: a plan carries no number and no anchors, and its body
 	// is freely editable at any status. Accepting this one is refused because
 	// it declares no `## Tasks` section — plan acceptance mints the plan's
 	// tasks (025 §9.2), and a plan that would mint nothing is not acceptable.
