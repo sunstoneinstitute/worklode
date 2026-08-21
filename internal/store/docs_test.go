@@ -4256,6 +4256,154 @@ func TestDocBareSupersededViaAcceptPath(t *testing.T) {
 	}
 }
 
+// replacerBody is a minimal accepted-at-create spec whose document-level
+// `replaces` names ref. The corpus importer's shape: status in the
+// frontmatter, no separate accept.
+func replacerBody(title, ref string) string {
+	return "---\nstatus: accepted\nissued: 2026-08-01\nreplaces:\n  \".\":\n    - " + ref +
+		"\n---\n\n# " + title + "\n\n## 1. Scope {#sec-1}\n\nBody.\n"
+}
+
+// docStatus reads one document's stored status, which is the thing the
+// cascade moves — CreateDoc's return value is a projection of the same row,
+// asserted separately where it matters.
+func docStatus(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	d, err := s.GetDoc(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetDoc(%d): %v", id, err)
+	}
+	return d.Status
+}
+
+// TestDocCreateAcceptedSupersedesReplaced: creating a document accepted runs
+// the same supersession cascade AcceptDoc does, so an importer recording a
+// document at the status it actually reached does not leave the document it
+// replaces claiming to be current too (WL-133).
+func TestDocCreateAcceptedSupersedesReplaced(t *testing.T) {
+	s := openDocStore(t)
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Status: "accepted", Body: replacerBody("New", "006-old.md"),
+	})
+
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status = %q, want superseded", got)
+	}
+}
+
+// TestDocCreateAcceptedSupersedesReplacedOutOfOrder: the same corpus imported
+// successor-first. The `replaces` edge starts unresolved, so the cascade has
+// no row to flip at create time; repointExternalEdges resolves the edge when
+// the target arrives and runs the missed cascade there, which is what makes
+// the outcome independent of import order (WL-133, on WL-130's mechanism).
+func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
+	s := openDocStore(t)
+	successor := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Status: "accepted", Body: replacerBody("New", "006-old.md"),
+	})
+	before := docEdges(t, s, successor.ID)
+	want := []model.DocEdge{{Type: "replaces", ToExternal: "006-old.md"}}
+	if !slices.Equal(before, want) {
+		t.Fatalf("edges before the target exists = %+v, want %+v", before, want)
+	}
+
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status = %q, want superseded", got)
+	}
+	// CreateDoc reports the row it landed, not the status it was asked for:
+	// this document was superseded on the way in.
+	if old.Status != "superseded" {
+		t.Errorf("CreateDoc(006-old).Status = %q, want superseded", old.Status)
+	}
+	after := docEdges(t, s, successor.ID)
+	wantAfter := []model.DocEdge{{Type: "replaces", ToDoc: old.ID}}
+	if !slices.Equal(after, wantAfter) {
+		t.Fatalf("edges after the target arrives = %+v, want %+v", after, wantAfter)
+	}
+}
+
+// TestDocCreateAcceptedLeavesDraftTargetAlone: 025 §7's ladder is draft ->
+// accepted -> superseded, and a draft pushed straight to superseded is
+// reachable by no verb. Neither new cascade path may do it — not the
+// accepted-at-create one, and not the one repointExternalEdges runs when the
+// edge resolves late.
+func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
+	t.Run("at create", func(t *testing.T) {
+		s := openDocStore(t)
+		old := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+			CreatedBy: "stig",
+		})
+		mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+			Status: "accepted", Body: replacerBody("New", "006-old.md"),
+		})
+		if got := docStatus(t, s, old.ID); got != "draft" {
+			t.Fatalf("006-old status = %q, want draft", got)
+		}
+	})
+
+	t.Run("on the late re-point", func(t *testing.T) {
+		s := openDocStore(t)
+		mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+			Status: "accepted", Body: replacerBody("New", "006-old.md"),
+		})
+		old := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+			CreatedBy: "stig",
+		})
+		if got := docStatus(t, s, old.ID); got != "draft" {
+			t.Fatalf("006-old status = %q, want draft", got)
+		}
+		// The draft target is still reachable by the verb that moves it, and
+		// accepting it is what finally makes it supersedable.
+		if _, _, err := acceptDoc(t, s, old.ID, "stig"); err != nil {
+			t.Fatalf("AcceptDoc(006-old): %v", err)
+		}
+		if got := docStatus(t, s, old.ID); got != "accepted" {
+			t.Fatalf("006-old status after accept = %q, want accepted", got)
+		}
+	})
+}
+
+// TestDocCreateDraftReplacerSupersedesNothing: the cascade is acceptance's
+// consequence, so the replacing end is guarded too. Here the edge resolves
+// late — the case repointExternalEdges now cascades on — but its document is
+// still draft, so nothing moves until that document's own accept. (At create
+// the guard is structural: a draft create never reaches the cascade.)
+func TestDocCreateDraftReplacerSupersedesNothing(t *testing.T) {
+	s := openDocStore(t)
+	successor := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n" +
+			"# New\n\n## 1. Scope {#sec-1}\n\nBody.\n",
+	})
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	if got := docStatus(t, s, old.ID); got != "accepted" {
+		t.Fatalf("006-old status = %q, want accepted: a draft replacer supersedes nothing", got)
+	}
+	if _, _, err := acceptDoc(t, s, successor.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc(025-new): %v", err)
+	}
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status after the replacer's accept = %q, want superseded", got)
+	}
+}
+
 // TestDocIRIRoundTrip: DocIRI renders spec 025 §4.1's project-qualified
 // subject IRI for a spec, an ADR, and a plan in the same project, and
 // DocBySubjectIRI resolves each back to its row. An unknown IRI is
