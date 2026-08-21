@@ -196,9 +196,16 @@ func (h *catalogHandler) apply(tx *sql.Tx, eventID int64, ev catalogEvent) ([]st
 		return nil, err
 	}
 
+	// An unparseable timestamp falls back to the store clock, but it is worth
+	// a warning: occurred_at is what the deliverable projection orders on, so
+	// a substituted clock can let a stale report win over a newer one.
 	occurredAt := h.st.Now()
 	if ev.OccurredAt != "" {
-		if t, parseErr := time.Parse(time.RFC3339, ev.OccurredAt); parseErr == nil {
+		t, parseErr := time.Parse(time.RFC3339, ev.OccurredAt)
+		if parseErr != nil {
+			h.log.Warn("catalog webhook: unparseable occurred_at, using the store clock",
+				"artifact", ev.Artifact, "occurred_at", ev.OccurredAt, "err", parseErr)
+		} else {
 			occurredAt = t
 		}
 	}

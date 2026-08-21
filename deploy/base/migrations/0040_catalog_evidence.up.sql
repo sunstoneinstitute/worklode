@@ -28,7 +28,10 @@ CREATE INDEX artifact_declarations_uri_idx ON artifact_declarations (artifact_ur
 -- task_commits: this is "an external system asserted a state at a time, with
 -- this event as provenance". event_id is ON DELETE RESTRICT because the event
 -- is that provenance — evidence must not outlive it. The UNIQUE key makes a
--- replayed delivery a no-op per entity.
+-- replayed delivery a no-op per entity and artifact: artifact_uri is in the key
+-- because one delivery reports about one address today, but a future batched
+-- payload naming several must file a row per address rather than silently
+-- dropping all but the first.
 CREATE TABLE artifact_evidence (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     entity_kind  text NOT NULL CHECK (entity_kind IN ('deliverable','task','doc')),
@@ -43,7 +46,7 @@ CREATE TABLE artifact_evidence (
     detail       jsonb,
     event_id     bigint NOT NULL REFERENCES events (id) ON DELETE RESTRICT,
     occurred_at  timestamptz NOT NULL,
-    UNIQUE (entity_kind, entity_id, event_id)
+    UNIQUE (entity_kind, entity_id, artifact_uri, event_id)
 );
 
 -- Covers the read every projection wants: the latest evidence for one entity.

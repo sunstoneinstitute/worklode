@@ -42,23 +42,33 @@ const deliverableSeqKind = "DEL"
 const deliverableColumns = `id, project_id, name, description, url, created_by, created_at, updated_at`
 
 // deliverableSelect is what a read projects: the stored columns, then the
-// declared artifact address and the newest state reported about it. The last
-// two are joined, never stored — 029 §3.2 keeps deliverable state a reported
-// fact, so the row itself has nothing to say about it.
+// declared artifact address and the newest state reported about that address.
+// The last two are joined, never stored — 029 §3.2 keeps deliverable state a
+// reported fact, so the row itself has nothing to say about it.
 const deliverableSelect = deliverableColumns + `,
-	COALESCE((SELECT ad.artifact_uri FROM artifact_declarations ad
-	           WHERE ad.entity_kind = 'deliverable' AND ad.entity_id = deliverables.id
-	           ORDER BY ad.id LIMIT 1), ''),
-	COALESCE(ev.state, ''), ev.occurred_at`
+	COALESCE(decl.artifact_uri, ''), COALESCE(ev.state, ''), ev.occurred_at`
 
-// deliverableFrom pairs the table with the latest evidence filed against the
-// deliverable, if any. Latest is by the emitter's own clock with id as the
-// tiebreak: a fact reported late about an earlier moment does not displace a
-// newer one. This is the only reader of artifact_evidence.
+// deliverableFrom pairs the table with the declared address and the latest
+// evidence filed against that same address. The two LATERALs are chained on
+// purpose: artifact_declarations is unique per (kind, id, artifact_uri), so a
+// deliverable can hold more than one declaration, and evidence picked without
+// correlating on decl.artifact_uri could pair one address with a state
+// reported about another. The projection shows the first declaration by id and
+// only what was reported about it.
+//
+// Latest is by the emitter's own clock with id as the tiebreak: a fact
+// reported late about an earlier moment does not displace a newer one. This is
+// the only reader of artifact_evidence.
 const deliverableFrom = `FROM deliverables
+	LEFT JOIN LATERAL (
+	    SELECT ad.artifact_uri FROM artifact_declarations ad
+	     WHERE ad.entity_kind = 'deliverable' AND ad.entity_id = deliverables.id
+	     ORDER BY ad.id LIMIT 1
+	) decl ON true
 	LEFT JOIN LATERAL (
 	    SELECT e.state, e.occurred_at FROM artifact_evidence e
 	     WHERE e.entity_kind = 'deliverable' AND e.entity_id = deliverables.id
+	       AND e.artifact_uri = decl.artifact_uri
 	     ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1
 	) ev ON true`
 

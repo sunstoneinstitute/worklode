@@ -85,8 +85,9 @@ func OpenDeclarationsForArtifact(tx *sql.Tx, artifact string) ([]DeclaredEntity,
 
 // InsertArtifactEvidence files one reported fact against a declared artifact.
 // inserted is false when this event already produced evidence for this entity
-// — a redelivery, which must not double-file. ev.Source and ev.Provenance are
-// the caller's to set; the event is the provenance record either way.
+// and artifact — a redelivery, which must not double-file. ev.Source and
+// ev.Provenance are the caller's to set; the event is the provenance record
+// either way.
 func InsertArtifactEvidence(tx *sql.Tx, eventID int64, ev model.ArtifactEvidence) (bool, error) {
 	var detail any
 	if len(ev.Detail) > 0 {
@@ -97,7 +98,7 @@ func InsertArtifactEvidence(tx *sql.Tx, eventID int64, ev model.ArtifactEvidence
 		   (entity_kind, entity_id, artifact_uri, source, state, provenance,
 		    version, url, detail, event_id, occurred_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-		 ON CONFLICT (entity_kind, entity_id, event_id) DO NOTHING`,
+		 ON CONFLICT (entity_kind, entity_id, artifact_uri, event_id) DO NOTHING`,
 		ev.EntityKind, ev.EntityID, ev.Artifact, ev.Source, ev.State, ev.Provenance,
 		ev.Version, ev.URL, detail, eventID, ev.OccurredAt.UTC())
 	if err != nil {
