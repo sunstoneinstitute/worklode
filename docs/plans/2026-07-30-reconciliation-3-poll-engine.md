@@ -1179,6 +1179,7 @@ In `internal/api/reconcile.go`, replace the Task 9 (part 2) placeholder tail of
 	} else {
 		poll, err := reconcile.Poll(r.Context(), s.st, s.appAuth, reconcile.Options{
 			Repo: req.Repo, Task: req.Task, Since: since, DryRun: req.DryRun, RunID: runID,
+			Log: s.log, Metrics: s.pollMetrics,
 		})
 		if err != nil {
 			s.mapStoreErr(w, err)
@@ -1189,7 +1190,11 @@ In `internal/api/reconcile.go`, replace the Task 9 (part 2) placeholder tail of
 ```
 
 with `"github.com/sunstoneinstitute/worklode/internal/reconcile"` in the
-imports, and tighten the response type:
+imports. `s.pollMetrics` is a new `*reconcile.Metrics` field on `server`, set
+in `registerRoutes` from `reconcile.NewMetrics(reg)` next to the
+`hooks.NewMetrics(reg)` line — engine 2's instruments already exist
+(`internal/reconcile/metrics.go`, WL-200); this task is only their
+registerer. Then tighten the response type:
 
 ```go
 	Poll *reconcile.PollResult `json:"poll"`
