@@ -499,6 +499,10 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// where the body — the artifact itself — comes from a file.
 	r.web("GET /docs", s.navWrap("knowledge", s.docsPage))
 	r.web("GET /docs/{id}", s.navWrap("knowledge", s.docPage))
+	// The drift board (spec 007) is the graph-backed half of Knowledge, so it
+	// marks that destination current rather than taking an eighth nav entry
+	// (see primaryNav's doc comment). Read-only: it renders no act.
+	r.web("GET /drift", s.navWrap("drift", s.driftPage))
 	// Deciding an approval is a web-session act (029 §7.3): the session's
 	// group claims are at most as old as the login that stored them, a bearer
 	// token's are as old as the token, and an open instance has no identity to

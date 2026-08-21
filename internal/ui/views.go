@@ -62,6 +62,36 @@ type BoardFailure struct {
 	Message    string
 }
 
+// --- drift board (spec 007) --------------------------------------------------
+
+// DriftView is the read-only drift board at /drift: four of spec 007's five
+// views, composed from internal/model directly because every field is a fact
+// the overview service already computed in the shape the page renders.
+//
+// Frontier and CriticalPath are backbone-authoritative and always render.
+// GraphEnabled reports whether a graph-server is configured; when it is not,
+// Drift and Gaps carry no data — not zero findings — so the page says the
+// graph is unconfigured rather than showing empty tables that would read as
+// "no drift".
+type DriftView struct {
+	Page         PageProps
+	Frontier     []model.FrontierTask
+	CriticalPath model.CriticalPath
+	Drift        model.Drift
+	Gaps         []model.Gap
+	GraphEnabled bool
+}
+
+// gapSubject names what a gap finding is about: the component with no
+// governing doc, or the repository holding an unmatched path (spec 007 §4.2
+// sets exactly one of the two).
+func gapSubject(g model.Gap) string {
+	if g.Component != "" {
+		return g.Component
+	}
+	return g.Repo
+}
+
 // --- projects portfolio -----------------------------------------------------
 
 // ProjectsView is the cross-project portfolio. It embeds model.Project rows

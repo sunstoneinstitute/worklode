@@ -71,6 +71,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /tasks/{id}":                     guarded(permWebRead),
 	"GET /docs":                           guarded(permWebRead),
 	"GET /docs/{id}":                      guarded(permWebRead),
+	"GET /drift":                          guarded(permWebRead),
 	// The cockpit's one decision act (029 §7.3). permApprovalDecide rather
 	// than permWebWrite: deciding an approval is a different capability from
 	// filing a task through a form, and the route is additionally gated by
