@@ -24,18 +24,20 @@ const (
 	maxDeliverableName        = 200
 	maxDeliverableDescription = 4000
 	maxDeliverableURL         = 2000
+	maxDeliverableArtifact    = 2000
 )
 
-// validateDeliverable trims and checks the three descriptive fields, returning
-// the cleaned input or a message naming the one thing to fix. Shared by the
-// JSON handler and the web form so the two surfaces cannot drift into
-// accepting different deliverables.
-func validateDeliverable(projectID, name, description, rawURL, createdBy string) (store.DeliverableInput, string) {
+// validateDeliverable trims and checks the declared fields, returning the
+// cleaned input or a message naming the one thing to fix. Shared by the JSON
+// handler and the web form so the two surfaces cannot drift into accepting
+// different deliverables.
+func validateDeliverable(projectID, name, description, rawURL, artifact, createdBy string) (store.DeliverableInput, string) {
 	in := store.DeliverableInput{
 		ProjectID:   projectID,
 		Name:        strings.TrimSpace(name),
 		Description: strings.TrimSpace(description),
 		URL:         strings.TrimSpace(rawURL),
+		Artifact:    strings.TrimSpace(artifact),
 		CreatedBy:   createdBy,
 	}
 	// Counted in runes, not bytes, so the server and the field's HTML
@@ -49,6 +51,8 @@ func validateDeliverable(projectID, name, description, rawURL, createdBy string)
 		return in, "description is too long"
 	case utf8.RuneCountInString(in.URL) > maxDeliverableURL:
 		return in, "url is too long"
+	case utf8.RuneCountInString(in.Artifact) > maxDeliverableArtifact:
+		return in, "artifact is too long"
 	}
 	if in.URL != "" {
 		// An absolute http(s) URL only. The deliverable's URL is rendered as a
@@ -60,6 +64,11 @@ func validateDeliverable(projectID, name, description, rawURL, createdBy string)
 			return in, "url must be an absolute http or https address"
 		}
 	}
+	// Artifact gets length only, deliberately: it is a catalog address the
+	// ingest matches on, not a link anything renders. "bigquery://…",
+	// "iceberg://…" and "gs://…" are all legal, and the comparison is exact
+	// after this trim — no scheme or case normalisation, because dataset
+	// identifiers are case-sensitive in the catalogs that report them.
 	return in, ""
 }
 
@@ -75,6 +84,7 @@ func (s *server) recordDeliverable(ctx context.Context, source string, in store.
 		"name":        in.Name,
 		"description": in.Description,
 		"url":         in.URL,
+		"artifact":    in.Artifact,
 		"created_by":  in.CreatedBy,
 	}, func(tx *sql.Tx, _ int64) error {
 		d, err := store.CreateDeliverable(tx, now, in)
@@ -118,7 +128,7 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := actorIDFrom(r)
-	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, actorID)
+	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, req.Artifact, actorID)
 	if msg != "" {
 		writeErr(w, http.StatusUnprocessableEntity, msg)
 		return

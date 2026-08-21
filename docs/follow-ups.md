@@ -168,11 +168,12 @@ outright once it is fixed over annotating it as resolved.
   declare a deliverable (§3.1's name/description/URL) and read the list back,
   but four pieces of §2/§3 are deliberately absent. Milestones do not exist,
   so a deliverable hangs off its project rather than a milestone — the
-  nullable `milestone_id` is a column the milestone table will add. Nothing
-  reports deliverable **state** (§3.2's push emitters and poll prober), so the
-  page says the state is unreported instead of showing one; that is the
-  substantial next slice, and until it lands "is the project published" has no
-  answer. Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
+  nullable `milestone_id` is a column the milestone table will add. §3.2's
+  **poll prober** does not exist: a push emitter can now report state (the
+  signed data-catalog ingest files evidence against the declared address), but
+  an address nothing pushes about is never checked, so "is the project
+  published" is answered only for the deliverables an emitter covers.
+  Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
   is not modelled — only by address. And no CLI verb exists: `lode deliverable
   list/add` would mirror `POST|GET /api/v1/projects/{id}/deliverables`.
 - `[gated]` **`project_entity_seq` carries only `DEL`**: spec 029 §4 gives milestones,

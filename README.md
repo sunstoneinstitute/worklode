@@ -282,6 +282,38 @@ valid environments — any other value is a startup error, since delivery
 tracking has no other stage. A cluster missing from the map falls back to
 `dev`.
 
+## Data catalog setup
+
+`POST /hooks/catalog` receives what a data catalog reports about an artifact
+and files it as evidence against whatever open deliverable, task or document
+declared that artifact address (spec 029 §3.2). Authentication is the same
+`generic-hmac` scheme as the Flux hook: `X-Signature: sha256=<hex>` over the
+exact request bytes, keyed by `LODE_CATALOG_WEBHOOK_SECRET`. An unset secret
+answers 503. `X-Catalog-Delivery` is the idempotency key when the emitter has
+one; without it the SHA-256 of the body is used.
+
+```json
+{
+  "event": "dataset.published",
+  "artifact": "bigquery://sunstone-prod/cow/casualties",
+  "state": "published",
+  "catalog": "prod",
+  "version": "2026-08-19T09:12:00Z",
+  "url": "https://catalog.example.org/datasets/cow.casualties",
+  "occurred_at": "2026-08-19T09:12:03Z",
+  "detail": {}
+}
+```
+
+`artifact` and `state` are required; `state` is one of `published`, `updated`,
+`deprecated`, `removed`, `failed`. The ack is
+`{"status":"ok"|"duplicate"|"unrouted"}` — `unrouted` means the delivery was
+recorded but no open entity declares that address. Artifact addresses are
+compared exactly (whitespace-trimmed, no case or scheme normalisation).
+
+**The contract is provisional.** No data-platform emitter exists yet; it is
+shaped after the Flux hook and will be settled against the first real one.
+
 ## Task branches
 
 Task branches are rendered from `LODE_BRANCH_TEMPLATE` on the server (default

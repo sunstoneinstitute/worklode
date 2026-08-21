@@ -336,7 +336,10 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 		URL:         strings.TrimSpace(r.PostFormValue("url")),
 	}
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, actorIDFrom(r))
+	// No artifact field on the form yet: the templ form would need a new
+	// input and a regenerated component, so the cockpit declares deliverables
+	// without an address and the JSON API is the only surface that sets one.
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, "", actorIDFrom(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",

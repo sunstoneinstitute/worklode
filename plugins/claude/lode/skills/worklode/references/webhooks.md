@@ -53,6 +53,32 @@ One event per `Kustomization` reconciliation attempt:
 The artifact a Flux event concerns is resolved either by OCI digest or by
 git-commit SHA (`revision` field), whichever the event's payload carries.
 
+## Data catalog (HMAC-signed, `POST /hooks/catalog`)
+
+Reports what a catalog knows about an artifact address, as **deliverable
+evidence** (spec 029 §3.2: deliverable state is reported by emitters, never
+asserted by a human closing a task). **No task-state effect at all** — this
+path never calls `Transition` or `ResolveDelivery`.
+
+Routing is unlike every path above. GitHub correlates by repo and branch;
+this one is a *declaration lookup*: the payload's `artifact` address is
+matched against `artifact_declarations`, and the fact is filed against every
+still-open entity that declared it. "Open" is per kind — a deliverable
+always (it stores no state to be closed by), a task by `taskClosed` (the same
+per-repo `done_state` predicate that decides blocking), a doc unless
+`superseded`.
+
+| Ack | Meaning |
+|---|---|
+| `ok` | Recorded, and evidence filed against at least one open declarer. |
+| `duplicate` | Already seen, by `X-Catalog-Delivery` or body hash. No second row. |
+| `unrouted` | Recorded, but nothing open declares that address. Not an error. |
+
+Today only a deliverable can declare an address, via `artifact` on `POST
+/api/v1/projects/{id}/deliverables`. **The contract is provisional** — no
+data-platform emitter exists yet; see the doc block atop
+`internal/hooks/catalog.go` for the payload.
+
 ## Kubernetes pod watcher (`lode watch`, not a webhook)
 
 An informer, not an ingest endpoint: it watches pod status directly and
