@@ -992,3 +992,138 @@ func TreeRender(w io.Writer, nodes []model.TaskTreeNode) {
 		}
 	}
 }
+
+// --- drift & overview (spec 007) -------------------------------------------
+
+// OverviewRender prints `lode overview`: the roll-up counts as a label/value
+// block, then any cycles found, then the note that says the counts are
+// missing rather than zero when no graph is configured.
+func OverviewRender(w io.Writer, o model.Overview) {
+	tw := newTabwriter(w)
+	fmt.Fprintf(tw, "violations\t%d\nstale intent\t%d\ngaps\t%d\nready frontier\t%d\n",
+		o.Violations, o.StaleIntent, o.Gaps, o.FrontierSize)
+	if o.CriticalHead != nil {
+		fmt.Fprintf(tw, "critical head\t%s\n", o.CriticalHead.ID)
+	}
+	for _, cyc := range o.Cycles {
+		fmt.Fprintf(tw, "CYCLE\t%s\n", strings.Join(cyc, " -> "))
+	}
+	if !o.GraphEnabled {
+		fmt.Fprintf(tw, "note\tgraph not configured; drift/gap counts unavailable\n")
+	}
+	tw.Flush()
+}
+
+// DriftRender prints `lode drift`: the violations, the stale intent, and —
+// when the caller asked for them — the accepted deviations. component filters
+// both edge sections to the edges leaving that component IRI.
+func DriftRender(w io.Writer, d model.Drift, component string, acknowledged bool) {
+	keep := func(from string) bool { return component == "" || from == component }
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "# violations (observed - declared - acknowledged)")
+	for _, e := range d.Violations {
+		if keep(e.From) {
+			fmt.Fprintf(tw, "%s\trequires\t%s\n", e.From, e.To)
+		}
+	}
+	fmt.Fprintln(tw, "# stale intent (declared - observed)")
+	for _, e := range d.StaleIntent {
+		if keep(e.From) {
+			fmt.Fprintf(tw, "%s\trequires\t%s\n", e.From, e.To)
+		}
+	}
+	if acknowledged {
+		fmt.Fprintln(tw, "# acknowledged deviations")
+		for _, a := range d.Acknowledged {
+			if !keep(a.From) {
+				continue
+			}
+			state := "active"
+			if a.Expired {
+				state = "EXPIRED"
+			}
+			fmt.Fprintf(tw, "%s\trequires\t%s\tby %s\t%s %s\n",
+				a.From, a.To, a.SanctionedBy, state, dash(a.ValidUntil))
+		}
+	}
+	tw.Flush()
+}
+
+// GapTable prints `lode gaps`: one line per finding. The two kinds carry
+// different fields — a component with no governing doc, or a repo path no
+// component claims — so the kind leads each row rather than being a column.
+func GapTable(w io.Writer, gaps []model.Gap) {
+	tw := newTabwriter(w)
+	for _, g := range gaps {
+		if g.Component != "" {
+			fmt.Fprintf(tw, "no governing doc\t%s\n", g.Component)
+			continue
+		}
+		fmt.Fprintf(tw, "unmatched path\t%s\t%s\n", g.Repo, g.Path)
+	}
+	tw.Flush()
+}
+
+// FrontierTable prints `lode frontier`: the ready set in the order the server
+// ranked it, with the criticality measures the overview adds. CRIT marks the
+// tasks on the critical path.
+func FrontierTable(w io.Writer, tasks []model.FrontierTask) {
+	tbl := newTable(
+		column{header: "ID"},
+		column{header: "PRIO"},
+		column{header: "CONCERN"},
+		column{header: "FAN-OUT"},
+		column{header: "DEPTH"},
+		column{header: "CRIT"},
+		titleColumn("TITLE"),
+	)
+	for _, t := range tasks {
+		crit := ""
+		if t.IsCritical {
+			crit = "*"
+		}
+		tbl.add(t.ID, t.Priority, dash(t.Concern),
+			strconv.Itoa(t.FanOut), strconv.Itoa(t.Depth), crit, t.Title)
+	}
+	tbl.flush(w)
+}
+
+// CriticalPathRender prints `lode critical-path`: the chain length, one row
+// per critical task, then any cycles. A task filter narrows the rows to that
+// one task, so the chain length — a property of the whole graph, not of the
+// row — is left out.
+func CriticalPathRender(w io.Writer, cp model.CriticalPath, task string) {
+	tw := newTabwriter(w)
+	if task == "" {
+		fmt.Fprintf(tw, "chain length\t%d\n", cp.MaxDepth)
+	}
+	for _, t := range cp.Tasks {
+		if task != "" && t.ID != task {
+			continue
+		}
+		fmt.Fprintf(tw, "%d\t%s\tfan-out %d\n", t.Depth, t.ID, t.FanOut)
+	}
+	for _, cyc := range cp.Cycles {
+		fmt.Fprintf(tw, "CYCLE\t%s\n", strings.Join(cyc, " -> "))
+	}
+	tw.Flush()
+}
+
+// DeriveResultTable prints one row per graph a deriver run touched. SKIPPED
+// means the stored hash already matched; EMPTY means the deriver produced no
+// triples, which is legitimate for some sources and a broken input for the
+// rest — so it is a column, not an inference from BYTES.
+func DeriveResultTable(w io.Writer, results []model.DeriveResult) {
+	tbl := newTable(
+		column{header: "GRAPH", wrap: wrapChars, min: minHolderWidth},
+		column{header: "HASH"},
+		column{header: "SKIPPED"},
+		column{header: "EMPTY"},
+		column{header: "BYTES"},
+	)
+	for _, r := range results {
+		tbl.add(r.Graph, dash(r.Hash), strconv.FormatBool(r.Skipped),
+			strconv.FormatBool(r.Empty), strconv.Itoa(r.Bytes))
+	}
+	tbl.flush(w)
+}

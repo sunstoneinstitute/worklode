@@ -164,3 +164,98 @@ func TestDeriveAllowEmptyReportsTheEmptyDocument(t *testing.T) {
 		t.Fatalf("puts=%d; want both documents written", n)
 	}
 }
+
+// fakeOverviewServer stands up an HTTP server answering every request through
+// h, and points LODE_SERVER/LODE_TOKEN/HOME at it so the spec 007 commands
+// build a client against it rather than the developer's own config.
+func fakeOverviewServer(t *testing.T, h func(*http.Request) (int, string)) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		status, body := h(r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+}
+
+func TestDriftCommandJSON(t *testing.T) {
+	fakeOverviewServer(t, func(*http.Request) (int, string) {
+		return http.StatusOK, `{"violations":[{"from":"urn:a","to":"urn:b"}],"stale_intent":[]}`
+	})
+	out, err := runLode(t, "drift", "--json")
+	if err != nil {
+		t.Fatalf("drift --json: %v", err)
+	}
+	if !strings.Contains(out, `"from": "urn:a"`) && !strings.Contains(out, `"from":"urn:a"`) {
+		t.Fatalf("drift --json output missing the violation:\n%s", out)
+	}
+}
+
+func TestFrontierCommandPassesProject(t *testing.T) {
+	var gotQuery string
+	fakeOverviewServer(t, func(r *http.Request) (int, string) {
+		gotQuery = r.URL.RawQuery
+		return http.StatusOK, `{"tasks":[]}`
+	})
+	if _, err := runLode(t, "frontier", "--project", "worklode", "--json"); err != nil {
+		t.Fatalf("frontier: %v", err)
+	}
+	if !strings.Contains(gotQuery, "project=worklode") {
+		t.Fatalf("query = %q; want project=worklode", gotQuery)
+	}
+}
+
+func TestDriftAcknowledgedFlag(t *testing.T) {
+	var gotQuery string
+	fakeOverviewServer(t, func(r *http.Request) (int, string) {
+		gotQuery = r.URL.RawQuery
+		return http.StatusOK, `{"violations":[],"stale_intent":[],"acknowledged":[]}`
+	})
+	if _, err := runLode(t, "drift", "--acknowledged", "--json"); err != nil {
+		t.Fatalf("drift --acknowledged: %v", err)
+	}
+	if !strings.Contains(gotQuery, "acknowledged=1") {
+		t.Fatalf("query = %q; want acknowledged=1", gotQuery)
+	}
+}
+
+// TestDeriveServerFlagPostsToTheAPI: --server is the one caller of
+// POST /api/v1/derive; without it the command derives from the checkout, so
+// the method and path are what the flag is for.
+func TestDeriveServerFlagPostsToTheAPI(t *testing.T) {
+	var gotMethod, gotPath string
+	fakeOverviewServer(t, func(r *http.Request) (int, string) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		return http.StatusOK, `{"results":[{"graph":"urn:g","hash":"sha256:abc","skipped":false,"empty":false,"bytes":42}]}`
+	})
+	out, err := runLode(t, "derive", "--server")
+	if err != nil {
+		t.Fatalf("derive --server: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/v1/derive" {
+		t.Fatalf("request = %s %s; want POST /api/v1/derive", gotMethod, gotPath)
+	}
+	if !strings.Contains(out, "urn:g") || !strings.Contains(out, "sha256:abc") || !strings.Contains(out, "42") {
+		t.Fatalf("derive --server output missing the result row:\n%s", out)
+	}
+}
+
+// TestDeriveServerRejectsRepoLocalFlags: --dry-run, --graph-url and
+// --allow-empty describe a checkout the server does not have; the combination
+// must fail rather than silently ignore them.
+func TestDeriveServerRejectsRepoLocalFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"derive", "--server", "--dry-run"},
+		{"derive", "--server", "--graph-url", "http://example.invalid"},
+		{"derive", "--server", "--allow-empty"},
+	} {
+		_, err := runLode(t, args...)
+		if err == nil || !strings.Contains(err.Error(), "none of the others can be") {
+			t.Errorf("%v: err = %v; want a mutual-exclusion error", args, err)
+		}
+	}
+}
