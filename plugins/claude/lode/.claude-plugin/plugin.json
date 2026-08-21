@@ -1,7 +1,7 @@
 {
   "name": "lode",
-  "description": "[code] Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. /lode:spec-coverage finds accepted specs with sections no accepted plan covers and seeds a planning task for each; /lode:plan-spec decomposes an accepted spec into plans under a claimed design task. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo into each targeted coding agent's own configuration, alongside the git hooks and the AGENTS.md block, so they stay versioned with the binary.",
-  "version": "0.2.0",
+  "description": "[code] Worklode: worktree-bound task pickup for agents. Slash commands /lode:next|resume|done|block|status wrap the lode CLI to claim a ready task, create its worktree under .worktrees/, bind the lease, and mark it done/blocked. /lode:spec-coverage finds accepted specs with sections no accepted plan covers and seeds a planning task for each; /lode:plan-spec decomposes an accepted spec into plans under a claimed design task. The `worklode` skill is a model-invocable orientation reference for any project Worklode manages — entities, edges, the task state machine, the doc model, the full command catalog — meant to be pointed at from a project's own CLAUDE.md. Lifecycle hooks ship with the CLI, not here: `lode install` writes them per repo into each targeted coding agent's own configuration, alongside the git hooks and the AGENTS.md block, so they stay versioned with the binary.",
+  "version": "0.3.0",
   "author": {
     "name": "Stig Bakken",
     "email": "stig@sunstone.institute"
@@ -13,6 +13,7 @@
     "task-pickup",
     "lease",
     "agent-workflow",
-    "cli"
+    "cli",
+    "onboarding"
   ]
 }
