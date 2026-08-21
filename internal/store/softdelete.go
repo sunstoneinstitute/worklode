@@ -109,7 +109,9 @@ func DeleteTask(tx *sql.Tx, now time.Time, id, actorID, justification string, ev
 	// closeLease makes, and it must precede the roll-up below so the parent
 	// resolves against the state the child actually ends on.
 	if state == "in_progress" {
-		if err := Transition(tx, now, id, "in_progress", "ready", eventID); err != nil {
+		// state came from lockTaskTombstone's FOR UPDATE read; nothing since
+		// has moved it, so the transition needs no re-read.
+		if err := transitionKnown(tx, now, id, state, "in_progress", "ready", eventID); err != nil {
 			return err
 		}
 	}
