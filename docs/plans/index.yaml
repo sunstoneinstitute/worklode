@@ -1038,6 +1038,19 @@ docs/plans/2026-08-21-cloud-sandbox-provisioning.md:
     task-5-content-addressed-worker-image-tags: "### Task 5 — Content-addressed worker image tags"
     task-6-ci-job-images-build-and-image-and-script-agree: "### Task 6 — CI job: images build, and image and script agree"
     task-7-e2e-environment-only-authentication: "### Task 7 — e2e: environment-only authentication"
+docs/plans/2026-08-21-corpus-indexing-and-hybrid-search.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-role-aware-provider-interface: "### Task 1 — Role-aware provider interface"
+    task-2-pure-chunking-and-context-headers: "### Task 2 — Pure chunking and context headers"
+    task-3-migration-0040-and-the-store-moves-onto-index-chunks: "### Task 3 — Migration 0040 and the store moves onto index_chunks"
+    task-4-hybrid-search-in-the-store: "### Task 4 — Hybrid search in the store"
+    task-5-convergence-loop-invalidation-and-server-wiring: "### Task 5 — Convergence loop, invalidation, and server wiring"
+    task-6-get-apiv1search: "### Task 6 — GET /api/v1/search"
+    task-7-recommendation-becomes-a-caller-of-the-retrieval-path: "### Task 7 — Recommendation becomes a caller of the retrieval path"
+    task-8-lode-search: "### Task 8 — lode search"
+    task-9-e2e-journey-acceptance-walk-docs: "### Task 9 — e2e journey, acceptance walk, docs"
 docs/plans/2026-08-21-per-project-workflows.md:
   sections:
     tasks: "## Tasks"
