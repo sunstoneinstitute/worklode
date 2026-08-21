@@ -434,6 +434,54 @@ The compose stack ships **no** graph-server; the Oxigraph container it can
 start is test-only (see `docs/follow-ups.md`), so projection has nowhere to
 write locally today.
 
+## Drift & overview
+
+The graph holds two layers of the same `dct:requires` relation: **declared**
+(what a design document says the architecture is, one named graph per doc) and
+**observed** (what the code, the manifests and the estate actually do, one
+named graph per deriver source). Drift is the set difference between them —
+edges observed but not declared are violations, edges declared but not observed
+are stale intent (spec 007).
+
+Each deriver owns exactly one graph and replaces it wholesale, so a run is
+idempotent and re-running is free: the runner hashes the rendered N-Triples,
+stores the hash in the graph, and short-circuits when it matches. A run that
+produced no triples will not replace a graph that currently holds content —
+that is nearly always broken inputs, not an empty world — unless you say
+`--allow-empty`.
+
+Derivers split by what they read. The repo-local ones (`go-imports`,
+`repo-layout`) need a checkout, so each repo runs them from its own CI:
+
+```bash
+lode derive                 # writes observed/<source>/<host>/<owner>/<repo>
+lode derive --dry-run       # print the N-Triples instead of writing
+```
+
+The server-side ones (`pr-affects`, `deploy`) read the backbone's own rows and
+run in one place, admin-only:
+
+```bash
+lode derive --server        # POST /api/v1/derive
+```
+
+Reading the result — every command takes `--json`, which passes the server's
+own bytes through, or re-encodes the same shape when `--component`/`--task`
+narrowed it client-side:
+
+| Command | Shows |
+|---|---|
+| `lode overview` | one-screen roll-up: drift counts, gaps, frontier size, critical head |
+| `lode drift [--component IRI] [--acknowledged]` | violations and stale intent; accepted deviations, marked expired |
+| `lode gaps` | components with no governing document, and repo paths no component claims |
+| `lode frontier` (alias `ready`) | the ranked ready set, annotated with depth and fan-out |
+| `lode critical-path [--task ID]` | the estimate-free critical path, plus any dependency cycles |
+
+`GET /drift` renders the same views as a read-only web page. All of it needs
+`LODE_GRAPHSERVER_URL` (see the table above) — without it the frontier and
+critical path still work, since those come from the backbone, and the
+graph-backed reads answer 503.
+
 ## Cluster watcher
 
 `lode watch` runs a pod informer against one cluster and reports crash loops
