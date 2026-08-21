@@ -30,7 +30,14 @@ materialized into the OS keystore at claim time; you never see or handle them.
 
 - Run credentialed commands via `lode secrets exec -- <command> [args...]`
   from inside the task worktree. The command's environment gets exactly the
-  task's materialized names.
+  task's materialized names, plus the shell plumbing (`PATH`, `HOME`, locale).
+  Credential-shaped variables from the operator's own shell — `AWS_*`,
+  `ANTHROPIC_API_KEY`, anything containing `TOKEN`/`SECRET`/`PASSWORD` — are
+  stripped (ADR 050), so a command that only worked because such a variable
+  was exported now fails. A missing *credential* is a missing declared secret,
+  handled below. A stripped non-credential — `AWS_REGION` and its kind go with
+  their namespace — is a report that the pattern is too broad: say so and
+  block, do not re-export it and do not declare it as a secret.
 - `lode secrets status` shows declared vs materialized names.
 - NEVER probe `op`, ask the operator for a value, or read
   `.worklode/secrets.env` expecting values — it holds `op://` references only.
