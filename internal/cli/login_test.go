@@ -99,6 +99,29 @@ func TestRunLoginTokenExchangeSurfacesServerError(t *testing.T) {
 	}
 }
 
+// A discovery failure that isn't a 404 (misconfigured OIDC, issuer
+// unreachable) is exactly where the server has the most useful thing to say,
+// so fetchLoginConfig must surface it the same way exchangeCLIToken does.
+func TestRunLoginDiscoverySurfacesServerError(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"oidc not configured"}`, http.StatusInternalServerError)
+	})
+	wt := httptest.NewServer(mux)
+	defer wt.Close()
+
+	_, err := cli.RunLogin(context.Background(), cli.LoginOptions{
+		Server: wt.URL, OpenBrowser: func(string) error { return nil },
+	})
+	if err == nil || !strings.Contains(err.Error(), "oidc not configured") {
+		t.Fatalf("err = %v; want it to carry the server's error message", err)
+	}
+	var ce *cli.ClientError
+	if !errors.As(err, &ce) || ce.Status != http.StatusInternalServerError {
+		t.Fatalf("err = %v (%T); want *cli.ClientError with status 500", err, err)
+	}
+}
+
 func TestRunLoginNoInteractiveLogin(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/lode-login", func(w http.ResponseWriter, r *http.Request) {
