@@ -57,7 +57,7 @@ func pages(t *testing.T) map[string]string {
 				{ProjectID: "p2", Name: "Beta", Key: "BET", RoleBadge: "Member", Signal: "You are on this project", InProgress: 0, InReview: 0, Blocked: 0, CrewInitials: []string{"AB"}},
 			},
 		}),
-		"deliverables": Deliverables(DeliverablesView{Page: PageProps{Title: "Deliverables"}, Project: proj, Deliverables: []DeliverableRow{{ID: "d", Name: "D", URL: "https://example.org/x", CreatedAt: now}}}),
+		"deliverables": Deliverables(DeliverablesView{Page: PageProps{Title: "Deliverables"}, Project: proj, Deliverables: []DeliverableRow{{ID: "d", Name: "D", URL: "https://example.org/x", CreatedAt: now, Artifact: "bigquery://sunstone-prod/cow/casualties", ReportedState: "published", ReportedAt: &now}}}),
 		"newtask":      NewTask(NewTaskView{Form: FormShell{Page: PageProps{Title: "New task"}, Project: proj}}),
 		"placeholder":  Placeholder(PlaceholderView{Page: PageProps{Title: "Crew"}, Heading: "Crew", Project: &proj}),
 	}

@@ -272,10 +272,11 @@ type DeliverablesView struct {
 	Deliverables []DeliverableRow
 }
 
-// DeliverableRow is one declared deliverable. It carries no state: spec 029
-// §3.2 makes deliverable state a fact emitters and probers report, and no
-// such report exists yet, so the page says the state is unreported rather
-// than showing one.
+// DeliverableRow is one declared deliverable. Spec 029 §3.2 makes deliverable
+// state a fact emitters and probers report, never one the deliverable stores,
+// so ReportedState and ReportedAt come from the newest evidence filed against
+// Artifact and are empty until something reports. A row with nothing reported
+// says "Declared" rather than inventing a status.
 type DeliverableRow struct {
 	ID          string
 	Name        string
@@ -283,6 +284,45 @@ type DeliverableRow struct {
 	URL         string
 	CreatedBy   string
 	CreatedAt   time.Time
+
+	// Artifact is the address the deliverable declares it is verified by
+	// (029 §3.1) — a catalog identifier, not necessarily a browser link, so
+	// it renders as text and never as an href.
+	Artifact string
+
+	// ReportedState is the newest reported state of Artifact
+	// (published | updated | deprecated | removed | failed), "" when nothing
+	// has reported; ReportedAt is when that report says it happened.
+	ReportedState string
+	ReportedAt    *time.Time
+}
+
+// deliverableChip maps a deliverable's reported state to its .chip variant.
+// An unreported deliverable keeps the "declared" evidence chip: a declaration
+// is all it honestly carries (spec 032 §1). Anything reported is observed
+// evidence, coloured by what the state means for the deliverable.
+func deliverableChip(state string) string {
+	switch state {
+	case "":
+		return "declared"
+	case "published", "updated":
+		return "ok"
+	case "deprecated":
+		return "warn"
+	case "removed", "failed":
+		return "crit"
+	default:
+		return "observed"
+	}
+}
+
+// deliverableLabel is the chip's text: the reported state, or "Declared" when
+// nothing has reported one.
+func deliverableLabel(state string) string {
+	if state == "" {
+		return "Declared"
+	}
+	return strings.ToUpper(state[:1]) + state[1:]
 }
 
 // --- crew --------------------------------------------------------------------
