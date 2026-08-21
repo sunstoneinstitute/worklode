@@ -35,21 +35,30 @@ func startTestServer(t *testing.T, baseCtx context.Context, handler http.Handler
 
 // TestShutdownServersWithOpenStream is the SIGTERM case that broke when the
 // event log grew a live SSE stream: http.Server.Shutdown waits for handlers
-// and never cancels them, so a handler that returns only on request-context
-// cancellation would hold shutdown to its deadline and make the command exit
-// non-zero. Shutdown must instead complete promptly and return nil.
+// and never cancels them, so a handler that never returned on its own would
+// hold shutdown to its deadline and make the command exit non-zero. The
+// stream ends on the background context that SIGTERM cancels (streamEvents
+// does this), so shutdown completes promptly and returns nil without having
+// to cancel anything else that is in flight.
 func TestShutdownServersWithOpenStream(t *testing.T) {
 	reqCtx, cancelRequests := context.WithCancel(context.Background())
 	defer cancelRequests()
 
+	// bgCtx stands in for the SIGTERM-notified context serve.go passes to
+	// api.NewServer; it is already cancelled by the time shutdown runs.
+	bgCtx, sigterm := context.WithCancel(context.Background())
+
 	streaming := make(chan struct{}) // closed once the handler is in flight
-	cancelled := make(chan struct{}) // closed once the handler saw cancellation
+	ended := make(chan struct{})     // closed once the handler returned
 	srv, url := startTestServer(t, reqCtx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		http.NewResponseController(w).Flush()
 		close(streaming)
-		<-r.Context().Done()
-		close(cancelled)
+		select {
+		case <-bgCtx.Done():
+		case <-r.Context().Done():
+		}
+		close(ended)
 	}))
 	adminSrv, _ := startTestServer(t, reqCtx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 
@@ -60,18 +69,18 @@ func TestShutdownServersWithOpenStream(t *testing.T) {
 	defer resp.Body.Close()
 	<-streaming
 
-	const grace = 50 * time.Millisecond
+	sigterm()
 	start := time.Now()
-	if err := shutdownServers(cancelRequests, grace, shutdownTimeout, srv, adminSrv); err != nil {
+	if err := shutdownServers(cancelRequests, shutdownTimeout, srv, adminSrv); err != nil {
 		t.Fatalf("shutdownServers with a stream open: %v, want nil", err)
 	}
 	if d := time.Since(start); d >= shutdownTimeout {
 		t.Fatalf("shutdownServers took %v, want well under the %v budget", d, shutdownTimeout)
 	}
 	select {
-	case <-cancelled:
+	case <-ended:
 	default:
-		t.Fatal("stream handler was never cancelled, so it did not return deliberately")
+		t.Fatal("stream handler never returned, so it did not observe shutdown")
 	}
 }
 
@@ -92,13 +101,12 @@ func TestShutdownServersIdleReturnsImmediately(t *testing.T) {
 		resp.Body.Close()
 	}
 
-	const grace = 5 * time.Second
 	start := time.Now()
-	if err := shutdownServers(cancelRequests, grace, shutdownTimeout, srv, adminSrv); err != nil {
+	if err := shutdownServers(cancelRequests, shutdownTimeout, srv, adminSrv); err != nil {
 		t.Fatalf("shutdownServers: %v, want nil", err)
 	}
-	if d := time.Since(start); d >= grace {
-		t.Fatalf("idle shutdown took %v, want it not to wait out the %v grace window", d, grace)
+	if d := time.Since(start); d >= shutdownTimeout {
+		t.Fatalf("idle shutdown took %v, want it not to wait out the %v budget", d, shutdownTimeout)
 	}
 }
 
@@ -205,5 +213,62 @@ func TestRunServeRejectsBadInstanceEnv(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "LODE_INSTANCE_ENV") {
 		t.Fatalf("error = %q, want it to name LODE_INSTANCE_ENV", err)
+	}
+}
+
+// TestShutdownServersLetsInFlightWriteFinish is WL-246: a rolling deploy sends
+// SIGTERM while ordinary requests are still in flight. Cutting those requests'
+// contexts short rolls their transaction back — the caller gets a 500, and a
+// GitHub webhook delivery, which is never retried, is lost for good. An
+// in-flight request must therefore keep an uncancelled context and complete,
+// however long shutdown has been running; only the whole-budget backstop may
+// cancel it.
+func TestShutdownServersLetsInFlightWriteFinish(t *testing.T) {
+	reqCtx, cancelRequests := context.WithCancel(context.Background())
+	defer cancelRequests()
+
+	inFlight := make(chan struct{}) // closed once the handler is running
+	release := make(chan struct{})  // closed to let the handler finish
+	gotErr := make(chan error, 1)   // the handler's view of its own context
+	srv, url := startTestServer(t, reqCtx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(inFlight)
+		<-release
+		gotErr <- r.Context().Err()
+		w.WriteHeader(http.StatusOK)
+	}))
+	adminSrv, _ := startTestServer(t, reqCtx, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+
+	respCh := make(chan *http.Response, 1)
+	go func() {
+		resp, err := http.Get(url)
+		if err != nil {
+			respCh <- nil
+			return
+		}
+		respCh <- resp
+	}()
+	<-inFlight
+
+	done := make(chan error, 1)
+	go func() { done <- shutdownServers(cancelRequests, shutdownTimeout, srv, adminSrv) }()
+
+	// Well past the old two-second grace window, so a shutdown that cancels
+	// ordinary requests has already done so by the time the handler looks.
+	time.Sleep(2*time.Second + 200*time.Millisecond)
+	close(release)
+
+	if err := <-gotErr; err != nil {
+		t.Fatalf("in-flight request context was cancelled during shutdown: %v, want it left alone", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("shutdownServers: %v, want nil", err)
+	}
+	resp := <-respCh
+	if resp == nil {
+		t.Fatal("in-flight request failed, want it to complete")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("in-flight request status = %d, want 200", resp.StatusCode)
 	}
 }

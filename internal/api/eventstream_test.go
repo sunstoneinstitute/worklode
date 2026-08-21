@@ -38,12 +38,19 @@ type streamFixture struct {
 // cannot tell a flushed response apart from a buffered one.
 func newStreamTestServer(t *testing.T) streamFixture {
 	t.Helper()
+	return newStreamTestServerWithBackground(t, nil)
+}
+
+// newStreamTestServerWithBackground is newStreamTestServer with an explicit
+// background context — the one serve.go cancels on SIGTERM.
+func newStreamTestServerWithBackground(t *testing.T, bg context.Context) streamFixture {
+	t.Helper()
 	st := newTestStore(t)
 
 	adminToken := seedActor(t, st, "alice", "human", "Alice", true)
 	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 
-	h, admin, err := api.NewServer(st, api.Config{})
+	h, admin, err := api.NewServer(st, api.Config{BackgroundCtx: bg})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -511,6 +518,39 @@ func TestEventStreamClientDisconnect(t *testing.T) {
 			}
 		case <-deadline:
 			t.Fatal("stream did not end within 10s of the client hanging up")
+		}
+	}
+}
+
+// TestEventStreamEndsOnShutdown is WL-246: SIGTERM cancels the background
+// context, and the stream must end on it. Without that, the only way to stop
+// a live `lode event tail --follow` at shutdown is to cancel every in-flight
+// request context — which rolls back the transactions of ordinary requests
+// caught in the same window, losing a webhook delivery that GitHub will never
+// retry.
+func TestEventStreamEndsOnShutdown(t *testing.T) {
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	bg, sigterm := context.WithCancel(context.Background())
+	defer sigterm()
+	f := newStreamTestServerWithBackground(t, bg)
+
+	s := openEventStream(t, context.Background(), f, "?type=stream.bye", f.adminToken, "")
+	s.awaitLive(t)
+	f.waitMetric(t, "worklode_event_streams_active", 1)
+
+	sigterm()
+
+	deadline := time.After(10 * time.Second)
+	for {
+		select {
+		case _, ok := <-s.msgs:
+			if !ok {
+				f.waitMetric(t, "worklode_event_streams_active", 0)
+				return
+			}
+		case <-deadline:
+			t.Fatal("stream did not end within 10s of shutdown being signalled")
 		}
 	}
 }
