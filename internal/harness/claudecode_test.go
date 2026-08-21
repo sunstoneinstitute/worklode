@@ -25,40 +25,6 @@ func readSettings(t *testing.T, path string) map[string]any {
 	return out
 }
 
-// commandsFor returns every hook command registered for a Claude Code event.
-func commandsFor(t *testing.T, settings map[string]any, event string) []string {
-	t.Helper()
-	hooks, ok := settings["hooks"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	groups, ok := hooks[event].([]any)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, g := range groups {
-		group, ok := g.(map[string]any)
-		if !ok {
-			continue
-		}
-		entries, ok := group["hooks"].([]any)
-		if !ok {
-			continue
-		}
-		for _, e := range entries {
-			entry, ok := e.(map[string]any)
-			if !ok {
-				continue
-			}
-			if cmd, ok := entry["command"].(string); ok {
-				out = append(out, cmd)
-			}
-		}
-	}
-	return out
-}
-
 // statusLineCommand returns the command string in a settings file's statusLine,
 // or "" when there is none.
 func statusLineCommand(t *testing.T, path string) string {
@@ -103,15 +69,15 @@ func TestClaudeInstallWritesBindings(t *testing.T) {
 	}
 
 	settings := readSettings(t, path)
-	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
-	if got := commandsFor(t, settings, "Stop"); len(got) != 1 || got[0] != "lode hook heartbeat" {
+	if got := HookCommands(settings, "Stop"); len(got) != 1 || got[0] != "lode hook heartbeat" {
 		t.Fatalf("Stop commands: %v", got)
 	}
 	// PostToolUse is matched on a tool name, so it costs nothing per
 	// ordinary tool call.
-	got := commandsFor(t, settings, "PostToolUse")
+	got := HookCommands(settings, "PostToolUse")
 	if len(got) != 1 || got[0] != "lode hook worktree-enter" {
 		t.Fatalf("PostToolUse commands: %v", got)
 	}
@@ -140,7 +106,7 @@ func TestClaudeInstallDoesNotBindDelegationHooks(t *testing.T) {
 
 	settings := readSettings(t, path)
 	for _, event := range []string{"WorktreeCreate", "WorktreeRemove"} {
-		if got := commandsFor(t, settings, event); len(got) != 0 {
+		if got := HookCommands(settings, event); len(got) != 0 {
 			t.Errorf("%s must stay unbound (Worklode would become the worktree creator), got %v", event, got)
 		}
 	}
@@ -185,7 +151,7 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 	if _, ok := settings["permissions"]; !ok {
 		t.Fatal("install dropped the unrelated permissions block")
 	}
-	stop := commandsFor(t, settings, "Stop")
+	stop := HookCommands(settings, "Stop")
 	if len(stop) != 2 {
 		t.Fatalf("Stop commands: %v, want the foreign hook plus ours", stop)
 	}
@@ -201,10 +167,10 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 	if _, ok := settings["permissions"]; !ok {
 		t.Fatal("uninstall dropped the unrelated permissions block")
 	}
-	if got := commandsFor(t, settings, "Stop"); len(got) != 1 || got[0] != "my-own-tool --report" {
+	if got := HookCommands(settings, "Stop"); len(got) != 1 || got[0] != "my-own-tool --report" {
 		t.Fatalf("Stop after uninstall: %v, want only the foreign hook", got)
 	}
-	if got := commandsFor(t, settings, "SessionStart"); len(got) != 0 {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 0 {
 		t.Fatalf("SessionStart after uninstall: %v, want none", got)
 	}
 }
@@ -239,7 +205,7 @@ func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 
 	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
 	settings := readSettings(t, dirPath)
-	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
 		t.Fatalf("SessionStart in worktree = %v, want the mirrored binding", got)
 	}
 	sl, ok := settings["statusLine"]
@@ -383,7 +349,7 @@ func TestClaudeInstallWithStatusLineWritesTheFileOnce(t *testing.T) {
 		t.Fatalf("status line path = %s, want the settings path %s", hi.StatusLine.Path, hi.Path)
 	}
 	settings := readSettings(t, hi.Path)
-	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
 	if got := statusLineCommand(t, hi.Path); got != StatusLineCommand {
@@ -419,7 +385,7 @@ func TestClaudeInstallWithStatusLineKeepsAForeignOne(t *testing.T) {
 	if got := statusLineCommand(t, path); got != "starship prompt" {
 		t.Fatalf("statusLine command = %q, want it untouched", got)
 	}
-	if got := commandsFor(t, readSettings(t, path), "Stop"); len(got) != 1 {
+	if got := HookCommands(readSettings(t, path), "Stop"); len(got) != 1 {
 		t.Fatalf("Stop commands = %v, want ours despite the kept status line", got)
 	}
 }
@@ -584,7 +550,7 @@ func TestPropagateClaudeHooksToWorktreeWritesTheFileOnce(t *testing.T) {
 		t.Fatalf("settings writes = %d, want 1", *writes)
 	}
 	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
-	if got := commandsFor(t, readSettings(t, dirPath), "SessionStart"); len(got) != 1 {
+	if got := HookCommands(readSettings(t, dirPath), "SessionStart"); len(got) != 1 {
 		t.Fatalf("SessionStart in worktree = %v, want the mirrored binding", got)
 	}
 	if got := statusLineCommand(t, dirPath); got != StatusLineCommand {
