@@ -30,10 +30,7 @@ func testLogger(t *testing.T) *slog.Logger {
 // plain http, a random port, and a loopback address, all of which production
 // refuses.
 func testFetcher() *safefetch.Fetcher {
-	f := safefetch.New(mirrorHosts, maxBlobBytes)
-	f.AllowLoopbackForTest = true
-	f.AllowAnyHostForTest = true
-	return f
+	return safefetch.NewForTest(mirrorHosts, maxBlobBytes, safefetch.TestEscapes{Loopback: true, AnyHost: true})
 }
 
 // mirrorTestServer builds a server with a fake blob store and a stubbed image
