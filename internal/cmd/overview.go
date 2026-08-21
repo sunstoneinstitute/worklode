@@ -20,9 +20,12 @@ import (
 
 // runDeriveLocal computes the repo-local observed documents (go-imports,
 // repo-layout) for the repo at root. With dryRun it returns the rendered
-// N-Triples; otherwise it Runs each through the deriver contract against c.
-// A repo that is not a Go module derives layout only (reported inline).
-func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun bool, c *graphserver.Client) (string, error) {
+// N-Triples; otherwise it Runs each through the deriver contract against c,
+// passing opts through. A repo that is not a Go module derives layout only
+// (reported inline). A document with no triples is called out either way —
+// legitimate for some sources, a broken input for the rest, and invisible
+// otherwise.
+func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun bool, c *graphserver.Client, opts derive.Options) (string, error) {
 	manPath := filepath.Join(root, ".worklode", "components.yaml")
 	data, err := os.ReadFile(manPath)
 	if err != nil {
@@ -59,14 +62,21 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 		}
 		graph := iri.RepoObservedGraph(source, host, owner, name)
 		if dryRun {
+			if len(doc) == 0 {
+				fmt.Fprintf(&b, "# %s\n# (empty: the deriver produced no triples)\n", graph)
+				continue
+			}
 			fmt.Fprintf(&b, "# %s\n%s", graph, doc)
 			continue
 		}
-		res, err := derive.Run(ctx, c, graph, doc)
+		res, err := derive.Run(ctx, c, graph, doc, opts)
+		if errors.Is(err, derive.ErrWouldEmptyGraph) {
+			return b.String(), fmt.Errorf("%w; re-run with --allow-empty to write it anyway", err)
+		}
 		if err != nil {
 			return b.String(), err
 		}
-		fmt.Fprintf(&b, "%s: hash=%s skipped=%v\n", res.Graph, res.Hash, res.Skipped)
+		fmt.Fprintf(&b, "%s: hash=%s skipped=%v empty=%v\n", res.Graph, res.Hash, res.Skipped, res.Empty)
 	}
 	for _, n := range notes {
 		fmt.Fprintln(&b, n)
@@ -93,6 +103,7 @@ func gitRemoteOrigin(ctx context.Context, dir string) string {
 func newDeriveCmd() *cobra.Command {
 	var graphURL string
 	var dryRun bool
+	var allowEmpty bool
 	cmd := &cobra.Command{
 		Use:   "derive",
 		Short: "Run the repo-local observed-layer derivers (go-imports, repo-layout)",
@@ -129,13 +140,16 @@ func newDeriveCmd() *cobra.Command {
 					return errors.New("no graph endpoint: set --graph-url or LODE_GRAPHSERVER_URL (or use --dry-run)")
 				}
 			}
-			out, err := runDeriveLocal(cmd.Context(), root, "github.com", owner, name, dryRun, c)
+			out, err := runDeriveLocal(cmd.Context(), root, "github.com", owner, name, dryRun, c,
+				derive.Options{AllowEmpty: allowEmpty})
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return err
 		},
 	}
 	cmd.Flags().StringVar(&graphURL, "graph-url", "", "graph-server base URL, unauthenticated (default: the LODE_GRAPHSERVER_* env via graphserver.FromEnv)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print the N-Triples instead of writing")
+	cmd.Flags().BoolVar(&allowEmpty, "allow-empty", false,
+		"let a deriver that produced no triples replace a graph that currently holds content (refused by default: an empty result is usually broken inputs)")
 	return cmd
 }
 

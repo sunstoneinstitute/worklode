@@ -22,7 +22,7 @@ Flags: --project, --repo
 
 ## `lode derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout)
 
-Flags: --dry-run, --graph-url
+Flags: --allow-empty, --dry-run, --graph-url
 
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
