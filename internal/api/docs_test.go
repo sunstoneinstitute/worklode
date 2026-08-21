@@ -881,6 +881,11 @@ func TestDocRevisionDiscard(t *testing.T) {
 	if detail.Revision != nil {
 		t.Errorf("revision = %+v, want it withdrawn", detail.Revision)
 	}
+
+	// Two discards happened, and each recorded its own event: the type string
+	// is the handler's, so nothing else in the suite would catch a typo in it.
+	// Polled, not read once — the commit horizon is cluster-wide.
+	pollEvents(t, h, token, "?type=doc.revision_discarded", 2)
 }
 
 // TestDocRevisionRefusals covers the states with nothing to revise: a draft

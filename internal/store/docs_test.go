@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -1809,14 +1810,17 @@ func updateRevision(t *testing.T, s *Store, id int64, body string) error {
 }
 
 // discardRevision runs DiscardRevision through RecordDocEvent.
-func discardRevision(t *testing.T, s *Store, id int64, actor string) error {
+func discardRevision(t *testing.T, s *Store, id int64, actor string) (*model.Doc, error) {
 	t.Helper()
+	var out *model.Doc
 	_, _, err := s.RecordDocEvent(t.Context(), "discard", "cli",
 		fmt.Sprintf("doc-revision-discard-%d", docEventSeq.Add(1)), "doc.revision_discarded", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return DiscardRevision(tx, s.Now(), id, actor, eventID)
+			var err error
+			out, err = DiscardRevision(tx, s.Now(), id, actor, eventID)
+			return err
 		})
-	return err
+	return out, err
 }
 
 // acceptRevision runs AcceptRevision through RecordDocEvent.
@@ -2528,7 +2532,7 @@ func TestDocDiscardRevisionStanding(t *testing.T) {
 		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
 			t.Fatalf("ReviseDoc: %v", err)
 		}
-		if err := discardRevision(t, s, doc.ID, "ada"); err != nil {
+		if _, err := discardRevision(t, s, doc.ID, "ada"); err != nil {
 			t.Fatalf("DiscardRevision by the author: %v", err)
 		}
 		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
@@ -2542,7 +2546,7 @@ func TestDocDiscardRevisionStanding(t *testing.T) {
 		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
 			t.Fatalf("ReviseDoc: %v", err)
 		}
-		if err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+		if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
 			t.Fatalf("DiscardRevision by the assignee: %v", err)
 		}
 		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
@@ -2556,7 +2560,7 @@ func TestDocDiscardRevisionStanding(t *testing.T) {
 		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
 			t.Fatalf("ReviseDoc: %v", err)
 		}
-		if err := discardRevision(t, s, doc.ID, "bob"); !errors.Is(err, ErrForbidden) {
+		if _, err := discardRevision(t, s, doc.ID, "bob"); !errors.Is(err, ErrForbidden) {
 			t.Fatalf("DiscardRevision by a third party = %v, want ErrForbidden", err)
 		}
 		if _, err := s.GetDocRevision(t.Context(), doc.ID); err != nil {
@@ -2577,8 +2581,12 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
 		t.Fatalf("UpdateRevision: %v", err)
 	}
-	if err := discardRevision(t, s, doc.ID, "ada"); err != nil {
+	back, err := discardRevision(t, s, doc.ID, "ada")
+	if err != nil {
 		t.Fatalf("DiscardRevision: %v", err)
+	}
+	if back.Version != 1 || back.Body != specBody {
+		t.Errorf("returned doc = version %d, want the accepted version untouched", back.Version)
 	}
 
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -2606,7 +2614,7 @@ func TestDocDiscardRevisionWithoutOpenRevision(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
-	if err := discardRevision(t, s, doc.ID, "stig"); !errors.Is(err, ErrNotFound) {
+	if _, err := discardRevision(t, s, doc.ID, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
@@ -2638,6 +2646,59 @@ func TestDocUpdateRevisionOnSupersededDoc(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "superseded") {
 		t.Errorf("err = %v, want it to name the status", err)
+	}
+}
+
+// TestDocDiscardRevisionOnSupersededDoc: the case that separates discard from
+// the other two revision verbs. A candidate stranded on a document superseded
+// since it opened can no longer be edited or landed, so withdrawing it must
+// still work — otherwise the row is unremovable.
+func TestDocDiscardRevisionOnSupersededDoc(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	setDocStatus(t, s, doc.ID, "superseded")
+
+	if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("DiscardRevision on a superseded doc: %v", err)
+	}
+	if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocDiscardRevisionLogsTheWithdrawnBody: doc_revisions has no history and
+// the discard is a hard delete, so the state_log row is the only surviving
+// copy of the withdrawn text.
+func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("DiscardRevision: %v", err)
+	}
+
+	var change []byte
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT change FROM state_log
+		  WHERE entity_kind = 'doc' AND entity_id = $1
+		    AND change->>'new' = 'discarded'
+		  ORDER BY id DESC LIMIT 1`, strconv.FormatInt(doc.ID, 10)).Scan(&change); err != nil {
+		t.Fatalf("read the discard's state_log row: %v", err)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(change, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["discarded_body"] != revisedSpecBody {
+		t.Errorf("discarded_body = %q, want the withdrawn candidate", got["discarded_body"])
 	}
 }
 

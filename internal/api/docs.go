@@ -612,9 +612,9 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 // frees the document's one candidate slot. Either the assignee or the
 // revision's author may; anyone else gets 403.
 //
-// It answers with the document, which the discard leaves untouched — the same
-// shape submitDoc answers with, and the reason no discard response type is
-// owed to internal/model.
+// It answers with the document, which the discard leaves untouched — read
+// inside the discarding transaction like acceptDocRevision's, and the reason
+// no discard response type is owed to internal/model.
 func (s *server) discardDocRevision(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
@@ -622,19 +622,20 @@ func (s *server) discardDocRevision(w http.ResponseWriter, r *http.Request) {
 	}
 	actorID := actorIDFrom(r)
 	now := s.st.Now()
+	var doc *model.Doc
 	err := s.recordDocEvent(w, r, "discard", "doc.revision_discarded", id, nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.DiscardRevision(tx, now, id, actorID, eventID)
+			d, err := store.DiscardRevision(tx, now, id, actorID, eventID)
+			if err != nil {
+				return err
+			}
+			doc = d
+			return nil
 		})
 	if err != nil {
 		return
 	}
-	d, err := s.st.GetDoc(r.Context(), id)
-	if err != nil {
-		s.mapStoreErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, d)
+	writeJSON(w, http.StatusOK, doc)
 }
 
 // acceptDocRevision handles POST /api/v1/docs/{id}/revision/accept: runs the

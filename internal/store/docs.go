@@ -494,34 +494,46 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 // document that has since been superseded is exactly the litter discard
 // exists to remove.
 //
-// The unused now keeps the signature matching the other document writers;
-// discarding stamps nothing.
-func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID int64) error {
+// Nothing is stamped, so now goes unused; the signature matches the other
+// document writers, as ReplaceDocEdges' does.
+func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
 	d, err := lockDoc(tx, id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// The revision is read before the gate because the gate depends on its
 	// created_by. Nothing is disclosed by that ordering: whether a candidate
 	// is open is already on the detail endpoint for any doc.read holder.
 	var createdBy sql.NullString
+	var body string
 	err = tx.QueryRow(
-		`SELECT created_by FROM doc_revisions WHERE doc_id = $1 FOR UPDATE`, id).Scan(&createdBy)
+		`SELECT created_by, body FROM doc_revisions WHERE doc_id = $1 FOR UPDATE`, id).
+		Scan(&createdBy, &body)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+		return nil, fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
 	}
 	if err != nil {
-		return fmt.Errorf("load revision of doc %d: %w", id, err)
+		return nil, fmt.Errorf("load revision of doc %d: %w", id, err)
 	}
 	if err := checkRevisionDiscarder(id, d.assignee, createdBy.String, actorID); err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {
-		return fmt.Errorf("discard revision of doc %d: %w", id, err)
+		return nil, fmt.Errorf("discard revision of doc %d: %w", id, err)
 	}
-	return logDocChange(tx, id, eventID,
-		map[string]string{"field": "revision", "new": "discarded"})
+	// The one state_log row in this file that carries a body, because this is
+	// the one verb after which the text is nowhere else: doc_revisions has no
+	// history and the delete is hard, the docs row never held a candidate, and
+	// the request that asked for the discard names no body to record. An
+	// accepted body stays on the document; an edited one is in the update's
+	// own event payload.
+	if err := logDocChange(tx, id, eventID, map[string]string{
+		"field": "revision", "new": "discarded", "discarded_body": body,
+	}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
 }
 
 // AcceptRevision lands a document's open candidate revision: it runs the

@@ -134,10 +134,10 @@ func (m *storeMetrics) projectWorkRead(err error) {
 }
 
 // docOp records one document mutation by op and outcome. op is the caller's
-// fixed verb — create|update|accept|submit|revise|discard|edges|delete|undelete,
-// the
-// enumeration the Help string above is the contract for (022 §8) — never a doc
-// id or project, which are unbounded. Adding a verb means adding it there too.
+// fixed verb — create|update|accept|submit|revise|discard|edges|delete|
+// undelete, the enumeration the Help string above is the contract for
+// (022 §8) — never a doc id or project, which are unbounded. Adding a verb
+// means adding it there too.
 func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
 		return
