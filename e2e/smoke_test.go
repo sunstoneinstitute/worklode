@@ -606,9 +606,11 @@ func assertBoard(t *testing.T, ctx context.Context, agent *cli.Client) {
 }
 
 // assertWebPages checks the read-only web UI renders: Home shows the shared
-// shell and its own heading, Work carries the project name and the
-// crashloop failure (the org-wide board, now the task-oriented destination —
-// see docs/specs/032-project-cockpit.md §2), and the task page loads.
+// shell, its own heading, and the seeded project (open-mode degradation,
+// since the e2e server runs without a session — no board framing), Work
+// carries the project name and the crashloop failure (the org-wide board,
+// now the task-oriented destination — see docs/specs/032-project-cockpit.md
+// §2), and the task page loads.
 func assertWebPages(t *testing.T, baseURL, taskID string) {
 	t.Helper()
 	code, body := getPage(t, baseURL+"/")
@@ -617,11 +619,14 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 	}
 	for _, want := range []string{
 		`<nav aria-label="Primary"`, `<main id="main-content"`, `href="/assets/app.css"`, // shared shell
-		"<h1>Home</h1>",
+		"<h1>Home</h1>", "Demo", `href="/projects/`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("home page missing %q:\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "Current work") {
+		t.Fatalf("home page still renders the retired board framing %q:\n%s", "Current work", body)
 	}
 
 	code, body = getPage(t, baseURL+"/work")

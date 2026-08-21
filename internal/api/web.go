@@ -264,8 +264,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 // workPage handles GET /work: task-oriented saved queries and the ready
 // frontier (spec 032 §2). Part 1 renders the org-wide board, built from the
 // same assembleBoard used by GET /api/v1/board, plus a count of new
-// (untriaged) inbox issues — the board Home used to show as well, before Home
-// became the actor's project list.
+// (untriaged) inbox issues.
 func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
