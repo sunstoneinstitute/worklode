@@ -1476,15 +1476,21 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 	return out
 }
 
-// resolveDocRef finds the document in project that base names, base being a
-// reference with any "#…" fragment already removed. Resolution is
-// same-project only: a cross-corpus reference has no row here and belongs in
-// to_external (025 §14.3).
+// resolveDocRef finds the document that base names, base being a reference
+// with any "#…" fragment already removed.
 //
 // Three forms are tried, in order: the slug, 025 §14.3's <KEY>-<TYPE>-<n>
-// shorthand against this project's key, and a bare corpus number. The number
-// form must match exactly one spec or ADR — a project can hold a spec 25 and
-// an ADR 25, and a reference that cannot say which resolves to neither.
+// shorthand, and a bare corpus number. The number form must match exactly one
+// spec or ADR — a project can hold a spec 25 and an ADR 25, and a reference
+// that cannot say which resolves to neither.
+//
+// Distance decides the scope, as 025 §14.3 does: the slug and bare-number
+// forms are same-project only, because a filename or a corpus number means
+// nothing outside the corpus that mints it, so a cross-corpus reference in
+// either form belongs in to_external. The shorthand is the one form that
+// crosses, which is what it exists for — it carries the project key, and
+// projects_key_format makes projects.key unique and excludes SPEC/ADR, so the
+// key alone identifies the corpus and the middle token can never be one.
 //
 // 026 §4.3's NO-SPEC sentinel needs no case of its own: it matches none of the
 // three forms, so it falls through to to_external, which is where a
@@ -1519,9 +1525,9 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	if sh, ok := designdoc.ParseShorthand(base); ok {
 		err := tx.QueryRow(
 			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
-			  WHERE d.project_id = $1 AND d.kind = $2 AND d.number = $3 AND p.key = $4
+			  WHERE p.key = $1 AND d.kind = $2 AND d.number = $3
 			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`,
-			project, sh.Kind(), sh.Number, sh.Key).Scan(&id)
+			sh.Key, sh.Kind(), sh.Number).Scan(&id)
 		if err == nil {
 			return id, true, nil
 		}

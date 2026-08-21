@@ -1599,9 +1599,9 @@ func TestDocUpdateBodyKeepsIssued(t *testing.T) {
 	}
 }
 
-// TestDocResolveRefShorthand covers 025 §14.3's <KEY>-<TYPE>-<n> form:
-// resolution is same-project only, so a reference naming another project's
-// key is external even when this project holds that number.
+// TestDocResolveRefShorthand covers 025 §14.3's <KEY>-<TYPE>-<n> form against
+// the referring document's own corpus: the key must be a real project's, and
+// the type token is verified against the target's kind rather than trusted.
 func TestDocResolveRefShorthand(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
@@ -1638,6 +1638,79 @@ requires:
 		if got[i] != want[i] {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+// TestDocResolveRefShorthandCrossesProjects: 025 §14.3's "distance decides
+// which form is canonical". The shorthand is the form for a reference across
+// corpora, so it resolves on the project key alone; a filename and a bare
+// number carry no corpus and stay same-project, landing in to_external when
+// only another project holds the target.
+func TestDocResolveRefShorthandCrossesProjects(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('cms','CMS','CMS')`); err != nil {
+		t.Fatal(err)
+	}
+	// The target lives in cms only; p1 holds no spec 4 and no such slug.
+	target := mustCreateDoc(t, s, DocInput{
+		Project: "cms", Kind: "spec", Number: 4, Slug: "004-content-model",
+		Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+requires:
+  - CMS-SPEC-4#sec-3
+  - 004-content-model.md
+  - "004"
+---
+
+# Referring plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "referring", Body: body, CreatedBy: "stig",
+	})
+
+	// Unresolved edges (to_doc NULL, coalesced to 0) sort ahead of the
+	// resolved one.
+	want := []model.DocEdge{
+		{Type: "requires", ToExternal: "004"},
+		{Type: "requires", ToExternal: "004-content-model.md"},
+		{Type: "requires", ToDoc: target.ID, ToAnchor: "sec-3"},
+	}
+	got := docEdges(t, s, plan.ID)
+	if len(got) != len(want) {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestProjectKeySpecAndADRReserved: SPEC and ADR are the <TYPE> token of the
+// document shorthand, which resolves on the project key alone (025 §14.3), so
+// the projects_key_format CHECK rejects them as keys.
+func TestProjectKeySpecAndADRReserved(t *testing.T) {
+	s := openDocStore(t)
+	for _, key := range []string{"SPEC", "ADR"} {
+		_, err := s.db.ExecContext(t.Context(),
+			`INSERT INTO projects (id, name, key) VALUES ($1, $1, $2)`,
+			strings.ToLower(key), key)
+		if err == nil {
+			t.Errorf("project key %q accepted, want rejected by projects_key_format", key)
+			continue
+		}
+		if !strings.Contains(err.Error(), "projects_key_format") {
+			t.Errorf("project key %q: err = %v, want a projects_key_format violation", key, err)
+		}
+	}
+	// A key that merely contains them is still fine.
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('specs','Specs','SPECS')`); err != nil {
+		t.Errorf("project key SPECS rejected: %v", err)
 	}
 }
 
