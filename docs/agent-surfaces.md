@@ -17,13 +17,23 @@ and the rules for adding and retiring skills.
 | Repo-development skills | `.claude/skills/*/SKILL.md` | agents changing this repo | no |
 | Shipped plugin, Claude | `plugins/claude/lode/skills/*/SKILL.md`, `plugins/claude/lode/agents/`, `.claude-plugin/marketplace.json` | `lode` users on Claude Code | no — **source of truth** |
 | Shipped plugin, Codex | `.agents/plugins/marketplace.json`, `plugins/claude/lode/.codex-plugin/plugin.json` | `lode` users on Codex | yes — `scripts/sync-codex-marketplace.py` |
+| `worklode` orientation skill's command catalog | `plugins/claude/lode/skills/worklode/references/commands.md` | `lode` users, on demand | yes — `go test ./internal/cmd -run TestCommandReference -update-command-ref` |
 | Org onboarding | `sunstoneinstitute/claude-plugins` → `plugins/sunstone-dev/skills/worklode-onboarding/SKILL.md` | any Sunstone repo adopting Worklode | no — **and out of this tree** |
 
-Two of these need care beyond ordinary editing.
+Three of these need care beyond ordinary editing.
 
 **The Codex mirror is generated.** Edit the Claude JSON; `sync-codex-marketplace.py`
 regenerates the rest, and `--check` runs in pre-commit and in `_lint.yml`. Details
 in the `worklode-lode-plugin` skill.
+
+**The command catalog is generated, straight off the cobra tree.**
+`TestCommandReference` (`internal/cmd/commandref_test.go`) re-renders it from
+`rootCmd` and fails the diff if the checked-in file disagrees, so it runs
+under `make test` on any PR that touches a command or a flag — unlike
+`TestAgentSurfaces`, which only catches an invocation that stopped resolving,
+this one also catches a command that went missing from the catalog. Add a
+command or a flag, then `go test ./internal/cmd -run TestCommandReference
+-update-command-ref` before committing.
 
 **The onboarding skill lives in another repository.** It walks a repo through
 `lode login`, `lode project`, `.worklode/config.toml` and `lode install`, so it
@@ -41,14 +51,17 @@ shape; changing a config key, env var, or hook name — any of these:
    `make test`, so CI catches it on any PR that touches Go.
 2. **Fix the in-tree surfaces it names.** Prose is not enough: the surrounding
    explanation usually rots with the invocation.
-3. **Regenerate the Codex mirror** if any manifest text changed:
+3. **Regenerate the command catalog** if a command or a flag changed:
+   `go test ./internal/cmd -run TestCommandReference -update-command-ref` (also
+   under `make test`, so a forgotten regen fails CI on its own).
+4. **Regenerate the Codex mirror** if any manifest text changed:
    `./scripts/sync-codex-marketplace.py`.
-4. **Update the downstream surface.** If the change touches onboarding —
+5. **Update the downstream surface.** If the change touches onboarding —
    `lode login`, `lode project`, `lode install`, `.worklode/config.toml`, the
    lifecycle hooks — update `worklode-onboarding` in
    `~/git/sunstone/claude-plugins` and bump its `lode-cli-version:` stamp. The
    drift test prints this reminder on failure because it cannot check it.
-5. **Ask the staleness question** below.
+6. **Ask the staleness question** below.
 
 ### What the drift test does not cover
 
@@ -94,7 +107,7 @@ the guidance lives" in the same commit.
 
 ### The staleness question
 
-Step 5 of the checklist: *does any skill now exist only to explain something the
+Step 6 of the checklist: *does any skill now exist only to explain something the
 CLI no longer does?* A skill whose trigger phrases all name removed surface is
 dead weight that still competes for the model's attention. Retire it rather than
 patching around it.
