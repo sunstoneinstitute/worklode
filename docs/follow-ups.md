@@ -249,7 +249,11 @@ outright once it is fixed over annotating it as resolved.
   honoured If-Match compare-and-swap since 2026-07-25
   (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
   Needed before a second work-graph writer exists; spec 006 should-have 6.
-  Adding it changes `PutGraph`'s signature.
+  Adding it changes `PutGraph`'s signature. WL-266 (spec 007 §1.1) scoped this
+  as hardening, not a prerequisite: the multi-repo `lode derive` case is solved
+  by per-repo graph partitioning, and same-graph races are last-write-wins over
+  fully recomputed documents — at worst one run stale, self-healing on the next
+  run.
 - `[P3]` **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 006
   must-have 3, publishing half): decided 2026-08-06 that this repo serves the
   files from its own site, without rdf-registry (rdf-registry#31 closed).
