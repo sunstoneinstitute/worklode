@@ -15,6 +15,16 @@ package ui
 // substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
 // toggles data-theme on <html>, honoring the OS colour-scheme on first click.
 
+// htmxConfig is the <meta name="htmx-config"> payload HTMX merges into its
+// defaults before it does anything else. It exists for one setting:
+// includeIndicatorStyles defaults to true, which makes HTMX inject an
+// unnonced <style> element into the head on every page load — the reason the
+// page CSP used to need style-src 'unsafe-inline' (WL-227). No page uses the
+// htmx-indicator class, so the rules it injects are dead weight anyway. If a
+// future page wants them, restore them in app.tailwind.css rather than
+// re-enabling the injection.
+const htmxConfig = `{"includeIndicatorStyles":false}`
+
 templ Page(p PageProps) {
 	<!doctype html>
 	<html lang="en">
@@ -22,6 +32,7 @@ templ Page(p PageProps) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ p.Title }</title>
+			<meta name="htmx-config" content={ htmxConfig }/>
 			<link rel="stylesheet" href="/assets/app.css"/>
 		</head>
 		<body>

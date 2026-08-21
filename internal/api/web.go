@@ -101,10 +101,11 @@ func (s *server) blobOrigin() string {
 //
 //   - script-src 'self': layout.templ's /assets/theme.js and /assets/htmx.min.js
 //     and cliauth.templ's /assets/copy.js. No page has an inline script.
-//   - style-src 'self' 'unsafe-inline': /assets/app.css, plus cockpit.templ's
-//     one inline style attribute on the mode chip (and the <style> element
-//     htmx injects for its indicator class). Remove that attribute and
-//     'unsafe-inline' can go.
+//   - style-src 'self': /assets/app.css, and nothing else. No page carries a
+//     style attribute or a <style> element, and layout.templ's htmx-config
+//     meta turns off the unnonced <style> htmx would otherwise inject for its
+//     indicator class — which is what let 'unsafe-inline' go (WL-227). Adding
+//     either back breaks the page rather than silently loosening the policy.
 //   - font-src 'self': app.css's @font-face files under /assets/fonts/.
 //   - img-src/media-src: a rendered task body embeds /blob/{hash}, which
 //     redirects to presigned object storage — see blobOrigin.
@@ -120,7 +121,7 @@ func (s *server) contentSecurityPolicy() string {
 		"img-src " + media,
 		"media-src " + media,
 		"script-src 'self'",
-		"style-src 'self' 'unsafe-inline'",
+		"style-src 'self'",
 		"font-src 'self'",
 		"object-src 'none'",
 		"base-uri 'none'",

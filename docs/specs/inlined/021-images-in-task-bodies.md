@@ -377,8 +377,10 @@ stronger answer and remains open.
 **CSP.** Every page carries one, set in the single place all pages render through:
 `default-src 'self'`, `script-src 'self'`, `img-src`/`media-src` extended with the blob
 endpoint's origin because `/blob/{hash}` 302s there, and `object-src`/`base-uri`/
-`frame-ancestors` `'none'`. `style-src` keeps `'unsafe-inline'`: the bundled HTMX injects an
-unnonced `<style>` element on load. That is the one directive worth tightening later.
+`frame-ancestors` `'none'`. `style-src` is `'self'` too, as of WL-227: the one inline style
+attribute (the cockpit's mode chip) became a class, and the bundled HTMX no longer injects
+its unnonced `<style>` element because a `htmx-config` meta turns `includeIndicatorStyles`
+off before it runs. `internal/ui/csp_test.go` holds both halves.
 
 The board and project pages keep showing titles only.
 
