@@ -188,6 +188,34 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// resolveDocRef handles GET /api/v1/docs/resolve?ref=<id-or-slug>: the one
+// document a reference names (025 §14.3). Every `lode doc <verb>` takes a
+// ref, and resolving it here rather than by listing the corpus client-side
+// keeps the ambiguity and tombstone-fallback rules beside the data — the same
+// reason GET /api/v1/projects/resolve normalizes a remote URL server-side, and
+// what lets the ref grammar grow without a client upgrade.
+//
+// The body is blanked as it is on a list: the caller wants an id, and follows
+// with GET /api/v1/docs/{id} when it wants the text.
+//
+// No dedicated metric. Every outcome this route derives is already its own
+// status code on http_requests_total's {route, code}: 200 resolved, 404 no
+// such document, 422 an ambiguous slug.
+func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
+	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
+	if ref == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "ref is required")
+		return
+	}
+	d, err := s.st.ResolveDocRef(r.Context(), ref)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	d.Body = ""
+	writeJSON(w, http.StatusOK, d)
+}
+
 // withoutDocBodies blanks the markdown source on a list projection. A corpus
 // is tens of documents of tens of kilobytes each, and no list consumer reads
 // the text — the one endpoint that serves a body is GET /api/v1/docs/{id},

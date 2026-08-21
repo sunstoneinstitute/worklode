@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"slices"
 	"strconv"
@@ -23,47 +25,33 @@ var docKinds = []string{"spec", "adr", "plan"}
 
 // resolveDocID resolves a document reference to its id (025 §14.3): a
 // positive integer is the id itself, taken without a round trip; anything
-// else is matched against every document's slug over GET /api/v1/docs
-// (exact match only — corpus-number and SPEC/ADR shorthand resolution stay
-// unbuilt). It is the one resolver both `lode doc <ref>`'s verbs and `lode
-// task list`'s `--plan`/`--about` call, so the surfaces cannot disagree about
-// what a ref names. An unmatched or ambiguous slug is an error naming what was
-// tried.
+// else goes to GET /api/v1/docs/resolve. It is the one resolver both `lode
+// doc <ref>`'s verbs and `lode task list`'s `--plan`/`--about` call, so the
+// surfaces cannot disagree about what a ref names.
 //
-// A slug that matches no live document is retried against the tombstoned ones.
-// `lode doc undelete <slug>` is what forces this — a deleted document has left
-// every list, so without the second pass the one command that exists to restore
-// it could never name it — but the fallback is on every verb deliberately:
-// 044 §4 keeps a tombstoned row addressable by an id its holder already has,
-// and a resolver that answered "no such document" for a row `lode doc get`
-// would happily render is the mysterious failure §4 exists to prevent. Live
-// documents win outright, since the fallback runs only when the first pass
-// found nothing, so a tombstone never shadows a live document.
+// The grammar itself — exact slug match, the refusal of an ambiguous slug,
+// the fallback to tombstoned documents that `lode doc undelete <slug>` needs
+// — is the server's (store.ResolveDocRef). What is left here is the numeric
+// shortcut, because an id needs no lookup to become an id, and naming the ref
+// in the 404: the server's "not found" says nothing about what was tried.
 func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
 		return id, nil
 	}
-	for _, deleted := range []bool{false, true} {
-		resp, _, err := c.ListDocs(ctx, cli.DocListFilter{Deleted: deleted})
-		if err != nil {
-			return 0, fmt.Errorf("resolve document %q: %w", ref, err)
-		}
-		var matches []int64
-		for _, d := range resp.Docs {
-			if d.Slug == ref {
-				matches = append(matches, d.ID)
+	d, err := c.ResolveDoc(ctx, ref)
+	if err != nil {
+		var cerr *cli.ClientError
+		if errors.As(err, &cerr) {
+			// A refusal about this ref: 404 says nothing about what was
+			// tried, and the ambiguity message already names it.
+			if cerr.Status == http.StatusNotFound {
+				return 0, fmt.Errorf("no document found with id or slug %q", ref)
 			}
+			return 0, err
 		}
-		switch len(matches) {
-		case 1:
-			return matches[0], nil
-		case 0:
-			continue
-		default:
-			return 0, fmt.Errorf("slug %q matches %d documents; pass a numeric id to disambiguate", ref, len(matches))
-		}
+		return 0, fmt.Errorf("resolve document %q: %w", ref, err)
 	}
-	return 0, fmt.Errorf("no document found with id or slug %q", ref)
+	return d.ID, nil
 }
 
 func newDocCmd() *cobra.Command {
