@@ -1051,6 +1051,10 @@ docs/plans/2026-08-21-corpus-indexing-and-hybrid-search.md:
     task-7-recommendation-becomes-a-caller-of-the-retrieval-path: "### Task 7 — Recommendation becomes a caller of the retrieval path"
     task-8-lode-search: "### Task 8 — lode search"
     task-9-e2e-journey-acceptance-walk-docs: "### Task 9 — e2e journey, acceptance walk, docs"
+docs/plans/2026-08-21-exit-purge-on-a-gone-lease.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-purge-secrets-on-worktree-exit-when-the-lease-is-definitely-gone: "### Task 1 — Purge secrets on worktree exit when the lease is definitely gone"
 docs/plans/2026-08-21-per-project-workflows.md:
   sections:
     tasks: "## Tasks"

@@ -12,10 +12,13 @@ amendedBy:
   - 047-loader-sensitive-secret-names.md#sec-2
   "#sec-3":
   - 042-secret-templates.md#sec-3
+  - 048-exit-purge-on-a-gone-lease.md#sec-2
   "#sec-4":
   - 042-secret-templates.md#sec-4
+  - 048-exit-purge-on-a-gone-lease.md#sec-2
   "#sec-6":
   - 042-secret-templates.md#sec-5
+  - 048-exit-purge-on-a-gone-lease.md#sec-3
   "#sec-8":
   - 043-secrets-catalog-home.md#sec-2
 ---
@@ -120,6 +123,11 @@ names the executor will need. The `lode-secrets` skill (below) makes that a stan
 > manifest additionally records the entry's item names, exported env name, and
 > template text so exec stays offline.
 
+> **Amended by ADR 048 §2.** The "exit" in this section's trigger list is a
+> *conditional* purge: the exit hook asks the backbone about the task's lease
+> and purges only on a definite "gone" (no lease, or the task 404s) — never on
+> a live lease, a timeout, or any error.
+
 Claim time is the one moment a human is guaranteed present (they just ran `/lode-next`), so that
 is when consent and decryption happen — everything after may be unattended.
 
@@ -163,6 +171,12 @@ that notices the lease is gone (resume, exit, or `lode doctor`).
 > injects the exported env name pointing at that path instead of a value. The
 > rendered file lives until purge (materialized lifetime = worktree lifetime);
 > exec remains `syscall.Exec`.
+
+> **Amended by ADR 048 §2.** `ExitWorktree` in the purge-trigger list below is
+> conditional, unlike the others: exit purges only after a definite backbone
+> "lease gone" answer, because 012 §4's multi-task session exits while its
+> lease is still held. Removal, `/lode-done` and `/lode-block` stay
+> unconditional and local-only.
 
 ```
 lode secrets exec [--] <command> [args…]
@@ -208,6 +222,11 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 > **Amended by spec 042 §5.** Adds the templated-entry failure rows: catalog
 > validation failures fail loudly server-side; render and env-name-collision
 > failures at exec are block signals.
+
+> **Amended by ADR 048 §3.** The "lease expires, worktree remains" row: items
+> persist until the next exit of that worktree gets a definite "gone" answer,
+> `/lode-resume` re-materializes, or removal purges. A server unreachable at
+> exit leaves items in place with a warning.
 
 | Condition | Behavior |
 |---|---|
