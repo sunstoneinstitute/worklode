@@ -11,6 +11,8 @@ import {
   isSafePathSegment,
   isTaskNotePath,
   mountRootName,
+  mountRootParent,
+  mountRootParentMissing,
   type VaultWriter,
 } from "../src/sync/mirror";
 import { stringify as stringifyYaml } from "yaml";
@@ -88,6 +90,10 @@ class MapVaultWriter implements VaultWriter {
   files = new Map<string, string>();
   written: string[] = [];
   removed: string[] = [];
+  /** Folders known to exist but holding no file -- exists() checks this in
+   *  addition to the files map, so a test can assert on an empty parent
+   *  folder without also giving it content. */
+  dirs = new Set<string>();
 
   private assertInsideRoot(root: string, path: string): void {
     const segments = path.split(/[\\/]/);
@@ -117,6 +123,15 @@ class MapVaultWriter implements VaultWriter {
     this.assertInsideRoot(root, path);
     this.files.delete(`${root}/${path}`);
     this.removed.push(path);
+  }
+
+  async exists(path: string): Promise<boolean> {
+    if (this.dirs.has(path)) return true;
+    const prefix = `${path}/`;
+    for (const key of this.files.keys()) {
+      if (key === path || key.startsWith(prefix)) return true;
+    }
+    return false;
   }
 }
 
@@ -220,6 +235,61 @@ describe("mountRootName", () => {
   it("is the last segment of a nested root", async () => {
     expect(mountRootName("Team/Worklode")).toBe("Worklode");
     expect(mountRootName("Team/Shared Notes/Worklode")).toBe("Worklode");
+  });
+});
+
+// The counterpart of mountRootName: everything before the last segment.
+// undefined for a single-segment root, whose "parent" is the vault root and
+// always exists -- there is nothing there that write()'s ensureDir could
+// create by mistake.
+describe("mountRootParent", () => {
+  it("is undefined for a single-segment root", async () => {
+    expect(mountRootParent("Worklode")).toBeUndefined();
+  });
+
+  it("is everything before the last segment of a nested root", async () => {
+    expect(mountRootParent("Team/Worklode")).toBe("Team");
+    expect(mountRootParent("Team/Shared Notes/Worklode")).toBe("Team/Shared Notes");
+  });
+});
+
+// The question src/main.ts asks before a sync's first write: is the mount
+// root's parent about to be created silently by ensureDir? WL-82's adopt
+// prompt already covers the root itself being absent (safe to take over);
+// this is the one case it cannot catch -- a typo'd *parent* segment, whose
+// blast radius is a stray folder created one level up, possibly inside a
+// real one.
+describe("mountRootParentMissing", () => {
+  it("is false for a single-segment root, regardless of vault state", async () => {
+    const writer = new MapVaultWriter();
+    expect(await mountRootParentMissing(writer, "Worklode")).toBe(false);
+  });
+
+  it("is true when a nested root's parent does not exist", async () => {
+    const writer = new MapVaultWriter();
+    expect(await mountRootParentMissing(writer, "Team/Worklode")).toBe(true);
+  });
+
+  it("is false when the parent already exists (the normal case)", async () => {
+    const writer = new MapVaultWriter();
+    writer.dirs.add("Team");
+    expect(await mountRootParentMissing(writer, "Team/Worklode")).toBe(false);
+  });
+
+  it("is false when the parent exists and holds the user's own notes", async () => {
+    const writer = new MapVaultWriter();
+    await writer.write("Team", "Retro.md", "the team's own note");
+    expect(await mountRootParentMissing(writer, "Team/Worklode")).toBe(false);
+  });
+
+  // The WL-82 case: the parent is fine, only the root itself (one level
+  // deeper) is absent -- foreignNotes/ensureRootAdopted already handles that
+  // by adopting silently, and this check must stay out of its way.
+  it("is false when only the root itself, not its parent, is absent", async () => {
+    const writer = new MapVaultWriter();
+    writer.dirs.add("Team");
+    expect(await mountRootParentMissing(writer, "Team/Worklode")).toBe(false);
+    expect(await foreignNotes(writer, "Team/Worklode")).toEqual([]);
   });
 });
 

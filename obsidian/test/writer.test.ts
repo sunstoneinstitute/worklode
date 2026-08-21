@@ -206,6 +206,23 @@ describe("ObsidianVaultWriter.list", () => {
   });
 });
 
+describe("ObsidianVaultWriter.exists", () => {
+  it("reports true for a file, a folder, and false for neither", async () => {
+    const adapter = new FakeAdapter();
+    adapter.files.set("Team/Worklode/worklode/worklode.md", "a");
+
+    const writer = new ObsidianVaultWriter(adapter);
+
+    expect(await writer.exists("Team/Worklode/worklode/worklode.md")).toBe(true);
+    // "Team" is not itself a stored key, only an ancestor of one -- exists()
+    // must still say it's there, the same way adapter.exists does for a
+    // folder implied by a file underneath it.
+    expect(await writer.exists("Team")).toBe(true);
+    expect(await writer.exists("Team/Worklode")).toBe(true);
+    expect(await writer.exists("Elsewhere")).toBe(false);
+  });
+});
+
 describe("ObsidianVaultWriter.write", () => {
   it("creates every missing ancestor directory before writing", async () => {
     const adapter = new FakeAdapter();
