@@ -83,19 +83,20 @@ var errBlockedIP = errors.New("blocked address range")
 
 // Fetcher fetches remote content under the guard. The zero value is not
 // usable; construct one with New.
+//
+// Every field is unexported and set once at construction: a Fetcher handed to
+// production code cannot have its guard relaxed by assignment. The two
+// relaxations tests need are reachable only through NewForTest, which refuses
+// to run outside a test binary.
 type Fetcher struct {
 	allowedHosts []string
 	maxBytes     int64
 
-	// AllowLoopbackForTest and AllowAnyHostForTest are test-only escapes.
-	// Production constructs Fetchers with New and assigns neither: both false
-	// is the only supported production state, and nothing outside a _test.go
-	// file may set them. AllowLoopbackForTest additionally permits http and a
-	// non-default port, because httptest serves plain http on a random port;
-	// AllowAnyHostForTest drops the host allowlist but keeps every address
-	// check.
-	AllowLoopbackForTest bool
-	AllowAnyHostForTest  bool
+	// allowLoopback additionally permits http and a non-default port, because
+	// httptest serves plain http on a random port. allowAnyHost drops the host
+	// allowlist but keeps every address check.
+	allowLoopback bool
+	allowAnyHost  bool
 }
 
 // New returns a Fetcher allowing the given host suffixes, capped at maxBytes.
@@ -205,7 +206,7 @@ func (f *Fetcher) checkURL(ctx context.Context, rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("parse url: %w", err)
 	}
-	if u.Scheme != "https" && !(f.AllowLoopbackForTest && u.Scheme == "http") {
+	if u.Scheme != "https" && !(f.allowLoopback && u.Scheme == "http") {
 		return fmt.Errorf("scheme %q not allowed", u.Scheme)
 	}
 	// Hostname() strips any userinfo, so
@@ -238,12 +239,12 @@ func (f *Fetcher) checkURL(ctx context.Context, rawURL string) error {
 	}
 	// An IP literal can never satisfy a domain allowlist.
 	if addr, err := netip.ParseAddr(host); err == nil {
-		if !f.AllowAnyHostForTest {
+		if !f.allowAnyHost {
 			return fmt.Errorf("host %q not allowed", host)
 		}
 		return f.checkAddr(addr)
 	}
-	if !f.AllowAnyHostForTest && !f.hostAllowed(host) {
+	if !f.allowAnyHost && !f.hostAllowed(host) {
 		return fmt.Errorf("host %q not allowed", host)
 	}
 	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
@@ -263,7 +264,7 @@ func (f *Fetcher) checkURL(ctx context.Context, rawURL string) error {
 }
 
 func (f *Fetcher) checkPort(port int) error {
-	if port == 443 || f.AllowLoopbackForTest {
+	if port == 443 || f.allowLoopback {
 		return nil
 	}
 	return fmt.Errorf("port %d not allowed", port)
@@ -275,7 +276,7 @@ func (f *Fetcher) checkAddr(addr netip.Addr) error {
 	if !addr.IsValid() {
 		return fmt.Errorf("invalid address: %w", errBlockedIP)
 	}
-	if f.AllowLoopbackForTest && addr.IsLoopback() {
+	if f.allowLoopback && addr.IsLoopback() {
 		return nil
 	}
 	for _, p := range blockedPrefixes {
