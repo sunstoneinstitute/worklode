@@ -218,6 +218,36 @@ func (s *Store) UnlandedTaskCommits(ctx context.Context, taskID, repo string) ([
 	return out, nil
 }
 
+// KnownMainSHAs returns the subset of shas main_commits already records for
+// repo. The poll engine asks GitHub about a commit only to learn whether it
+// landed, so a sha already in main_commits has nothing left to learn and the
+// request is pure waste — and a recurring one, because the scheduled run is
+// org-wide and rate limits are the binding constraint (spec 013 §2.2).
+func (s *Store) KnownMainSHAs(ctx context.Context, repo string, shas []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(shas) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT sha FROM main_commits WHERE repo = $1 AND sha = ANY($2)`, repo, shas)
+	if err != nil {
+		return nil, fmt.Errorf("known main commits in %s: %w", repo, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var sha string
+		if err := rows.Scan(&sha); err != nil {
+			return nil, fmt.Errorf("scan known main commit: %w", err)
+		}
+		out[sha] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("known main commits in %s: %w", repo, err)
+	}
+	return out, nil
+}
+
 // UnmappedSender is a repo that has sent webhooks but maps to no project.
 type UnmappedSender struct {
 	Repo        string

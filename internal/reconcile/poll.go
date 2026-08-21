@@ -94,7 +94,7 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 
 	var gathered []*repoFacts
 	for _, repo := range repos {
-		facts, err := gatherRepo(ctx, st, app, repo, byRepo[repo])
+		facts, err := gatherRepo(ctx, st, app, repo, byRepo[repo], opts.Metrics)
 		if err != nil {
 			// One repo failing (App not installed there, rate limit) must not
 			// abort the run for every other repo.
@@ -185,7 +185,7 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 // gatherRepo reads GitHub once per repo: one installation token, then the
 // PRs, default-branch membership, and releases for that repo's candidate
 // tasks. Read-only.
-func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, repo string, tasks []store.PollCandidate) (*repoFacts, error) {
+func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, repo string, tasks []store.PollCandidate, m *Metrics) (*repoFacts, error) {
 	rc, err := app.NewRepoClient(ctx, repo)
 	if err != nil {
 		return nil, err
@@ -205,6 +205,16 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 	}
 	now := st.Now()
 	shasToCheck := map[string]bool{}
+	// settledHead maps a merged PR's head sha to that PR's merge sha. Once the
+	// merge sha is known to be on the default branch the head sha's fate is
+	// decided and asking GitHub about it again can never change an answer: on a
+	// merge-commit merge the head sha landed in the same push (so main_commits
+	// already has it and it never reaches the check set), and on a squash or
+	// rebase merge it never lands at all. Without this the head sha —
+	// recorded as a task_commits row by both the webhook and this engine —
+	// stays permanently unlanded and costs one request per run, forever, for
+	// every squash-merged task.
+	settledHead := map[string]string{}
 	// check records a sha to ask GitHub about and the task it was gathered
 	// for, so the report can attribute each landing to the right task.
 	seenForTask := map[string]map[string]bool{}
@@ -261,9 +271,10 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 			})
 			f.prBodies[gh.Number] = gh.Body
 			if gh.Merged {
-				if sha := gh.HeadSHA(); sha != "" {
+				head := gh.HeadSHA()
+				if head != "" {
 					f.mergedCommits = append(f.mergedCommits, store.TaskCommit{
-						TaskID: c.TaskID, Repo: repo, SHA: sha, Source: "pr", SeenAt: now,
+						TaskID: c.TaskID, Repo: repo, SHA: head, Source: "pr", SeenAt: now,
 					})
 				}
 				if gh.MergeCommitSHA != nil && *gh.MergeCommitSHA != "" {
@@ -271,6 +282,9 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 						TaskID: c.TaskID, Repo: repo, SHA: *gh.MergeCommitSHA, Source: "pr", SeenAt: now,
 					})
 					check(c.TaskID, *gh.MergeCommitSHA)
+					if head != "" {
+						settledHead[head] = *gh.MergeCommitSHA
+					}
 				}
 			}
 		}
@@ -293,7 +307,28 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 		ordered = append(ordered, sha)
 	}
 	sort.Strings(ordered)
+
+	// Every request below is one GitHub call against the repo's installation
+	// token, and the scheduled run is org-wide, so drop the ones whose answer
+	// is already recorded before spending any of them.
+	known, err := st.KnownMainSHAs(ctx, repo, ordered)
+	if err != nil {
+		return nil, err
+	}
+	toAsk := make([]string, 0, len(ordered))
 	for _, sha := range ordered {
+		switch {
+		case known[sha]:
+			m.commitCheck("skipped_landed")
+		case settledHead[sha] != "" && known[settledHead[sha]]:
+			m.commitCheck("skipped_settled")
+		default:
+			m.commitCheck("checked")
+			toAsk = append(toAsk, sha)
+		}
+	}
+
+	for _, sha := range toAsk {
 		on, committed, err := rc.CommitOnBranch(ctx, defaultBranch, sha)
 		if err != nil {
 			return nil, err
