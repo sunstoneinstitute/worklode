@@ -219,7 +219,8 @@ func fetchLoginConfig(ctx context.Context, client *http.Client, server string) (
 		return model.LoginDiscovery{}, errors.New("this worklode server has no interactive login; ask an admin to mint you a token and set LODE_TOKEN")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return model.LoginDiscovery{}, &ClientError{Status: resp.StatusCode, Msg: "fetch login config"}
+		data, _ := io.ReadAll(resp.Body)
+		return model.LoginDiscovery{}, apiError(resp.StatusCode, data)
 	}
 	var d model.LoginDiscovery
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
