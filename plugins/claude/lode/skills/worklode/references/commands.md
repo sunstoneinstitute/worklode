@@ -20,6 +20,10 @@ Flags: --on
 
 Flags: --project, --repo
 
+## `lode derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout)
+
+Flags: --dry-run, --graph-url
+
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted); only the assignee may accept it
