@@ -95,3 +95,20 @@ func Environment(name string) string {
 func Commit(host, owner, repo, sha string) string {
 	return IDNS + "commit/" + host + "/" + owner + "/" + repo + "/" + sha
 }
+
+// DeclaredGraph returns the named graph holding one design doc's declared
+// edges (spec 007 §Representation: one graph per design doc, so acceptance
+// gating and re-authoring replace exactly one graph).
+func DeclaredGraph(docSlug string) string { return GraphNS + "declared/" + docSlug }
+
+// ObservedGraph returns the named graph one deriver owns (spec 007: a
+// deriver must confine its writes to its own observed/* graph). Sources:
+// go-imports, repo-layout, pr-affects, deploy, repo-implements (025 §11).
+func ObservedGraph(source string) string { return GraphNS + "observed/" + source }
+
+// Repo returns a repository's instance IRI (the doap:Project node, D4).
+// Spec 006 defines no repo pattern; this package fixes
+// id/repo/<host>/<owner>/<name>.
+func Repo(host, owner, name string) string {
+	return IDNS + "repo/" + host + "/" + owner + "/" + name
+}

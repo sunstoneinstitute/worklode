@@ -424,6 +424,12 @@ wl:concern a owl:DatatypeProperty ;
         scheme — the backbone owns the enum (006 Open Q3). The legal values are the tasks.concern
         CHECK constraint (migration 0002_prioritization).""" .
 
+wl:unmatchedPath a owl:DatatypeProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain doap:Project ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A repo-relative path prefix matched by no component in the repo's .worklode/components.yaml — a coverage gap (spec 007 §1, §3.2). Subject is the repo (doap:Project) node; written only by the repo-layout deriver." .
+
 wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
