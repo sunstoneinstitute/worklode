@@ -178,6 +178,47 @@ func TestCompareSections(t *testing.T) {
 			wantChanged: []string{"sec-4.1"},
 		},
 		{
+			// A heading contributes its parsed fields, not its source line, so
+			// respacing one is not content. Over-stamping last_revised_in
+			// mass-invalidates valid claims, which rule 5 forbids too.
+			name: "anchorless subheading respaced is not a change",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"####   Tie-breaking\n\nOldest first.\n",
+			depthLimit: DepthLimit,
+		},
+		{
+			// Structure alone: the prose is untouched, only the anchorless
+			// heading dividing it is gone. The newline join is what keeps this
+			// from collapsing to the same string on both sides.
+			name: "anchorless subheading removed with its prose kept is a change",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\nOldest first.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4"},
+		},
+		{
+			// An anchorless heading with no anchored ancestor is inside no
+			// section, so nothing owns its text and nothing is stamped. 025
+			// §6.1 scopes the roll-up to headings below the addressability
+			// limit; a top-level anchorless heading is a separate gap, tracked
+			// in docs/follow-ups.md.
+			name: "anchorless heading with no anchored ancestor belongs to nobody",
+			accepted: "# Spec\n\n" +
+				"## 1. First {#sec-1}\n\nBody one.\n\n" +
+				"## Appendix\n\nAppendix body.\n",
+			candidate: "# Spec\n\n" +
+				"## 1. First {#sec-1}\n\nBody one.\n\n" +
+				"## Appendix\n\nAppendix body, edited.\n",
+			depthLimit: DepthLimit,
+		},
+		{
 			name: "depth-4 anchored heading exceeds default limit",
 			accepted: "# Spec\n\n" +
 				"## 1. First {#sec-1}\n\nBody.\n\n" +

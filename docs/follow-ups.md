@@ -643,3 +643,20 @@ while dogfooding it against the real corpus.
   visible in `git status`, since `info/exclude` does not hide tracked files, so
   it is recoverable. Worth either matching `withinStore`'s rigour or saying so
   in the comment.
+
+## From WL-124 — anchorless subheadings in the accept diff (2026-08-21)
+
+- `[P3]` **An anchorless heading with no anchored ancestor is diffed by
+  nobody.** WL-124 made `designdoc.effectiveContent` roll an anchorless heading
+  into its nearest anchored ancestor, but that walk starts from a section:
+  a top-level `## Appendix` sitting beside `## 1. First {#sec-1}` has
+  `Parent == nil`, so an edit under it still marks nothing `Changed` and stamps
+  no `last_revised_in` — the same silent staleness, one level up. Nothing on
+  the write path refuses the shape: `LintAnchors` skips anchorless headings and
+  `DepthViolations` only inspects anchored ones. 025 §6.1 scopes its "content
+  within the nearest anchored ancestor" rule to headings *below* the
+  addressability limit and says nothing about a shallow one, so the fix is a
+  spec decision first: either require every H2 in a spec or ADR to be anchored
+  (a lint, enforced at accept), or define what owns an unowned heading.
+  `internal/designdoc/diff_test.go` pins today's behaviour under
+  "anchorless heading with no anchored ancestor belongs to nobody".
