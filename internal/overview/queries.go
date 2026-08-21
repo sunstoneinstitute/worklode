@@ -35,6 +35,17 @@ const (
 // violationsQuery is spec 007 §3.1 (violation direction):
 // observed − declared − un-expired acknowledged. The layer partition is the
 // graph-name family; today's date is injected from Go (design call 8).
+//
+// Two constraints the GRAPH wrapping makes explicit:
+//
+//   - Co-location. A deviation's four triples must sit in one named graph
+//     (?vg), and its dct:valid in one graph (?eg, not necessarily the same).
+//     The projector writes each deviation as a unit, so this holds; a writer
+//     that split a deviation across graphs would make it invisible here.
+//   - Declared-only. ?vg is confined to the declared family: a deviation is
+//     sanctioned by a design document, so it belongs to the declared layer.
+//     Without the filter an observed graph could carry a deviation, and a
+//     buggy deriver would then suppress its own violations.
 func violationsQuery(today string) string {
 	return sparqlPrefixes + fmt.Sprintf(`SELECT DISTINCT ?from ?to WHERE {
   GRAPH ?og { ?from dct:requires ?to . }
@@ -48,11 +59,12 @@ func violationsQuery(today string) string {
       ?dev a wl:AcceptedDeviation ;
            rdf:subject ?from ; rdf:predicate dct:requires ; rdf:object ?to .
     }
+    FILTER(STRSTARTS(STR(?vg), %q))
     FILTER NOT EXISTS {
       GRAPH ?eg { ?dev dct:valid ?exp } FILTER (?exp < %q^^xsd:date)
     }
   }
-} ORDER BY ?from ?to`, observedFamily, declaredFamily, today)
+} ORDER BY ?from ?to`, observedFamily, declaredFamily, declaredFamily, today)
 }
 
 // staleIntentQuery is §4.1's other direction: declared − observed.
@@ -68,17 +80,28 @@ func staleIntentQuery() string {
 }
 
 // acknowledgedQuery lists every deviation, active and expired
-// (`lode drift --acknowledged`).
-const acknowledgedQuery = sparqlPrefixes + `SELECT DISTINCT ?from ?to ?by ?exp WHERE {
+// (`lode drift --acknowledged`). It carries violationsQuery's declared-only
+// confinement so the listing is exactly the set that suppresses violations —
+// a deviation the report showed but the suppression ignored would be worse
+// than not listing it.
+func acknowledgedQuery() string {
+	return sparqlPrefixes + fmt.Sprintf(`SELECT DISTINCT ?from ?to ?by ?exp WHERE {
   GRAPH ?g {
     ?dev a wl:AcceptedDeviation ;
          rdf:subject ?from ; rdf:predicate dct:requires ; rdf:object ?to ;
          wl:sanctionedBy ?by .
   }
+  FILTER(STRSTARTS(STR(?g), %q))
   OPTIONAL { GRAPH ?eg { ?dev dct:valid ?exp } }
-} ORDER BY ?from ?to`
+} ORDER BY ?from ?to`, declaredFamily)
+}
 
 // docGapsQuery is §4.2: components with no governing DesignDoc.
+//
+// Co-location assumption: the type and the wl:governs edge must be in the
+// same named graph (?dg). The projector writes a document's declaration as a
+// unit, so this holds; a document typed in one graph and governing from
+// another would read here as no governance at all.
 const docGapsQuery = sparqlPrefixes + `SELECT DISTINCT ?c WHERE {
   GRAPH ?g { ?c a wl:Component . }
   FILTER NOT EXISTS { GRAPH ?dg { ?d a wl:DesignDoc ; wl:governs ?c . } }
@@ -128,7 +151,7 @@ func StaleIntent(ctx context.Context, c *graphserver.Client) ([]model.DriftEdge,
 // Acknowledged lists accepted deviations, marking expiry against the
 // injected clock.
 func Acknowledged(ctx context.Context, c *graphserver.Client) ([]model.Deviation, error) {
-	rows, err := c.Select(ctx, acknowledgedQuery)
+	rows, err := c.Select(ctx, acknowledgedQuery())
 	if err != nil {
 		return nil, fmt.Errorf("acknowledged deviations: %w", err)
 	}

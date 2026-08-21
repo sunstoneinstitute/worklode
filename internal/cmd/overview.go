@@ -225,8 +225,9 @@ func newOverviewCmd() *cobra.Command {
 }
 
 // newDriftCmd wires `lode drift [--component <iri>] [--acknowledged]`.
-// --component filters client-side, so it also suppresses the raw --json
-// passthrough: a filtered payload is a shape the server never sent.
+// --component filters client-side, so --json re-encodes the filtered value
+// instead of passing the server's body through: the payload must be what the
+// flags asked for, and a scripted caller still gets JSON.
 func newDriftCmd() *cobra.Command {
 	var acknowledged bool
 	var component string
@@ -242,9 +243,12 @@ func newDriftCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if jsonOut(cmd) && component == "" {
-				printRaw(cmd, raw)
-				return nil
+			if jsonOut(cmd) {
+				if component == "" {
+					printRaw(cmd, raw)
+					return nil
+				}
+				return printJSON(cmd, cli.DriftFiltered(resp, component))
 			}
 			cli.DriftRender(cmd.OutOrStdout(), resp, component, acknowledged)
 			return nil
@@ -314,8 +318,9 @@ func newFrontierCmd() *cobra.Command {
 
 // newCriticalPathCmd wires `lode critical-path [--task <id>]`; cycles are
 // findings, not silent drops (spec 007 §Cycle handling). --task narrows the
-// table to that task's row (its depth and fan-out), client-side, which is why
-// it suppresses the raw --json passthrough.
+// table to that task's row (its depth and fan-out), client-side, so --json
+// re-encodes the narrowed value rather than passing the server's body
+// through.
 func newCriticalPathCmd() *cobra.Command {
 	var task string
 	cmd := &cobra.Command{
@@ -330,9 +335,12 @@ func newCriticalPathCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if jsonOut(cmd) && task == "" {
-				printRaw(cmd, raw)
-				return nil
+			if jsonOut(cmd) {
+				if task == "" {
+					printRaw(cmd, raw)
+					return nil
+				}
+				return printJSON(cmd, cli.CriticalPathFiltered(resp, task))
 			}
 			cli.CriticalPathRender(cmd.OutOrStdout(), resp, task)
 			return nil

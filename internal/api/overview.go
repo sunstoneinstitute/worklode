@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
@@ -44,9 +45,25 @@ func (s *server) getOverview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, o)
 }
 
+// queryFlag reads a boolean query parameter the way a caller writes one: an
+// absent parameter is false, a bare `?flag` is true, and only an explicit
+// false value turns it off. Get alone reads `?flag` as false and `?flag=0` as
+// true, which is backwards on both.
+func queryFlag(r *http.Request, name string) bool {
+	q := r.URL.Query()
+	if !q.Has(name) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(q.Get(name))) {
+	case "0", "false", "no", "off":
+		return false
+	}
+	return true
+}
+
 // getDrift handles GET /api/v1/drift?acknowledged=1.
 func (s *server) getDrift(w http.ResponseWriter, r *http.Request) {
-	d, err := s.overview.DriftReport(r.Context(), r.URL.Query().Get("acknowledged") != "")
+	d, err := s.overview.DriftReport(r.Context(), queryFlag(r, "acknowledged"))
 	if s.failedOverviewRead(w, readDrift, err) {
 		return
 	}
@@ -98,10 +115,23 @@ func (s *server) postDerive(w http.ResponseWriter, r *http.Request) {
 	}
 	results, err := s.runServerDerivers(r.Context())
 	if err != nil {
-		writeErr(w, http.StatusBadGateway, err.Error())
+		writeErr(w, deriveFailureStatus(err), err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, model.DeriveResponse{Results: results})
+}
+
+// deriveFailureStatus names the party a failed deriver run blames. The run
+// reads Postgres (deployment rows, task PRs) as well as writing the graph
+// endpoint, and a store failure reported as 502 sends the operator to the
+// wrong service: 502 is for the upstream graph endpoint, 500 for us.
+// graphserver.ErrSPARQLUnavailable wraps ErrUnavailable, so the one check
+// covers both faces of it.
+func deriveFailureStatus(err error) int {
+	if errors.Is(err, graphserver.ErrUnavailable) {
+		return http.StatusBadGateway
+	}
+	return http.StatusInternalServerError
 }
 
 // runServerDerivers runs the two derivers that need the server's own inputs:

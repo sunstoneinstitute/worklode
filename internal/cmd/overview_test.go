@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestDeriveDryRunPrintsTriples(t *testing.T) {
@@ -192,6 +194,49 @@ func TestDriftCommandJSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"from": "urn:a"`) && !strings.Contains(out, `"from":"urn:a"`) {
 		t.Fatalf("drift --json output missing the violation:\n%s", out)
+	}
+}
+
+// TestDriftJSONHonoursComponentFilter: --component filters client-side, but
+// --json must still emit JSON — a scripted caller asking for both gets the
+// filtered value, not the human table.
+func TestDriftJSONHonoursComponentFilter(t *testing.T) {
+	fakeOverviewServer(t, func(*http.Request) (int, string) {
+		return http.StatusOK, `{"violations":[{"from":"urn:a","to":"urn:b"},{"from":"urn:x","to":"urn:y"}],` +
+			`"stale_intent":[{"from":"urn:x","to":"urn:z"}]}`
+	})
+	out, err := runLode(t, "drift", "--json", "--component", "urn:a")
+	if err != nil {
+		t.Fatalf("drift --json --component: %v", err)
+	}
+	var got model.Drift
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("output is not JSON (%v):\n%s", err, out)
+	}
+	if len(got.Violations) != 1 || got.Violations[0].From != "urn:a" {
+		t.Errorf("violations = %+v; want only urn:a's edge", got.Violations)
+	}
+	if len(got.StaleIntent) != 0 {
+		t.Errorf("stale_intent = %+v; want nothing from urn:x", got.StaleIntent)
+	}
+}
+
+// TestCriticalPathJSONHonoursTaskFilter is the same contract on the other
+// filtered command.
+func TestCriticalPathJSONHonoursTaskFilter(t *testing.T) {
+	fakeOverviewServer(t, func(*http.Request) (int, string) {
+		return http.StatusOK, `{"max_depth":2,"tasks":[{"id":"WL-1","depth":1},{"id":"WL-2","depth":2}]}`
+	})
+	out, err := runLode(t, "critical-path", "--json", "--task", "WL-2")
+	if err != nil {
+		t.Fatalf("critical-path --json --task: %v", err)
+	}
+	var got model.CriticalPath
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("output is not JSON (%v):\n%s", err, out)
+	}
+	if len(got.Tasks) != 1 || got.Tasks[0].ID != "WL-2" {
+		t.Fatalf("tasks = %+v; want only WL-2", got.Tasks)
 	}
 }
 

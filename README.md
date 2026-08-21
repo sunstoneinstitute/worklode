@@ -465,7 +465,9 @@ run in one place, admin-only:
 lode derive --server        # POST /api/v1/derive
 ```
 
-Reading the result — every command takes `--json` for the server's own bytes:
+Reading the result — every command takes `--json`, which passes the server's
+own bytes through, or re-encodes the same shape when `--component`/`--task`
+narrowed it client-side:
 
 | Command | Shows |
 |---|---|

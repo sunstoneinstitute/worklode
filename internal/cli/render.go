@@ -1014,30 +1014,67 @@ func OverviewRender(w io.Writer, o model.Overview) {
 	tw.Flush()
 }
 
+// DriftFiltered returns d with both edge lists and the acknowledged list
+// narrowed to the edges leaving component; the zero component returns d
+// unchanged. The human view and `--json` under the same flag both run this,
+// so they cannot disagree about what --component means.
+func DriftFiltered(d model.Drift, component string) model.Drift {
+	if component == "" {
+		return d
+	}
+	out := model.Drift{}
+	for _, e := range d.Violations {
+		if e.From == component {
+			out.Violations = append(out.Violations, e)
+		}
+	}
+	for _, e := range d.StaleIntent {
+		if e.From == component {
+			out.StaleIntent = append(out.StaleIntent, e)
+		}
+	}
+	for _, a := range d.Acknowledged {
+		if a.From == component {
+			out.Acknowledged = append(out.Acknowledged, a)
+		}
+	}
+	return out
+}
+
+// CriticalPathFiltered returns cp with Tasks narrowed to task; the zero task
+// returns cp unchanged. MaxDepth and Cycles are properties of the whole graph
+// and are left as they are — the renderer drops the chain length under a
+// filter rather than pretending one row has its own.
+func CriticalPathFiltered(cp model.CriticalPath, task string) model.CriticalPath {
+	if task == "" {
+		return cp
+	}
+	out := model.CriticalPath{MaxDepth: cp.MaxDepth, Cycles: cp.Cycles}
+	for _, t := range cp.Tasks {
+		if t.ID == task {
+			out.Tasks = append(out.Tasks, t)
+		}
+	}
+	return out
+}
+
 // DriftRender prints `lode drift`: the violations, the stale intent, and —
 // when the caller asked for them — the accepted deviations. component filters
 // both edge sections to the edges leaving that component IRI.
 func DriftRender(w io.Writer, d model.Drift, component string, acknowledged bool) {
-	keep := func(from string) bool { return component == "" || from == component }
+	d = DriftFiltered(d, component)
 	tw := newTabwriter(w)
 	fmt.Fprintln(tw, "# violations (observed - declared - acknowledged)")
 	for _, e := range d.Violations {
-		if keep(e.From) {
-			fmt.Fprintf(tw, "%s\trequires\t%s\n", e.From, e.To)
-		}
+		fmt.Fprintf(tw, "%s\trequires\t%s\n", e.From, e.To)
 	}
 	fmt.Fprintln(tw, "# stale intent (declared - observed)")
 	for _, e := range d.StaleIntent {
-		if keep(e.From) {
-			fmt.Fprintf(tw, "%s\trequires\t%s\n", e.From, e.To)
-		}
+		fmt.Fprintf(tw, "%s\trequires\t%s\n", e.From, e.To)
 	}
 	if acknowledged {
 		fmt.Fprintln(tw, "# acknowledged deviations")
 		for _, a := range d.Acknowledged {
-			if !keep(a.From) {
-				continue
-			}
 			state := "active"
 			if a.Expired {
 				state = "EXPIRED"
@@ -1093,14 +1130,12 @@ func FrontierTable(w io.Writer, tasks []model.FrontierTask) {
 // one task, so the chain length — a property of the whole graph, not of the
 // row — is left out.
 func CriticalPathRender(w io.Writer, cp model.CriticalPath, task string) {
+	cp = CriticalPathFiltered(cp, task)
 	tw := newTabwriter(w)
 	if task == "" {
 		fmt.Fprintf(tw, "chain length\t%d\n", cp.MaxDepth)
 	}
 	for _, t := range cp.Tasks {
-		if task != "" && t.ID != task {
-			continue
-		}
 		fmt.Fprintf(tw, "%d\t%s\tfan-out %d\n", t.Depth, t.ID, t.FanOut)
 	}
 	for _, cyc := range cp.Cycles {

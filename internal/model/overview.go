@@ -53,9 +53,13 @@ type FrontierList struct {
 
 // CriticalPath is the `lode critical-path` payload.
 type CriticalPath struct {
-	MaxDepth int            `json:"max_depth"`
-	Tasks    []FrontierTask `json:"tasks"` // critical tasks, by depth
-	Cycles   [][]string     `json:"cycles,omitempty"`
+	MaxDepth int `json:"max_depth"`
+	// Tasks are the critical tasks by depth. The rows come from the DAG, not
+	// from a task read, so Title, Project and Priority are always zero here —
+	// only ID, Depth, FanOut and IsCritical are populated. Callers wanting the
+	// other three read /api/v1/frontier or the task itself.
+	Tasks  []FrontierTask `json:"tasks"`
+	Cycles [][]string     `json:"cycles,omitempty"`
 }
 
 // Drift bundles the three 4.1 reads.
