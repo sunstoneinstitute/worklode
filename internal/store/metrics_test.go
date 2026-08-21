@@ -61,6 +61,8 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.renew("ok")
 	m.release("ok")
 	m.expire(3)
+	m.sweeperRun(nil)
+	m.sweeperRun(errors.New("boom"))
 	m.projectWorkRead(nil)
 	m.projectWorkRead(errors.New("boom"))
 }

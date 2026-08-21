@@ -94,9 +94,11 @@ only, so this is one trivial query per scrape interval.
 
 ## 4. Background jobs
 
-**Lease sweeper** (`internal/cmd/serve.go`): the 60s loop owns
-`worklode_lease_sweeper_runs_total{result="ok"|"error"}`, registered directly in
-`serve.go`. Expiry counts come from §3's `worklode_lease_expiries_total`. A cancelled
+**Lease sweeper** (`internal/store/sweeper.go`, `StartLeaseSweeper`): the 60s loop owns
+`worklode_lease_sweeper_runs_total{result="ok"|"error"}`, on the store's own metrics
+struct — the sweep is `internal/store`'s operation, so §1's rule puts both there, with
+`serve.go` supplying only the registry (through `store.WithMetrics`) and the shutdown
+context. Expiry counts come from §3's `worklode_lease_expiries_total`. A cancelled
 context (shutdown) records nothing — neither `ok` nor `error` — so it doesn't spike the
 error rate; a deadline exceeded still counts as `error`.
 

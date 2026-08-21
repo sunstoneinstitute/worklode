@@ -31,6 +31,7 @@ type storeMetrics struct {
 	renewals         *prometheus.CounterVec
 	releases         *prometheus.CounterVec
 	expiries         prometheus.Counter
+	sweeperRuns      *prometheus.CounterVec
 	projectWorkReads *prometheus.CounterVec
 	docOps           *prometheus.CounterVec
 	docTasksMinted   prometheus.Counter
@@ -54,6 +55,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_lease_expiries_total",
 			Help: "Leases closed by the expiry sweeper.",
 		}),
+		sweeperRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_lease_sweeper_runs_total",
+			Help: "Lease sweeper runs by result.",
+		}, []string{"result"}),
 		projectWorkReads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_project_work_reads_total",
 			Help: "ListProjectWorkFacts reads by outcome.",
@@ -67,7 +72,11 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Tasks minted across all plan-document accepts (025 §9.2).",
 		}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.projectWorkReads, m.docOps, m.docTasksMinted)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted)
+	// Pre-initialise both sweeper series so alert expressions see 0, not
+	// no-data, on a server whose sweeper has not ticked yet.
+	m.sweeperRuns.WithLabelValues("ok")
+	m.sweeperRuns.WithLabelValues("error")
 	return m
 }
 
@@ -97,6 +106,16 @@ func (m *storeMetrics) expire(n int) {
 		return
 	}
 	m.expiries.Add(float64(n))
+}
+
+// sweeperRun records one lease-sweeper tick by result. The label key is
+// "result", not "outcome": this is plain operational success/failure, not a
+// domain sentinel (022 §3).
+func (m *storeMetrics) sweeperRun(err error) {
+	if m == nil {
+		return
+	}
+	m.sweeperRuns.WithLabelValues(outcome(err)).Inc()
 }
 
 // projectWorkRead records one ListProjectWorkFacts call by outcome. Never

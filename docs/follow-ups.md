@@ -194,9 +194,6 @@ outright once it is fixed over annotating it as resolved.
   embed each own a nil-safe package-private metrics struct; api hangs its
   instruments off `*server` and the HTTP middleware is not nil-safe. Extract an
   `apiMetrics` struct, or document the exception in spec 022 §1.
-- `[P4]` **`worklode_lease_sweeper_runs_total` has no test**: the sweeper loop is
-  built inline in `serve.go`'s `RunE` closure; extract it to a testable
-  function to cover the counter.
 - `[gated]` **Alert on `promhttp_metric_handler_errors_total`**: the /metrics handler
   serves partial output on collector failure (`ContinueOnError`); this counter
   is the only signal a collector is broken. Dashboards/alerts are out of scope
