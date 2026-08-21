@@ -894,7 +894,9 @@ func seed(t *testing.T, declaredExtra string) *graphserver.Client {
 	t.Helper()
 	base := graphtest.Endpoint(t)
 	graphtest.PutGraph(t, base, iri.DeclaredGraph("adr-test-0001"), declaredTTL(declaredExtra))
-	graphtest.PutGraph(t, base, iri.ObservedGraph("go-imports"), observedTTL())
+	graphtest.PutGraph(t, base,
+		iri.RepoObservedGraph("go-imports", "github.com", "sunstoneinstitute", "worklode"),
+		observedTTL())
 	return graphserver.New(sparqlProxy(t, base).URL, nil)
 }
 
