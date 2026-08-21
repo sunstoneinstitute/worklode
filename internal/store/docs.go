@@ -81,7 +81,8 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 //
 // Status is the corpus importer's affordance. Creating a spec or ADR straight
 // at accepted must therefore establish what AcceptDoc would have: the 025 §6.1
-// depth gate runs here too, and the sections land published.
+// depth gate runs here too, the sections land published, and the supersession
+// cascade fires on every document-level `replaces` edge that resolves.
 func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Doc, error) {
 	if !validDocKinds[in.Kind] {
 		return nil, fmt.Errorf("doc kind %q: %w", in.Kind, ErrInvalidInput)
@@ -169,10 +170,20 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if err := rebuildEdges(tx, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
+	// The third thing AcceptDoc does, after the depth gate and the publish flag:
+	// what this document replaces stops being current the moment it lands
+	// accepted. Only targets already in the corpus and already accepted move —
+	// supersedeReplacedDocs' own guard — so an import that writes the replacing
+	// document first is caught later instead, by repointExternalEdges (WL-133).
+	if acceptedAtCreate {
+		if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+			return nil, err
+		}
+	}
 	// A reference resolves once, at write time, so references already stored
 	// unresolved because this document did not exist yet are re-pointed now —
 	// that is what makes corpus import order-independent (WL-130).
-	if err := repointExternalEdges(tx, in.Project, id, eventID); err != nil {
+	if err := repointExternalEdges(tx, in.Project, ts, id, eventID); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -180,12 +191,12 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, err
 	}
 
-	return &model.Doc{
-		ID: id, Project: in.Project, Kind: in.Kind, Number: in.Number,
-		Slug: in.Slug, Title: title, Body: in.Body, Status: status, Version: 1,
-		Issued: parsed.issued, Assignee: assignee, CreatedBy: in.CreatedBy,
-		CreatedAt: ts, UpdatedAt: ts,
-	}, nil
+	// Read the row back rather than restating the input: repointExternalEdges
+	// may have superseded this very document on the way in — an already-imported
+	// accepted document that replaces it, whose cascade could not reach it until
+	// now — and a caller told "accepted" by a create that landed superseded is
+	// the same order-dependence this whole path exists to remove.
+	return getDocTx(tx, id)
 }
 
 // UpdateDocBody replaces a document's body in place, rebuilding its sections
@@ -1231,11 +1242,20 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 // failing this document's creation for it would wedge an import on an unrelated
 // defect.
 //
+// A re-pointed document-level `replaces` edge also carries a side effect: the
+// supersession cascade its replacing document could not run, because at accept
+// (or accepted-at-create) time the target was not in the corpus yet. It runs
+// here instead, from the replacing end, once the edge resolves — see
+// supersedeReplacedFrom.
+//
 // The re-point is attributed to the creating document's event and logged as an
 // edges change on each referring document whose rows moved.
-func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) error {
+func repointExternalEdges(tx *sql.Tx, project string, ts time.Time, newDocID, eventID int64) error {
 	// Distinct referring documents whose rows changed, logged once each below.
 	touched := map[int64]bool{}
+	// Referring documents whose re-pointed row was a document-level `replaces`
+	// edge, so the cascade is re-run from each of them below.
+	replacers := map[int64]bool{}
 	type externalEdge struct {
 		id         int64
 		fromDoc    int64
@@ -1271,6 +1291,12 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 		}
 		if !resolved || toDoc != newDocID {
 			continue
+		}
+		// Recorded before the duplicate branch: both branches leave a resolved
+		// document-level `replaces` row from c.fromDoc to newDocID standing, so
+		// both owe the cascade.
+		if c.typ == "replaces" && c.fromAnchor == "" {
+			replacers[c.fromDoc] = true
 		}
 		// The pre-check reads live state and candidates run in id order, so two
 		// spellings of one target in one document collapse: the first
@@ -1360,6 +1386,44 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 		}
 		if err := logDocChange(tx, id, eventID,
 			map[string]string{"field": "edges"}); err != nil {
+			return err
+		}
+	}
+	// After the edge changes are logged: the supersession is their consequence,
+	// and reads that way in the state log.
+	return supersedeReplacedFrom(tx, ts, replacers, eventID)
+}
+
+// supersedeReplacedFrom re-runs the supersession cascade from each document in
+// replacers, for the documents whose `replaces` edge only just resolved.
+//
+// The cascade normally fires once, when the replacing document is accepted
+// (AcceptDoc, AcceptRevision) or created accepted (CreateDoc). A corpus import
+// that writes the replacing document before its target defeats that: at accept
+// time the edge was still to_external and named no row, so nothing moved.
+// repointExternalEdges is where that edge finally resolves, so it is also where
+// the missed cascade belongs (WL-133).
+//
+// Two guards decide whether a replacer's cascade runs at all. A draft replacer
+// has superseded nothing yet — its own accept will run the cascade, now that
+// the edge resolves. A plan never cascades, matching acceptPlanDoc, which does
+// not run one either. Whether a *target* moves stays supersedeReplacedDocs'
+// own judgement: only an accepted one does, so a draft target is still left to
+// climb 025 §7's ladder rather than being pushed past accepted.
+func supersedeReplacedFrom(tx *sql.Tx, ts time.Time, replacers map[int64]bool, eventID int64) error {
+	for _, from := range slices.Sorted(maps.Keys(replacers)) {
+		var kind, status string
+		err := tx.QueryRow(`SELECT kind, status FROM docs WHERE id = $1`, from).Scan(&kind, &status)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read status of replacing doc %d: %w", from, err)
+		}
+		if kind == "plan" || status == "draft" {
+			continue
+		}
+		if err := supersedeReplacedDocs(tx, ts, from, eventID); err != nil {
 			return err
 		}
 	}
