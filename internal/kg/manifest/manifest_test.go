@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 )
 
@@ -107,6 +108,23 @@ func TestParseRejects(t *testing.T) {
 func TestLoadMissingFile(t *testing.T) {
 	if _, err := manifest.Load(filepath.Join(t.TempDir(), "components.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("Load on a missing file: %v; want os.IsNotExist", err)
+	}
+}
+
+func TestWorklodeRepoManifest(t *testing.T) {
+	m, err := manifest.Load(filepath.Join("..", "..", "..", ".worklode", "components.yaml"))
+	if err != nil {
+		t.Fatalf("load repo manifest: %v", err)
+	}
+	if m.Repo != "github.com/sunstoneinstitute/worklode" {
+		t.Fatalf("Repo = %q", m.Repo)
+	}
+	c, ok := m.Match("internal/store/tasks.go")
+	if !ok || c.Name != "worklode" {
+		t.Fatalf("Match = %v, %v; want the whole-repo worklode component", c, ok)
+	}
+	if want := iri.Component(m.Repo); c.IRI != want {
+		t.Fatalf("component IRI = %q; want %q (006 scheme)", c.IRI, want)
 	}
 }
 
