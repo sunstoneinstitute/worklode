@@ -82,7 +82,7 @@ func ImportsTriples(goList io.Reader, moduleRoot string, m *manifest.Manifest) (
 }
 
 // GoListDeps runs `go list -deps -json ./...` in repoRoot and returns its
-// stdout, for DeriveImports; split out so tests feed a fixture stream.
+// stdout; split out so tests feed a fixture stream.
 func GoListDeps(ctx context.Context, repoRoot string) (io.Reader, error) {
 	cmd := exec.CommandContext(ctx, "go", "list", "-deps", "-json", "./...")
 	cmd.Dir = repoRoot

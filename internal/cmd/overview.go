@@ -95,10 +95,18 @@ func newDeriveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "derive",
 		Short: "Run the repo-local observed-layer derivers (go-imports, repo-layout)",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			root, err := os.Getwd()
+			cwd, err := os.Getwd()
 			if err != nil {
 				return err
+			}
+			// The manifest and the walk are rooted at the repo, so a run from
+			// a subdirectory must resolve upwards. A non-git cwd falls through
+			// and fails on the missing manifest, as before.
+			root, ok := gitexec.Line(cwd, "rev-parse", "--show-toplevel")
+			if !ok {
+				root = cwd
 			}
 			remote := gitRemoteOrigin(cmd.Context(), root)
 			coord, err := repourl.Normalize(remote)

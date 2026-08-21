@@ -12,12 +12,9 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 )
 
-const (
-	rdfType     = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-	dctHasPart  = "http://purl.org/dc/terms/hasPart"
-	wlComponent = "https://worklode.io/ns/ontology#Component"
-	wlUnmatched = "https://worklode.io/ns/ontology#unmatchedPath"
-)
+// Dublin Core hasPart; the other reused IRIs come from graphproj, wl: terms
+// from iri.Term.
+const dctHasPart = "http://purl.org/dc/terms/hasPart"
 
 // LayoutTriples derives the observed/repo-layout document (spec 007
 // deriver 2): the repo's dct:hasPart edge to each manifest component, each
@@ -30,7 +27,7 @@ func LayoutTriples(root, host, owner, name string, m *manifest.Manifest) ([]byte
 	for _, c := range m.Components {
 		ts = append(ts,
 			graphproj.Triple{S: repo, P: dctHasPart, O: graphproj.IRIRef(c.IRI)},
-			graphproj.Triple{S: c.IRI, P: rdfType, O: graphproj.IRIRef(wlComponent)},
+			graphproj.Triple{S: c.IRI, P: graphproj.RDFType, O: graphproj.IRIRef(iri.Term("Component"))},
 		)
 	}
 
@@ -69,7 +66,7 @@ func LayoutTriples(root, host, owner, name string, m *manifest.Manifest) ([]byte
 	}
 	sort.Strings(prefixes)
 	for _, p := range prefixes {
-		ts = append(ts, graphproj.Triple{S: repo, P: wlUnmatched, O: graphproj.Text(p)})
+		ts = append(ts, graphproj.Triple{S: repo, P: iri.Term("unmatchedPath"), O: graphproj.Text(p)})
 	}
 	return graphproj.Document(ts), nil
 }

@@ -51,17 +51,3 @@ func TestImportsTriples(t *testing.T) {
 		t.Fatalf("got:\n%s\nwant exactly the one cross-component edge:\n%s", got, want)
 	}
 }
-
-func TestImportsTriplesDropsIntraComponentAndForeign(t *testing.T) {
-	m, _ := manifest.Parse([]byte(importsManifest))
-	doc, err := derive.ImportsTriples(strings.NewReader(goListStream), "/r", m)
-	if err != nil {
-		t.Fatalf("ImportsTriples: %v", err)
-	}
-	for _, banned := range []string{"fmt", "ingest/parse"} {
-		if strings.Contains(string(doc), banned) {
-			t.Fatalf("output mentions %q; stdlib and intra-component edges must be dropped:\n%s",
-				banned, doc)
-		}
-	}
-}

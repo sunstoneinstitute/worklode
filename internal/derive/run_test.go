@@ -93,6 +93,22 @@ func TestRunSkipsOnMatchingHash(t *testing.T) {
 	}
 }
 
+func TestRunRejectsUnsafeGraphIRI(t *testing.T) {
+	f := &fakeGraphServer{}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	c := graphserver.New(srv.URL, nil)
+
+	_, err := derive.Run(context.Background(), c, "urn:g> } INSERT { <urn:s",
+		[]byte("<urn:s> <urn:p> <urn:o> .\n"))
+	if err == nil {
+		t.Fatal("Run = nil error; a graph IRI that escapes the <...> must be rejected")
+	}
+	if f.puts.Load() != 0 {
+		t.Fatalf("puts=%d; a rejected graph IRI must write nothing", f.puts.Load())
+	}
+}
+
 func TestRunRewritesOnChangedHash(t *testing.T) {
 	f := &fakeGraphServer{storedHash: "sha256:stale"}
 	srv := httptest.NewServer(f.handler())
