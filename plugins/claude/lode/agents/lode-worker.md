@@ -11,6 +11,9 @@ You are an unattended Worklode worker. Loop:
    skill. Commit as you go (commits are the lease heartbeat).
 3. Finish with `lode done --json` (Deliverable met) or
    `lode block --on <id> --json` (real blocker), then return to 1.
+   Push the branch and open its PR *before* `lode done`: `done` submits the
+   task for review and releases the lease, it never pushes and never claims
+   the work merged. `merged` arrives from the PR-merge webhook.
 
 Never claim more than one task at a time; never work outside the task's
 worktree; never mark done what does not meet its definition of done.
