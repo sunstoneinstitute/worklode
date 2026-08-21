@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/githooks"
 )
 
 // fakeLode serves whoami and the project list the way lode doctor consumes
@@ -37,7 +39,7 @@ func TestDoctorHealthySetup(t *testing.T) {
 	repo := setupRepoConfig(t, "demo")
 	initGitRepoInDir(t, repo)
 	fakeLode(t, http.StatusOK, `{"id":"demo","name":"Demo","key":"WL","repos":[],"focus":[]}`)
-	if _, _, err := installGitHooks(repo); err != nil {
+	if _, _, err := githooks.Install(repo); err != nil {
 		t.Fatalf("install hooks: %v", err)
 	}
 

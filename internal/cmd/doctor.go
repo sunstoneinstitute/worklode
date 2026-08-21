@@ -11,12 +11,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -133,16 +132,14 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 	}
 
 	// 5. Git hooks installed in this repo.
-	if hooksDir, err := resolveHooksDir(dir); err != nil {
+	switch hooksDir, installed, err := githooks.Installed(dir); {
+	case err != nil:
 		checks = append(checks, skip("hooks", "not in a git repository"))
-	} else {
-		content, readErr := os.ReadFile(filepath.Join(hooksDir, "pre-commit"))
-		if readErr == nil && strings.Contains(string(content), hookMarker) {
-			checks = append(checks, pass("hooks", "pre-commit installed in "+hooksDir))
-		} else {
-			checks = append(checks, fail("hooks", "worklode pre-commit hook not installed",
-				"run `lode install` in this repo"))
-		}
+	case installed:
+		checks = append(checks, pass("hooks", "pre-commit installed in "+hooksDir))
+	default:
+		checks = append(checks, fail("hooks", "worklode pre-commit hook not installed",
+			"run `lode install` in this repo"))
 	}
 
 	// 6. Inside a task worktree: does it map to a task with a live lease.
