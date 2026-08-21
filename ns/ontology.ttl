@@ -452,6 +452,28 @@ wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
     rdfs:range wl:Task ;
     rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
 
+wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:layer wlc:execution ;
+    rdfs:subPropertyOf dct:requires ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Plan ;
+    rdfs:comment """This plan is ordered after that plan — the document-level blocks edge
+        (025 §5, §9.3): every task in this plan is held while any task in the blocking plan's
+        set is open. A distinct property, never a widened wl:dependsOn, so the Task→Task
+        closure stays type-homogeneous (ADR-0004) and ?t wl:dependsOn+ ?x never walks across
+        document ordering. Transitive: a held plan keeps its own set open, so ordering
+        composes down a chain. The plan frontmatter keys are `blocks`/`blockedBy`; the
+        backbone row is a doc_edges 'blocks' edge between the two plan documents.""" .
+
+wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:layer wlc:execution ;
+    owl:inverseOf wl:blockedByPlan ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Plan ;
+    rdfs:comment """This plan is ordered before that plan (document-level blocks edge,
+        backbone-authoritative doc_edges; 025 §5, §9.3). Transitive. "Plan B after plan A"
+        is A wl:blocksPlan B.""" .
+
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
