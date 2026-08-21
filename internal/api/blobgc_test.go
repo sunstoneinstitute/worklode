@@ -56,6 +56,66 @@ func TestBlobGCCollects(t *testing.T) {
 	}
 }
 
+// TestBlobGCDefaultGraceSparesRecent is the one case that omits grace_hours,
+// so it is the only coverage defaultGCGrace has. Spec 021 criterion 10 says
+// neither sweep touches anything newer than the grace period: the freshly
+// uploaded blob keeps its row and its object, the freshly written orphan
+// object survives, and only the object aged past 24h is collected.
+func TestBlobGCDefaultGraceSparesRecent(t *testing.T) {
+	_, h, token, fake := newTestServerBlobs(t)
+	hash := uploadedHash(t, h, token, pngBytes) // unreferenced, but fresh
+
+	freshKey := blobstore.Key(strings.Repeat("a", 64))
+	fake.PutAt(freshKey, []byte("just written"), time.Now())
+	agedKey := blobstore.Key(strings.Repeat("9", 64))
+	fake.PutAt(agedKey, []byte("stray"), time.Now().Add(-48*time.Hour))
+
+	rec := doReq(t, h, http.MethodPost, "/api/v1/blobs/gc", token,
+		map[string]any{"dry_run": false}) // no grace_hours: defaultGCGrace applies
+	if rec.Code != http.StatusOK {
+		t.Fatalf("gc: %d %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		Unreferenced []string `json:"unreferenced"`
+		Orphans      []string `json:"orphan_objects"`
+		Deleted      int      `json:"deleted"`
+		Errors       []string `json:"errors"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.Unreferenced) != 0 {
+		t.Errorf("unreferenced = %v, want none within the default grace", got.Unreferenced)
+	}
+	if len(got.Orphans) != 1 || got.Orphans[0] != agedKey {
+		t.Errorf("orphan_objects = %v, want [%s]", got.Orphans, agedKey)
+	}
+	if got.Deleted != 1 {
+		t.Errorf("deleted = %d, want 1", got.Deleted)
+	}
+	if len(got.Errors) != 0 {
+		t.Errorf("errors = %v, want none", got.Errors)
+	}
+
+	left := map[string]bool{}
+	objs, err := fake.List(t.Context(), "blobs/")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, o := range objs {
+		left[o.Key] = true
+	}
+	if !left[freshKey] {
+		t.Errorf("object newer than the grace period was deleted: %s", freshKey)
+	}
+	if !left[blobstore.Key(hash)] {
+		t.Errorf("freshly uploaded blob object was deleted: %s", blobstore.Key(hash))
+	}
+	if left[agedKey] {
+		t.Errorf("orphan older than the grace period survived: %s", agedKey)
+	}
+}
+
 func TestBlobGCRequiresAdmin(t *testing.T) {
 	st, h, _, _ := newTestServerBlobs(t)
 	if err := st.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
