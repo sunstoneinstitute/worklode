@@ -204,6 +204,33 @@ func TestPollCandidates(t *testing.T) {
 	if len(unlanded) != 0 {
 		t.Fatalf("unlanded after landing = %v; want none", unlanded)
 	}
+
+	// KnownMainSHAs is the poll engine's pre-filter: it answers the same
+	// question without spending a GitHub request, and is scoped to one repo.
+	known, err := s.KnownMainSHAs(ctx, "acme/app", []string{
+		"5555555555555555555555555555555555555555",
+		"6666666666666666666666666666666666666666",
+	})
+	if err != nil {
+		t.Fatalf("known main shas: %v", err)
+	}
+	if !known["5555555555555555555555555555555555555555"] || known["6666666666666666666666666666666666666666"] {
+		t.Fatalf("known = %v; want only the landed sha", known)
+	}
+	other, err := s.KnownMainSHAs(ctx, "other/repo", []string{"5555555555555555555555555555555555555555"})
+	if err != nil {
+		t.Fatalf("known main shas in another repo: %v", err)
+	}
+	if len(other) != 0 {
+		t.Fatalf("known in other/repo = %v; want none — main_commits is per repo", other)
+	}
+	empty, err := s.KnownMainSHAs(ctx, "acme/app", nil)
+	if err != nil {
+		t.Fatalf("known main shas with no shas: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("known for an empty set = %v; want none", empty)
+	}
 }
 
 func TestRepoIngestionHealth(t *testing.T) {
