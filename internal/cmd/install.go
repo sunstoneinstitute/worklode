@@ -280,6 +280,26 @@ type agentUninstall struct {
 	Action string `json:"action"`
 }
 
+// installAgentHooks writes one harness's hook bindings, and its status line
+// when the harness has one and this run targets it. The status line is another
+// key in the same config file as the hooks, so an adapter that has one writes
+// both in a single pass rather than reading and rewriting the file twice; the
+// result carries both outcomes.
+func installAgentHooks(h harness.Harness, dir, scope string, statusLine bool) (harness.HookInstall, error) {
+	if sl, ok := h.(harness.StatusLiner); ok && statusLine {
+		return sl.InstallWithStatusLine(dir, scope)
+	}
+	return h.InstallHooks(dir, scope)
+}
+
+// uninstallAgentHooks is installAgentHooks for the removal side.
+func uninstallAgentHooks(h harness.Harness, dir, scope string, statusLine bool) (harness.HookUninstall, error) {
+	if sl, ok := h.(harness.StatusLiner); ok && statusLine {
+		return sl.UninstallWithStatusLine(dir, scope)
+	}
+	return h.UninstallHooks(dir, scope)
+}
+
 // installHooks installs every selected integration for the repo containing
 // dir. On error it still returns whatever integrations succeeded before the
 // failing one, so the caller can report what actually landed rather than
@@ -317,7 +337,7 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 		if !ok {
 			return res, fmt.Errorf("unknown agent %q", id)
 		}
-		hooks, err := h.InstallHooks(dir, scope)
+		hooks, err := installAgentHooks(h, dir, scope, targets.statusLine)
 		if err != nil {
 			return res, fmt.Errorf("install %s hooks: %w", id, err)
 		}
@@ -328,13 +348,9 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 
 		// Only a harness with a status-line slot gets a stanza; an adapter
 		// without one contributes nothing rather than an empty action.
-		if sl, ok := h.(harness.StatusLiner); ok && targets.statusLine {
-			action, err := sl.InstallStatusLine(dir, scope)
-			if err != nil {
-				return res, fmt.Errorf("install %s status line: %w", id, err)
-			}
+		if sl := hooks.StatusLine; sl != nil {
 			res.StatusLine = append(res.StatusLine,
-				statusLineInstall{Agent: id, Path: action.Path, Action: action.Action})
+				statusLineInstall{Agent: id, Path: sl.Path, Action: sl.Action})
 		}
 	}
 
@@ -459,20 +475,16 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 		if !ok {
 			return res, fmt.Errorf("unknown agent %q", id)
 		}
-		hooks, err := h.UninstallHooks(dir, scope)
+		hooks, err := uninstallAgentHooks(h, dir, scope, targets.statusLine)
 		if err != nil {
 			return res, fmt.Errorf("uninstall %s hooks: %w", id, err)
 		}
 		res.Agents = append(res.Agents,
 			agentUninstall{Agent: id, Path: hooks.Path, Action: hooks.Action})
 
-		if sl, ok := h.(harness.StatusLiner); ok && targets.statusLine {
-			action, err := sl.UninstallStatusLine(dir, scope)
-			if err != nil {
-				return res, fmt.Errorf("uninstall %s status line: %w", id, err)
-			}
+		if sl := hooks.StatusLine; sl != nil {
 			res.StatusLine = append(res.StatusLine,
-				statusLineUninstall{Agent: id, Path: action.Path, Action: action.Action})
+				statusLineUninstall{Agent: id, Path: sl.Path, Action: sl.Action})
 		}
 	}
 
