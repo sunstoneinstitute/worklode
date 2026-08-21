@@ -101,10 +101,19 @@ func Commit(host, owner, repo, sha string) string {
 // gating and re-authoring replace exactly one graph).
 func DeclaredGraph(docSlug string) string { return GraphNS + "declared/" + docSlug }
 
-// ObservedGraph returns the named graph one deriver owns (spec 007: a
-// deriver must confine its writes to its own observed/* graph). Sources:
-// go-imports, repo-layout, pr-affects, deploy, repo-implements (025 §11).
+// ObservedGraph returns the org-global named graph of a backbone-derived
+// deriver source — computed server-side over all-repo state by a single
+// writer: pr-affects, deploy, repo-implements (025 §11). Repo-local sources
+// use RepoObservedGraph instead; spec 007 §1.1 owns the split.
 func ObservedGraph(source string) string { return GraphNS + "observed/" + source }
+
+// RepoObservedGraph returns the per-repo named graph of a repo-local deriver
+// source (go-imports, repo-layout). `lode derive` runs from each repo's
+// checkout, and the whole-graph-replace contract needs one graph per writer
+// (spec 007 §1.1); the repo segment mirrors Repo's <host>/<owner>/<name>.
+func RepoObservedGraph(source, host, owner, name string) string {
+	return GraphNS + "observed/" + source + "/" + host + "/" + owner + "/" + name
+}
 
 // Repo returns a repository's instance IRI (the doap:Project node, D4).
 // Spec 006 defines no repo pattern; this package fixes

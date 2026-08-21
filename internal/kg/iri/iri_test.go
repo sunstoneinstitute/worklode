@@ -32,8 +32,11 @@ func TestGrammar(t *testing.T) {
 			base + "id/commit/github.com/sunstoneinstitute/worklode/a16c2a7"},
 		{"declared graph", iri.DeclaredGraph("adr-worklode-0007"),
 			base + "graph/declared/adr-worklode-0007"},
-		{"observed graph", iri.ObservedGraph("go-imports"),
-			base + "graph/observed/go-imports"},
+		{"observed graph (org-global source)", iri.ObservedGraph("deploy"),
+			base + "graph/observed/deploy"},
+		{"observed graph (repo-local source)",
+			iri.RepoObservedGraph("go-imports", "github.com", "sunstoneinstitute", "worklode"),
+			base + "graph/observed/go-imports/github.com/sunstoneinstitute/worklode"},
 		{"repo", iri.Repo("github.com", "sunstoneinstitute", "worklode"),
 			base + "id/repo/github.com/sunstoneinstitute/worklode"},
 	}
