@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Rates the arithmetic in this file is hand-computed against, from the
@@ -64,14 +66,11 @@ type usageRow struct {
 // asserted rather than inferred from the rollup.
 func sessionUsageRows(t *testing.T, s *Store, lease *Lease, sessionID string) []usageRow {
 	t.Helper()
-	sess, err := s.AgentSession(t.Context(), lease.ID, "claude-code", sessionID)
-	if err != nil {
-		t.Fatalf("read session %s: %v", sessionID, err)
-	}
 	rows, err := s.db.Query(
 		`SELECT usage_day, model, speed, `+usageColumns+`, cost_amount::text, cost_currency
 		   FROM agent_session_usage WHERE agent_session_id = $1
-		  ORDER BY usage_day, model, speed`, sess.ID)
+		  ORDER BY usage_day, model, speed`,
+		sessionRowID(t, s, lease.ID, "claude-code", sessionID))
 	if err != nil {
 		t.Fatalf("read usage rows: %v", err)
 	}
@@ -239,7 +238,7 @@ func TestTouchAgentSessionRecordsUsage(t *testing.T) {
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
-	touchUsage := func(buckets []SessionUsageBucket) *AgentSession {
+	touchUsage := func(buckets []SessionUsageBucket) *model.AgentSession {
 		t.Helper()
 		*now = now.Add(time.Minute)
 		sess, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", buckets)

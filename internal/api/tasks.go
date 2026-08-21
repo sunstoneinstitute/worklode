@@ -207,10 +207,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 			s.mapStoreErr(w, err)
 			return
 		}
-		resp.AgentSessions = make([]model.AgentSession, 0, len(sessions))
-		for i := range sessions {
-			resp.AgentSessions = append(resp.AgentSessions, toAgentSessionJSON(&sessions[i]))
-		}
+		resp.AgentSessions = sessions
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.mapStoreErr(w, err)
 		return

@@ -11,31 +11,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// AgentSession is one coding-agent session's work on one lease. A lease
-// outlives many sessions (restarts, /clear, next-day resumption), and a single
-// session can span several leases when it moves between worktrees — so the
-// natural key is (lease_id, agent, external_session_id), not the lease alone.
-//
-// AgentSession is deliberately not model.AgentSession: ID is the database
-// primary key this package needs internally (row updates) that never crosses
-// the wire, so it stays outside the eleven fields model.AgentSession declares
-// (ADR 036 §3, "store scan plumbing"). api.toAgentSessionJSON is the one
-// conversion point from this type to model.AgentSession.
-type AgentSession struct {
-	ID           int64
-	LeaseID      int64
-	Agent        string
-	AgentVersion string
-	SessionID    string
-	StartedAt    time.Time
-	LastSeenAt   time.Time
-	EndedAt      *time.Time
-	InputTokens  *int64
-	OutputTokens *int64
-	CostAmount   *string
-	CostCurrency string
-}
-
 // validAgent mirrors the agent_sessions.agent CHECK constraint in Go so
 // callers get ErrInvalidInput instead of a raw constraint violation. The
 // vocabulary itself is model.KnownAgents — clients need it too, to fold an
@@ -55,16 +30,16 @@ var costAmountRE = regexp.MustCompile(`^\d{1,6}(\.\d{1,6})?$`)
 // column default only fires on INSERT.
 const defaultCurrency = "USD"
 
-const agentSessionColumns = `id, lease_id, agent, agent_version, external_session_id,
+const agentSessionColumns = `lease_id, agent, agent_version, external_session_id,
 	started_at, last_seen_at, ended_at, input_tokens, output_tokens,
 	cost_amount, cost_currency`
 
-func scanAgentSession(row rowScanner) (*AgentSession, error) {
-	var a AgentSession
+func scanAgentSession(row rowScanner) (*model.AgentSession, error) {
+	var a model.AgentSession
 	var version, costAmount sql.NullString
 	var endedAt sql.NullTime
 	var inTok, outTok sql.NullInt64
-	if err := row.Scan(&a.ID, &a.LeaseID, &a.Agent, &version, &a.SessionID,
+	if err := row.Scan(&a.LeaseID, &a.Agent, &version, &a.SessionID,
 		&a.StartedAt, &a.LastSeenAt, &endedAt, &inTok, &outTok,
 		&costAmount, &a.CostCurrency); err != nil {
 		return nil, err
@@ -131,7 +106,7 @@ func (s *Store) heldLease(ctx context.Context, taskID, actorID string) (*Lease, 
 //
 // Errors: ErrInvalidInput for an unknown agent or empty session id,
 // ErrNotFound when actorID does not hold an active lease on taskID.
-func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, agentVersion, sessionID string, buckets []SessionUsageBucket) (*AgentSession, error) {
+func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, agentVersion, sessionID string, buckets []SessionUsageBucket) (*model.AgentSession, error) {
 	if !validAgent(agent) {
 		return nil, fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
 	}
@@ -405,7 +380,7 @@ func endOpenAgentSessionsOnLease(tx *sql.Tx, now time.Time, leaseID int64) error
 
 // AgentSessionsForLease returns every session recorded against leaseID,
 // oldest-started-first, or an empty slice for a lease with none.
-func (s *Store) AgentSessionsForLease(ctx context.Context, leaseID int64) ([]AgentSession, error) {
+func (s *Store) AgentSessionsForLease(ctx context.Context, leaseID int64) ([]model.AgentSession, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+agentSessionColumns+` FROM agent_sessions
 		  WHERE lease_id = $1 ORDER BY started_at`,
@@ -421,7 +396,13 @@ func (s *Store) AgentSessionsForLease(ctx context.Context, leaseID int64) ([]Age
 }
 
 // AgentSession returns one session row by its natural key, or ErrNotFound.
-func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionID string) (*AgentSession, error) {
+// A session is one coding-agent session's work on one lease: a lease outlives
+// many sessions (restarts, /clear, next-day resumption), and a session can
+// span several leases when it moves between worktrees, so the key is
+// (lease_id, agent, external_session_id), not the lease alone. The row's
+// surrogate id never leaves this file — every caller addresses a session the
+// same way — which is why this returns model.AgentSession unadorned.
+func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionID string) (*model.AgentSession, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT `+agentSessionColumns+` FROM agent_sessions
 		  WHERE lease_id = $1 AND agent = $2 AND external_session_id = $3`,
