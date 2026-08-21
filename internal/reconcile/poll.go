@@ -15,6 +15,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -31,6 +32,12 @@ type Options struct {
 	Since  *time.Time
 	DryRun bool
 	RunID  string
+
+	// Log and Metrics mirror what engine 1 takes (hooks.ReplayOptions); both
+	// are optional. A nil Log falls back to slog.Default(); a nil Metrics
+	// records nothing.
+	Log     *slog.Logger
+	Metrics *Metrics
 }
 
 // repoFacts is everything gathered for one repo before the apply phase.
@@ -60,6 +67,10 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 	if opts.RunID == "" {
 		return nil, fmt.Errorf("reconcile poll: run id is required")
 	}
+	log := opts.Log
+	if log == nil {
+		log = slog.Default()
+	}
 	candidates, err := st.PollCandidates(ctx, opts.Repo, opts.Task, opts.Since)
 	if err != nil {
 		return nil, err
@@ -88,6 +99,9 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 			// One repo failing (App not installed there, rate limit) must not
 			// abort the run for every other repo.
 			res.Errors = append(res.Errors, fmt.Sprintf("%s: %v", repo, err))
+			opts.Metrics.repoError()
+			log.Warn("reconcile poll could not gather repo",
+				"run_id", opts.RunID, "repo", repo, "candidates", len(byRepo[repo]), "err", err)
 			continue
 		}
 		gathered = append(gathered, facts)
@@ -118,7 +132,16 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 	// repo-level fact (013 §2.2). A candidate correlated solely through an
 	// already-landed task_commits row produces no repair, yet a release
 	// published during the outage still has to move it to released.
+	// Every candidate belongs to exactly one repo, so the ones whose repo
+	// never gathered are exactly those the gather loop skipped.
+	polled := 0
+	for _, f := range gathered {
+		polled += len(f.tasks)
+	}
+	opts.Metrics.candidateOutcome("gather_error", len(candidates)-polled)
+
 	if opts.DryRun || len(gathered) == 0 {
+		opts.Metrics.candidateOutcome("dry_run", polled)
 		return res, nil
 	}
 
@@ -131,13 +154,31 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 			return applyFacts(tx, st.Now(), eventID, gathered)
 		})
 	if err != nil {
+		opts.Metrics.candidateOutcome("error", polled)
 		return nil, err
 	}
 	if !inserted {
 		// RecordEvent skipped apply: nothing in res was written. Reporting
 		// success here would describe repairs that did not happen.
+		opts.Metrics.candidateOutcome("error", polled)
 		return nil, fmt.Errorf("reconcile poll: run id %q already recorded; no facts were applied", opts.RunID)
 	}
+
+	// Counted only past the apply: every other exit wrote nothing, so
+	// crediting a repair there would report facts that never landed.
+	opts.Metrics.candidateOutcome("repaired", len(res.Repaired))
+	opts.Metrics.candidateOutcome("clean", polled-len(res.Repaired))
+	prs, commits := 0, 0
+	for _, r := range res.Repaired {
+		prs += len(r.PRsUpdated)
+		commits += len(r.CommitsLanded)
+	}
+	opts.Metrics.repaired("pr", prs)
+	opts.Metrics.repaired("commit", commits)
+	log.Info("reconcile poll applied",
+		"run_id", opts.RunID, "candidates", res.Candidates, "polled", polled,
+		"repaired", len(res.Repaired), "prs", prs, "commits", commits,
+		"repo_errors", len(res.Errors))
 	return res, nil
 }
 
