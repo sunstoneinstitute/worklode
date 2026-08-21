@@ -60,29 +60,53 @@ func eventsFor(bindings []hookBinding) map[Event][]string {
 	return out
 }
 
-// installGroupedHooks writes bindings into the JSON config at path, replacing
-// any bindings a previous install left behind and preserving every other
-// setting. "Grouped" is the event → matcher-group → handler shape Claude Code
-// and Codex both use. A file that exists but does not parse returns the read
-// error and is never rewritten (spec 024 acceptance 6).
-func installGroupedHooks(path string, bindings []hookBinding) error {
-	settings, err := ReadJSONFile(path)
-	if err != nil {
-		return err
-	}
+// applyGroupedHooks sets bindings on an already-read settings object,
+// replacing any bindings a previous install left behind and preserving every
+// other setting. "Grouped" is the event → matcher-group → handler shape Claude
+// Code and Codex both use. It mutates settings in place and never touches the
+// filesystem, so an adapter with a second surface in the same file (claude-code's
+// status line) can fold both into one read-modify-write.
+func applyGroupedHooks(settings map[string]any, bindings []hookBinding) {
 	hooks, _ := stripLodeHooks(settingsHooks(settings))
 	for _, b := range bindings {
 		hooks[b.Event] = appendBinding(hooks[b.Event], b)
 	}
 	settings["hooks"] = hooks
+}
+
+// stripGroupedHooks is applyGroupedHooks' inverse: it removes Worklode's
+// bindings from an already-read settings object, reporting ActionNone or
+// ActionRemoved (the same vocabulary the git hooks use). ActionNone means
+// settings was left exactly as read, so the caller can skip the write — a
+// no-op must not reformat someone's settings JSON or bump its mtime.
+func stripGroupedHooks(settings map[string]any) (action string) {
+	hooks, changed := stripLodeHooks(settingsHooks(settings))
+	if !changed {
+		return ActionNone
+	}
+	if len(hooks) == 0 {
+		delete(settings, "hooks")
+	} else {
+		settings["hooks"] = hooks
+	}
+	return ActionRemoved
+}
+
+// installGroupedHooks writes bindings into the JSON config at path. A file
+// that exists but does not parse returns the read error and is never rewritten
+// (spec 024 acceptance 6).
+func installGroupedHooks(path string, bindings []hookBinding) error {
+	settings, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+	applyGroupedHooks(settings, bindings)
 	return writeJSONFile(path, settings)
 }
 
 // uninstallGroupedHooks removes Worklode's bindings from the JSON config at
-// path, reporting ActionNone or ActionRemoved (the same vocabulary the git
-// hooks use). A missing file, or one with no `lode hook` entries to strip, is
-// ActionNone and leaves the file untouched — a no-op must not reformat
-// someone's settings JSON or bump its mtime.
+// path. A missing file, or one with no `lode hook` entries to strip, is
+// ActionNone and leaves the file untouched.
 func uninstallGroupedHooks(path string) (action string, err error) {
 	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 		return ActionNone, nil
@@ -91,14 +115,8 @@ func uninstallGroupedHooks(path string) (action string, err error) {
 	if err != nil {
 		return "", err
 	}
-	hooks, changed := stripLodeHooks(settingsHooks(settings))
-	if !changed {
+	if action := stripGroupedHooks(settings); action == ActionNone {
 		return ActionNone, nil
-	}
-	if len(hooks) == 0 {
-		delete(settings, "hooks")
-	} else {
-		settings["hooks"] = hooks
 	}
 	if err := writeJSONFile(path, settings); err != nil {
 		return "", err

@@ -58,12 +58,18 @@ type HookInstall struct {
 	// user — a harness whose hooks stay inert until the user approves them, for
 	// instance. Empty for an adapter with nothing to say.
 	Notes []string
+	// StatusLine is set only by InstallWithStatusLine: the status line shares a
+	// config file with the hooks, so the two are written together and reported
+	// together. nil means the status line was not part of this call.
+	StatusLine *StatusLineAction
 }
 
 // HookUninstall mirrors internal/cmd's git-hook action vocabulary.
 type HookUninstall struct {
 	Path   string
 	Action string // ActionRemoved | ActionNone
+	// StatusLine mirrors HookInstall's, set only by UninstallWithStatusLine.
+	StatusLine *StatusLineAction
 }
 
 // StatusLineAction is what one status-line install or uninstall did.
@@ -91,9 +97,16 @@ type Harness interface {
 // that takes a command (spec 008 §17.5). Only claude-code has one in v1, so it
 // is an optional interface rather than part of Harness: an adapter without a
 // status line should not have to implement two no-op methods.
+//
+// The status line is not a separate location — it is another key in the same
+// config file the hooks go into — so it is installed *with* them rather than
+// after them: one read, both mutations, one write. Splitting it in two would
+// double the I/O and make the pair non-atomic, leaving hooks written and no
+// status line when the second step failed. A caller that does not want the
+// status line calls Harness.InstallHooks instead.
 type StatusLiner interface {
-	InstallStatusLine(repoDir, scope string) (StatusLineAction, error)
-	UninstallStatusLine(repoDir, scope string) (StatusLineAction, error)
+	InstallWithStatusLine(repoDir, scope string) (HookInstall, error)
+	UninstallWithStatusLine(repoDir, scope string) (HookUninstall, error)
 }
 
 var registry = map[string]Harness{}
