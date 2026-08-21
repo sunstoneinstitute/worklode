@@ -137,6 +137,7 @@ var routeGuards = map[string]routeGuard{
 	// a per-document fact the store checks, not a role.
 	"POST /api/v1/docs":                      guarded(permDocWrite),
 	"GET /api/v1/docs":                       guarded(permDocRead),
+	"GET /api/v1/docs/resolve":               guarded(permDocRead),
 	"GET /api/v1/docs/{id}":                  guarded(permDocRead),
 	"PUT /api/v1/docs/{id}/body":             guarded(permDocWrite),
 	"PUT /api/v1/docs/{id}/edges":            guarded(permDocImport),

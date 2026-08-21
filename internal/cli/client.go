@@ -975,6 +975,20 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
 }
 
+// ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
+// reference names — an id or an exact slug (025 §14.3). The server owns the
+// grammar and its ambiguity rule, so a ref costs one indexed lookup rather
+// than a listing of the whole corpus, and a grammar extension needs no client
+// upgrade. A *ClientError with Status 404 means no document holds that ref;
+// 422 means a slug that names more than one. The response carries no body
+// text — fetch the document with GetDoc when the text is wanted.
+func (c *Client) ResolveDoc(ctx context.Context, ref string) (model.Doc, error) {
+	q := url.Values{}
+	q.Set("ref", ref)
+	d, _, err := doJSON[model.Doc](ctx, c, http.MethodGet, withQuery("/api/v1/docs/resolve", q), nil, "doc")
+	return d, err
+}
+
 // GetDoc calls GET /api/v1/docs/{id}: the document plus its sections, its
 // edges in both directions, and its open candidate revision if it has one.
 func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte, error) {
