@@ -418,6 +418,18 @@ Forcing a full re-projection — after a schema change to the projected shape,
 say — is a watermark rewind: `UPDATE graph_projection SET
 last_state_log_id = 0`. The next run treats every project as dirty again.
 
+**When one project is stuck.** The watermark is global, but a failure is not:
+a project that cannot be rendered or written is recorded in
+`graph_projection_failures` and the watermark advances past it, so the rest
+keep flowing. `worklode_graph_projection_quarantined_projects` staying above
+zero is the signal — `worklode_graph_projection_runs_total{result="error"}`
+climbing without it means the batch itself is broken, not one project. Which
+project, since when, and the last error are in that table; the projector
+re-attempts it immediately, then on a 1m→30m doubling backoff, and
+immediately again whenever the project has new task activity. The row is
+deleted the moment a projection succeeds; deleting it by hand only forgets
+that the project owes one.
+
 The compose stack ships **no** graph-server; the Oxigraph container it can
 start is test-only (see `docs/follow-ups.md`), so projection has nowhere to
 write locally today.
