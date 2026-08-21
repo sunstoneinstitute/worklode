@@ -7,9 +7,10 @@ import (
 // Metrics holds engine 2's instruments. A nil *Metrics records nothing, so
 // tests and any caller without a registerer can leave Options.Metrics unset.
 type Metrics struct {
-	candidates *prometheus.CounterVec
-	repairs    *prometheus.CounterVec
-	repoErrors prometheus.Counter
+	candidates   *prometheus.CounterVec
+	commitChecks *prometheus.CounterVec
+	repairs      *prometheus.CounterVec
+	repoErrors   prometheus.Counter
 }
 
 // NewMetrics registers engine 2's counters on reg.
@@ -23,6 +24,15 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		candidates: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_reconcile_poll_candidates_total",
 			Help: "Poll candidates examined by reconcile engine 2, by outcome.",
+		}, []string{"outcome"}),
+		// commitChecks counts the branch-membership questions a run resolved,
+		// by how: "checked" spent a GitHub request, "skipped_landed" read the
+		// answer out of main_commits, "skipped_settled" is a merged PR's head
+		// sha whose merge sha already landed (spec 013 §2.2 — the org-wide run
+		// is rate-limit bound, so the skip ratio is the thing to watch).
+		commitChecks: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_reconcile_poll_commit_checks_total",
+			Help: "Branch-membership questions resolved by reconcile engine 2, by how they were resolved.",
 		}, []string{"outcome"}),
 		// repairs counts the facts an applied run repaired, so a run that
 		// touched one candidate with twenty stale commits is distinguishable
@@ -39,13 +49,18 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Help: "Repos whose GitHub gather phase failed during a poll run.",
 		}),
 	}
-	reg.MustRegister(m.candidates, m.repairs, m.repoErrors)
+	reg.MustRegister(m.candidates, m.commitChecks, m.repairs, m.repoErrors)
 	return m
 }
 
 // Candidates exposes the counter for test assertions.
 func (m *Metrics) Candidates() *prometheus.CounterVec {
 	return m.candidates
+}
+
+// CommitChecks exposes the counter for test assertions.
+func (m *Metrics) CommitChecks() *prometheus.CounterVec {
+	return m.commitChecks
 }
 
 // Repairs exposes the counter for test assertions.
@@ -66,6 +81,14 @@ func (m *Metrics) candidateOutcome(outcome string, n int) {
 		return
 	}
 	m.candidates.WithLabelValues(outcome).Add(float64(n))
+}
+
+// commitCheck records how one candidate sha's branch membership was resolved.
+func (m *Metrics) commitCheck(outcome string) {
+	if m == nil {
+		return
+	}
+	m.commitChecks.WithLabelValues(outcome).Inc()
 }
 
 func (m *Metrics) repaired(fact string, n int) {
