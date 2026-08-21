@@ -69,6 +69,14 @@ class MapVaultWriter implements VaultWriter {
     this.files.delete(`${root}/${path}`);
     this.removed.push(path);
   }
+
+  async exists(path: string): Promise<boolean> {
+    const prefix = `${path}/`;
+    for (const key of this.files.keys()) {
+      if (key === path || key.startsWith(prefix)) return true;
+    }
+    return false;
+  }
 }
 
 /** A push that answers the way PATCH /api/v1/tasks/{id} does: the plain task

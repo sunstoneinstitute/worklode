@@ -34,6 +34,11 @@ export interface VaultWriter {
    *  under the root the backbone does not imply -- including files the
    *  mirror never created. */
   remove(root: string, path: string): Promise<void>;
+  /** Whether a vault-relative path exists as a file or folder -- not
+   *  necessarily under any mount root. Used only to check the mount root's
+   *  own *parent* before write()'s ensureDir would silently create it; see
+   *  mountRootParent and mountRootParentMissing. */
+  exists(path: string): Promise<boolean>;
 }
 
 export interface MirrorStats {
@@ -130,6 +135,35 @@ export function isSafeMountRoot(root: string): boolean {
  *  segment. */
 export function mountRootName(root: string): string {
   return root.slice(root.lastIndexOf("/") + 1);
+}
+
+/** The mount root's own parent path, or undefined when there is none worth
+ *  asking about: a single-segment root's parent is the vault root, which
+ *  always exists, so nothing there could be created by mistake. Splits on
+ *  "/" only, mirroring mountRootName -- isSafeMountRoot already forbids a
+ *  backslash in the root outright, so the two never disagree about where a
+ *  segment ends. */
+export function mountRootParent(root: string): string | undefined {
+  const idx = root.lastIndexOf("/");
+  return idx === -1 ? undefined : root.slice(0, idx);
+}
+
+/** Whether the mount root's own parent is missing and about to be created
+ *  silently by write()'s ensureDir -- the question src/main.ts asks before a
+ *  sync's first write, alongside the foreignNotes/adopt-root guard.
+ *
+ *  WL-82's adopt prompt already covers the root itself being absent (safe to
+ *  take over silently, since there is nothing under a root that does not
+ *  exist to lose); it does not catch a typo'd *parent* segment, whose blast
+ *  radius is a stray folder created one level up -- possibly inside a real
+ *  one. This is that missing check, asked once per sync rather than
+ *  remembered: once the parent exists, whether because the user made it or
+ *  because Worklode created it after a confirmation, it stays existing --
+ *  nothing here ever removes a mount root's parent -- so there is nothing to
+ *  persist the way adoptedRoots persists a confirmed root. */
+export async function mountRootParentMissing(writer: VaultWriter, root: string): Promise<boolean> {
+  const parent = mountRootParent(root);
+  return parent !== undefined && !(await writer.exists(parent));
 }
 
 /** The vault-relative path for a project/doc/task note, or undefined when a
