@@ -116,6 +116,68 @@ func TestCompareSections(t *testing.T) {
 			wantChanged: []string{"sec-1"},
 		},
 		{
+			// 025 §6.1: an anchorless heading is content within sec-4, so an
+			// edit confined to it is an edit to sec-4. Section.Body alone stops
+			// at the next heading of any level and would report no change,
+			// leaving claims against sec-4 falsely fresh.
+			name: "edit under an anchorless subheading changes its anchored ancestor",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n\n" +
+				"## 5. Next {#sec-5}\n\nBody five.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nHighest priority first.\n\n" +
+				"## 5. Next {#sec-5}\n\nBody five.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4"},
+		},
+		{
+			// The heading text of an anchorless subheading is content too, so
+			// renaming it changes its ancestor — unlike rewording an anchored
+			// heading, which is explicitly not a change (025 §3).
+			name: "anchorless subheading renamed changes its anchored ancestor",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Ties\n\nOldest first.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4"},
+		},
+		{
+			// An anchored descendant is a node of its own: its body belongs to
+			// it, never to its parent, so editing sec-4.1 leaves sec-4 alone
+			// even though the anchorless heading beside it does roll up.
+			name: "anchored descendant's body does not roll up into its parent",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body, edited.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4.1"},
+		},
+		{
+			// The walk stops at an anchored descendant, so an anchorless
+			// heading nested under sec-4.1 rolls up into sec-4.1, not sec-4.
+			name: "anchorless heading rolls up to its nearest anchored ancestor only",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body.\n\n" +
+				"#### Tie-breaking\n\nHighest priority first.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4.1"},
+		},
+		{
 			name: "depth-4 anchored heading exceeds default limit",
 			accepted: "# Spec\n\n" +
 				"## 1. First {#sec-1}\n\nBody.\n\n" +
