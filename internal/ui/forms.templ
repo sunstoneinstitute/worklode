@@ -5,10 +5,18 @@ package ui
 // pages — no client state, no HTMX behavior — so they work with the keyboard
 // and without JavaScript, as spec 032 §10 requires of a primary workflow.
 //
-// A rejected submit re-renders the same form with the validation message in
-// an aria-live region and every entered value preserved, so nothing typed is
-// lost to a missing field. Success is a POST-redirect-GET, so a reload never
-// re-creates the object.
+// A rejected submit re-renders the same form with the validation message and
+// every entered value preserved, so nothing typed is lost to a missing field.
+// Success is a POST-redirect-GET, so a reload never re-creates the object.
+//
+// The message used to sit in an aria-live region, which announced nothing: a
+// live region only fires for a change made to a document already on screen,
+// and a rejected submit arrives as a whole new document. So the message takes
+// focus instead (tabindex="-1" + autofocus), which is what actually reaches a
+// screen reader, and the page title is prefixed "Error: " so the announcement
+// on load says something went wrong before the reader gets to the message.
+// The first field's autofocus yields to it, rather than relying on which
+// autofocus the browser resolves first.
 
 // formCard is the shell both forms share: the project sidebar, the heading,
 // the error region, and the surrounding <form>. The caller fills in the
@@ -19,11 +27,9 @@ templ formCard(f FormShell, heading, lede, submit, sidebarActive string) {
 			<section class="card pad form">
 				<h1>{ heading }</h1>
 				<p class="muted small">{ lede }</p>
-				<div aria-live="polite">
-					if f.Error != "" {
-						<p class="formerr" role="alert">{ f.Error }</p>
-					}
-				</div>
+				if f.Error != "" {
+					<p id="form-error" class="formerr" tabindex="-1" autofocus>{ f.Error }</p>
+				}
 				<form method="post" action={ f.Action }>
 					{ children... }
 					<div class="btnrow">
@@ -57,7 +63,7 @@ templ NewTask(v NewTaskView) {
 			"Create task", "") {
 			<p class="fieldrow">
 				<label for="title">Title</label>
-				<input id="title" name="title" type="text" required maxlength="200" autofocus value={ v.Title }/>
+				<input id="title" name="title" type="text" required maxlength="200" autofocus?={ v.Form.Error == "" } value={ v.Title }/>
 			</p>
 			<p class="fieldrow">
 				<label for="body">Body</label>
@@ -85,7 +91,7 @@ templ NewDeliverable(v NewDeliverableView) {
 			"Declare deliverable", "deliverables") {
 			<p class="fieldrow">
 				<label for="name">Name</label>
-				<input id="name" name="name" type="text" required maxlength="200" autofocus value={ v.Name }/>
+				<input id="name" name="name" type="text" required maxlength="200" autofocus?={ v.Form.Error == "" } value={ v.Name }/>
 			</p>
 			<p class="fieldrow">
 				<label for="description">Description</label>
@@ -93,8 +99,8 @@ templ NewDeliverable(v NewDeliverableView) {
 			</p>
 			<p class="fieldrow">
 				<label for="url">URL <span class="muted">(optional)</span></label>
-				<input id="url" name="url" type="url" inputmode="url" maxlength="2000" placeholder="https://" value={ v.URL }/>
-				<span class="hint">
+				<input id="url" name="url" type="url" inputmode="url" maxlength="2000" placeholder="https://" aria-describedby="url-hint" value={ v.URL }/>
+				<span id="url-hint" class="hint">
 					The address this deliverable lives at, when it is known in advance.
 					Adding it records where to look; whether the deliverable is live stays
 					a fact an emitter or prober reports.

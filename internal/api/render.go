@@ -250,12 +250,24 @@ func docRef(d model.Doc) string {
 // docPageURL is a document's cockpit page path.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
+// formTitle is a creation form's document title, prefixed "Error: " when the
+// submit was rejected. On a rejected submit the browser announces the new
+// document's title before anything on the page, so the prefix is what tells a
+// screen-reader user the submit failed; the message itself takes focus
+// separately (see forms.templ).
+func formTitle(base, errMsg string) string {
+	if errMsg == "" {
+		return base
+	}
+	return "Error: " + base
+}
+
 // newTaskView builds the new-task form, with the submitted values selected in
 // the menus and errMsg shown ("" on first render).
 func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.NewTaskView {
 	return ui.NewTaskView{
 		Form: ui.FormShell{
-			Page:      ui.PageProps{Title: "worklode: " + project.Name + ": new task"},
+			Page:      ui.PageProps{Title: formTitle("worklode: "+project.Name+": new task", errMsg)},
 			Project:   project,
 			Action:    "/projects/" + project.ID + "/tasks",
 			CancelURL: "/projects/" + project.ID,
@@ -274,7 +286,7 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.
 func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string) ui.NewDeliverableView {
 	return ui.NewDeliverableView{
 		Form: ui.FormShell{
-			Page:      ui.PageProps{Title: "worklode: " + project.Name + ": new deliverable"},
+			Page:      ui.PageProps{Title: formTitle("worklode: "+project.Name+": new deliverable", errMsg)},
 			Project:   project,
 			Action:    "/projects/" + project.ID + "/deliverables",
 			CancelURL: "/projects/" + project.ID + "/deliverables",
