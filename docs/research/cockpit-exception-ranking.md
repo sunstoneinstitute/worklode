@@ -116,9 +116,9 @@ Replaying the 908 recorded state transitions, blocks-edge changes, and
 priority changes forward from 2026-08-11, recomputing det-v1's answer after
 every event:
 
-- **9 answer changes in 10.2 days — 0.88/day.** Six of the nine landed in one
-  36-hour burst (08-20/08-21) when the blob-storage blocker chain was being
-  wired up; whole days pass with none.
+- **9 answer changes in 10.2 days — 0.88/day, and bursty.** All nine landed
+  inside one eight-hour stretch on 08-20, while the blob-storage blocker
+  chain was being wired up; every other day in the window had none.
 - **Every answer change was triggered by a churn-classified event** (a
   blocks-edge add/remove, a transition into/out of `ready` or into a closed
   state, or a priority change). Zero changes came from events outside those
