@@ -653,3 +653,11 @@ docs/specs/048-exit-purge-on-a-gone-lease.md:
     sec-3: "## 3. Degradation"
     sec-4: "## 4. Consequences"
     sec-5: "## 5. Rejected alternatives"
+docs/specs/049-validate-project-graphs-as-a-union.md:
+  sections:
+    sec-0: "## 0. Decision"
+    sec-1: "## 1. The problem"
+    sec-2: "## 2. What a project graph promises"
+    sec-3: "## 3. Validation scope"
+    sec-4: "## 4. Consequences"
+    sec-5: "## 5. Rejected alternatives"

@@ -425,19 +425,6 @@ one pass.
   self-hosted branch of `_test.yml` the way `postgres-dsn` already is. Worth
   doing when the graph gets a second consumer — part 2's projector, or a CI
   SHACL gate over projected graphs.
-- `[gated]` **Cross-project edges project dangling, untyped IRIs** — owned by
-  **WL-117**, which must decide before per-graph SHACL validation can be
-  turned on. Knowledge-graph part 2 (the projector plan) shipped without
-  deciding this, so the decision moved rather than being resolved: a
-  `blocks`/`child_of`/`follow_up_to` edge that crosses projects lands `A
-  wl:blocks B` in P1's named graph and `B wl:dependsOn A` in P2's; neither
-  graph holds both ends, so each carries an object IRI with no `rdf:type`
-  beside it. Per-graph SHACL validation then fails: `wl:followUpTo`'s
-  `sh:class wl:Task` (`ns/shapes.ttl`) is unsatisfied by a foreign end. Two
-  candidate answers — emit a bare `rdf:type wl:Task` stub for out-of-graph
-  ends, or scope validation to the union of the project graphs — and the
-  choice is the projector's, not the renderer's.
-
 ## From WL-141 — three-valued plan coverage (2026-08-20)
 
 - `[gated]` **A plan can close its own section by naming itself in
