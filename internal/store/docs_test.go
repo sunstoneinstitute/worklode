@@ -1808,6 +1808,17 @@ func updateRevision(t *testing.T, s *Store, id int64, body string) error {
 	return err
 }
 
+// discardRevision runs DiscardRevision through RecordDocEvent.
+func discardRevision(t *testing.T, s *Store, id int64, actor string) error {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "discard", "cli",
+		fmt.Sprintf("doc-revision-discard-%d", docEventSeq.Add(1)), "doc.revision_discarded", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return DiscardRevision(tx, s.Now(), id, actor, eventID)
+		})
+	return err
+}
+
 // acceptRevision runs AcceptRevision through RecordDocEvent.
 func acceptRevision(t *testing.T, s *Store, id int64, actor string) (*model.Doc, error) {
 	t.Helper()
@@ -2500,6 +2511,102 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 	doc := mustAcceptedSpec(t, s, "025-x")
 
 	if err := updateRevision(t, s, doc.ID, revisedSpecBody); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocDiscardRevisionStanding: the assignee and the revision's author may
+// each withdraw an open candidate; a third party may not (025 §7.2).
+//
+// mustAcceptedSpec's documents are created by stig, and CreateDoc defaults the
+// assignee to the creator, so stig is the assignee throughout and ada is the
+// proposer.
+func TestDocDiscardRevisionStanding(t *testing.T) {
+	t.Run("author", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x")
+		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if err := discardRevision(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("DiscardRevision by the author: %v", err)
+		}
+		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("assignee", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x")
+		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+			t.Fatalf("DiscardRevision by the assignee: %v", err)
+		}
+		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("third party", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x")
+		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if err := discardRevision(t, s, doc.ID, "bob"); !errors.Is(err, ErrForbidden) {
+			t.Fatalf("DiscardRevision by a third party = %v, want ErrForbidden", err)
+		}
+		if _, err := s.GetDocRevision(t.Context(), doc.ID); err != nil {
+			t.Fatalf("the refused discard removed the candidate anyway: %v", err)
+		}
+	})
+}
+
+// TestDocDiscardRevisionFreesTheSlot: doc_revisions is keyed on doc_id, so the
+// point of a discard is that the next ReviseDoc succeeds immediately rather
+// than hitting ErrRevisionExists. The accepted version is untouched by either.
+func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if err := discardRevision(t, s, doc.ID, "ada"); err != nil {
+		t.Fatalf("DiscardRevision: %v", err)
+	}
+
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc after a discard: %v, want the slot free", err)
+	}
+	rev, err := s.GetDocRevision(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rev.CreatedBy != "stig" || rev.Body != specBody {
+		t.Errorf("revision = %+v, want a fresh copy of the accepted body opened by stig", rev)
+	}
+	got, err := s.GetDoc(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 1 || got.Body != specBody {
+		t.Errorf("doc = version %d, want the accepted version untouched by a discard", got.Version)
+	}
+}
+
+// TestDocDiscardRevisionWithoutOpenRevision: nothing to withdraw is
+// ErrNotFound, for the assignee as much as for anyone.
+func TestDocDiscardRevisionWithoutOpenRevision(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+
+	if err := discardRevision(t, s, doc.ID, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }

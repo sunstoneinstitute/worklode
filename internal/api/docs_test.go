@@ -821,6 +821,68 @@ func TestDocRevisionLifecycle(t *testing.T) {
 	}
 }
 
+// TestDocRevisionDiscard walks DELETE /api/v1/docs/{id}/revision: a third
+// party is refused, the proposer withdraws their own candidate, and the slot
+// the withdrawal frees takes a fresh one straight away (025 §7.2).
+//
+// The token identity is alice, who is the spec's assignee; bob proposes.
+func TestDocRevisionDiscard(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	bobToken := docActor(t, st, "bob")
+	carolToken := docActor(t, st, "carol")
+	spec := acceptedSpec(t, h, token, "proj", "025-x", 25)
+
+	// Nothing open yet: 404, not a silent success.
+	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("discard with no open revision status = %d, want 404", rr.Code)
+	}
+
+	// Proposing stays open to any doc.write holder, so bob may open one on
+	// alice's document.
+	if rr := doReq(t, h, "POST", docPath(spec.ID, "/revise"), bobToken, nil); rr.Code != http.StatusOK {
+		t.Fatalf("revise as bob status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	// Carol is neither the assignee nor the proposer.
+	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), carolToken, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("third-party discard status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+	rr := doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if detail.Revision == nil {
+		t.Fatal("the refused discard removed the candidate anyway")
+	}
+
+	// The proposer withdraws their own, and the response is the document,
+	// unchanged.
+	rr = doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), bobToken, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("author discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	var after model.Doc
+	decodeInto(t, rr, &after)
+	if after.Version != 1 || after.Body != docSpecBody {
+		t.Errorf("doc = version %d, want the accepted version untouched by a discard", after.Version)
+	}
+
+	// The slot is free: a fresh candidate opens rather than 409ing. This one
+	// is bob's again, and the assignee withdraws it — the other half of the
+	// gate.
+	if rr := doReq(t, h, "POST", docPath(spec.ID, "/revise"), bobToken, nil); rr.Code != http.StatusOK {
+		t.Fatalf("revise after a discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("assignee discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	decodeInto(t, rr, &detail)
+	if detail.Revision != nil {
+		t.Errorf("revision = %+v, want it withdrawn", detail.Revision)
+	}
+}
+
 // TestDocRevisionRefusals covers the states with nothing to revise: a draft
 // (edited in place), a plan (edited in place), and a document with no open
 // candidate.

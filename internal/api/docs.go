@@ -607,6 +607,36 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 	s.writeDocRevision(w, r, id)
 }
 
+// discardDocRevision handles DELETE /api/v1/docs/{id}/revision: withdraws the
+// open candidate without landing it (025 §7.2's close-without-merging), which
+// frees the document's one candidate slot. Either the assignee or the
+// revision's author may; anyone else gets 403.
+//
+// It answers with the document, which the discard leaves untouched — the same
+// shape submitDoc answers with, and the reason no discard response type is
+// owed to internal/model.
+func (s *server) discardDocRevision(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	err := s.recordDocEvent(w, r, "discard", "doc.revision_discarded", id, nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.DiscardRevision(tx, now, id, actorID, eventID)
+		})
+	if err != nil {
+		return
+	}
+	d, err := s.st.GetDoc(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
 // acceptDocRevision handles POST /api/v1/docs/{id}/revision/accept: runs the
 // 025 §6 anchor gate and, when clean, lands the candidate as the next version.
 func (s *server) acceptDocRevision(w http.ResponseWriter, r *http.Request) {
