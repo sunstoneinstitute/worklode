@@ -275,6 +275,12 @@ type server struct {
 	// see web.go's navWrap and metrics.go's observeNavigation.
 	navigations *prometheus.CounterVec
 
+	// homeRenders counts Home page renders, by mode (actor, open, empty);
+	// see web.go's homePage and metrics.go's observeHomeRender. navWrap
+	// already counts the "home" destination by outcome — this one says which
+	// Home the viewer got.
+	homeRenders *prometheus.CounterVec
+
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
 	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
 	// observeFormSubmission.

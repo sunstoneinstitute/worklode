@@ -166,25 +166,112 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 
 // homePage handles GET / (routed as "GET /{$}" — see server.go — so it
 // matches only the exact root path, not every otherwise-unmatched GET): the
-// default post-login destination. Part 1 has no assigned-work/decision/brief
-// aggregation yet (spec 032 §9), so Home shows the org-wide board under a
-// "Current work" heading — the same data "/work" shows as the task-oriented
-// destination.
+// default post-login destination, which is the actor's project list (spec 032
+// §9). It renders in one of three modes, which are also the bounded label
+// values of worklode_web_home_renders_total:
+//
+//   - "open": no actor (LODE_WEB_OPEN, or no login provider). Every project
+//     by last activity, and never a role badge or signal line — an anonymous
+//     viewer has no relationship to claim. Membership and awaiting approvals
+//     are not even read.
+//   - "actor": a signed-in actor with at least one card (a project they are
+//     on, or one with approvals awaiting them).
+//   - "empty": a signed-in actor on no project with nothing awaiting them.
+//     The page says so and points at /projects; it never fabricates a card.
+//
+// Groups come off the request subject, which carries the actor row's stored
+// Keycloak claim (see authz.go's Subject.Groups) — the same rows GetActor
+// would return, without a second read.
 func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
-	s.renderBoard(w, r, "home", "worklode: home")
+	ctx := r.Context()
+	sub := subjectFrom(r)
+
+	projects, err := s.st.ListProjects(ctx)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	workFacts, err := s.st.ListProjectWorkFacts(ctx, "")
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	participants, err := s.st.ListParticipants(ctx, "")
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	in := homeInputs{
+		Projects:     projects,
+		Facts:        map[string][]store.ProjectWorkFact{},
+		Participants: map[string][]string{},
+		OpenMode:     sub.ActorID == "",
+	}
+	for _, f := range workFacts {
+		in.Facts[f.Task.Project] = append(in.Facts[f.Task.Project], f)
+	}
+	// ListParticipants already orders lead first within each project, so
+	// appending in row order gives the lead-first crew the cards want. A
+	// nameless actor falls back to its id, so no card renders a blank avatar.
+	for _, p := range participants {
+		name := p.DisplayName
+		if name == "" {
+			name = p.ActorID
+		}
+		in.Participants[p.ProjectID] = append(in.Participants[p.ProjectID], name)
+	}
+
+	if !in.OpenMode {
+		mine, err := s.st.ProjectsForActor(ctx, sub.ActorID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		in.Membership = make(map[string]memberFacts, len(mine))
+		for _, ap := range mine {
+			in.Membership[ap.Project.ID] = memberFacts{IsLead: ap.IsLead}
+		}
+
+		awaiting, err := s.st.ApprovalsAwaiting(ctx, sub.ActorID, sub.Groups)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		in.Awaiting = make(map[string]int, len(awaiting))
+		for _, c := range awaiting {
+			in.Awaiting[c.ProjectID] = c.Count
+		}
+	}
+
+	cards := homeCards(in)
+	mode := homeModeActor
+	switch {
+	case in.OpenMode:
+		mode = homeModeOpen
+	case len(cards) == 0:
+		mode = homeModeEmpty
+	}
+	s.observeHomeRender(mode)
+
+	s.renderWeb(w, r, http.StatusOK, "home page", ui.Home(ui.HomeView{
+		Page:  ui.PageProps{Title: "worklode: home", ActiveGlobal: "home"},
+		Mode:  mode,
+		Cards: cards,
+	}))
 }
 
 // workPage handles GET /work: task-oriented saved queries and the ready
-// frontier (spec 032 §2). Part 1 renders the same org-wide board as Home,
-// without the "Current work" framing.
+// frontier (spec 032 §2). Part 1 renders the org-wide board — the one Home
+// used to show as well, before Home became the actor's project list.
 func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
 	s.renderBoard(w, r, "work", "worklode: work")
 }
 
 // renderBoard builds the org-wide board, built from the same assembleBoard
 // used by GET /api/v1/board, plus a count of new (untriaged) inbox issues,
-// and renders it under the given ActiveGlobal/title. Shared by homePage and
-// workPage.
+// and renders it under the given ActiveGlobal/title. workPage is its only
+// caller: Home is the actor's project list now, not the board.
 func (s *server) renderBoard(w http.ResponseWriter, r *http.Request, activeGlobal, title string) {
 	ctx := r.Context()
 
