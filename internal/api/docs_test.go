@@ -775,18 +775,28 @@ Do the third thing.
 
 	// The event says what actually happened: the second acceptance left
 	// "accepted", not "draft" — an append-only log may not record a transition
-	// the document never made.
-	events := eventsOfType(t, h, token, "wl:DocumentAccepted")
-	if len(events) != 2 {
-		t.Fatalf("wl:DocumentAccepted events = %d, want 2", len(events))
+	// the document never made. Read from the table rather than through
+	// /api/v1/events, whose commit-horizon predicate (025 §15) may not have
+	// caught up with an event committed a moment ago.
+	rows, err := st.DBForTests().Query(
+		`SELECT payload->>'wl:fromStatus' FROM events WHERE type = 'wl:DocumentAccepted' ORDER BY id`)
+	if err != nil {
+		t.Fatalf("read acceptance events: %v", err)
 	}
-	fromStatuses := make([]any, 0, len(events))
-	for _, e := range events {
-		ev, _ := e.(map[string]any)
-		fromStatuses = append(fromStatuses, eventPayload(t, ev)["wl:fromStatus"])
+	defer rows.Close()
+	var fromStatuses []string
+	for rows.Next() {
+		var from string
+		if err := rows.Scan(&from); err != nil {
+			t.Fatalf("scan wl:fromStatus: %v", err)
+		}
+		fromStatuses = append(fromStatuses, from)
 	}
-	if !slices.Contains(fromStatuses, any("wlc:draft")) || !slices.Contains(fromStatuses, any("wlc:accepted")) {
-		t.Errorf("wl:fromStatus values = %v, want one wlc:draft and one wlc:accepted", fromStatuses)
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read acceptance events: %v", err)
+	}
+	if !slices.Equal(fromStatuses, []string{"wlc:draft", "wlc:accepted"}) {
+		t.Errorf("wl:fromStatus values = %v, want [wlc:draft wlc:accepted]", fromStatuses)
 	}
 }
 
