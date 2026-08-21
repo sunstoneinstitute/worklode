@@ -12,9 +12,15 @@ var anchorRE = regexp.MustCompile(`^sec-[a-z0-9][a-z0-9.-]*$`)
 
 // ValidAnchor reports whether a is a well-formed section anchor. Parsing is
 // deliberately looser (see the heading regexp in designdoc.go): a document
-// may hold a malformed anchor, and this is what says so. Callers that mint
-// or consume section IRIs — internal/kg/implements, the anchor lint — check
-// against this one grammar rather than each restating it.
+// may hold a malformed anchor, and this is what says so.
+//
+// LintAnchors does not call it. LintAnchors reports the two defects that
+// make a section unaddressable, and an off-grammar anchor is addressable —
+// just ugly as a URL fragment. Enforcing the grammar there would refuse
+// writes in internal/store's parseDocBody for documents that parse fine
+// today, which is a corpus decision, not a lint tweak. The caller is
+// internal/kg/implements, which needs the grammar because a claim names a
+// section IRI built from an anchor.
 func ValidAnchor(a string) bool { return anchorRE.MatchString(a) }
 
 // LintAnchors reports the two anchor defects that make a section

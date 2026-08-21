@@ -11,12 +11,14 @@ import (
 // Only the edge is emitted. 025 §11.5 also wants the pinned version in the
 // graph for the stale-claim query, but names no predicate or annotation
 // encoding for a per-edge value; that mint follows the amend-006-then-
-// mirror-ns/ route (see this plan's Overlaps section). Claims carry the
-// pin in Go until then.
+// mirror-ns/ route (docs/plans/2026-07-30-design-documents-as-graph-objects.md,
+// open question 2, tracked as WL-275). Claims carry the pin in Go until then.
 //
-// The edge set is deduplicated on (component, section): the pin is not part
-// of the edge, so two claims that differ only in Pinned collapse to one
-// triple.
+// The edge set is deduplicated on (component, section), so two claims that
+// differ only in Pinned collapse to one triple. Resolve cannot hand that
+// pair over — it errors on conflicting pins first — so this only matters for
+// a hand-built slice; graphproj.Document would drop the duplicate line
+// anyway. It is here so Triples is right on its own terms.
 func Triples(claims []Claim) []graphproj.Triple {
 	ts := make([]graphproj.Triple, 0, len(claims))
 	seen := make(map[[2]string]bool, len(claims))

@@ -63,6 +63,13 @@ func TestParseRejects(t *testing.T) {
 		{"not a section IRI", "implements: [{section: 'wlid:doc/x', pinned: 'wlid:doc/x/v1', by: [a.go]}]"},
 		{"bad anchor", "implements: [{section: 'wlid:section/x/NOT-AN-ANCHOR', pinned: 'wlid:doc/x/v1', by: [a.go]}]"},
 		{"pinned version out of range", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v99999999999999999999', by: [a.go]}]"},
+		// 025 §11.3: the claiming component is derived, never declared, so a
+		// component: key must fail rather than be quietly ignored.
+		{"declares a component", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v1', by: [a.go], component: 'wlid:component/x'}]"},
+		{"unknown top-level key", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v1', by: [a.go]}]\ncovers: [y]"},
+		{"doc slug with a space", "implements: [{section: 'wlid:section/two words/sec-1', pinned: 'wlid:doc/two words/v1', by: [a.go]}]"},
+		{"doc slug with an angle bracket", "implements: [{section: 'wlid:section/x>y/sec-1', pinned: 'wlid:doc/x>y/v1', by: [a.go]}]"},
+		{"empty doc slug", "implements: [{section: 'wlid:section//sec-1', pinned: 'wlid:doc//v1', by: [a.go]}]"},
 		{"pinned not versioned", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x', by: [a.go]}]"},
 		{"pinned version zero", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v0', by: [a.go]}]"},
 		{"pin names another doc", "implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/y/v1', by: [a.go]}]"},
@@ -86,10 +93,10 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 }
 
-// Parse re-mints Section and Pinned through internal/kg/iri rather than
-// keeping the input spelling, so a valid entry's IRIs are canonical by
-// construction. Without this, "normalized to full IRIs" would hold only for
-// input that was already spelled that way.
+// Parse's output is whatever internal/kg/iri mints, not the input spelling.
+// Today the two agree for every accepted input, so this cannot fail on the
+// current code — it is here to fail the day iri.Section or iri.DocVersion
+// changes shape without this package noticing.
 func TestParseMintsCanonicalIRIs(t *testing.T) {
 	f, err := implements.Parse([]byte(specExample))
 	if err != nil {
@@ -101,5 +108,18 @@ func TestParseMintsCanonicalIRIs(t *testing.T) {
 	}
 	if want := iri.DocVersion("spec-worklode-004", 2); e.Pinned != want {
 		t.Errorf("pinned = %q; want the minted %q", e.Pinned, want)
+	}
+}
+
+// A leading ".." segment is what makes a path escape the repo; a file whose
+// name merely starts with dots does not.
+func TestParseAcceptsDotPrefixedNames(t *testing.T) {
+	f, err := implements.Parse([]byte(
+		"implements: [{section: 'wlid:section/x/sec-1', pinned: 'wlid:doc/x/v1', by: ['..hidden/a.go']}]"))
+	if err != nil {
+		t.Fatalf("Parse rejected a ..hidden path: %v", err)
+	}
+	if got := f.Implements[0].By[0]; got != "..hidden/a.go" {
+		t.Fatalf("by[0] = %q; want ..hidden/a.go", got)
 	}
 }

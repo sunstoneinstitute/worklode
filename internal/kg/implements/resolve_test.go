@@ -143,3 +143,32 @@ implements:
 		t.Fatal("conflicting pins for one (component, section) resolved without error")
 	}
 }
+
+// A component IRI is a triple subject, so it has to be an absolute IRI.
+// manifest.Parse only requires iri: non-empty, which lets a manifest declare
+// a bare name that would render as <ingest> — not a legal N-Triples subject.
+func TestResolveRejectsRelativeComponentIRI(t *testing.T) {
+	f, err := implements.Parse([]byte(`
+implements:
+  - section: wlid:section/spec-worklode-004/sec-4
+    pinned:  wlid:doc/spec-worklode-004/v2
+    by:      [internal/ingest/reader.go]
+`))
+	if err != nil {
+		t.Fatalf("parse implements: %v", err)
+	}
+	m, err := manifest.Parse([]byte(`
+repo: github.com/sunstoneinstitute/research-stack
+components:
+  - iri: ingest
+    name: ingest
+    paths: ["internal/ingest/**"]
+`))
+	if err != nil {
+		t.Fatalf("parse manifest: %v", err)
+	}
+	_, err = implements.Resolve(f, m, "github.com/sunstoneinstitute/research-stack")
+	if err == nil || !strings.Contains(err.Error(), "ingest") {
+		t.Fatalf("err = %v; want an error naming the relative component IRI", err)
+	}
+}

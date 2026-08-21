@@ -95,21 +95,38 @@ code does — only who built it changed.
 | 2 — `ls:`→`wl:` rename | **done elsewhere** | the spec-corpus consolidation series (plans `2026-08-11`…`2026-08-14`). The occurrences left in `docs/` are prose *about* the rename in those plans, 025 §17's own Old/New table, and `fold.yaml`/`mapping.yaml` provenance — all historical mentions that respelling would corrupt. AC1's grep is satisfied for spec bodies, not for the record of the change |
 | 3 — section/versioned-doc IRIs | **remaining** | `iri.Section`, `iri.DocVersion` (this task) |
 | 4 — parse sections and anchors | **done elsewhere** | `internal/designdoc` (`Parse`, `Document`, `Section`), a fuller parser than Task 4 specified: source-preserving, editable, ported from `scripts/secfmt.py` so the hook and the code agree on what a section is |
-| 5 — lint anchors | **done elsewhere** | `designdoc.LintAnchors`. The anchor *grammar* had no exported form, so this task added `designdoc.ValidAnchor` beside it — the one thing Task 5 specified that was missing |
+| 5 — lint anchors | **mostly done elsewhere** | `designdoc.LintAnchors` covers duplicates and number/anchor disagreement. The anchor *grammar* had no exported form, so this task added `designdoc.ValidAnchor` beside it; nothing lints against it yet (see below) |
 | 6 — `lode doc anchors` | **done elsewhere** | `internal/cmd/doc.go` (`newDocAnchorsCmd`), alongside the rest of `lode doc` |
 | 7 — version-diff gate | **done elsewhere** | `designdoc.CompareSections`, `SectionDiff`, `Violations`, `DepthViolations`, `DepthLimit` |
 | 8–10 — `implements.yaml`, claim derivation, `wl:implements` triples | **remaining** | `internal/kg/implements` (this task) |
 
-Two corrections the remaining tasks needed, both from drift:
+Corrections the remaining tasks needed:
 
 - Tasks 8–9 import `internal/kg/section`, a package that was never created —
-  `internal/designdoc` is where section parsing landed. `ValidAnchor` comes
-  from there.
-- Task 10's `Triples` body does not satisfy Task 10's own
-  `TestTriplesEdgeIsPinFree`: it emits one triple per claim, so two claims
-  differing only in pin emit the edge twice. The shipped version deduplicates
-  on (component, section), which is what the test — and the "the pin is not
-  part of the edge" comment — always meant.
+  `internal/designdoc` is where section parsing landed. `ValidAnchor` was
+  the one piece of Task 5's grammar with no exported form, so this task added
+  it there.
+- Task 5 specified *linting against* that grammar, not just exporting it (its
+  cases were `{#1}` and `{#sec-A}`). `LintAnchors` still does not check it,
+  and wiring it in is a corpus decision, not a lint tweak:
+  `internal/store`'s `parseDocBody` refuses a write on any finding, so
+  enforcing the grammar there would reject documents that parse today. Left
+  as-is, and said so in `ValidAnchor`'s comment.
+- Task 10's `Triples` emits one triple per claim, so two claims differing
+  only in pin emit the edge twice. The shipped version deduplicates on
+  (component, section). This is belt-and-braces, not a bug fix: review
+  established that `graphproj.Document` sorts and `slices.Compact`s the
+  rendered lines, so the plan's version would have passed
+  `TestTriplesEdgeIsPinFree` too. Kept because `Triples` should be right
+  without depending on its renderer.
+
+Beyond the plan, review hardened the parser: doc slugs are held to a grammar
+(nothing else validates them, and an unvalidated slug reaches
+`graphproj.IRIRef`, which wraps its value in `<>` unescaped), unknown YAML
+keys are rejected so a `component:` field fails loudly rather than being
+ignored — §11.3 forbids exactly that declaration — and `Resolve` refuses a
+component IRI outside `id/component/`, which is what makes §11.4's
+"unchanged by that promotion" checkable rather than merely stated.
 
 **Still not built, and now formally unowned: the `observed/repo-implements`
 deriver.** This plan defers it to spec 007's plan; spec 007's plan 1 defers it

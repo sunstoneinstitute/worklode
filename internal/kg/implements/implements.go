@@ -7,6 +7,7 @@
 package implements
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path"
@@ -20,15 +21,22 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 )
 
-// sectionPrefix and docPrefix are derived from iri.IDNS, the single owner of
-// the id/ instance namespace (internal/kg/iri), rather than restating the
-// literal namespace here.
+// Derived from iri.IDNS, the single owner of the id/ instance namespace.
 const (
 	sectionPrefix = iri.IDNS + "section/"
 	docPrefix     = iri.IDNS + "doc/"
 )
 
-var versionRE = regexp.MustCompile(`^v[1-9][0-9]*$`)
+var (
+	versionRE = regexp.MustCompile(`^v[1-9][0-9]*$`)
+	// slugRE holds a document slug to the same shape as an anchor
+	// (designdoc.ValidAnchor) minus the sec- prefix. Nothing else validates
+	// it — docs.slug carries no CHECK constraint — and an unvalidated slug
+	// reaches graphproj.IRIRef, which wraps its value in <> without escaping.
+	// A slug holding a space or an angle bracket would then fail as a broken
+	// N-Triples document at PUT time instead of here, naming the entry.
+	slugRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]*$`)
+)
 
 // Entry is one claim: this repo's files in By satisfy Section, validated
 // against the Pinned document version. Parse normalizes Section and Pinned
@@ -60,9 +68,16 @@ func Load(p string) (*File, error) {
 
 // Parse parses and validates manifest YAML. The wlid: CURIE of the spec's
 // examples expands to the full instance IRI; both forms are accepted.
+//
+// Unknown keys are rejected, not ignored. The field this most matters for is
+// component: — 025 §11.3 says the claiming component is derived from the by:
+// paths and never declared, and a silently-ignored component: key is exactly
+// the declaration the spec forbids, spelled so that nothing complains.
 func Parse(data []byte) (*File, error) {
 	var f File
-	if err := yaml.Unmarshal(data, &f); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&f); err != nil {
 		return nil, fmt.Errorf("parse implements manifest: %w", err)
 	}
 	if len(f.Implements) == 0 {
@@ -78,10 +93,9 @@ func Parse(data []byte) (*File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("implements entry %d: %w", i, err)
 		}
-		// Re-mint rather than keep the input string: the parsed parts have
-		// been validated, so minting through internal/kg/iri is what makes
-		// "Parse normalizes to full IRIs" true by construction instead of by
-		// the input happening to be spelled canonically.
+		// Re-mint from the validated parts rather than keep the input
+		// string, so the stored form is whatever internal/kg/iri says the
+		// grammar is even if the two ever diverge.
 		e.Section = iri.Section(docSlug, anchor)
 		e.Pinned = iri.DocVersion(pinSlug, version)
 		if pinSlug != docSlug {
@@ -92,8 +106,13 @@ func Parse(data []byte) (*File, error) {
 			return nil, fmt.Errorf("implements entry %d: by needs at least one path", i)
 		}
 		for j, p := range e.By {
+			// path.Clean resolves the interior escapes — a/../../b becomes
+			// ../b — so a leading ".." segment is the whole test. Matching
+			// the segment rather than the prefix keeps a real ..hidden file
+			// claimable.
 			clean := path.Clean(strings.TrimSpace(p))
-			if clean == "" || clean == "." || strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, "..") {
+			if clean == "" || clean == "." || clean == ".." ||
+				strings.HasPrefix(clean, "/") || strings.HasPrefix(clean, "../") {
 				return nil, fmt.Errorf("implements entry %d: path %q is not repo-relative", i, p)
 			}
 			e.By[j] = clean
@@ -111,16 +130,18 @@ func expand(v string) string {
 }
 
 // sectionDoc validates a section IRI — id/section/<doc-slug>/<anchor> — and
-// returns its doc slug and anchor. The parameter is not named iri: that is
-// the package this file mints through.
+// returns its doc slug and anchor.
 func sectionDoc(ref string) (docSlug, anchor string, err error) {
 	rest, ok := strings.CutPrefix(ref, sectionPrefix)
 	if !ok {
 		return "", "", fmt.Errorf("section %q is not a %s IRI", ref, sectionPrefix)
 	}
 	slug, anchor, ok := strings.Cut(rest, "/")
-	if !ok || slug == "" || strings.Contains(anchor, "/") {
+	if !ok || strings.Contains(anchor, "/") {
 		return "", "", fmt.Errorf("section %q is not id/section/<doc-slug>/<anchor>", ref)
+	}
+	if !slugRE.MatchString(slug) {
+		return "", "", fmt.Errorf("section %q: doc slug %q does not match the slug grammar", ref, slug)
 	}
 	if !designdoc.ValidAnchor(anchor) {
 		return "", "", fmt.Errorf("section %q: anchor %q does not match the sec- grammar", ref, anchor)
@@ -136,12 +157,13 @@ func pinnedDoc(ref string) (docSlug string, version int, err error) {
 		return "", 0, fmt.Errorf("pinned %q is not a %s IRI", ref, docPrefix)
 	}
 	slug, v, ok := strings.Cut(rest, "/")
-	if !ok || slug == "" || !versionRE.MatchString(v) {
+	if !ok || !versionRE.MatchString(v) {
 		return "", 0, fmt.Errorf("pinned %q is not id/doc/<slug>/v<n>", ref)
 	}
-	// versionRE has already held v to v[1-9][0-9]*, so the only way Atoi can
-	// fail here is a version too large for an int — still an error, never a
-	// silent zero.
+	if !slugRE.MatchString(slug) {
+		return "", 0, fmt.Errorf("pinned %q: doc slug %q does not match the slug grammar", ref, slug)
+	}
+	// versionRE has held v to v[1-9][0-9]*, so Atoi can only fail on overflow.
 	n, err := strconv.Atoi(strings.TrimPrefix(v, "v"))
 	if err != nil {
 		return "", 0, fmt.Errorf("pinned %q: version %q is out of range", ref, v)
