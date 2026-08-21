@@ -30,6 +30,12 @@ func TestGrammar(t *testing.T) {
 		{"environment", iri.Environment("prod"), base + "id/environment/prod"},
 		{"commit", iri.Commit("github.com", "sunstoneinstitute", "worklode", "a16c2a7"),
 			base + "id/commit/github.com/sunstoneinstitute/worklode/a16c2a7"},
+		{"declared graph", iri.DeclaredGraph("adr-worklode-0007"),
+			base + "graph/declared/adr-worklode-0007"},
+		{"observed graph", iri.ObservedGraph("go-imports"),
+			base + "graph/observed/go-imports"},
+		{"repo", iri.Repo("github.com", "sunstoneinstitute", "worklode"),
+			base + "id/repo/github.com/sunstoneinstitute/worklode"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
