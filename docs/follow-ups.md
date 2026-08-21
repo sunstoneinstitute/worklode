@@ -660,3 +660,25 @@ while dogfooding it against the real corpus.
   (a lint, enforced at accept), or define what owns an unowned heading.
   `internal/designdoc/diff_test.go` pins today's behaviour under
   "anchorless heading with no anchored ancestor belongs to nobody".
+
+## From WL-145 — incremental plan re-acceptance (2026-08-22)
+
+- `[P3]` **Migration 0043 backfills `plan_task_key` from `tasks.title`, the
+  source the column exists to stop trusting.** A task minted before 0043 and
+  renamed since (`lode task edit --title`) carries a key its declaration no
+  longer spells, so the first re-accept of that plan mints the declaration a
+  second time. The blast radius is one duplicate draft task per renamed task,
+  visible in the accept's own output and closable; it is bounded to plans that
+  existed before 0043, since every later mint records the key at mint. A
+  one-shot re-key would have to parse each accepted plan's body and match
+  declarations to rows by ordinal, which is guesswork of its own — worth doing
+  only if a real plan turns out to be affected.
+- `[P3]` **An accepted plan's unminted declaration is invisible to every
+  SQL-side query.** `NeedsExecution` and `planUnfinished`
+  (`internal/store/tasks.go`) read rows, and a declaration added to an accepted
+  plan but not yet re-accepted is a fact about the body. So `lode doc list
+  --needs-execution` omits such a plan once its minted tasks close, and a
+  downstream plan's tasks become claimable while the upstream plan still
+  declares unstarted work. 025 §18's "unminted" arm always meant this; making
+  it detectable needs the accept-time parse to record a declaration count, or a
+  reconciler that re-reads bodies.

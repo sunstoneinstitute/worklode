@@ -233,6 +233,19 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 			return nil, fmt.Errorf("load doc %d slug: %w", id, err)
 		}
 	}
+	if kind == "plan" {
+		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
+			return nil, err
+		}
+		// A plan is edited in place rather than revised (025 §9), so its body
+		// edit is what a spec's accepted revision is: the next version of the
+		// document. Nothing else moves the number for a plan, and re-accepting
+		// one needs it to — the acceptance event's external id is derived from
+		// the document's IRI and version (§15.3), so a re-accept at an
+		// unchanged version collapses at the log, which is exactly the no-op
+		// an unedited plan should be.
+		version++
+	}
 	ts := now.UTC().Truncate(time.Second)
 
 	// The frontmatter is part of the body, so title and issued are rederived
@@ -243,9 +256,9 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	// property of the text.
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 updated_at = $5
+		                 version = $5, updated_at = $6
 		  WHERE id = $1`,
-		id, body, title, nullText(parsed.issued), ts,
+		id, body, title, nullText(parsed.issued), version, ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
 	}
@@ -302,6 +315,10 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 // instead (see acceptPlanDoc) — the second return is that minted set, in
 // definition order, and nil for a spec or ADR.
 //
+// A plan is also accepted from accepted: re-acceptance is how a declaration
+// added to an accepted plan reaches the task set (§9.2), and it mints only
+// what has no row yet.
+//
 // The depth limit is evaluated at publication (025 §6 rule 6), so a first
 // accept still rejects an anchored heading below designdoc.DepthLimit even
 // though rules 1-3 exempt drafts.
@@ -316,15 +333,22 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
 		return nil, nil, err
 	}
-	// Draft-only applies to both branches: a plan already accepted must never
-	// mint a second time, which is what keeps doc.status = accepted ⟺ its
-	// tasks exist true by construction (025 §9.2).
+	if d.kind == "plan" {
+		// A plan is accepted from draft and re-accepted while accepted
+		// (025 §9.2): it stays freely mutable, and re-acceptance is how a
+		// declaration added after the first accept reaches the task set.
+		// Superseded is still refused — there is nothing left to execute.
+		if d.status != "draft" && d.status != "accepted" {
+			return nil, nil, fmt.Errorf(
+				"doc %d is %s: a plan is accepted from draft or re-accepted while accepted (025 §9.2): %w",
+				id, d.status, ErrInvalidInput)
+		}
+		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
+	}
+	// Draft-only for a spec or ADR: an accepted one is revised (§7.2), never
+	// re-accepted.
 	if d.status != "draft" {
 		return nil, nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
-	}
-
-	if d.kind == "plan" {
-		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
 	}
 
 	parsed, err := parseDocBody(d.kind, d.body)
@@ -358,15 +382,23 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 }
 
 // acceptPlanDoc is AcceptDoc's plan branch (025 §9.2): parse the plan body's
-// ## Tasks declarations, mint one draft task per definition with plan_doc set
-// to id, wire each definition's blockedBy numbers as blocks edges between the
-// minted tasks, then flip the document to accepted — all inside the caller's
-// transaction, so accept and mint are one commit and a failed mint leaves the
-// document draft.
+// ## Tasks declarations, mint one draft task per declaration that has no row
+// yet with plan_doc set to id, wire the newly minted tasks' blockedBy numbers
+// as blocks edges, then flip the document to accepted — all inside the
+// caller's transaction, so accept and mint are one commit and a failed mint
+// leaves the document as it was.
+//
+// Re-accepting an accepted plan runs the same code: a declaration whose title
+// already names a row is left alone — no re-mint, no field overwrite, no
+// state change — so a re-accept of an unedited plan mints nothing and is a
+// safe no-op. The match is on plan_task_key, the declaration title recorded at
+// mint, which is why a title edit inside the plan reads as withdrawing one
+// declaration and adding another: a minted task is execution fact and outlives
+// its declaration, so nothing here deletes a task whose declaration is gone.
 //
 // Plans carry no sections and no anchors (025 §9), so none of the spec/ADR
 // branch's section or diff machinery runs here: there is nothing to publish
-// and no depth gate to evaluate. d.status is already known draft —
+// and no depth gate to evaluate. d.status is already known draft or accepted —
 // AcceptDoc checks it before branching.
 func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	parsed, err := parseDocBody(d.kind, d.body)
@@ -377,33 +409,52 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err != nil {
 		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %w: %w", id, err, ErrInvalidInput)
 	}
+	minted, err := plantaskRows(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	// First pass mints every task and records its minted id by definition
-	// number; second pass wires blockedBy once every number resolves, so a
-	// forward reference (task 1 blockedBy task 2) needs no reordering.
-	mintedID := make(map[int]string, len(defs))
+	// First pass resolves every definition number to a task id — minting the
+	// ones that have none — and the second wires blockedBy once every number
+	// resolves, so a forward reference (task 1 blockedBy task 2) needs no
+	// reordering.
+	taskID := make(map[int]string, len(defs))
+	fresh := make(map[int]bool, len(defs))
 	tasks := make([]model.Task, 0, len(defs))
 	for _, def := range defs {
+		if existing, ok := minted[def.Title]; ok {
+			taskID[def.Number] = existing
+			continue
+		}
 		task, err := CreateTask(tx, now, TaskInput{
-			ProjectID: d.project,
-			Title:     def.Title,
-			Body:      def.Body,
-			Priority:  def.Priority,
-			Kind:      def.Kind,
-			Skills:    def.Skills,
-			CreatedBy: actorID,
-			Draft:     true,
-			PlanDoc:   id,
+			ProjectID:   d.project,
+			Title:       def.Title,
+			Body:        def.Body,
+			Priority:    def.Priority,
+			Kind:        def.Kind,
+			Skills:      def.Skills,
+			CreatedBy:   actorID,
+			Draft:       true,
+			PlanDoc:     id,
+			PlanTaskKey: def.Title,
 		}, eventID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("mint task %d of plan %d: %w", def.Number, id, err)
 		}
-		mintedID[def.Number] = task.ID
+		taskID[def.Number] = task.ID
+		fresh[def.Number] = true
 		tasks = append(tasks, *task)
 	}
+	// Only a newly minted task gets its declared blockers wired. An edge into
+	// a task that already exists would change how that task ranks and when it
+	// is claimable — a change to an existing row, which re-acceptance does not
+	// make.
 	for _, def := range defs {
+		if !fresh[def.Number] {
+			continue
+		}
 		for _, blocker := range def.BlockedBy {
-			if err := AddEdge(tx, now, mintedID[blocker], mintedID[def.Number], "blocks", eventID); err != nil {
+			if err := AddEdge(tx, now, taskID[blocker], taskID[def.Number], "blocks", eventID); err != nil {
 				return nil, nil, fmt.Errorf(
 					"wire blocks edge task %d -> %d of plan %d: %w", blocker, def.Number, id, err)
 			}
@@ -415,8 +466,14 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
 		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
-	if err := logDocChange(tx, id, eventID,
-		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
+	// A first accept logs the status move; a re-accept logs what it minted,
+	// because the status did not move and an "accepted -> accepted" line would
+	// say nothing about what changed.
+	change := map[string]string{"field": "status", "old": d.status, "new": "accepted"}
+	if d.status == "accepted" {
+		change = map[string]string{"field": "plan_tasks", "new": strconv.Itoa(len(tasks))}
+	}
+	if err := logDocChange(tx, id, eventID, change); err != nil {
 		return nil, nil, err
 	}
 	doc, err := getDocTx(tx, id)
@@ -424,6 +481,70 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		return nil, nil, err
 	}
 	return doc, tasks, nil
+}
+
+// plantaskRows reads a plan's minted task set as declaration title -> task id
+// (025 §9.2): what acceptPlanDoc matches declarations against, and what
+// checkPlanTasksMinted uses to decide whether a body edit has a task set to
+// stay consistent with.
+//
+// Soft-deleted tasks are included deliberately. A deleted task is withdrawn
+// work, not absent work; skipping it here would have the next re-accept mint
+// its declaration again and undo the withdrawal, and the partial unique index
+// on (plan_doc, plan_task_key) would refuse the insert anyway.
+func plantaskRows(tx *sql.Tx, docID int64) (map[string]string, error) {
+	rows, err := tx.Query(
+		`SELECT plan_task_key, id FROM tasks WHERE plan_doc = $1`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+	}
+	defer rows.Close()
+	minted := map[string]string{}
+	for rows.Next() {
+		var key, taskID string
+		if err := rows.Scan(&key, &taskID); err != nil {
+			return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+		}
+		minted[key] = taskID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+	}
+	return minted, nil
+}
+
+// checkPlanTasksMinted refuses a plan body edit that would leave a plan whose
+// tasks are already minted without the valid ## Tasks section a re-accept has
+// to read (025 §9.2). Without it an accepted plan's declarations could be
+// rewritten into something unparseable, and the drift between the document and
+// its task set would surface only at the next accept — or never.
+//
+// It binds only once something has been minted. A draft plan is written a
+// paragraph at a time and its ## Tasks section is legitimately incomplete
+// until the accept gate reads it, and an accepted plan that minted nothing is
+// §9.2's historical import, which never had a task set to stay consistent
+// with.
+//
+// What it does not refuse is a declaration that disappeared or was retitled.
+// §9.2 is explicit that a minted task outlives its declaration — withdrawing
+// work is a task transition, not a document edit — so an edit that drops one
+// leaves the row alone, and one that retitles it declares a task the next
+// re-accept mints. Only the ambiguity a re-accept cannot resolve is an error,
+// and designdoc.PlanTasks names it.
+func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
+	minted, err := plantaskRows(tx, id)
+	if err != nil {
+		return err
+	}
+	if len(minted) == 0 {
+		return nil
+	}
+	if _, err := designdoc.PlanTasks(doc); err != nil {
+		return fmt.Errorf(
+			"doc %d has %d minted task(s), so its \"## Tasks\" section must stay readable: %w: %w",
+			id, len(minted), err, ErrInvalidInput)
+	}
+	return nil
 }
 
 // ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
@@ -759,6 +880,11 @@ func checkRevisionDiscarder(id int64, assignee, createdBy, actorID string) error
 // returns the same sentinels: ErrNotFound, ErrForbidden for an actor that is
 // not the assignee, ErrInvalidInput for a document that is not draft.
 //
+// The first return says the accept has already happened and mints nothing
+// more: an accepted plan re-accepted at a version it was accepted at. That is
+// a legal no-op rather than a refusal (025 §9.2), and the caller answers with
+// the document unchanged.
+//
 // It exists for one caller. The typed accept emission (025 §15.3) derives its
 // external id from the document's IRI and version, so a second accept of the
 // same version conflicts at the log and eventbus.Emit skips apply — which
@@ -766,28 +892,31 @@ func checkRevisionDiscarder(id int64, assignee, createdBy, actorID string) error
 // return. Without this the request would report success for an accept that
 // did not happen, to an actor who may not even be the assignee. The gates live
 // here, next to the ones AcceptDoc runs, so the two cannot drift.
-func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) error {
-	var status, assignee string
+func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) (settled bool, err error) {
+	var kind, status, assignee string
 	var assigneeCol sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT status, assignee FROM docs WHERE id = $1`, id).Scan(&status, &assigneeCol)
+	err = s.db.QueryRowContext(ctx,
+		`SELECT kind, status, assignee FROM docs WHERE id = $1`, id).Scan(&kind, &status, &assigneeCol)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("doc %d: %w", id, ErrNotFound)
+		return false, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
-		return fmt.Errorf("load doc %d: %w", id, err)
+		return false, fmt.Errorf("load doc %d: %w", id, err)
 	}
 	assignee = assigneeCol.String
 	// Assignee first, matching AcceptDoc: standing to touch the document does
 	// not depend on its state, and checking state first would disclose it to
 	// an actor who has none.
 	if err := checkDocAssignee(id, assignee, actorID); err != nil {
-		return err
+		return false, err
+	}
+	if kind == "plan" && status == "accepted" {
+		return true, nil
 	}
 	if status != "draft" {
-		return fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
+		return false, fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
 	}
-	return nil
+	return false, nil
 }
 
 // supersedeReplacedDocs flips every accepted document a document-level
@@ -2054,11 +2183,15 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 // tombstoned task is out on top of that (044 §4), matching planUnfinished.
 //
 // This departs from 025 §18's "unminted or unfinished" deliberately, as the
-// 2026-08-03 plan-acceptance plan records: through the accept path an
-// accepted-but-unminted plan cannot exist, and the only accepted plans with no
-// task set are the importer's *spent* plans, which must not be reported as
+// 2026-08-03 plan-acceptance plan records: the accepted plans with no task set
+// at all are the importer's *spent* plans, which must not be reported as
 // pending work. The ordering need §18's "unminted" arm served is covered by
 // the plan-to-plan blocks predicate (planBlockedCondition).
+//
+// A declaration added to an accepted plan and not yet re-accepted (025 §9.2)
+// is invisible here, because whether one exists is a fact about the body and
+// not about any row. Re-accepting the plan is what makes it visible; nothing
+// SQL can see says it is owed.
 func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+docColumnsD+`

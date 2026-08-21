@@ -66,8 +66,8 @@ Model body, revised.
 
 // planSourceBody is a plan doc: no corpus number, no anchored sections
 // (025 §9). It deliberately declares no `## Tasks` section, so accepting it
-// is refused — a plan mints its tasks on accept and one that would mint
-// nothing breaks the accepted ⟺ tasks-exist invariant (025 §9.2).
+// is refused — a plan mints its tasks on accept, and a body that declares
+// none is a plan with nothing to execute (025 §9.2).
 const planSourceBody = `---
 status: draft
 ---
