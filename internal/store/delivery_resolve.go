@@ -75,9 +75,15 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 	// (InsertTaskCommit's contract); both return nil here rather than an
 	// error. A tombstoned task joins them (044 §4): its commits still land,
 	// but nothing advances a row nothing can see.
+	//
+	// FOR UPDATE because this read is the from-state of up to two transitions
+	// below (transitionKnown), and because a resolve is a read-then-write on
+	// the task either way: without the lock a concurrent writer could move the
+	// task between the read and the UPDATE. Every other delivery-state writer
+	// locks the task row first too, so the lock order is unchanged.
 	var state string
 	if err := tx.QueryRow(
-		`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&state); err != nil {
+		`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, taskID).Scan(&state); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -101,7 +107,7 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 
 	switch state {
 	case "ready", "in_progress", "in_review":
-		if err := Transition(tx, now, taskID, state, "merged", eventID); err != nil {
+		if err := transitionKnown(tx, now, taskID, state, state, "merged", eventID); err != nil {
 			return err
 		}
 		state = "merged"
@@ -121,7 +127,7 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 			return err
 		}
 		if covered(dev) {
-			if err := Transition(tx, now, taskID, "merged", "deployed_dev", eventID); err != nil {
+			if err := transitionKnown(tx, now, taskID, state, "merged", "deployed_dev", eventID); err != nil {
 				return err
 			}
 			state = "deployed_dev"
@@ -138,7 +144,7 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 			return err
 		}
 		if covered(rel) {
-			return Transition(tx, now, taskID, state, "released", eventID)
+			return transitionKnown(tx, now, taskID, state, state, "released", eventID)
 		}
 		return nil
 	}
@@ -148,7 +154,7 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 		return err
 	}
 	if covered(prod) {
-		return Transition(tx, now, taskID, state, "deployed_prod", eventID)
+		return transitionKnown(tx, now, taskID, state, state, "deployed_prod", eventID)
 	}
 	return nil
 }

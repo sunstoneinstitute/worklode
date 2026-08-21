@@ -89,6 +89,37 @@ func TestAddEdgeFollowUpTo(t *testing.T) {
 	}
 }
 
+// TestAddEdgeMissingEndpoint pins the error precedence of the endpoint
+// existence check now that both endpoints are read in one query: a missing
+// endpoint is ErrNotFound naming that endpoint, and when both are missing it
+// is the from end that is named.
+func TestAddEdgeMissingEndpoint(t *testing.T) {
+	s := openTaskStore(t)
+	real := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	for _, tc := range []struct {
+		name           string
+		from, to, want string
+	}{
+		{"missing from", "WL-9001", real.ID, "WL-9001"},
+		{"missing to", real.ID, "WL-9002", "WL-9002"},
+		{"both missing", "WL-9001", "WL-9002", "WL-9001"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+				func(tx *sql.Tx, eventID int64) error {
+					return AddEdge(tx, taskTestNow, tc.from, tc.to, "blocks", eventID)
+				})
+			if !errors.Is(err, ErrNotFound) {
+				t.Fatalf("AddEdge error = %v, want ErrNotFound", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("AddEdge error = %v, want it to name %s", err, tc.want)
+			}
+		})
+	}
+}
+
 // TestSingleOriginIndex pins the partial unique index: a task has at most one
 // origin, whichever task the second edge points at.
 func TestSingleOriginIndex(t *testing.T) {

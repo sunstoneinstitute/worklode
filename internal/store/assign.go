@@ -161,7 +161,9 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 		assignee = actorID
 	}
 
-	if err := Transition(tx, now, id, "ready", "in_progress", eventID); err != nil {
+	// state came from lockTaskOwnership's FOR UPDATE read, so the transition
+	// needs no re-read.
+	if err := transitionKnown(tx, now, id, state, "ready", "in_progress", eventID); err != nil {
 		return "", err
 	}
 	return assignee, nil
@@ -195,5 +197,5 @@ func StopTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) erro
 		return fmt.Errorf("task %s: held by an active lease; use release: %w", id, ErrInvalidInput)
 	}
 
-	return Transition(tx, now, id, "in_progress", "ready", eventID)
+	return transitionKnown(tx, now, id, state, "in_progress", "ready", eventID)
 }
