@@ -55,20 +55,32 @@ func parseClusterEnvMap(s string) (map[string]string, error) {
 // termination grace period.
 const shutdownTimeout = 10 * time.Second
 
-// graphProjector builds the knowledge-graph projector when
-// LODE_GRAPHSERVER_URL is set (spec 006 §11): the same LODE_GRAPHSERVER_*
-// variables graphserver.FromEnv documents, so serve and every other caller
-// share one configuration surface. Unset means projection is disabled;
-// set-but-broken fails the boot.
-func graphProjector(reg prometheus.Registerer, st *store.Store) (*projector.Projector, error) {
+// graphClientFromEnv builds the shared graph-server client, or nil when
+// LODE_GRAPHSERVER_URL is unset (projection and the graph-backed overview
+// reads are then both off). One client per process: the projector, the
+// overview service and the server-side derivers all speak to the same
+// endpoint with the same credentials.
+//
+// The same LODE_GRAPHSERVER_* variables graphserver.FromEnv documents, so
+// serve and every other caller share one configuration surface. Unset means
+// off; set-but-broken fails the boot.
+func graphClientFromEnv() (*graphserver.Client, error) {
 	if os.Getenv("LODE_GRAPHSERVER_URL") == "" {
 		return nil, nil
 	}
-	gc, err := graphserver.FromEnv()
-	if err != nil {
-		return nil, err
+	return graphserver.FromEnv()
+}
+
+// graphProjector builds the knowledge-graph projector over gc (spec 006 §11),
+// or nil when gc is nil — no graph endpoint is configured, so projection is
+// disabled. It takes the client rather than reading the environment itself so
+// graphserver.FromEnv is called exactly once per process; see
+// graphClientFromEnv.
+func graphProjector(reg prometheus.Registerer, st *store.Store, gc *graphserver.Client) *projector.Projector {
+	if gc == nil {
+		return nil
 	}
-	return projector.New(st, gc, projector.NewMetrics(reg), 200), nil
+	return projector.New(st, gc, projector.NewMetrics(reg), 200)
 }
 
 // shutdownServers stops every server gracefully and returns the first real
@@ -177,6 +189,13 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// One graph-server client for the process: the server (spec 007's
+	// graph-backed reads and its derivers) and the projector below share it.
+	gc, err := graphClientFromEnv()
+	if err != nil {
+		return err
+	}
+
 	handler, adminHandler, err := api.NewServer(st, api.Config{
 		BackgroundCtx:        ctx,
 		BootstrapToken:       os.Getenv("LODE_BOOTSTRAP_TOKEN"),
@@ -208,6 +227,7 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		BlobAccessKey:        os.Getenv("LODE_BLOB_ACCESS_KEY"),
 		BlobSecretKey:        os.Getenv("LODE_BLOB_SECRET_KEY"),
 		BlobSpoolDir:         os.Getenv("LODE_BLOB_SPOOL_DIR"),
+		Graph:                gc,
 		Metrics:              reg,
 	})
 	if err != nil {
@@ -219,10 +239,7 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 	// the shutdown context.
 	st.StartLeaseSweeper(ctx)
 
-	proj, err := graphProjector(reg, st)
-	if err != nil {
-		return err
-	}
+	proj := graphProjector(reg, st, gc)
 	if proj != nil {
 		// Knowledge-graph projection (spec 006 §11): follow the
 		// state_log outbox and replace each dirty project's graph on

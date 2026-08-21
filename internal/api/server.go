@@ -25,13 +25,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -155,6 +158,18 @@ type Config struct {
 	// a second per step.
 	EventPoll time.Duration
 
+	// Graph is the knowledge-graph client, nil when LODE_GRAPHSERVER_URL is
+	// unset; shared with the projector so one process has one client.
+	//
+	// A live client rather than a URL because serve.go already builds one for
+	// the projector: the endpoint, its OAuth client credentials and their
+	// token source are graphserver.FromEnv's business (spec 006 §11), and
+	// handing the server a URL would mean a second client with a second token
+	// source against the same endpoint. Nil disables the graph-backed reads
+	// (drift, gaps) and POST /api/v1/derive; the frontier and the critical
+	// path are backbone-authoritative and answer either way.
+	Graph *graphserver.Client
+
 	// Metrics is the registry the server registers its instruments on and
 	// serves at /metrics on the admin handler. Nil (tests) gets a private
 	// empty registry; serve.go passes the process-wide one, which also
@@ -203,6 +218,18 @@ type server struct {
 	// appAuth is nil unless the GitHub App id and private key are configured;
 	// when nil, addRepo skips done_state discovery.
 	appAuth *githubauth.AppAuth
+
+	// overview is spec 007's read surface (see overview.go). Always non-nil:
+	// the frontier and the critical path are computed from the backbone, so
+	// they answer on an instance with no graph configured. cfg.Graph being
+	// nil is what disables the graph-backed reads, inside the service.
+	overview *overview.Service
+
+	// repoReader is the pr-affects deriver's GitHub reader, nil when the
+	// GitHub App is not configured (postDerive then refuses with 503). Built
+	// once and shared: it caches one installation token per repo, so a run
+	// over many PRs in one repo mints one token rather than one per read.
+	repoReader *derive.GitHubReader
 
 	// hookMetrics is the webhook/replay instrument set (internal/hooks),
 	// shared by the webhook handlers and POST /api/v1/reconcile's replay
@@ -380,6 +407,17 @@ type server struct {
 	// are discoverable by querying the documents themselves rather than by
 	// watching a request-shaped metric (WL-138).
 	kindAliasUses *prometheus.CounterVec
+
+	// overviewReads counts spec 007's five read endpoints by read and
+	// outcome, and deriveRuns counts each server-side deriver a POST
+	// /api/v1/derive ran, by source and outcome. See overview.go and
+	// observeOverviewRead/observeDeriveRun. http_requests_total cannot stand
+	// in for either: a graph-less instance answering 503 and a broken SPARQL
+	// endpoint answering 500 are both "not 200", and one POST runs two
+	// derivers whose outcomes differ — a skipped no-op and a replaced graph
+	// are the same 200.
+	overviewReads *prometheus.CounterVec
+	deriveRuns    *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -607,6 +645,17 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/whoami", s.whoami)
 	r.api("POST /api/v1/reconcile", s.reconcile)
 
+	// Spec 007's read surface (overview.go). The frontier and the critical
+	// path answer from the backbone alone; drift and gaps need a graph and
+	// 503 without one. The derive POST is admin-only — it replaces org-wide
+	// named graphs.
+	r.api("GET /api/v1/overview", s.getOverview)
+	r.api("GET /api/v1/drift", s.getDrift)
+	r.api("GET /api/v1/gaps", s.getGaps)
+	r.api("GET /api/v1/frontier", s.getFrontier)
+	r.api("GET /api/v1/critical-path", s.getCriticalPath)
+	r.api("POST /api/v1/derive", s.postDerive)
+
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
 	// rather than sitting in the file looking enforced.
@@ -697,6 +746,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		return nil, nil, err
 	}
 	s.appAuth = appAuth
+
+	// Spec 007's read surface, and the reader its server-side derivers need.
+	// The service is always built — see the field comment — while the reader
+	// exists only when the GitHub App does.
+	s.overview = &overview.Service{Store: st, Graph: cfg.Graph}
+	if appAuth != nil {
+		s.repoReader = &derive.GitHubReader{Auth: appAuth}
+	}
 
 	s.skillFloor = 0.35
 	if cfg.SkillScoreFloor != "" {

@@ -229,6 +229,18 @@ var routeGuards = map[string]routeGuard{
 	// --- reconciliation (spec 013) ---------------------------------------------
 	"GET /api/v1/repos/doctor": guarded(permReconcile),
 	"POST /api/v1/reconcile":   guarded(permReconcile),
+
+	// --- drift & overview (spec 007) ------------------------------------------
+	// One permission for all five reads: they are one screen's worth of the
+	// same picture, and an actor who may see the frontier may see what is
+	// drifting from it.
+	"GET /api/v1/overview":      guarded(permOverviewRead),
+	"GET /api/v1/drift":         guarded(permOverviewRead),
+	"GET /api/v1/gaps":          guarded(permOverviewRead),
+	"GET /api/v1/frontier":      guarded(permOverviewRead),
+	"GET /api/v1/critical-path": guarded(permOverviewRead),
+	// The one write on this surface, and admin-only; see permDeriveRun.
+	"POST /api/v1/derive": guarded(permDeriveRun),
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which
