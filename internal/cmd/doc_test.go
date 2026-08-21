@@ -437,6 +437,25 @@ func TestDocLifecycle(t *testing.T) {
 		t.Errorf("doc revise --file: body = %q, want %q", rev.Body, revisedBody)
 	}
 
+	// revise: --discard withdraws the candidate and frees the slot, so the
+	// open above can be repeated and the accept below still has one to land.
+	out, err = runLode(t, "doc", "revise", idArg, "--discard")
+	if err != nil {
+		t.Fatalf("doc revise --discard: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "discarded the candidate revision") {
+		t.Errorf("doc revise --discard output = %q, want it to report the withdrawal", out)
+	}
+	if out, err := runLode(t, "doc", "revise", idArg, "--discard"); err == nil {
+		t.Errorf("doc revise --discard with nothing open: want an error, got %q", out)
+	}
+	if out, err := runLode(t, "doc", "revise", idArg, "--json"); err != nil {
+		t.Fatalf("doc revise (reopen after a discard): %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "doc", "revise", idArg, "--file", revFile, "--json"); err != nil {
+		t.Fatalf("doc revise --file (after a discard): %v\noutput: %s", err, out)
+	}
+
 	// revise: land the candidate
 	out, err = runLode(t, "doc", "revise", idArg, "--accept", "--json")
 	if err != nil {
