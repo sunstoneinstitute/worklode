@@ -209,15 +209,28 @@ func TestClaudeInstallIsIdempotentAndPreservesForeignSettings(t *testing.T) {
 	}
 }
 
+// seedClaudeSettings writes Worklode's hooks, and optionally its status line,
+// into the settings file at path — the opted-in state PropagateToWorktree
+// mirrors.
+func seedClaudeSettings(t *testing.T, path string, statusLine bool) {
+	t.Helper()
+	settings, err := ReadJSONFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	applyGroupedHooks(settings, claudeBindings)
+	if statusLine {
+		applyStatusLine(settings)
+	}
+	if err := writeJSONFile(path, settings); err != nil {
+		t.Fatalf("seed %s: %v", path, err)
+	}
+}
+
 func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 	root := t.TempDir()
 	rootPath := filepath.Join(root, ".claude", "settings.local.json")
-	if err := installClaudeHooks(rootPath); err != nil {
-		t.Fatalf("install at root: %v", err)
-	}
-	if _, err := installStatusLine(rootPath); err != nil {
-		t.Fatalf("install status line at root: %v", err)
-	}
+	seedClaudeSettings(t, rootPath, true)
 
 	dir := t.TempDir()
 	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
@@ -337,74 +350,301 @@ func TestClaudeUninstallNoopLeavesFileUntouched(t *testing.T) {
 	}
 }
 
-func TestInstallStatusLineWritesTheCommand(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-
-	action, err := installStatusLine(path)
-	if err != nil {
-		t.Fatalf("installStatusLine: %v", err)
+// countSettingsWrites makes writeJSONFile count its calls for the rest of the
+// test. Hooks and the status line live in one file, so "how many times was it
+// written" is the contract the combined install/uninstall paths exist to hold.
+func countSettingsWrites(t *testing.T) *int {
+	t.Helper()
+	writes := 0
+	real := writeJSONFile
+	writeJSONFile = func(path string, settings map[string]any) error {
+		writes++
+		return real(path, settings)
 	}
-	if action != ActionInstalled {
+	t.Cleanup(func() { writeJSONFile = real })
+	return &writes
+}
+
+func TestClaudeInstallWithStatusLineWritesTheFileOnce(t *testing.T) {
+	root := initGitRepo(t)
+	writes := countSettingsWrites(t)
+
+	hi, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("InstallWithStatusLine: %v", err)
+	}
+	if *writes != 1 {
+		t.Fatalf("settings writes = %d, want 1 (hooks and status line share one file)", *writes)
+	}
+	if hi.StatusLine == nil || hi.StatusLine.Action != ActionInstalled {
+		t.Fatalf("status line = %+v, want %q", hi.StatusLine, ActionInstalled)
+	}
+	if hi.StatusLine.Path != hi.Path {
+		t.Fatalf("status line path = %s, want the settings path %s", hi.StatusLine.Path, hi.Path)
+	}
+	settings := readSettings(t, hi.Path)
+	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+		t.Fatalf("SessionStart commands: %v", got)
+	}
+	if got := statusLineCommand(t, hi.Path); got != StatusLineCommand {
+		t.Fatalf("statusLine command = %q, want %q", got, StatusLineCommand)
+	}
+}
+
+// A status line someone else configured is still declined, and declining it
+// must not cost the hooks their write.
+func TestClaudeInstallWithStatusLineKeepsAForeignOne(t *testing.T) {
+	root := initGitRepo(t)
+	path, err := claudeSettingsPath(root, ScopeLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(path, map[string]any{
+		"statusLine": map[string]any{"type": "command", "command": "starship prompt"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writes := countSettingsWrites(t)
+
+	hi, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("InstallWithStatusLine: %v", err)
+	}
+	if *writes != 1 {
+		t.Fatalf("settings writes = %d, want 1", *writes)
+	}
+	if hi.StatusLine == nil || hi.StatusLine.Action != ActionKept {
+		t.Fatalf("status line = %+v, want %q", hi.StatusLine, ActionKept)
+	}
+	if got := statusLineCommand(t, path); got != "starship prompt" {
+		t.Fatalf("statusLine command = %q, want it untouched", got)
+	}
+	if got := commandsFor(t, readSettings(t, path), "Stop"); len(got) != 1 {
+		t.Fatalf("Stop commands = %v, want ours despite the kept status line", got)
+	}
+}
+
+func TestClaudeUninstallWithStatusLineWritesTheFileOnce(t *testing.T) {
+	root := initGitRepo(t)
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	writes := countSettingsWrites(t)
+
+	hu, err := (ClaudeCode{}).UninstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("UninstallWithStatusLine: %v", err)
+	}
+	if *writes != 1 {
+		t.Fatalf("settings writes = %d, want 1", *writes)
+	}
+	if hu.Action != ActionRemoved {
+		t.Fatalf("hooks action = %q, want %q", hu.Action, ActionRemoved)
+	}
+	if hu.StatusLine == nil || hu.StatusLine.Action != ActionRemoved {
+		t.Fatalf("status line = %+v, want %q", hu.StatusLine, ActionRemoved)
+	}
+	settings := readSettings(t, hu.Path)
+	if _, ok := settings["hooks"]; ok {
+		t.Fatalf("hooks left behind: %v", settings["hooks"])
+	}
+	if got := statusLineCommand(t, hu.Path); got != "" {
+		t.Fatalf("statusLine command = %q, want it gone", got)
+	}
+}
+
+// Nothing of ours in the file means nothing written at all: a no-op uninstall
+// must not reformat someone's settings JSON or bump its mtime, and that has to
+// stay true now that one write covers both surfaces.
+func TestClaudeUninstallWithStatusLineNoopLeavesFileUntouched(t *testing.T) {
+	root := initGitRepo(t)
+	path, err := claudeSettingsPath(root, ScopeLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := []byte(`{
+  "hooks": {
+    "Stop": [{"hooks": [{"type": "command", "command": "my-own-tool --report"}]}]
+  },
+  "statusLine": {"type": "command", "command": "starship prompt"}
+}
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-1 * time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(path, past, past); err != nil {
+		t.Fatal(err)
+	}
+	writes := countSettingsWrites(t)
+
+	hu, err := (ClaudeCode{}).UninstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("UninstallWithStatusLine: %v", err)
+	}
+	if *writes != 0 {
+		t.Fatalf("settings writes = %d, want 0 for a no-op", *writes)
+	}
+	if hu.Action != ActionNone {
+		t.Fatalf("hooks action = %q, want %q", hu.Action, ActionNone)
+	}
+	if hu.StatusLine == nil || hu.StatusLine.Action != ActionKept {
+		t.Fatalf("status line = %+v, want %q", hu.StatusLine, ActionKept)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("no-op uninstall rewrote file content:\nbefore: %s\nafter:  %s", content, got)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(past) {
+		t.Fatalf("no-op uninstall updated mtime: got %v, want unchanged %v", info.ModTime(), past)
+	}
+}
+
+// One half of the file being ours is still one write, and the other half must
+// survive it.
+func TestClaudeUninstallWithStatusLineRemovesOneHalfWithoutTheOther(t *testing.T) {
+	root := initGitRepo(t)
+	path, err := claudeSettingsPath(root, ScopeLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := installClaudeHooks(path); err != nil {
+		t.Fatal(err)
+	}
+	settings := readSettings(t, path)
+	settings["statusLine"] = map[string]any{"type": "command", "command": "starship prompt"}
+	if err := writeJSONFile(path, settings); err != nil {
+		t.Fatal(err)
+	}
+	writes := countSettingsWrites(t)
+
+	hu, err := (ClaudeCode{}).UninstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("UninstallWithStatusLine: %v", err)
+	}
+	if *writes != 1 {
+		t.Fatalf("settings writes = %d, want 1", *writes)
+	}
+	if hu.Action != ActionRemoved {
+		t.Fatalf("hooks action = %q, want %q", hu.Action, ActionRemoved)
+	}
+	if hu.StatusLine == nil || hu.StatusLine.Action != ActionKept {
+		t.Fatalf("status line = %+v, want %q", hu.StatusLine, ActionKept)
+	}
+	if got := statusLineCommand(t, path); got != "starship prompt" {
+		t.Fatalf("statusLine command = %q, want the foreign one kept", got)
+	}
+}
+
+func TestClaudeUninstallWithStatusLineWithNoSettingsFile(t *testing.T) {
+	root := initGitRepo(t)
+	writes := countSettingsWrites(t)
+
+	hu, err := (ClaudeCode{}).UninstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("UninstallWithStatusLine: %v", err)
+	}
+	if *writes != 0 {
+		t.Fatalf("settings writes = %d, want 0", *writes)
+	}
+	if hu.Action != ActionNone {
+		t.Fatalf("hooks action = %q, want %q", hu.Action, ActionNone)
+	}
+	if hu.StatusLine == nil || hu.StatusLine.Action != ActionNone {
+		t.Fatalf("status line = %+v, want %q", hu.StatusLine, ActionNone)
+	}
+	if _, err := os.Stat(hu.Path); !os.IsNotExist(err) {
+		t.Fatal("uninstall created a settings file")
+	}
+}
+
+// The propagation path writes the worktree's settings file for both surfaces
+// too, so it gets the same single-write treatment.
+func TestPropagateClaudeHooksToWorktreeWritesTheFileOnce(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	seedClaudeSettings(t, rootPath, true)
+	dir := t.TempDir()
+	writes := countSettingsWrites(t)
+
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+	if *writes != 1 {
+		t.Fatalf("settings writes = %d, want 1", *writes)
+	}
+	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
+	if got := commandsFor(t, readSettings(t, dirPath), "SessionStart"); len(got) != 1 {
+		t.Fatalf("SessionStart in worktree = %v, want the mirrored binding", got)
+	}
+	if got := statusLineCommand(t, dirPath); got != StatusLineCommand {
+		t.Fatalf("statusLine in worktree = %q, want the mirrored one", got)
+	}
+}
+
+// statusLineIn returns the command string in an in-memory settings object's
+// statusLine, or "" when there is none.
+func statusLineIn(settings map[string]any) string {
+	entry, ok := settings["statusLine"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	command, _ := entry["command"].(string)
+	return command
+}
+
+func TestApplyStatusLineWritesTheCommand(t *testing.T) {
+	settings := map[string]any{"model": "opus"}
+
+	if action := applyStatusLine(settings); action != ActionInstalled {
 		t.Fatalf("action = %q, want %q", action, ActionInstalled)
 	}
-	if got := statusLineCommand(t, path); got != StatusLineCommand {
+	if got := statusLineIn(settings); got != StatusLineCommand {
 		t.Fatalf("statusLine command = %q, want %q", got, StatusLineCommand)
+	}
+	if got := settings["model"]; got != "opus" {
+		t.Fatalf("model = %v, want it preserved", got)
 	}
 }
 
 // The slot holds exactly one command, so an install that finds someone else's
 // status line must decline rather than replace it.
-func TestInstallStatusLineKeepsAnExistingOne(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := writeJSONFile(path, map[string]any{
+func TestApplyStatusLineKeepsAnExistingOne(t *testing.T) {
+	settings := map[string]any{
 		"statusLine": map[string]any{"type": "command", "command": "~/bin/my-statusline"},
-	}); err != nil {
-		t.Fatal(err)
 	}
 
-	action, err := installStatusLine(path)
-	if err != nil {
-		t.Fatalf("installStatusLine: %v", err)
-	}
-	if action != ActionKept {
+	if action := applyStatusLine(settings); action != ActionKept {
 		t.Fatalf("action = %q, want %q", action, ActionKept)
 	}
-	if got := statusLineCommand(t, path); got != "~/bin/my-statusline" {
+	if got := statusLineIn(settings); got != "~/bin/my-statusline" {
 		t.Fatalf("statusLine command = %q, want it untouched", got)
 	}
 }
 
-func TestInstallStatusLineIsIdempotent(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if _, err := installStatusLine(path); err != nil {
-		t.Fatal(err)
-	}
-	action, err := installStatusLine(path)
-	if err != nil {
-		t.Fatalf("second installStatusLine: %v", err)
-	}
-	if action != ActionInstalled {
+func TestApplyStatusLineIsIdempotent(t *testing.T) {
+	settings := map[string]any{}
+	applyStatusLine(settings)
+
+	if action := applyStatusLine(settings); action != ActionInstalled {
 		t.Fatalf("action = %q, want a converging re-install", action)
 	}
-	if got := statusLineCommand(t, path); got != StatusLineCommand {
+	if got := statusLineIn(settings); got != StatusLineCommand {
 		t.Fatalf("statusLine command = %q", got)
 	}
 }
 
-func TestInstallStatusLinePreservesOtherSettings(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	if err := writeJSONFile(path, map[string]any{"model": "opus"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := installStatusLine(path); err != nil {
-		t.Fatal(err)
-	}
-	if got := readSettings(t, path)["model"]; got != "opus" {
-		t.Fatalf("model = %v, want it preserved", got)
-	}
-}
-
-func TestUninstallStatusLineRemovesOnlyOurs(t *testing.T) {
+func TestStripStatusLineRemovesOnlyOurs(t *testing.T) {
 	tests := []struct {
 		name        string
 		settings    map[string]any
@@ -430,37 +670,13 @@ func TestUninstallStatusLineRemovesOnlyOurs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-			if err := writeJSONFile(path, tt.settings); err != nil {
-				t.Fatal(err)
-			}
-			action, err := uninstallStatusLine(path)
-			if err != nil {
-				t.Fatalf("uninstallStatusLine: %v", err)
-			}
-			if action != tt.wantAction {
+			if action := stripStatusLine(tt.settings); action != tt.wantAction {
 				t.Fatalf("action = %q, want %q", action, tt.wantAction)
 			}
-			if got := statusLineCommand(t, path); got != tt.wantCommand {
+			if got := statusLineIn(tt.settings); got != tt.wantCommand {
 				t.Fatalf("statusLine command = %q, want %q", got, tt.wantCommand)
 			}
 		})
-	}
-}
-
-// A no-op uninstall must not rewrite the file — that would reformat someone's
-// settings JSON and bump its mtime for nothing.
-func TestUninstallStatusLineLeavesAMissingFileAlone(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
-	action, err := uninstallStatusLine(path)
-	if err != nil {
-		t.Fatalf("uninstallStatusLine: %v", err)
-	}
-	if action != ActionNone {
-		t.Fatalf("action = %q, want %q", action, ActionNone)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatal("uninstall created a settings file")
 	}
 }
 
