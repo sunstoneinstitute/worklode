@@ -582,6 +582,12 @@ func ReconcileRender(w io.Writer, resp model.ReconcileResponse) {
 		for _, e := range resp.Replay.Errors {
 			fmt.Fprintf(w, "  error: %s\n", e)
 		}
+		if n := resp.Replay.ErrorsOmitted; n > 0 {
+			fmt.Fprintf(w, "  ... and %d more error(s), not reported\n", n)
+		}
+		if resp.Replay.Truncated {
+			fmt.Fprintf(w, "  batch full: more candidates remain, run again\n")
+		}
 	}
 	switch {
 	case resp.PollSkipped != "":

@@ -342,3 +342,69 @@ func TestReplayRecordsMetrics(t *testing.T) {
 		}
 	}
 }
+
+// TestReplayBatchIsBoundedAndResumes: the candidate read is a batch, so one
+// run cannot pull an org-sized backlog of payloads into memory. A full batch
+// says so, and the next run continues after it rather than repeating it.
+func TestReplayBatchIsBoundedAndResumes(t *testing.T) {
+	e := newUnmappedEnv(t)
+	for _, id := range []string{"d-1", "d-2", "d-3"} {
+		deliverBody(t, e.h, "issues", id, []byte(`{
+			"action": "opened",
+			"repository": {"full_name": "sunstoneinstitute/demo"},
+			"issue": {"number": 7, "title": "late issue", "state": "open", "html_url": "u"}
+		}`))
+	}
+	mapDemoRepo(t, e)
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{Limit: 2})
+	if err != nil {
+		t.Fatalf("first batch: %v", err)
+	}
+	if res.Candidates != 2 || res.Replayed != 2 || !res.Truncated {
+		t.Fatalf("first batch = %+v; want 2 candidates, 2 replayed, truncated", res)
+	}
+
+	res, err = hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{Limit: 2})
+	if err != nil {
+		t.Fatalf("second batch: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 || res.Truncated {
+		t.Fatalf("second batch = %+v; want the remaining 1, not truncated", res)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM events WHERE applied_at IS NULL`); n != 0 {
+		t.Fatalf("%d events still unapplied; batching skipped some", n)
+	}
+}
+
+// TestReplayCapsReportedErrors: Errors becomes the reconcile response body's
+// replay section, so a backlog where every apply fails must report a bounded
+// list and count the rest rather than growing the response without limit.
+func TestReplayCapsReportedErrors(t *testing.T) {
+	e := newUnmappedEnv(t)
+	mapDemoRepo(t, e)
+
+	const overflow = 2
+	// A payload that is valid jsonb but not a delivery envelope fails at
+	// parse, which is the cheapest way to make every candidate an error.
+	if _, err := e.st.DBForTests().Exec(
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 SELECT 'github', 'd-bad-' || i, 'issues.opened.ignored', '{"repository": 5}'::jsonb, now()
+		 FROM generate_series(1, $1) i`,
+		hooks.MaxReplayErrorsForTest+overflow,
+	); err != nil {
+		t.Fatalf("seed unparseable events: %v", err)
+	}
+
+	res, err := hooks.Replay(context.Background(), e.st,
+		hooks.ReplayOptions{Limit: hooks.MaxReplayErrorsForTest + overflow + 10})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if len(res.Errors) != hooks.MaxReplayErrorsForTest {
+		t.Fatalf("reported %d errors, want the cap of %d", len(res.Errors), hooks.MaxReplayErrorsForTest)
+	}
+	if res.ErrorsOmitted != overflow {
+		t.Fatalf("errors_omitted = %d, want %d", res.ErrorsOmitted, overflow)
+	}
+}

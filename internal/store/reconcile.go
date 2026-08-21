@@ -28,6 +28,13 @@ func MarkEventApplied(tx *sql.Tx, eventID int64, at time.Time) error {
 type UnappliedFilter struct {
 	Repo  string
 	Since *time.Time
+
+	// Limit caps how many rows come back; <= 0 is unbounded. Every row
+	// carries its whole delivery payload (up to hooks.maxGitHubBody each),
+	// so a caller that materialises the result — hooks.Replay does — must
+	// set it. Order is by id, so a bounded read is the oldest batch and the
+	// next run picks up where this one stopped.
+	Limit int
 }
 
 // UnappliedGitHubEvents returns github-source events whose apply has not
@@ -43,11 +50,16 @@ func (s *Store) UnappliedGitHubEvents(ctx context.Context, f UnappliedFilter) ([
 		where += " AND received_at >= " + args.next(f.Since.UTC())
 	}
 
+	limit := ""
+	if f.Limit > 0 {
+		limit = " LIMIT " + args.next(f.Limit)
+	}
+
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+eventColumns+`
 		   FROM events
 		  WHERE `+where+`
-		  ORDER BY id`, args.vals...)
+		  ORDER BY id`+limit, args.vals...)
 	if err != nil {
 		return nil, fmt.Errorf("unapplied events: %w", err)
 	}
