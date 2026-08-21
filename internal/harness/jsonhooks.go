@@ -147,6 +147,42 @@ func appendBinding(existing any, b hookBinding) []any {
 	return append(groups, group)
 }
 
+// HookCommands reads the commands bound to one event out of an already-read
+// settings object — the inverse of applyGroupedHooks, over the same grouped
+// shape Claude Code and Codex share. Anything that is not that shape (a
+// missing "hooks" object, an event left as a scalar by hand-editing, a group
+// without a handler list) reads as no commands rather than an error, matching
+// how the writers treat a settings file they did not produce. Exported so the
+// adapter's own tests and `lode install`'s tests assert against one reader
+// instead of each keeping a copy of the schema.
+func HookCommands(settings map[string]any, event string) []string {
+	groups, ok := settingsHooks(settings)[event].([]any)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, g := range groups {
+		group, ok := g.(map[string]any)
+		if !ok {
+			continue
+		}
+		entries, ok := group["hooks"].([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			if cmd, ok := entry["command"].(string); ok {
+				out = append(out, cmd)
+			}
+		}
+	}
+	return out
+}
+
 // stripLodeHooks removes every `lode hook` entry from a hooks object, dropping
 // groups and events that end up empty so an uninstall leaves no residue. Any
 // third-party hook sharing an event is preserved. changed reports whether any
