@@ -638,3 +638,10 @@ docs/specs/046-workflow-rule-engine.md:
     sec-7: "## 7. Testing"
     sec-8: "## 8. Non-goals and deferred"
     sec-9: "## 9. Acceptance criteria"
+docs/specs/047-loader-sensitive-secret-names.md:
+  sections:
+    sec-0: "## 0. Decision"
+    sec-1: "## 1. The problem"
+    sec-2: "## 2. What the grammar is now"
+    sec-3: "## 3. The list"
+    sec-4: "## 4. Consequences"

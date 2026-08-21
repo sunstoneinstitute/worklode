@@ -1973,16 +1973,20 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 	if err := s.CreateProject(ctx, "secproj2", "Secrets2", "SF"); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			_, err := CreateTask(tx, s.Now(), TaskInput{
-				ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
-				Secrets: []string{"op://Employee/x"},
-			}, eventID)
-			return err
-		})
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("create with bad secret name: %v; want ErrInvalidInput", err)
+	// The store re-checks independently of the API, so the loader-sensitive
+	// deny-list (ADR 047) has to hold here too, not only at the HTTP edge.
+	for _, name := range []string{"op://Employee/x", "LD_PRELOAD", "DYLD_LIBRARY_PATH", "PATH", "PYTHONPATH"} {
+		_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				_, err := CreateTask(tx, s.Now(), TaskInput{
+					ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
+					Secrets: []string{name},
+				}, eventID)
+				return err
+			})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("create with secret name %q: %v; want ErrInvalidInput", name, err)
+		}
 	}
 }
 

@@ -15,6 +15,7 @@ amends:
 amendedBy:
   "#sec-2":
   - 043-secrets-catalog-home.md#sec-2
+  - 047-loader-sensitive-secret-names.md#sec-2
 ---
 # Spec 042 — Secret templates
 
@@ -81,6 +82,12 @@ protection.
 > its templates are field labels on a 1Password item, extracted into that
 > Secret per environment. The mechanism below is otherwise unchanged — only the
 > object kind and how it gets provisioned.
+
+> **Amended by ADR 047 §2.** The secret-name grammar this section borrows for
+> `cred.<PLACEHOLDER>` and `env` now also denies loader-sensitive names
+> (`LD_*`, `DYLD_*`, `PATH`, `IFS`, `ENV`, `BASH_ENV`, `PYTHONPATH`, …). An
+> `env` name is what an entry is exported under at exec time, so the deny-list
+> is load-bearing there.
 
 Amends 017 §1. A templated entry replaces `ref` with a `template` key naming a
 sibling file and one `cred.<PLACEHOLDER>` key per credential:
