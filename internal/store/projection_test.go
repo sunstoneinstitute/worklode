@@ -103,3 +103,62 @@ func TestDirtyProjects(t *testing.T) {
 		t.Fatalf("resume from part = %v; want beta still present", rest)
 	}
 }
+
+func TestProjectionFailuresRoundTrip(t *testing.T) {
+	s := outboxStore(t) // projects alpha and beta
+	ctx := t.Context()
+
+	if fails, err := s.ProjectionFailures(ctx); err != nil || len(fails) != 0 {
+		t.Fatalf("initial quarantine = %v, %v; want empty", fails, err)
+	}
+
+	t0 := time.Now().UTC().Truncate(time.Microsecond) // Postgres timestamptz resolution
+	first := ProjectionFailure{
+		ProjectID: "alpha", Attempts: 1,
+		FirstFailedAt: t0, LastFailedAt: t0, NextAttemptAt: t0,
+		LastError: "put graph: 500",
+	}
+	if err := s.RecordProjectionFailure(ctx, first); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	fails, err := s.ProjectionFailures(ctx)
+	if err != nil || len(fails) != 1 {
+		t.Fatalf("quarantine = %v, %v; want one row", fails, err)
+	}
+	if got := fails[0]; got.ProjectID != "alpha" || got.Attempts != 1 ||
+		!got.FirstFailedAt.Equal(t0) || !got.NextAttemptAt.Equal(t0) ||
+		got.LastError != "put graph: 500" {
+		t.Fatalf("row = %+v; want %+v", got, first)
+	}
+
+	// A repeat failure updates the row in place and keeps FirstFailedAt: it
+	// is how long the project has been stuck, which Attempts alone omits.
+	t1 := t0.Add(time.Minute)
+	second := ProjectionFailure{
+		ProjectID: "alpha", Attempts: 2,
+		FirstFailedAt: t0, LastFailedAt: t1, NextAttemptAt: t1.Add(time.Minute),
+		LastError: "put graph: 400",
+	}
+	if err := s.RecordProjectionFailure(ctx, second); err != nil {
+		t.Fatalf("re-record: %v", err)
+	}
+	fails, err = s.ProjectionFailures(ctx)
+	if err != nil || len(fails) != 1 {
+		t.Fatalf("quarantine after repeat = %v, %v; want one row", fails, err)
+	}
+	if got := fails[0]; got.Attempts != 2 || !got.FirstFailedAt.Equal(t0) ||
+		!got.LastFailedAt.Equal(t1) || got.LastError != "put graph: 400" {
+		t.Fatalf("row after repeat = %+v; want %+v", got, second)
+	}
+
+	// Clearing is idempotent, so the projector can call it unconditionally.
+	if err := s.ClearProjectionFailure(ctx, "alpha"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if err := s.ClearProjectionFailure(ctx, "alpha"); err != nil {
+		t.Fatalf("clear a second time: %v", err)
+	}
+	if fails, err := s.ProjectionFailures(ctx); err != nil || len(fails) != 0 {
+		t.Fatalf("quarantine after clear = %v, %v; want empty", fails, err)
+	}
+}
