@@ -17,6 +17,14 @@ commands `/lode:next` and friends; `working-under-worklode` stays
 model-invocable — it is the done/block/release judgment loop a worktree session
 loads on its own.
 
+`worklode` is a different shape again: a model-invocable orientation reference
+(entities, edges, the task state machine, the doc model, the full command
+catalog) meant to be pasted, as a pointer, into the CLAUDE.md of *any* project
+this instance of Worklode manages — not just this repo. Its
+`references/commands.md` is generated (`internal/cmd/commandref_test.go`), so a
+CLI change that adds or removes a command or flag fails `make test` on its own
+rather than rotting silently, the same shape as the Codex mirror below.
+
 ## Marketplace
 
 This repo is its own marketplace, named `worklode`:
