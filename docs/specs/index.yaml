@@ -645,3 +645,11 @@ docs/specs/047-loader-sensitive-secret-names.md:
     sec-2: "## 2. What the grammar is now"
     sec-3: "## 3. The list"
     sec-4: "## 4. Consequences"
+docs/specs/048-exit-purge-on-a-gone-lease.md:
+  sections:
+    sec-0: "## 0. Decision"
+    sec-1: "## 1. The problem"
+    sec-2: "## 2. The exit-time lease check"
+    sec-3: "## 3. Degradation"
+    sec-4: "## 4. Consequences"
+    sec-5: "## 5. Rejected alternatives"

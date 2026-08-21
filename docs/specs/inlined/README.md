@@ -45,3 +45,4 @@ These files do that resolution once.
 - [`045-per-project-workflows.md`](045-per-project-workflows.md) — Spec 045 — Per-project workflows (draft)
 - [`046-workflow-rule-engine.md`](046-workflow-rule-engine.md) — Spec 046 — Workflow rule engine (draft)
 - [`047-loader-sensitive-secret-names.md`](047-loader-sensitive-secret-names.md) — ADR 047 — Loader-sensitive names are not secret names (draft)
+- [`048-exit-purge-on-a-gone-lease.md`](048-exit-purge-on-a-gone-lease.md) — ADR 048 — Exit purges secrets only on a definitely gone lease (draft)
