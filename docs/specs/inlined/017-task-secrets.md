@@ -110,13 +110,19 @@ names the executor will need. The `lode-secrets` skill (below) makes that a stan
 
 ## 3. Claim-time ceremony & materialization
 
-> Pending `042-secret-templates.md#sec-3` (not yet effective)
+> Pending `042-secret-templates.md#sec-3` (not yet effective)  
+> Pending `048-exit-purge-on-a-gone-lease.md#sec-2` (not yet effective)
 
 > **Amended by spec 042 §3.** A templated entry materializes one keystore item
 > per credential, named `<NAME>__<PLACEHOLDER>`; consent and the
 > `secrets_materialized` event stay at entry granularity, and the local
 > manifest additionally records the entry's item names, exported env name, and
 > template text so exec stays offline.
+
+> **Amended by ADR 048 §2.** The "exit" in this section's trigger list is a
+> *conditional* purge: the exit hook asks the backbone about the task's lease
+> and purges only on a definite "gone" (no lease, or the task 404s) — never on
+> a live lease, a timeout, or any error.
 
 Claim time is the one moment a human is guaranteed present (they just ran `/lode-next`), so that
 is when consent and decryption happen — everything after may be unattended.
@@ -156,13 +162,20 @@ that notices the lease is gone (resume, exit, or `lode doctor`).
 
 ## 4. Execution: `lode secrets exec`
 
-> Pending `042-secret-templates.md#sec-4` (not yet effective)
+> Pending `042-secret-templates.md#sec-4` (not yet effective)  
+> Pending `048-exit-purge-on-a-gone-lease.md#sec-2` (not yet effective)
 
 > **Amended by spec 042 §4.** For a templated entry, exec renders the template
 > with the keystore credentials into `.worklode/secrets/<NAME>` (0600) and
 > injects the exported env name pointing at that path instead of a value. The
 > rendered file lives until purge (materialized lifetime = worktree lifetime);
 > exec remains `syscall.Exec`.
+
+> **Amended by ADR 048 §2.** `ExitWorktree` in the purge-trigger list below is
+> conditional, unlike the others: exit purges only after a definite backbone
+> "lease gone" answer, because 012 §4's multi-task session exits while its
+> lease is still held. Removal, `/lode-done` and `/lode-block` stay
+> unconditional and local-only.
 
 ```
 lode secrets exec [--] <command> [args…]
@@ -205,11 +218,17 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 
 ## 6. Degradation
 
-> Pending `042-secret-templates.md#sec-5` (not yet effective)
+> Pending `042-secret-templates.md#sec-5` (not yet effective)  
+> Pending `048-exit-purge-on-a-gone-lease.md#sec-3` (not yet effective)
 
 > **Amended by spec 042 §5.** Adds the templated-entry failure rows: catalog
 > validation failures fail loudly server-side; render and env-name-collision
 > failures at exec are block signals.
+
+> **Amended by ADR 048 §3.** The "lease expires, worktree remains" row: items
+> persist until the next exit of that worktree gets a definite "gone" answer,
+> `/lode-resume` re-materializes, or removal purges. A server unreachable at
+> exit leaves items in place with a warning.
 
 | Condition | Behavior |
 |---|---|
