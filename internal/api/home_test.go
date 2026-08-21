@@ -6,6 +6,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // TestBucketWorkFacts exercises the per-project bucketing shared by the
@@ -242,6 +243,144 @@ func TestAssembleHomeFacts(t *testing.T) {
 		}
 		if !got[0].LastActivity.IsZero() {
 			t.Fatalf("LastActivity = %v, want zero", got[0].LastActivity)
+		}
+	})
+}
+
+// cardIDs is a test helper for readable failure messages.
+func cardIDs(cards []ui.HomeCard) []string {
+	out := make([]string, len(cards))
+	for i, c := range cards {
+		out[i] = c.ProjectID
+	}
+	return out
+}
+
+// TestHomeCardsOrderAndSignals exercises the pure derivation on top of
+// assembleHomeFacts per task-4-brief.md: tier, the exact signal strings, the
+// role badge, crew-initial truncation, and the sort order.
+func TestHomeCardsOrderAndSignals(t *testing.T) {
+	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
+
+	factsAt := func(at time.Time) []store.ProjectWorkFact {
+		return []store.ProjectWorkFact{{Task: model.Task{ID: "x", State: "done", UpdatedAt: at}}}
+	}
+
+	t.Run("actor mode: tier order, exact signals (including singular), and role badges", func(t *testing.T) {
+		await2 := store.Project{ID: "proj-await2", Name: "Awaiting Two"}
+		await1 := store.Project{ID: "proj-await1", Name: "Awaiting One"}
+		lead := store.Project{ID: "proj-lead", Name: "Lead Project"}
+		member := store.Project{ID: "proj-member", Name: "Member Project"}
+
+		in := homeInputs{
+			Projects: []store.Project{await2, await1, lead, member},
+			Facts: map[string][]store.ProjectWorkFact{
+				"proj-await2": factsAt(base.Add(1 * time.Hour)),
+				"proj-await1": factsAt(base),
+				"proj-lead":   factsAt(base.Add(2 * time.Hour)),
+				"proj-member": factsAt(base.Add(3 * time.Hour)),
+			},
+			Membership: map[string]memberFacts{
+				"proj-lead":   {IsLead: true},
+				"proj-member": {IsLead: false},
+			},
+			Awaiting: map[string]int{
+				"proj-await2": 2,
+				"proj-await1": 1,
+			},
+		}
+
+		got := homeCards(in)
+
+		wantIDs := []string{"proj-await2", "proj-await1", "proj-lead", "proj-member"}
+		if len(got) != len(wantIDs) {
+			t.Fatalf("homeCards() = %d cards, want %d (got %v)", len(got), len(wantIDs), cardIDs(got))
+		}
+		for i, id := range wantIDs {
+			if got[i].ProjectID != id {
+				t.Fatalf("card order = %v, want %v", cardIDs(got), wantIDs)
+			}
+		}
+
+		if got[0].Signal != "2 approvals awaiting you" || got[0].RoleBadge != "" {
+			t.Fatalf("await2 card = %+v, want Signal=%q RoleBadge=%q", got[0], "2 approvals awaiting you", "")
+		}
+		if got[1].Signal != "1 approval awaiting you" || got[1].RoleBadge != "" {
+			t.Fatalf("await1 card = %+v, want Signal=%q RoleBadge=%q", got[1], "1 approval awaiting you", "")
+		}
+		if got[2].Signal != "You lead this project" || got[2].RoleBadge != "Lead" {
+			t.Fatalf("lead card = %+v, want Signal=%q RoleBadge=%q", got[2], "You lead this project", "Lead")
+		}
+		if got[3].Signal != "You are on this project" || got[3].RoleBadge != "Member" {
+			t.Fatalf("member card = %+v, want Signal=%q RoleBadge=%q", got[3], "You are on this project", "Member")
+		}
+	})
+
+	t.Run("open mode: last-activity descending, ID tiebreak, every Signal/RoleBadge empty", func(t *testing.T) {
+		projB := store.Project{ID: "proj-b", Name: "B"}
+		projA := store.Project{ID: "proj-a", Name: "A"}
+		projC := store.Project{ID: "proj-c", Name: "C"}
+
+		in := homeInputs{
+			Projects: []store.Project{projB, projA, projC},
+			Facts: map[string][]store.ProjectWorkFact{
+				"proj-b": factsAt(base),                // tied with proj-a
+				"proj-a": factsAt(base),                // tied with proj-b -> ID tiebreak
+				"proj-c": factsAt(base.Add(time.Hour)), // most recent
+			},
+			OpenMode: true,
+		}
+
+		got := homeCards(in)
+
+		wantIDs := []string{"proj-c", "proj-a", "proj-b"}
+		if len(got) != len(wantIDs) {
+			t.Fatalf("homeCards() = %d cards, want %d (got %v)", len(got), len(wantIDs), cardIDs(got))
+		}
+		for i, id := range wantIDs {
+			if got[i].ProjectID != id {
+				t.Fatalf("card order = %v, want %v", cardIDs(got), wantIDs)
+			}
+			if got[i].Signal != "" {
+				t.Fatalf("open mode card %+v has non-empty Signal", got[i])
+			}
+			if got[i].RoleBadge != "" {
+				t.Fatalf("open mode card %+v has non-empty RoleBadge", got[i])
+			}
+		}
+	})
+
+	t.Run("crew truncation: seven names, five initials, CrewMore=2, lead-first order preserved", func(t *testing.T) {
+		names := []string{"Ada Lovelace", "Bob Smith", "Cara Diaz", "Dan Ok", "Eve Chan", "Fay Wong", "Gus Lee"}
+		p := store.Project{ID: "proj-crew", Name: "Crew Project"}
+
+		in := homeInputs{
+			Projects: []store.Project{p},
+			Membership: map[string]memberFacts{
+				"proj-crew": {IsLead: false},
+			},
+			Participants: map[string][]string{
+				"proj-crew": names,
+			},
+		}
+
+		got := homeCards(in)
+		if len(got) != 1 {
+			t.Fatalf("homeCards() = %d cards, want 1", len(got))
+		}
+
+		c := got[0]
+		wantInitials := []string{"AL", "BS", "CD", "DO", "EC"}
+		if len(c.CrewInitials) != len(wantInitials) {
+			t.Fatalf("CrewInitials = %v, want %v", c.CrewInitials, wantInitials)
+		}
+		for i, w := range wantInitials {
+			if c.CrewInitials[i] != w {
+				t.Fatalf("CrewInitials = %v, want %v", c.CrewInitials, wantInitials)
+			}
+		}
+		if c.CrewMore != 2 {
+			t.Fatalf("CrewMore = %d, want 2", c.CrewMore)
 		}
 	})
 }

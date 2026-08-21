@@ -8,9 +8,12 @@
 package api
 
 import (
+	"fmt"
+	"sort"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // homeInputs is everything Home's card assembly reads, already fetched.
@@ -92,6 +95,120 @@ func assembleHomeFacts(in homeInputs) []homeCardFacts {
 			CrewNames:    in.Participants[p.ID],
 			LastActivity: lastActivity(facts),
 		})
+	}
+
+	return cards
+}
+
+const maxCrewInitials = 5
+
+// homeTier ranks a card for actor-mode sort order: 1 = approvals awaiting
+// the actor, 2 = the actor leads the project, 3 = the actor is on the
+// project. Open mode has no tiers; callers must not call this when
+// homeInputs.OpenMode is true.
+func homeTier(f homeCardFacts) int {
+	switch {
+	case f.Awaiting > 0:
+		return 1
+	case f.IsLead:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// homeSignal is the card's one-line "why this card is here" (exact
+// spellings pinned in constraints.md); "" in open mode, which never calls
+// this.
+func homeSignal(f homeCardFacts) string {
+	switch {
+	case f.Awaiting == 1:
+		return "1 approval awaiting you"
+	case f.Awaiting > 1:
+		return fmt.Sprintf("%d approvals awaiting you", f.Awaiting)
+	case f.IsLead:
+		return "You lead this project"
+	case f.IsMember:
+		return "You are on this project"
+	default:
+		return ""
+	}
+}
+
+// crewInitials maps up to maxCrewInitials display names (lead-first, as
+// assembled) to ui.Initials, plus the count truncated beyond that.
+func crewInitials(names []string) ([]string, int) {
+	if len(names) <= maxCrewInitials {
+		out := make([]string, len(names))
+		for i, n := range names {
+			out[i] = ui.Initials(n)
+		}
+		return out, 0
+	}
+
+	out := make([]string, maxCrewInitials)
+	for i := 0; i < maxCrewInitials; i++ {
+		out[i] = ui.Initials(names[i])
+	}
+	return out, len(names) - maxCrewInitials
+}
+
+// homeCards derives tier and signal from assembleHomeFacts's projection,
+// maps facts to ui.HomeCard, and sorts: actor mode by (tier ascending, last
+// activity descending, project ID ascending); open mode by (last activity
+// descending, project ID ascending) with no tiers and every Signal/RoleBadge
+// left "".
+func homeCards(in homeInputs) []ui.HomeCard {
+	facts := assembleHomeFacts(in)
+
+	if in.OpenMode {
+		sort.SliceStable(facts, func(i, j int) bool {
+			if !facts[i].LastActivity.Equal(facts[j].LastActivity) {
+				return facts[i].LastActivity.After(facts[j].LastActivity)
+			}
+			return facts[i].Project.ID < facts[j].Project.ID
+		})
+	} else {
+		sort.SliceStable(facts, func(i, j int) bool {
+			ti, tj := homeTier(facts[i]), homeTier(facts[j])
+			if ti != tj {
+				return ti < tj
+			}
+			if !facts[i].LastActivity.Equal(facts[j].LastActivity) {
+				return facts[i].LastActivity.After(facts[j].LastActivity)
+			}
+			return facts[i].Project.ID < facts[j].Project.ID
+		})
+	}
+
+	cards := make([]ui.HomeCard, len(facts))
+	for i, f := range facts {
+		var signal, badge string
+		if !in.OpenMode {
+			signal = homeSignal(f)
+			switch {
+			case f.IsLead:
+				badge = "Lead"
+			case f.IsMember:
+				badge = "Member"
+			}
+		}
+
+		crew, more := crewInitials(f.CrewNames)
+
+		cards[i] = ui.HomeCard{
+			ProjectID:    f.Project.ID,
+			Name:         f.Project.Name,
+			Key:          f.Project.Key,
+			RoleBadge:    badge,
+			Signal:       signal,
+			InProgress:   f.InProgress,
+			InReview:     f.InReview,
+			Blocked:      f.Blocked,
+			CrewInitials: crew,
+			CrewMore:     more,
+			LastActivity: f.LastActivity,
+		}
 	}
 
 	return cards

@@ -535,10 +535,12 @@ func modeLabel(mode string) string {
 	}
 }
 
-// initials returns up to two uppercase initials for a display name, for the
-// avatar badges in the Active-work list and decision rail. An empty name
-// yields "" (a blank avatar), never a fabricated placeholder.
-func initials(name string) string {
+// Initials returns up to two uppercase initials for a display name, for the
+// avatar badges in the Active-work list and decision rail, and for
+// internal/api's Home card crew mapping (assembled facts carry full names,
+// never truncated ones). An empty name yields "" (a blank avatar), never a
+// fabricated placeholder.
+func Initials(name string) string {
 	out := make([]rune, 0, 2)
 	for _, field := range strings.Fields(name) {
 		// Fields never yields an empty string, so there is always a first rune.
@@ -566,9 +568,9 @@ func workRowWhoClass(item WorkRow) string {
 // (unassigned — a blank avatar, never invented).
 func workRowInitials(item WorkRow) string {
 	if item.Delegate != "" {
-		return initials(item.Delegate)
+		return Initials(item.Delegate)
 	}
-	return initials(item.Owner)
+	return Initials(item.Owner)
 }
 
 // workRowActors renders a work row's who-line: the delegated agent acting on
