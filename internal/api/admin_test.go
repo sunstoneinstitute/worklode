@@ -474,6 +474,16 @@ func TestCreateProjectKeyValidation(t *testing.T) {
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("duplicate WL status = %d, want 409; body %s", rr.Code, rr.Body.String())
 	}
+	// SPEC and ADR are the document shorthand's type token (025 §14.3) and are
+	// reserved, so they are a clean 422 rather than a raw CHECK violation.
+	for _, key := range []string{"SPEC", "ADR"} {
+		rr = doReq(t, h, "POST", "/api/v1/projects", token,
+			map[string]any{"id": strings.ToLower(key), "name": key, "key": key})
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("reserved key %s status = %d, want 422; body %s",
+				key, rr.Code, rr.Body.String())
+		}
+	}
 }
 
 func TestCreateActorAndTokenLifecycle(t *testing.T) {
