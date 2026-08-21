@@ -275,6 +275,7 @@ docs/plans/2026-07-30-design-documents-as-graph-objects.md:
   sections:
     prerequisites-sibling-plans-same-day: "## Prerequisites (sibling plans, same day)"
     already-implemented-vs-what-remains: "## Already implemented vs. what remains"
+    execution-record-wl-44-2026-08-21: "## Execution record (WL-44, 2026-08-21)"
     file-structure: "## File Structure"
     task-1-widen-taskskind-to-six-kinds-8-ac11-backbone-half: "## Task 1: Widen `tasks.kind` to six kinds (§8, AC11 backbone half)"
     task-2-rename-lslsclsid-to-wlwlcwlid-across-docs-1-ac1-docs-half: "## Task 2: Rename `ls:`/`lsc:`/`lsid:` to `wl:`/`wlc:`/`wlid:` across docs (§1, AC1 docs half)"
