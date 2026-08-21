@@ -29,6 +29,9 @@ var (
 	ErrEdgeExists = errors.New("edge already exists")
 	// ErrInvalidInput means a field value failed validation.
 	ErrInvalidInput = errors.New("invalid input")
+	// ErrAmbiguousSkill means a bare skill name matched more than one
+	// plugin-qualified skill; the caller must qualify it (037 §4.2).
+	ErrAmbiguousSkill = errors.New("ambiguous skill name")
 	// ErrDocExists means the project already holds a document with that slug
 	// or that (kind, number).
 	ErrDocExists = errors.New("document already exists")

@@ -50,6 +50,7 @@ func skillsTestServer(t *testing.T) (*store.Store, *cli.Client, *int32, string) 
 func seedSkill(t *testing.T, st *store.Store, name, description string) {
 	t.Helper()
 	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Qualifier:   "acme",
 		Name:        name,
 		Description: description,
 		SourceRepo:  "acme/skills",
@@ -74,6 +75,7 @@ func seedInstallableSkill(t *testing.T, st *store.Store, name string) (hash, con
 	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
 	hash = skillhash.Sum([]skillhash.File{{Path: "SKILL.md", Data: []byte(content)}})
 	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Qualifier:   "acme",
 		Name:        name,
 		Description: "desc for " + name,
 		SourceRepo:  "acme/skills",
@@ -99,6 +101,7 @@ func seedInstallableSkillWithHash(t *testing.T, st *store.Store, name, hash stri
 	content = "# " + name + "\n\nDo the thing.\n"
 	archive := buildTarGz(t, map[string]string{"SKILL.md": content})
 	_, _, err := st.UpsertSkill(context.Background(), store.SkillUpsert{
+		Qualifier:   "acme",
 		Name:        name,
 		Description: "desc for " + name,
 		SourceRepo:  "acme/skills",
@@ -249,7 +252,7 @@ func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skills recommend --task: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
-	if !strings.Contains(stdout, "pinned\ttdd\t") {
+	if !strings.Contains(stdout, "pinned\tacme:tdd\t") {
 		t.Fatalf("stdout = %q, want a pinned tdd line", stdout)
 	}
 	if strings.Contains(stdout, "ghost") {
@@ -258,7 +261,7 @@ func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
 	if !strings.Contains(stderr, "warning: pinned skill not found: ghost") {
 		t.Fatalf("stderr = %q, want a warning about the missing ghost skill", stderr)
 	}
-	if strings.Contains(stderr, "pinned\ttdd") {
+	if strings.Contains(stderr, "pinned\tacme:tdd") {
 		t.Fatalf("stderr = %q, pinned result leaked into stderr", stderr)
 	}
 }

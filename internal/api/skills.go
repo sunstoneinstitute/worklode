@@ -31,16 +31,21 @@ const (
 // corpus, so this is generous rather than tight.
 const skillSyncTimeout = 5 * time.Minute
 
+// Both conversions send the qualified name (<plugin>:<name>), not the bare
+// one: it is the registry's identity, what a pin should name, and what a
+// client stores the skill under locally — two plugins' same-named skills
+// would otherwise land on one path.
+
 func toSkillJSON(sk store.Skill) model.Skill {
 	return model.Skill{
-		Name: sk.Name, Description: sk.Description, SourceRepo: sk.SourceRepo,
+		Name: sk.QualifiedName(), Description: sk.Description, SourceRepo: sk.SourceRepo,
 		Hash: sk.ContentHash, Deleted: sk.Deleted,
 	}
 }
 
 func toPinnedSkillJSON(sk store.Skill) model.PinnedSkill {
 	return model.PinnedSkill{
-		Name: sk.Name, Description: sk.Description, Hash: sk.ContentHash, Content: sk.SkillMD,
+		Name: sk.QualifiedName(), Description: sk.Description, Hash: sk.ContentHash, Content: sk.SkillMD,
 	}
 }
 
@@ -132,7 +137,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 		}
 		rec.Warnings = append(rec.Warnings, warnings...)
 		for _, sk := range pinned {
-			pinnedNames[sk.Name] = true
+			pinnedNames[sk.QualifiedName()] = true
 			rec.Pinned = append(rec.Pinned, toPinnedSkillJSON(sk))
 		}
 	}
@@ -148,7 +153,8 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 
 // skillMatches computes embedding matches for text, excluding any name in
 // exclude (typically already-pinned skills, so the same skill is never
-// surfaced twice). It is the one embedding code path shared by recommendation
+// surfaced twice). Both sides of that comparison are qualified names — a
+// bare-name exclusion set would silently stop excluding anything. It is the one embedding code path shared by recommendation
 // (pins resolved just above) and the task brief handler (pins already
 // resolved by store.Brief).
 //

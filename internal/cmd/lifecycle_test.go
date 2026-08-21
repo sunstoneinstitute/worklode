@@ -1101,7 +1101,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &b); err != nil {
 		t.Fatalf("decode output %q: %v", out, err)
 	}
-	if len(b.Skills.Pinned) != 1 || b.Skills.Pinned[0].Name != "tdd" || b.Skills.Pinned[0].Content == "" {
+	if len(b.Skills.Pinned) != 1 || b.Skills.Pinned[0].Name != "acme:tdd" || b.Skills.Pinned[0].Content == "" {
 		t.Fatalf("brief.Skills.Pinned = %+v, want one tdd entry with content", b.Skills.Pinned)
 	}
 	if len(b.Skills.Warnings) != 1 || b.Skills.Warnings[0] != "pinned skill not found: ghost" {
@@ -1113,7 +1113,7 @@ func TestTaskBriefCmdShowsSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode task brief (table): %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "pinned  tdd") {
+	if !strings.Contains(out, "pinned  acme:tdd") {
 		t.Fatalf("brief output = %q, want a pinned tdd line", out)
 	}
 	if !strings.Contains(out, "warning: pinned skill not found: ghost") {

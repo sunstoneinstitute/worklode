@@ -9,7 +9,8 @@ import (
 
 func testSkillUpsert(name, hash string) SkillUpsert {
 	return SkillUpsert{
-		Name: name, Description: "desc of " + name,
+		Qualifier: "p",
+		Name:      name, Description: "desc of " + name,
 		SourceRepo: "acme/claude-plugins", SourcePath: "plugins/p/skills/" + name,
 		GitCommit: "abc123", ContentHash: hash,
 		SkillMD:     "---\nname: " + name + "\n---\nbody",
@@ -67,7 +68,7 @@ func TestUpsertSkillLifecycle(t *testing.T) {
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h9")); err != nil {
 		t.Fatalf("second skill: %v", err)
 	}
-	n, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"debugging"})
+	n, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"p:debugging"})
 	if err != nil || n != 1 {
 		t.Fatalf("soft delete: n=%d err=%v", n, err)
 	}
@@ -250,7 +251,7 @@ func TestSkillsMissingEmbeddings(t *testing.T) {
 	if err := s.ReplaceSkillEmbeddings(ctx, tdd.ID, [][]float32{{1, 0, 0}}); err != nil {
 		t.Fatalf("embed tdd: %v", err)
 	}
-	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"tdd", "debugging"}); err != nil {
+	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"p:tdd", "p:debugging"}); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
 

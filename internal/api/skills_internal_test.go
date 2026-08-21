@@ -31,6 +31,7 @@ func seedSkillDirect(t *testing.T, st *store.Store, name, description string) *s
 	t.Helper()
 	ctx := context.Background()
 	if _, _, err := st.UpsertSkill(ctx, store.SkillUpsert{
+		Qualifier:   "acme",
 		Name:        name,
 		Description: description,
 		SourceRepo:  "acme/skills",
@@ -75,7 +76,7 @@ func TestRecommendationPins(t *testing.T) {
 	}
 
 	deleted := seedSkillDirect(t, st, "legacy", "Retired skill")
-	if _, err := st.SoftDeleteSkillsExcept(context.Background(), "acme/skills", []string{"tdd"}); err != nil {
+	if _, err := st.SoftDeleteSkillsExcept(context.Background(), "acme/skills", []string{"acme:tdd"}); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
 	if sk, err := st.GetSkill(context.Background(), deleted.Name); err != nil || !sk.Deleted {
@@ -96,12 +97,12 @@ func TestRecommendationPins(t *testing.T) {
 	var gotTDD, gotLegacy bool
 	for _, p := range rec.Pinned {
 		switch p.Name {
-		case "tdd":
+		case "acme:tdd":
 			gotTDD = true
 			if p.Content == "" {
 				t.Fatalf("tdd pin missing inline content: %+v", p)
 			}
-		case "legacy":
+		case "acme:legacy":
 			gotLegacy = true
 		}
 	}
@@ -159,7 +160,7 @@ func TestRecommendationNoPins(t *testing.T) {
 	if len(rec.Pinned) != 0 {
 		t.Fatalf("pinned: %+v", rec.Pinned)
 	}
-	if len(rec.Matches) != 1 || rec.Matches[0].Name != "tdd" {
+	if len(rec.Matches) != 1 || rec.Matches[0].Name != "acme:tdd" {
 		t.Fatalf("matches: %+v", rec.Matches)
 	}
 }
@@ -403,7 +404,7 @@ func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
 			if len(rec.Warnings) == 0 {
 				t.Fatalf("expected a degradation warning, got none")
 			}
-			if len(rec.Pinned) != 1 || rec.Pinned[0].Name != "tdd" || rec.Pinned[0].Content == "" {
+			if len(rec.Pinned) != 1 || rec.Pinned[0].Name != "acme:tdd" || rec.Pinned[0].Content == "" {
 				t.Fatalf("pin did not survive provider failure: %+v", rec.Pinned)
 			}
 		})
@@ -488,7 +489,7 @@ func TestRecommendationPinsSurviveMatchQueryFailure(t *testing.T) {
 	if len(rec.Matches) != 0 {
 		t.Fatalf("matches from a failing query: %+v", rec.Matches)
 	}
-	if len(rec.Pinned) != 1 || rec.Pinned[0].Name != "tdd" || rec.Pinned[0].Content == "" {
+	if len(rec.Pinned) != 1 || rec.Pinned[0].Name != "acme:tdd" || rec.Pinned[0].Content == "" {
 		t.Fatalf("pin did not survive the query failure: %+v", rec.Pinned)
 	}
 	found := false
