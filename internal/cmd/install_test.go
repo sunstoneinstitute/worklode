@@ -30,40 +30,6 @@ func readSettings(t *testing.T, path string) map[string]any {
 	return settings
 }
 
-// commandsFor returns every hook command registered for a Claude Code event.
-func commandsFor(t *testing.T, settings map[string]any, event string) []string {
-	t.Helper()
-	hooks, ok := settings["hooks"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	groups, ok := hooks[event].([]any)
-	if !ok {
-		return nil
-	}
-	var out []string
-	for _, g := range groups {
-		group, ok := g.(map[string]any)
-		if !ok {
-			continue
-		}
-		entries, ok := group["hooks"].([]any)
-		if !ok {
-			continue
-		}
-		for _, e := range entries {
-			entry, ok := e.(map[string]any)
-			if !ok {
-				continue
-			}
-			if cmd, ok := entry["command"].(string); ok {
-				out = append(out, cmd)
-			}
-		}
-	}
-	return out
-}
-
 // discardCmd is a throwaway command supplying the streams installHooks writes
 // warnings to, for tests that do not inspect them. Tests that do assert on a
 // warning build their own command with SetErr.
@@ -417,7 +383,7 @@ func TestInstallHooksBothIntegrations(t *testing.T) {
 		t.Fatalf("unbound events = %v, want none for claude-code", got)
 	}
 	settings := readSettings(t, res.Agents[0].Path)
-	if got := commandsFor(t, settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := harness.HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
 }
@@ -474,7 +440,7 @@ func TestUninstallHooksUndoesInstall(t *testing.T) {
 		t.Fatalf("agent results = %+v, want exactly one", res.Agents)
 	}
 	settings := readSettings(t, res.Agents[0].Path)
-	if got := commandsFor(t, settings, "SessionStart"); len(got) != 0 {
+	if got := harness.HookCommands(settings, "SessionStart"); len(got) != 0 {
 		t.Fatalf("SessionStart after uninstall: %v, want none", got)
 	}
 }
