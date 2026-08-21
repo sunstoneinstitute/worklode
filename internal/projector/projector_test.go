@@ -18,9 +18,11 @@ import (
 
 // fakeGraphServer records PUT bodies per graph IRI and can be told to fail.
 type fakeGraphServer struct {
-	mu   sync.Mutex
-	fail bool
-	puts map[string][]string // graph IRI → bodies, in arrival order
+	mu        sync.Mutex
+	fail      bool
+	failGraph map[string]bool // graph IRI → reject only that graph
+	puts      map[string][]string
+	attempts  map[string]int // graph IRI → PUTs seen, rejected ones included
 }
 
 // setFail is used instead of a bare field write because the test goroutine
@@ -29,6 +31,18 @@ func (f *fakeGraphServer) setFail(v bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.fail = v
+}
+
+// setFailGraph rejects PUTs to one graph only, which is how a test models the
+// case this package exists to contain: one project graph-server will not
+// accept while every other project is fine.
+func (f *fakeGraphServer) setFailGraph(graph string, v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.failGraph == nil {
+		f.failGraph = map[string]bool{}
+	}
+	f.failGraph[graph] = v
 }
 
 func (f *fakeGraphServer) handler() http.Handler {
@@ -41,7 +55,11 @@ func (f *fakeGraphServer) handler() http.Handler {
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		if f.fail {
+		if f.attempts == nil {
+			f.attempts = map[string]int{}
+		}
+		f.attempts[g]++
+		if f.fail || f.failGraph[g] {
 			http.Error(w, "boom", http.StatusInternalServerError)
 			return
 		}
@@ -70,6 +88,14 @@ func (f *fakeGraphServer) count(graph string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.puts[graph])
+}
+
+// attemptCount is count's counterpart for rejected writes: how many PUTs the
+// graph saw, whether or not they were accepted.
+func (f *fakeGraphServer) attemptCount(graph string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.attempts[graph]
 }
 
 func newProjector(t *testing.T) (*store.Store, *projector.Projector, *fakeGraphServer) {
@@ -169,21 +195,185 @@ func TestCrossProjectEdgeProjectsBothGraphs(t *testing.T) {
 	}
 }
 
-func TestRunOnceLeavesCheckpointOnError(t *testing.T) {
+// TestFailedProjectQuarantinedAndRetried is WL-118's core contract: a project
+// the graph server rejects no longer holds the watermark back — the checkpoint
+// advances past its state_log rows and the project itself is remembered in
+// graph_projection_failures, so the very next run re-attempts it (the first
+// retry is immediate; see retryDelay).
+func TestFailedProjectQuarantinedAndRetried(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
 	createTask(t, s, "p5", "alpha", "unlucky")
 
 	f.setFail(true)
-	if _, err := p.RunOnce(ctx); err == nil {
-		t.Fatal("RunOnce against a failing endpoint returned nil error")
+	if n, err := p.RunOnce(ctx); err == nil || n != 0 {
+		t.Fatalf("RunOnce against a failing endpoint = %d, %v; want 0 and an error", n, err)
 	}
-	if cp, err := s.ProjectionCheckpoint(ctx); err != nil || cp != 0 {
-		t.Fatalf("checkpoint after failure = %d, %v; must stay 0 for the retry", cp, err)
+	cp, err := s.ProjectionCheckpoint(ctx)
+	if err != nil {
+		t.Fatalf("read checkpoint: %v", err)
+	}
+	if cp == 0 {
+		t.Fatal("checkpoint stayed 0 after a per-project failure; it must advance past the batch")
+	}
+	fails, err := s.ProjectionFailures(ctx)
+	if err != nil {
+		t.Fatalf("read quarantine: %v", err)
+	}
+	if len(fails) != 1 || fails[0].ProjectID != "alpha" || fails[0].Attempts != 1 {
+		t.Fatalf("quarantine = %+v; want one alpha row at attempt 1", fails)
+	}
+	if fails[0].LastError == "" {
+		t.Error("quarantine row recorded no error text")
 	}
 
+	// The task's state_log rows are behind the watermark now, so only the
+	// quarantine row can bring the project back — which is the point.
 	f.setFail(false)
 	if n, err := p.RunOnce(ctx); err != nil || n != 1 {
 		t.Fatalf("retry RunOnce = %d, %v; want 1, nil", n, err)
+	}
+	if got := f.count(iri.ProjectGraph("alpha")); got != 1 {
+		t.Fatalf("accepted PUTs after recovery = %d; want 1", got)
+	}
+	if fails, err := s.ProjectionFailures(ctx); err != nil || len(fails) != 0 {
+		t.Fatalf("quarantine after recovery = %+v, %v; want empty", fails, err)
+	}
+}
+
+// TestOneFailingProjectDoesNotBlockAnother is the blast-radius property: alpha
+// and beta are dirty in the same batch, graph-server rejects alpha's graph
+// only, and beta must still be projected — before WL-118 the loop returned on
+// alpha and beta was never attempted at all.
+func TestOneFailingProjectDoesNotBlockAnother(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	createTask(t, s, "p6", "alpha", "poison")
+	createTask(t, s, "p7", "beta", "innocent bystander")
+
+	f.setFailGraph(iri.ProjectGraph("alpha"), true)
+	n, err := p.RunOnce(ctx)
+	if err == nil {
+		t.Fatal("RunOnce with one failing project returned nil error")
+	}
+	if n != 1 {
+		t.Fatalf("RunOnce projected %d graphs; want 1 (beta), alpha having failed", n)
+	}
+	if got := f.count(iri.ProjectGraph("beta")); got != 1 {
+		t.Errorf("beta PUTs = %d; want 1 — a sibling's failure must not skip it", got)
+	}
+	if got := f.count(iri.ProjectGraph("alpha")); got != 0 {
+		t.Errorf("alpha accepted PUTs = %d; want 0", got)
+	}
+
+	first, err := s.ProjectionFailures(ctx)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("quarantine = %+v, %v; want one alpha row", first, err)
+	}
+
+	// beta is done: with the checkpoint past both, only alpha comes back.
+	if n, err := p.RunOnce(ctx); n != 0 || err == nil {
+		t.Fatalf("second RunOnce = %d, %v; want 0 and alpha's error", n, err)
+	}
+	// A repeat failure advances the attempt count but not the start of the
+	// outage: how long alpha has been stuck is what an operator reads.
+	again, err := s.ProjectionFailures(ctx)
+	if err != nil || len(again) != 1 {
+		t.Fatalf("quarantine after retry = %+v, %v; want one alpha row", again, err)
+	}
+	if again[0].Attempts != 2 {
+		t.Errorf("attempts = %d; want 2", again[0].Attempts)
+	}
+	if !again[0].FirstFailedAt.Equal(first[0].FirstFailedAt) {
+		t.Errorf("first_failed_at moved: %v -> %v", first[0].FirstFailedAt, again[0].FirstFailedAt)
+	}
+	if got := f.count(iri.ProjectGraph("beta")); got != 1 {
+		t.Errorf("beta re-projected on alpha's retry: PUTs = %d; want 1", got)
+	}
+	if got := f.attemptCount(iri.ProjectGraph("alpha")); got != 2 {
+		t.Errorf("alpha attempts = %d; want 2 (quarantine retry)", got)
+	}
+}
+
+// TestQuarantineBacksOff pins the cadence: the first retry is immediate, the
+// second waits, and the wait is skipped once the clock passes it.
+func TestQuarantineBacksOff(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	base := time.Now().UTC()
+	p.SetClock(func() time.Time { return base })
+	createTask(t, s, "p8", "alpha", "persistently poisonous")
+	alpha := iri.ProjectGraph("alpha")
+
+	f.setFailGraph(alpha, true)
+	for i := 1; i <= 2; i++ { // attempt 1 (dirty), attempt 2 (immediate retry)
+		if _, err := p.RunOnce(ctx); err == nil {
+			t.Fatalf("run %d against a rejecting graph returned nil error", i)
+		}
+	}
+	if got := f.attemptCount(alpha); got != 2 {
+		t.Fatalf("attempts after two runs = %d; want 2", got)
+	}
+
+	// Attempt 2 set a retryBase wait, so a third run at the same instant is
+	// a no-op even with the graph server healthy again.
+	f.setFailGraph(alpha, false)
+	if n, err := p.RunOnce(ctx); n != 0 || err != nil {
+		t.Fatalf("run inside the backoff = %d, %v; want 0, nil", n, err)
+	}
+	if got := f.attemptCount(alpha); got != 2 {
+		t.Fatalf("attempts inside the backoff = %d; want 2 — the wait was ignored", got)
+	}
+
+	p.SetClock(func() time.Time { return base.Add(projector.RetryDelay(2) + time.Second) })
+	if n, err := p.RunOnce(ctx); n != 1 || err != nil {
+		t.Fatalf("run after the backoff = %d, %v; want 1, nil", n, err)
+	}
+	if fails, err := s.ProjectionFailures(ctx); err != nil || len(fails) != 0 {
+		t.Fatalf("quarantine after recovery = %+v, %v; want empty", fails, err)
+	}
+}
+
+// TestDirtyProjectBypassesBackoff: new task activity is the event most likely
+// to clear a content-specific rejection, so it re-attempts immediately rather
+// than waiting out the backoff.
+func TestDirtyProjectBypassesBackoff(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	base := time.Now().UTC()
+	p.SetClock(func() time.Time { return base })
+	alpha := iri.ProjectGraph("alpha")
+
+	createTask(t, s, "p9", "alpha", "bad content")
+	f.setFailGraph(alpha, true)
+	for i := 1; i <= 2; i++ {
+		if _, err := p.RunOnce(ctx); err == nil {
+			t.Fatalf("run %d returned nil error", i)
+		}
+	}
+
+	// In backoff now. New activity in the project must not have to wait.
+	f.setFailGraph(alpha, false)
+	createTask(t, s, "p10", "alpha", "content fixed")
+	if n, err := p.RunOnce(ctx); n != 1 || err != nil {
+		t.Fatalf("RunOnce over a re-dirtied quarantined project = %d, %v; want 1, nil", n, err)
+	}
+	if got := f.count(alpha); got != 1 {
+		t.Fatalf("accepted PUTs = %d; want 1", got)
+	}
+}
+
+func TestRetryDelayCurve(t *testing.T) {
+	for _, tc := range []struct {
+		attempts int
+		want     time.Duration
+	}{
+		{0, 0}, {1, 0}, {2, time.Minute}, {3, 2 * time.Minute},
+		{4, 4 * time.Minute}, {6, 16 * time.Minute},
+		{7, 30 * time.Minute}, {50, 30 * time.Minute},
+	} {
+		if got := projector.RetryDelay(tc.attempts); got != tc.want {
+			t.Errorf("RetryDelay(%d) = %v; want %v", tc.attempts, got, tc.want)
+		}
 	}
 }

@@ -92,3 +92,5 @@ configMapGenerator:
       - migrations/0039_skill_qualifier.down.sql
       - migrations/0040_catalog_evidence.up.sql
       - migrations/0040_catalog_evidence.down.sql
+      - migrations/0041_graph_projection_failures.up.sql
+      - migrations/0041_graph_projection_failures.down.sql
