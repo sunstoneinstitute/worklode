@@ -20,6 +20,8 @@ import {
   desiredTaskNotes,
   foreignNotes,
   isSafeMountRoot,
+  mountRootParent,
+  mountRootParentMissing,
   type MirrorStats,
 } from "./sync/mirror";
 import { writeBackTaskNotes, type WriteBackStats } from "./sync/writeback";
@@ -127,6 +129,10 @@ export default class WorklodePlugin extends Plugin {
    *  arriving while the user reads the modal; without this they would stack
    *  one on top of another. */
   private adoptPromptFor: string | undefined;
+  /** The root a create-parent prompt is currently open for, mirroring
+   *  adoptPromptFor for the same reason: an interval sync must not stack a
+   *  second modal on top of one already open. */
+  private parentPromptFor: string | undefined;
 
   override async onload(): Promise<void> {
     await this.loadSettings();
@@ -244,6 +250,7 @@ export default class WorklodePlugin extends Plugin {
     // while the first one is still surveying.
     this.busy = true;
     try {
+      if (!(await this.ensureParentConfirmed(mountRoot))) return;
       if (!(await this.ensureRootAdopted(mountRoot))) return;
 
       // A watermark is a position in one server's task history, read with one
@@ -324,6 +331,32 @@ export default class WorklodePlugin extends Plugin {
     } finally {
       this.busy = false;
     }
+  }
+
+  /** The typo guard. write()'s ensureDir creates every missing ancestor of a
+   *  note's path, the mount root's own parent included -- so a mistyped
+   *  parent segment ("Tema/Worklode" for "Team/Worklode") would otherwise
+   *  create a stray folder and mirror into it silently, rather than
+   *  failing. WL-82's adopt prompt (ensureRootAdopted, below) does not catch
+   *  this: an absent root has no foreign notes under it, so it is the
+   *  correct case for a silent take-over. This is the one case that isn't --
+   *  the root's own *parent* is missing -- asked about before that check
+   *  runs. Returns whether the sync may proceed now; a confirmed prompt
+   *  starts its own. */
+  private async ensureParentConfirmed(mountRoot: string): Promise<boolean> {
+    if (!(await mountRootParentMissing(this.writer, mountRoot))) return true;
+    if (this.parentPromptFor !== undefined) return false;
+
+    const parent = mountRootParent(mountRoot);
+    if (parent === undefined) return true; // unreachable: mountRootParentMissing already checked this
+
+    this.parentPromptFor = mountRoot;
+    new CreateParentModal(this.app, parent, (confirmed) => {
+      this.parentPromptFor = undefined;
+      if (!confirmed) return;
+      void this.sync();
+    }).open();
+    return false;
   }
 
   /** The first-sync guard. applyMirror deletes every .md under the mount
@@ -573,6 +606,66 @@ class WorklodeSettingTab extends PluginSettingTab {
             this.plugin.scheduleInterval();
           });
       });
+  }
+}
+
+/** Confirms before write()'s ensureDir would silently create the mount
+ *  root's own missing parent folder -- the one thing WL-82's adopt prompt
+ *  cannot catch, since an absent root has no foreign notes under it and is
+ *  always safe to take over. Same shape as AdoptRootModal: answers exactly
+ *  once, on the first of confirm, cancel, or dismissal. */
+class CreateParentModal extends Modal {
+  private answered = false;
+
+  constructor(
+    app: App,
+    private readonly parent: string,
+    private readonly onAnswer: (confirmed: boolean) => void,
+  ) {
+    super(app);
+  }
+
+  private answer(confirmed: boolean): void {
+    if (this.answered) return;
+    this.answered = true;
+    this.onAnswer(confirmed);
+  }
+
+  override onOpen(): void {
+    const { contentEl } = this;
+
+    contentEl.createEl("h2", { text: `"${this.parent}" does not exist -- create it?` });
+    contentEl.createEl("p", {
+      text:
+        `The mount root's parent folder, "${this.parent}", was not found in this vault. ` +
+        `If the mount root setting has a typo, cancel and fix it there. Otherwise, Worklode ` +
+        `will create "${this.parent}" and sync into it.`,
+    });
+
+    new Setting(contentEl)
+      .addButton((btn) =>
+        btn
+          .setButtonText("Cancel")
+          .setCta()
+          .onClick(() => {
+            this.answer(false);
+            this.close();
+          }),
+      )
+      .addButton((btn) =>
+        btn
+          .setButtonText(`Create "${this.parent}"`)
+          .setWarning()
+          .onClick(() => {
+            this.answer(true);
+            this.close();
+          }),
+      );
+  }
+
+  override onClose(): void {
+    this.answer(false);
+    this.contentEl.empty();
   }
 }
 
