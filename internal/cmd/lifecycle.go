@@ -288,6 +288,14 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		return fmt.Errorf("set up worktree for %s: %w", taskID, err)
 	}
 
+	// Printed as soon as the worktree exists, not only on full success — a
+	// later failure (e.g. the brief fetch) rolls the worktree back via
+	// rollbackClaim, and the operator should still see where it was before
+	// that happened.
+	if !jsonOut(cmd) {
+		fmt.Fprintf(cmd.OutOrStdout(), "worktree: %s\n", dir)
+	}
+
 	if err := worktree.SetTaskID(dir, taskID); err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: stamp task id in worktree git config: %v\n", err)
 	}
