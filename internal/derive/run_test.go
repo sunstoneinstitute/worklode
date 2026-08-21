@@ -2,6 +2,7 @@ package derive_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -53,7 +54,7 @@ func TestRunWritesPayloadWithEmbeddedHash(t *testing.T) {
 	c := graphserver.New(srv.URL, nil)
 
 	res, err := derive.Run(context.Background(), c, "urn:g",
-		[]byte("<urn:s> <urn:p> <urn:o> .\n"))
+		[]byte("<urn:s> <urn:p> <urn:o> .\n"), derive.Options{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestRunSkipsOnMatchingHash(t *testing.T) {
 	t.Cleanup(srv.Close)
 	c := graphserver.New(srv.URL, nil)
 
-	res, err := derive.Run(context.Background(), c, "urn:g", payload)
+	res, err := derive.Run(context.Background(), c, "urn:g", payload, derive.Options{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -100,7 +101,7 @@ func TestRunRejectsUnsafeGraphIRI(t *testing.T) {
 	c := graphserver.New(srv.URL, nil)
 
 	_, err := derive.Run(context.Background(), c, "urn:g> } INSERT { <urn:s",
-		[]byte("<urn:s> <urn:p> <urn:o> .\n"))
+		[]byte("<urn:s> <urn:p> <urn:o> .\n"), derive.Options{})
 	if err == nil {
 		t.Fatal("Run = nil error; a graph IRI that escapes the <...> must be rejected")
 	}
@@ -115,8 +116,78 @@ func TestRunRewritesOnChangedHash(t *testing.T) {
 	t.Cleanup(srv.Close)
 	c := graphserver.New(srv.URL, nil)
 
-	res, err := derive.Run(context.Background(), c, "urn:g", []byte("<urn:s> <urn:p> <urn:o> .\n"))
+	res, err := derive.Run(context.Background(), c, "urn:g", []byte("<urn:s> <urn:p> <urn:o> .\n"), derive.Options{})
 	if err != nil || res.Skipped {
 		t.Fatalf("Run = %+v, %v; want a fresh write", res, err)
+	}
+}
+
+// TestRunRefusesToEmptyANonEmptyGraph: the failure this guard exists for —
+// a deriver whose inputs broke computes nothing, and a blind full-replace
+// would wipe a graph that held real edges with no trace of why.
+func TestRunRefusesToEmptyANonEmptyGraph(t *testing.T) {
+	f := &fakeGraphServer{storedHash: derive.HashOf([]byte("<urn:s> <urn:p> <urn:o> .\n"))}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	c := graphserver.New(srv.URL, nil)
+
+	_, err := derive.Run(context.Background(), c, "urn:g", nil, derive.Options{})
+	if !errors.Is(err, derive.ErrWouldEmptyGraph) {
+		t.Fatalf("Run = %v; want ErrWouldEmptyGraph", err)
+	}
+	if f.puts.Load() != 0 {
+		t.Fatalf("puts=%d; a refused run must write nothing", f.puts.Load())
+	}
+}
+
+// TestRunAllowEmptyWritesTheEmptyDocument: the escape hatch — a caller that
+// knows the source really has no edges opts in and the graph is replaced.
+func TestRunAllowEmptyWritesTheEmptyDocument(t *testing.T) {
+	f := &fakeGraphServer{storedHash: derive.HashOf([]byte("<urn:s> <urn:p> <urn:o> .\n"))}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	c := graphserver.New(srv.URL, nil)
+
+	res, err := derive.Run(context.Background(), c, "urn:g", nil, derive.Options{AllowEmpty: true})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Empty || res.Skipped {
+		t.Fatalf("result = %+v; want an unskipped empty write", res)
+	}
+	if f.puts.Load() != 1 {
+		t.Fatalf("puts=%d; want the opted-in write", f.puts.Load())
+	}
+	if got := *f.lastPut.Load(); !strings.HasPrefix(got, "<urn:g> <") {
+		t.Fatalf("PUT body = %q; want the hash triple alone", got)
+	}
+}
+
+// TestRunWritesEmptyOnAFirstRun: worklode's own go-imports document is
+// legitimately empty (one whole-repo component, so every import edge is
+// intra-component and dropped by design). Nothing is stored yet, so there is
+// no content to lose and no opt-in is needed; the second run then
+// short-circuits on the matching hash.
+func TestRunWritesEmptyOnAFirstRun(t *testing.T) {
+	f := &fakeGraphServer{}
+	srv := httptest.NewServer(f.handler())
+	t.Cleanup(srv.Close)
+	c := graphserver.New(srv.URL, nil)
+
+	res, err := derive.Run(context.Background(), c, "urn:g", nil, derive.Options{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !res.Empty || res.Skipped || f.puts.Load() != 1 {
+		t.Fatalf("result = %+v, puts=%d; want a first empty write", res, f.puts.Load())
+	}
+
+	f.storedHash = res.Hash
+	res, err = derive.Run(context.Background(), c, "urn:g", nil, derive.Options{})
+	if err != nil {
+		t.Fatalf("re-Run: %v", err)
+	}
+	if !res.Skipped || !res.Empty || f.puts.Load() != 1 {
+		t.Fatalf("result = %+v, puts=%d; a re-run must skip", res, f.puts.Load())
 	}
 }
