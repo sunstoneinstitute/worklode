@@ -1,6 +1,21 @@
 package designdoc
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
+
+// anchorRE is the 025 §3 anchor grammar: the "sec-" prefix — a bare {#2.1}
+// is legal HTML but a hostile CSS selector and URL fragment — then a section
+// number (2.1a) or a lowercase slug (purpose).
+var anchorRE = regexp.MustCompile(`^sec-[a-z0-9][a-z0-9.-]*$`)
+
+// ValidAnchor reports whether a is a well-formed section anchor. Parsing is
+// deliberately looser (see the heading regexp in designdoc.go): a document
+// may hold a malformed anchor, and this is what says so. Callers that mint
+// or consume section IRIs — internal/kg/implements, the anchor lint — check
+// against this one grammar rather than each restating it.
+func ValidAnchor(a string) bool { return anchorRE.MatchString(a) }
 
 // LintAnchors reports the two anchor defects that make a section
 // unaddressable: two headings claiming one anchor, and an anchor that
