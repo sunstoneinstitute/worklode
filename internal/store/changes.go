@@ -277,6 +277,32 @@ func (s *Store) GetPR(ctx context.Context, repo string, number int64) (*PullRequ
 	return pr, nil
 }
 
+// PRRef is the minimal PR identity the pr-affects deriver needs: which repo,
+// which PR, which task.
+type PRRef struct {
+	Repo   string
+	Number int64
+	TaskID string
+}
+
+// TaskPRs returns every pull request bound to a task, ordered by repo then
+// number. Unbound PRs are invisible to the deriver: with no task there is no
+// wl:affects subject to hang the triple off, unlike PRsForTask, which reads
+// one task's PRs and has no such filter to apply.
+func (s *Store) TaskPRs(ctx context.Context) ([]PRRef, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, number, task_id FROM pull_requests
+		 WHERE task_id IS NOT NULL ORDER BY repo, number`)
+	if err != nil {
+		return nil, fmt.Errorf("task prs: %w", err)
+	}
+	return collectRows(rows, "task prs", func(r rowScanner) (PRRef, error) {
+		var p PRRef
+		err := r.Scan(&p.Repo, &p.Number, &p.TaskID)
+		return p, err
+	})
+}
+
 // PRsForTask returns the pull requests correlated to taskID, ordered by
 // repo then number.
 func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, error) {

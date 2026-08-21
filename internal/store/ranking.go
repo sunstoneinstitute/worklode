@@ -117,6 +117,43 @@ func (s *Store) projectFocusMap(ctx context.Context, projectIDs []string) (map[s
 	return out, nil
 }
 
+// Frontier returns the ready, unblocked, unleased tasks in the exact rank
+// order ClaimNext consumes, plus the blocking fan-out map — the read-only
+// overview mirror of the authoritative frontier (spec 007 §3.4). It claims
+// nothing, and it is deliberately not wired through ClaimNext (nor is
+// ClaimNext refactored to call it): keeping the two implementations
+// independent is what makes a mirror test between them a real check rather
+// than a tautology.
+func (s *Store) Frontier(ctx context.Context, projectID string) ([]model.Task, map[string]int, error) {
+	candidates, err := s.readyCandidates(ctx, projectID, "")
+	if err != nil {
+		return nil, nil, err
+	}
+	fanOut, err := s.BlockingFanOut(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var projectIDs []string
+	seen := map[string]bool{}
+	for _, t := range candidates {
+		if !seen[t.Project] {
+			seen[t.Project] = true
+			projectIDs = append(projectIDs, t.Project)
+		}
+	}
+	focus, err := s.projectFocusMap(ctx, projectIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	in := make([]rankInput, len(candidates))
+	for i, t := range candidates {
+		in[i] = rankInput{Task: t, Focus: focus[t.Project], FanOut: fanOut[t.ID]}
+	}
+	return rankTasks(in, false), fanOut, nil
+}
+
 // rankInput carries the per-candidate inputs rankTasks needs beyond the task
 // itself: the ranking concern index depends on the task's own project focus
 // (a claim-next call spanning multiple projects uses each task's own
