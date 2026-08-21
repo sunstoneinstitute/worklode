@@ -17,6 +17,7 @@ import (
 // labels, each its own project_participants row; ListParticipants folds
 // those into one Participant per actor.
 type Participant struct {
+	ProjectID   string
 	ActorID     string
 	DisplayName string
 	Roles       []string // sorted
@@ -36,41 +37,59 @@ type ActorProject struct {
 // holding at least one role-labelled row, ordered lead first, then by
 // AddedAt (the actor's earliest role row), then actor id. Returns
 // ErrNotFound if the project does not exist.
+//
+// projectID == "" is the repo's established "all" form (matching
+// ListProjectWorkFacts and ListIssues): every row across every project,
+// grouped by project id ascending and lead-first within each project — the
+// one bulk read Home's card grid needs to avoid an N+1 per-project call.
+// There is no single project to check existence of in that form, so the
+// ErrNotFound guard below only runs for a specific projectID.
 func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Participant, error) {
-	if _, err := s.GetProject(ctx, projectID); err != nil {
-		return nil, err
+	if projectID != "" {
+		if _, err := s.GetProject(ctx, projectID); err != nil {
+			return nil, err
+		}
 	}
 
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT pp.actor_id, a.display_name, pp.role, pp.is_lead, pp.added_at
-		   FROM project_participants pp
-		   JOIN actors a ON a.id = pp.actor_id
-		  WHERE pp.project_id = $1
-		  ORDER BY pp.is_lead DESC, pp.added_at, pp.actor_id`,
-		projectID)
+	query := `SELECT pp.project_id, pp.actor_id, a.display_name, pp.role, pp.is_lead, pp.added_at
+	            FROM project_participants pp
+	            JOIN actors a ON a.id = pp.actor_id`
+	args := []any{}
+	if projectID != "" {
+		query += ` WHERE pp.project_id = $1`
+		args = append(args, projectID)
+	}
+	query += ` ORDER BY pp.project_id, pp.is_lead DESC, pp.added_at, pp.actor_id`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list participants for project %s: %w", projectID, err)
 	}
 	defer rows.Close()
 
-	// Aggregate per actor id, preserving the order each actor first appears
-	// in (already lead-first/AddedAt/actor-id from the ORDER BY above, since
-	// project_participants_one_lead guarantees at most one lead per project).
-	var order []string
-	byActor := map[string]*Participant{}
+	// Aggregate per (project id, actor id) — not actor id alone, or an
+	// actor holding a role on two projects would have both projects' roles
+	// folded into a single row — preserving the order each pair first
+	// appears in (already project/lead/AddedAt/actor-id from the ORDER BY
+	// above, since project_participants_one_lead guarantees at most one
+	// lead per project).
+	type key struct{ projectID, actorID string }
+	var order []key
+	byKey := map[key]*Participant{}
 	for rows.Next() {
-		var actorID, role string
+		var pID, actorID, role string
 		var displayName sql.NullString
 		var isLead bool
 		var addedAt time.Time
-		if err := rows.Scan(&actorID, &displayName, &role, &isLead, &addedAt); err != nil {
+		if err := rows.Scan(&pID, &actorID, &displayName, &role, &isLead, &addedAt); err != nil {
 			return nil, fmt.Errorf("list participants for project %s: %w", projectID, err)
 		}
-		p, ok := byActor[actorID]
+		k := key{pID, actorID}
+		p, ok := byKey[k]
 		if !ok {
-			p = &Participant{ActorID: actorID, DisplayName: displayName.String, AddedAt: addedAt}
-			byActor[actorID] = p
-			order = append(order, actorID)
+			p = &Participant{ProjectID: pID, ActorID: actorID, DisplayName: displayName.String, AddedAt: addedAt}
+			byKey[k] = p
+			order = append(order, k)
 		}
 		p.Roles = append(p.Roles, role)
 		if isLead {
@@ -85,8 +104,8 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 	}
 
 	out := make([]Participant, 0, len(order))
-	for _, id := range order {
-		p := byActor[id]
+	for _, k := range order {
+		p := byKey[k]
 		slices.Sort(p.Roles)
 		out = append(out, *p)
 	}
