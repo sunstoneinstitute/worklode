@@ -138,6 +138,15 @@ func TestListProjectWorkFacts(t *testing.T) {
 	if facts[0].Lease == nil || facts[0].Lease.ActorID != agentID {
 		t.Errorf("lease = %#v", facts[0].Lease)
 	}
+	// Branch must match what scanTask derives everywhere else (WL-183): the
+	// projection used to hand-clear it, so /board and the admin board served
+	// "" for the same task /tasks served a real branch name for.
+	if want := BranchFor(&facts[0].Task); facts[0].Task.Branch != want {
+		t.Errorf("facts[0].Task.Branch = %q, want %q", facts[0].Task.Branch, want)
+	}
+	if facts[0].Task.Branch == "" {
+		t.Error("facts[0].Task.Branch is empty, want a real branch name")
+	}
 	if facts[0].StateEvent == nil || facts[0].StateEvent.Source != "github" {
 		t.Errorf("state event = %#v", facts[0].StateEvent)
 	}

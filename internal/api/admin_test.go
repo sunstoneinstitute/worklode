@@ -785,6 +785,7 @@ func TestBoard(t *testing.T) {
 			Ready []struct {
 				ID     string `json:"id"`
 				Parent string `json:"parent"`
+				Branch string `json:"branch"`
 			} `json:"ready"`
 			Blocked []struct {
 				ID string `json:"id"`
@@ -805,6 +806,14 @@ func TestBoard(t *testing.T) {
 	}
 	if p.Ready[1].Parent != "" {
 		t.Fatalf("the container reported a parent of %q, want none", p.Ready[1].Parent)
+	}
+	// The board must carry the same real branch name /tasks would serve for
+	// the same task (WL-183) — the projection used to hand-clear it to "".
+	if want := store.BranchFor(&model.Task{ID: "WL-1", Title: "Ready one"}); p.Ready[0].Branch != want {
+		t.Fatalf("ready[0] branch = %q, want %q", p.Ready[0].Branch, want)
+	}
+	if p.Ready[0].Branch == "" {
+		t.Fatalf("ready[0] branch is empty, want a real branch name")
 	}
 	if len(p.Blocked) != 1 || p.Blocked[0].ID != "WL-2" {
 		t.Fatalf("blocked = %+v", p.Blocked)
