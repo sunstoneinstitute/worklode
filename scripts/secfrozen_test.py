@@ -60,10 +60,24 @@ class Repo:
             capture_output=True, text=True, env=env,
         )
 
+    def close(self):
+        self._tmp.cleanup()
 
-class TestPermanence(unittest.TestCase):
-    def test_delete_published_anchor_fails(self):
+
+class RepoCase(unittest.TestCase):
+    """Base for the cases that build fixture repos: `self.repo()` ties the
+    temporary directory's lifetime to the test, so no case leaks one to the
+    interpreter's exit-time finalizer (a ResourceWarning per test)."""
+
+    def repo(self):
         r = Repo()
+        self.addCleanup(r.close)
+        return r
+
+
+class TestPermanence(RepoCase):
+    def test_delete_published_anchor_fails(self):
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         text = (r.root / "docs/specs/001-fixture.md").read_text()
@@ -77,7 +91,7 @@ class TestPermanence(unittest.TestCase):
         self.assertIn("001-fixture.md", p.stderr)
 
     def test_rename_anchor_fails(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -87,7 +101,7 @@ class TestPermanence(unittest.TestCase):
         self.assertIn("sec-2", p.stderr)
 
     def test_renumber_with_anchor_fails(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -98,7 +112,7 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
 
     def test_letter_suffix_insert_passes(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -112,7 +126,7 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_body_edit_passes(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -121,7 +135,7 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_status_flip_does_not_unfreeze(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -133,7 +147,7 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
 
     def test_draft_doc_may_renumber(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="draft"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -142,7 +156,7 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_delete_frozen_document_fails(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         os.remove(r.root / "docs/specs/001-fixture.md")
@@ -152,15 +166,37 @@ class TestPermanence(unittest.TestCase):
         self.assertIn("document", p.stderr)
 
     def test_new_document_is_unfrozen(self):
-        r = Repo()
+        """A document with no baseline is not inspected at all, whatever its
+        status says: the duplicate anchor that refuses a published document
+        one test below is not this gate's finding on a file HEAD never saw."""
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
-        r.write("docs/specs/002-new.md", SPEC.format(status="accepted"))
+        r.write("docs/specs/002-new.md", SPEC.format(status="accepted")
+                + "\n## 3. Duplicate {#sec-2}\n\nMore body.\n")
         p = r.run()
         self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stderr, "")
+
+    def test_generated_view_is_never_frozen(self):
+        """head_files() drops generated views: inlinespec.py renumbers a view
+        whenever the amendments folded into it change, and that is the
+        generator's output, not a published anchor being broken."""
+        r = self.repo()
+        r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
+        # Frontmatter a real view never carries — the point is that scanning
+        # the file at all would refuse the renumber below.
+        r.write("docs/specs/inlined/001-fixture.md",
+                SPEC.format(status="accepted"))
+        r.commit()
+        f = r.root / "docs/specs/inlined/001-fixture.md"
+        f.write_text(f.read_text().replace("{#sec-2}", "{#sec-9}"))
+        p = r.run()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stderr, "")
 
     def test_duplicate_anchor_fails(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         f = r.root / "docs/specs/001-fixture.md"
@@ -171,13 +207,13 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
 
     def test_no_head_at_all(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         p = r.run()
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_superseded_is_frozen(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="superseded"))
         r.commit()
         text = (r.root / "docs/specs/001-fixture.md").read_text()
@@ -188,7 +224,7 @@ class TestPermanence(unittest.TestCase):
         self.assertEqual(p.returncode, 2)
 
     def test_runs_without_lode(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
         r.commit()
         bindir = r.root / "bin"
@@ -232,11 +268,11 @@ def edge(key, subject, *values, indent=4):
     return "\n".join(lines) + "\n"
 
 
-class TestMirrorEdges(unittest.TestCase):
+class TestMirrorEdges(RepoCase):
     """026 §4: an amends/replaces edge must be recorded from both sides."""
 
     def pair(self, a_front="", b_front="", commit=True):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(front=a_front, n="001"))
         r.write("docs/specs/002-b.md", doc(front=b_front, n="002"))
         if commit:
@@ -281,7 +317,7 @@ class TestMirrorEdges(unittest.TestCase):
 
     def test_all_reference_forms_resolve(self):
         """The same edge written in different path forms still pairs."""
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(
             front=edge("amends", "#sec-1", "../specs/002-b.md#sec-2")))
         r.write("docs/specs/002-b.md", doc(n="002", front=(
@@ -356,7 +392,7 @@ class TestMirrorEdges(unittest.TestCase):
     def test_other_keys_ignored(self):
         """Only the edge keys are read; covers' nested objects must not
         be mistaken for edge content."""
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(front="requires:\n- 009-nope.md\n"))
         r.write("docs/plans/2026-01-01-p.md", doc(n="002", front=(
             "covers:\n"
@@ -372,7 +408,7 @@ class TestMirrorEdges(unittest.TestCase):
 
     def test_new_document_checked_for_edges(self):
         """No baseline means unfrozen, but the edges are still paired."""
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/002-b.md", doc(n="002"))
         r.commit()
         r.write("docs/specs/001-a.md",
@@ -390,15 +426,20 @@ class TestMirrorEdges(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_generated_views_ignored(self):
+        """The walk skips generated views, so their edges never enter the
+        graph. The view here carries a half-recorded `amends` — a refusal if
+        it were read as authored — precisely so the skip is what is proven."""
         r = self.pair(
             edge("amends", "#sec-1", "002-b.md#sec-2"),
             edge("amendedBy", "#sec-2", "001-a.md#sec-1"),
             commit=False,
         )
-        r.write("docs/specs/inlined/001-a.md", "# Fixture\n\n## 1. First\n")
+        r.write("docs/specs/inlined/001-a.md",
+                doc(front=edge("amends", "#sec-1", "../002-b.md#sec-2")))
         r.commit()
         p = r.run()
         self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stderr, "")
 
 
 class TestCanonical(unittest.TestCase):
@@ -427,13 +468,13 @@ class TestCanonical(unittest.TestCase):
             ("replaces", "docs/specs/001-a.md", ".", "docs/plans/p.md", "."))
 
 
-class TestCycles(unittest.TestCase):
+class TestCycles(RepoCase):
     """026 §4.1: an amends/replaces cycle in the section-level graph is
     refused, even when task 2's mirror check finds each edge correctly
     recorded from both sides."""
 
     def pair(self, a_front="", b_front=""):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(front=a_front, n="001"))
         r.write("docs/specs/002-b.md", doc(front=b_front, n="002"))
         r.commit()
@@ -443,7 +484,7 @@ class TestCycles(unittest.TestCase):
         """A#sec-1 <-> B#sec-2 mutual amends, correctly mirrored both ways
         -- a 2-cycle that a naive per-recording check could mistake for a
         clean mirror pair."""
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(status=status, n="001", front=(
             edge("amends", "#sec-1", "002-b.md#sec-2")
             + edge("amendedBy", "#sec-1", "002-b.md#sec-2"))))
@@ -473,7 +514,7 @@ class TestCycles(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr)
 
     def test_three_document_loop_refused(self):
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(n="001", front=(
             edge("replaces", "#sec-1", "002-b.md#sec-2")
             + edge("isReplacedBy", "#sec-1", "003-c.md#sec-3"))))
@@ -486,9 +527,10 @@ class TestCycles(unittest.TestCase):
         r.commit()
         p = r.run()
         self.assertEqual(p.returncode, 2, p.stderr)
-        self.assertIn("001-a.md#sec-1", p.stderr)
-        self.assertIn("002-b.md#sec-2", p.stderr)
-        self.assertIn("003-c.md#sec-3", p.stderr)
+        self.assertIn(
+            "amends/replaces cycle: docs/specs/001-a.md#sec-1 -> "
+            "docs/specs/002-b.md#sec-2 -> docs/specs/003-c.md#sec-3 -> "
+            "docs/specs/001-a.md#sec-1", p.stderr)
 
     def test_self_amendment_refused(self):
         """A loop within one document is the same error."""
@@ -504,13 +546,15 @@ class TestCycles(unittest.TestCase):
             '  "#sec-2":\n'
             '    - 001-a.md#sec-1\n'
         )
-        r = Repo()
+        r = self.repo()
         r.write("docs/specs/001-a.md", doc(front=front, n="001"))
         r.commit()
         p = r.run()
         self.assertEqual(p.returncode, 2, p.stderr)
-        self.assertIn("001-a.md#sec-1", p.stderr)
-        self.assertIn("001-a.md#sec-2", p.stderr)
+        self.assertIn(
+            "amends/replaces cycle: docs/specs/001-a.md#sec-1 -> "
+            "docs/specs/001-a.md#sec-2 -> docs/specs/001-a.md#sec-1",
+            p.stderr)
 
     def test_doc_scoped_edges_never_cycle(self):
         """§4.1 scopes acyclicity to the section-level graph; doc-scoped
@@ -530,6 +574,10 @@ class TestCycles(unittest.TestCase):
         r = self.cycle_pair(status="draft")
         p = r.run()
         self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn(
+            "amends/replaces cycle: docs/specs/001-a.md#sec-1 -> "
+            "docs/specs/002-b.md#sec-2 -> docs/specs/001-a.md#sec-1",
+            p.stderr)
 
 
 if __name__ == "__main__":
