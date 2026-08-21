@@ -47,6 +47,26 @@ func boardView(b *model.BoardResponse, inboxCount int, title, active string) ui.
 	return v
 }
 
+// driftView maps spec 007's four read surfaces into the drift board's view.
+// drift and gaps are nil when no graph-server is configured; graphEnabled is
+// what tells the page the difference between "no findings" and "nothing
+// looked", so it is passed rather than inferred from the nil slices.
+func driftView(frontier []model.FrontierTask, cp *model.CriticalPath, drift *model.Drift, gaps []model.Gap, graphEnabled bool) ui.DriftView {
+	v := ui.DriftView{
+		Page:         ui.PageProps{Title: "worklode: drift", ActiveGlobal: "knowledge"},
+		Frontier:     frontier,
+		Gaps:         gaps,
+		GraphEnabled: graphEnabled,
+	}
+	if cp != nil {
+		v.CriticalPath = *cp
+	}
+	if drift != nil {
+		v.Drift = *drift
+	}
+	return v
+}
+
 // projectsView maps the cross-project portfolio, dropping store.Project's
 // curated cockpit-only fields (ADR 036 §3) down to the model.Project shape
 // the page actually renders (id, name, key).

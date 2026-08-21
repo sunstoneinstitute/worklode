@@ -1122,3 +1122,23 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 	}
 	bodyContains(t, rr.Body.String(), "Agent One", "on behalf of Dana")
 }
+
+// TestDriftPageRendersWithoutGraph holds the drift board's two standing
+// properties on a deployment with no graph-server: the backbone-authoritative
+// half still renders (200), the graph-backed half says so honestly instead of
+// erroring, and the whole page stays read-only — spec 007's read surface has
+// no act to offer, so it must render no mutation affordance at all.
+func TestDriftPageRendersWithoutGraph(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	rec := doReq(t, h, http.MethodGet, "/drift", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /drift: %d %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "knowledge graph not configured") {
+		t.Fatalf("page without graph must say so:\n%s", rec.Body.String())
+	}
+	// Read-only by construction: no form, no POST affordance.
+	if strings.Contains(rec.Body.String(), "<form") {
+		t.Fatal("drift page contains a mutation affordance")
+	}
+}

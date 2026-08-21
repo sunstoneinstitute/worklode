@@ -10,9 +10,20 @@ package ui
 // body: there is no markdown renderer in this repo, and inventing one here
 // would make the page disagree with what is stored.
 
+// Docs carries the link to /drift because Knowledge is where the graph-backed
+// expert views live (layout.templ's primaryNav doc comment): the drift board
+// takes no nav destination of its own, so without this card it is reachable
+// only by typing the URL.
 templ Docs(v DocsView) {
 	@Page(v.Page) {
 		@globalShell("knowledge") {
+			<section class="card">
+				<div class="hd"><h3>Drift &amp; overview</h3></div>
+				<div class="bd">
+					<p><a href="/drift">Drift board</a></p>
+					<p class="muted small">Architectural violations, stale intent and coverage gaps from the knowledge graph, alongside the ready frontier and the critical path from the backbone.</p>
+				</div>
+			</section>
 			<section class="card">
 				<div class="hd"><h3>Documents</h3></div>
 				<div class="bd">

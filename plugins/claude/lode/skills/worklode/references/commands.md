@@ -20,9 +20,13 @@ Flags: --on
 
 Flags: --project, --repo
 
-## `lode derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout)
+## `lode critical-path` — Estimate-free critical path over blocks + requires (D12)
 
-Flags: --allow-empty, --dry-run, --graph-url
+Flags: --task
+
+## `lode derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones
+
+Flags: --allow-empty, --dry-run, --graph-url, --server
 
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
@@ -50,6 +54,10 @@ Flags: --allow-empty, --dry-run, --graph-url
 
 ## `lode done` — Submit the current worktree's task for review and release its lease
 
+## `lode drift` — Architectural drift: violations and stale intent (spec 007 §3.1)
+
+Flags: --acknowledged, --component
+
 ## `lode event` — The ordered event log: tail, subscriber status, admin seek
 
 - `lode event seek` — Move a subscriber's offsets (admin; a replay relies on handler idempotency)
@@ -57,6 +65,12 @@ Flags: --allow-empty, --dry-run, --graph-url
 - `lode event subscribers` — Show subscriber offsets, lag, and lock holder
 - `lode event tail` — List recent events, newest last (--follow to keep watching)
   Flags: --follow, --limit, --since, --type
+
+## `lode frontier` — Ready, unblocked tasks in pickup order
+
+Flags: --project, --repo
+
+## `lode gaps` — Doc gaps and unmatched-path coverage gaps
 
 ## `lode hook` — Run a Worklode lifecycle hook (--list shows every event)
 
@@ -90,6 +104,10 @@ Flags: --dsn, --migrations-path
 ## `lode next` — Claim a task (or the top-ranked ready one), set up its worktree, and print its brief
 
 Flags: --kind, --project, --repo, --strict-focus
+
+## `lode overview` — One-screen roll-up: drift counts, gaps, frontier, critical head
+
+Flags: --project, --repo
 
 ## `lode project` — Manage projects and their repos
 
