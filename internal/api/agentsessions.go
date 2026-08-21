@@ -9,22 +9,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-func toAgentSessionJSON(a *store.AgentSession) model.AgentSession {
-	return model.AgentSession{
-		LeaseID:      a.LeaseID,
-		Agent:        a.Agent,
-		AgentVersion: a.AgentVersion,
-		SessionID:    a.SessionID,
-		StartedAt:    a.StartedAt,
-		LastSeenAt:   a.LastSeenAt,
-		EndedAt:      a.EndedAt,
-		InputTokens:  a.InputTokens,
-		OutputTokens: a.OutputTokens,
-		CostAmount:   a.CostAmount,
-		CostCurrency: a.CostCurrency,
-	}
-}
-
 // touchAgentSession handles POST /api/v1/tasks/{id}/agent-session: record
 // that an agent session is working the task, or heartbeat an existing one.
 // Only the lease holder may report; a non-holder gets 404, the same
@@ -49,7 +33,7 @@ func (s *server) touchAgentSession(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toAgentSessionJSON(sess))
+	writeJSON(w, http.StatusOK, sess)
 }
 
 // toUsageBuckets converts reported buckets to their store form, preserving
