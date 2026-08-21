@@ -35,6 +35,7 @@ const (
 	bootstrapToken = "wl_00e2e00e2e00e2e00e2e00e2e00e2e00e2e00e2e"
 	githubSecret   = "e2e-github-secret"
 	fluxSecret     = "e2e-flux-secret"
+	catalogSecret  = "e2e-catalog-secret"
 
 	repo     = "sunstoneinstitute/demo"
 	headSHA  = "aaa1110000000000000000000000000000000000"
