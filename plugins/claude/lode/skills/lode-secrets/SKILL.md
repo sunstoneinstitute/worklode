@@ -18,7 +18,9 @@ materialized into the OS keystore at claim time; you never see or handle them.
   access to it — there is no PR to open and no repo file to edit, so do not
   attempt it yourself. Mint a task and block, per "Executing tasks" below. Do
   not invent names — they are org-unique and env-var style
-  (`^[A-Z][A-Z0-9_]*$`).
+  (`^[A-Z][A-Z0-9_]*$`), and loader-sensitive names are rejected: nothing
+  starting `LD_` or `DYLD_`, and not `PATH`, `IFS`, `ENV`, `BASH_ENV`,
+  `PYTHONPATH`, `NODE_OPTIONS`, `CLASSPATH` and friends (ADR 047).
 - A catalog entry holds a credential, not a whole credentialed asset — on
   macOS and Windows a keystore item is capped at ~2.5-3 KB, so an asset like a
   full kubeconfig has to be split into a plaintext template plus the client

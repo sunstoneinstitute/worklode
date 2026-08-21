@@ -44,3 +44,4 @@ These files do that resolution once.
 - [`044-deleting-tasks-and-documents.md`](044-deleting-tasks-and-documents.md) — Spec 044 — Deleting tasks and documents (draft)
 - [`045-per-project-workflows.md`](045-per-project-workflows.md) — Spec 045 — Per-project workflows (draft)
 - [`046-workflow-rule-engine.md`](046-workflow-rule-engine.md) — Spec 046 — Workflow rule engine (draft)
+- [`047-loader-sensitive-secret-names.md`](047-loader-sensitive-secret-names.md) — ADR 047 — Loader-sensitive names are not secret names (draft)
