@@ -1,9 +1,10 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
 	"path"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
@@ -104,49 +105,37 @@ func looksLikePath(base string) bool {
 	return strings.Contains(base, "/") || strings.HasSuffix(base, ".md")
 }
 
+// filterDocs returns every document keep accepts. Each ref form narrows the
+// candidate set on a one-line predicate; this is the single loop they share.
+func filterDocs(docs []model.Doc, keep func(model.Doc) bool) []model.Doc {
+	var matches []model.Doc
+	for _, d := range docs {
+		if keep(d) {
+			matches = append(matches, d)
+		}
+	}
+	return matches
+}
+
 // showableDocs drops the documents `lode show` cannot render: plans, which
 // carry no number and no sections (025 §9).
 func showableDocs(docs []model.Doc) []model.Doc {
-	out := make([]model.Doc, 0, len(docs))
-	for _, d := range docs {
-		if d.Kind != "plan" {
-			out = append(out, d)
-		}
-	}
-	return out
+	return filterDocs(docs, func(d model.Doc) bool { return d.Kind != "plan" })
 }
 
 // matchNumber returns every document whose corpus number equals n.
 func matchNumber(docs []model.Doc, n int) []model.Doc {
-	var matches []model.Doc
-	for _, d := range docs {
-		if d.Number == n {
-			matches = append(matches, d)
-		}
-	}
-	return matches
+	return filterDocs(docs, func(d model.Doc) bool { return d.Number == n })
 }
 
 // matchSlug returns every document whose slug is exactly slug.
 func matchSlug(docs []model.Doc, slug string) []model.Doc {
-	var matches []model.Doc
-	for _, d := range docs {
-		if d.Slug == slug {
-			matches = append(matches, d)
-		}
-	}
-	return matches
+	return filterDocs(docs, func(d model.Doc) bool { return d.Slug == slug })
 }
 
 // matchSlugPrefix returns every document whose slug starts with prefix.
 func matchSlugPrefix(docs []model.Doc, prefix string) []model.Doc {
-	var matches []model.Doc
-	for _, d := range docs {
-		if strings.HasPrefix(d.Slug, prefix) {
-			matches = append(matches, d)
-		}
-	}
-	return matches
+	return filterDocs(docs, func(d model.Doc) bool { return strings.HasPrefix(d.Slug, prefix) })
 }
 
 // finishDocRef turns a form's candidates into a result: none is a tier-1
@@ -179,6 +168,6 @@ func uniqueDocs(in []model.Doc) []model.Doc {
 			out = append(out, d)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Slug < out[j].Slug })
+	slices.SortFunc(out, func(a, b model.Doc) int { return cmp.Compare(a.Slug, b.Slug) })
 	return out
 }
