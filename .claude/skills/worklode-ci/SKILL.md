@@ -16,7 +16,7 @@ their markdown is input, not prose, so a PR touching only those still runs CI.
 ## The subtree-scoped job
 
 The `obsidian` job is the one check scoped to a subtree: it runs only when a PR
-touches `obsidian/` or `_obsidian.yml`, decided by a `gate` output rather than
+touches `plugins/obsidian/` or `_obsidian.yml`, decided by a `gate` output rather than
 a `paths:` filter, because a reusable workflow cannot take one.
 
 `can-be-tested` does **not** force it — that label authorises CI, it does not

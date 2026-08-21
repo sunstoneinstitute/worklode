@@ -111,7 +111,7 @@ Wire shape and server side (spec 042 §2 "Serving").
   §5). Reject a `template` value containing a path separator or `..` — it
   names a key in the projected Secret, never a path. Populate the new wire
   fields.
-- Check `obsidian/src/api/types.ts`: if it hand-mirrors
+- Check `plugins/obsidian/src/api/types.ts`: if it hand-mirrors
   `SecretCatalogEntry`, update the mirror (worklode-obsidian-mirror skill);
   if it does not, this step is a no-op.
 

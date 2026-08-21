@@ -19,7 +19,7 @@ requests instead of an N+1 walk.
 **Architecture:** Two halves, sequenced. First, Go: `GET /api/v1/docs?body=true`
 stops blanking `body`/`frontmatter`, and `GET /api/v1/tasks?detail=true` adds
 `blocked` and `edges` to each row on the back of one new bulk store reader.
-Second, TypeScript: a new top-level `obsidian/` directory holding an Obsidian
+Second, TypeScript: a `plugins/obsidian/` directory holding an Obsidian
 plugin whose only writable territory is one configured subfolder of the user's
 vault. Inside the plugin, three pure modules (wire client, note serializer,
 mirror diff) sit behind one thin Obsidian-aware shell, so everything load-bearing
@@ -151,7 +151,7 @@ that is what puts the edges into graph view — the whole point of the exercise.
   `internal/api/metrics.go` following `observeDocSync` (line 346);
   `prometheus.Registerer` is already threaded. No per-project or per-id label,
   ever.
-- **No Go dependency on the plugin.** `obsidian/` is not imported by the Go
+- **No Go dependency on the plugin.** `plugins/obsidian/` is not imported by the Go
   build, not embedded in the binary, and adds no Go module dependency. It ships
   no secrets: the token lives in Obsidian's per-vault `data.json`, in plaintext,
   and the README says so plainly rather than pretending otherwise.
@@ -160,7 +160,7 @@ that is what puts the edges into graph view — the whole point of the exercise.
   do. This is what keeps the three testable under vitest with no Obsidian
   runtime; a task that breaks it has broken the test strategy.
 - **Every task leaves `go test ./...` green** (and, from task 4 on,
-  `npm --prefix obsidian test` green) and ends in its own commit. Commit
+  `npm --prefix plugins/obsidian test` green) and ends in its own commit. Commit
   messages describe the change, never the plan file, and never carry
   `Co-authored-by:` trailers.
 
@@ -486,7 +486,7 @@ expansion="detail"}` increments only on the expanded request.
 - [ ] `go test ./... -count=1` → green
 - [ ] Commit: e.g. `Expand task list rows with blocked and edges on request`
 
-### Task 4 — `obsidian/` scaffold, build, test harness and CI
+### Task 4 — `plugins/obsidian/` scaffold, build, test harness and CI
 
 ```yaml
 kind: chore
@@ -495,11 +495,11 @@ skills: [ ]
 blockedBy: [ ]
 ```
 
-First TypeScript in the repo. Create `obsidian/` at the top level, beside
-`www/` — it shares no code with the Go build and must not be importable from
-it.
+First TypeScript in the repo. Create `plugins/obsidian/` under the existing
+`plugins/` directory, beside `plugins/claude/` — it shares no code with the Go
+build and must not be importable from it.
 
-`obsidian/package.json`:
+`plugins/obsidian/package.json`:
 
 ```json
 {
@@ -528,7 +528,7 @@ it.
 }
 ```
 
-`obsidian/manifest.json` — the id is what names the plugin folder inside a
+`plugins/obsidian/manifest.json` — the id is what names the plugin folder inside a
 vault, so it is fixed here and never changed:
 
 ```json
@@ -544,21 +544,21 @@ vault, so it is fixed here and never changed:
 }
 ```
 
-`obsidian/tsconfig.json`: `target`/`module` `ES2022`, `moduleResolution`
+`plugins/obsidian/tsconfig.json`: `target`/`module` `ES2022`, `moduleResolution`
 `bundler`, `strict: true`, `noImplicitOverride: true`, `noUnusedLocals: true`,
 `lib: ["DOM", "ES2022"]`, `include: ["src", "test"]`.
 
-`obsidian/esbuild.config.mjs`: the standard Obsidian sample-plugin config —
+`plugins/obsidian/esbuild.config.mjs`: the standard Obsidian sample-plugin config —
 entry `src/main.ts`, `bundle: true`, `format: "cjs"`, `target: "es2022"`,
 `outfile: "main.js"`, `external: ["obsidian", "electron", ...builtinModules]`,
 sourcemap `inline` in dev and off in production, watch mode when the
 `production` argument is absent.
 
-`obsidian/.gitignore`: `node_modules/`, `main.js`, `*.js.map`. The build output
+`plugins/obsidian/.gitignore`: `node_modules/`, `main.js`, `*.js.map`. The build output
 is not committed — this plugin is installed by building, not by downloading a
 release, and a committed `main.js` would rot silently.
 
-`obsidian/vitest.config.ts`: environment `node`, `include: ["test/**/*.test.ts"]`.
+`plugins/obsidian/vitest.config.ts`: environment `node`, `include: ["test/**/*.test.ts"]`.
 
 Prove the harness with one real assertion rather than a smoke test that cannot
 fail — `test/scaffold.test.ts` reads `manifest.json` and asserts its `id` is
@@ -569,19 +569,19 @@ version does not match its release).
 CI: new `.github/workflows/_obsidian.yml`, a reusable workflow mirroring
 `_lint.yml`'s structure — `actions/checkout` (pinned by SHA, as every other
 workflow in this repo does), `actions/setup-node` with `node-version: 22` and
-`cache: npm` / `cache-dependency-path: obsidian/package-lock.json`, then
+`cache: npm` / `cache-dependency-path: plugins/obsidian/package-lock.json`, then
 `npm ci`, `npm run typecheck`, `npm test`, `npm run build`, all with
-`working-directory: obsidian`. Wire it into `.github/workflows/pr-checks.yml`
+`working-directory: plugins/obsidian`. Wire it into `.github/workflows/pr-checks.yml`
 as a job named `obsidian` with `needs: gate` and
 `if: needs.gate.outputs.run == 'true'`, alongside `lint` and `test`. No path
 filter — a reusable workflow cannot take one, and the job is under a minute.
 Commit `package-lock.json` (`npm ci` requires it).
 
-- [ ] Create the scaffold files; `cd obsidian && npm install`
+- [ ] Create the scaffold files; `cd plugins/obsidian && npm install`
 - [ ] Write `test/scaffold.test.ts`
-- [ ] `npm --prefix obsidian run typecheck` → no errors
-- [ ] `npm --prefix obsidian test` → 1 passed
-- [ ] `npm --prefix obsidian run build` → `main.js` written
+- [ ] `npm --prefix plugins/obsidian run typecheck` → no errors
+- [ ] `npm --prefix plugins/obsidian test` → 1 passed
+- [ ] `npm --prefix plugins/obsidian run build` → `main.js` written
 - [ ] Add `_obsidian.yml` and the `obsidian` job in `pr-checks.yml`
 - [ ] Commit **including `package-lock.json`, excluding `main.js`**: e.g.
       `Add the Obsidian plugin scaffold and its CI job`
@@ -596,7 +596,7 @@ skills:
 blockedBy: [4]
 ```
 
-`obsidian/src/api/types.ts` mirrors the Go wire shapes — `Project`,
+`plugins/obsidian/src/api/types.ts` mirrors the Go wire shapes — `Project`,
 `RepoMapping`, `Task` (all fifteen `taskJSON` fields), `TaskListDetail`
 (`Task` + `blocked` + `edges`), `TaskEdgeOut`/`TaskEdgeIn`, and `Doc` (the
 `docJSON` fields, with `body`/`frontmatter` optional since an unexpanded list
@@ -604,7 +604,7 @@ omits them). Head the file with a comment naming
 `internal/cli/client.go` as the source of truth and ADR 036 as the direction of
 travel, so the next reader knows which side to change first.
 
-`obsidian/src/api/client.ts` — no Obsidian import; the transport is injected so
+`plugins/obsidian/src/api/client.ts` — no Obsidian import; the transport is injected so
 tests need no network and no Obsidian:
 
 ```ts
@@ -640,7 +640,7 @@ would send the user hunting.
 `baseUrl` is normalized once in the constructor by stripping trailing slashes,
 so `https://lode.example.com/` and `https://lode.example.com` behave the same.
 
-Tests, `obsidian/test/client.test.ts`, with a fake transport recording requests:
+Tests, `plugins/obsidian/test/client.test.ts`, with a fake transport recording requests:
 
 ```ts
 it("requests the expanded shapes and sends the bearer token", async () => {
@@ -664,7 +664,7 @@ it("parses a task row's edges", async () => {
 
 - [ ] Write `test/client.test.ts`; watch it fail to compile
 - [ ] Write `src/api/types.ts` and `src/api/client.ts`
-- [ ] `npm --prefix obsidian test` → all passing
+- [ ] `npm --prefix plugins/obsidian test` → all passing
 - [ ] Commit: e.g. `Add the Worklode read API client for the Obsidian plugin`
 
 ### Task 6 — Task note serialization and the round-trip property
@@ -677,7 +677,7 @@ skills:
 blockedBy: [5]
 ```
 
-`obsidian/src/serialize/note.ts` — pure, no Obsidian, no I/O. This task builds
+`plugins/obsidian/src/serialize/note.ts` — pure, no Obsidian, no I/O. This task builds
 the task half and the shared machinery; task 7 adds the other three note kinds.
 
 ```ts
@@ -769,7 +769,7 @@ Serialize the frontmatter with the `yaml` package (`stringify`) rather than by
 hand: quoting rules for values like `"[[WL-7]]"` and titles containing `:` are
 exactly the kind of thing a hand-rolled emitter gets wrong.
 
-Tests, `obsidian/test/note.test.ts`:
+Tests, `plugins/obsidian/test/note.test.ts`:
 
 ```ts
 it("renders a task note with relations as wikilinks", () => {
@@ -800,7 +800,7 @@ regression fences around them.
 
 - [ ] Write `test/note.test.ts`; watch it fail to compile
 - [ ] Implement `Note`, `WlBlock`, `taskToNote`, `parseNote`, and the etag helper
-- [ ] `npm --prefix obsidian test` → all passing
+- [ ] `npm --prefix plugins/obsidian test` → all passing
 - [ ] Commit: e.g. `Serialize Worklode tasks as Obsidian notes`
 
 ### Task 7 — Doc, project and index note serialization
@@ -813,7 +813,7 @@ skills:
 blockedBy: [6]
 ```
 
-Still `obsidian/src/serialize/note.ts`:
+Still `plugins/obsidian/src/serialize/note.ts`:
 
 ```ts
 export function docToNote(d: Doc): Note;
@@ -876,7 +876,7 @@ the round-trip rule does not apply to it, and the note says so in one line:
 a `wl` block with `type: index` and the sync timestamp, and a body listing every
 project as a wikilink with its doc and task counts.
 
-Tests, extending `obsidian/test/note.test.ts`:
+Tests, extending `plugins/obsidian/test/note.test.ts`:
 
 ```ts
 it("preserves the doc's own frontmatter verbatim", () => {
@@ -905,7 +905,7 @@ it("renders project and index notes with wikilinks to their members", () => {
 
 - [ ] Write the new tests; watch them fail
 - [ ] Implement `docToNote`, `projectToNote`, `indexToNote`
-- [ ] `npm --prefix obsidian test` → all passing
+- [ ] `npm --prefix plugins/obsidian test` → all passing
 - [ ] Commit: e.g. `Serialize Worklode docs, projects and the vault index`
 
 ### Task 8 — The mirror: desired set, diff, and apply
@@ -918,7 +918,7 @@ skills:
 blockedBy: [7]
 ```
 
-`obsidian/src/sync/mirror.ts` — pure logic against an injected writer
+`plugins/obsidian/src/sync/mirror.ts` — pure logic against an injected writer
 interface, no Obsidian import:
 
 ```ts
@@ -969,7 +969,7 @@ recording it in `conflicts` rather than writing outside the mount. This is the
 one place a hostile or malformed backbone id could escape the mount root, so it
 is tested directly.
 
-Tests, `obsidian/test/mirror.test.ts`, against an in-memory `VaultWriter`
+Tests, `plugins/obsidian/test/mirror.test.ts`, against an in-memory `VaultWriter`
 backed by a `Map<string, string>`:
 
 ```ts
@@ -997,7 +997,7 @@ it("never touches a path outside the mount root", async () => {
 
 - [ ] Write `test/mirror.test.ts`; watch it fail to compile
 - [ ] Implement `desiredNotes`, `desiredPath`, `applyMirror`
-- [ ] `npm --prefix obsidian test` → all passing
+- [ ] `npm --prefix plugins/obsidian test` → all passing
 - [ ] Commit: e.g. `Add the vault mirror diff and apply pass`
 
 ### Task 9 — The Obsidian shell: settings, commands, status bar
@@ -1011,7 +1011,7 @@ blockedBy: [8]
 
 The only two files that import `obsidian`.
 
-`obsidian/src/vault/writer.ts` — `ObsidianVaultWriter implements VaultWriter`
+`plugins/obsidian/src/vault/writer.ts` — `ObsidianVaultWriter implements VaultWriter`
 over `app.vault.adapter` (`list`, `read`, `write`, `remove`, `mkdir`). Create
 parent folders before writing, and after deletions remove folders left empty
 under the root so a deleted project does not leave a husk. Use the adapter
@@ -1019,7 +1019,7 @@ rather than `app.vault.create`/`modify` — the adapter's path-based API is the
 one that maps cleanly onto `VaultWriter` and does not require a `TFile` handle
 for a file the plugin is about to overwrite.
 
-`obsidian/src/main.ts`:
+`plugins/obsidian/src/main.ts`:
 
 ```ts
 interface WorklodeSettings {
@@ -1057,9 +1057,9 @@ is covered by tasks 5–8. Verification is task 10's manual pass.
 
 - [ ] Implement `src/vault/writer.ts`
 - [ ] Implement `src/main.ts` and the settings tab
-- [ ] `npm --prefix obsidian run typecheck` → no errors
-- [ ] `npm --prefix obsidian test` → still all passing
-- [ ] `npm --prefix obsidian run build` → `main.js` written
+- [ ] `npm --prefix plugins/obsidian run typecheck` → no errors
+- [ ] `npm --prefix plugins/obsidian test` → still all passing
+- [ ] `npm --prefix plugins/obsidian run build` → `main.js` written
 - [ ] Commit: e.g. `Add the Obsidian plugin shell, settings and sync command`
 
 ### Task 10 — Install docs, manual verification, and the spec follow-up
@@ -1072,7 +1072,7 @@ skills:
 blockedBy: [9]
 ```
 
-`obsidian/README.md`, short and precise — no debugging diary:
+`plugins/obsidian/README.md`, short and precise — no debugging diary:
 
 - What it does and the one-sentence machine-owned-mount rule.
 - Build and install: `npm ci && npm run build`, then
@@ -1107,7 +1107,7 @@ first so these are not filed twice:
 - `GET /api/v1/tasks?detail=true` and `GET /api/v1/docs?body=true` are
   implemented but not written into their specs' API sections (004 §6.7, 025
   §16). Fold them in the next time either spec is amended.
-- The plugin's wire types in `obsidian/src/api/types.ts` duplicate
+- The plugin's wire types in `plugins/obsidian/src/api/types.ts` duplicate
   `internal/cli/client.go` by hand. ADR 036 makes `internal/model` the one
   declaration of every shape crossing the HTTP boundary; generating the
   TypeScript from it is the eventual fix.
@@ -1117,8 +1117,8 @@ first so these are not filed twice:
   for a non-admin client needs either an `event.read`-scoped stream or an
   `updated_at` filter on the list endpoints.
 
-- [ ] Write `obsidian/README.md` and the `CLAUDE.md` paragraph
+- [ ] Write `plugins/obsidian/README.md` and the `CLAUDE.md` paragraph
 - [ ] Run the four manual checks against a local stack
 - [ ] File the four follow-ups via the skill
-- [ ] `go test ./... -count=1` and `npm --prefix obsidian test` → both green
+- [ ] `go test ./... -count=1` and `npm --prefix plugins/obsidian test` → both green
 - [ ] Commit: e.g. `Document the Obsidian mirror and record its known gaps`

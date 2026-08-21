@@ -531,10 +531,10 @@ while dogfooding it against the real corpus.
   (including `Closed`, which costs a second round trip in `store.GetTask`'s
   implementation), and none of these six callers read anything but the
   not-found error.
-- `[P4]` **`obsidian/src/api/types.ts`'s hand-kept `Task` interface lacks
+- `[P4]` **`plugins/obsidian/src/api/types.ts`'s hand-kept `Task` interface lacks
   `closed`** (`internal/model/task.go`'s `Closed bool`), and already lacked
   `secrets`. Pre-existing drift, not introduced here — WL-76 (generate
-  `obsidian/src/api/types.ts` from `internal/model` instead of hand-mirroring)
+  `plugins/obsidian/src/api/types.ts` from `internal/model` instead of hand-mirroring)
   is the real fix; noting it here because this plan's `model.Task.Closed`
   read is what surfaced the gap.
 - `[P4]` **Every spec in `docs/specs/` is `status: draft`** — all 24 files,

@@ -70,7 +70,7 @@ makes Windows a real build target.
 
 What it would buy is a single bootstrap verb on a bare machine, which §2 already provides.
 
-**The trigger to revisit is a second runtime, not a second opinion.** The `obsidian/` TypeScript
+**The trigger to revisit is a second runtime, not a second opinion.** The `plugins/obsidian/` TypeScript
 plugin introduces one: a Node version needing a pin that no existing source of truth carries. Adopt a
 tool manager then, with that pin as its first real job, rather than retrofitting it onto three
 things that are fine.

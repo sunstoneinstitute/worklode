@@ -1,5 +1,5 @@
 # pnpm settings for the plugin. Since pnpm 11 these live here rather than in
-# package.json's "pnpm" field, and this file also makes obsidian/ the pnpm root —
+# package.json's "pnpm" field, and this file also makes plugins/obsidian/ the pnpm root —
 # the plugin shares no dependency tree with the Go build above it.
 #
 # pnpm blocks a dependency's build scripts unless it is allowed here. esbuild's
