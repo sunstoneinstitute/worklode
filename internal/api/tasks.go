@@ -41,8 +41,11 @@ func validSecretNames(names []string) bool {
 }
 
 // invalidSecretNameMsg is shared by every handler that gates on
-// validSecretNames, so the message cannot drift from the grammar.
-const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
+// validSecretNames, so the message cannot drift from the grammar. It names
+// both halves of the contract: a caller told only the pattern after
+// submitting PATH would read the rejection as a bug (ADR 047 §4).
+const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$ " +
+	"and must not be loader-sensitive (LD_*, DYLD_*, PATH, IFS, ENV, BASH_ENV, PYTHONPATH, ...)"
 
 // validKinds mirrors the tasks.kind CHECK constraint (migration 0025) and
 // wlc:TaskKind in ns/concept.ttl. The list is generated from the Turtle by

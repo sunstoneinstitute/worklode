@@ -1288,11 +1288,18 @@ func TestTaskSecretsRejectsBadNames(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
 	}
-	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
-		"project": "secbad", "title": "bad", "priority": "medium", "kind": "chore",
-		"secrets": []string{"op://Employee/GitHub token/credential"},
-	})
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("bad secret name: %d %s; want 422", rec.Code, rec.Body.String())
+	// A value or ref smuggled into the name field, then names that satisfy the
+	// grammar but redirect loading in a `lode secrets exec` child (ADR 047).
+	for _, name := range []string{
+		"op://Employee/GitHub token/credential",
+		"LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "PATH", "IFS", "BASH_ENV",
+	} {
+		rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+			"project": "secbad", "title": "bad", "priority": "medium", "kind": "chore",
+			"secrets": []string{name},
+		})
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("secret name %q: %d %s; want 422", name, rec.Code, rec.Body.String())
+		}
 	}
 }
