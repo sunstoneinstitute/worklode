@@ -1138,10 +1138,16 @@ already maintains. The implicit component is promoted to an explicit one the mom
 The manifest is a hand-maintained *claim about code*, so it enters the **observed** layer under
 spec 007's existing deriver contract — idempotent, full-replace, confined to its own named graph:
 
-- **Input:** every mapped repo's `.worklode/implements.yaml` at the default branch head.
-- **Output:** `<component> wl:implements <section>` into `…/graph/observed/repo-implements`, plus
-  the pinned version for staleness testing.
-- **Trigger:** push to the default branch; on a schedule as a backstop.
+- **Input:** the repo's own `.worklode/implements.yaml` at the checkout being derived — the
+  deriver is repo-local (`lode derive`, one writer and one graph per repo, 007 §1.1 as settled
+  by WL-275), not server-side: its inputs are the same checkout files the go-imports and
+  repo-layout derivers already read.
+- **Output:** `<component> wl:implements <section>` into
+  `…/graph/observed/repo-implements/<host>/<owner>/<repo>`, plus the pinned version for
+  staleness testing, carried as an RDF-1.2 annotation on the asserted edge's triple term:
+  `<< <component> wl:implements <section> >> wl:pinnedVersion <id/doc/<slug>/v<n>>`
+  (`wl:pinnedVersion` minted in 006 §3).
+- **Trigger:** the repo's CI on push to the default branch; a scheduled CI run as a backstop.
 
 Coverage and staleness then fall out as standing queries over the two-layer diff, with no new
 machinery:

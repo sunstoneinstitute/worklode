@@ -50,7 +50,7 @@ recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 006):
 | `…/graph/observed/repo-layout/<host>/<owner>/<repo>` | observed | component-boundary deriver (`lode derive`, one graph per repo) |
 | `…/graph/observed/pr-affects` | observed | PR-path deriver (server-side, org-global) |
 | `…/graph/observed/deploy` | observed | deploy/runtime projection from `internal/hooks/` (server-side, org-global) |
-| `…/graph/observed/repo-implements` | observed | implements-manifest deriver (025 §11; server-side, org-global) |
+| `…/graph/observed/repo-implements/<host>/<owner>/<repo>` | observed | implements-manifest deriver (025 §11; `lode derive`, one graph per repo — WL-275) |
 
 Concrete IRI grammar for the graph names is owned by 006 (branch-free term IRIs, ADR-0006);
 the `declared` vs `observed/*` partition is this spec's requirement. A deriver **must** confine
@@ -59,16 +59,22 @@ its writes to its own `observed/*` graph, so a bad run can never corrupt declare
 **One writer per graph.** The deriver contract (§2) is a blind whole-graph replace, so a graph
 name must encode everything that distinguishes independent writers — otherwise two writers
 alternate-and-erase each other, and the content-hash short-circuit turns that into a permanent
-flap. The **repo-local** sources (`go-imports`, `repo-layout`) run from each repo's checkout —
-`lode derive` in N repos' CI is N writers — so their partition is **per-source-per-repo**:
-`observed/<source>/<host>/<owner>/<repo>`, the repo segment mirroring the repo instance grammar
-(`id/repo/<host>/<owner>/<name>`). Their triples are keyed by repo-owned subjects (the repo node
-and the components its own manifest declares — a component lives in one repo, §2.2), so the
-per-repo sibling graphs union cleanly; the standing queries (§3) read the family by IRI prefix,
-which is exactly the sibling-graph UNION §3 already implies. The **backbone-derived** sources
-(`pr-affects`, `deploy`, `repo-implements`) are computed server-side over already-ingested,
-all-repo state by a single writer, and stay one org-global graph per source. If a source ever
-moves from server-run to per-repo-run, its graph moves to the per-repo shape with it.
+flap. The **repo-local** sources (`go-imports`, `repo-layout`, `repo-implements`) run from each
+repo's checkout — `lode derive` in N repos' CI is N writers — so their partition is
+**per-source-per-repo**: `observed/<source>/<host>/<owner>/<repo>`, the repo segment mirroring
+the repo instance grammar (`id/repo/<host>/<owner>/<name>`). Their triples are keyed by
+repo-owned subjects (the repo node and the components its own manifest declares — a component
+lives in one repo, §2.2), so the per-repo sibling graphs union cleanly; the standing queries
+(§3) read the family by IRI prefix, which is exactly the sibling-graph UNION §3 already implies.
+The **backbone-derived** sources (`pr-affects`, `deploy`) are computed server-side over
+already-ingested, all-repo state by a single writer, and stay one org-global graph per source.
+If a source ever moves from server-run to per-repo-run, its graph moves to the per-repo shape
+with it — which is exactly what `repo-implements` did (WL-275): its inputs
+(`.worklode/implements.yaml` resolved through `.worklode/components.yaml`) are the same
+repo-local files the other two checkout derivers already read, whereas running it server-side
+would have needed a mapped-repo enumeration and per-repo forge reads that exist nowhere else.
+Its subjects are the repo's own components, so the sibling-union argument above carries over
+unchanged.
 
 *Concurrency (compare-and-swap disposition).* Per-repo partitioning — one writer per graph — is
 what makes the blind `PUT` sound; it does not require compare-and-swap. Two runs racing on the
@@ -85,8 +91,9 @@ with a `wl:layer` — heavier to query and to replace atomically than one graph 
 
 ## 2. Observed-layer derivers {#sec-2}
 
-Five derivers share a contract, including a fifth — `observed/repo-implements`, which reads
-`.worklode/implements.yaml` and emits `<component> wl:implements <section>` (025 §11):
+Five derivers share a contract, including a fifth — `observed/repo-implements/<host>/<owner>/<repo>`,
+which reads `.worklode/implements.yaml` from the checkout and emits
+`<component> wl:implements <section>` (025 §11; repo-local per §1.1, WL-275):
 - **Idempotent & full-replace.** A run computes the complete edge set for its source *scope* —
   the repo it runs in for the repo-local derivers, the org for the server-side ones (§1.1) — and
   `PUT`s its whole `observed/*` graph. No incremental deltas; no stale edges survive a run.

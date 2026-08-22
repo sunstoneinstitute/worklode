@@ -275,6 +275,19 @@ wl:implements a owl:ObjectProperty ;              # component → intent (observ
                  "Component→Section. Derived by observed/repo-implements from "
                  ".worklode/implements.yaml (025 §11), never declared on a task." .
 
+wl:pinnedVersion a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT (WL-275)
+    rdfs:range wl:DesignDoc ;                     # the versioned snapshot (025 §4.1)
+    rdfs:comment "The document version a wl:implements claim was validated against — the "
+                 "manifest's pinned: value (025 §11.2), carried as an RDF-1.2 annotation on the "
+                 "asserted edge's triple term: << <component> wl:implements <section> >> "
+                 "wl:pinnedVersion <id/doc/<slug>/v<n>>. ADR-0001's asserted-occurrence is the "
+                 "right tool here, unlike the AcceptedDeviation case (§10): the implements edge "
+                 "IS asserted, and the pin is its one attribute, so no reification class is "
+                 "earned. No rdfs:domain — the subject is a triple term. The stale-claim "
+                 "standing query (025 §11.5) reads it as "
+                 "<< ?c wl:implements ?s >> wl:pinnedVersion/dcat:version ?pinned and compares "
+                 "against ?s wl:lastRevisedIn/dcat:version — numbers, never IRI strings (025 §4.1)." .
+
 wl:produces a owl:ObjectProperty ;                # execution → intent
     rdfs:domain wl:Task ; rdfs:range wl:Deliverable ;
     rdfs:comment "This task is what makes that deliverable exist (026 §6.2). Component left that "
