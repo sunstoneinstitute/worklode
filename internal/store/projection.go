@@ -128,7 +128,7 @@ func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (proj
 	// re-renders the owning project's declared doc graphs in the same
 	// cycle as its project graph.
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT sl.id, coalesce(t.project_id, d.project)
+		`SELECT sl.id, coalesce(t.project_id, d.project_id)
 		   FROM state_log sl
 		   LEFT JOIN tasks t ON sl.entity_kind = 'task' AND t.id = sl.entity_id
 		   LEFT JOIN docs d ON sl.entity_kind = 'doc' AND d.id::text = sl.entity_id
