@@ -1,12 +1,27 @@
 ---
 status: draft
 covers:
+- spec: docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-0
+  coverage: none
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-1
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-2
+- spec: docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-2.1
+  coverage: none
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-2.2
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-2.3
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-2.4
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-3
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-4
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-4.1
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-4.2
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-4.3
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-4.4
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-5
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-6
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-6.1
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-6.2
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-6.3
+- docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-6.4
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-7
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-8
 - docs/specs/040-corpus-indexing-and-hybrid-search.md#sec-9
@@ -31,12 +46,17 @@ machinery (`internal/embed`, `skillsync.embedMissing`,
 `InvalidateOnProviderChange`, `store.RecommendSkills`) rather than building
 beside it.
 
-**Shape of the change.** One new migration (`0040_index_chunks`), one new
+**Shape of the change.** One new migration (`0046_index_chunks` — the next
+free number when this plan was written; re-check with
+`./scripts/check-migrations.sh` at execution), one new
 package `internal/corpusindex` (pure chunking + the convergence loop),
 new store files `internal/store/index_chunks.go` and
 `internal/store/search.go`, a `Role`-aware `embed.Provider`, one new API route,
 one new CLI verb. `skill_embeddings` is dropped; `embedding_config` survives
-unchanged. No cockpit work (spec 040 §9: out of scope).
+unchanged. No cockpit work (spec 040 §9: out of scope). Spec 040 §0 and §2.1
+are motivation and rationale with no work to undertake, and §12's open
+questions are deliberately unresolved — each waits on evidence (§9's `mode`
+parameter, Task 6, is what produces it) — so all three carry `coverage: none`.
 
 **One reconciliation the executor must not "fix" back.** Spec 040 §5's DDL
 shows `embedding vector(768) NOT NULL`, but §8 states invalidation *nulls* the
@@ -179,7 +199,7 @@ end-to-end, table-tested.
   yields sub-chunks all carrying the section's anchor, each ≤ 3600 runes
   including its header, overlapping by 600.
 
-### Task 3 — Migration 0040 and the store moves onto index_chunks
+### Task 3 — Migration 0046 and the store moves onto index_chunks
 
 ```yaml
 kind: feature
@@ -190,7 +210,7 @@ skills:
 blockedBy: [1, 2]
 ```
 
-`deploy/base/migrations/0040_index_chunks.{up,down}.sql` plus
+`deploy/base/migrations/0046_index_chunks.{up,down}.sql` plus
 `internal/store/index_chunks.go`, landing together with every existing
 caller retargeted so the branch stays green.
 
