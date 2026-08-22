@@ -112,3 +112,5 @@ configMapGenerator:
       - migrations/0049_duplicate_edges.down.sql
       - migrations/0050_doc_edges_declared_by.up.sql
       - migrations/0050_doc_edges_declared_by.down.sql
+      - migrations/0051_task_scoped_tokens.up.sql
+      - migrations/0051_task_scoped_tokens.down.sql

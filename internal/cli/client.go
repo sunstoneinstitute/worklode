@@ -1342,6 +1342,13 @@ func (c *Client) CreateToken(ctx context.Context, actorID, description string, e
 	return doJSON[model.TokenResponse](ctx, c, http.MethodPost, "/api/v1/actors/"+url.PathEscape(actorID)+"/tokens", in, "token response")
 }
 
+// MintTaskToken calls POST /api/v1/tasks/{id}/tokens: a task-scoped token
+// (001 §2.1). Zero values take the server defaults (actor "sandbox", the
+// lease TTL).
+func (c *Client) MintTaskToken(ctx context.Context, taskID string, in model.TaskTokenInput) (model.TaskTokenResponse, []byte, error) {
+	return doJSON[model.TaskTokenResponse](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(taskID)+"/tokens", in, "task token")
+}
+
 // RevokeToken calls DELETE /api/v1/tokens (204, no body). token may be
 // either the plaintext or its stored hash.
 func (c *Client) RevokeToken(ctx context.Context, token string) ([]byte, error) {

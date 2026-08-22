@@ -151,7 +151,7 @@ func TestOIDCTokenExchangeMintsToken(t *testing.T) {
 		t.Fatal("empty token")
 	}
 	// The minted token authenticates as the provisioned actor.
-	a, err := st.Authenticate(context.Background(), token)
+	a, _, err := st.Authenticate(context.Background(), token)
 	if err != nil {
 		t.Fatalf("authenticate minted token: %v", err)
 	}

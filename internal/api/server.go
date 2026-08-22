@@ -334,6 +334,8 @@ type server struct {
 	formSubmissions *prometheus.CounterVec
 	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
 	dictations *prometheus.CounterVec
+	// taskTokens counts task-scoped token mints (WL-306); see metrics.go.
+	taskTokens *prometheus.CounterVec
 
 	// crewChanges counts Crew membership changes, by surface (api, web),
 	// action (add, remove), and outcome; see crew.go and observeCrewChange. Labels
@@ -677,6 +679,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/repos/doctor", s.reposDoctor)
 
 	r.api("POST /api/v1/actors", s.createActor)
+	r.api("POST /api/v1/tasks/{id}/tokens", s.mintTaskToken)
 	r.api("POST /api/v1/actors/{id}/tokens", s.createToken)
 	r.api("DELETE /api/v1/tokens", s.revokeToken)
 
@@ -1074,7 +1077,7 @@ func (s *server) auth(next http.HandlerFunc) http.Handler {
 			writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		actor, err := s.st.Authenticate(r.Context(), token)
+		actor, boundTask, err := s.st.Authenticate(r.Context(), token)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				writeErr(w, http.StatusUnauthorized, "unauthorized")
@@ -1083,7 +1086,9 @@ func (s *server) auth(next http.HandlerFunc) http.Handler {
 			s.mapStoreErr(w, err)
 			return
 		}
-		next(w, withSubject(r, subjectFromActor(actor, authToken)))
+		sub := subjectFromActor(actor, authToken)
+		sub.TaskID = boundTask
+		next(w, withSubject(r, sub))
 	})
 }
 
