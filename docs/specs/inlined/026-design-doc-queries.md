@@ -461,8 +461,9 @@ readers cannot disagree about what a name means), or
 that matches exactly one document; an ambiguous ref is an error listing the candidates.
 A bare number is always a task id at the `lode show` surface; a document by bare number is
 spelled with a kind flag (`--spec 25`) or the shorthand.
-A shorthand naming another project is reported unresolved rather than fetched — §4.2's tier 2
-is dormant until 025. Without
+A shorthand naming another project resolves against that project's backbone docs — §4.2's
+tier 2, live since 025 landed (WL-276); only a key no registered project carries is reported
+unresolved. Without
 `--resolved` this is `cat` with ref resolution, which is worth having only because it takes
 the same ref forms as everything else.
 
@@ -749,10 +750,14 @@ has none. Committing the key to the repo is safe because 004 §2.1 makes it immu
 what buys tier-1 checking. Where the key is absent every shorthand falls to tier 3, so the line
 stays optional and an un-migrated repo degrades rather than failing.
 
-**Tier 2 is dormant in this spec's window.** It reads the `docs` rows, and 025 has not landed;
-§1's "this spec adds no endpoint" stands, and nothing here builds one. Until then every foreign
-key falls to tier 3, and the tier exists in the table so that landing 025 changes which branch
-runs rather than what a reference means.
+**Tier 2 is live** (dormant in this spec's original window; activated by WL-276 once 025
+landed). It reads the backbone's own knowledge of the org through the endpoints that already
+exist — the project list supplies the key→project mapping, that project's `docs` rows supply
+the candidates — so §1's "this spec adds no endpoint" still stands. A foreign key the backbone
+knows resolves exactly like a local one, kind check included, and a known key whose document is
+missing is the defect the table says it is; only a key no registered project carries falls to
+tier 3. A checkout with no `project_key` of its own gets the same treatment — its shorthands
+resolve through the backbone rather than degrading, since the lookup is one code path.
 
 It also cannot be shortcut by reading the other repo off disk, even where one is checked out
 beside this repo. No two corpora in the org share a layout: worklode numbers specs and ADRs
