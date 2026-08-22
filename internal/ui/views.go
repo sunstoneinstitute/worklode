@@ -518,14 +518,16 @@ type NewTaskView struct {
 	Draft      bool
 }
 
-// NewDeliverableView is the "Declare a deliverable" form: exactly the three
-// descriptive fields spec 029 §3.1 gives a custom deliverable, and nothing
-// that would let a person assert its state.
+// NewDeliverableView is the "Declare a deliverable" form: exactly the
+// descriptive fields spec 029 §3.1 gives a custom deliverable — name,
+// description, URL, and the artifact address the ingest routes reports by —
+// and nothing that would let a person assert its state.
 type NewDeliverableView struct {
 	Form        FormShell
 	Name        string
 	Description string
 	URL         string
+	Artifact    string
 }
 
 // --- presentation helpers ---------------------------------------------------

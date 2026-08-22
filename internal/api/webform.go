@@ -76,6 +76,7 @@ type deliverableFormValues struct {
 	Name        string
 	Description string
 	URL         string
+	Artifact    string
 }
 
 // sameOriginForm reports whether a state-changing form submission came from
@@ -335,11 +336,9 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Name:        strings.TrimSpace(r.PostFormValue("name")),
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 		URL:         strings.TrimSpace(r.PostFormValue("url")),
+		Artifact:    strings.TrimSpace(r.PostFormValue("artifact")),
 	}
-	// No artifact field on the form yet: the templ form would need a new
-	// input and a regenerated component, so the cockpit declares deliverables
-	// without an address and the JSON API is the only surface that sets one.
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, "", actorIDFrom(r))
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, values.Artifact, actorIDFrom(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",
