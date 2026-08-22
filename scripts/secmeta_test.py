@@ -50,6 +50,17 @@ covers:
 """
 
 
+def defers_plan(status, entry):
+    return f"""\
+---
+status: {status}
+defers:
+  - {entry}
+---
+# Plan
+"""
+
+
 def run_secmeta(files):
     """Run the real validator in an isolated, minimal repository."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -289,6 +300,89 @@ class PlanCoverageTest(unittest.TestCase):
                               "docs/plans/b.md": plan("accepted", "spec: docs/specs/s.md#sec-1\n    coverage: full")})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout + result.stderr, "")
+
+
+class DefersTest(unittest.TestCase):
+    # Each case is a real CLI contract for the `defers` handoff key (026 §5.3).
+    def assert_error(self, entry, message):
+        result = run_secmeta({"docs/specs/s.md": SPEC,
+                              "docs/plans/a.md": defers_plan("accepted", entry)})
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(message, result.stdout)
+
+    def test_defers_requires_spec(self):
+        self.assert_error("to: docs/specs/s.md", "no spec")
+
+    def test_defers_requires_to(self):
+        self.assert_error("spec: docs/specs/s.md#sec-1", "no to")
+
+    def test_defers_rejects_unknown_entry_key(self):
+        self.assert_error("spec: docs/specs/s.md#sec-1\n    to: docs/specs/s.md\n    extra: no",
+                          "unknown key(s) extra")
+
+    def test_defers_requires_section_fragment(self):
+        self.assert_error("spec: docs/specs/s.md\n    to: docs/specs/s.md", "names no section")
+
+    def test_defers_owner_rejects_fragment(self):
+        self.assert_error("spec: docs/specs/s.md#sec-1\n    to: docs/specs/s.md#sec-2",
+                          "names a section — the owner is a document")
+
+    def test_defers_spec_resolves_like_covers(self):
+        self.assert_error("spec: docs/specs/missing.md#sec-1\n    to: docs/specs/s.md",
+                          "resolves to no file")
+
+    def test_defers_owner_resolves_like_covers(self):
+        self.assert_error("spec: docs/specs/s.md#sec-1\n    to: docs/specs/missing.md",
+                          "resolves to no file")
+
+    def test_defers_rejects_conflicting_owners(self):
+        result = run_secmeta({"docs/specs/s.md": SPEC,
+                              "docs/plans/a.md": """\
+---
+status: accepted
+defers:
+  - spec: docs/specs/s.md#sec-1
+    to: docs/specs/s.md
+  - spec: docs/specs/s.md#sec-1
+    to: docs/plans/b.md
+---
+# Plan
+""",
+                              "docs/plans/b.md": plan("accepted", "docs/specs/s.md#sec-2")})
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("already deferred to", result.stdout)
+
+    def test_defers_same_entry_twice_is_not_a_conflict(self):
+        result = run_secmeta({"docs/specs/s.md": SPEC,
+                              "docs/plans/a.md": """\
+---
+status: accepted
+defers:
+  - spec: docs/specs/s.md#sec-1
+    to: docs/specs/s.md
+  - spec: docs/specs/s.md#sec-1
+    to: docs/specs/s.md
+---
+# Plan
+"""})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_defers_is_plan_only(self):
+        result = run_secmeta({"docs/specs/s.md": """\
+---
+status: accepted
+issued: 2026-08-09
+defers:
+  - spec: docs/specs/s.md#sec-1
+    to: docs/specs/s.md
+---
+# Spec
+
+## 1. Covered section {#sec-1}
+""",
+                              "docs/plans/a.md": plan("draft", "NO-SPEC")})
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("defers is a plan key, not a spec key", result.stdout)
 
 
 class CoverageShapeTest(unittest.TestCase):

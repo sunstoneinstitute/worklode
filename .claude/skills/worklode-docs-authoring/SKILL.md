@@ -49,7 +49,7 @@ spec" sentinel, which takes no project key — 026 §4.3) rather than omitting t
 key, because an absent `covers` is indistinguishable from a forgotten one.
 
 Frontmatter keys are ontology property names, ordered lifecycle → `covers` →
-dependency → amendment → supersession. A `covers:` reference the project
+`defers` → dependency → amendment → supersession. A `covers:` reference the project
 resolves becomes an edge on creation; one it does not is kept verbatim as an
 external reference — a typo therefore reads as an unplanned section rather
 than an error, so check `lode doc get <slug> --json` for the edges you meant.

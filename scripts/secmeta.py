@@ -29,6 +29,13 @@ section 2 checks closure, never trusts it), and that a section covered by
 several accepted plans is written in the qualified form, which is the only one
 that can say how the work divides.
 
+A plan's `defers` entry (026 section 5.3) hands one section to a named owner:
+a mapping of `spec` + `to`, no bare form -- a deferral without an owner is
+just an uncovered section, which needs no syntax. Both keys are required, the
+`spec` needs a `#sec-N` fragment and the `to` must not carry one, and a
+section deferred twice to different owners is a contradiction the frontmatter
+cannot mean.
+
 Usage: secmeta.py [path ...]        # defaults to docs/specs and docs/plans
 """
 
@@ -78,12 +85,17 @@ CLOSED_LEVELS = {"full", "none"}
 # `blocks`/`blockedBy` order whole plan documents (025 §5, §9.3) -- the
 # ordering edge that replaces a container row above a plan's tasks.
 PLAN_ORDERING = {"blocks", "blockedBy"}
+# `defers` (026 §5.3) hands one section to a named owner. It is a list of
+# {spec, to} mappings -- unlike `covers` it has no bare shorthand, so it is
+# neither a LIST_REFS nor a MAP_REFS key and gets its own check.
+DEFERS = {"defers"}
+DEFER_KEYS = {"spec", "to"}
 LIST_REFS = {"requires", "isRequiredBy"} | PLAN_COVERAGE | PLAN_ORDERING
 MAP_REFS = {"amends", "amendedBy", "replaces", "isReplacedBy"}
 PLAIN = {"status", "issued", "task", "kind"}
 SPEC_ONLY = {"wasDerivedFrom"}
-PLAN_ONLY = PLAN_COVERAGE | PLAN_ORDERING
-KNOWN = SCALAR_REFS | LIST_REFS | MAP_REFS | PLAIN
+PLAN_ONLY = PLAN_COVERAGE | PLAN_ORDERING | DEFERS
+KNOWN = SCALAR_REFS | LIST_REFS | MAP_REFS | PLAIN | DEFERS
 
 
 def sections_of(path):
@@ -222,6 +234,38 @@ def check_coverage_entry(entry, home, where, out, anchors):
         else:
             for i, target in enumerate(completions):
                 check_ref(target, home, f"{where}.fullCoverageWith[{i}]", out, anchors)
+
+
+def check_defers_entry(entry, home, where, out, anchors):
+    """Check one `defers` entry (026 §5.3): a plan's explicit handoff of one
+    section to a named owner. Unlike a qualified `covers` entry it carries no
+    level -- only `spec` and `to` are legal keys, and both resolve through the
+    same reference machinery `covers` uses."""
+    unknown = sorted(str(k) for k in set(entry) - DEFER_KEYS)
+    if unknown:
+        out.append(("error", f"{where}: unknown key(s) {', '.join(unknown)} — an entry "
+                             "takes spec and to"))
+
+    spec = entry.get("spec")
+    if spec is None:
+        out.append(("error", f"{where}: no spec — a deferral names the section handed off"))
+    else:
+        spec = str(spec)
+        check_ref(spec, home, f"{where}.spec", out, anchors)
+        if (REFERENCE.match(spec) or SHORTHAND.match(spec)) and "#sec-" not in spec:
+            out.append(("error", f"{where}.spec: {spec} names no section — a whole-document "
+                                 "deferral would silently defer future sections too (026 §5.3)"))
+
+    to = entry.get("to")
+    if to is None:
+        out.append(("error", f"{where}: no to — a deferral without an owner is just an "
+                             "uncovered section, which needs no syntax (026 §5.3)"))
+    else:
+        to = str(to)
+        check_ref(to, home, f"{where}.to", out, anchors)
+        if "#" in to:
+            out.append(("error", f"{where}.to: {to} names a section — the owner is a "
+                                 "document, no fragment (026 §5.3)"))
 
 
 def coverage_of(rel, data):
@@ -378,6 +422,30 @@ def check(path, anchors):
                 out.append(("error", f"{key}: {own} is not a section of this document"))
             for ref in as_list(refs):
                 check_ref(ref, home, f"{key}[{own}]", out, anchors)
+
+    if "defers" in data:
+        v = data["defers"]
+        if not isinstance(v, list):
+            out.append(("error", "defers takes a list of spec/to entries (026 §5.3)"))
+        else:
+            owners = {}  # resolved section -> (owner as authored, resolved owner)
+            for i, entry in enumerate(v):
+                where = f"defers[{i}]"
+                if not isinstance(entry, dict):
+                    out.append(("error", f"{where}: a defers entry is a mapping of spec and to"))
+                    continue
+                check_defers_entry(entry, home, where, out, anchors)
+                spec, to = entry.get("spec"), entry.get("to")
+                if spec is None or to is None:
+                    continue
+                section = resolve_ref(spec, home) or str(spec)
+                target = resolve_ref(to, home) or str(to)
+                prior = owners.get(section)
+                if prior and prior[1] != target:
+                    out.append(("error", f"{where}: {spec} is already deferred to {prior[0]} — "
+                                         "one owner per section per plan (026 §5.3)"))
+                else:
+                    owners.setdefault(section, (to, target))
 
     return out
 

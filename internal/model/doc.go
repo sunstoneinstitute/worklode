@@ -143,18 +143,24 @@ type DocRef struct {
 	Status string `json:"status"`
 }
 
-// DocSectionGap is one section of a spec that no accepted plan discharges,
-// with the reason 026 §2.1 gives: "partial" when a plan covers part of it and
-// no fullCoverageWith set closes it, "bound-only" when every accepted plan
-// naming it claims `none`, "unplanned" when none names it at all.
+// DocSectionGap is one section of a spec that no accepted or superseded plan
+// discharges, with the reason 026 §2.1 gives: "partial" when a plan covers
+// part of it and no fullCoverageWith set closes it, "deferred" when some such
+// plan hands it off to a named owner with `defers` (026 §5.3) and none claims
+// `partial`, "bound-only" when every such plan naming it claims `none`,
+// "unplanned" when none names it at all.
 type DocSectionGap struct {
 	Anchor   string `json:"anchor"`
-	Coverage string `json:"coverage"` // partial | bound-only | unplanned
+	Coverage string `json:"coverage"` // partial | deferred | bound-only | unplanned
+	// Owner is the deferral's named owner — a slug, or the external reference
+	// verbatim when it did not resolve — set only when Coverage is "deferred"
+	// (026 §2.1, §5.3).
+	Owner string `json:"owner,omitempty"`
 }
 
-// DocPlanningGap names the sections of one accepted spec that no accepted
-// plan discharges, each classified by why (026 §2.1). It is keyed by
-// document id rather than embedding the document, so GET /api/v1/docs
+// DocPlanningGap names the sections of one accepted spec that no accepted or
+// superseded plan discharges, each classified by why (026 §2.1). It is keyed
+// by document id rather than embedding the document, so GET /api/v1/docs
 // answers with one listing shape whatever selector produced it.
 //
 // Sections is the spec's current section count, so a caller can render the

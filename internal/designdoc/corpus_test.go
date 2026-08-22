@@ -53,7 +53,9 @@ func specPlanDirs(t *testing.T) (string, string) {
 	writeDoc(t, planDir, "2026-08-09-sync-1-foundations.md",
 		"---\nstatus: draft\nimplements: docs/specs/034-design-doc-sync.md\n---\n# Part 1\n\nProse.\n")
 	writeDoc(t, planDir, "2026-08-10-sync-2-store.md",
-		"---\nstatus: draft\nimplements: docs/specs/034-design-doc-sync.md\n---\n# Part 2\n\nProse.\n")
+		"---\nstatus: draft\nimplements: docs/specs/034-design-doc-sync.md\n"+
+			"defers:\n  - spec: docs/specs/034-design-doc-sync.md#sec-1\n"+
+			"    to: docs/specs/025-documents-in-the-backbone.md\n---\n# Part 2\n\nProse.\n")
 	writeDoc(t, planDir, "2026-07-01-standalone.md",
 		"---\nstatus: draft\nimplements: NO-SPEC\n---\n# Standalone\n\nProse.\n")
 	return specDir, planDir
@@ -127,6 +129,23 @@ func TestLoadSyncCorpusSectionsAndEdges(t *testing.T) {
 	noSpec := byFile["2026-07-01-standalone.md"]
 	if len(noSpec.Edges) != 1 || noSpec.Edges[0].Target != "NO-SPEC" {
 		t.Errorf("NO-SPEC plan edges = %+v", noSpec.Edges)
+	}
+
+	// A plan's defers entry projects to a covers-sibling edge: covers first,
+	// then defers (026 §5.3) — EdgeMeta carries no owner, the same way it
+	// carries no coverage level.
+	deferring := byFile["2026-08-10-sync-2-store.md"]
+	wantDeferring := []designdoc.EdgeMeta{
+		{Rel: "covers", Target: "docs/specs/034-design-doc-sync.md"},
+		{Rel: "defers", Target: "docs/specs/034-design-doc-sync.md", TargetAnchor: "sec-1"},
+	}
+	if len(deferring.Edges) != len(wantDeferring) {
+		t.Fatalf("deferring plan edges = %+v, want %+v", deferring.Edges, wantDeferring)
+	}
+	for i := range wantDeferring {
+		if deferring.Edges[i] != wantDeferring[i] {
+			t.Errorf("deferring plan edge %d = %+v, want %+v", i, deferring.Edges[i], wantDeferring[i])
+		}
 	}
 }
 

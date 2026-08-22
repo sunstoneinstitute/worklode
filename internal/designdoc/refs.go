@@ -29,13 +29,18 @@ type Ref struct {
 	// partial entry, its fullCoverageWith closure (026 §5.1). It is a copy,
 	// so writing through it does not reach the frontmatter.
 	Coverage *Coverage
+	// Deferral is the defers entry this reference came from, non-nil only
+	// when Rel is "defers": that relation alone carries a named owner
+	// (026 §5.3). It is a copy, so writing through it does not reach the
+	// frontmatter.
+	Deferral *Deferral
 }
 
 // ActingRels is the acting-direction relation set: the spellings that assert a
 // relation rather than restate its inverse. A consumer recording one row per
 // fact keeps these and drops the rest — writing both directions would double
 // every edge and let the two disagree (025 §14).
-var ActingRels = []string{"covers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"}
+var ActingRels = []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"}
 
 // refListRelOrder is the fixed order Refs walks the RefList fields, acting
 // spelling before its inverse.
@@ -73,27 +78,32 @@ func (f *Frontmatter) Refs() []Ref {
 		return nil
 	}
 	var out []Ref
-	add := func(anchor, rel, ref string, cov *Coverage) {
+	add := func(anchor, rel, ref string, cov *Coverage, def *Deferral) {
 		if ref = strings.TrimSpace(ref); ref != "" {
-			out = append(out, Ref{SrcAnchor: anchor, Rel: rel, Ref: ref, Coverage: cov})
+			out = append(out, Ref{SrcAnchor: anchor, Rel: rel, Ref: ref, Coverage: cov, Deferral: def})
 		}
 	}
 	// covers reads the retired `implements` spelling too (026 §5.1).
 	for _, entry := range f.CoverageEntries() {
-		add("", "covers", entry.Spec, &entry)
+		add("", "covers", entry.Spec, &entry, nil)
+	}
+	// defers, like covers, carries its qualifier (here the owner) with the
+	// reference rather than as a separate field (026 §5.3).
+	for _, entry := range f.Defers {
+		add("", "defers", entry.Spec, nil, &entry)
 	}
 	for _, r := range refListRelOrder {
 		for _, ref := range r.get(f) {
-			add("", r.rel, ref, nil)
+			add("", r.rel, ref, nil, nil)
 		}
 	}
-	add("", "wasDerivedFrom", f.WasDerivedFrom, nil)
+	add("", "wasDerivedFrom", f.WasDerivedFrom, nil, nil)
 	for _, r := range anchorRelOrder {
 		m := r.get(f)
 		for _, k := range slices.Sorted(maps.Keys(m)) {
 			anchor := anchorMapSrcAnchor(k)
 			for _, ref := range m[k] {
-				add(anchor, r.rel, ref, nil)
+				add(anchor, r.rel, ref, nil, nil)
 			}
 		}
 	}
