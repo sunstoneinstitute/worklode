@@ -34,6 +34,7 @@ type Frontmatter struct {
 	IsReplacedBy   AnchorMap    `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
 	Task           string       `yaml:"task,omitempty"`           // transitional, no term
 	Kind           string       `yaml:"kind,omitempty"`           // transitional, no term; 026 §4.2 — "adr" or absent (spec)
+	Artifact       RefList      `yaml:"artifact,omitempty"`       // transitional, no term; catalog address(es) verifying this doc (029 §3.1) — URIs, not doc refs
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is

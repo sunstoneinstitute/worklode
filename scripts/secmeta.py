@@ -92,7 +92,9 @@ DEFERS = {"defers"}
 DEFER_KEYS = {"spec", "to"}
 LIST_REFS = {"requires", "isRequiredBy"} | PLAN_COVERAGE | PLAN_ORDERING
 MAP_REFS = {"amends", "amendedBy", "replaces", "isReplacedBy"}
-PLAIN = {"status", "issued", "task", "kind"}
+# `artifact` is a catalog address (or list of them) the document is verified
+# by (029 §3.1, WL-255) -- URIs, not document refs, so it gets no ref checks.
+PLAIN = {"status", "issued", "task", "kind", "artifact"}
 SPEC_ONLY = {"wasDerivedFrom"}
 PLAN_ONLY = PLAN_COVERAGE | PLAN_ORDERING | DEFERS
 KNOWN = SCALAR_REFS | LIST_REFS | MAP_REFS | PLAIN | DEFERS
