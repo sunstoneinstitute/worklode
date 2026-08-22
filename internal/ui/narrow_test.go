@@ -178,6 +178,30 @@ func pages(t *testing.T) map[string]string {
 			RemoveError:      "claude-worker-01 still owns open work; reassign or close it first",
 			Responsibilities: []CrewWorkItem{{Kind: "task", ID: "WL-234", Title: longTitle, State: "in_progress"}},
 		}),
+		// One tombstone with a justification and one without, so both
+		// branches of tombstoneNote are measured.
+		"deleted": Deleted(DeletedView{
+			Page: PageProps{Title: "Deleted"}, Project: proj,
+			CanonicalURL:      "/projects/worklode/deleted",
+			RestoreTaskAction: "/projects/worklode/deleted/tasks/restore",
+			RestoreDocAction:  "/projects/worklode/deleted/docs/restore",
+			RestoreError:      "WL-234 is not deleted. It may already have been restored.",
+			Tasks: []model.Task{{
+				ID: "WL-234", Title: longTitle, Kind: "feature", Priority: "low", State: "ready",
+				Tombstone: &model.Tombstone{
+					DeletedAt: now, DeletedBy: "stig@sunstoneinstitute.ai",
+					Justification: "Filed twice by the importer against " + token + ", and this is the copy nobody worked.",
+				},
+			}},
+			Docs: []DeletedDocRow{{
+				Doc: model.Doc{
+					ID: 44, Kind: "spec", Slug: "044-deleting-tasks-and-documents",
+					Title: longTitle, Status: "draft",
+					Tombstone: &model.Tombstone{DeletedAt: now, DeletedBy: "claude-worker-01"},
+				},
+				URL: "/docs/44", Ref: "spec 44",
+			}},
+		}),
 		"approvals": Approvals(ApprovalsView{
 			Page: PageProps{Title: "Reviews", ActiveGlobal: "reviews"},
 			Rows: []ApprovalRow{{
