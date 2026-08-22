@@ -94,6 +94,7 @@ three specs.
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | **map**, see below | both |
 | `task` | — | `WL-<n>` | transitional only |
 | `kind` | — | `adr` on ADRs, absent on specs (026 §4.2) | specs, ADRs |
+| `artifact` | — (029 §3.3 defers the term to acceptance) | catalog address or list of them (`bigquery://…`, `gs://…`) the document is verified by (029 §3.1); declares additively — removing the key undeclares nothing | any |
 
 `kind` here is the resolver's document kind — it distinguishes an ADR from a
 spec for the `WL-SPEC-<n>`/`WL-ADR-<n>` shorthand's `<TYPE>` check (026 §4.2,

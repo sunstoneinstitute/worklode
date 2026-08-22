@@ -17,6 +17,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
+// maxArtifactURI caps a declared catalog address, in runes, matching the
+// API-side cap on a deliverable's artifact (internal/api/deliverables.go).
+const maxArtifactURI = 2000
+
 // DeclareArtifact records that (entityKind, entityID) is verified by the
 // artifact at this address. Re-declaring is a no-op, so a create path that
 // runs twice does not duplicate the routing target.

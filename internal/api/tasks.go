@@ -486,7 +486,8 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
-		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil {
+		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil &&
+		req.Artifacts == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
@@ -505,6 +506,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	if req.Secrets != nil && !validSecretNames(*req.Secrets) {
 		writeErr(w, http.StatusUnprocessableEntity, invalidSecretNameMsg)
 		return
+	}
+	if req.Artifacts != nil {
+		if msg := validateArtifacts(*req.Artifacts); msg != "" {
+			writeErr(w, http.StatusUnprocessableEntity, msg)
+			return
+		}
 	}
 	var stateFrom string
 	if req.State != nil {
@@ -536,6 +543,17 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			if req.Secrets != nil {
 				if err := store.LogChange(tx, "task", id, eventID,
 					map[string]any{"field": "secrets", "new": *req.Secrets}); err != nil {
+					return err
+				}
+			}
+			if req.Artifacts != nil {
+				for _, a := range *req.Artifacts {
+					if err := store.DeclareArtifact(tx, s.st.Now(), "task", id, strings.TrimSpace(a)); err != nil {
+						return err
+					}
+				}
+				if err := store.LogChange(tx, "task", id, eventID,
+					map[string]any{"field": "artifacts", "new": *req.Artifacts}); err != nil {
 					return err
 				}
 			}

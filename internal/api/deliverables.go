@@ -72,6 +72,26 @@ func validateDeliverable(projectID, name, description, rawURL, artifact, created
 	return in, ""
 }
 
+// validateArtifacts checks a list of catalog addresses to declare (PATCH
+// /api/v1/tasks/{id} artifacts): each non-blank after trimming and within
+// the same rune cap as a deliverable's artifact — length only, deliberately,
+// for the reason validateDeliverable states. Returns "" when valid.
+func validateArtifacts(artifacts []string) string {
+	if len(artifacts) == 0 {
+		return "artifacts must list at least one catalog address"
+	}
+	for _, a := range artifacts {
+		a = strings.TrimSpace(a)
+		switch {
+		case a == "":
+			return "artifacts must not contain a blank address"
+		case utf8.RuneCountInString(a) > maxDeliverableArtifact:
+			return "artifact is too long"
+		}
+	}
+	return ""
+}
+
 // recordDeliverable writes one declared deliverable through RecordEvent, so
 // the event log carries the fact and the source names the surface it came
 // from ("cli" for the JSON API, "web" for a cockpit form).
