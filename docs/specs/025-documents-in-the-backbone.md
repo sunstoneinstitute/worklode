@@ -1504,11 +1504,11 @@ The contract, per emitted type:
 
 | Event type | Source | Payload |
 |---|---|---|
-| `task.created` | `cli`, `web`, `doc-lifecycle` | the creation input, plus `task` — the minted id |
-| `task.updated` | `cli`, `doc-lifecycle` | the changed fields, plus `task` |
+| `task.created` | `cli`, `web`, `watcher` (the `doc-lifecycle` mint) | the creation input, plus `task` — the minted id |
+| `task.updated` | `cli`, `watcher` (an absorbed acceptance, §15.4) | the changed fields, plus `task` |
 | `task.skills_set` | `cli` | the pinned skills, plus `task` |
 | `task.decomposed` | `cli` | the child titles, plus `task` — the parent |
-| `task.assigned`, `task.unassigned`, `task.started`, `task.stopped` | `cli` | `task`, plus the assignee or actor |
+| `task.assigned`, `task.unassigned`, `task.started`, `task.stopped` | `cli` | `task`, plus the assignee or actor where the act names one |
 | `task.done`, `task.abandoned`, `task.reopened` | `cli` | `task` |
 | `task.deleted`, `task.undeleted` | `cli` | `task`, `actor`, and the delete's `justification` |
 | `task.edge_added`, `task.edge_removed` | `cli` | `from`, `to`, `type` — an edge names both its tasks |
