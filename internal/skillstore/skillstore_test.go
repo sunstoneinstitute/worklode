@@ -111,7 +111,17 @@ func manyEntries(n int) []tarEntry {
 // sibling relationship DefaultDirs computes for the real ~/.worklode tree.
 func testDirs(t *testing.T) Dirs {
 	t.Helper()
-	root := t.TempDir()
+	// Resolve once, at the root: t.TempDir() on macOS lives under
+	// /var/folders, a symlink to /private/var/folders. Links and Store are
+	// both derived from this root and later compared against each other
+	// (relTarget's filepath.Rel, publishEntry's withinStore) and against
+	// resolved on-disk symlink targets, so resolving only one side would
+	// make Rel/withinStore see two different roots. Resolving the shared
+	// root before deriving either keeps every later comparison consistent.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("EvalSymlinks(root): %v", err)
+	}
 	return Dirs{Links: filepath.Join(root, "skills"), Store: filepath.Join(root, "store")}
 }
 
