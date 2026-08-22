@@ -61,7 +61,7 @@ func formCard(f FormShell, heading, lede, submit, sidebarActive string) templ.Co
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(heading)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 20, Col: 17}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 20, Col: 17}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -74,7 +74,7 @@ func formCard(f FormShell, heading, lede, submit, sidebarActive string) templ.Co
 			var templ_7745c5c3_Var4 string
 			templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(lede)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 21, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 21, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 			if templ_7745c5c3_Err != nil {
@@ -92,7 +92,7 @@ func formCard(f FormShell, heading, lede, submit, sidebarActive string) templ.Co
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(f.Error)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 24, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 24, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -110,7 +110,7 @@ func formCard(f FormShell, heading, lede, submit, sidebarActive string) templ.Co
 			var templ_7745c5c3_Var6 templ.SafeURL
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(f.Action)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 27, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 27, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -131,7 +131,7 @@ func formCard(f FormShell, heading, lede, submit, sidebarActive string) templ.Co
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(submit)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 30, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 30, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -144,7 +144,7 @@ func formCard(f FormShell, heading, lede, submit, sidebarActive string) templ.Co
 			var templ_7745c5c3_Var8 templ.SafeURL
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(f.CancelURL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 31, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 31, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -194,7 +194,7 @@ func selectField(id, label string, options []FormOption) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 43, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 43, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
@@ -207,7 +207,7 @@ func selectField(id, label string, options []FormOption) templ.Component {
 		var templ_7745c5c3_Var11 string
 		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 43, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 43, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 		if templ_7745c5c3_Err != nil {
@@ -220,7 +220,7 @@ func selectField(id, label string, options []FormOption) templ.Component {
 		var templ_7745c5c3_Var12 string
 		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 44, Col: 17}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 44, Col: 17}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 		if templ_7745c5c3_Err != nil {
@@ -233,7 +233,7 @@ func selectField(id, label string, options []FormOption) templ.Component {
 		var templ_7745c5c3_Var13 string
 		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 44, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 44, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var13)
 		if templ_7745c5c3_Err != nil {
@@ -251,7 +251,7 @@ func selectField(id, label string, options []FormOption) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(opt.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 46, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 46, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 			if templ_7745c5c3_Err != nil {
@@ -274,7 +274,7 @@ func selectField(id, label string, options []FormOption) templ.Component {
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(opt.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 46, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 46, Col: 70}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -346,7 +346,7 @@ func NewTask(v NewTaskView) templ.Component {
 				var templ_7745c5c3_Var19 string
 				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 60, Col: 97}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 60, Col: 97}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var19)
 				if templ_7745c5c3_Err != nil {
@@ -476,7 +476,7 @@ func NewDeliverable(v NewDeliverableView) templ.Component {
 				var templ_7745c5c3_Var23 string
 				templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 92, Col: 94}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 92, Col: 94}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 				if templ_7745c5c3_Err != nil {
@@ -501,7 +501,7 @@ func NewDeliverable(v NewDeliverableView) templ.Component {
 				var templ_7745c5c3_Var24 string
 				templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.URL)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 104, Col: 111}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 104, Col: 111}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 				if templ_7745c5c3_Err != nil {
@@ -514,7 +514,7 @@ func NewDeliverable(v NewDeliverableView) templ.Component {
 				var templ_7745c5c3_Var25 string
 				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Artifact)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `forms.templ`, Line: 113, Col: 135}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 113, Col: 135}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 				if templ_7745c5c3_Err != nil {

@@ -72,7 +72,7 @@ func Crew(v CrewView) templ.Component {
 			var templ_7745c5c3_Var3 templ.SafeURL
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(v.CanonicalURL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 29, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 29, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -106,7 +106,7 @@ func Crew(v CrewView) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.RemoveError)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 39, Col: 55}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 39, Col: 55}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 					if templ_7745c5c3_Err != nil {
@@ -213,7 +213,7 @@ func crewAddForm(v CrewView) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(v.AddError)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 79, Col: 48}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 79, Col: 48}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -231,7 +231,7 @@ func crewAddForm(v CrewView) templ.Component {
 		var templ_7745c5c3_Var8 templ.SafeURL
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(v.AddAction)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 82, Col: 42}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 82, Col: 42}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -244,7 +244,7 @@ func crewAddForm(v CrewView) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Add.Actor)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 85, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 85, Col: 91}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 		if templ_7745c5c3_Err != nil {
@@ -262,7 +262,7 @@ func crewAddForm(v CrewView) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue(o.Value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 91, Col: 29}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 91, Col: 29}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 			if templ_7745c5c3_Err != nil {
@@ -285,7 +285,7 @@ func crewAddForm(v CrewView) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(o.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 91, Col: 66}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 91, Col: 66}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -351,7 +351,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var13 templ.SafeURL
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs("/tasks/" + it.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 115, Col: 31}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 115, Col: 31}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -364,7 +364,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(it.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 115, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 115, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 			if templ_7745c5c3_Err != nil {
@@ -377,7 +377,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 116, Col: 9}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 116, Col: 9}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
@@ -390,7 +390,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(it.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 117, Col: 14}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 117, Col: 14}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -403,7 +403,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 118, Col: 9}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 118, Col: 9}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -416,7 +416,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(it.Kind)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 119, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 119, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
@@ -429,7 +429,7 @@ func crewResponsibilities(items []CrewWorkItem) templ.Component {
 			var templ_7745c5c3_Var19 string
 			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(it.State)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 119, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 119, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 			if templ_7745c5c3_Err != nil {
@@ -481,7 +481,7 @@ func crewRow(m CrewMember, removeAction string) templ.Component {
 			var templ_7745c5c3_Var21 string
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(m.DisplayName)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 134, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 134, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -491,7 +491,7 @@ func crewRow(m CrewMember, removeAction string) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(m.ActorID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 136, Col: 16}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 136, Col: 16}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
@@ -510,7 +510,7 @@ func crewRow(m CrewMember, removeAction string) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(m.ActorID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 140, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 140, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
@@ -529,7 +529,7 @@ func crewRow(m CrewMember, removeAction string) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(m.Roles, ", "))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 143, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 143, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 			if templ_7745c5c3_Err != nil {
@@ -557,7 +557,7 @@ func crewRow(m CrewMember, removeAction string) templ.Component {
 			var templ_7745c5c3_Var25 templ.SafeURL
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinURLErrs(removeAction)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 150, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 150, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 			if templ_7745c5c3_Err != nil {
@@ -570,7 +570,7 @@ func crewRow(m CrewMember, removeAction string) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(m.ActorID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `crew.templ`, Line: 151, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/crew.templ`, Line: 151, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {

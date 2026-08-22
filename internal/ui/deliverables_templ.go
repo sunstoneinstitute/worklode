@@ -58,7 +58,7 @@ func Deliverables(v DeliverablesView) templ.Component {
 			var templ_7745c5c3_Var3 templ.SafeURL
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinURLErrs(v.CanonicalURL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 16, Col: 45}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 16, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -87,7 +87,7 @@ func Deliverables(v DeliverablesView) templ.Component {
 				var templ_7745c5c3_Var5 templ.SafeURL
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(v.NewURL)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 23, Col: 41}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 23, Col: 41}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -170,7 +170,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(d.Name)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 61, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 61, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
@@ -183,7 +183,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 		var templ_7745c5c3_Var8 string
 		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(d.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 62, Col: 31}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 62, Col: 31}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
@@ -201,7 +201,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(d.Description)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 64, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 64, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -220,7 +220,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(d.Artifact)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 67, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 67, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -239,7 +239,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var11 templ.SafeURL
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(d.URL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 70, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 70, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -252,7 +252,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(d.URL)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 70, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 70, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -279,7 +279,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var13).String())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 1, Col: 0}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 1, Col: 0}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 		if templ_7745c5c3_Err != nil {
@@ -292,7 +292,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(deliverableLabel(d.ReportedState))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 75, Col: 82}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 75, Col: 82}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -310,7 +310,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs("reported " + fmtTime(*d.ReportedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 78, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 78, Col: 59}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -329,7 +329,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs("declared by " + d.CreatedBy + " · " + fmtTime(d.CreatedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 82, Col: 67}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 82, Col: 67}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
@@ -339,7 +339,7 @@ func deliverableRow(d DeliverableRow) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs("declared " + fmtTime(d.CreatedAt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `deliverables.templ`, Line: 84, Col: 41}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/deliverables.templ`, Line: 84, Col: 41}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 			if templ_7745c5c3_Err != nil {
