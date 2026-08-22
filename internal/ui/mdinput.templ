@@ -1,0 +1,32 @@
+package ui
+
+import "strconv"
+
+// mdinput.templ renders the shared markdown text input (WL-299): a Write /
+// Preview tab pair over a plain textarea, plus an optional dictation button.
+// The behaviour lives in /assets/mdinput.js — Preview POSTs the draft to
+// /preview and injects the server-rendered, server-sanitized fragment;
+// dictation records audio and POSTs it to /dictate, appending the
+// transcription to the draft. With scripts unavailable the component is
+// exactly the textarea it wraps: the tabs and the microphone are
+// progressive enhancement, never a dependency.
+
+// MarkdownInput renders one markdown-aware text input. It replaces every
+// bare <textarea> in the cockpit's forms; the textarea keeps the given id
+// and name so labels and form handlers are untouched.
+templ MarkdownInput(v MarkdownInputView) {
+	<div class="mdinput" data-mdinput>
+		<div class="mdtabs" role="tablist">
+			<button type="button" class="mdtab active" data-md-write aria-selected="true">Write</button>
+			<button type="button" class="mdtab" data-md-preview aria-selected="false">Preview</button>
+			if v.Dictation {
+				<button type="button" class="mdtab mdmic" data-md-dictate aria-pressed="false" aria-label="Dictate">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>
+					Dictate
+				</button>
+			}
+		</div>
+		<textarea id={ v.ID } name={ v.Name } rows={ strconv.Itoa(v.Rows) } placeholder={ v.Placeholder }>{ v.Value }</textarea>
+		<div class="mdpreview" hidden></div>
+	</div>
+}

@@ -1614,6 +1614,62 @@ nav.local a .cnt {
   align-items: center;
   gap: 9px;
 }
+.mdinput {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.mdtabs {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.mdtab {
+  appearance: none;
+  border: 1px solid var(--line);
+  border-bottom: none;
+  background: var(--bg);
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mdtab.active {
+  background: var(--surface);
+  color: var(--ink-1);
+}
+.mdtab svg {
+  width: 14px;
+  height: 14px;
+}
+.mdtab.mdmic {
+  margin-left: auto;
+}
+.mdtab.mdmic.recording {
+  color: var(--crit, #c0392b);
+}
+.mdinput textarea {
+  border-top-left-radius: 0;
+}
+.mdpreview {
+  border: 1px solid var(--line);
+  border-radius: 0 10px 10px 10px;
+  background: var(--surface);
+  padding: 10px 12px;
+  min-height: 96px;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.mdpreview[hidden] {
+  display: none;
+}
 .fieldrow.check label {
   text-transform: none;
   letter-spacing: 0;

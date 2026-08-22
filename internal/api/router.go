@@ -64,6 +64,8 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
 	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
 	"POST /projects/{id}/tasks":           guarded(permWebWrite),
+	"POST /preview":                       guarded(permWebWrite),
+	"POST /dictate":                       guarded(permWebWrite),
 	"GET /projects/{id}/{section}":        guarded(permWebRead),
 	"GET /work":                           guarded(permWebRead),
 	"GET /reviews":                        guarded(permWebRead),
