@@ -259,7 +259,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, mode := range homeRenderModes {
 		s.homeRenders.WithLabelValues(mode)
 	}
-	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove"} {
+	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove",
+		formRestoreTask, formRestoreDoc} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}

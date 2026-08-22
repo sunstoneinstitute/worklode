@@ -254,6 +254,11 @@ templ sidebar(p CockpitProject, active string) {
 // Deliverables, Reviews, Decisions, Documents, Activity), marking the item
 // matching active as aria-current="page". The Work item links to the
 // overview's #work anchor and is never marked current.
+//
+// Deleted follows them, outside that order deliberately: it is spec 044's
+// tombstone review rather than one of 032 §2's destinations, and it is last
+// because a deleted row is the rarest thing anyone comes here to read. Spec
+// 032 §2's list is owed an amendment naming it (docs/follow-ups.md).
 templ localNav(projectID, active string) {
 	@navLink("/projects/"+projectID, "Overview", "overview", active)
 	@navLink("/projects/"+projectID+"/crew", "Crew", "crew", active)
@@ -263,4 +268,5 @@ templ localNav(projectID, active string) {
 	@navLink("/projects/"+projectID+"/decisions", "Decisions", "decisions", active)
 	@navLink("/projects/"+projectID+"/documents", "Documents", "documents", active)
 	@navLink("/projects/"+projectID+"/activity", "Activity", "activity", active)
+	@navLink("/projects/"+projectID+"/deleted", "Deleted", "deleted", active)
 }
