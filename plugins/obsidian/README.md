@@ -24,7 +24,12 @@ it, so a nested root of `Team/Worklode` puts it at
 `Team/Worklode/Worklode.md` — the folder name, not the path.
 
 Task notes carry `parent`/`children`/`blocks`/`blocked_by` as frontmatter
-wikilinks, so Obsidian's graph view renders the task graph.
+wikilinks, so Obsidian's graph view renders the task graph. Doc notes carry
+`edges` the same way: the document's *outgoing* typed links (025 §14) grouped
+by relation, each far end a project-qualified wikilink, with an unresolved
+reference left as its verbatim text. Incoming edges are not rendered — one is
+written by another document and moves nothing on this one that the sync's
+staleness check can see, so a mirrored `edges_in` would sit stale.
 
 Every note carries a reserved `wl` frontmatter block — the backbone's fields,
 the note's `etag`, and a record of what the plugin itself added, so a note can
