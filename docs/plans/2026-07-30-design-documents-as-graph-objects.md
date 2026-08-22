@@ -2,6 +2,9 @@
 status: accepted
 task: WL-44
 covers: docs/specs/025-documents-in-the-backbone.md
+defers:
+  - spec: docs/specs/025-documents-in-the-backbone.md#sec-12
+    to: docs/specs/006-knowledge-graph.md
 ---
 # Design documents as graph objects (spec 014) — Implementation Plan
 
@@ -1953,7 +1956,7 @@ Deferred table below, so nobody mistakes it for a gap.
 | ADR-0006 amendment (versioned sibling IRIs as a named exception) | data-platform's ADR corpus — cross-repo, still owed |
 | Versioned named graphs, the single-transaction publication, `lode doc list/show/coverage/revise/publish`, `lode drift --docs`, the web view, crit-gated revisions, the server-side depth-limit setting | blocked on the graph server (spec 009, cross-repo) and 007's overview surface |
 | The `observed/repo-implements` deriver (fetch manifests at branch head, named-graph PUT, push/schedule triggers) and the coverage/stale/orphan standing queries | **WL-275** — the two blocking decisions first (open questions 2, 3), then the deriver. Consumes this plan's `implements` package, which now exists |
-| `prov:wasGeneratedBy` authorship projection (§9) | 006 projection work |
+| `prov:wasGeneratedBy` authorship projection (§9) | 006 projection work — now also a `defers:` frontmatter edge (026 §5.3), minted after this row sat unclaimed for three weeks (WL-217/WL-218); the backbone half (`docs.generated_by_task`) landed with WL-217 |
 | Onboarding the existing `docs/specs/` corpus | candidate spec 020 (014's text said "spec 015", already taken by the runtime layer; renumbered in 014); explicitly out of scope per 014 §Adoption |
 
 ## Overlaps and open questions

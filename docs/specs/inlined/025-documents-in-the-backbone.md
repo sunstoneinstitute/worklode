@@ -802,6 +802,12 @@ does today: each entry is a qualified reference carrying a `coverage:` level (`f
 `none`) and an optional `fullCoverageWith:`, a bare reference means `full`, and `implements` still
 parses and means `covers` (026 §5).
 
+`defers` on a plan names the spec sections it deliberately hands to another document: each entry
+pairs the section with its owner (`spec:`/`to:`), sits after `covers` in the key order (§14), and
+projects as a `defers` edge, so the section stays a *named* planning gap until some plan covers it
+(026 §5.3, §2.1). What was a "Deferred to owning specs' plans" prose table becomes an edge a query
+can find.
+
 A plan's *execution* is an ordered task set in the execution backbone — which is what a plan
 already is: a bundle of tasks with instructions attached. The instructions live in task bodies and
 reach the agent through `lode task brief` (008).
@@ -1232,6 +1238,7 @@ is a signal that the ontology is missing one, not licence for a private extensio
 | `status` | `wl:status` | one `wlc:DesignDocStatus` concept (§7) |
 | `issued` | `dct:issued` | ISO date of first publication |
 | `covers` | `wl:covers` | the spec sections a plan undertakes to realise; plans only (026 §5) |
+| `defers` | `wl:defers` | the spec sections a plan hands to a named owner; plans only (026 §5.3) |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | dependency |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | supersession |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
