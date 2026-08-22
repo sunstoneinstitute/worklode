@@ -580,6 +580,12 @@ Two adapter-relevant notes:
 
 ### 16.3 Lifecycle hooks
 
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-1` (not yet effective)
+
+> **Amended by ADR 051 §1.** Codex does define a `SessionEnd` hook event, and
+> the codex adapter binds it; this section's Codex row and the shutdown
+> paragraph at its end overstate the gap.
+
 | | Mechanism | Config location | Events Worklode cares about | Can block? |
 |---|---|---|---|---|
 | **Claude Code** | JSON bindings; handler types `command`, `prompt`, `agent`, `http`, `mcp_tool`; sync or background | `~/.claude/settings.json`, `.claude/settings.json`, `.claude/settings.local.json`, plugin `hooks/hooks.json`, skill/agent frontmatter | ~30 events. Currently used: `SessionStart`, `SessionEnd`, `Stop`, `StopFailure`, `SubagentStop`, `Notification`, `PostToolUse:EnterWorktree`. **Unused and relevant:** `CwdChanged`, `FileChanged`, `InstructionsLoaded`, `PreCompact`/`PostCompact`, `TaskCreated`/`TaskCompleted`, `UserPromptSubmit`, `Setup` | Yes (`PreToolUse`, `UserPromptSubmit`, `PermissionRequest`) |
@@ -677,6 +683,12 @@ verbatim; the file's settings-merge machinery (`stripLodeHooks`, `appendBinding`
 
 ### 17.2 `lode install` across harnesses
 
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-2` (not yet effective)
+
+> **Amended by ADR 051 §2.** Amp is not a settings array the installer merges
+> into: its adapter writes a generated TypeScript plugin Worklode owns
+> outright, like the shims.
+
 ```
 lode install   [--vcs git] [--no-vcs] [--agent <id>|auto|all]... [--no-agent]
                [--scope local|project] [--skills] [--telemetry] [--no-statusline] [--json]
@@ -744,11 +756,20 @@ standalone.
 
 ### 17.4 Hook delivery
 
-> Pending `041-pi-agent-integration.md#sec-2` (not yet effective)
+> Pending `041-pi-agent-integration.md#sec-2` (not yet effective)  
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-1` (not yet effective)  
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-2` (not yet effective)  
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-3` (not yet effective)  
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-4` (not yet effective)
 
 > **Amended by spec 041 §2.** Pi is delivered as a project-local Pi package,
 > rather than an installer-generated global extension shim. Its extension is
 > still the adapter that maps Pi events to the same `lode hook` commands.
+
+> **Amended by ADR 051 §§1–4.** Codex binds `SessionEnd`; Amp is a third
+> code-generating adapter that binds `session.start` and
+> `agent.start`/`agent.end` through its Plugin API, with tool events
+> deliberately unbound; the event map below is corrected accordingly.
 
 Five harnesses take a shell command, so the compiled binary is the integration and the adapter is
 a table. Two do not:
@@ -858,6 +879,12 @@ Codex exports OTLP to the same endpoint with different attribute names; a per-so
 the ingest boundary keeps one storage shape. No harness-specific table.
 
 ### 17.7 Instruction files
+
+> Pending `051-codex-and-amp-bindings-as-built.md#sec-5` (not yet effective)
+
+> **Amended by ADR 051 §5.** The managed block leads with `lode next`, which
+> claims the top-ranked ready task and creates its worktree; `lode task claim
+> <id>` is named second, as the way to claim a specific task.
 
 `lode install` writes a **marker-delimited managed block** into `AGENTS.md` at the repo root —
 the file six of the seven harnesses read — containing the two facts an agent needs before a
