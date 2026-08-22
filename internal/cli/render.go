@@ -389,6 +389,11 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 		fmt.Fprintf(w, "  issued:   %s\n", d.Issued)
 	}
 	fmt.Fprintf(w, "  assignee: %s\n", dash(d.Assignee))
+	// Only when set: most documents predate the column or were authored
+	// outside a worktree, and a row of dashes is not worth the line (025 §12).
+	if d.GeneratedByTask != "" {
+		fmt.Fprintf(w, "  written by task: %s\n", d.GeneratedByTask)
+	}
 	if d.Revision != nil {
 		fmt.Fprintf(w, "  open revision: by %s at %s\n", d.Revision.CreatedBy, LocalTime(d.Revision.CreatedAt))
 	}
