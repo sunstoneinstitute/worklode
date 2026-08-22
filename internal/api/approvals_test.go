@@ -88,7 +88,7 @@ func seedPRApproval(t *testing.T, st *store.Store, seed prApprovalSeed) seededAp
 		requiredRole = &seed.RequiredRole
 	}
 	seedEvent(t, st, fmt.Sprintf("approval-seed-pr-%d", n), func(tx *sql.Tx, _ int64) error {
-		if _, err := store.UpsertPR(tx, store.PullRequest{
+		if _, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: number, Title: title, State: "open",
 			HeadRef: taskID + "-approval-seed", HeadSHA: revision,
 			URL:      fmt.Sprintf("https://github.com/%s/pull/%d", repo, number),
