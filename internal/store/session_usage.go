@@ -544,7 +544,7 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 		        COALESCE(o.input_tokens,0), COALESCE(o.cache_write_5m_tokens,0),
 		        COALESCE(o.cache_write_1h_tokens,0), COALESCE(o.cache_read_tokens,0),
 		        COALESCE(o.output_tokens,0),
-		        COALESCE(o.cost_amount,0)::text,
+		        COALESCE(o.cost_amount, 0)::numeric(14,6)::text,
 		        COALESCE(o.unpriced_tokens,0)
 		   FROM t FULL OUTER JOIN o
 		     ON t.usage_day = o.usage_day AND t.cost_currency = o.cost_currency
