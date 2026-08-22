@@ -53,7 +53,17 @@ EDGE_KEYS = set(MIRROR) | set(INVERSE)
 
 TOP_KEY = re.compile(r"^(?P<key>[A-Za-z_][\w-]*):[ \t]*(?P<rest>.*)$")
 SUB_KEY = re.compile(r"^(?P<key>\S[^:]*):[ \t]*(?P<rest>.*)$")
-ITEM = re.compile(r"^-[ \t]+(?P<value>.*)$")
+# The separator is captured (not consumed with `.strip()`) so an
+# entirely-comment item's `#` still has the leading whitespace INLINE_COMMENT
+# requires -- `-[ \t]+` alone would eat that whitespace and leave `# why`
+# looking like a value with no comment to strip (WL-210).
+ITEM = re.compile(r"^-(?P<sep>[ \t]+)(?P<value>.*)$")
+# An unquoted subject key (`#sec-1:`) reads, to the comment-skip branch
+# below, exactly like the YAML comments this gate's own convention writes
+# with a space after `#` -- so it is matched first, narrowly: no space
+# between `#` and the key, and a colon ending it, which a prose comment
+# essentially never does (WL-210).
+UNQUOTED_SUBJECT = re.compile(r"^#\S+:")
 # A reference may carry a trailing parenthetical annotation naming which
 # decisions were inherited (026 section 4). Its content is opaque; it is
 # stripped before the path is read and otherwise ignored.
@@ -128,6 +138,7 @@ def check_permanence(root, roots):
                 f"{len(published)} published anchors all break")
             continue
         current, dupes = anchors_of(wt.read_text())
+        dupeset = set(dupes)
         for a in dupes:
             refusals.append(f"{rel}: anchor #{a} appears on more than one "
                             f"heading; inbound references are ambiguous")
@@ -136,7 +147,11 @@ def check_permanence(root, roots):
                 refusals.append(
                     f"{rel}: published anchor #{anchor} (was §{num}) is "
                     f"gone — every inbound reference to it now breaks")
-            elif current[anchor] != num:
+            elif anchor not in dupeset and current[anchor] != num:
+                # A duplicated anchor already produced its own refusal above;
+                # the section number the dict happens to keep (whichever
+                # heading's match ran last) is not a rename and would
+                # misdirect the fix if reported as one (WL-210).
                 refusals.append(
                     f"{rel}: #{anchor} moved from §{num} to "
                     f"§{current[anchor]} — the anchor no longer names "
@@ -194,6 +209,8 @@ def extract_edges(front):
             continue
         lead = line[:len(line) - len(line.lstrip(" \t"))]
         stripped = line[len(lead):]
+        if key is not None and UNQUOTED_SUBJECT.match(stripped):
+            raise Unparseable(raw)
         if stripped.startswith("#"):  # a YAML comment; subjects are quoted
             continue
         if "\t" in lead:
@@ -217,15 +234,23 @@ def extract_edges(front):
         if item:
             if subject is None:  # the edge keys are maps, never bare lists
                 raise Unparseable(raw)
-            value = item["value"].strip()
+            value = value_of(item["sep"] + item["value"])
             if value:
-                yield key, subject, value_of(value)
+                yield key, subject, value
             continue
         if indent == 0:
             raise Unparseable(raw)
         sub = SUB_KEY.match(stripped)
         if sub:
             subject = unquote(sub["key"])
+            # A flow-style ("[...]"/"{...}") or empty-flow ("[]") value on the
+            # subject line itself is unreadable the same way the key-line
+            # case already is (WL-210): normalise() would silently reject the
+            # bogus fragment it decodes to, degrading a real defect into an
+            # unresolved note instead of a refusal.
+            raw_rest = sub["rest"].strip()
+            if raw_rest[:1] in ("[", "{"):
+                raise Unparseable(raw)
             rest = value_of(" " + sub["rest"])
             if rest:
                 yield key, subject, rest
@@ -291,11 +316,20 @@ def corpus_files(root, roots):
 def edge_set(root, roots):
     """Canonical edges of the working-tree corpus: (edges, refusals, notes).
 
-    `edges` maps a canonical 5-tuple to the set of documents that recorded it
-    -- the reusable edge set task 3's acyclicity check reads. An end this
-    checkout cannot resolve, or one naming a file that is not there (a dangling
-    reference is secmeta.py's finding, not this gate's), keeps the edge out of
-    the graph and produces a `note` instead.
+    `edges` maps a canonical 5-tuple to {"docs": ..., "sides": ...} -- the
+    documents that recorded it, and which of the two mirror roles ("acting":
+    an `amends`/`replaces` entry, "passive": an `amendedBy`/`isReplacedBy`
+    entry) were among those recordings. `docs` alone cannot tell a mirrored
+    self-edge from a half-recorded one: when acting doc == target doc, a
+    single recording puts that one document in `docs` twice over, satisfying
+    a `docs`-only completeness test with only half the mirror written
+    (WL-210). `sides` is what `check_mirrors` actually tests for
+    completeness; `docs` remains for naming which file to blame. The
+    acyclicity check (task 3) only reads the keys of this dict, so its shape
+    is unaffected by what the values hold. An end this checkout cannot
+    resolve, or one naming a file that is not there (a dangling reference is
+    secmeta.py's finding, not this gate's), keeps the edge out of the graph
+    and produces a `note` instead.
     """
     edges, refusals, notes = {}, [], []
     present = set(corpus_files(root, roots))
@@ -317,8 +351,10 @@ def edge_set(root, roots):
             if target is None or target[0] not in present:
                 notes.append(f"{rel} {key}: {value}")
                 continue
-            edges.setdefault(canonical(rel, key, subject, *target),
-                             set()).add(rel)
+            entry = edges.setdefault(canonical(rel, key, subject, *target),
+                                     {"docs": set(), "sides": set()})
+            entry["docs"].add(rel)
+            entry["sides"].add("acting" if key in MIRROR else "passive")
     return edges, refusals, notes
 
 
@@ -340,10 +376,10 @@ def check_mirrors(edges):
     refusals = []
     for edge in sorted(edges):
         relation, acting, acting_frag, target, target_frag = edge
-        seen = edges[edge]
-        if acting in seen and target in seen:
+        seen, sides = edges[edge]["docs"], edges[edge]["sides"]
+        if "acting" in sides and "passive" in sides:
             continue
-        if acting in seen:
+        if "acting" in sides:
             missing, key, frag = target, MIRROR[relation], target_frag
         else:
             missing, key, frag = acting, relation, acting_frag
