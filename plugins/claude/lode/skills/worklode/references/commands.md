@@ -177,7 +177,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task assign` — Assign a task to an actor (default: yourself)
   Flags: --to
 - `lode task attach` — Upload files and attach them to a task
-  Flags: --no-embed
+  Flags: --alt, --no-embed
 - `lode task block` — Record that another task blocks this one
   Flags: --by
 - `lode task brief` — Fetch a task's brief: body, branch, open blockers, and active lease
