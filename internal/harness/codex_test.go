@@ -201,8 +201,10 @@ func TestCodexRefusesUnroundtrippableFile(t *testing.T) {
 	}
 }
 
-// Both scopes write the user-level file: the `lode hook` guard is what scopes
-// behaviour to Worklode worktrees, not the config layer.
+// Both scopes write the user-level file: project-level .codex/hooks.json is
+// silently ignored inside a git worktree (openai/codex#27133), so writing
+// there would never fire for a Worklode task; the `lode hook` guard, not the
+// config layer, is what scopes behaviour to Worklode worktrees.
 func TestCodexScopesShareOneFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("CODEX_HOME", home)

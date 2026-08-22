@@ -29,6 +29,12 @@ const codexTrustNote = "hooks are written but stay inactive until you review the
 // Codex is the codex adapter: hook bindings in $CODEX_HOME/hooks.json
 // (default ~/.codex/hooks.json). Both scopes write that user-level file —
 // the `lode hook` guard is what scopes behaviour to Worklode worktrees.
+//
+// Codex also supports a project-level .codex/hooks.json, but it is silently
+// ignored while Codex runs inside a git worktree (openai/codex#27133), which
+// is exactly where every Worklode task runs. Writing there would produce
+// hooks that never fire for Worklode's primary use case, so this adapter
+// never does — deliberately, not for lack of a project-scope location.
 type Codex struct{}
 
 func init() { register(Codex{}) }
