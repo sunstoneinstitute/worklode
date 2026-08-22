@@ -317,7 +317,7 @@ narrow-width audit at 320, 375 and 768 CSS px and at 200% zoom fixed them:
   see.
 
 A second audit measured what the first one left out — the width-independent
-criteria — against the same built pages, in both themes, and settled four more
+criteria — against the same built pages, in both themes, and settled five more
 consequences:
 
 - **Muted text is measured against the page, not against a card.** `--ink-3` is
@@ -338,14 +338,19 @@ consequences:
   a rejected submit arrives as a whole new document, so the region announced
   nothing. The validation message takes focus on load and the page title is
   prefixed `Error:`.
+- **The light theme's accent is dark enough to bound a control.** The primary
+  button is filled with the accent rather than outlined with the control token,
+  so the accent is the boundary and carries the 3:1 itself. Sunstone yellow is
+  too light to do that on white, so the light theme's accent is the brand hue
+  darkened and turned towards amber until fill and border both clear 3:1 on
+  every surface a control sits on, while the accent's own ink still clears
+  4.5:1 on it. The dark theme keeps the brand value, where it already cleared
+  both.
 
-1.3.1, 1.3.2, 1.4.3, 1.4.4, 1.4.10, 1.4.12, 2.4.7, 2.4.11, 2.5.8 and 4.1.2 have
-now been verified against the built pages; 1.4.13 has no subject, because
-nothing in the cockpit appears on hover or focus. 1.4.11 holds for control
-boundaries and the focus indicator, with one exception: on the light theme the
-primary button's accent fill and its border both sit under 3:1 against the card
-behind them. That is a decision about the brand accent rather than about this
-page, so it is filed rather than fixed here.
+1.3.1, 1.3.2, 1.4.3, 1.4.4, 1.4.10, 1.4.11, 1.4.12, 2.4.7, 2.4.11, 2.5.8 and
+4.1.2 have now been verified against the built pages, with no outstanding
+exception; 1.4.13 has no subject, because nothing in the cockpit appears on
+hover or focus.
 
 The rest of this section remains the target it says it is.
 
