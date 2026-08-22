@@ -98,9 +98,18 @@ reconcile at all.
 
 ### 2.1 Engine 1 — replay stored events
 
-Events already in the database that were recorded with a nil apply: `*.ignored` (the repo was not
-mapped when the delivery arrived, `internal/hooks/github.go:126`) and unhandled actions. The
-payload is intact in `events.payload`, so this engine is offline and costs nothing.
+Events already in the database whose apply never completed: `*.ignored` (the repo was not
+mapped when the delivery arrived, `internal/hooks/github.go:126`) and deliveries whose apply
+failed. The payload is intact in `events.payload`, so this engine is offline and costs nothing.
+
+**Record first, apply second (WL-247).** The webhook path commits the event row in its own
+transaction and runs the apply in a second one (`store.RecordEventThenApply`), so a failed apply
+answers 500 but leaves the row with `applied_at` NULL — exactly the state this engine repairs —
+instead of rolling the delivery back into nonexistence, which no one redelivers. The split is
+safe because the applies are already order-safe under replay (below). Dedup follows the marker,
+not the row: a redelivered event whose row exists unapplied gets its apply re-run, so GitHub's
+manual redelivery is a second remedy alongside replay; only an event already marked applied is a
+no-op duplicate.
 
 **Required refactor.** Apply routing is today a method on `githubHandler`, bound to the HTTP
 envelope (`applyFunc`, `internal/hooks/github.go:167`). Replay needs it extracted to a
