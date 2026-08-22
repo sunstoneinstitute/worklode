@@ -487,13 +487,21 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
 		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil &&
-		req.Artifacts == nil {
+		req.Artifacts == nil && req.Kind == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
 	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title must not be blank")
 		return
+	}
+	if req.Kind != nil {
+		normalized := s.normalizeTaskKind(*req.Kind, "edit")
+		if !validKinds[normalized] {
+			writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
+			return
+		}
+		req.Kind = &normalized
 	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidPriorityMsg)
@@ -526,11 +534,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.recordEvent(r.Context(), "cli", "task.updated", req,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.Kind); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{
 				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
+				"kind": req.Kind,
 			} {
 				if val == nil {
 					continue

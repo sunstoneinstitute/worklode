@@ -1602,7 +1602,7 @@ func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, b
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition)
+			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil)
 		})
 	return err
 }
@@ -1956,7 +1956,7 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 	// Update replaces the whole list; empty clears.
 	next := []string{"GITHUB_TOKEN"}
 	err = s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil)
+		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil, nil)
 	})
 	if err != nil {
 		t.Fatalf("update secrets: %v", err)
