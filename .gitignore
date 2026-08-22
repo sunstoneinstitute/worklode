@@ -15,3 +15,6 @@ settings.local.json
 # and not the directory.
 .worklode/secrets.env
 
+graphify-out
+CLAUDE.local.md
+.codex
