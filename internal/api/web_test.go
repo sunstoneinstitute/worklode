@@ -115,10 +115,10 @@ func topbarRegion(t *testing.T, body string) string {
 	return rest[:j]
 }
 
-// TestTopbarKeepsOnlyChrome checks the global destinations left the topbar
-// (brand, theme toggle, avatar only — no nav landmark, no links) and that
-// the eight destinations render in the sidebar column before the content.
-func TestTopbarKeepsOnlyChrome(t *testing.T) {
+// TestGlobalNavFollowsTopbar checks the global destinations render once in a
+// second header row rather than in the page's sidebar. The topbar itself keeps
+// only its brand and controls.
+func TestGlobalNavFollowsTopbar(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	header := topbarRegion(t, body)
@@ -130,7 +130,10 @@ func TestTopbarKeepsOnlyChrome(t *testing.T) {
 	if strings.Contains(header, "<nav") || strings.Contains(header, "<a ") {
 		t.Errorf("topbar still carries navigation:\n%s", header)
 	}
-	assertOrder(t, body, `<div class="sidebar">`, ">Home<", ">Knowledge<", `<main id="main-content"`)
+	assertOrder(t, body, `</header>`, `<nav aria-label="Primary"`, ">Home<", ">Knowledge<", `<div class="shell" data-global="true">`, `<main id="main-content"`)
+	if got := strings.Count(body, `<nav aria-label="Primary"`); got != 1 {
+		t.Errorf("primary navigation count = %d, want 1", got)
+	}
 }
 
 // TestGlobalNavOrder checks the primary nav renders the eight destinations
@@ -176,7 +179,7 @@ func TestKnowledgeIsTheDocumentCorpus(t *testing.T) {
 
 	docs := doReq(t, h, "GET", "/docs", "", nil).Body.String()
 	assertOneAriaCurrent(t, docs)
-	bodyContains(t, docs, `<a href="/docs" class="tab-secondary active" aria-current="page"><span class="tab-label">Knowledge</span></a>`)
+	bodyContains(t, docs, `<a href="/docs" class="tab-secondary active" aria-current="page">`, `<span class="tab-label">Knowledge</span>`)
 
 	rr := doReq(t, h, "GET", "/knowledge", "", nil)
 	if rr.Code != http.StatusFound || rr.Header().Get("Location") != "/docs" {
@@ -370,7 +373,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 				t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
 			}
 			body := rr.Body.String()
-			if got := strings.Count(body, `<div class="shell">`); got != 1 {
+			if got := strings.Count(body, `<div class="shell"`); got != 1 {
 				t.Errorf("shell count = %d, want 1", got)
 			}
 			if got := strings.Count(body, `<main id="main-content"`); got != 1 {

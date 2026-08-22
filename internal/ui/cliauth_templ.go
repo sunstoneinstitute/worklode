@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 // cliauth.templ renders the one-time code that manual `lode login` sends the
 // user back to their terminal with (spec 001 §8.7). It deliberately does NOT
 // render through the Page shell: this page is reached mid-login, before any
-// session exists, so a sidebar of nav destinations the visitor cannot open
+// session exists, so a navigation row of destinations the visitor cannot open
 // and an avatar standing in for nobody would both be lies. It carries only the
 // stylesheet, the code, and a copy button.
 func CLICode(v CLICodeView) templ.Component {
