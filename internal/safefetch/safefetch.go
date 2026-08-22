@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
 	"strings"
 	"syscall"
 	"time"
@@ -117,10 +118,12 @@ func New(allowedHosts []string, maxBytes int64) *Fetcher {
 }
 
 // WithBearer returns a copy of f that sends "Authorization: Bearer <token>" on
-// requests to authHosts — matched by the same label-aligned suffix rule as the
-// host allowlist — and on no other request. An empty token or an empty
-// authHosts returns an unauthenticated copy, so a caller whose credential
-// lookup failed needs no branch of its own.
+// requests to authHosts — each a host matched by the same label-aligned
+// suffix rule as the host allowlist, or a host plus path prefix
+// ("github.com/user-attachments/", see scopeMatches) — and on no other
+// request. An empty token or an empty authHosts returns an unauthenticated
+// copy, so a caller whose credential lookup failed needs no branch of its
+// own.
 //
 // The scoping is per host, not per fetch, because the allowlist is wider than
 // the set of hosts a credential belongs to: mirroring fetches from github.com
@@ -216,10 +219,33 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// A RoundTripper must not modify the request it is handed.
 	r := req.Clone(req.Context())
 	r.Header.Del("Authorization")
-	if t.value != "" && hostMatches(normalizeHost(r.URL.Hostname()), t.hosts) {
+	if t.value != "" && scopeMatches(r.URL, t.hosts) {
 		r.Header.Set("Authorization", t.value)
 	}
 	return t.base.RoundTrip(r)
+}
+
+// scopeMatches reports whether the credential's scopes name this request's
+// destination. A scope is a host, with hostMatches' subdomain rules — or a
+// host plus path prefix ("github.com/user-attachments/"), which additionally
+// requires the request's decoded, dot-segment-resolved path to sit under
+// that prefix (WL-292). The path is path.Clean'd before the check because
+// the origin routes on the resolved path: a literal or percent-encoded ".."
+// would otherwise let an attacker-chosen URL carry the credential back out
+// of the scoped subtree to the rest of the host.
+func scopeMatches(u *url.URL, scopes []string) bool {
+	host := normalizeHost(u.Hostname())
+	cleaned := path.Clean("/" + u.Path)
+	for _, s := range scopes {
+		h, prefix, scoped := strings.Cut(s, "/")
+		if !hostMatches(host, []string{h}) {
+			continue
+		}
+		if !scoped || strings.HasPrefix(cleaned, "/"+prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // transport dials through a Control hook that inspects the address the kernel
