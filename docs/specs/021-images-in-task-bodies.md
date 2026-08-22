@@ -179,12 +179,12 @@ in full.
 
 | Surface | Purpose |
 |---|---|
-| `POST /api/v1/blobs` | Raw body upload, streamed (§5). Returns `{hash, media_type, size, url}`. Idempotent — identical bytes return `200` and the existing row, never a duplicate object. |
+| `POST /api/v1/blobs` | Raw body upload, streamed (§5). Returns `{hash, media_type, size, url}`, plus `poster_url` for a video (§5). Idempotent — identical bytes return `200` and the existing row, never a duplicate object. |
 | `GET /blob/{hash}` | Authenticate, then redirect to a presigned URL (§2). |
 | `GET /api/v1/tasks/{id}/blobs` | List a task's blobs: hash, filename, media type, size, embedded/attached. |
 | `POST /api/v1/tasks/{id}/blobs` | Attach an already-uploaded hash to a task (`attached = true`). |
 | `DELETE /api/v1/tasks/{id}/blobs/{hash}` | Clear `attached`; the row goes if `embedded` is also false. |
-| `lode task attach <id> <file>…` | Upload, then attach. Images additionally get `![<basename>](/blob/…)` appended to the body. |
+| `lode task attach <id> <file>…` | Upload, then attach. Images additionally get `![<basename>](/blob/…)` appended to the body; videos get a `<video src poster controls preload>` element. |
 | `lode task attach <id> -` | Read one blob from stdin. Pairs with `pngpaste - \| lode task attach WL-42 -`. |
 | `lode task detach <id> <hash>` | The inverse. Warns if the body still embeds it. |
 | `lode task add --body-file`, `lode task edit --body-file` | **Reference rewriting** (§7) — the main event. |
@@ -270,8 +270,21 @@ rather than relying on the label.
 | Class | Types | Treatment |
 |---|---|---|
 | **Embeddable image** | `image/png`, `image/jpeg`, `image/gif`, `image/webp`, `image/svg+xml` | Rendered inline; `Content-Disposition: inline` |
-| **Embeddable video** | `video/mp4`, `video/webm` | Rendered inline via `<video>`; `inline` |
+| **Embeddable video** | `video/mp4`, `video/webm` | Rendered inline via `<video>`, with an extracted poster frame; `inline` |
 | **Attachment** | anything else | Never rendered; `Content-Disposition: attachment` |
+
+**A video upload also produces a poster frame** (resolving Q021.2). Before the dedup check, the
+server runs `ffmpeg` over the spooled file, takes the first frame of the first video stream, and
+stores that JPEG as a blob of its own; `POST /api/v1/blobs` answers with `poster_url` alongside
+`url`. Extracting before dedup rather than after is what makes re-uploading the same recording
+answer with the same poster instead of degrading to a black rectangle.
+
+The poster is an ordinary blob — content-addressed, indexed, GC'd by §11 — so it needs no schema
+of its own: whatever body embeds the `<video poster="/blob/…">` pins it through the same
+reference graph as the video. The dependency is optional at runtime. The server image carries a
+statically linked `ffmpeg`, but an instance without one stores the video and omits `poster_url`
+rather than refusing the upload, and `worklode_video_poster_extractions_total` is what says which
+of the two is happening.
 
 Nothing is rejected on type. A core dump is a legitimate attachment, and an allowlist that
 blocks it buys nothing once §6 guarantees non-embeddable types are never served inline.
@@ -456,10 +469,16 @@ lode task attach WL-42 ./crash.log ./heap.prof
 lode task attach WL-42 ./flash-390.png        # image → also appended to the body
 ```
 
-The distinction is entirely media-type driven: image and video get a markdown reference
-appended and `embedded = true` on the reconciliation that follows; everything else gets
-`attached = true` and appears only in the attachments list. `--no-embed` suppresses the append
-for an image the author wants attached but not shown inline.
+The distinction is entirely media-type driven: image and video get a reference appended and
+`embedded = true` on the reconciliation that follows; everything else gets `attached = true` and
+appears only in the attachments list. `--no-embed` suppresses the append for an image the author
+wants attached but not shown inline.
+
+An image's reference is markdown; a video's cannot be, because `![](…)` is an `<img>` and an
+`<img>` pointed at an MP4 is a broken image. A video is appended as the raw `<video>` element
+§8's allowlist exists for, carrying the poster frame §5 extracted and `preload="metadata"` —
+the poster is already the still, so fetching a 100 MiB recording before anyone presses play
+buys nothing.
 
 ---
 
@@ -602,10 +621,12 @@ the on-switch: with either unset the feature stays off and uploads `501` as abov
   alt text to the file basename, which is not alt text. A `--alt` flag is cheap; a lint that
   refuses `![](…)` on a task whose concern is `usability` is more valuable and more annoying.
   **v2.**
-- **Q021.2 — Do embedded videos want a poster frame?** A `<video>` with no poster is a black
-  rectangle until played, which is a poor answer to "show me the bug". Extracting frame 0
-  server-side means an ffmpeg dependency in the server image. Deferred; authors can attach a
-  still alongside.
+- **Q021.2 — Do embedded videos want a poster frame?**
+  *Resolved 2026-08-22.* Yes, and the ffmpeg dependency was the right price: a `<video>` with no
+  poster is a black rectangle until played, which is a poor answer to "show me the bug". §5 now
+  extracts the first frame at upload and stores it as an ordinary blob, and §9 appends a
+  `<video>` carrying it. The binary is one statically linked file copied into the image, and a
+  deployment without it loses the poster and nothing else.
 - **Q021.3 — Bucket per environment or prefix per environment?** Dev and prod sharing a bucket
   under different key prefixes halves the credential management and makes a prod-to-dev data
   copy trivially wrong. Separate buckets is the safer default; confirm against how the fleet

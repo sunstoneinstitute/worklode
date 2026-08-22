@@ -18,11 +18,18 @@ type Blob struct {
 // blob endpoints answer with. URL is the root-relative permanent reference a
 // task body embeds (spec 021 §2) — /blob/<hash> — not the presigned object
 // URL, which is short-lived and never persisted.
+//
+// PosterURL is the same kind of reference to a second blob: the video's first
+// frame, extracted at upload so an embedded <video> is a picture of the bug
+// rather than a black rectangle (spec 021 §5). Empty for every non-video
+// upload, and for a video on a deployment whose image has no ffmpeg — a
+// poster is decoration, and its absence is never an upload failure.
 type BlobResponse struct {
 	Hash      string `json:"hash"`
 	MediaType string `json:"media_type"`
 	Size      int64  `json:"size"`
 	URL       string `json:"url"`
+	PosterURL string `json:"poster_url,omitempty"`
 }
 
 // TaskBlob is one row of a task's blob reference graph (spec 021 §1), joined
