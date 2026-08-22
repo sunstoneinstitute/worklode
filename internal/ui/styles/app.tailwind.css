@@ -249,8 +249,14 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
   .sheet-backdrop{display:none}
   body[data-open-panel] .sheet-backdrop{display:block;position:fixed;inset:0;z-index:39;background:rgba(14,25,55,.45)}
 
-  /* Room for the fixed tab bar so it never covers page content. */
+  /* Room for the fixed tab bar so it never covers page content. The padding
+   * keeps the end of the document clear of the bar; scroll-padding-bottom is
+   * what keeps a *scrolled-to* box clear of it, and it is the bottom half of
+   * the scroll-padding-top rule above — without it, tabbing to a control near
+   * the fold scrolls it to just under the bar, entirely hidden (WCAG 2.4.11
+   * Focus Not Obscured). */
   .main{padding-bottom:calc(64px + env(safe-area-inset-bottom) + 16px)}
+  html{scroll-padding-bottom:calc(64px + env(safe-area-inset-bottom) + 16px)}
 }
 
 .canvas{min-width:0;display:flex;flex-direction:column;gap:16px}
@@ -347,8 +353,16 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .dodrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;padding:12px 0;border-top:1px solid var(--line);align-items:start}
 .dodrow:first-child{border-top:0}
 .dodrow .name{font-weight:600;font-size:13.5px}
-.dodrow .def{color:var(--ink-3);font-size:12px;margin-top:2px}
+/* A deliverable's artifact address renders here, and an address is an
+ * identifier with no soft wrap opportunity in it (spec 029 §3.1's
+ * bigquery://project.dataset.table), so it needs the same break-anywhere rule
+ * the URL line beside it already has (WCAG 1.4.10 Reflow). */
+.dodrow .def{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere}
 .dodrow .ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;overflow-wrap:anywhere}
+/* The deliverable's URL is a link on a line of its own, not one inside a
+ * sentence, so WCAG 2.5.8's inline exception does not cover it: its box has to
+ * reach 24px on its own (it rendered 21px tall, the line-height). */
+.dodrow .ev a{display:flex;align-items:center;min-height:24px}
 .dodrow .st{justify-self:end;text-align:right}
 /* A per-row action form (the Crew roster's Remove button): .btn is
  * full-width by default, which is right in a form's button row and wrong
@@ -382,7 +396,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 @media (max-width:880px){
   .wlrow{flex-wrap:wrap}
   .wlrow .tl{flex:1 1 auto}
-  .wlrow .tl .t{white-space:normal;overflow:visible;text-overflow:clip}
+  /* overflow-wrap:anywhere for the same reason .prose carries it: a title
+   * holding an unbreakable identifier (an artifact address, a branch name) has
+   * no soft wrap opportunity, so wrapping alone lets it widen the page. */
+  .wlrow .tl .t{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
   .wlrow .rt{flex:1 1 100%;margin-left:0;flex-wrap:wrap;white-space:normal}
   .dodrow{grid-template-columns:minmax(0,1fr)}
   .dodrow .st{justify-self:start;text-align:left}

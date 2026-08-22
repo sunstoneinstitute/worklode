@@ -12,6 +12,7 @@ package ui
 
 import (
 	"context"
+	"html/template"
 	"strings"
 	"testing"
 	"time"
@@ -20,59 +21,190 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// pages renders every page component this package exports, with just enough
-// data that the optional regions — the ones holding tables — render.
+// pages renders every page component this package exports through the app
+// shell, with data long enough to be worth measuring.
+//
+// The length is the point. These fixtures are what narrowbrowser_test.go's
+// browser audit measures, and every finding the WL-140 audit made came from
+// content that was longer than its box: a task title that filled a row, an
+// unbreakable identifier in a body, a deliverable's URL, a timeline summary in
+// a table. A fixture reading Title: "t" reflows perfectly at 320px and proves
+// nothing about the page. So each page below gets a realistic worst case —
+// long titles, an unbroken token, a full URL, more than one row — and a new
+// page added here becomes measured by the audit at no further cost.
 func pages(t *testing.T) map[string]string {
 	t.Helper()
 	now := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
-	proj := CockpitProject{ID: "p", Name: "Project", Key: "P"}
+	proj := CockpitProject{ID: "worklode", Name: "Worklode backbone", Key: "WL"}
+	// An unbreakable identifier: no spaces or hyphens for a browser to break
+	// on, which is what turns a narrow column into a horizontal scrollbar.
+	token := "bigquery://sunstone_prod.casualty_reconciliation.daily_partitioned_snapshot_v3"
+	longTitle := "Make the narrow-width reflow check runnable, so the WCAG fixes are measured and not just asserted"
+	// A title carrying an identifier is the ordinary case a narrow column has
+	// to survive, and the identifier is the half a browser cannot break.
+	tokenTitle := "Reconcile " + token + " against the source extract"
 	comps := map[string]templ.Component{
 		"board": Board(BoardView{
-			Page:           PageProps{Title: "Work", ActiveGlobal: "work"},
-			Projects:       []BoardProject{{ID: "p", Name: "Project", Ready: []model.BoardTask{{Task: model.Task{ID: "T-1", Title: "t"}}}}},
-			RecentFailures: []BoardFailure{{OccurredAt: now, Cluster: "c", Kind: "k", Workload: "w", Message: "m"}},
+			Page:       PageProps{Title: "Work", ActiveGlobal: "work"},
+			InboxCount: 7,
+			Projects: []BoardProject{{
+				ID: "worklode", Name: "Worklode backbone",
+				InProgress: []model.BoardTask{{
+					Task:   model.Task{ID: "WL-234", Title: longTitle, Priority: "low", State: "in_progress", Assignee: "stig@sunstoneinstitute.ai"},
+					Holder: &model.Holder{ActorID: "claude-worker-01", ExpiresAt: now},
+				}},
+				InReview: []model.BoardTask{{Task: model.Task{ID: "WL-233", Title: "Cover the WCAG criteria the narrow-width audit left out", Priority: "medium", State: "in_review"}}},
+				Ready:    []model.BoardTask{{Task: model.Task{ID: "WL-140", Title: "Fix what the narrow-width WCAG audit found", Priority: "high", State: "ready"}}},
+				Blocked:  []model.BoardTask{{Task: model.Task{ID: "WL-141", Title: tokenTitle, Priority: "high", State: "blocked"}}},
+			}},
+			RecentFailures: []BoardFailure{{
+				OccurredAt: now, Cluster: "admin-hel01", Kind: "CrashLoopBackOff",
+				Workload: "deployment/worklode-server",
+				Message:  "back-off 5m0s restarting failed container=lode pod=worklode-server-7d9f8c6b4d-x2ktp",
+			}},
 		}),
 		"cockpit": Cockpit(CockpitView{
-			Page: PageProps{Title: "Project"}, Project: proj, ModeName: "operations",
-			Work: CockpitWork{Ready: []WorkRow{{ID: "T-1", Title: "t", State: "ready", URL: "/tasks/T-1"}}},
+			Page: PageProps{Title: "Worklode backbone"}, Project: proj,
+			ModeName: "operations", ModeBasis: "the project has active work and no pending launch decision",
+			PinnedFocus:  &CockpitFocus{Note: "Land the cockpit accessibility work before the sandbox demo", PinnedBy: "Stig Bakken", PinnedAt: now},
+			NextDecision: &CockpitDecision{Title: "Whether the cockpit ships read-only for the first release", Accountable: "Stig Bakken", Readiness: "awaiting evidence"},
+			Work: CockpitWork{
+				InProgress: []WorkRow{{
+					ID: "WL-234", Title: longTitle, State: "in_progress", Priority: "low", URL: "/tasks/WL-234",
+					Owner: "Stig Bakken", Delegate: "claude-worker-01",
+					EvidenceCategory: "observed", EvidenceSummary: "a lease has been held for 41 minutes with two commits on the task branch",
+				}},
+				Ready: []WorkRow{{ID: "WL-141", Title: tokenTitle, State: "ready", Priority: "high", URL: "/tasks/WL-141", Owner: "Stig Bakken", EvidenceCategory: "declared", EvidenceSummary: "declared ready by its author"}},
+			},
+			SecondaryConcerns: []CockpitConcern{{Title: "WL-140 blocks three ready tasks", URL: "/tasks/WL-140", EvidenceSummary: "an open blocker task holds the frontier"}},
+			CostTotals:        []CockpitCostTotal{{Currency: "USD", CostAmount: "1284.55", UnpricedTokens: 92311}},
 		}),
 		"task": Task(TaskView{
-			Page: PageProps{Title: "T-1"}, Task: model.Task{ID: "T-1", Title: "t"},
-			Timeline: []TimelineRow{{At: now, Type: "pr", Label: "Pull request", Summary: "s"}},
+			Page: PageProps{Title: "WL-234"},
+			Task: model.Task{
+				ID: "WL-234", Project: "worklode", Title: longTitle, Priority: "low", Kind: "chore",
+				State: "in_progress", Concern: "usability", CreatedBy: "stig", Assignee: "stig@sunstoneinstitute.ai",
+				CreatedAt: now, UpdatedAt: now, Branch: "WL-234-make-the-narrow-width-reflow-check-runna",
+			},
+			// The stored body is markdown rendered elsewhere; what matters here is
+			// that it carries an unbreakable token and a <pre> nobody can re-wrap.
+			BodyHTML: template.HTML(`<p>The audit measured ` + token + ` and reported:</p>` +
+				`<pre><code>go test -trimpath -tags narrowcheck -run TestNarrowWidthAudit ./internal/ui/</code></pre>`),
+			Blocked:   true,
+			Holder:    &model.Lease{TaskID: "WL-234", ActorID: "claude-worker-01", Worktree: "hel01:/home/stig/git/worklode/.worktrees/WL-234-make-the-narrow-width-reflow-check-runna", ExpiresAt: now},
+			Blocks:    []string{"WL-235", "WL-236"},
+			BlockedBy: []string{"WL-140"},
+			Children:  []string{"WL-237"},
+			Progress:  model.TaskProgress{Closed: 1, Total: 3},
+			Timeline: []TimelineRow{
+				{At: now, Type: "pr", Label: "Pull request", Summary: "#242 Make the narrow-width reflow check runnable — merged by stig", URL: "https://github.com/sunstoneinstitute/worklode/pull/242"},
+				{At: now, Type: "ci", Label: "Check", Summary: "pr-checks / test (pull_request) succeeded in 4m12s", URL: "https://github.com/sunstoneinstitute/worklode/actions/runs/1234567890"},
+				{At: now, Type: "lease", Label: "Lease", Summary: "claimed by claude-worker-01 in .worktrees/WL-234-make-the-narrow-width-reflow-check-runna"},
+			},
 		}),
 		"docs": Docs(DocsView{
 			Page: PageProps{Title: "Knowledge", ActiveGlobal: "knowledge"},
-			Docs: []DocRow{{Doc: model.Doc{ID: 1, Slug: "s", Title: "T"}, URL: "/docs/1", Ref: "spec 1"}},
+			Docs: []DocRow{
+				{Doc: model.Doc{ID: 32, Kind: "spec", Number: 32, Slug: "032-project-cockpit", Title: "Project cockpit", Status: "draft", CreatedBy: "stig", UpdatedAt: now}, URL: "/docs/32", Ref: "spec 32"},
+				{Doc: model.Doc{ID: 41, Kind: "plan", Slug: "032-project-cockpit-part-3-accessibility", Title: "Project cockpit, part 3: accessibility and responsive behaviour", Status: "accepted", CreatedBy: "stig", UpdatedAt: now}, URL: "/docs/41", Ref: "plan"},
+			},
 		}),
 		"doc": Doc(DocView{
-			Page: PageProps{Title: "T"}, Doc: model.Doc{ID: 1, Slug: "s", Title: "T"},
-			Sections: []model.DocSection{{Anchor: "sec-1", Heading: "1. H"}},
+			Page: PageProps{Title: "Project cockpit"},
+			Doc:  model.Doc{ID: 32, Project: "worklode", Kind: "spec", Number: 32, Slug: "032-project-cockpit", Title: "Project cockpit", Status: "draft", CreatedBy: "stig", CreatedAt: now, UpdatedAt: now},
+			Ref:  "spec 32",
+			BodyHTML: template.HTML(`<h2 id="sec-10">10. Accessibility and responsive behavior</h2>` +
+				`<p>Measured against ` + token + `.</p><pre><code>./scripts/narrow-check.sh</code></pre>`),
+			Sections: []model.DocSection{
+				{Anchor: "sec-10", Number: "10", Heading: "10. Accessibility and responsive behavior", Depth: 2, Position: 10, LastRevisedIn: 3, Published: true},
+				{Anchor: "sec-12", Number: "12", Heading: "12. Cockpit rendering and styling toolchain", Depth: 2, Position: 12, LastRevisedIn: 1, Published: true},
+			},
+			Edges:   []DocEdgeRow{{Type: "covers", Anchor: "sec-10", Ref: "plan", Label: "032-project-cockpit-part-3-accessibility#sec-2", URL: "/docs/41"}},
+			EdgesIn: []DocEdgeRow{{Type: "amends", Ref: "spec 29", Label: "029-research-work-in-the-backbone#sec-7", URL: "/docs/29"}},
 		}),
-		"projects": Projects(ProjectsView{Page: PageProps{Title: "Projects", ActiveGlobal: "projects"}, Projects: []model.Project{{ID: "p", Name: "Project"}}}),
+		"projects": Projects(ProjectsView{
+			Page: PageProps{Title: "Projects", ActiveGlobal: "projects"},
+			Projects: []model.Project{
+				{ID: "worklode", Name: "Worklode backbone", Key: "WL"},
+				{ID: "casualty-reconciliation", Name: "Casualty reconciliation data platform", Key: "CRD"},
+			},
+		}),
 		// GraphEnabled, so the two drift tables and the gap table render
 		// alongside the frontier and critical-path ones.
 		"drift": Drift(DriftView{
-			Page:         PageProps{Title: "Drift", ActiveGlobal: "knowledge"},
-			Frontier:     []model.FrontierTask{{ID: "T-1", Title: "t", Priority: "high", Concern: "c", FanOut: 2, Depth: 1, IsCritical: true}},
-			CriticalPath: model.CriticalPath{MaxDepth: 1, Tasks: []model.FrontierTask{{ID: "T-1", Depth: 1, FanOut: 2, IsCritical: true}}, Cycles: [][]string{{"T-2", "T-3"}}},
-			Drift: model.Drift{
-				Violations:  []model.DriftEdge{{From: "svc/a", To: "svc/b"}},
-				StaleIntent: []model.DriftEdge{{From: "svc/c", To: "svc/d"}},
+			Page: PageProps{Title: "Drift", ActiveGlobal: "knowledge"},
+			Frontier: []model.FrontierTask{
+				{ID: "WL-234", Title: longTitle, Project: "worklode", Priority: "low", Concern: "usability", FanOut: 2, Depth: 1, IsCritical: true},
+				{ID: "WL-141", Title: tokenTitle, Project: "worklode", Priority: "high", Concern: "reliability", FanOut: 5, Depth: 3},
 			},
-			Gaps:         []model.Gap{{Component: "svc/a"}, {Repo: "r", Path: "cmd/x"}},
+			CriticalPath: model.CriticalPath{
+				MaxDepth: 3,
+				Tasks:    []model.FrontierTask{{ID: "WL-234", Title: longTitle, Depth: 1, FanOut: 2, IsCritical: true}},
+				Cycles:   [][]string{{"WL-301", "WL-302", "WL-303"}},
+			},
+			Drift: model.Drift{
+				Violations:  []model.DriftEdge{{From: "worklode/internal/ui", To: "worklode/internal/api"}},
+				StaleIntent: []model.DriftEdge{{From: "casualty-reconciliation/ingest", To: "casualty-reconciliation/warehouse"}},
+			},
+			Gaps:         []model.Gap{{Component: "worklode/internal/skillstore"}, {Repo: "casualty-reconciliation", Path: "pipelines/daily/reconcile_partitions.py"}},
 			GraphEnabled: true,
 		}),
 		"home": Home(HomeView{
 			Page: PageProps{Title: "Home", ActiveGlobal: "home"},
 			Mode: "actor",
 			Cards: []HomeCard{
-				{ProjectID: "p1", Name: "Alpha", Key: "ALP", RoleBadge: "Lead", Signal: "You lead this project", InProgress: 2, InReview: 1, Blocked: 1, CrewInitials: []string{"SB", "JD"}, CrewMore: 3, LastActivity: now},
-				{ProjectID: "p2", Name: "Beta", Key: "BET", RoleBadge: "Member", Signal: "You are on this project", InProgress: 0, InReview: 0, Blocked: 0, CrewInitials: []string{"AB"}},
+				{ProjectID: "worklode", Name: "Worklode backbone", Key: "WL", RoleBadge: "Lead", Signal: "Three tasks are blocked on a decision only you can make", InProgress: 2, InReview: 1, Blocked: 1, CrewInitials: []string{"SB", "JD", "AK", "MP", "TL"}, CrewMore: 3, LastActivity: now},
+				{ProjectID: "casualty-reconciliation", Name: "Casualty reconciliation data platform", Key: "CRD", RoleBadge: "Member", Signal: "You are on this project", CrewInitials: []string{"AB"}},
 			},
 		}),
-		"deliverables": Deliverables(DeliverablesView{Page: PageProps{Title: "Deliverables"}, Project: proj, Deliverables: []DeliverableRow{{ID: "d", Name: "D", URL: "https://example.org/x", CreatedAt: now, Artifact: "bigquery://sunstone-prod/cow/casualties", ReportedState: "published", ReportedAt: &now}}}),
-		"newtask":      NewTask(NewTaskView{Form: FormShell{Page: PageProps{Title: "New task"}, Project: proj}}),
-		"placeholder":  Placeholder(PlaceholderView{Page: PageProps{Title: "Crew"}, Heading: "Crew", Project: &proj}),
+		"deliverables": Deliverables(DeliverablesView{
+			Page: PageProps{Title: "Deliverables"}, Project: proj, NewURL: "/projects/worklode/deliverables/new",
+			Deliverables: []DeliverableRow{{
+				ID: "DL-4", Name: "Daily casualty reconciliation snapshot",
+				Description: "The partitioned daily snapshot the newsroom queries, republished whenever an upstream correction lands",
+				URL:         "https://console.cloud.google.com/bigquery?project=sunstone-prod&ws=!1m5!1m4!4m3!1ssunstone-prod!2scasualty_reconciliation",
+				CreatedBy:   "stig", CreatedAt: now, Artifact: token,
+				ReportedState: "published", ReportedAt: &now,
+			}},
+		}),
+		"crew": Crew(CrewView{
+			Page: PageProps{Title: "Crew"}, Project: proj,
+			AddAction: "/projects/worklode/crew", RemoveAction: "/projects/worklode/crew/remove",
+			Roles: []FormOption{{Value: "member", Label: "Member", Selected: true}, {Value: "reviewer", Label: "Reviewer"}},
+			Members: []CrewMember{
+				{ActorID: "stig@sunstoneinstitute.ai", DisplayName: "Stig Bakken", Roles: []string{"lead", "reviewer"}, IsLead: true},
+				{ActorID: "claude-worker-01", DisplayName: "claude-worker-01", Roles: []string{"member"}},
+			},
+			RemoveError:      "claude-worker-01 still owns open work; reassign or close it first",
+			Responsibilities: []CrewWorkItem{{Kind: "task", ID: "WL-234", Title: longTitle, State: "in_progress"}},
+		}),
+		"approvals": Approvals(ApprovalsView{
+			Page: PageProps{Title: "Reviews", ActiveGlobal: "reviews"},
+			Rows: []ApprovalRow{{
+				ID: 12, EntityID: "sunstoneinstitute/worklode#242",
+				PRTitle: "Make the narrow-width reflow check runnable, so the WCAG fixes are measured",
+				PRURL:   "https://github.com/sunstoneinstitute/worklode/pull/242",
+				TaskID:  "WL-234", ProjectID: "worklode", ProjectName: "Worklode backbone",
+				RequiredActorName: "Stig Bakken", Age: "3h ago",
+			}},
+		}),
+		"newtask": NewTask(NewTaskView{
+			Form:  FormShell{Page: PageProps{Title: "New task"}, Project: proj, Action: "/projects/worklode/tasks/new", CancelURL: "/projects/worklode", Error: "A task needs a title before it can be created"},
+			Title: longTitle, Body: "The audit measured " + token + " and reported nothing.",
+			Priorities: []FormOption{{Value: "high", Label: "High"}, {Value: "low", Label: "Low", Selected: true}},
+			Kinds:      []FormOption{{Value: "chore", Label: "Chore", Selected: true}, {Value: "feature", Label: "Feature"}},
+			Concerns:   []FormOption{{Value: "usability", Label: "Usability", Selected: true}},
+			Draft:      true,
+		}),
+		"newdeliverable": NewDeliverable(NewDeliverableView{
+			Form: FormShell{Page: PageProps{Title: "Declare a deliverable"}, Project: proj, Action: "/projects/worklode/deliverables/new", CancelURL: "/projects/worklode/deliverables"},
+			Name: "Daily casualty reconciliation snapshot", Artifact: token,
+			URL: "https://console.cloud.google.com/bigquery?project=sunstone-prod",
+		}),
+		"placeholder": Placeholder(PlaceholderView{
+			Page: PageProps{Title: "Decisions"}, Heading: "Decisions", Project: &proj, ActiveSection: "decisions",
+			Message: "Governed decisions are not stored in the backbone yet, so this page would have nothing honest to show.",
+		}),
 	}
 	out := make(map[string]string, len(comps))
 	for name, comp := range comps {
@@ -179,6 +311,10 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{"pre{overflow-x:auto", "a stored document body cannot be re-wrapped, so it scrolls inside itself (WCAG 1.4.10)"},
 		{".prose{overflow-wrap:anywhere", "an unbroken token in a task body must not widen the page (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal", "a work row's title wraps below 880px instead of truncating to nothing (WCAG 1.4.10)"},
+		{".wlrow.tl.t{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere", "a work-row title holding an unbreakable identifier must break rather than widen the page (WCAG 1.4.10)"},
+		{".dodrow.def{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere", "a deliverable's artifact address has no soft wrap opportunity in it (WCAG 1.4.10)"},
+		{"scroll-padding-bottom:calc(64px+env(safe-area-inset-bottom)+16px)", "a control focused near the fold must clear the fixed bottom tab bar (WCAG 2.4.11)"},
+		{".dodrow.eva{display:flex;align-items:center;min-height:24px", "a deliverable's URL is a link on its own line, so it needs a 24px box (WCAG 2.5.8)"},
 		{".fieldrow.checkinput{width:24px;height:24px", "the draft checkbox meets the minimum target size (WCAG 2.5.8)"},
 		{".homegrid{display:grid;grid-template-columns:1fr1fr", "Home's two-column grid must stay fixed, never auto-fit/auto-fill (spec 032 §10)"},
 		{"@media(max-width:820px){.homegrid{grid-template-columns:1fr;}}", "Home's grid must collapse to one column below 820px (spec 032 §10)"},
