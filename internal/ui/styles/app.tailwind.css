@@ -172,26 +172,71 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 @media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}}
 
 /* Below 880px the shell collapses to one column (spec 032 §10: reduced
- * columns, not a squeezed grid): the sidebar — global or project — becomes
- * a horizontal nav strip above the content. */
+ * columns, not a squeezed grid). Below that width nav.global and nav.local
+ * stop rendering inline in the sidebar and instead become a GitHub-app-style
+ * fixed bottom tab bar and a project drawer — see layout.templ's header
+ * comment for why they are CSS-restyled in place rather than duplicated. */
+.navicon{display:none}
+.tab-more{display:none}
+.drawer-toggle{display:none}
+.sheet-backdrop{display:none}
 @media (max-width:880px){
-  /* minmax(0,…) lets the single track shrink below the nav's intrinsic width,
-   * so the strip scrolls inside itself instead of widening the page; the
-   * explicit rows keep the shell's min-height on the content, not on the
-   * strip, which stretch would otherwise inflate. */
   .shell{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
-  .sidebar{border-right:0;border-bottom:1px solid var(--line);padding:10px 14px;min-width:0}
-  nav.global,nav.local{flex-direction:row;overflow-x:auto;scrollbar-width:none;
-    margin-top:0;border-top:0;padding-top:0}
-  nav.global::-webkit-scrollbar,nav.local::-webkit-scrollbar{display:none}
-  nav.global a,nav.local a{white-space:nowrap}
-  /* Two navs stacked in the strip: keep the rule between them, tighter. */
-  .sidebar nav.global:not(:only-child){padding-bottom:8px;margin-bottom:8px}
+  .sidebar{border-right:0;border-bottom:1px solid var(--line);padding:10px 14px;min-width:0;position:relative}
   /* min-width:0 stops the flex row and the name flooring at min-content, and
    * overflow-wrap breaks a long unbroken project name, so neither re-widens
-   * the collapsed strip. */
-  .proj-head{display:flex;align-items:baseline;gap:10px;padding:0 0 8px;min-width:0}
+   * the column. The drawer-toggle button reserves right-hand room. */
+  .proj-head{display:flex;align-items:baseline;gap:10px;padding:0 34px 8px 0;min-width:0}
   .proj-name{margin:0;font-size:16px;min-width:0;overflow-wrap:anywhere}
+
+  /* ---- global nav -> bottom tab bar ---- */
+  /* Fixed to the viewport; env() reserves the iOS home-indicator strip. The
+   * five primary tabs (order:2) always show; the three secondary
+   * destinations (order:1, flex-basis 100%) stay display:none until the
+   * "More" tab sets body[data-open-panel="more"], at which point each one
+   * fills its own wrapped line — a stacked sheet — directly above the row,
+   * with the DOM never reordered (spec 032 §2's order is untouched; only
+   * flex `order` changes what paints where). */
+  .sidebar nav.global{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;border-top:1px solid var(--line);
+    display:flex;flex-direction:row;flex-wrap:wrap;background:var(--surface);
+  }
+  .sidebar nav.global a.tab-secondary{
+    display:none;order:1;flex:0 0 100%;padding:12px 16px;border-bottom:1px solid var(--line);
+    font-size:14px;font-weight:500;color:var(--ink-2);
+  }
+  .sidebar nav.global a.tab-secondary.active{color:var(--ink);font-weight:600;background:var(--sunk)}
+  body[data-open-panel="more"] .sidebar nav.global{box-shadow:var(--shadow);border-radius:16px 16px 0 0;max-height:70vh;overflow-y:auto}
+  body[data-open-panel="more"] .sidebar nav.global a.tab-secondary{display:flex}
+  .sidebar nav.global a.tab-primary,.sidebar nav.global .tab-more{
+    order:2;flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;padding:7px 2px calc(7px + env(safe-area-inset-bottom));font-size:10.5px;font-weight:500;
+    color:var(--ink-2);text-align:center;border:0;background:none;font-family:inherit;
+  }
+  .sidebar nav.global a.tab-primary.active,.sidebar nav.global .tab-more[aria-expanded="true"]{color:var(--ink);font-weight:700}
+  .sidebar nav.global .navicon{display:block}
+  .sidebar nav.global .navicon svg{width:20px;height:20px;display:block;margin:0 auto}
+  .tab-more{display:flex;cursor:pointer}
+
+  /* ---- project-local nav -> drawer ---- */
+  .drawer-toggle{
+    display:grid;place-items:center;position:absolute;top:10px;right:14px;
+    width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+  }
+  .drawer-toggle svg{width:16px;height:16px}
+  nav.local{display:none}
+  body[data-open-panel="drawer"] nav.local{
+    display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:var(--surface);border-radius:16px 16px 0 0;box-shadow:var(--shadow);margin:0;border-top:0;
+    padding:10px 10px calc(10px + env(safe-area-inset-bottom));max-height:70vh;overflow-y:auto;
+  }
+
+  /* ---- shared backdrop ---- */
+  .sheet-backdrop{display:none}
+  body[data-open-panel] .sheet-backdrop{display:block;position:fixed;inset:0;z-index:39;background:rgba(14,25,55,.45)}
+
+  /* Room for the fixed tab bar so it never covers page content. */
+  .main{padding-bottom:calc(64px + env(safe-area-inset-bottom) + 16px)}
 }
 
 .canvas{min-width:0;display:flex;flex-direction:column;gap:16px}
