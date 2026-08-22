@@ -138,6 +138,7 @@ func TestRunOnceProjectsCreatedTask(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
 	id := createTask(t, s, "p1", "alpha", "wire the projector")
+	store.AwaitCommitHorizon(t, s) // so this one run also checkpoints past it
 
 	n, err := p.RunOnce(ctx)
 	if err != nil || n != 1 {
@@ -156,7 +157,8 @@ func TestRunOnceProjectsCreatedTask(t *testing.T) {
 		}
 	}
 
-	// Checkpoint advanced: a second run is a no-op with no new PUT.
+	// Checkpoint advanced past the settled batch: a second run is a no-op
+	// with no new PUT.
 	if n, err := p.RunOnce(ctx); err != nil || n != 0 {
 		t.Fatalf("second RunOnce = %d, %v; want 0, nil", n, err)
 	}
@@ -247,6 +249,7 @@ func TestFailedProjectQuarantinedAndRetried(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
 	createTask(t, s, "p5", "alpha", "unlucky")
+	store.AwaitCommitHorizon(t, s) // the checkpoint may only pass a settled batch
 
 	f.setFail(true)
 	if n, err := p.RunOnce(ctx); err == nil || n != 0 {
@@ -293,6 +296,7 @@ func TestOneFailingProjectDoesNotBlockAnother(t *testing.T) {
 	ctx := t.Context()
 	createTask(t, s, "p6", "alpha", "poison")
 	createTask(t, s, "p7", "beta", "innocent bystander")
+	store.AwaitCommitHorizon(t, s) // the checkpoint may only pass a settled batch
 
 	f.setFailGraph(iri.ProjectGraph("alpha"), true)
 	n, err := p.RunOnce(ctx)
@@ -346,6 +350,7 @@ func TestQuarantineBacksOff(t *testing.T) {
 	base := time.Now().UTC()
 	p.SetClock(func() time.Time { return base })
 	createTask(t, s, "p8", "alpha", "persistently poisonous")
+	store.AwaitCommitHorizon(t, s) // the checkpoint may only pass a settled batch
 	alpha := iri.ProjectGraph("alpha")
 
 	f.setFailGraph(alpha, true)
@@ -388,6 +393,7 @@ func TestDirtyProjectBypassesBackoff(t *testing.T) {
 	alpha := iri.ProjectGraph("alpha")
 
 	createTask(t, s, "p9", "alpha", "bad content")
+	store.AwaitCommitHorizon(t, s) // the checkpoint may only pass a settled batch
 	f.setFailGraph(alpha, true)
 	for i := 1; i <= 2; i++ {
 		if _, err := p.RunOnce(ctx); err == nil {
