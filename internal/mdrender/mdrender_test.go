@@ -10,91 +10,96 @@ import (
 
 const validHash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
+// hostileBodies is the corpus TestHostileBodies runs through Body and
+// TestDocBodyIsSanitisedLikeATaskBody runs through DocBody: both flavours have
+// to neutralise every shape here, which is what "the document body runs the
+// same pipeline" means in practice.
+var hostileBodies = []struct {
+	name, body string
+	absent     []string
+}{
+	// From the plan.
+	{"script tag", "<script>alert(1)</script>", []string{"<script", "alert(1)"}},
+	{"javascript href", "[x](javascript:alert(1))", []string{"javascript:"}},
+	{"remote image", "![](https://evil.example/p.png)", []string{"evil.example"}},
+	{"protocol-relative image", "![](//evil.example/p.png)", []string{"evil.example"}},
+	{"traversal src", `<img src="/blob/../../etc/passwd">`, []string{"etc/passwd"}},
+	{"onerror", `<img src="/blob/` + validHash + `" onerror="alert(1)">`, []string{"onerror"}},
+	{"data uri", "![](data:text/html;base64,PHNjcmlwdD4=)", []string{"data:"}},
+	{"iframe", `<iframe src="https://evil.example"></iframe>`, []string{"<iframe"}},
+	{"svg script", `<svg><script>alert(1)</script></svg>`, []string{"<script"}},
+	{"uppercase hash", "![](/blob/" + strings.ToUpper(validHash) + ")", []string{"/blob/"}},
+
+	// javascript: obfuscation. bluemonday parses the URL and matches the
+	// scheme, but only after its own whitespace handling, so each shape
+	// is pinned separately.
+	{"mixed case scheme", `<a href="JaVaScRiPt:alert(1)">x</a>`, []string{"alert(1)"}},
+	{"tab in scheme", "<a href=\"java\tscript:alert(1)\">x</a>", []string{"alert(1)"}},
+	{"entity tab in scheme", `<a href="java&#09;script:alert(1)">x</a>`, []string{"alert(1)"}},
+	{"leading space scheme", `<a href=" javascript:alert(1)">x</a>`, []string{"alert(1)"}},
+	{"newline in scheme", "<a href=\"java\nscript:alert(1)\">x</a>", []string{"alert(1)"}},
+	{"vbscript href", `<a href="vbscript:msgbox(1)">x</a>`, []string{"vbscript"}},
+	{"data html href", `<a href="data:text/html,PHN2Zz4=">x</a>`, []string{"data:"}},
+	{"reference javascript image", "![x][ref]\n\n[ref]: javascript:alert(1)\n", []string{"javascript", "alert(1)"}},
+	{"reference remote image", "![x][ref]\n\n[ref]: https://evil.example/p.png\n", []string{"evil.example"}},
+
+	// CSS is an exfiltration channel (background: url(...)) and a
+	// mutation-XSS vector, so neither the element nor the attribute is
+	// allowed anywhere.
+	{"style block", "<style>body{background:url(https://evil.example/x)}</style>", []string{"evil.example", "<style"}},
+	{"style attribute", `<p style="background:url(https://evil.example/x)">hi</p>`, []string{"evil.example", "style="}},
+	{"style on allowed img", `<img src="/blob/` + validHash + `" style="background:url(https://evil.example/x)">`, []string{"evil.example", "style="}},
+
+	// Remote fetches by any other name.
+	{"srcset", `<img src="/blob/` + validHash + `" srcset="https://evil.example/2x.png 2x">`, []string{"evil.example", "srcset"}},
+	{"picture source srcset", `<picture><source srcset="https://evil.example/a.png"><img src="/blob/` + validHash + `"></picture>`, []string{"evil.example", "srcset"}},
+	{"video poster", `<video src="/blob/` + validHash + `" poster="https://evil.example/p.png"></video>`, []string{"evil.example", "poster"}},
+	{"source src remote", `<video><source src="https://evil.example/v.mp4" type="video/mp4"></video>`, []string{"evil.example"}},
+	{"link stylesheet", `<link rel="stylesheet" href="https://evil.example/x.css">`, []string{"evil.example", "<link"}},
+
+	// Document-scope hijacking.
+	{"base href", `<base href="https://evil.example/">`, []string{"evil.example", "<base"}},
+	{"meta refresh", `<meta http-equiv="refresh" content="0;url=https://evil.example">`, []string{"evil.example", "<meta"}},
+	{"form", `<form action="https://evil.example"><input name="x"></form>`, []string{"evil.example", "<form", "name="}},
+	{"object", `<object data="https://evil.example/x"></object>`, []string{"evil.example", "<object"}},
+	{"embed", `<embed src="https://evil.example/x">`, []string{"evil.example", "<embed"}},
+	{"math foreignobject", `<math><foreignObject><script>alert(1)</script></foreignObject></math>`, []string{"alert(1)", "<script", "<math"}},
+
+	// Mutation shapes: markup whose meaning changes when a browser
+	// re-parses the sanitiser's output.
+	{"noscript mutation", `<noscript><p title="</noscript><img src=x onerror=alert(1)>">`, []string{"onerror", "alert(1)"}},
+	{"svg style mutation", `<svg><style><img src=x onerror=alert(1)>`, []string{"onerror", "alert(1)"}},
+	{"broken comment", "<!--><script>alert(1)</script>", []string{"alert(1)", "<script"}},
+	// A CDATA section is a bogus comment that swallows the <script> start
+	// tag with it; what is left of the payload comes back as escaped text,
+	// so the assertion is about markup, not about the word "alert".
+	{"cdata", "<![CDATA[<script>alert(1)</script>]]>", []string{"<script", "<!["}},
+
+	// Attribute-level tricks.
+	{"odd case handler", `<img src=x OnErRoR=alert(1)>`, []string{"alert", "rror"}},
+	{"unquoted handler", `<img src="/blob/` + validHash + `" onload=alert(1)>`, []string{"onload", "alert"}},
+	{"onclick on link", `<a href="https://example.com" onclick="alert(1)">x</a>`, []string{"onclick", "alert"}},
+	{"id clobbering", `<div id="config">x</div>`, []string{"id="}},
+
+	// src regexp bypasses. The pattern must anchor both ends against the
+	// whole value, not a line or a prefix.
+	{"src query", `<img src="/blob/` + validHash + `?x=1">`, []string{"/blob/"}},
+	{"src fragment", `<img src="/blob/` + validHash + `#f">`, []string{"/blob/"}},
+	{"src traversal suffix", `<img src="/blob/` + validHash + `/../../etc/passwd">`, []string{"/blob/", "passwd"}},
+	{"src 63 hex", `<img src="/blob/` + validHash[:63] + `">`, []string{"/blob/"}},
+	{"src 65 hex", `<img src="/blob/` + validHash + `f">`, []string{"/blob/"}},
+	{"src trailing newline", "<img src=\"/blob/" + validHash + "\n\">", []string{"/blob/"}},
+	{"src protocol relative", `<img src="//evil.example/blob/` + validHash + `">`, []string{"evil.example", "/blob/"}},
+	{"src absolute remote blob", `<img src="https://evil.example/blob/` + validHash + `">`, []string{"evil.example"}},
+	{"src backslash", `<img src="\\evil.example\blob\` + validHash + `">`, []string{"evil.example"}},
+	{"src nul byte", "<img src=\"/blob/\x00" + validHash + "\">", []string{"/blob/"}},
+}
+
 // TestHostileBodies is the load-bearing test. Task bodies are untrusted:
 // spec 020's inbox import writes GitHub issue text straight into tasks.body,
 // so anyone who can open an issue on a mapped repo controls this input.
 func TestHostileBodies(t *testing.T) {
-	cases := []struct {
-		name, body string
-		absent     []string
-	}{
-		// From the plan.
-		{"script tag", "<script>alert(1)</script>", []string{"<script", "alert(1)"}},
-		{"javascript href", "[x](javascript:alert(1))", []string{"javascript:"}},
-		{"remote image", "![](https://evil.example/p.png)", []string{"evil.example"}},
-		{"protocol-relative image", "![](//evil.example/p.png)", []string{"evil.example"}},
-		{"traversal src", `<img src="/blob/../../etc/passwd">`, []string{"etc/passwd"}},
-		{"onerror", `<img src="/blob/` + validHash + `" onerror="alert(1)">`, []string{"onerror"}},
-		{"data uri", "![](data:text/html;base64,PHNjcmlwdD4=)", []string{"data:"}},
-		{"iframe", `<iframe src="https://evil.example"></iframe>`, []string{"<iframe"}},
-		{"svg script", `<svg><script>alert(1)</script></svg>`, []string{"<script"}},
-		{"uppercase hash", "![](/blob/" + strings.ToUpper(validHash) + ")", []string{"/blob/"}},
-
-		// javascript: obfuscation. bluemonday parses the URL and matches the
-		// scheme, but only after its own whitespace handling, so each shape
-		// is pinned separately.
-		{"mixed case scheme", `<a href="JaVaScRiPt:alert(1)">x</a>`, []string{"alert(1)"}},
-		{"tab in scheme", "<a href=\"java\tscript:alert(1)\">x</a>", []string{"alert(1)"}},
-		{"entity tab in scheme", `<a href="java&#09;script:alert(1)">x</a>`, []string{"alert(1)"}},
-		{"leading space scheme", `<a href=" javascript:alert(1)">x</a>`, []string{"alert(1)"}},
-		{"newline in scheme", "<a href=\"java\nscript:alert(1)\">x</a>", []string{"alert(1)"}},
-		{"vbscript href", `<a href="vbscript:msgbox(1)">x</a>`, []string{"vbscript"}},
-		{"data html href", `<a href="data:text/html,PHN2Zz4=">x</a>`, []string{"data:"}},
-		{"reference javascript image", "![x][ref]\n\n[ref]: javascript:alert(1)\n", []string{"javascript", "alert(1)"}},
-		{"reference remote image", "![x][ref]\n\n[ref]: https://evil.example/p.png\n", []string{"evil.example"}},
-
-		// CSS is an exfiltration channel (background: url(...)) and a
-		// mutation-XSS vector, so neither the element nor the attribute is
-		// allowed anywhere.
-		{"style block", "<style>body{background:url(https://evil.example/x)}</style>", []string{"evil.example", "<style"}},
-		{"style attribute", `<p style="background:url(https://evil.example/x)">hi</p>`, []string{"evil.example", "style="}},
-		{"style on allowed img", `<img src="/blob/` + validHash + `" style="background:url(https://evil.example/x)">`, []string{"evil.example", "style="}},
-
-		// Remote fetches by any other name.
-		{"srcset", `<img src="/blob/` + validHash + `" srcset="https://evil.example/2x.png 2x">`, []string{"evil.example", "srcset"}},
-		{"picture source srcset", `<picture><source srcset="https://evil.example/a.png"><img src="/blob/` + validHash + `"></picture>`, []string{"evil.example", "srcset"}},
-		{"video poster", `<video src="/blob/` + validHash + `" poster="https://evil.example/p.png"></video>`, []string{"evil.example", "poster"}},
-		{"source src remote", `<video><source src="https://evil.example/v.mp4" type="video/mp4"></video>`, []string{"evil.example"}},
-		{"link stylesheet", `<link rel="stylesheet" href="https://evil.example/x.css">`, []string{"evil.example", "<link"}},
-
-		// Document-scope hijacking.
-		{"base href", `<base href="https://evil.example/">`, []string{"evil.example", "<base"}},
-		{"meta refresh", `<meta http-equiv="refresh" content="0;url=https://evil.example">`, []string{"evil.example", "<meta"}},
-		{"form", `<form action="https://evil.example"><input name="x"></form>`, []string{"evil.example", "<form", "name="}},
-		{"object", `<object data="https://evil.example/x"></object>`, []string{"evil.example", "<object"}},
-		{"embed", `<embed src="https://evil.example/x">`, []string{"evil.example", "<embed"}},
-		{"math foreignobject", `<math><foreignObject><script>alert(1)</script></foreignObject></math>`, []string{"alert(1)", "<script", "<math"}},
-
-		// Mutation shapes: markup whose meaning changes when a browser
-		// re-parses the sanitiser's output.
-		{"noscript mutation", `<noscript><p title="</noscript><img src=x onerror=alert(1)>">`, []string{"onerror", "alert(1)"}},
-		{"svg style mutation", `<svg><style><img src=x onerror=alert(1)>`, []string{"onerror", "alert(1)"}},
-		{"broken comment", "<!--><script>alert(1)</script>", []string{"alert(1)", "<script"}},
-		// A CDATA section is a bogus comment that swallows the <script> start
-		// tag with it; what is left of the payload comes back as escaped text,
-		// so the assertion is about markup, not about the word "alert".
-		{"cdata", "<![CDATA[<script>alert(1)</script>]]>", []string{"<script", "<!["}},
-
-		// Attribute-level tricks.
-		{"odd case handler", `<img src=x OnErRoR=alert(1)>`, []string{"alert", "rror"}},
-		{"unquoted handler", `<img src="/blob/` + validHash + `" onload=alert(1)>`, []string{"onload", "alert"}},
-		{"onclick on link", `<a href="https://example.com" onclick="alert(1)">x</a>`, []string{"onclick", "alert"}},
-		{"id clobbering", `<div id="config">x</div>`, []string{"id="}},
-
-		// src regexp bypasses. The pattern must anchor both ends against the
-		// whole value, not a line or a prefix.
-		{"src query", `<img src="/blob/` + validHash + `?x=1">`, []string{"/blob/"}},
-		{"src fragment", `<img src="/blob/` + validHash + `#f">`, []string{"/blob/"}},
-		{"src traversal suffix", `<img src="/blob/` + validHash + `/../../etc/passwd">`, []string{"/blob/", "passwd"}},
-		{"src 63 hex", `<img src="/blob/` + validHash[:63] + `">`, []string{"/blob/"}},
-		{"src 65 hex", `<img src="/blob/` + validHash + `f">`, []string{"/blob/"}},
-		{"src trailing newline", "<img src=\"/blob/" + validHash + "\n\">", []string{"/blob/"}},
-		{"src protocol relative", `<img src="//evil.example/blob/` + validHash + `">`, []string{"evil.example", "/blob/"}},
-		{"src absolute remote blob", `<img src="https://evil.example/blob/` + validHash + `">`, []string{"evil.example"}},
-		{"src backslash", `<img src="\\evil.example\blob\` + validHash + `">`, []string{"evil.example"}},
-		{"src nul byte", "<img src=\"/blob/\x00" + validHash + "\">", []string{"/blob/"}},
-	}
-	for _, tc := range cases {
+	for _, tc := range hostileBodies {
 		t.Run(tc.name, func(t *testing.T) {
 			got := string(mdrender.Body(tc.body))
 			for _, bad := range tc.absent {

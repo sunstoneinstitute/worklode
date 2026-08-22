@@ -1,13 +1,16 @@
 package api
 
-// docs_internal_test.go exercises docSelectorFrom directly: it is a pure
-// function of a query string, so its validation is covered here without a
-// live store, alongside the store-backed round trips in docs_test.go.
+// docs_internal_test.go exercises the pure parts of the docs surface —
+// docSelectorFrom over a query string, docView over a detail projection — so
+// they are covered without a live store, alongside the store-backed round
+// trips in docs_test.go.
 
 import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // TestDocSelectorFromValid: the three derived selectors accept no filter, or
@@ -57,5 +60,35 @@ func TestDocSelectorFromConflicts(t *testing.T) {
 				t.Fatalf("docSelectorFrom(%q) = %v, want it to mention %q", c.query, err, c.want)
 			}
 		})
+	}
+}
+
+// TestDocViewRendersBody: the document page shows a rendered body, not the
+// markdown source. The rendering happens here rather than in internal/ui,
+// which is a stdlib + internal/model leaf and cannot import mdrender, so
+// docView is where a regression would land — and a nil cache is the shape a
+// test-built *server carries.
+func TestDocViewRendersBody(t *testing.T) {
+	v := docView(nil, &model.DocDetail{
+		Doc: model.Doc{
+			ID:   25,
+			Kind: "spec",
+			Slug: "025-documents",
+			Body: "## 3. Anchors {#sec-3}\n\n**prose**\n\n<script>alert(1)</script>\n",
+		},
+	})
+	got := string(v.BodyHTML)
+	// The document flavour: the anchor becomes an id, which is what the
+	// Sections table links at.
+	if !strings.Contains(got, `<h2 id="sec-3">`) {
+		t.Fatalf("section anchor missing from rendered body:\n%s", got)
+	}
+	if !strings.Contains(got, "<strong>prose</strong>") {
+		t.Fatalf("markdown was not rendered:\n%s", got)
+	}
+	// Same sanitiser as the task path: a more trusted source is not a reason
+	// to skip it.
+	if strings.Contains(got, "<script") || strings.Contains(got, "alert(1)") {
+		t.Fatalf("script survived the document render:\n%s", got)
 	}
 }
