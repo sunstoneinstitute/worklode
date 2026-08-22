@@ -2501,8 +2501,11 @@ var docEdgeInverse = map[string]string{
 // authorship.
 //
 // Each resolved far end is named as well as identified: one join carries the
-// other document's slug, kind and number back with its id, so a caller can
-// render "spec 25" instead of "document 42" without a query per edge. An
+// other document's project, slug, kind and number back with its id, so a
+// caller can render "spec 25" instead of "document 42", or address the far
+// document by project and slug, without a query per edge. The project is part
+// of that because an edge can cross one — resolveDocRef matches a shorthand
+// reference on a project key — so a slug alone does not name a document. An
 // unresolved outbound edge (to_external) joins to nothing and leaves them
 // empty.
 //
@@ -2515,7 +2518,8 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	outRows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
 		        coalesce(e.to_anchor,''), coalesce(e.to_external,''),
-		        coalesce(d.slug,''), coalesce(d.kind,''), coalesce(d.number,0)
+		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
+		        coalesce(d.number,0)
 		   FROM doc_edges e LEFT JOIN docs d ON d.id = e.to_doc
 		  WHERE e.from_doc = $1
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
@@ -2533,7 +2537,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	// anchor here, and its source anchor is the far one.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
-		        d.slug, d.kind, coalesce(d.number,0)
+		        d.project_id, d.slug, d.kind, coalesce(d.number,0)
 		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
 		  WHERE e.to_doc = $1 AND d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
@@ -2556,14 +2560,14 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 }
 
 // scanDocEdges drains a query selecting the DocEdge columns in order: the
-// five stored ones, then the joined far end's slug, kind and number.
+// five stored ones, then the joined far end's project, slug, kind and number.
 func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 	defer rows.Close()
 	var out []model.DocEdge
 	for rows.Next() {
 		var e model.DocEdge
 		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
-			&e.ToSlug, &e.ToKind, &e.ToNumber); err != nil {
+			&e.ToProject, &e.ToSlug, &e.ToKind, &e.ToNumber); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

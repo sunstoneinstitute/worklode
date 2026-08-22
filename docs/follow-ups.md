@@ -729,3 +729,21 @@ while dogfooding it against the real corpus.
   reviewing every delete across an instance still means visiting each project.
   A global destination was out of WL-238's scope for the same reason the nav
   item above is a deviation: it would be a second addition to 032 §2's list.
+
+## From WL-284 — a doc note's edges (2026-08-23)
+
+- `[P3]` **The Obsidian mirror renders a document's outgoing `edges` but not
+  its `edges_in`, because nothing on the list route dates them.** The sync
+  decides whether to re-render a doc note from its list row alone (`docEtag`
+  over `version`/`updated_at`, WL-196), and an inbound edge is created by
+  *another* document's write, which touches neither field. A rendered
+  `edges_in` would therefore be correct once and then sit stale for as long as
+  nothing else about the document moved — worse than absent, since a reader
+  cannot tell the two apart. Fixing it means a cheap inbound-edge revision on
+  `GET /api/v1/docs` (a max over the inbound rows' event ids, say) folded into
+  `docIdentity`; building that was out of scope for a cosmetic parity pass.
+  The same gap has one narrow effect on the outgoing side already rendered:
+  creating a document re-points references stored unresolved because it did
+  not exist yet (`store.CreateDoc`), so a `to_external` entry can become a
+  link without the near document's row moving. It corrects on that document's
+  next write.
