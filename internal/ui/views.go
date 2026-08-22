@@ -369,9 +369,12 @@ type CrewView struct {
 	// AddAction is where the add-member form POSTs. Add is what the person
 	// typed, preserved so a rejected submit comes back with the form filled
 	// in, and AddError is the one message to fix ("" on first render).
+	// Roles is the fixed role vocabulary as the dropdown's options (WL-297),
+	// with the submitted (or default) role marked selected.
 	AddAction string
 	Add       CrewFormValues
 	AddError  string
+	Roles     []FormOption
 
 	// RemoveAction is where each non-lead member's Remove button POSTs; the
 	// member is named in a hidden field. RemoveError is the one message a
@@ -393,10 +396,10 @@ type CrewWorkItem struct {
 	State string
 }
 
-// CrewFormValues are the add-member form's fields as submitted. Role is a
-// free-form label (spec 029 §6.1), so it is a text field and not a menu:
-// what a person does on a project is org vocabulary, not a closed set this
-// page gets to offer.
+// CrewFormValues are the add-member form's fields as submitted. Role is one
+// of the fixed project-role vocabulary (WL-297) — CrewView.Roles carries the
+// menu the page offers, and the store and migration 0046's CHECK enforce the
+// same set.
 type CrewFormValues struct {
 	Actor string
 	Role  string

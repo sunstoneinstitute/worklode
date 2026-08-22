@@ -71,7 +71,8 @@ templ crewAddForm(v CrewView) {
 		<h3>Add a Crew member</h3>
 		<p class="muted small">
 			Crew is the time-limited group contributing to this project (spec 029
-			§6.1). A role is a free-form label; a project has at most one lead.
+			§6.1). A role is drawn from the project-role vocabulary; a project has
+			at most one lead.
 		</p>
 		<div aria-live="polite">
 			if v.AddError != "" {
@@ -85,8 +86,12 @@ templ crewAddForm(v CrewView) {
 			</p>
 			<p class="fieldrow">
 				<label for="role">Role</label>
-				<input id="role" name="role" type="text" maxlength="100" placeholder="member" value={ v.Add.Role }/>
-				<span class="hint">What this person does on the project. Left empty, it is "member".</span>
+				<select id="role" name="role">
+					for _, o := range v.Roles {
+						<option value={ o.Value } selected?={ o.Selected }>{ o.Label }</option>
+					}
+				</select>
+				<span class="hint">What this person does on the project.</span>
 			</p>
 			<p class="fieldrow check">
 				<input id="lead" name="lead" type="checkbox" value="1" checked?={ v.Add.Lead }/>

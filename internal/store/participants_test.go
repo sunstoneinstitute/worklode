@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -189,7 +192,7 @@ func TestListParticipantsAllProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	// bob again on p2, with a different role than on p1.
-	if err := addParticipant(t, s, "p2", "bob", "reviewer", false, "ada"); err != nil {
+	if err := addParticipant(t, s, "p2", "bob", "engineer", false, "ada"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -211,7 +214,7 @@ func TestListParticipantsAllProjects(t *testing.T) {
 		t.Fatalf("row 1 wrong: %+v", got[1])
 	}
 	if got[2].ProjectID != "p2" || got[2].ActorID != "bob" || got[2].IsLead ||
-		!slices.Equal(got[2].Roles, []string{"reviewer"}) {
+		!slices.Equal(got[2].Roles, []string{"engineer"}) {
 		t.Fatalf("row 2 wrong: %+v", got[2])
 	}
 
@@ -316,7 +319,7 @@ func TestAddParticipant(t *testing.T) {
 		t.Fatalf("duplicate role: got %v", err)
 	}
 	// A second lead is refused (lead handoff is deferred).
-	if err := add("bob", "co-lead", true); !errors.Is(err, ErrInvalidInput) {
+	if err := add("bob", "editor", true); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("second lead: got %v", err)
 	}
 
@@ -477,5 +480,41 @@ func TestRemoveParticipantGuard(t *testing.T) {
 	if logged.Actor != "bob" || logged.By != "ada" ||
 		!slices.Equal(logged.Roles, []string{"data-scientist", "reporter"}) {
 		t.Fatalf("change = %+v, want bob/[data-scientist reporter]/ada", logged)
+	}
+}
+
+// TestParticipantRolesMatchMigration holds the Go vocabulary and migration
+// 0046's CHECK constraint together (WL-297): a role added to one and not the
+// other would let the store admit what Postgres refuses, or vice versa.
+func TestParticipantRolesMatchMigration(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(MigrationsDirForTests(), "0046_participant_role_check.up.sql"))
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	m := regexp.MustCompile(`ADD CONSTRAINT project_participants_role_check\s*\n\s*CHECK \(role IN \(([^)]+)\)\)`).
+		FindSubmatch(data)
+	if m == nil {
+		t.Fatalf("migration 0046 carries no recognizable role CHECK")
+	}
+	inMigration := map[string]bool{}
+	for _, q := range regexp.MustCompile(`'([^']+)'`).FindAllStringSubmatch(string(m[1]), -1) {
+		inMigration[q[1]] = true
+	}
+	if len(inMigration) != len(validParticipantRoles) {
+		t.Fatalf("migration CHECK has %d roles, store has %d", len(inMigration), len(validParticipantRoles))
+	}
+	for role := range validParticipantRoles {
+		if !inMigration[role] {
+			t.Errorf("role %q is in validParticipantRoles but not migration 0046's CHECK", role)
+		}
+	}
+	// The ordered list is the same set.
+	if got := ParticipantRoles(); len(got) != len(validParticipantRoles) {
+		t.Fatalf("ParticipantRoles() has %d entries, want %d", len(got), len(validParticipantRoles))
+	}
+	for _, role := range ParticipantRoles() {
+		if !validParticipantRoles[role] {
+			t.Errorf("ParticipantRoles() lists %q, which validParticipantRoles rejects", role)
+		}
 	}
 }
