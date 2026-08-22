@@ -76,11 +76,36 @@ type ReconcileInput struct {
 }
 
 // ReconcileResponse is one reconcile run's report, one section per engine.
-// Poll is null when polling did not run; PollSkipped says why.
+// Replay is null when --task bounded the run (replay cannot be task-scoped).
+// Poll is null when polling did not run: PollSkipped says the App was not
+// configured, PollError says the poll ran and failed. Either way the replay
+// section stands on its own — engine 1 has already written by then.
 type ReconcileResponse struct {
 	RunID       string        `json:"run_id"`
 	DryRun      bool          `json:"dry_run"`
 	Replay      *ReplayResult `json:"replay"`
-	Poll        any           `json:"poll"` // *PollResult once a later plan adds engine 2 to this endpoint
+	Poll        *PollResult   `json:"poll"`
 	PollSkipped string        `json:"poll_skipped,omitempty"`
+	PollError   string        `json:"poll_error,omitempty"`
+}
+
+// PollResult is one reconcile poll run's report (spec 013 engine 2). Like
+// ReplayResult it is a section of the POST /api/v1/reconcile response body,
+// so ADR 036 puts it here rather than in internal/reconcile. Repaired is what
+// the run observed, not what it changed — see `lode reconcile --help`.
+type PollResult struct {
+	RunID      string       `json:"run_id"`
+	DryRun     bool         `json:"dry_run"`
+	Candidates int          `json:"candidates"`
+	Repaired   []TaskRepair `json:"repaired,omitempty"`
+	Errors     []string     `json:"errors,omitempty"`
+}
+
+// TaskRepair is what the run did (or would do) for one task.
+type TaskRepair struct {
+	TaskID        string   `json:"task_id"`
+	Repo          string   `json:"repo"`
+	State         string   `json:"state"` // state before the run
+	PRsUpdated    []int64  `json:"prs_updated,omitempty"`
+	CommitsLanded []string `json:"commits_landed,omitempty"`
 }
