@@ -73,6 +73,40 @@ func TestSweepLeasesCountsErrors(t *testing.T) {
 	}
 }
 
+// TestSweepLeasesIgnoresASweepTornDownByShutdown asserts a sweep that fails
+// with the context already done counts as neither ok nor error. Shutdown
+// aborts the in-flight round-trip, so the failure arrives as the pool's own
+// error ("sql: database is closed" here, "write tcp ...: i/o timeout" against
+// a live pool) and never as a wrapped context.Canceled — matching on the
+// error's shape would count shutdown as a failed sweep.
+func TestSweepLeasesIgnoresASweepTornDownByShutdown(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	s.db.Close() // every ExpireLeases call now fails
+
+	ctx, cancel := context.WithCancel(t.Context())
+	// The loop reads the clock after the tick and before the sweep, so
+	// cancelling from nowFn puts the context in exactly the state shutdown
+	// leaves it in: done, with a sweep already under way.
+	s.SetNowFunc(func() time.Time {
+		cancel()
+		return leaseTestNow
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.sweepLeases(ctx, time.Millisecond)
+	}()
+	<-done
+
+	for _, result := range []string{"ok", "error"} {
+		if got := testutil.ToFloat64(s.metrics.sweeperRuns.WithLabelValues(result)); got != 0 {
+			t.Fatalf("sweeper_runs{%s} = %v after a sweep torn down by shutdown, want 0", result, got)
+		}
+	}
+}
+
 // TestNewStoreMetricsPreInitialisesSweeperSeries asserts both result series
 // exist at zero before the sweeper has ticked, so an alert expression sees 0
 // rather than no-data.
