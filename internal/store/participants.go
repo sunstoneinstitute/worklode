@@ -240,11 +240,29 @@ func (s *Store) OpenWorkOwnedBy(ctx context.Context, projectID, actorID string) 
 	return openWorkOwnedBy(ctx, s.db, projectID, actorID)
 }
 
-// maxParticipantRole caps a role label. The label is free-form on purpose
-// (spec 029 §6.1): what a person does on a project is org vocabulary, not a
-// closed enum this package gets to decide, and it is never used as a metric
-// label. The cap exists only to keep a runaway paste out of the table.
+// maxParticipantRole caps a role label — a backstop under the vocabulary
+// check below, kept so a widened vocabulary cannot silently admit a runaway
+// value.
 const maxParticipantRole = 100
+
+// validParticipantRoles is the fixed Crew role vocabulary (WL-297),
+// mirrored by migration 0046's CHECK constraint and the cockpit form's
+// dropdown — TestParticipantRolesMatchMigration holds the first pair
+// together. member is the generic default; the rest are the story-project
+// roles the corpus names (spec 029 §6.1, the cockpit design brief). Widening
+// means a new migration plus this map plus the form's option list.
+var validParticipantRoles = map[string]bool{
+	"member": true, "editor": true, "science-lead": true, "reporter": true,
+	"domain-expert": true, "data-scientist": true, "engineer": true,
+}
+
+// ParticipantRoles is the vocabulary as an ordered list — the shape the
+// cockpit's dropdown and error messages want. member first (the default),
+// then alphabetical.
+func ParticipantRoles() []string {
+	return []string{"member", "data-scientist", "domain-expert", "editor",
+		"engineer", "reporter", "science-lead"}
+}
 
 // AddParticipant adds one role-labelled Crew row inside the given ingest
 // transaction (spec 029 §6.1). Callers reach it through RecordEvent with
@@ -266,6 +284,9 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 	case utf8.RuneCountInString(role) > maxParticipantRole:
 		return fmt.Errorf("role %q is too long (%d characters at most): %w",
 			role, maxParticipantRole, ErrInvalidInput)
+	case !validParticipantRoles[role]:
+		return fmt.Errorf("unknown role %q; valid roles: %s: %w",
+			role, strings.Join(ParticipantRoles(), ", "), ErrInvalidInput)
 	}
 
 	// Both referenced rows are checked before the insert: without this an
