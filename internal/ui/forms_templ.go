@@ -509,7 +509,20 @@ func NewDeliverable(v NewDeliverableView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\"> <span class=\"hint\">The address this deliverable lives at, when it is known in advance. Adding it records where to look; whether the deliverable is live stays a fact an emitter or prober reports.</span></p>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "\"> <span class=\"hint\">The address this deliverable lives at, when it is known in advance. Adding it records where to look; whether the deliverable is live stays a fact an emitter or prober reports.</span></p><p class=\"fieldrow\"><label for=\"artifact\">Artifact address <span class=\"muted\">(optional)</span></label> <input id=\"artifact\" name=\"artifact\" type=\"text\" maxlength=\"2000\" placeholder=\"bigquery://project.dataset.table\" value=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var27 string
+				templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(v.Artifact)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/forms.templ`, Line: 105, Col: 135}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "\"> <span class=\"hint\">The catalog address this deliverable is verified by (spec 029 §3.1) &mdash; <span class=\"mono\">bigquery://</span>, <span class=\"mono\">iceberg://</span>, <span class=\"mono\">gs://</span>, &hellip; Emitters report state against this exact address, so copy it from the catalog rather than typing it.</span></p>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

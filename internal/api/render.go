@@ -313,6 +313,7 @@ func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errM
 		Name:        v.Name,
 		Description: v.Description,
 		URL:         v.URL,
+		Artifact:    v.Artifact,
 	}
 }
 
