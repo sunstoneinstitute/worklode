@@ -70,7 +70,7 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	// same-origin with the server and has nothing to resolve /blob/ against.
 	base := strings.TrimRight(s.cfg.PublicURL, "/")
 	for i := range out.Blobs {
-		out.Blobs[i].URL = base + "/blob/" + out.Blobs[i].Hash
+		out.Blobs[i].URL = base + blobURL(out.Blobs[i].Hash, out.Blobs[i].Filename)
 	}
 	if !withSkills {
 		writeJSON(w, http.StatusOK, out)

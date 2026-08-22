@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -457,5 +458,87 @@ func TestBlobMetrics(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("metrics body missing %q", want)
 		}
+	}
+}
+
+// servedDisposition drives GET /blob/{hash} with the given raw query and
+// returns the Content-Disposition the presigned URL will carry.
+func servedDisposition(t *testing.T, h http.Handler, token, hash, rawQuery string) string {
+	t.Helper()
+	target := "/blob/" + hash
+	if rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302; body = %s", rec.Code, rec.Body)
+	}
+	loc := rec.Header().Get("Location")
+	if strings.ContainsAny(loc, "\r\n") {
+		t.Fatalf("Location %q carries a line break", loc)
+	}
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parse Location %q: %v", loc, err)
+	}
+	return u.Query().Get("response-content-disposition")
+}
+
+// TestServeBlobFilenameDisposition pins the promise of spec 021 §2: a
+// reference that carries a name is served under it, encoded per RFC 6266.
+// The name arrives as a query parameter because task_blobs.filename is
+// per-reference while the route is per-blob.
+func TestServeBlobFilenameDisposition(t *testing.T) {
+	_, h, token, _ := newTestServerBlobs(t)
+	hash := uploadedHash(t, h, token, []byte("crash log line\n"))
+
+	cases := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{"no name falls back to the bare token", "", "attachment"},
+		{"a plain name is served verbatim", "filename=crash.log",
+			"attachment; filename=crash.log"},
+		{"spaces are quoted", "filename=" + url.QueryEscape("crash report (1).log"),
+			`attachment; filename="crash report (1).log"`},
+		{"unicode carries both halves", "filename=" + url.QueryEscape("crash-résumé.log"),
+			`attachment; filename=crash-r_sum_.log; filename*=utf-8''crash-r%C3%A9sum%C3%A9.log`},
+		// Percent-encoded CRLF in the query is the header-injection attempt.
+		// It must not reach the header, and must not add one.
+		{"CRLF cannot inject a header", "filename=crash.log%0d%0aX-Injected:%201",
+			`attachment; filename="crash.logX-Injected: 1"`},
+		{"quotes cannot end the parameter", "filename=" + url.QueryEscape(`"; filename="evil.exe`),
+			`attachment; filename="\"; filename=\"evil.exe"`},
+		{"a path is reduced to its last segment", "filename=" + url.QueryEscape("../../etc/passwd"),
+			"attachment; filename=passwd"},
+		{"an unparseable query is no name at all", "filename=%zz", "attachment"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := servedDisposition(t, h, token, hash, tc.query); got != tc.want {
+				t.Fatalf("Content-Disposition = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestServeBlobFilenameKeepsTheInlineToken: the name is cosmetic, the token
+// is not. Spec 021 §6 rests the whole of the per-object hardening on
+// inline-vs-attachment, so a caller-supplied name must not be able to move
+// it — including by naming a text blob something executable-looking.
+func TestServeBlobFilenameKeepsTheInlineToken(t *testing.T) {
+	_, h, token, _ := newTestServerBlobs(t)
+
+	img := uploadedHash(t, h, token, pngBytes)
+	if got := servedDisposition(t, h, token, img, "filename=shot.png"); got != "inline; filename=shot.png" {
+		t.Fatalf("image disposition = %q, want it to stay inline", got)
+	}
+	txt := uploadedHash(t, h, token, []byte("plain log line\n"))
+	if got := servedDisposition(t, h, token, txt, "filename=notes.png"); got != "attachment; filename=notes.png" {
+		t.Fatalf("text disposition = %q, want it to stay an attachment", got)
 	}
 }
