@@ -209,6 +209,33 @@ func WorktreeDirFrom(startDir string) string {
 	return dir
 }
 
+// CurrentProjectFrom returns the project startDir's repo is scoped to, using
+// only local config -- a repo-local config file, then the user config -- with
+// no server round trip and no keychain access: the same cheap, dir-scoped
+// contract WorktreeDirFrom has, for a caller (internal/hookrun) that must
+// resolve a project ahead of a backbone call from a directory that is not
+// necessarily the process's own cwd. Returns "" when neither config sets
+// one. Does not attempt the git-remote tier of project resolution (spec 019
+// §_, ResolveScope) -- a caller that also wants that tier still needs
+// ResolveScope with a real client.
+func CurrentProjectFrom(startDir string) string {
+	if repoPath, ok := findRepoConfig(startDir); ok {
+		if data, err := os.ReadFile(repoPath); err == nil {
+			if cfg, err := parseConfig(string(data)); err == nil && cfg.CurrentProject != "" {
+				return cfg.CurrentProject
+			}
+		}
+	}
+	if path, err := configPath(); err == nil {
+		if data, err := os.ReadFile(path); err == nil {
+			if cfg, err := parseConfig(string(data)); err == nil {
+				return cfg.CurrentProject
+			}
+		}
+	}
+	return ""
+}
+
 // LoadConfig reads the config files (a missing file is not an error — its
 // fields are just left empty), merges the repo-local config found from the
 // working directory on top of the user config, and applies the
@@ -707,6 +734,14 @@ func (c *Client) TouchAgentSession(ctx context.Context, id, agent, agentVersion,
 func (c *Client) EndAgentSession(ctx context.Context, id string, in model.EndAgentSessionInput) error {
 	_, err := c.do(ctx, http.MethodPost,
 		"/api/v1/tasks/"+url.PathEscape(id)+"/agent-session/end", in)
+	return err
+}
+
+// ReportProjectOverheadUsage calls POST /api/v1/projects/{id}/overhead-usage:
+// report usage with no task to bill to (spec 052 §2).
+func (c *Client) ReportProjectOverheadUsage(ctx context.Context, projectID string, in model.ProjectOverheadUsageInput) error {
+	_, err := c.do(ctx, http.MethodPost,
+		"/api/v1/projects/"+url.PathEscape(projectID)+"/overhead-usage", in)
 	return err
 }
 
