@@ -879,6 +879,42 @@ func TestTaskPage(t *testing.T) {
 	}
 }
 
+// TestTaskPageTimelineTypeIsAnAccessibleIcon asserts the Timeline "Type"
+// column (WL-298) renders each row's type as an icon, not the old plain-text
+// label, while keeping that label reachable two ways: the native title
+// tooltip for desktop hover, and an aria-label — on an element carrying
+// role="img" so assistive tech announces the label instead of trying to
+// describe the SVG — for touch and screen readers, since a title attribute
+// alone is not reliably exposed on touch.
+func TestTaskPageTimelineTypeIsAnAccessibleIcon(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+
+	// The task's own creation writes a "state" timeline entry, so a fresh
+	// task's page already carries one icon to check without seeding a PR,
+	// CI run, or other fact.
+	bodyContains(t, body,
+		`class="ticon" role="img" title="State change" aria-label="State change"`,
+		`<svg`, `aria-hidden="true"`,
+	)
+	// The old plain-text cell rendered the label as element content; the
+	// icon cell must not also render it there, only in the two attributes
+	// above — otherwise the type column is back to spending the horizontal
+	// space this task exists to save.
+	if strings.Contains(body, "<td>State change</td>") {
+		t.Errorf("timeline type cell still renders the old plain-text label:\n%s", body)
+	}
+}
+
 // TestTaskPageRendersSourceLink asserts a task with a linked PR/CI fact
 // renders a source-native "Open source" link to that fact's own URL, marked
 // rel="noreferrer" — the timeline evidence Task 4 preserves.
