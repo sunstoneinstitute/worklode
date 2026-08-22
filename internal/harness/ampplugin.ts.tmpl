@@ -35,40 +35,72 @@ export default function (amp: any) {
 		}
 	}
 
-	// bind wraps one `lode hook` invocation as an Amp event handler. It returns
-	// nothing on every path: session.start is fire-and-forget, and agent.end's
-	// result type admits void. agent.start's does not name a void arm, but its
-	// one field is optional and Bun does not typecheck, so an absent result is
-	// the same "append no context message" an empty object would be.
+	const threadID = (event: any, ctx: any): string =>
+		event?.thread?.id ?? ctx?.thread?.id ?? ""
+
+	// runHook pipes one payload into `lode hook` and returns the shell
+	// result (null on a thrown failure), logging every failure path so a
+	// silent non-zero or a missing binary is recorded without interrupting
+	// the session — Worklode degrades to the git pre-commit heartbeat.
 	//
 	// The payload is interpolated into the shell template rather than
 	// concatenated into it, so Bun quotes it as a single argument. That is the
 	// one behaviour of `$` this file depends on and the one the Plugin API
 	// reference does not spell out — it documents only "Bun's shell".
+	const runHook = async (
+		ampEvent: string,
+		run: (payload: string, ctx: any) => Promise<any>,
+		event: any,
+		ctx: any,
+	): Promise<any> => {
+		const payload = JSON.stringify({
+			hook_event_name: ampEvent,
+			session_id: threadID(event, ctx),
+			cwd: workspaceRoot(ctx),
+		})
+		try {
+			const result = await run(payload, ctx)
+			// `$` reports a failed command through exitCode rather than by
+			// throwing, so a silent non-zero would otherwise go unrecorded.
+			if (result?.exitCode) {
+				ctx?.logger?.log?.(
+					`worklode: ${ampEvent} hook exited ${result.exitCode}: ${result.stderr ?? ""}`,
+				)
+			}
+			return result
+		} catch (err) {
+			ctx?.logger?.log?.(`worklode: ${ampEvent} hook failed: ${err}`)
+			return null
+		}
+	}
+
+	// bind wraps one `lode hook` invocation as a fire-and-forget Amp event
+	// handler; agent.end's result type admits void.
 	const bind = (ampEvent: string, run: (payload: string, ctx: any) => Promise<any>) =>
 		async (event: any, ctx: any): Promise<void> => {
-			const payload = JSON.stringify({
-				hook_event_name: ampEvent,
-				session_id: event?.thread?.id ?? ctx?.thread?.id ?? "",
-				cwd: workspaceRoot(ctx),
-			})
-			try {
-				const result = await run(payload, ctx)
-				// `$` reports a failed command through exitCode rather than by
-				// throwing, so a silent non-zero would otherwise go unrecorded.
-				if (result?.exitCode) {
-					ctx?.logger?.log?.(
-						`worklode: ${ampEvent} hook exited ${result.exitCode}: ${result.stderr ?? ""}`,
-					)
-				}
-			} catch (err) {
-				// A `lode` that is not on PATH, or a shell that throws instead of
-				// reporting an exit code: neither is the user's problem mid-turn.
-				// Worklode degrades to the git pre-commit heartbeat rather than
-				// interrupting the session.
-				ctx?.logger?.log?.(`worklode: ${ampEvent} hook failed: ${err}`)
-			}
+			await runHook(ampEvent, run, event, ctx)
 		}
 
-{{ range .Bindings }}	amp.on({{ .Event | js }}, bind({{ .Event | js }}, (payload: string, ctx: any) => ctx.$`echo ${payload} | {{ .Command }}`))
-{{ end }}}
+	// briefs holds, per thread, the brief `lode hook session-start` printed
+	// to stdout, until the thread's first agent.start returns it as a
+	// context message — the one Plugin API slot that reaches the agent
+	// (WL-287). Delivered at most once per thread id; a restarted plugin
+	// process re-delivers once, which is harmless repeated context.
+	const briefs = new Map<string, string>()
+
+{{ range .Bindings }}{{ if eq .Event "session.start" }}	amp.on({{ .Event | js }}, async (event: any, ctx: any): Promise<void> => {
+		const result = await runHook({{ .Event | js }}, (payload: string, ctx: any) => ctx.$`echo ${payload} | {{ .Command }}`, event, ctx)
+		const brief = String(result?.stdout ?? "").trim()
+		const id = threadID(event, ctx)
+		if (brief && id) briefs.set(id, brief)
+	})
+{{ else if eq .Event "agent.start" }}	amp.on({{ .Event | js }}, async (event: any, ctx: any): Promise<any> => {
+		await runHook({{ .Event | js }}, (payload: string, ctx: any) => ctx.$`echo ${payload} | {{ .Command }}`, event, ctx)
+		const id = threadID(event, ctx)
+		const brief = id ? briefs.get(id) : undefined
+		if (brief === undefined) return
+		briefs.delete(id)
+		return { message: { content: brief } }
+	})
+{{ else }}	amp.on({{ .Event | js }}, bind({{ .Event | js }}, (payload: string, ctx: any) => ctx.$`echo ${payload} | {{ .Command }}`))
+{{ end }}{{ end }}}

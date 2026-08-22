@@ -547,7 +547,30 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
 
 	skillPaths := ensureSkills(ctx, opts, c, brief, root)
-	emitAdditionalContext(opts.Stdout, compactBrief(brief, skillPaths))
+	emitSessionContext(opts, compactBrief(brief, skillPaths))
+}
+
+// emitSessionContext writes the brief to stdout in the shape the harness
+// actually consumes at session start (WL-287):
+//
+//   - Claude Code (and the empty default) reads the documented
+//     hookSpecificOutput.additionalContext envelope.
+//   - Amp gets plain text: the generated plugin captures the hook's stdout
+//     and returns it as the thread's first-turn context message.
+//   - Codex and Copilot get nothing. Neither consumes session-start stdout
+//     in any shape verified to date (ADR 051's re-verification posture), so
+//     an envelope would be dead bytes at best and payload confusion at
+//     worst; their session-start binding still renews the lease and opens
+//     the session, which is what it is bound for.
+func emitSessionContext(opts Options, text string) {
+	switch opts.Harness {
+	case "amp":
+		fmt.Fprintln(opts.Stdout, text)
+	case "codex", "copilot":
+		// No verified consumer; see above.
+	default:
+		emitAdditionalContext(opts.Stdout, text)
+	}
 }
 
 // ensureSkills lazily fetches brief-referenced skill archives into the local
