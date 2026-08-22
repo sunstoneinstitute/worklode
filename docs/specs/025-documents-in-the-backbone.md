@@ -533,12 +533,24 @@ for a spec:
    unaffected.
 3. The revision is reviewed with **crit** (as 006 required for the `proposed → accepted` transition
    it has since retired).
-4. On resolution, publication runs the §4 single transaction and the §6 constraint check together.
-   Either both succeed or the revision does not land.
+4. Resolution has two outcomes. **Landing** it runs the §4 single transaction and the §6
+   constraint check together — either both succeed or the revision does not land. **Discarding**
+   it (`lode doc revise <ref> --discard`, `DELETE /api/v1/docs/{id}/revision`) withdraws the
+   candidate without landing it, freeing the document's one-candidate slot so the next `lode doc
+   revise` succeeds immediately instead of hitting a conflict. Discarding changes nothing else
+   about the document; the withdrawn body has nowhere else to live once the candidate row is
+   gone, so the `doc.revision_discarded` event it emits carries it.
 
 Within a revision, sections may be freely added, reworded, or marked superseded. What the revision
 may **not** do is remove an anchor that the accepted version published — that is the one invariant
 that survives into draft, because inbound links do not care that a document is mid-revision.
+
+Opening a revision needs only `doc.write` — proposing an edit is not the maintainer's privilege —
+but the two resolutions above are gated more narrowly, and differently from each other. Landing is
+the assignee's act alone, as narrow as acceptance (§7.3). Discarding is wider: the assignee **or**
+the revision's own author, because closing a proposal without merging it is the proposer's act too,
+not only the maintainer's. That pairing is what lets opening stay open to anyone with `doc.write` —
+an unwanted candidate can always be cleared by someone with standing to do it.
 
 ### 7.3 Reviewers and the accept gate {#sec-7.3}
 
@@ -1798,7 +1810,7 @@ The document and event surface, backed by the backbone store:
 | `lode doc list --bare-superseded` | Superseded documents whose sections nothing replaces — §6 rule 2, read as a query |
 | `lode doc todo <ref> [--deps]` | One spec's remaining work, ordered: planning gaps, unaccepted plans, unexecuted plans (026 §2.5) |
 | `lode doc accept <id>` | The manual commit; on a plan, mints the tasks its declarations have no row for yet (§9.2) |
-| `lode doc revise <slug>` | Open a candidate revision (§7.2) |
+| `lode doc revise <slug> [--file\|--accept\|--discard]` | Open, update, land, or discard a candidate revision (§7.2) |
 | `lode doc publish <slug>` | Run the §6 constraints, then the §4 transaction |
 | `lode doc anchors <slug>` | List anchors with depth and addressability; the lint an author runs before publishing |
 | `lode doc coverage <slug>` | Per-section implemented / unimplemented / stale |
