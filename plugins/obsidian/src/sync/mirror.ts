@@ -16,7 +16,7 @@ import {
   type ProjectMembers,
   type WlBlock,
 } from "../serialize/note";
-import type { Doc, Project } from "../api/types";
+import type { Doc, Project, Task } from "../api/types";
 
 /** The file operations the mirror needs. Implemented against Obsidian's
  *  vault in src/vault/writer.ts, and against a map in the tests.
@@ -75,6 +75,20 @@ export interface MirrorOptions {
    *  renders neither of the first two (see desiredTaskNotes) and would
    *  otherwise delete both. */
   pruneOtherNotes?: boolean;
+  /** Notes to remove because the backbone named them deleted, whatever the
+   *  flags above allow. Those flags answer "may absence be read as deletion
+   *  for this kind" -- the question an incremental sync has to answer no to.
+   *  A path here is not an inference from absence but a row the server
+   *  returned as tombstoned, so it is safe on exactly the sync that may prune
+   *  nothing else. See deletedTaskPaths, which builds it.
+   *
+   *  A path that is also in the desired set is written, not removed: the
+   *  delete pass never considers a desired path. That is the right way round
+   *  for a task deleted and undeleted between the two fetches -- the live
+   *  answer, which carries the note's content, wins over the stale tombstone.
+   *
+   *  A conflict note is still never removed, whatever is named here. */
+  removePaths?: Set<string>;
   /** Note paths the caller has already established are current, and which must
    *  be skipped whatever this render produced for them. hydrateDocBodies fills
    *  it with the doc notes it chose not to fetch: their rendered content has no
@@ -419,6 +433,38 @@ export async function desiredTaskNotes(
   return { notes, conflicts };
 }
 
+/** The note paths of tasks the backbone reports as deleted -- what an
+ *  incremental sync prunes, since its own `updated_since` answer lists live
+ *  tasks only and cannot tell a deleted task from an untouched one. Feed it
+ *  straight to applyMirror as `removePaths`.
+ *
+ *  Keyed by the project the rows were fetched under rather than by
+ *  `task.project`, for filterSafe's reason: the grouping key is what the
+ *  note's path was built from, so asking about the row's own field would be
+ *  asking about a different file. An id that fails isSafePathSegment yields
+ *  no path and is dropped -- no note was ever written for it.
+ *
+ *  A row with no tombstone is dropped too, and that check is the load-bearing
+ *  one. `?deleted=true` is a parameter a server predating 044 does not know,
+ *  and an unknown query parameter is ignored rather than refused: such a
+ *  server answers the same request with its *live* tasks, and pruning those
+ *  would delete every note the sync had just written. The tombstone is what
+ *  makes a row's deletedness the server's claim instead of the client's
+ *  assumption. */
+export function deletedTaskPaths(byProject: Map<string, Task[]>): Set<string> {
+  const paths = new Set<string>();
+  for (const [projectId, tasks] of byProject) {
+    for (const task of tasks) {
+      // Falsy rather than `=== undefined`: the field is omitted on a live row,
+      // but a null would be just as much a "no tombstone" answer.
+      if (!task.tombstone) continue;
+      const path = desiredPath("task", projectId, task.id);
+      if (path !== undefined) paths.add(path);
+    }
+  }
+  return paths;
+}
+
 /** Write what changed, delete what no longer belongs, leave the rest
  *  alone. The mount root is machine-owned: a note that exists but whose
  *  stored wl.etag no longer matches -- because the backbone data changed,
@@ -428,8 +474,9 @@ export async function desiredTaskNotes(
  *  The delete pass reads "not in the desired set" as "gone from the
  *  backbone", which only holds for a kind the sync actually enumerated -- see
  *  MirrorOptions. A degraded sync passes `pruneDocNotes: false`; an
- *  incremental one, which enumerated only the tasks that changed, prunes
- *  nothing at all. */
+ *  incremental one, which enumerated only the tasks that changed, infers no
+ *  deletion at all and instead names the notes to remove outright, in
+ *  `removePaths`. */
 export async function applyMirror(
   writer: VaultWriter,
   root: string,
@@ -440,6 +487,10 @@ export async function applyMirror(
     // Checked first and answered false unconditionally: a conflict note is
     // never desired and never pruned.
     if (isConflictNotePath(path)) return false;
+    // Checked next, and true whatever the per-kind flags say: the backbone
+    // named this note's row deleted, which is a fact rather than the
+    // absence-means-gone inference those flags gate.
+    if (options.removePaths?.has(path)) return true;
     if (isDocNotePath(path)) return options.pruneDocNotes ?? true;
     if (isTaskNotePath(path)) return options.pruneTaskNotes ?? true;
     return options.pruneOtherNotes ?? true;

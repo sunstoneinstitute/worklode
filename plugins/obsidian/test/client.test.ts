@@ -60,6 +60,48 @@ describe("WorklodeClient", () => {
     expect(requests[0].url).toBe("https://lode.example.com/api/v1/tasks?project=worklode&detail=true");
   });
 
+  // The deletion half of the incremental path: `deleted=true` switches the
+  // listing to the tombstoned rows (044 §5), and the same watermark rides
+  // along, because a delete sets the row's updated_at to the deletion instant.
+  it("asks for the tombstoned tasks changed since the watermark", async () => {
+    const { transport, requests } = fakeTransport(200, JSON.stringify({ tasks: [] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await client.listDeletedTasks("worklode", "2026-08-16T09:12:00Z");
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("GET");
+    expect(requests[0].url).toBe(
+      "https://lode.example.com/api/v1/tasks?project=worklode&deleted=true" +
+        "&updated_since=2026-08-16T09%3A12%3A00Z",
+    );
+    expect(requests[0].headers.Authorization).toBe("Bearer wl_abc123");
+  });
+
+  // No detail=true: nothing is rendered from these rows, only removed, so the
+  // expansion's two extra bulk queries would buy fields the caller drops.
+  it("asks for every tombstoned task when there is no watermark, without the detail expansion", async () => {
+    const { transport, requests } = fakeTransport(200, JSON.stringify({ tasks: [] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    await client.listDeletedTasks("worklode", "");
+
+    expect(requests[0].url).toBe("https://lode.example.com/api/v1/tasks?project=worklode&deleted=true");
+  });
+
+  it("unwraps the tombstoned rows, tombstone included", async () => {
+    const row = {
+      id: "WL-9",
+      project: "worklode",
+      title: "Gone",
+      tombstone: { deleted_at: "2026-08-17T08:00:00Z", deleted_by: "stig", justification: "seeded by mistake" },
+    };
+    const { transport } = fakeTransport(200, JSON.stringify({ tasks: [row] }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    expect(await client.listDeletedTasks("worklode")).toEqual([row]);
+  });
+
   it("requests docs and sends the bearer token", async () => {
     const { transport, requests } = fakeTransport(200, JSON.stringify({ docs: [] }));
     const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
