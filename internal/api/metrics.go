@@ -123,6 +123,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(imageMirrorOutcomes, ", ") +
 			"). Each remote reference contributes exactly one outcome. Anything but 'mirrored' or 'deduplicated' leaves an off-site URL in a task body, which renders as nothing.",
 	}, []string{"outcome"})
+	s.mirrorTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_image_mirror_tokens_total",
+		Help: "GitHub App installation tokens a mirroring pass minted for the images it was about to fetch, by outcome (" +
+			strings.Join(mirrorTokenOutcomes, ", ") +
+			"). One per promote that had remote images, not one per image. A 'failed' rate above zero means private-repo images are being fetched unauthenticated, which shows up on worklode_image_mirrors_total as fetch_failed.",
+	}, []string{"outcome"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
 		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
@@ -199,7 +205,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.taskBlobRefs,
-		s.blobGCRuns, s.blobGCObjects, s.imageMirrors,
+		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns)
 
@@ -276,6 +282,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range imageMirrorOutcomes {
 		s.imageMirrors.WithLabelValues(outcome)
+	}
+	for _, outcome := range mirrorTokenOutcomes {
+		s.mirrorTokens.WithLabelValues(outcome)
 	}
 	// Every reachable entity/op/outcome combination, so an instance where
 	// nobody has deleted anything reads as a flat zero rather than as no-data
@@ -692,6 +701,20 @@ var imageMirrorOutcomes = []string{
 	mirrorCapped,        // over the per-body reference cap; skipped without a fetch
 }
 
+// mirrorTokenOutcomes is the complete label set for
+// worklode_image_mirror_tokens_total. A pass on an instance with no GitHub App
+// configured contributes nothing: not minting a token that was never
+// configured is not an outcome of a mint.
+var mirrorTokenOutcomes = []string{
+	mirrorTokenMinted, // GitHub issued a token for the issue's repo
+	mirrorTokenFailed, // the App is not installed there, or GitHub refused
+}
+
+const (
+	mirrorTokenMinted = "minted"
+	mirrorTokenFailed = "failed"
+)
+
 const (
 	mirrorStored        = "mirrored"
 	mirrorDeduplicated  = "deduplicated"
@@ -709,6 +732,15 @@ func (s *server) observeImageMirror(outcome string, n int) {
 		return
 	}
 	s.imageMirrors.WithLabelValues(outcome).Add(float64(n))
+}
+
+// observeMirrorToken records one installation-token mint for a mirroring
+// pass. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeMirrorToken(outcome string) {
+	if s.mirrorTokens == nil {
+		return
+	}
+	s.mirrorTokens.WithLabelValues(outcome).Inc()
 }
 
 // observeBlobUpload records one POST /api/v1/blobs, called exactly once on

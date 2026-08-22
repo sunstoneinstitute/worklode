@@ -17,6 +17,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobref"
@@ -29,11 +30,14 @@ import (
 // knows exactly which hosts it expects, so the allowlist can be this narrow.
 var mirrorHosts = []string{"githubusercontent.com", "github.com"}
 
-// Fetches are unauthenticated. §12 also asks for the installation's GitHub
-// App token on githubusercontent.com, which is what a private repo's images
-// need; without it those fetch 404 and keep their original URL like any other
-// per-image failure. safefetch.Get carries no request headers, so wiring the
-// token is a change to both packages and is not done here.
+// mirrorTokenHosts are the hosts the installation's GitHub App token may be
+// sent to: §12 names githubusercontent.com and nothing else. It is a strict
+// subset of mirrorHosts on purpose — github.com is fetchable because a body
+// can reference an asset there, but it also serves every ordinary page an
+// issue might link to, and a token attached to those is a credential handed to
+// a URL whoever filed the issue chose. safefetch scopes the header per
+// redirect hop, so a hop off githubusercontent.com drops it.
+var mirrorTokenHosts = []string{"githubusercontent.com"}
 
 // mirrorTimeout bounds the whole pass, not one fetch. safefetch already caps
 // a single fetch at 30 seconds, but the number of image references in a body
@@ -63,7 +67,11 @@ const maxMirroredImages = 20
 //
 // It performs network I/O, so it must be called before the caller's
 // transaction opens -- a slow origin must never hold a database lock.
-func (s *server) mirrorRemoteImages(ctx context.Context, body string) string {
+//
+// repo is the issue's "owner/name", used only to mint the installation token
+// the images may need; an empty repo, or an instance with no GitHub App, just
+// fetches unauthenticated.
+func (s *server) mirrorRemoteImages(ctx context.Context, repo, body string) string {
 	if s.blobs == nil {
 		return body
 	}
@@ -71,12 +79,16 @@ func (s *server) mirrorRemoteImages(ctx context.Context, body string) string {
 	if len(remotes) == 0 {
 		return body
 	}
+	ctx, cancel := context.WithTimeout(ctx, mirrorTimeout)
+	defer cancel()
+
 	f := s.mirrorFetcherForTest
 	if f == nil {
 		f = safefetch.New(mirrorHosts, maxBlobBytes)
 	}
-	ctx, cancel := context.WithTimeout(ctx, mirrorTimeout)
-	defer cancel()
+	// Under the same budget as the fetches: minting is two GitHub round trips,
+	// and an unreachable GitHub must not extend the pass past mirrorTimeout.
+	f = f.WithBearer(mirrorTokenHosts, s.mirrorToken(ctx, repo))
 
 	mapping := map[string]string{}
 	stored, deduped := 0, 0
@@ -146,4 +158,29 @@ func (s *server) mirrorRemoteImages(ctx context.Context, body string) string {
 	s.observeImageMirror(mirrorStored, stored)
 	s.observeImageMirror(mirrorDeduplicated, deduped)
 	return out
+}
+
+// mirrorToken mints the installation token §12 asks for, returning "" when
+// there is none to be had.
+//
+// Failure is never fatal and never blocks the pass: a public repo's images
+// fetch fine unauthenticated, and a private repo's images then fail per-image
+// exactly as any other fetch failure does -- the original URL stays and §8
+// renders it as nothing. That is strictly better than refusing the promote
+// over a credential most bodies do not need. It is minted once per pass rather
+// than per image because one promote's images are all one repo's.
+func (s *server) mirrorToken(ctx context.Context, repo string) string {
+	if s.appAuth == nil || strings.TrimSpace(repo) == "" {
+		return ""
+	}
+	token, err := s.appAuth.InstallationToken(ctx, repo)
+	if err != nil {
+		// githubauth never puts token material in an error, so this is safe
+		// to log.
+		s.log.Warn("mirror token unavailable", "repo", repo, "err", err)
+		s.observeMirrorToken(mirrorTokenFailed)
+		return ""
+	}
+	s.observeMirrorToken(mirrorTokenMinted)
+	return token
 }

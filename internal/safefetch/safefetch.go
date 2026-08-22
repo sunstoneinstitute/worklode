@@ -9,6 +9,12 @@
 // per hop, a byte cap, and a 30-second whole-fetch timeout. Every failure is
 // an error the caller is expected to treat as non-fatal.
 //
+// A fetch may carry a credential (WithBearer) — private-repo images need the
+// installation's GitHub App token — but the credential is bound to the hosts
+// it belongs to, not to the fetch. The allowlist is deliberately wider than
+// any one credential's scope, and a redirect can move a fetch across it, so
+// the header is decided per hop against the host actually being contacted.
+//
 // The address check runs twice on purpose. The pre-flight resolve gives a fast,
 // legible error, but it is not a boundary: http.Transport resolves the host
 // again at dial time, so a name that answers with a public address for the
@@ -92,6 +98,12 @@ type Fetcher struct {
 	allowedHosts []string
 	maxBytes     int64
 
+	// authHosts and authValue are the credential and the hosts it may be sent
+	// to. Empty authValue means every request goes out unauthenticated, which
+	// is what New builds; see WithBearer.
+	authHosts []string
+	authValue string
+
 	// allowLoopback additionally permits http and a non-default port, because
 	// httptest serves plain http on a random port. allowAnyHost drops the host
 	// allowlist but keeps every address check.
@@ -102,6 +114,27 @@ type Fetcher struct {
 // New returns a Fetcher allowing the given host suffixes, capped at maxBytes.
 func New(allowedHosts []string, maxBytes int64) *Fetcher {
 	return &Fetcher{allowedHosts: allowedHosts, maxBytes: maxBytes}
+}
+
+// WithBearer returns a copy of f that sends "Authorization: Bearer <token>" on
+// requests to authHosts — matched by the same label-aligned suffix rule as the
+// host allowlist — and on no other request. An empty token or an empty
+// authHosts returns an unauthenticated copy, so a caller whose credential
+// lookup failed needs no branch of its own.
+//
+// The scoping is per host, not per fetch, because the allowlist is wider than
+// the set of hosts a credential belongs to: mirroring may fetch from
+// github.com and githubusercontent.com, and only the latter is the host the
+// GitHub App token is for (021 §12). A blanket "attach to every fetch" option
+// would hand the token to whichever of them the URL named, and to any redirect
+// target that stayed inside the allowlist.
+func (f *Fetcher) WithBearer(authHosts []string, token string) *Fetcher {
+	c := *f
+	c.authHosts, c.authValue = nil, ""
+	if token != "" && len(authHosts) > 0 {
+		c.authHosts, c.authValue = authHosts, "Bearer "+token
+	}
+	return &c
 }
 
 // Get fetches url, returning its bytes and the Content-Type the origin
@@ -119,8 +152,12 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error
 
 	transport := f.transport()
 	defer transport.CloseIdleConnections()
+	var rt http.RoundTripper = transport
+	if f.authValue != "" {
+		rt = &authTransport{base: transport, hosts: f.authHosts, value: f.authValue}
+	}
 	client := &http.Client{
-		Transport: transport,
+		Transport: rt,
 		Timeout:   fetchTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// via holds the requests already sent, so its length is the
@@ -154,6 +191,34 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error
 		return nil, "", fmt.Errorf("fetch %s: body exceeds %d bytes", rawURL, f.maxBytes)
 	}
 	return data, resp.Header.Get("Content-Type"), nil
+}
+
+// authTransport attaches the credential to a request only when the host being
+// requested is one the credential names, and removes any Authorization header
+// from every other request.
+//
+// The decision belongs here rather than on the outgoing request because
+// net/http builds the redirect hops itself: it copies the original request's
+// headers onto each hop and drops Authorization only when the target is
+// neither the original host nor a subdomain of it. A header set once on the
+// first request would therefore ride a redirect from
+// user-images.githubusercontent.com to any sibling under
+// githubusercontent.com. A RoundTripper sees each hop as its own request, so
+// the host check is re-run against the host actually being contacted.
+type authTransport struct {
+	base  http.RoundTripper
+	hosts []string
+	value string
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// A RoundTripper must not modify the request it is handed.
+	r := req.Clone(req.Context())
+	r.Header.Del("Authorization")
+	if hostMatches(normalizeHost(r.URL.Hostname()), t.hosts) {
+		r.Header.Set("Authorization", t.value)
+	}
+	return t.base.RoundTrip(r)
 }
 
 // transport dials through a Control hook that inspects the address the kernel
@@ -287,10 +352,21 @@ func (f *Fetcher) checkAddr(addr netip.Addr) error {
 	return nil
 }
 
-// hostAllowed matches on label boundaries: "githubusercontent.com" permits
-// user-images.githubusercontent.com and rejects evilgithubusercontent.com.
+// hostAllowed reports whether host satisfies the fetch allowlist.
 func (f *Fetcher) hostAllowed(host string) bool {
-	for _, a := range f.allowedHosts {
+	return hostMatches(host, f.allowedHosts)
+}
+
+// hostMatches matches host against a list of suffixes on label boundaries:
+// "githubusercontent.com" permits user-images.githubusercontent.com and
+// rejects evilgithubusercontent.com. Both the fetch allowlist and the
+// credential's host scope use it, so a credential can never be attached to a
+// lookalike host the allowlist would itself reject.
+func hostMatches(host string, suffixes []string) bool {
+	if host == "" {
+		return false
+	}
+	for _, a := range suffixes {
 		a = normalizeHost(a)
 		// "*.example.com" and ".example.com" are the two natural spellings
 		// of "and its subdomains", but neither equals "example.com" as a

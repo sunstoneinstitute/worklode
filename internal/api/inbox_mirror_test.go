@@ -2,18 +2,21 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -56,7 +59,7 @@ func TestMirrorRewritesAllowedHost(t *testing.T) {
 	s.mirrorFetcherForTest = testFetcher()
 
 	body := "repro:\n\n![shot](" + origin + "/a.png)\n"
-	got := s.mirrorRemoteImages(context.Background(), body)
+	got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body)
 
 	if strings.Contains(got, origin) {
 		t.Fatalf("remote URL survived:\n%s", got)
@@ -83,7 +86,7 @@ func TestMirrorRewritesAllowedHost(t *testing.T) {
 func TestMirrorLeavesBlockedTarget(t *testing.T) {
 	s, fake, _ := mirrorTestServer(t)
 	body := "![x](http://169.254.169.254/latest/meta-data)\n"
-	if got := s.mirrorRemoteImages(context.Background(), body); got != body {
+	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
 		t.Fatalf("body changed:\n%s", got)
 	}
 	if objs, _ := fake.List(context.Background(), "blobs/"); len(objs) != 0 {
@@ -97,7 +100,7 @@ func TestMirrorLeavesBlockedTarget(t *testing.T) {
 func TestMirrorLeavesDisallowedHost(t *testing.T) {
 	s, fake, _ := mirrorTestServer(t)
 	body := "![x](https://evil.example/p.png)\n"
-	if got := s.mirrorRemoteImages(context.Background(), body); got != body {
+	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
 		t.Fatalf("body changed:\n%s", got)
 	}
 	if objs, _ := fake.List(context.Background(), "blobs/"); len(objs) != 0 {
@@ -108,7 +111,7 @@ func TestMirrorLeavesDisallowedHost(t *testing.T) {
 func TestMirrorNoImagesIsIdentity(t *testing.T) {
 	s, _, _ := mirrorTestServer(t)
 	body := "no images here\n\n```\n![fake](https://x.example/y.png)\n```\n"
-	if got := s.mirrorRemoteImages(context.Background(), body); got != body {
+	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
 		t.Fatalf("body changed:\n%s", got)
 	}
 }
@@ -122,7 +125,7 @@ func TestMirrorDedupesIdenticalBytes(t *testing.T) {
 
 	body := "![a](" + origin + "/a.png)\n\n![again](" + origin + "/a.png)\n\n" +
 		"![b](" + origin + "/b.png)\n"
-	got := s.mirrorRemoteImages(context.Background(), body)
+	got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body)
 
 	if strings.Contains(got, origin) {
 		t.Fatalf("a remote URL survived:\n%s", got)
@@ -153,7 +156,7 @@ func TestMirrorSkipsNonImage(t *testing.T) {
 	s.mirrorFetcherForTest = testFetcher()
 
 	body := "![x](" + html.URL + "/a.png)\n"
-	if got := s.mirrorRemoteImages(context.Background(), body); got != body {
+	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
 		t.Fatalf("body changed:\n%s", got)
 	}
 	if objs, _ := fake.List(context.Background(), "blobs/"); len(objs) != 0 {
@@ -166,7 +169,7 @@ func TestMirrorSkipsNonImage(t *testing.T) {
 func TestMirrorUnconfiguredIsIdentity(t *testing.T) {
 	s := &server{log: testLogger(t)}
 	body := "![x](https://user-images.githubusercontent.com/1/a.png)\n"
-	if got := s.mirrorRemoteImages(context.Background(), body); got != body {
+	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
 		t.Fatalf("body changed:\n%s", got)
 	}
 }
@@ -181,7 +184,7 @@ func TestMirrorMetrics(t *testing.T) {
 
 	body := "![a](" + origin + "/a.png)\n\n![b](" + origin + "/b.png)\n\n" +
 		"![c](http://169.254.169.254/latest/meta-data)\n"
-	s.mirrorRemoteImages(context.Background(), body)
+	s.mirrorRemoteImages(context.Background(), "acme/widgets", body)
 
 	for _, tc := range []struct {
 		outcome string
@@ -214,7 +217,7 @@ func TestMirrorCapsReferencesPerBody(t *testing.T) {
 	for i := 0; i < total; i++ {
 		fmt.Fprintf(&body, "![x](%s/%d.png)\n\n", origin, i)
 	}
-	got := s.mirrorRemoteImages(context.Background(), body.String())
+	got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body.String())
 
 	if n := strings.Count(got, "](/blob/"); n != maxMirroredImages {
 		t.Fatalf("rewrote %d references, want %d", n, maxMirroredImages)
@@ -231,5 +234,160 @@ func TestMirrorCapsReferencesPerBody(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(s.imageMirrors.WithLabelValues(mirrorCapped)); got != float64(total-maxMirroredImages) {
 		t.Fatalf("imageMirrors{capped} = %v, want %d", got, total-maxMirroredImages)
+	}
+}
+
+// --- the installation token (§12) ---
+
+// mirrorTokenApp serves the two calls minting an installation token for
+// acme/widgets takes. fail makes the installation lookup 500, which is how a
+// GitHub outage or a lost App installation reaches mirrorToken.
+func mirrorTokenApp(t *testing.T, fail bool) *githubauth.AppAuth {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if fail {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		switch r.URL.Path {
+		case "/repos/acme/widgets/installation":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7})
+		case "/app/installations/7/access_tokens":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{"token": "ghs_mirror"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return &githubauth.AppAuth{AppID: "12345", Key: appTestKey(), BaseURL: srv.URL}
+}
+
+// mirrorAuthOrigin is an image host that remembers the Authorization header of
+// every request it served. Mutex-guarded: the handler runs on the server's
+// goroutine, the assertion on the test's.
+type mirrorAuthOrigin struct {
+	mu   sync.Mutex
+	seen []string
+	url  string // the "localhost" spelling, which is what a host scope matches
+}
+
+func newMirrorAuthOrigin(t *testing.T) *mirrorAuthOrigin {
+	t.Helper()
+	o := &mirrorAuthOrigin{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		o.mu.Lock()
+		o.seen = append(o.seen, r.Header.Get("Authorization"))
+		o.mu.Unlock()
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte(pngBytes))
+	}))
+	t.Cleanup(srv.Close)
+	o.url = strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+	if o.url == srv.URL {
+		t.Fatalf("unexpected httptest URL %q", srv.URL)
+	}
+	return o
+}
+
+func (o *mirrorAuthOrigin) headers() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.seen...)
+}
+
+// mirrorTokenServer builds a mirroring server wired to a GitHub App, with
+// metrics initialised so the token outcome is observable.
+func mirrorTokenServer(t *testing.T, app *githubauth.AppAuth) *server {
+	t.Helper()
+	s := &server{st: store.OpenTestStore(t), blobs: blobstore.NewFake(), log: testLogger(t)}
+	s.initMetrics(prometheus.NewRegistry())
+	s.appAuth = app
+	s.mirrorFetcherForTest = testFetcher()
+	return s
+}
+
+// aimAtTestHost points the token's host scope at the httptest origin for one
+// test. Production's scope is mirrorTokenHosts' own value, which
+// TestMirrorTokenStaysOffOtherHosts exercises unchanged.
+func aimAtTestHost(t *testing.T) {
+	t.Helper()
+	saved := mirrorTokenHosts
+	mirrorTokenHosts = []string{"localhost"}
+	t.Cleanup(func() { mirrorTokenHosts = saved })
+}
+
+// A private repo's image is exactly a fetch that 404s without the token, so
+// the header has to reach the image host, and the image still has to mirror.
+func TestMirrorSendsInstallationToken(t *testing.T) {
+	aimAtTestHost(t)
+	s := mirrorTokenServer(t, mirrorTokenApp(t, false))
+	origin := newMirrorAuthOrigin(t)
+
+	got := s.mirrorRemoteImages(context.Background(), "acme/widgets", "![shot]("+origin.url+"/a.png)\n")
+
+	if h := origin.headers(); len(h) != 1 || h[0] != "Bearer ghs_mirror" {
+		t.Fatalf("image host saw Authorization %q, want one \"Bearer ghs_mirror\"", h)
+	}
+	if !strings.Contains(got, "](/blob/") {
+		t.Fatalf("not rewritten to a blob:\n%s", got)
+	}
+	if v := testutil.ToFloat64(s.mirrorTokens.WithLabelValues(mirrorTokenMinted)); v != 1 {
+		t.Fatalf("mirrorTokens{minted} = %v, want 1", v)
+	}
+}
+
+// The token's host scope is githubusercontent.com, not the whole fetch
+// allowlist: an image on any other host mirroring will fetch gets no
+// credential. Deliberately runs against the production value of
+// mirrorTokenHosts.
+func TestMirrorTokenStaysOffOtherHosts(t *testing.T) {
+	s := mirrorTokenServer(t, mirrorTokenApp(t, false))
+	origin := newMirrorAuthOrigin(t)
+
+	s.mirrorRemoteImages(context.Background(), "acme/widgets", "![shot]("+origin.url+"/a.png)\n")
+
+	if h := origin.headers(); len(h) != 1 || h[0] != "" {
+		t.Fatalf("unnamed host saw Authorization %q, want one empty", h)
+	}
+}
+
+// A token that cannot be minted is not fatal: the fetch goes out bare, a
+// public repo's images still mirror, and the failure is on the meter rather
+// than only in the log.
+func TestMirrorProceedsWhenTokenMintFails(t *testing.T) {
+	aimAtTestHost(t)
+	s := mirrorTokenServer(t, mirrorTokenApp(t, true))
+	origin := newMirrorAuthOrigin(t)
+
+	got := s.mirrorRemoteImages(context.Background(), "acme/widgets", "![shot]("+origin.url+"/a.png)\n")
+
+	if h := origin.headers(); len(h) != 1 || h[0] != "" {
+		t.Fatalf("image host saw Authorization %q, want one empty", h)
+	}
+	if !strings.Contains(got, "](/blob/") {
+		t.Fatalf("a failed token mint blocked the mirror:\n%s", got)
+	}
+	if v := testutil.ToFloat64(s.mirrorTokens.WithLabelValues(mirrorTokenFailed)); v != 1 {
+		t.Fatalf("mirrorTokens{failed} = %v, want 1", v)
+	}
+}
+
+// No App configured is not a mint that failed: nothing is counted, and the
+// pass runs unauthenticated as it always did.
+func TestMirrorWithoutGitHubAppCountsNoToken(t *testing.T) {
+	aimAtTestHost(t)
+	s := mirrorTokenServer(t, nil)
+	origin := newMirrorAuthOrigin(t)
+
+	s.mirrorRemoteImages(context.Background(), "acme/widgets", "![shot]("+origin.url+"/a.png)\n")
+
+	if h := origin.headers(); len(h) != 1 || h[0] != "" {
+		t.Fatalf("image host saw Authorization %q, want one empty", h)
+	}
+	for _, outcome := range mirrorTokenOutcomes {
+		if v := testutil.ToFloat64(s.mirrorTokens.WithLabelValues(outcome)); v != 0 {
+			t.Fatalf("mirrorTokens{%s} = %v, want 0", outcome, v)
+		}
 	}
 }
