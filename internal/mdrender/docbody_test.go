@@ -15,7 +15,7 @@ func TestDocBodyKeepsSectionAnchors(t *testing.T) {
 		"### 1.1 Detail {#sec-1.1}\n\nmore\n\n" +
 		"## Rationale {#sec-rationale}\n\n" +
 		"#### 2.1a Amended {#sec-2.1a}\n"
-	got := string(mdrender.DocBody(body))
+	got := string(mdrender.DocBody(mdrender.ProjectKeys{}, body))
 	for _, want := range []string{
 		`<h2 id="sec-1">`, `<h3 id="sec-1.1">`,
 		`<h2 id="sec-rationale">`, `<h4 id="sec-2.1a">`,
@@ -52,7 +52,7 @@ func TestDocBodyDropsOtherIDs(t *testing.T) {
 		{"code fence", "``` {#sec-1}\nx\n```\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := string(mdrender.DocBody(tc.body)); strings.Contains(got, "id=") {
+			if got := string(mdrender.DocBody(mdrender.ProjectKeys{}, tc.body)); strings.Contains(got, "id=") {
 				t.Fatalf("id survived %q:\n%s", tc.body, got)
 			}
 		})
@@ -65,7 +65,7 @@ func TestDocBodyDropsOtherIDs(t *testing.T) {
 // deciding.
 func TestDocBodyDropsOtherAttributes(t *testing.T) {
 	body := "## Heading {#sec-1 .danger onclick=\"alert(1)\" style=\"color:red\"}\n"
-	got := string(mdrender.DocBody(body))
+	got := string(mdrender.DocBody(mdrender.ProjectKeys{}, body))
 	if !strings.Contains(got, `id="sec-1"`) {
 		t.Fatalf("anchor lost:\n%s", got)
 	}
@@ -80,7 +80,7 @@ func TestDocBodyDropsOtherAttributes(t *testing.T) {
 // the document flavour. A task body has no anchor convention, so "{#sec-1}"
 // there is prose that must come back as prose — and must never become an id.
 func TestTaskBodiesHaveNoAnchorSyntax(t *testing.T) {
-	got := string(mdrender.Body("## Heading {#sec-1}\n"))
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, "## Heading {#sec-1}\n"))
 	if strings.Contains(got, "id=") {
 		t.Fatalf("task body grew an id:\n%s", got)
 	}
@@ -97,7 +97,7 @@ func TestTaskBodiesHaveNoAnchorSyntax(t *testing.T) {
 func TestDocBodyIsSanitisedLikeATaskBody(t *testing.T) {
 	for _, tc := range hostileBodies {
 		t.Run(tc.name, func(t *testing.T) {
-			got := string(mdrender.DocBody(tc.body))
+			got := string(mdrender.DocBody(mdrender.ProjectKeys{}, tc.body))
 			for _, bad := range tc.absent {
 				if strings.Contains(got, bad) {
 					t.Fatalf("output contains %q:\n%s", bad, got)
@@ -117,7 +117,7 @@ func TestDocPolicyIsNotUGCPolicy(t *testing.T) {
 		"![](https://example.com/tracker.png)",
 		`<img src="/not-a-blob/x.png">`,
 	} {
-		got := string(mdrender.DocBody(body))
+		got := string(mdrender.DocBody(mdrender.ProjectKeys{}, body))
 		if strings.Contains(got, "src=") || strings.Contains(got, "example.com") {
 			t.Fatalf("non-blob image source survived %q:\n%s", body, got)
 		}
@@ -131,7 +131,7 @@ func TestDocBodySafeMarkupSurvives(t *testing.T) {
 		"| a | b |\n|---|---|\n| 1 | 2 |\n\n" +
 		"```go\nfunc main() {}\n```\n\n" +
 		"[link](https://example.com) and [section](#sec-1)\n"
-	got := string(mdrender.DocBody(body))
+	got := string(mdrender.DocBody(mdrender.ProjectKeys{}, body))
 	for _, want := range []string{
 		`<h2 id="sec-1">`, "<strong>", "<table", "<code",
 		`href="https://example.com"`, `href="#sec-1"`,

@@ -64,12 +64,12 @@ func TestCacheRendersOncePerBody(t *testing.T) {
 	c, reg := newTestCache(t)
 	const body = "# hi\n\n*there* [x](https://example.com)\n"
 
-	first := c.Body(body)
+	first := c.Body(mdrender.ProjectKeys{}, body)
 	if got, want := renders(t, reg, "task", "ok"), 1.0; got != want {
 		t.Fatalf("first view performed %v renders, want %v", got, want)
 	}
 	for i := 0; i < 5; i++ {
-		if got := c.Body(body); got != first {
+		if got := c.Body(mdrender.ProjectKeys{}, body); got != first {
 			t.Fatalf("view %d differs from the first:\n%s\n%s", i+2, got, first)
 		}
 	}
@@ -106,11 +106,11 @@ func TestCacheMatchesUncached(t *testing.T) {
 	c, _ := newTestCache(t)
 	for i, body := range bodies {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
-			want := mdrender.Body(body)
-			if got := c.Body(body); got != want {
+			want := mdrender.Body(mdrender.ProjectKeys{}, body)
+			if got := c.Body(mdrender.ProjectKeys{}, body); got != want {
 				t.Fatalf("miss differs from uncached:\n got %.300s\nwant %.300s", got, want)
 			}
-			if got := c.Body(body); got != want {
+			if got := c.Body(mdrender.ProjectKeys{}, body); got != want {
 				t.Fatalf("hit differs from uncached:\n got %.300s\nwant %.300s", got, want)
 			}
 		})
@@ -121,11 +121,11 @@ func TestCacheMatchesUncached(t *testing.T) {
 // cache must not serve one body's HTML for another's.
 func TestDistinctBodiesDoNotShareAnEntry(t *testing.T) {
 	c, _ := newTestCache(t)
-	a, b := c.Body("alpha"), c.Body("beta")
+	a, b := c.Body(mdrender.ProjectKeys{}, "alpha"), c.Body(mdrender.ProjectKeys{}, "beta")
 	if a == b {
 		t.Fatalf("two bodies rendered to the same HTML: %q", a)
 	}
-	if got := c.Body("alpha"); got != a {
+	if got := c.Body(mdrender.ProjectKeys{}, "alpha"); got != a {
 		t.Fatalf("second view of alpha returned %q, want %q", got, a)
 	}
 }
@@ -138,14 +138,14 @@ func TestFlavoursDoNotShareAnEntry(t *testing.T) {
 	c, reg := newTestCache(t)
 	const body = "## Heading {#sec-1}\n"
 
-	task, doc := c.Body(body), c.DocBody(body)
+	task, doc := c.Body(mdrender.ProjectKeys{}, body), c.DocBody(mdrender.ProjectKeys{}, body)
 	if task == doc {
 		t.Fatalf("both flavours returned the same HTML: %q", task)
 	}
-	if got, want := string(c.Body(body)), string(task); got != want {
+	if got, want := string(c.Body(mdrender.ProjectKeys{}, body)), string(task); got != want {
 		t.Fatalf("second task view returned %q, want %q", got, want)
 	}
-	if got, want := string(c.DocBody(body)), string(doc); got != want {
+	if got, want := string(c.DocBody(mdrender.ProjectKeys{}, body)), string(doc); got != want {
 		t.Fatalf("second doc view returned %q, want %q", got, want)
 	}
 	// One render each, then a hit each: the counters are labelled by kind, so
@@ -160,12 +160,31 @@ func TestFlavoursDoNotShareAnEntry(t *testing.T) {
 	}
 }
 
+// TestKeySetIsPartOfTheKey (WL-305): the same body renders differently under
+// different project-key sets, so a body cached under one must not be served
+// under another. This is what makes the body-keyed cache safe without any
+// invalidation when a project is added or removed.
+func TestKeySetIsPartOfTheKey(t *testing.T) {
+	c, _ := newTestCache(t)
+	const body = "Follows WL-129."
+	if got := string(c.Body(mdrender.ProjectKeys{}, body)); strings.Contains(got, "/tasks/") {
+		t.Fatalf("linked under an empty key set:\n%s", got)
+	}
+	if got := string(c.Body(mdrender.NewProjectKeys([]string{"WL"}), body)); !strings.Contains(got, "/tasks/WL-129") {
+		t.Fatalf("cached render from the empty key set was served under a live one:\n%s", got)
+	}
+	// And back again, so the reverse direction is pinned too.
+	if got := string(c.Body(mdrender.ProjectKeys{}, body)); strings.Contains(got, "/tasks/") {
+		t.Fatalf("live-key render was served under the empty key set:\n%s", got)
+	}
+}
+
 // TestNilCacheRendersDocs: a *server built directly in a test carries no
 // cache, and the document page must render anyway.
 func TestNilCacheRendersDocs(t *testing.T) {
 	var c *mdrender.Cache
 	const body = "## Heading {#sec-1}\n"
-	if got, want := c.DocBody(body), mdrender.DocBody(body); got != want {
+	if got, want := c.DocBody(mdrender.ProjectKeys{}, body), mdrender.DocBody(mdrender.ProjectKeys{}, body); got != want {
 		t.Fatalf("nil cache rendered %q, want %q", got, want)
 	}
 }
@@ -177,8 +196,8 @@ func TestNilCacheRendersDocs(t *testing.T) {
 func TestOversizeIsNotCached(t *testing.T) {
 	c, reg := newTestCache(t)
 	body := strings.Repeat("x", (64<<10)+1)
-	c.Body(body)
-	c.Body(body)
+	c.Body(mdrender.ProjectKeys{}, body)
+	c.Body(mdrender.ProjectKeys{}, body)
 	if got := renders(t, reg, "task", "oversize"); got != 2 {
 		t.Fatalf("got %v oversize renders, want 2", got)
 	}
@@ -193,8 +212,8 @@ func TestOversizeIsNotCached(t *testing.T) {
 func TestFallbackIsCached(t *testing.T) {
 	c, reg := newTestCache(t)
 	body := amplifier(400, 4800)
-	first := c.Body(body)
-	second := c.Body(body)
+	first := c.Body(mdrender.ProjectKeys{}, body)
+	second := c.Body(mdrender.ProjectKeys{}, body)
 	if first != second {
 		t.Fatal("fallback output differs between views")
 	}
@@ -207,7 +226,7 @@ func TestFallbackIsCached(t *testing.T) {
 func TestNilCacheRenders(t *testing.T) {
 	var c *mdrender.Cache
 	const body = "# hi\n"
-	if got, want := c.Body(body), mdrender.Body(body); got != want {
+	if got, want := c.Body(mdrender.ProjectKeys{}, body), mdrender.Body(mdrender.ProjectKeys{}, body); got != want {
 		t.Fatalf("nil cache rendered %q, want %q", got, want)
 	}
 }
@@ -227,7 +246,7 @@ func TestConcurrentMissesCoalesce(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			got[i] = string(c.Body(body))
+			got[i] = string(c.Body(mdrender.ProjectKeys{}, body))
 		}(i)
 	}
 	close(start)

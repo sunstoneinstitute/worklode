@@ -49,7 +49,7 @@ func (s *server) previewMarkdown(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	_, _ = io.WriteString(w, string(mdrender.Body(r.PostFormValue("body"))))
+	_, _ = io.WriteString(w, string(mdrender.Body(s.projectKeys(r.Context()), r.PostFormValue("body"))))
 }
 
 // dictate handles POST /dictate: the request body is one recorded audio clip

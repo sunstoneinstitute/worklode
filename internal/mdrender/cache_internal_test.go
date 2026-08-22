@@ -17,7 +17,7 @@ func TestEvictsToStayUnderEntryBound(t *testing.T) {
 	m := NewMetrics(prometheus.NewRegistry())
 	c := newCache(maxCacheBytes, 4, m)
 	for i := 0; i < 20; i++ {
-		c.Body(fmt.Sprintf("body %d\n", i))
+		c.Body(ProjectKeys{}, fmt.Sprintf("body %d\n", i))
 	}
 	if got := c.lru.Len(); got != 4 {
 		t.Fatalf("cache holds %d entries, want 4", got)
@@ -36,7 +36,7 @@ func TestEvictsToStayUnderByteBound(t *testing.T) {
 	// handful and the rest must be evicted.
 	c := newCache(8<<10, maxCacheEntries, m)
 	for i := 0; i < 64; i++ {
-		c.Body(fmt.Sprintf("%04d", i) + strings.Repeat("x", 1<<10))
+		c.Body(ProjectKeys{}, fmt.Sprintf("%04d", i)+strings.Repeat("x", 1<<10))
 	}
 	if c.bytes > 8<<10 {
 		t.Fatalf("cache holds %d bytes, over the 8192 bound", c.bytes)
@@ -53,18 +53,18 @@ func TestEvictsToStayUnderByteBound(t *testing.T) {
 // nobody has looked at, or a busy task page evicts itself.
 func TestEvictsLeastRecentlyUsed(t *testing.T) {
 	c := newCache(maxCacheBytes, 2, nil)
-	c.Body("a")
-	c.Body("b")
-	c.Body("a") // a is now the most recently used
-	c.Body("c") // evicts b
+	c.Body(ProjectKeys{}, "a")
+	c.Body(ProjectKeys{}, "b")
+	c.Body(ProjectKeys{}, "a") // a is now the most recently used
+	c.Body(ProjectKeys{}, "c") // evicts b
 
-	if _, ok := c.get(keyOf(kindTask, "a")); !ok {
+	if _, ok := c.get(keyOf(kindTask, ProjectKeys{}, "a")); !ok {
 		t.Fatal("a was evicted despite being the most recently used")
 	}
-	if _, ok := c.get(keyOf(kindTask, "c")); !ok {
+	if _, ok := c.get(keyOf(kindTask, ProjectKeys{}, "c")); !ok {
 		t.Fatal("c was evicted immediately after insertion")
 	}
-	if _, ok := c.get(keyOf(kindTask, "b")); ok {
+	if _, ok := c.get(keyOf(kindTask, ProjectKeys{}, "b")); ok {
 		t.Fatal("b survived; eviction is not least-recently-used")
 	}
 }
@@ -73,7 +73,7 @@ func TestEvictsLeastRecentlyUsed(t *testing.T) {
 // and (*Cache).Body must not panic without a registry behind it.
 func TestNilMetricsIsSafe(t *testing.T) {
 	c := newCache(maxCacheBytes, maxCacheEntries, nil)
-	c.Body("# hi\n")
-	c.Body("# hi\n")
-	c.Body(strings.Repeat("x", (64<<10)+1))
+	c.Body(ProjectKeys{}, "# hi\n")
+	c.Body(ProjectKeys{}, "# hi\n")
+	c.Body(ProjectKeys{}, strings.Repeat("x", (64<<10)+1))
 }
