@@ -211,7 +211,7 @@ func TestBootstrapAdmin(t *testing.T) {
 	if err := st.BootstrapAdmin(ctx, tok1); err != nil {
 		t.Fatalf("bootstrap: %v", err)
 	}
-	a, err := st.Authenticate(ctx, tok1)
+	a, _, err := st.Authenticate(ctx, tok1)
 	if err != nil {
 		t.Fatalf("authenticate bootstrap token: %v", err)
 	}
@@ -224,11 +224,11 @@ func TestBootstrapAdmin(t *testing.T) {
 	if err := st.BootstrapAdmin(ctx, tok2); err != nil {
 		t.Fatalf("second bootstrap: %v", err)
 	}
-	if _, err := st.Authenticate(ctx, tok2); !errors.Is(err, store.ErrNotFound) {
+	if _, _, err := st.Authenticate(ctx, tok2); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("second token authenticate err = %v, want ErrNotFound", err)
 	}
 	// First token still works.
-	if _, err := st.Authenticate(ctx, tok1); err != nil {
+	if _, _, err := st.Authenticate(ctx, tok1); err != nil {
 		t.Fatalf("first token stopped working: %v", err)
 	}
 }

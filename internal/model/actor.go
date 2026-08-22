@@ -1,5 +1,7 @@
 package model
 
+import "time"
+
 // Actor is the wire form of an actor: a human, agent, or service identity
 // that can hold leases and be granted tokens.
 type Actor struct {
@@ -25,6 +27,26 @@ type CreateActorInput struct {
 type CreateTokenInput struct {
 	Description string  `json:"description"`
 	ExpiresAt   *string `json:"expires_at"`
+}
+
+// TaskTokenInput is the request body for POST /api/v1/tasks/{id}/tokens
+// (001 §2.1, WL-306). Actor names the agent actor the token is attributed
+// to, defaulting to "sandbox" (auto-provisioned, kind agent). TTLSeconds
+// defaults to the lease TTL; the token also extends with lease renewals and
+// is revoked when the lease ends, whatever value is set here.
+type TaskTokenInput struct {
+	Actor      string `json:"actor,omitempty"`
+	TTLSeconds int    `json:"ttl_seconds,omitempty"`
+}
+
+// TaskTokenResponse is that endpoint's response: the plaintext (returned
+// exactly once), who it acts as, the task it is bound to, and when it
+// expires absent renewals.
+type TaskTokenResponse struct {
+	Token     string    `json:"token"`
+	Actor     string    `json:"actor"`
+	Task      string    `json:"task"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // TokenResponse is the response body of CreateToken: the plaintext token,
