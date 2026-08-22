@@ -5,6 +5,7 @@
 package blobref
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"sort"
@@ -160,6 +161,34 @@ func RemoteImages(body string) []string {
 		}
 		seen[dest] = true
 		out = append(out, dest)
+	})
+	return out
+}
+
+// EmptyAltImages returns the destinations of images whose alt text is empty
+// -- `![](dest)` -- in document order. Alt text is an image's label, the
+// text between `![` and `]`, which is distinct from Destination and Title:
+// `Node.Text` (deprecated upstream, but still the shortest path to a node's
+// literal text) concatenates exactly that label for a childless *ast.Image.
+//
+// A basename-derived alt (`![shot.png](dest)`) does not count as empty: it
+// is a worse default than real alt text, but a non-empty one, and Q021.1
+// keeps it as the fallback when `--alt` is not given (spec 021 §14, v2).
+// Only the true `![]()` case -- no attempt at alt text at all -- is flagged.
+func EmptyAltImages(body string) []string {
+	var out []string
+	src := []byte(body)
+	doc := md.Parser().Parse(text.NewReader(src))
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if img, ok := n.(*ast.Image); ok {
+			if len(bytes.TrimSpace(img.Text(src))) == 0 {
+				out = append(out, string(img.Destination))
+			}
+		}
+		return ast.WalkContinue, nil
 	})
 	return out
 }

@@ -147,6 +147,52 @@ func TestAttachEmbedsImagesOnly(t *testing.T) {
 	}
 }
 
+// TestAttachAlt: --alt supplies the embedded image's alt text instead of the
+// filename default (spec 021 Q021.1).
+func TestAttachAlt(t *testing.T) {
+	dir := t.TempDir()
+	png := writeFile(t, dir, "shot.png", "\x89PNG\r\n\x1a\n fake")
+	srv := startBlobSrv(t, func([]byte) string { return "image/png" })
+
+	out, err := runLode(t, "task", "attach", "--alt", "map flashes narrow at 390px", "WL-1", png)
+	if err != nil {
+		t.Fatalf("attach: %v\n%s", err, out)
+	}
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.patched) != 1 {
+		t.Fatalf("patches = %d, want 1", len(srv.patched))
+	}
+	body := srv.patched[0]
+	if !strings.Contains(body, "![map flashes narrow at 390px](/blob/"+strings.Repeat("a", 64)+")") {
+		t.Fatalf("body missing the --alt text:\n%s", body)
+	}
+	if strings.Contains(body, "shot.png") {
+		t.Fatalf("filename leaked into alt text despite --alt:\n%s", body)
+	}
+}
+
+// TestAttachAltRejectsMultipleImages: --alt names one image's alt text, so
+// attaching two embeddable images with one --alt is ambiguous and refused
+// rather than silently reusing the same alt text for both.
+func TestAttachAltRejectsMultipleImages(t *testing.T) {
+	dir := t.TempDir()
+	png1 := writeFile(t, dir, "shot1.png", "\x89PNG\r\n\x1a\n one")
+	png2 := writeFile(t, dir, "shot2.png", "\x89PNG\r\n\x1a\n two")
+	srv := startBlobSrv(t, func([]byte) string { return "image/png" })
+
+	_, err := runLode(t, "task", "attach", "--alt", "one alt for both?", "WL-1", png1, png2)
+	if err == nil {
+		t.Fatalf("attach with --alt and two images: want an error")
+	}
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.patched) != 0 {
+		t.Fatalf("body was patched despite the rejected --alt reuse: %v", srv.patched)
+	}
+}
+
 // TestAttachNoEmbed: --no-embed attaches an image without touching the body.
 func TestAttachNoEmbed(t *testing.T) {
 	dir := t.TempDir()

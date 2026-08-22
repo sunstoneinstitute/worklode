@@ -263,3 +263,31 @@ func TestEmbeddable(t *testing.T) {
 		}
 	}
 }
+
+// TestEmptyAltImages: a literal `![](dest)` is flagged, but a basename-
+// derived alt like `![shot.png](dest)` is not -- Q021.1 keeps the basename
+// fallback acceptable and only refuses no alt text at all.
+func TestEmptyAltImages(t *testing.T) {
+	body := "before\n\n" +
+		"![](/blob/" + strings.Repeat("a", 64) + ")\n\n" +
+		"![shot.png](/blob/" + strings.Repeat("b", 64) + ")\n\n" +
+		"![  ](/blob/" + strings.Repeat("c", 64) + ")\n\n" +
+		"after\n"
+	got := blobref.EmptyAltImages(body)
+	want := []string{"/blob/" + strings.Repeat("a", 64), "/blob/" + strings.Repeat("c", 64)}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("EmptyAltImages = %v, want %v", got, want)
+	}
+}
+
+// TestEmptyAltImagesNone: a body with no images, or only images that carry
+// alt text, reports nothing.
+func TestEmptyAltImagesNone(t *testing.T) {
+	body := "![a screenshot of the bug](/blob/" + strings.Repeat("d", 64) + ")\n"
+	if got := blobref.EmptyAltImages(body); len(got) != 0 {
+		t.Fatalf("EmptyAltImages = %v, want none", got)
+	}
+	if got := blobref.EmptyAltImages("no images here\n"); len(got) != 0 {
+		t.Fatalf("EmptyAltImages = %v, want none", got)
+	}
+}

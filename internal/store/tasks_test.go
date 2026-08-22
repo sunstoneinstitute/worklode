@@ -1597,6 +1597,53 @@ func TestCreateTaskInvalidConcernRejected(t *testing.T) {
 	}
 }
 
+// TestCreateTaskUsabilityRejectsEmptyAlt pins spec 021 Q021.1: a usability
+// task whose body embeds an image with no alt text at all is refused, but
+// the same body is fine on a task with a different (or no) concern, and a
+// basename-derived alt on a usability task still goes through.
+func TestCreateTaskUsabilityRejectsEmptyAlt(t *testing.T) {
+	s := openTaskStore(t)
+	emptyAlt := "before\n\n![](/blob/" + strings.Repeat("a", 64) + ")\n\nafter\n"
+
+	in := defaultTaskInput()
+	in.Concern = "usability"
+	in.Body = emptyAlt
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, in, eventID)
+			return err
+		})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("CreateTask usability with empty alt: want ErrInvalidInput, got %v", err)
+	}
+
+	// The same body on a non-usability concern is not the lint's business.
+	other := defaultTaskInput()
+	other.Concern = "performance"
+	other.Body = emptyAlt
+	_, _, err = s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, other, eventID)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("CreateTask performance with empty alt: %v", err)
+	}
+
+	// A basename-derived alt on a usability task is the accepted fallback.
+	fallback := defaultTaskInput()
+	fallback.Concern = "usability"
+	fallback.Body = "![shot.png](/blob/" + strings.Repeat("b", 64) + ")\n"
+	_, _, err = s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, fallback, eventID)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("CreateTask usability with basename alt: %v", err)
+	}
+}
+
 // updateTaskFields drives UpdateTaskFields through RecordEvent.
 func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, body, priority, concern *string, needsDecomposition *bool) error {
 	t.Helper()
@@ -1713,6 +1760,42 @@ func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
 		t.Fatalf("GetTask: %v", err)
 	} else if got.Title != "Renamed" {
 		t.Fatalf("title = %q, want Renamed", got.Title)
+	}
+}
+
+// TestUpdateTaskFieldsUsabilityRejectsEmptyAlt: an edit that only touches the
+// body (concern left nil, meaning "unchanged") still has to honor an
+// already-set usability concern, so the lint reads the task's current
+// concern rather than only the one passed to this call.
+func TestUpdateTaskFieldsUsabilityRejectsEmptyAlt(t *testing.T) {
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	in.Concern = "usability"
+	task := createTask(t, s, taskTestNow, in)
+
+	emptyAlt := "![](/blob/" + strings.Repeat("c", 64) + ")\n"
+	err := updateTaskFields(t, s, taskTestNow, task.ID, nil, strPtr(emptyAlt), nil, nil, nil)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("update body with empty alt on usability task: want ErrInvalidInput, got %v", err)
+	}
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Body == emptyAlt {
+		t.Fatalf("rejected body was written anyway")
+	}
+
+	// A basename-derived alt still goes through.
+	fallback := "![shot.png](/blob/" + strings.Repeat("d", 64) + ")\n"
+	if err := updateTaskFields(t, s, taskTestNow, task.ID, nil, strPtr(fallback), nil, nil, nil); err != nil {
+		t.Fatalf("update body with basename alt: %v", err)
+	}
+
+	// Clearing the concern in the same call as the bad body lifts the lint.
+	err = updateTaskFields(t, s, taskTestNow, task.ID, nil, strPtr(emptyAlt), nil, strPtr(""), nil)
+	if err != nil {
+		t.Fatalf("update body+clear concern with empty alt: %v", err)
 	}
 }
 
