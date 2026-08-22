@@ -113,6 +113,44 @@ func TestResolveDocRefAmbiguous(t *testing.T) {
 	}
 }
 
+// TestResolveDocRefSlugForm covers ref form 3: the letter-leading slugs the
+// backbone mints (`lode doc new --slug`), which carry no number prefix.
+func TestResolveDocRefSlugForm(t *testing.T) {
+	docs := []model.Doc{
+		{ID: 1, Kind: "spec", Number: 45, Slug: "per-project-workflows"},
+		{ID: 2, Kind: "spec", Number: 46, Slug: "workflow-rule-engine"},
+		{ID: 3, Kind: "adr", Number: 43, Slug: "secrets-catalog-home"},
+		{ID: 4, Kind: "spec", Number: 47, Slug: "workflow-cockpit-columns"},
+	}
+
+	got, section, err := resolveDocRef(docs, "WL", "per-project-workflows")
+	if err != nil {
+		t.Fatalf("exact slug: %v", err)
+	}
+	if got.ID != 1 || section != "" {
+		t.Errorf("exact slug = %d %q; want 1, empty section", got.ID, section)
+	}
+
+	got, section, err = resolveDocRef(docs, "WL", "secrets#sec-2")
+	if err != nil {
+		t.Fatalf("slug prefix with fragment: %v", err)
+	}
+	if got.ID != 3 || section != "sec-2" {
+		t.Errorf("slug prefix = %d %q; want 3, sec-2", got.ID, section)
+	}
+
+	_, _, err = resolveDocRef(docs, "WL", "workflow")
+	var amb *designdoc.AmbiguousRefError
+	if !errors.As(err, &amb) {
+		t.Fatalf("prefix of two slugs: err = %v; want *AmbiguousRefError", err)
+	}
+
+	_, _, err = resolveDocRef(docs, "WL", "no-such-doc")
+	if err == nil || err.Error() != notFoundRefError("no-such-doc").Error() {
+		t.Fatalf("miss: err = %v; want the tier-1 not-found error", err)
+	}
+}
+
 // A document matching through both criteria of the number form — its number
 // and its slug prefix — is one match, not an ambiguity.
 func TestResolveDocRefDedupesAcrossCriteria(t *testing.T) {

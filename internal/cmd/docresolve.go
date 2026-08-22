@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -21,7 +22,9 @@ import (
 //
 //  1. a path — matched by its basename, which is the document's slug;
 //  2. a document number, optionally with slug text after it;
-//  3. the <KEY>-<TYPE>-<n> shorthand, whose <TYPE> token is kind-checked.
+//  3. a bare slug — the same name `lode doc get` and the other doc verbs
+//     resolve, so the two readers cannot disagree about what a name means;
+//  4. the <KEY>-<TYPE>-<n> shorthand, whose <TYPE> token is kind-checked.
 //
 // A form that matches nothing falls through to the next, which is how a bare
 // filename ("014-foo.md") still resolves by number. Plans are never
@@ -54,7 +57,20 @@ func resolveDocRef(docs []model.Doc, projectKey, ref string) (model.Doc, string,
 		return finishDocRef(ref, matches, section)
 	}
 
-	// Form 3: shorthand.
+	// Form 3: bare slug. Digit-leading refs never reach here — the number
+	// form already returned — so this is the letter-leading names the
+	// backbone mints (`lode doc new --slug`). Exact match first, so a slug
+	// that is a prefix of another still names itself.
+	if slugForm.MatchString(base) {
+		if m := matchSlug(candidates, base); len(m) > 0 {
+			return finishDocRef(ref, m, section)
+		}
+		if m := matchSlugPrefix(candidates, base); len(m) > 0 {
+			return finishDocRef(ref, m, section)
+		}
+	}
+
+	// Form 4: shorthand.
 	if base == "NO-SPEC" {
 		return model.Doc{}, "", designdoc.NoSpecError(ref)
 	}
@@ -104,6 +120,12 @@ func notFoundRefError(ref string) error {
 func looksLikePath(base string) bool {
 	return strings.Contains(base, "/") || strings.HasSuffix(base, ".md")
 }
+
+// slugForm is ref form 3's shape: a letter-leading document slug. It is
+// deliberately looser than the slug grammar `lode doc new` enforces — a
+// near-miss should resolve to nothing, not fall through to the shorthand
+// form's grammar error.
+var slugForm = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // filterDocs returns every document keep accepts. Each ref form narrows the
 // candidate set on a one-line predicate; this is the single loop they share.

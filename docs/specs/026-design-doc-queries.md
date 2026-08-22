@@ -447,9 +447,13 @@ lode show <ref> [--resolved] [--section|-s <anchor>]
 `--section` (short `-s`) takes an anchor in any of three spellings: `sec-3`, `#sec-3`,
 or the bare number `3`, which is expanded to `sec-3`.
 
-`<ref>` is a path, a bare filename, a spec number (`025`, `025-documents-in-the-backbone`), or
+`<ref>` is a path, a bare filename, a spec number (`025`, `025-documents-in-the-backbone`),
+a document slug (`design-doc-queries` — the name the `lode doc` verbs resolve, so the two
+readers cannot disagree about what a name means), or
 025 §14.3's shorthand (`WL-SPEC-25`, and `WL-SPEC-25#sec-9` as sugar for `--section sec-9`)
 that matches exactly one document; an ambiguous ref is an error listing the candidates.
+A bare number is always a task id at the `lode show` surface; a document by bare number is
+spelled with a kind flag (`--spec 25`) or the shorthand.
 A shorthand naming another project is reported unresolved rather than fetched — §4.2's tier 2
 is dormant until 025. Without
 `--resolved` this is `cat` with ref resolution, which is worth having only because it takes
