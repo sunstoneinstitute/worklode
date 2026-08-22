@@ -86,11 +86,9 @@ func (s *server) deleteTask(w http.ResponseWriter, r *http.Request) {
 func (s *server) undeleteTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
-	err := s.recordEvent(r.Context(), "cli", "task.undeleted",
-		map[string]string{"task": id, "actor": actorIDFrom(r)},
-		func(tx *sql.Tx, eventID int64) error {
-			return store.UndeleteTask(tx, s.st.Now(), id, eventID)
-		})
+	// The write itself lives in deleted.go, shared with the cockpit's Restore
+	// button, so the two surfaces differ only in the event source.
+	err := s.recordUndeleteTask(r.Context(), "cli", id, actorIDFrom(r))
 	s.observeDelete(entityTask, opUndelete, deleteOutcome(err))
 	if err != nil {
 		s.mapStoreErr(w, err)
@@ -145,14 +143,13 @@ func (s *server) undeleteDoc(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	now := s.st.Now()
-
-	err := s.recordDocEvent(w, r, "undelete", "doc.undeleted", id, nil,
-		func(tx *sql.Tx, eventID int64) error {
-			return store.UndeleteDoc(tx, now, id, eventID)
-		})
+	// Shared with the cockpit's Restore button (deleted.go), which is why the
+	// error comes back rather than being written here: this handler owes a
+	// JSON body and that one owes an HTML page.
+	err := s.recordUndeleteDoc(r.Context(), docSource, id, actorIDFrom(r))
 	s.observeDelete(entityDoc, opUndelete, deleteOutcome(err))
 	if err != nil {
+		s.mapStoreErr(w, err)
 		return
 	}
 	s.writeDoc(w, r, id)

@@ -1,0 +1,141 @@
+package ui
+
+// deleted.templ renders a project's Deleted destination (GET
+// /projects/{id}/deleted): the tasks and design documents spec 044 §2
+// tombstoned, and the affordance to restore one.
+//
+// A delete never removes a row — it hides it from every list, ranking and
+// pickup path, and carries a justification precisely so that someone can
+// review it later (044 §3). Until this page existed that justification was
+// readable only through the CLI or the JSON API, so the page's job is to show
+// exactly what the tombstone stores: who deleted the row, when, and why.
+//
+// It is a review surface, not an audit trail: one row per tombstone, no
+// history of the row before it was deleted and no diff. The Restore button is
+// a plain server-rendered <form method="post"> like the cockpit's other
+// writes, POSTing to the same undelete the CLI calls; a refused restore
+// re-renders the page with the reason.
+
+import (
+	"strconv"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
+
+templ Deleted(v DeletedView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "deleted") {
+			<div class="canvas">
+				<section class="card">
+					<div class="hd">
+						<h3>Deleted</h3>
+					</div>
+					<div class="bd">
+						<div aria-live="polite">
+							if v.RestoreError != "" {
+								<p class="formerr" role="alert">{ v.RestoreError }</p>
+							}
+						</div>
+						<p class="muted small">
+							A deleted task or document is hidden from every other page, never
+							removed: its events, edges and artifacts stay valid, and restoring
+							it puts it back where it was (spec 044 §2).
+						</p>
+					</div>
+				</section>
+				<section class="card">
+					<div class="hd"><h3>Tasks</h3></div>
+					<div class="bd">
+						if len(v.Tasks) == 0 {
+							<p class="muted">No deleted tasks in this project.</p>
+						} else {
+							<div class="dod">
+								for _, t := range v.Tasks {
+									@deletedTaskRow(t, v.RestoreTaskAction)
+								}
+							</div>
+						}
+					</div>
+				</section>
+				<section class="card">
+					<div class="hd"><h3>Documents</h3></div>
+					<div class="bd">
+						if len(v.Docs) == 0 {
+							<p class="muted">No deleted documents in this project.</p>
+						} else {
+							<div class="dod">
+								for _, d := range v.Docs {
+									@deletedDocRow(d, v.RestoreDocAction)
+								}
+							</div>
+						}
+					</div>
+				</section>
+			</div>
+		}
+	}
+}
+
+// deletedTaskRow renders one tombstoned task. The id still links to its
+// detail page: fetching a deleted row by id is the one read that resolves
+// (044 §4), which is what makes the mistake recoverable rather than
+// mysterious.
+templ deletedTaskRow(t model.Task, action string) {
+	<div class="dodrow">
+		<div>
+			<div class="name"><a href={ "/tasks/" + t.ID }>{ t.ID }</a> &mdash; { t.Title }</div>
+			<div class="def">{ t.Kind } &middot; { t.Priority } &middot; { t.State }</div>
+			@tombstoneNote(tombstone(t.Tombstone))
+		</div>
+		<div class="st">
+			if action != "" {
+				<form class="rowform" method="post" action={ action }>
+					<input type="hidden" name="task" value={ t.ID }/>
+					<button type="submit" class="btn">Restore</button>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+// deletedDocRow renders one tombstoned document. A deleted document keeps its
+// slug and corpus number and stays addressable by them, but stops reserving
+// them (044 §2), so the row shows both.
+templ deletedDocRow(d DeletedDocRow, action string) {
+	<div class="dodrow">
+		<div>
+			<div class="name"><a href={ d.URL }>{ d.Ref }</a> &mdash; { d.Doc.Title }</div>
+			<div class="def mono">{ d.Doc.Slug }</div>
+			<div class="def">{ d.Doc.Kind } &middot; { d.Doc.Status }</div>
+			@tombstoneNote(tombstone(d.Doc.Tombstone))
+		</div>
+		<div class="st">
+			if action != "" {
+				<form class="rowform" method="post" action={ action }>
+					<input type="hidden" name="doc" value={ strconv.FormatInt(d.Doc.ID, 10) }/>
+					<button type="submit" class="btn">Restore</button>
+				</form>
+			}
+		</div>
+	</div>
+}
+
+// tombstoneNote renders the delete record itself: who, when, and the
+// justification. A blank justification is stated as such rather than left
+// out — a dev instance accepts a delete without one (044 §3), and an empty
+// line would read as a page that failed to load it.
+templ tombstoneNote(ts model.Tombstone) {
+	<div class="def">
+		if ts.DeletedBy != "" {
+			{ "deleted by " + ts.DeletedBy + " · " + fmtTime(ts.DeletedAt) }
+		} else {
+			{ "deleted " + fmtTime(ts.DeletedAt) }
+		}
+	</div>
+	if ts.Justification != "" {
+		<div class="def">{ ts.Justification }</div>
+	} else {
+		<div class="def muted">No justification was recorded.</div>
+	}
+}
