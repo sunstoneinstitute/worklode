@@ -286,6 +286,48 @@ wl:CoverageShape a sh:NodeShape ;
         """ ;
     ] .
 
+wl:defersShape a sh:NodeShape ;
+    sh:targetSubjectsOf wl:defers ;
+    sh:class wl:Plan ;
+    sh:message "Only a Plan defers a Section: a spec is what work is deferred from, never what defers (026 §5.3)." ;
+    sh:property [
+        sh:path wl:defers ;
+        sh:class wl:Section ;
+        sh:message "wl:defers names a Section — a whole-document deferral would silently defer future sections (026 §5.3)." ;
+    ] .
+
+wl:DeferralShape a sh:NodeShape ;
+    sh:targetClass wl:Deferral ;
+    sh:property [
+        sh:path wl:deferringPlan ;
+        sh:class wl:Plan ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path wl:deferredSection ;
+        sh:class wl:Section ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path wl:deferredTo ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:or ( [ sh:class wl:DesignDoc ] [ sh:class wl:Plan ] ) ;
+        sh:message "A deferral without an owner is just an uncovered section, which needs no syntax (026 §5.3)." ;
+    ] ;
+    sh:sparql [
+        sh:message "A qualified deferral record must reify a direct wl:defers edge for the same Plan and Section (026 §5.3)." ;
+        sh:select """
+            PREFIX wl: <https://worklode.io/ns/ontology#>
+            SELECT $this WHERE {
+                $this wl:deferringPlan ?plan ; wl:deferredSection ?section .
+                FILTER NOT EXISTS { ?plan wl:defers ?section . }
+            }
+        """ ;
+    ] .
+
 wl:implementsShape a sh:NodeShape ;
     sh:targetSubjectsOf wl:implements ;
     sh:class wl:Component ;

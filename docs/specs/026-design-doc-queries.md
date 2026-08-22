@@ -133,13 +133,15 @@ document without one is a defect (§4), reported rather than quietly rendered as
 
 Plans and sections are many-to-many, and coverage is the qualified, three-valued
 `covers` relation of §5. For an accepted spec section `S`, over every plan that is accepted **or
-superseded** naming that exact `#sec-N` anchor in `covers`:
+superseded** naming that exact `#sec-N` anchor in `covers` — or handing it off in `defers`
+(§5.3):
 
 | Outcome | Rule |
 |---|---|
 | **fully planned** | some such plan claims `coverage: full`; **or** one claims `partial` with a non-empty `fullCoverageWith: [P…]` where every `P` is itself accepted or superseded, is not the claiming plan, and contributes `full` or `partial` to `S` |
 | **partially planned** | `S` is claimed only `partial`, and no `fullCoverageWith` closes it |
 | **bound only** | `S` is claimed only `none` |
+| **deferred** | no such plan claims `partial` on `S`, and some such plan `defers` `S` to a named owner (§5.3) |
 | **unplanned** | no such plan covers `S` |
 
 `fullCoverageWith` is checked, never taken on trust: an empty list, a draft
@@ -150,6 +152,18 @@ same defect in a new place.
 
 Only `full` and a closed `partial` set discharge the section. `none` contributes
 nothing to coverage by construction — it records that the section was read.
+
+A deferral (§5.3) discharges nothing either: it is the explicit zero, the plan
+that looked at `S`, will not build it, and names the document whose plans
+should. An undischarged section reports the strongest reading that holds —
+`partial` over `deferred` over `bound only` over `unplanned`. A section someone
+is partially building is foremost partially built, and a deferral outranks
+`none` because it carries who is owed the rest, not merely that the section was
+read. The report names the owner alongside the anchor, which is what turns an
+orphaned handoff — deferred, owner named, nothing scheduled — into a query
+result instead of prose archaeology (WL-217 is the founding case). A deferral
+is *delivered* when `S` is discharged under the rules above, by any plan: the
+owner is who was named, never a gate on who may deliver.
 
 The acceptance test applies to both ends: a draft spec is not yet owed planning,
 and a draft plan has not yet undertaken work. Counting a draft plan would let an
@@ -177,7 +191,7 @@ Nothing here counts plans per spec or expects a partition. Overlap is legal and 
 two plans claiming the same section means two plans touch it, not a modelling error.
 
 ```
-docs/specs/007-drift-and-overview.md      accepted   2/9 need planning   sec-2.4(partial) sec-4(unplanned)
+docs/specs/007-drift-and-overview.md      accepted   3/9 need planning   sec-2.4(partial) sec-4(unplanned) sec-6(deferred:006-knowledge-graph)
 ```
 
 A plan whose `covers` is **`NO-SPEC`** declares that no spec governs it (§4.3). It
@@ -901,6 +915,71 @@ it being one row. It retires with the files.
 Both keys are backfilled across the existing corpus (§2.2): every plan carries a `status`, and
 the seventeen with a stand-in execution task carry a `task` naming it.
 
+### 5.3 `defers` hands a section to a named owner {#sec-5.3}
+
+A plan that deliberately leaves a section to another document has, until this
+key, only prose to say so — a "Deferred to owning specs' plans" table naming
+the owner in a sentence. Nothing behind that sentence is an edge, so the
+handoff is never delivered and no query can find it: the state "deferred,
+owner named, nothing scheduled" was unrepresentable, and §2.1 could not tell
+it from a section nobody had looked at. WL-217 is the worked example — an
+accepted plan deferred 025's authorship projection to "006 projection work"
+twice, in two tables, and the handoff sat unclaimed for three weeks until a
+passing question surfaced it.
+
+**The key is `defers`**, a sibling of `covers` and authored the same way:
+
+```yaml
+defers:
+  - spec: docs/specs/025-documents-in-the-backbone.md#sec-12
+    to: docs/specs/006-knowledge-graph.md
+```
+
+| Key | Required | Value |
+|---|---|---|
+| `spec` | yes | A reference (025 §14.1) with a `#sec-N` fragment — the section handed off. |
+| `to` | yes | A reference to the owner: the document whose plans are expected to cover the section. Usually a spec, whose future plans inherit the handoff; a plan is legal when the successor already exists. No fragment. |
+
+Each entry asserts: *this plan explicitly defers that section to that owner.*
+The deferring plan contributes no coverage — a deferral is not a level, and an
+entry carries no `coverage:` — and the section stays a planning gap, but a
+*named* one, reported `deferred` with its owner by §2.1 until some plan covers
+it.
+
+Five rules, each closing a hole the prose form left open:
+
+- **Section-scoped, enforced.** An entry whose `spec` lacks a `#sec-N`
+  fragment is refused, not tolerated-and-ignored the way a whole-document
+  `covers` is (§2.1). A whole-document deferral would silently defer future
+  sections and recreate exactly the silent handoff this key removes.
+- **The owner is mandatory.** A deferral without an owner is just an
+  uncovered section, which needs no syntax — omitting `to` is refused.
+- **Plan-only**, like `covers`: a spec defers nothing, it is what work is
+  deferred *from*. A `defers` key on a spec or ADR is refused.
+- **Never to itself.** A plan deferring a section to itself has confused
+  deferral with coverage; refused.
+- **One owner per section per plan.** The same entry twice is one edge; the
+  same section deferred to two different owners is a contradiction the
+  frontmatter cannot mean, refused the way conflicting `covers` levels are
+  (§5.1).
+
+The deferring set is §2.1's: accepted or superseded, never draft. A superseded
+plan's deferral stands — being spent does not deliver a handoff the plan never
+made, and the founding case is precisely a finished plan whose deferral
+outlived it.
+
+`defers` takes the position after `covers` in the key order (025 §14):
+lifecycle, `covers`, `defers`, dependency, amendment, supersession.
+
+**Projection.** Each entry becomes one `doc_edges` row of type `defers` from
+the plan to the section, resolved exactly as a `covers` reference is — an
+unresolvable `spec` is kept verbatim as an external reference and, like a
+`covers` typo, reads as an unplanned section rather than an error. The owner
+rides in the same completion side-table a `partial` entry uses for
+`fullCoverageWith`, because it is the same assertion read at level zero: full
+coverage of this section arrives with the named document. Re-pointing on late
+corpus import reaches it for free.
+
 ## 6. Ontology {#sec-6}
 
 **Name a predicate by reading a triple aloud.** Substitute the class names of
@@ -1072,6 +1151,44 @@ specified now because 025 §14 requires a term behind every frontmatter key, and
 enforces — a validated key with no term is exactly the private extension that
 rule exists to prevent.
 
+### 6.4 Deferral {#sec-6.4}
+
+§5.3's key gets the same treatment as `covers`: a direct edge that survives the
+read-aloud test — *the design-documents plan defers 025 §12* — and a qualified
+node beside it carrying what the edge alone cannot, here the owner rather than
+a level. The node names both its ends itself, for §6.3's reasons.
+
+```turtle
+wl:defers a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Plan ; rdfs:range wl:Section ;
+    rdfs:comment """A Plan's explicit handoff of a Section it will not build (026 §5.3). The
+        deferring plan contributes no coverage; the section stays a planning gap, named rather
+        than silent, until some plan covers it. The owner hangs off the qualified wl:Deferral
+        node, never off this edge.""" .
+
+wl:Deferral a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A qualified wl:defers: which document owns the handed-off Section. Reified
+        beside the direct edge, never in place of it, mirroring wl:Coverage (026 §5.3).""" .
+
+wl:deferringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Deferral ; rdfs:range wl:Plan .
+
+wl:deferredSection a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Deferral ; rdfs:range wl:Section .
+
+wl:deferredTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan ) ] .
+```
+
+`wl:deferredTo`'s range is the union because the owner is usually a spec —
+whose future plans inherit the handoff — and a plan only when the successor
+already exists (§5.3). SHACL mirrors the `covers` shapes: only a Plan defers, a
+`wl:defers` object is a Section never a whole document, and a `wl:Deferral`
+must reify a direct `wl:defers` edge between its own plan and section.
+
 ## 7. Checks {#sec-7}
 
 `scripts/secmeta.py` gates this at commit. It accepts `covers` in both forms and
@@ -1087,6 +1204,13 @@ reports:
 - the bare form on a section another accepted plan also covers;
 - `implements` on a plan — deprecated, write `covers`;
 - both keys on one plan — an error.
+
+For `defers` (§5.3) it reports:
+
+- an entry missing `spec` or `to`, or carrying an unknown key;
+- a `spec` reference without a `#sec-N` fragment;
+- `defers` on a spec or ADR — the key is plan-only;
+- one section deferred to two different owners.
 
 `covers` replaces `implements` in `PLAN_ONLY`, and `NO-SPEC`'s "only on a plan's
 `implements`" constraint moves with it. `internal/designdoc/frontmatter.go`

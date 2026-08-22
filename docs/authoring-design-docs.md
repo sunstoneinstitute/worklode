@@ -86,6 +86,7 @@ three specs.
 | `status` | `wl:status` | one of `draft`, `accepted`, `superseded` (`proposed` retired by 025 §7 — a doc under review stays `draft`) | specs, design records |
 | `issued` | `dct:issued` | `YYYY-MM-DD` of first publication | specs, design records |
 | `covers` | `wl:covers` | scalar or list of spec references, or the qualified form (026 §5.1) | **plans** |
+| `defers` | `wl:defers` | list of `{spec, to}` entries: a section handed off, and the document that owns it (026 §5.3) | **plans** |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | list of references | both |
 | `blocks` / `blockedBy` | — (see 025 §5) | list of references to other plans | **plans** |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | scalar reference | specs |
@@ -114,8 +115,14 @@ tasks (spec 025 §9.2 — the binding becomes the minted tasks' doc reference).
 **If you set it, the lode task body and the document must stay in sync** —
 nothing enforces that yet.
 
-Order keys as in the table: lifecycle, then `covers`, then dependency
-(`requires`, then `blocks`), then amendment, then supersession.
+Order keys as in the table: lifecycle, then `covers`, then `defers`, then
+dependency (`requires`, then `blocks`), then amendment, then supersession.
+
+`defers` records a deliberate handoff: a section this plan will not build,
+paired with the document whose plans should (`spec:` with a `#sec-N` fragment,
+`to:` without one). The section then reports as `deferred` with its owner in
+`lode doc list --needs-planning` instead of blending into `unplanned` — use it
+wherever a "Deferred to owning specs' plans" prose table would have gone.
 
 ### References
 

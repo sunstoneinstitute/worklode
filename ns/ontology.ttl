@@ -382,6 +382,41 @@ wl:completedWith a owl:ObjectProperty ;
         a named plan that does not itself cover the section leaves it partially planned
         (026 §2.1).""" .
 
+wl:defers a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Section ;
+    rdfs:comment """A Plan's explicit handoff of a Section it will not build (026 §5.3). The
+        deferring plan contributes no coverage; the section stays a planning gap, named rather
+        than silent, until some plan covers it. The owner hangs off the qualified wl:Deferral
+        node, never off this edge. Frontmatter key `defers`, entries {spec, to}; projected as a
+        doc_edges 'defers' row with the owner in the completion side-table.""" .
+
+wl:Deferral a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A qualified wl:defers: which document owns the handed-off Section. Reified
+        beside the direct edge, never in place of it, mirroring wl:Coverage — the node names both
+        ends itself for 026 §6.3's reasons.""" .
+
+wl:deferringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range wl:Plan .
+
+wl:deferredSection a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range wl:Section .
+
+wl:deferredTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan ) ] ;
+    rdfs:comment """The owner: the document whose plans are expected to cover the deferred
+        section. Usually a spec, whose future plans inherit the handoff; a plan when the
+        successor already exists (026 §5.3). Naming an owner gates nothing — delivery is any
+        plan covering the section (026 §2.1).""" .
+
 wl:affects a owl:ObjectProperty ;
     wl:layer wlc:execution ;
     rdfs:range wl:Component ;
