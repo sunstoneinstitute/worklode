@@ -4,6 +4,7 @@ docs/specs/001-identity-and-authentication.md:
     sec-0: "## 0. Purpose & scope"
     sec-1: "## 1. Motivation"
     sec-2: "## 2. Decisions"
+    sec-2.1: "### 2.1 Task-scoped tokens"
     sec-3: "## 3. Keycloak is the only login"
     sec-4: "## 4. Keycloak realm configuration"
     sec-5: "## 5. Server OIDC configuration and verification"
