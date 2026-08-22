@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -243,7 +244,8 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 	out := make([]ui.DocEdgeRow, 0, len(edges))
 	for _, e := range edges {
 		row := ui.DocEdgeRow{Type: e.Type, Anchor: e.FromAnchor, Label: e.ToExternal}
-		if e.ToDoc != 0 {
+		switch {
+		case e.ToDoc != 0:
 			row.URL = docPageURL(e.ToDoc)
 			row.Label = e.ToSlug
 			if row.Label == "" {
@@ -251,7 +253,22 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 			}
 			row.Ref = docEdgeRef(e)
 			if e.ToAnchor != "" {
+				// The fragment rides the link, not just the label (WL-301).
+				row.URL += "#" + e.ToAnchor
 				row.Label += "#" + e.ToAnchor
+			}
+		case e.ToExternal != "":
+			// A reference the store kept verbatim — a corpus filename like
+			// "004-execution-backbone.md#sec-5.1" — still resolves at read
+			// time through the reference redirect (WL-301): the href's own
+			// #fragment survives the 302. A ref outside the grammar keeps
+			// URL "" and renders as text.
+			base, frag := designdoc.SplitFragment(e.ToExternal)
+			if _, ok := designdoc.ParseNumberForm(base); ok || designdoc.LooksLikePath(base) {
+				row.URL = "/docs/ref/" + base
+				if frag != "" {
+					row.URL += "#" + frag
+				}
 			}
 		}
 		out = append(out, row)
