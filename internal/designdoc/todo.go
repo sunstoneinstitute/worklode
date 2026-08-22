@@ -400,7 +400,11 @@ func gapDetail(typ string, n int) string {
 // section-level gap type it still has ("" when none), which emitDoc collapses
 // into one item per document.
 func (w *todoWalk) emitSection(docPath string, sec SectionMeta) string {
-	outcome, covering := w.ix.Section(docPath, sec.Anchor)
+	// The owner is 026 §2.1's business, not §2.5's: no item type here names a
+	// deferred section (see the gap switch below), so lode doc todo has no
+	// column to put it in yet. Discarded here, not dropped from the index —
+	// coverage.go's own Section tests pin outcome and owner together.
+	outcome, covering, _ := w.ix.Section(docPath, sec.Anchor)
 
 	// The section-level gap, discharged by writing a plan. It is suppressed
 	// when a draft plan already covers the section: 026 §2.4 calls reporting
@@ -411,6 +415,13 @@ func (w *todoWalk) emitSection(docPath string, sec SectionMeta) string {
 	// plan binds at `none` is a different case: §2.4 forbids a plan-draft
 	// item there, not an item at all, and nothing covers it, so it still
 	// needs planning.
+	//
+	// Deferred falls through to no item, the same as BoundOnly: §2.5's five
+	// types are each an act this document's own plans can discharge, and a
+	// deferred section's next act belongs to the named owner, not to writing
+	// a plan here. §2.1 is where a deferral is reported (--needs-planning
+	// sweeps for it); this walk is silent on it until §2.5 grows a type for
+	// it.
 	gap := ""
 	switch {
 	case outcome == Unplanned && len(covering) == 0:
