@@ -500,6 +500,47 @@ func TestPreCommitIgnoresStampedWorktreeOutsideTheBase(t *testing.T) {
 
 // --- session-start emits additionalContext ----------------------------------
 
+// TestSessionStartOutputPerHarness covers WL-287: the brief reaches stdout in
+// the shape each harness consumes — plain text for Amp (its plugin replays
+// stdout as the first-turn context message), nothing for Codex and Copilot
+// (no verified stdout consumer), and Claude Code's JSON envelope by default.
+func TestSessionStartOutputPerHarness(t *testing.T) {
+	_, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Harness brief")
+
+	run := func(harness, sessionID string) string {
+		t.Helper()
+		var outBuf, errBuf bytes.Buffer
+		code := Run(context.Background(), Options{
+			Event:   "session-start",
+			Harness: harness,
+			Stdin: bytes.NewReader(payloadJSON(t, Payload{
+				Cwd: wtDir, SessionID: sessionID, HookEventName: "SessionStart"})),
+			Stdout: &outBuf,
+			Stderr: &errBuf,
+		})
+		if code != 0 {
+			t.Fatalf("session-start --harness %s exit = %d (stderr: %s)", harness, code, errBuf.String())
+		}
+		return outBuf.String()
+	}
+
+	amp := run("amp", "s-amp")
+	if strings.Contains(amp, "hookSpecificOutput") {
+		t.Fatalf("amp stdout is the Claude envelope, want plain text: %q", amp)
+	}
+	if !strings.Contains(amp, taskID) || !strings.Contains(amp, "Harness brief") {
+		t.Fatalf("amp stdout missing the brief: %q", amp)
+	}
+
+	for _, harness := range []string{"codex", "copilot"} {
+		if out := run(harness, "s-"+harness); out != "" {
+			t.Fatalf("%s stdout = %q, want empty (no verified consumer)", harness, out)
+		}
+	}
+}
+
 func TestSessionStartEmitsAdditionalContext(t *testing.T) {
 	_, c, _ := newRealServer(t)
 	root := initGitRepo(t)

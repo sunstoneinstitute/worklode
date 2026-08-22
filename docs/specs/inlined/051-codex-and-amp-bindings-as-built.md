@@ -91,3 +91,24 @@ which claims the top-ranked ready task *and* creates its worktree, what an
 agent with no brief actually needs — and names `lode task claim <id>` second,
 as the way to claim a specific task. The block matches the intent; the spec's
 sentence is corrected to describe it.
+
+## 6. What each harness does with session-start stdout
+
+The session-start hook's stdout is the task brief — the payload the binding
+exists to deliver — and its consumption is per-harness (WL-287).
+`lode hook session-start` therefore emits per `--harness`, and the statement
+of record is:
+
+| Harness | Session-start stdout | Emitted |
+|---|---|---|
+| Claude Code | injected via the documented `hookSpecificOutput.additionalContext` envelope | the envelope |
+| Amp | the generated plugin captures the shell result's `stdout` and returns it from the thread's first `agent.start` as a context message — the one Plugin API slot that reaches the agent; held per thread id, delivered once (a restarted plugin process re-delivers once, harmless) | plain text |
+| Codex | **no verified consumer.** The hook schema is Claude-Code-shaped, but stdout-as-context is unverified for the installed versions, per §0's re-verification posture | nothing |
+| Copilot | **no verified consumer**, same posture | nothing |
+
+Codex and Copilot sessions consequently still open without the brief; their
+session-start binding renews the lease and opens the session, which is what
+it is bound for. Closing that gap is deliberate follow-up work gated on
+verifying each harness's stdout contract — an unverified envelope would be
+dead bytes at best and payload confusion at worst, the exact failure class
+§0 records.
