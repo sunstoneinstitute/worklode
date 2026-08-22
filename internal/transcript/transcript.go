@@ -73,6 +73,11 @@ type Bucket struct {
 	// Speed is "fast" for fast-mode turns, "standard" otherwise. Fast mode is
 	// a separate, more expensive SKU.
 	Speed string
+	// Cwd is the working directory the entries in this bucket recorded, raw
+	// as the transcript wrote it (not normalized). A later consumer uses it
+	// to classify spend by directory; Parse itself does nothing with it
+	// beyond carrying it through.
+	Cwd   string
 	Usage Usage
 }
 
@@ -180,6 +185,7 @@ func Parse(r io.Reader, opts Options) ([]Bucket, error) {
 			day:   e.Timestamp.UTC().Truncate(24 * time.Hour),
 			model: e.Message.Model,
 			speed: normalizeSpeed(u.Speed),
+			cwd:   e.Cwd,
 		}
 		acc, ok := byKey[k]
 		if !ok {
@@ -221,7 +227,7 @@ func Parse(r io.Reader, opts Options) ([]Bucket, error) {
 			continue
 		}
 		buckets = append(buckets, Bucket{
-			Day: k.day, Model: k.model, Speed: k.speed, Usage: *byKey[k],
+			Day: k.day, Model: k.model, Speed: k.speed, Cwd: k.cwd, Usage: *byKey[k],
 		})
 	}
 	sortBuckets(buckets)
@@ -232,6 +238,7 @@ type key struct {
 	day   time.Time
 	model string
 	speed string
+	cwd   string
 }
 
 // dedupeID picks the most specific identity available for a turn. The message
@@ -276,6 +283,9 @@ func sortBuckets(buckets []Bucket) {
 		if a.Model != b.Model {
 			return a.Model < b.Model
 		}
-		return a.Speed < b.Speed
+		if a.Speed != b.Speed {
+			return a.Speed < b.Speed
+		}
+		return a.Cwd < b.Cwd
 	})
 }
