@@ -2207,3 +2207,98 @@ func TestSessionEndWithoutTranscriptStillEndsSession(t *testing.T) {
 		})
 	}
 }
+
+// --- overhead: usage with no task of its own goes to the project, not the void ---
+
+// writeProjectConfig writes a repo-local .worklode/config.toml under dir
+// naming project as the current project, so cli.CurrentProjectFrom(dir)
+// resolves it without a server round trip.
+func writeProjectConfig(t *testing.T, dir, project string) {
+	t.Helper()
+	confDir := filepath.Join(dir, ".worklode")
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", confDir, err)
+	}
+	content := fmt.Sprintf("current_project = %q\n", project)
+	if err := os.WriteFile(filepath.Join(confDir, "config.toml"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+}
+
+// TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead is the bug this plan
+// exists to fix: an orchestrator session runs from the repo's main checkout
+// and dispatches a subagent into a task worktree, but Claude Code logs the
+// subagent's turns into the orchestrator's OWN transcript, tagged with the
+// directory each ran in. A heartbeat fired from the main checkout must still
+// split that transcript's usage correctly: the cwd under a currently
+// lease-held task worktree bills through /agent-session, and the cwd with no
+// task at all (the main checkout itself) bills through /overhead-usage —
+// neither is dropped.
+func TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Main checkout task")
+	writeProjectConfig(t, root, "proj")
+
+	transcriptPath := writeTranscript(t,
+		transcriptLine(wtDir, "msg_1", "claude-sonnet-5", 100, 0, 0, 0, 10),
+		transcriptLine(root, "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
+	)
+
+	beforeAgent := rec.count("/agent-session")
+	beforeOverhead := rec.count("/overhead-usage")
+	runHook(t, "heartbeat", Payload{Cwd: root, SessionID: "sess-orch", TranscriptPath: transcriptPath})
+
+	if rec.count("/agent-session") != beforeAgent+1 {
+		t.Fatal("main-checkout heartbeat did not report the worktree's own task")
+	}
+	if rec.count("/overhead-usage") != beforeOverhead+1 {
+		t.Fatal("main-checkout heartbeat did not report project overhead")
+	}
+
+	lease, err := st.ActiveLease(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	sess, err := st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-orch")
+	if err != nil {
+		t.Fatalf("agent session for the worktree's task: %v", err)
+	}
+	if sess.InputTokens == nil || *sess.InputTokens != 100 {
+		t.Fatalf("worktree task input tokens = %v, want 100", sess.InputTokens)
+	}
+}
+
+// TestHeartbeatOtherTaskWithoutLeaseFallsBackToOverhead is the trap this
+// plan warns about most: a transcript names a task this actor no longer
+// holds the lease on (released, swept, or claimed by someone else), so
+// TouchAgentSession fails (typically ErrNotFound / 404). Those tokens must
+// still be reported — as project overhead — rather than silently dropped,
+// which would reintroduce the very bug this plan fixes in a new place.
+func TestHeartbeatOtherTaskWithoutLeaseFallsBackToOverhead(t *testing.T) {
+	_, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	_, wtDir, _ := setupLeasedWorktree(t, c, root, "Own task")
+	otherTaskID, otherWtDir, _ := setupLeasedWorktree(t, c, root, "No longer held")
+
+	if _, err := c.ReleaseLease(context.Background(), otherTaskID); err != nil {
+		t.Fatalf("release other task's lease: %v", err)
+	}
+	writeProjectConfig(t, wtDir, "proj")
+
+	transcriptPath := writeTranscript(t,
+		transcriptLine(wtDir, "msg_1", "claude-sonnet-5", 100, 0, 0, 0, 10),
+		transcriptLine(otherWtDir, "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
+	)
+
+	beforeOverhead := rec.count("/overhead-usage")
+	beforeOtherTouch := rec.count("/tasks/" + otherTaskID + "/agent-session")
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: transcriptPath})
+
+	if rec.count("/tasks/"+otherTaskID+"/agent-session") != beforeOtherTouch+1 {
+		t.Fatal("heartbeat did not attempt to touch the unleased other task's agent session")
+	}
+	if rec.count("/overhead-usage") != beforeOverhead+1 {
+		t.Fatal("heartbeat did not redirect the unleased other task's usage to project overhead")
+	}
+}

@@ -394,35 +394,44 @@ func (o Options) agentName() string {
 // is not a heartbeat — stamping the marker here would suppress the next
 // real one for up to heartbeatDebounce, so the marker is only stamped when
 // the returned session is actually open.
-func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, root, sessionID, transcriptPath string) {
+func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.Layout, taskID, root, sessionID, transcriptPath string) {
 	if sessionID == "" {
 		return
 	}
-	// Parsed before the timeout below is started, for the reason endSession
-	// gives: a transcript is local file IO and must not eat the backbone
-	// budget.
-	usage := sessionUsage(opts, transcriptPath, root)
+	byTask := classifyTranscriptUsage(opts, l, transcriptPath)
 
-	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	defer cancel()
-	sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, usage)
-	if err != nil {
-		warn(opts, "report agent session on %s: %v", taskID, err)
-		return
+	if taskID != "" {
+		ownUsage := byTask[taskID]
+		delete(byTask, taskID)
+
+		sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+		sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, ownUsage)
+		cancel()
+		if err != nil {
+			warn(opts, "report agent session on %s: %v", taskID, err)
+		} else if sess.EndedAt == nil {
+			if err := recordHeartbeat(root, opts.now()); err != nil {
+				warn(opts, "record heartbeat: %v", err)
+			}
+		}
+	} else {
+		// No task of our own (main checkout, or an unleased worktree): there
+		// is no agent_sessions row to touch, only usage to classify below.
+		// The marker's own debounce still applies -- stamp it directly, since
+		// there is no TouchAgentSession response to gate it on.
+		if err := recordHeartbeat(root, opts.now()); err != nil {
+			warn(opts, "record heartbeat: %v", err)
+		}
 	}
-	if sess.EndedAt != nil {
-		return
-	}
-	if err := recordHeartbeat(root, opts.now()); err != nil {
-		warn(opts, "record heartbeat: %v", err)
-	}
+
+	reportOtherTaskAndOverheadUsage(ctx, opts, c, root, sessionID, byTask)
 }
 
 // endSession ends an agent session on taskID, reporting the tokens it billed
 // in root. Mirrors reportSession's shape — bounded, downgrades failure to a
 // warning — so the two halves of a session's lifecycle (touch/end) enforce the
 // same timeout-and-warn contract in exactly one place each.
-func endSession(ctx context.Context, opts Options, taskID, sessionID, transcriptPath, root string) {
+func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, sessionID, transcriptPath, root string) {
 	if sessionID == "" {
 		return
 	}
@@ -431,30 +440,39 @@ func endSession(ctx context.Context, opts Options, taskID, sessionID, transcript
 		warn(opts, "load config: %v", err)
 		return
 	}
-	// Parsed before the timeout below is started: a transcript is local file
-	// IO and can run to hundreds of megabytes, and reading it must not eat the
-	// backbone budget.
-	usage := sessionUsage(opts, transcriptPath, root)
 
-	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	defer cancel()
-	if err := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
-		Agent: opts.agentName(), SessionID: sessionID, Usage: usage,
-	}); err != nil {
-		warn(opts, "end agent session on %s: %v", taskID, err)
+	byTask := classifyTranscriptUsage(opts, l, transcriptPath)
+
+	if taskID != "" {
+		ownUsage := byTask[taskID]
+		delete(byTask, taskID)
+
+		ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
+		endErr := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
+			Agent: opts.agentName(), SessionID: sessionID, Usage: ownUsage,
+		})
+		cancel()
+		if endErr != nil {
+			warn(opts, "end agent session on %s: %v", taskID, endErr)
+		}
 	}
+	// taskID == "" (main checkout, or an unleased worktree): no
+	// agent_sessions row was ever opened here, so only the classification
+	// below applies.
+
+	reportOtherTaskAndOverheadUsage(ctx, opts, c, root, sessionID, byTask)
 }
 
 // closeSession ends the session recorded against root's lease and drops its
 // marker — the shared tail of session-end and worktree-exit. The session id
 // comes from the payload, falling back to the marker for a caller that got no
 // stdin.
-func closeSession(ctx context.Context, opts Options, p Payload, taskID, root string) {
+func closeSession(ctx context.Context, opts Options, p Payload, l worktree.Layout, taskID, root string) {
 	sessionID := p.SessionID
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	endSession(ctx, opts, taskID, sessionID, p.TranscriptPath, root)
+	endSession(ctx, opts, l, taskID, sessionID, p.TranscriptPath, root)
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
 	}
@@ -519,6 +537,96 @@ func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsag
 	return out
 }
 
+// classifyTranscriptUsage parses transcriptPath's FULL usage -- every cwd the
+// session touched, not just one worktree -- and groups it by task id,
+// resolved per distinct cwd via l.TaskID (the same worktree-layout
+// resolution the hook guard itself uses). A cwd outside the configured
+// worktree base, or one whose directory name/stamp carries no task id,
+// groups under the empty string key. Same no-failure contract as
+// sessionUsage, which this supplements rather than replaces: a missing
+// transcript, an unreadable file, or an empty result all yield nil.
+func classifyTranscriptUsage(opts Options, l worktree.Layout, transcriptPath string) map[string][]model.SessionUsageBucket {
+	if transcriptPath == "" {
+		return nil
+	}
+	buckets, err := transcript.ParseFile(transcriptPath, transcript.Options{})
+	if err != nil {
+		warn(opts, "parse transcript %s: %v", transcriptPath, err)
+		return nil
+	}
+	out := map[string][]model.SessionUsageBucket{}
+	for _, b := range buckets {
+		taskID, _ := l.TaskID(b.Cwd) // ok=false ⇒ "" (overhead)
+		out[taskID] = append(out[taskID], model.SessionUsageBucket{
+			Day:                b.Day.Format(time.DateOnly),
+			Model:              b.Model,
+			Speed:              b.Speed,
+			InputTokens:        b.Usage.Input,
+			CacheWrite5mTokens: b.Usage.CacheWrite5m,
+			CacheWrite1hTokens: b.Usage.CacheWrite1h,
+			CacheReadTokens:    b.Usage.CacheRead,
+			OutputTokens:       b.Usage.Output,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// reportOverhead resolves the current repo's project from local config only
+// (no server round trip -- see cli.CurrentProjectFrom) and reports buckets
+// as that project's overhead usage: tokens with no task to bill to (spec
+// 052). root is the directory to resolve the project from -- see
+// layoutFor's doc comment on why this must be the hook's own resolved
+// worktree root, never os.Getwd().
+func reportOverhead(ctx context.Context, opts Options, c *cli.Client, root, sessionID string, buckets []model.SessionUsageBucket) {
+	if len(buckets) == 0 {
+		return
+	}
+	project := cli.CurrentProjectFrom(root)
+	if project == "" {
+		warn(opts, "no project configured for %s; dropping %d overhead usage bucket(s)", root, len(buckets))
+		return
+	}
+	octx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	defer cancel()
+	if err := c.ReportProjectOverheadUsage(octx, project, model.ProjectOverheadUsageInput{
+		Agent: opts.agentName(), ExternalSessionID: sessionID, Usage: buckets,
+	}); err != nil {
+		warn(opts, "report project overhead usage on %s: %v", project, err)
+	}
+}
+
+// reportOtherTaskAndOverheadUsage reports every classifyTranscriptUsage
+// group besides the calling handler's own task (already removed from
+// byTask by the caller): a real task id bills through TouchAgentSession --
+// never EndAgentSession, since this call has no opinion on whether that
+// other task's own session should end, only that these tokens billed to it
+// -- and a TouchAgentSession failure (most commonly ErrNotFound: this actor
+// no longer holds that task's lease) redirects those buckets to overhead
+// instead of dropping them. The "" group (main checkout, or a cwd outside
+// the worktree layout) always goes to overhead.
+func reportOtherTaskAndOverheadUsage(ctx context.Context, opts Options, c *cli.Client, root, sessionID string, byTask map[string][]model.SessionUsageBucket) {
+	if len(byTask) == 0 {
+		return
+	}
+	overhead := byTask[""]
+	for taskID, buckets := range byTask {
+		if taskID == "" {
+			continue
+		}
+		octx, cancel := context.WithTimeout(ctx, backboneTimeout)
+		_, _, err := c.TouchAgentSession(octx, taskID, opts.agentName(), "", sessionID, buckets)
+		cancel()
+		if err != nil {
+			warn(opts, "report agent session on %s: %v (billing to project overhead instead)", taskID, err)
+			overhead = append(overhead, buckets...)
+		}
+	}
+	reportOverhead(ctx, opts, c, root, sessionID, overhead)
+}
+
 // --- event handlers ---------------------------------------------------------
 
 func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
@@ -544,7 +652,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	if err := writeSessionMarker(root, p.SessionID, opts.now()); err != nil {
 		warn(opts, "write session marker: %v", err)
 	}
-	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
+	reportSession(ctx, opts, c, l, taskID, root, p.SessionID, p.TranscriptPath)
 
 	skillPaths := ensureSkills(ctx, opts, c, brief, root)
 	emitSessionContext(opts, compactBrief(brief, skillPaths))
@@ -798,11 +906,11 @@ func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.La
 }
 
 func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	root, taskID, ok := leasedWorktree(l, dir)
-	if !ok {
+	root, taskID, _ := leasedWorktree(l, dir)
+	if root == "" {
 		return
 	}
-	closeSession(ctx, opts, p, taskID, root)
+	closeSession(ctx, opts, p, l, taskID, root)
 }
 
 // handlePreCommit keeps this worktree's lease alive across a long working
@@ -849,7 +957,7 @@ func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.L
 		sessionID, _ := markerSessionID(root)
 		// No payload, so no transcript: a git hook is not the place to
 		// find one, and the next heartbeat reports the spend anyway.
-		reportSession(ctx, opts, c, taskID, root, sessionID, "")
+		reportSession(ctx, opts, c, l, taskID, root, sessionID, "")
 	}
 }
 
@@ -911,9 +1019,9 @@ func handleWorktreeRemove(ctx context.Context, opts Options, p Payload, dir stri
 // debounce window that was never actually started for this id is not one to
 // wait out.
 func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	root, taskID, ok := leasedWorktree(l, dir)
-	if !ok {
-		return
+	root, taskID, _ := leasedWorktree(l, dir)
+	if root == "" {
+		return // not inside a git worktree at all ⇒ nothing to report, nowhere to debounce
 	}
 
 	m, hasMarker := readSessionMarker(root)
@@ -938,7 +1046,7 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l
 		warn(opts, "load config: %v", err)
 		return
 	}
-	reportSession(ctx, opts, c, taskID, root, sessionID, p.TranscriptPath)
+	reportSession(ctx, opts, c, l, taskID, root, sessionID, p.TranscriptPath)
 }
 
 // handleWorktreeEnter reports the session against the lease of the worktree it
@@ -949,8 +1057,8 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l
 // forever (no marker ⇒ nothing due) and sessionMarkerFresh would read this
 // worktree as abandoned while it is actively being worked.
 func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
-	root, taskID, ok := leasedWorktree(l, payloadPath(p, dir))
-	if !ok {
+	root, taskID, _ := leasedWorktree(l, payloadPath(p, dir))
+	if root == "" {
 		return
 	}
 	c, err := opts.client()
@@ -966,7 +1074,7 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 			warn(opts, "write session marker: %v", err)
 		}
 	}
-	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
+	reportSession(ctx, opts, c, l, taskID, root, p.SessionID, p.TranscriptPath)
 }
 
 // handleWorktreeExit closes the session's row on the worktree it is leaving
@@ -989,7 +1097,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return
 	}
-	closeSession(ctx, opts, p, taskID, root)
+	closeSession(ctx, opts, p, l, taskID, root)
 }
 
 // payloadPath returns the created/removed worktree path from the payload's
