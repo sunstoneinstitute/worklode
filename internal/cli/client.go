@@ -877,6 +877,20 @@ func (c *Client) UnfollowUp(ctx context.Context, id, origin string) ([]byte, err
 		model.EdgeInput{To: &origin, Type: "follow_up_to"})
 }
 
+// Duplicate calls POST /api/v1/tasks/{id}/edges to record that id is the same
+// request as canonical, which is the one to work.
+func (c *Client) Duplicate(ctx context.Context, id, canonical string) ([]byte, error) {
+	return c.do(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
+		model.EdgeInput{To: &canonical, Type: "duplicate_of"})
+}
+
+// Unduplicate calls DELETE /api/v1/tasks/{id}/edges to drop the duplicate
+// edge from id to canonical.
+func (c *Client) Unduplicate(ctx context.Context, id, canonical string) ([]byte, error) {
+	return c.do(ctx, http.MethodDelete, "/api/v1/tasks/"+url.PathEscape(id)+"/edges",
+		model.EdgeInput{To: &canonical, Type: "duplicate_of"})
+}
+
 // Decompose calls POST /api/v1/tasks/{id}/decompose: converts id into an
 // parent and files titles as new children under it.
 func (c *Client) Decompose(ctx context.Context, id string, titles []string) (model.DecomposeResponse, []byte, error) {

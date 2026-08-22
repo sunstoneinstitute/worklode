@@ -194,6 +194,12 @@ wl:TaskShape a sh:NodeShape ;
         sh:message "A Task's wl:concern, when present, is drawn from the tasks.concern CHECK set." ;
     ] ;
     sh:property [
+        sh:path wl:duplicateOf ;
+        sh:class wl:Task ;
+        sh:maxCount 1 ;
+        sh:message "A Task is a duplicate of at most one canonical Task (004 §1.3)." ;
+    ] ;
+    sh:property [
         sh:path wl:followUpTo ;
         sh:class wl:Task ;
         sh:maxCount 1 ;

@@ -58,7 +58,7 @@ delivery state — `task done` on a parent reports the roll-up rule instead.
 
 | Between | Types |
 |---|---|
-| task ↔ task | `child_of` (subtask), `blocks`, `follow_up_to` (spun out of) |
+| task ↔ task | `child_of` (subtask), `blocks`, `follow_up_to` (spun out of), `duplicate_of` (same request, filed twice) |
 | task → doc | `plan_doc` (the plan that minted this task), `about_doc` (the doc a review/design task concerns) |
 | doc ↔ doc | `covers` (plan→section, `full`\|`partial`\|`none`), `implements` (code→section), `amends`/`amendedBy`, `replaces`/`isReplacedBy`, `requires`, `wasDerivedFrom`, `blocks` (whole-plan ordering) |
 

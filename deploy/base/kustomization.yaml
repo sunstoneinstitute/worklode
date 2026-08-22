@@ -108,3 +108,5 @@ configMapGenerator:
       - migrations/0047_state_log_txid.down.sql
       - migrations/0048_project_overhead_usage.up.sql
       - migrations/0048_project_overhead_usage.down.sql
+      - migrations/0049_duplicate_edges.up.sql
+      - migrations/0049_duplicate_edges.down.sql

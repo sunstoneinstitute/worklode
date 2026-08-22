@@ -58,7 +58,7 @@ var validKinds = ns.Set(ns.TaskKinds)
 var invalidKindMsg = "invalid kind: must be " + ns.OrList(ns.TaskKinds)
 
 var validEdgeTypes = map[string]bool{
-	"blocks": true, "child_of": true, "follow_up_to": true,
+	"blocks": true, "child_of": true, "follow_up_to": true, "duplicate_of": true,
 }
 
 // createTask handles POST /api/v1/tasks.
@@ -608,7 +608,7 @@ func resolveEdge(w http.ResponseWriter, id string, req model.EdgeInput) (from, t
 	}
 	if !validEdgeTypes[req.Type] {
 		writeErr(w, http.StatusUnprocessableEntity,
-			"invalid edge type: must be blocks, child_of, or follow_up_to")
+			"invalid edge type: must be blocks, child_of, follow_up_to, or duplicate_of")
 		return "", "", false
 	}
 	if req.To != nil {

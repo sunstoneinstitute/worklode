@@ -88,6 +88,8 @@ templ Task(v TaskView) {
 						</li>
 						@taskEdgeID("Follow-up to", v.FollowUpTo)
 						@taskEdgeIDs("Follow-ups", v.FollowUps)
+						@taskEdgeID("Duplicate of", v.DuplicateOf)
+						@taskEdgeIDs("Duplicates", v.Duplicates)
 					</ul>
 				</div>
 			</section>
@@ -141,7 +143,7 @@ templ taskEdgeIDs(label string, ids []string) {
 }
 
 // taskEdgeID renders one labelled edge row that holds at most one task id
-// (Parent, Follow-up to), or an honest "none" when it is unset.
+// (Parent, Follow-up to, Duplicate of), or an honest "none" when it is unset.
 templ taskEdgeID(label, id string) {
 	<li>
 		{ label }:

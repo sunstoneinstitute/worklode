@@ -653,6 +653,65 @@ func TestTaskFollowUpCommands(t *testing.T) {
 	}
 }
 
+func TestTaskDuplicateCommands(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	setupRepoConfig(t, "proj") // so a bare task number resolves
+
+	canonical := createTestTask(t, c, "Canonical")
+	dupe := createTestTask(t, c, "Filed twice")
+
+	// duplicate --of records the edge; the dupe alias reaches the same command.
+	if out, err := runLode(t, "task", "dupe", dupe.ID, "--of", canonical.ID); err != nil {
+		t.Fatalf("task dupe --of: %v\noutput: %s", err, out)
+	}
+	detail, _, err := c.GetTask(context.Background(), dupe.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	found := false
+	for _, e := range detail.Edges.Out {
+		if e.Type == "duplicate_of" && e.To == canonical.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("out edges after duplicate --of = %+v, want a duplicate_of edge to %s",
+			detail.Edges.Out, canonical.ID)
+	}
+
+	// No absorption (004 §1.3): the canonical task gains no children.
+	canon, _, err := c.GetTask(context.Background(), canonical.ID)
+	if err != nil {
+		t.Fatalf("get canonical: %v", err)
+	}
+	if canon.Hierarchy.Progress.Total != 0 {
+		t.Fatalf("canonical progress = %+v, want zero total: a duplicate is not a child",
+			canon.Hierarchy.Progress)
+	}
+
+	// unduplicate reads the canonical task back and drops the edge.
+	if out, err := runLode(t, "task", "unduplicate", dupe.ID); err != nil {
+		t.Fatalf("task unduplicate: %v\noutput: %s", err, out)
+	}
+	detail, _, err = c.GetTask(context.Background(), dupe.ID)
+	if err != nil {
+		t.Fatalf("get task after unduplicate: %v", err)
+	}
+	for _, e := range detail.Edges.Out {
+		if e.Type == "duplicate_of" {
+			t.Fatalf("out edges after unduplicate = %+v, want no duplicate_of edge", detail.Edges.Out)
+		}
+	}
+
+	// unduplicate on a task not marked a duplicate hits the error branch.
+	if _, err := runLode(t, "task", "unduplicate", canonical.ID); err == nil ||
+		!strings.Contains(err.Error(), "is not marked a duplicate of anything") {
+		t.Fatalf("task unduplicate %s = %v, want \"is not marked a duplicate of anything\" error",
+			canonical.ID, err)
+	}
+}
+
 func TestResolveBody(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "body.md")
 	if err := os.WriteFile(f, []byte("from file\n"), 0o644); err != nil {
