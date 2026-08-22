@@ -9,6 +9,12 @@
 // per hop, a byte cap, and a 30-second whole-fetch timeout. Every failure is
 // an error the caller is expected to treat as non-fatal.
 //
+// A fetch may carry a credential (WithBearer) — private-repo images need the
+// installation's GitHub App token — but the credential is bound to the hosts
+// it belongs to, not to the fetch. The allowlist is deliberately wider than
+// any one credential's scope, and a redirect can move a fetch across it, so
+// the header is decided per hop against the host actually being contacted.
+//
 // The address check runs twice on purpose. The pre-flight resolve gives a fast,
 // legible error, but it is not a boundary: http.Transport resolves the host
 // again at dial time, so a name that answers with a public address for the
@@ -92,6 +98,12 @@ type Fetcher struct {
 	allowedHosts []string
 	maxBytes     int64
 
+	// authHosts and authValue are the credential and the hosts it may be sent
+	// to. Empty authValue means every request goes out unauthenticated, which
+	// is what New builds; see WithBearer.
+	authHosts []string
+	authValue string
+
 	// allowLoopback additionally permits http and a non-default port, because
 	// httptest serves plain http on a random port. allowAnyHost drops the host
 	// allowlist but keeps every address check.
@@ -102,6 +114,26 @@ type Fetcher struct {
 // New returns a Fetcher allowing the given host suffixes, capped at maxBytes.
 func New(allowedHosts []string, maxBytes int64) *Fetcher {
 	return &Fetcher{allowedHosts: allowedHosts, maxBytes: maxBytes}
+}
+
+// WithBearer returns a copy of f that sends "Authorization: Bearer <token>" on
+// requests to authHosts — matched by the same label-aligned suffix rule as the
+// host allowlist — and on no other request. An empty token or an empty
+// authHosts returns an unauthenticated copy, so a caller whose credential
+// lookup failed needs no branch of its own.
+//
+// The scoping is per host, not per fetch, because the allowlist is wider than
+// the set of hosts a credential belongs to: mirroring fetches from github.com
+// and githubusercontent.com, and the GitHub App token belongs to neither in
+// full (021 §12). A blanket "attach to every fetch" option would hand the
+// token to whichever host the attacker-chosen URL named.
+func (f *Fetcher) WithBearer(authHosts []string, token string) *Fetcher {
+	c := *f
+	c.authHosts, c.authValue = nil, ""
+	if token != "" && len(authHosts) > 0 {
+		c.authHosts, c.authValue = authHosts, "Bearer "+token
+	}
+	return &c
 }
 
 // Get fetches url, returning its bytes and the Content-Type the origin
@@ -120,7 +152,7 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error
 	transport := f.transport()
 	defer transport.CloseIdleConnections()
 	client := &http.Client{
-		Transport: transport,
+		Transport: &authTransport{base: transport, hosts: f.authHosts, value: f.authValue},
 		Timeout:   fetchTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// via holds the requests already sent, so its length is the
@@ -154,6 +186,40 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error
 		return nil, "", fmt.Errorf("fetch %s: body exceeds %d bytes", rawURL, f.maxBytes)
 	}
 	return data, resp.Header.Get("Content-Type"), nil
+}
+
+// authTransport is the only thing that may put an Authorization header on a
+// request this package sends: it attaches the credential when the host being
+// contacted is one the credential names, and strips the header from every
+// other request. It is installed unconditionally, so the invariant holds on an
+// unauthenticated Fetcher too -- a URL carrying userinfo would otherwise have
+// http.Client synthesise a Basic header out of an attacker's own credential
+// and carry it across hops on net/http's terms rather than this package's.
+//
+// The decision belongs in a RoundTripper rather than on the outgoing request
+// because a fetch does not stay on one host. The initial URL is chosen by
+// whoever filed the issue, and can name any host the allowlist permits, which
+// is wider than any credential's scope; each redirect hop can move it again,
+// on or off scope. A RoundTripper sees every hop as its own request, so the
+// question asked is always "is *this* host one the credential names" rather
+// than "was the first one". net/http has a rule of its own here -- it drops
+// Authorization on a redirect to anything but the original host or a
+// subdomain of it -- but that rule is about a header it was handed, not about
+// which hosts a credential belongs to, and it never re-attaches.
+type authTransport struct {
+	base  http.RoundTripper
+	hosts []string
+	value string
+}
+
+func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// A RoundTripper must not modify the request it is handed.
+	r := req.Clone(req.Context())
+	r.Header.Del("Authorization")
+	if t.value != "" && hostMatches(normalizeHost(r.URL.Hostname()), t.hosts) {
+		r.Header.Set("Authorization", t.value)
+	}
+	return t.base.RoundTrip(r)
 }
 
 // transport dials through a Control hook that inspects the address the kernel
@@ -287,10 +353,21 @@ func (f *Fetcher) checkAddr(addr netip.Addr) error {
 	return nil
 }
 
-// hostAllowed matches on label boundaries: "githubusercontent.com" permits
-// user-images.githubusercontent.com and rejects evilgithubusercontent.com.
+// hostAllowed reports whether host satisfies the fetch allowlist.
 func (f *Fetcher) hostAllowed(host string) bool {
-	for _, a := range f.allowedHosts {
+	return hostMatches(host, f.allowedHosts)
+}
+
+// hostMatches matches host against a list of suffixes on label boundaries:
+// "githubusercontent.com" permits user-images.githubusercontent.com and
+// rejects evilgithubusercontent.com. Both the fetch allowlist and the
+// credential's host scope use it, so a credential can never be attached to a
+// lookalike host the allowlist would itself reject.
+func hostMatches(host string, suffixes []string) bool {
+	if host == "" {
+		return false
+	}
+	for _, a := range suffixes {
 		a = normalizeHost(a)
 		// "*.example.com" and ".example.com" are the two natural spellings
 		// of "and its subdomains", but neither equals "example.com" as a
