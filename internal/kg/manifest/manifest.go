@@ -92,10 +92,17 @@ func (m *Manifest) Match(p string) (*Component, bool) {
 	return nil, false
 }
 
-// checkGlob rejects patterns path.Match cannot evaluate, at parse time rather
-// than silently at match time.
+// checkGlob rejects patterns path.Match cannot evaluate, and patterns that
+// are structurally dead against repo-relative paths (which never start or
+// end with "/", and never contain "//"): a leading "/", a trailing "/", or a
+// "//" all produce an empty path segment, which no repo-relative path
+// segment can ever equal, so the whole pattern could never match. Rejecting
+// at parse time turns a silent stray-slash typo into an authoring error.
 func checkGlob(pattern string) error {
 	for _, seg := range strings.Split(pattern, "/") {
+		if seg == "" {
+			return fmt.Errorf("bad glob %q: empty path segment (leading/trailing/doubled slash)", pattern)
+		}
 		if seg == "**" {
 			continue
 		}
@@ -110,26 +117,57 @@ func checkGlob(pattern string) error {
 // "**" spans zero or more whole segments; any other segment follows
 // path.Match, so "*" never crosses a "/".
 func matchGlob(pattern, p string) bool {
-	return matchSegs(strings.Split(pattern, "/"), strings.Split(p, "/"))
+	pat := strings.Split(pattern, "/")
+	segs := strings.Split(p, "/")
+	// memo[i][j] caches matchSegs(pat[i:], segs[j:]); a "**" segment tries
+	// every skip length, and adjacent "**" segments can revisit the same
+	// (i, j) many times without it, which is what makes the unmemoized
+	// recursion exponential in the number of "**" segments.
+	memo := make([][]int8, len(pat)+1)
+	for i := range memo {
+		memo[i] = make([]int8, len(segs)+1)
+	}
+	return matchSegs(pat, segs, 0, 0, memo)
 }
 
-func matchSegs(pat, segs []string) bool {
-	if len(pat) == 0 {
-		return len(segs) == 0
+const (
+	memoUnknown int8 = iota
+	memoTrue
+	memoFalse
+)
+
+// matchSegs matches pat[i:] against segs[j:], memoizing on (i, j) so that
+// overlapping "**" backtracking explores each state at most once.
+func matchSegs(pat, segs []string, i, j int, memo [][]int8) bool {
+	if v := memo[i][j]; v != memoUnknown {
+		return v == memoTrue
 	}
-	if pat[0] == "**" {
-		for skip := 0; skip <= len(segs); skip++ {
-			if matchSegs(pat[1:], segs[skip:]) {
+	result := matchSegsCompute(pat, segs, i, j, memo)
+	if result {
+		memo[i][j] = memoTrue
+	} else {
+		memo[i][j] = memoFalse
+	}
+	return result
+}
+
+func matchSegsCompute(pat, segs []string, i, j int, memo [][]int8) bool {
+	if i == len(pat) {
+		return j == len(segs)
+	}
+	if pat[i] == "**" {
+		for skip := j; skip <= len(segs); skip++ {
+			if matchSegs(pat, segs, i+1, skip, memo) {
 				return true
 			}
 		}
 		return false
 	}
-	if len(segs) == 0 {
+	if j == len(segs) {
 		return false
 	}
-	if ok, err := path.Match(pat[0], segs[0]); err != nil || !ok {
+	if ok, err := path.Match(pat[i], segs[j]); err != nil || !ok {
 		return false
 	}
-	return matchSegs(pat[1:], segs[1:])
+	return matchSegs(pat, segs, i+1, j+1, memo)
 }
