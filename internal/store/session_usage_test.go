@@ -133,6 +133,38 @@ func projectRollupRows(t *testing.T, s *Store, projectID string) []rollupRow {
 	return out
 }
 
+// projectOverheadRollupRows reads project_daily_overhead_cost directly, so a
+// day dropping out of the rollup after a shrinking re-report is asserted
+// against the table itself rather than inferred from ProjectCost.
+func projectOverheadRollupRows(t *testing.T, s *Store, projectID string) []rollupRow {
+	t.Helper()
+	rows, err := s.db.Query(
+		`SELECT usage_day, cost_currency, `+usageColumns+`, cost_amount::text, unpriced_tokens
+		   FROM project_daily_overhead_cost WHERE project_id = $1
+		  ORDER BY usage_day, cost_currency`, projectID)
+	if err != nil {
+		t.Fatalf("read overhead rollup: %v", err)
+	}
+	defer rows.Close()
+
+	var out []rollupRow
+	for rows.Next() {
+		var r rollupRow
+		var day time.Time
+		if err := rows.Scan(&day, &r.Currency, &r.Tokens.Input, &r.Tokens.CacheWrite5m,
+			&r.Tokens.CacheWrite1h, &r.Tokens.CacheRead, &r.Tokens.Output,
+			&r.Cost, &r.Unpriced); err != nil {
+			t.Fatalf("scan overhead rollup row: %v", err)
+		}
+		r.Day = day.UTC().Format(time.DateOnly)
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("overhead rollup rows: %v", err)
+	}
+	return out
+}
+
 // TestEndAgentSessionRecordsPricedUsage walks one bucket all the way through:
 // stored detail, session roll-up, project rollup, and ProjectCost.
 func TestEndAgentSessionRecordsPricedUsage(t *testing.T) {
@@ -941,9 +973,89 @@ func TestProjectCostDayWithOverheadOnlyNoTaskUsage(t *testing.T) {
 	if len(report.Totals) != 1 {
 		t.Fatalf("got %d totals, want 1", len(report.Totals))
 	}
-	if report.Totals[0].Cost != report.Totals[0].OverheadCost {
-		t.Errorf("total cost %s should equal overhead cost %s (no task-side cost on this project)",
-			report.Totals[0].Cost, report.Totals[0].OverheadCost)
+	// 100*2.00 + 10*10.00 per MTok = 300 micro-USD. Asserted as an absolute
+	// value on each field rather than Cost == OverheadCost: two values
+	// derived from the same source column would pass that comparison even if
+	// a bug scaled both of them identically.
+	const wantCost = "0.000300"
+	if report.Totals[0].Cost != wantCost {
+		t.Errorf("total cost = %s, want %s", report.Totals[0].Cost, wantCost)
+	}
+	if report.Totals[0].OverheadCost != wantCost {
+		t.Errorf("total overhead cost = %s, want %s", report.Totals[0].OverheadCost, wantCost)
+	}
+}
+
+// Pins the wire-format contract at the boundary the join could break it:
+// on a day with task-attributed usage but no overhead row at all, the
+// overhead side of the join has no row to COALESCE from, and the fallback
+// literal must still render at CostDay.Cost's six-fractional-digit shape,
+// not the bare "0" a same-scale numeric zero would give.
+func TestProjectCostOverheadCostIsSixDigitsWithNoOverheadUsage(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-task")
+
+	reportUsage(t, s, lease, "sess-task", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
+	})
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadCost; got != "0.000000" {
+		t.Errorf("OverheadCost = %q, want \"0.000000\" exactly (six fractional digits)", got)
+	}
+	if len(report.Totals) != 1 {
+		t.Fatalf("got %d totals, want 1", len(report.Totals))
+	}
+	if got := report.Totals[0].OverheadCost; got != "0.000000" {
+		t.Errorf("total OverheadCost = %q, want \"0.000000\" exactly (six fractional digits)", got)
+	}
+}
+
+// A re-report that no longer covers a previously-reported day must clear
+// that day's rollup row entirely -- the distinct failure mode from a
+// same-day shrink: DELETE ... RETURNING usage_day must surface the dropped
+// day so the rollup is rebuilt to nothing for it, not left stale. Task 7's
+// hook path re-reports transcripts that can shrink to cover fewer days.
+func TestReportProjectOverheadUsageDropsRollupForDayNoLongerReported(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
+		{Day: usageDay2, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 200, Output: 20}},
+	}); err != nil {
+		t.Fatalf("first report: %v", err)
+	}
+	if got := projectOverheadRollupRows(t, s, "horndb"); len(got) != 2 {
+		t.Fatalf("got %d overhead rollup rows after first report, want 2: %+v", len(got), got)
+	}
+
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+		{Day: usageDay2, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 200, Output: 20}},
+	}); err != nil {
+		t.Fatalf("second (shrinking) report: %v", err)
+	}
+
+	rollup := projectOverheadRollupRows(t, s, "horndb")
+	if len(rollup) != 1 || rollup[0].Day != "2026-07-20" {
+		t.Fatalf("overhead rollup after re-report: got %+v, want only day 2026-07-20", rollup)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	for _, d := range report.Days {
+		if d.Day.Format(time.DateOnly) == "2026-07-19" && d.OverheadTokens.Total() != 0 {
+			t.Fatalf("day 2026-07-19 still reports overhead after being dropped from the re-report: %+v", d)
+		}
 	}
 }
 
