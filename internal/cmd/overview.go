@@ -139,6 +139,17 @@ not apply to them.`,
 				return fmt.Errorf("resolve repo from origin remote %q: %w", remote, err)
 			}
 			owner, name, _ := strings.Cut(coord, "/")
+			// The host goes into the repo instance IRI (iri.Repo), so a
+			// GitLab or self-hosted remote must not mint id/repo/github.com/…
+			// (WL-269). A hostless remote (bare owner/name) keeps the
+			// GitHub default.
+			host, err := repourl.Host(remote)
+			if err != nil {
+				return fmt.Errorf("resolve host from origin remote %q: %w", remote, err)
+			}
+			if host == "" {
+				host = "github.com"
+			}
 
 			var c *graphserver.Client
 			if !dryRun {
@@ -153,7 +164,7 @@ not apply to them.`,
 					return errors.New("no graph endpoint: set --graph-url or LODE_GRAPHSERVER_URL (or use --dry-run)")
 				}
 			}
-			out, err := runDeriveLocal(cmd.Context(), root, "github.com", owner, name, dryRun, c,
+			out, err := runDeriveLocal(cmd.Context(), root, host, owner, name, dryRun, c,
 				derive.Options{AllowEmpty: allowEmpty})
 			fmt.Fprint(cmd.OutOrStdout(), out)
 			return err

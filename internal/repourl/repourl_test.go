@@ -39,6 +39,44 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
+// TestHost covers WL-269: the host component `lode derive` puts in the repo
+// instance IRI, extracted from the same remote forms Normalize accepts.
+func TestHost(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"scp style", "git@github.com:sunstoneinstitute/worklode.git", "github.com"},
+		{"scp style no user", "github.com:sunstoneinstitute/worklode.git", "github.com"},
+		{"https", "https://github.com/sunstoneinstitute/worklode", "github.com"},
+		{"ssh with port", "ssh://git@github.com:22/sunstoneinstitute/worklode.git", "github.com"},
+		{"git+ssh", "git+ssh://git@github.com/sunstoneinstitute/worklode.git", "github.com"},
+		{"other forge", "git@git.example.com:sunstoneinstitute/worklode.git", "git.example.com"},
+		{"self-hosted gitlab", "https://gitlab.internal.example:8443/team/tool.git", "gitlab.internal.example"},
+		{"bare owner/name has no host", "sunstoneinstitute/worklode", ""},
+		{"surrounding space", "  git@github.com:sunstoneinstitute/worklode.git\n", "github.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := repourl.Host(tc.in)
+			if err != nil {
+				t.Fatalf("Host(%q): %v", tc.in, err)
+			}
+			if got != tc.want {
+				t.Fatalf("Host(%q) = %q; want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+
+	if _, err := repourl.Host(""); !errors.Is(err, repourl.ErrNotRepoURL) {
+		t.Fatalf("Host(\"\") err = %v; want ErrNotRepoURL", err)
+	}
+	if _, err := repourl.Host("https://github.com"); !errors.Is(err, repourl.ErrNotRepoURL) {
+		t.Fatalf("Host with no path err = %v; want ErrNotRepoURL", err)
+	}
+}
+
 func TestNormalizeRejects(t *testing.T) {
 	cases := []struct {
 		name string
