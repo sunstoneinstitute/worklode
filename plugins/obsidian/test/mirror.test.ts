@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyMirror,
+  deletedTaskPaths,
   desiredNotes,
   desiredPath,
   desiredTaskNotes,
@@ -19,7 +20,7 @@ import {
 } from "../src/sync/mirror";
 import { stringify as stringifyYaml } from "yaml";
 import { parseNote, SERIALIZER_VERSION } from "../src/serialize/note";
-import type { Doc, Project, TaskListDetail } from "../src/api/types";
+import type { Doc, Project, Task, TaskListDetail } from "../src/api/types";
 
 /** Renders a frontmatter object as a `---`-fenced YAML block, the shape a
  *  doc body carries its own frontmatter in (internal/model.Doc.Body: "the
@@ -79,6 +80,16 @@ function fixtureTask(overrides: Partial<TaskListDetail> = {}): TaskListDetail {
     branch: "WL-1-fix-the-thing",
     blocked: false,
     edges: { out: [], in: [] },
+    ...overrides,
+  };
+}
+
+/** A row as `GET /api/v1/tasks?deleted=true` serves it: an ordinary task
+ *  carrying the tombstone that says it is gone. */
+function fixtureDeletedTask(overrides: Partial<Task> = {}): Task {
+  return {
+    ...fixtureTask(),
+    tombstone: { deleted_at: "2026-08-17T08:00:00Z", deleted_by: "stig", justification: "seeded by mistake" },
     ...overrides,
   };
 }
@@ -388,6 +399,53 @@ describe("desiredTaskNotes", () => {
   });
 });
 
+// The other half of the incremental sync: an `updated_since` answer lists live
+// tasks only, so the deletions come from a second listing and are turned into
+// the note paths applyMirror is told to remove outright.
+describe("deletedTaskPaths", () => {
+  it("names the note of every tombstoned task", async () => {
+    const byProject = new Map([
+      ["worklode", [fixtureDeletedTask(), fixtureDeletedTask({ id: "WL-9" })]],
+      ["other", [fixtureDeletedTask({ id: "OT-3", project: "other" })]],
+    ]);
+
+    expect(deletedTaskPaths(byProject)).toEqual(
+      new Set(["worklode/tasks/WL-1.md", "worklode/tasks/WL-9.md", "other/tasks/OT-3.md"]),
+    );
+  });
+
+  // The load-bearing check. `deleted=true` is a parameter a server predating
+  // 044 does not know, and an unknown query parameter is ignored rather than
+  // refused -- so such a server answers this request with its live tasks. A
+  // tombstone is what turns "the server called this deleted" from an
+  // assumption into a claim; without it, this would empty the vault.
+  it("prunes nothing for a row that carries no tombstone", async () => {
+    const live: Task = fixtureTask();
+    const byProject = new Map([["worklode", [live, fixtureDeletedTask({ id: "WL-9" })]]]);
+
+    expect(deletedTaskPaths(byProject)).toEqual(new Set(["worklode/tasks/WL-9.md"]));
+  });
+
+  it("drops an id that is not a safe path segment", async () => {
+    const byProject = new Map([["worklode", [fixtureDeletedTask({ id: "../escape" })]]]);
+
+    expect(deletedTaskPaths(byProject)).toEqual(new Set());
+  });
+
+  // The grouping key is what the note's path was built from, so a row whose
+  // own `project` disagrees still names the file the mirror actually wrote --
+  // asking about task.project would be asking about a different file.
+  it("keys the path on the project the rows were fetched under", async () => {
+    const byProject = new Map([["worklode", [fixtureDeletedTask({ project: "elsewhere" })]]]);
+
+    expect(deletedTaskPaths(byProject)).toEqual(new Set(["worklode/tasks/WL-1.md"]));
+  });
+
+  it("is empty for a sync that asked for no deletions", async () => {
+    expect(deletedTaskPaths(new Map())).toEqual(new Set());
+  });
+});
+
 describe("applyMirror", () => {
   function fullScenario() {
     const project = fixtureProject();
@@ -596,6 +654,83 @@ describe("applyMirror", () => {
     expect(remaining).toContain("worklode/docs/WL-SPEC-1.md");
     expect(remaining).toContain("worklode/worklode.md");
     expect(remaining).toContain(`${ROOT_NAME}.md`);
+  });
+
+  // ...but a note the backbone *named* deleted is removed on that same sync.
+  // The prune flags gate the absence-means-gone inference, which an
+  // incremental sync may not make; removePaths is a fact it was told, so it
+  // applies where none of the flags do.
+  it("removes a note the backbone named deleted, on a sync that prunes nothing else", async () => {
+    const project = fixtureProject();
+    const gone = fixtureTask();
+    const changed = fixtureTask({ id: "WL-2", title: "Ship the thing", branch: "WL-2-ship-the-thing" });
+    const writer = new MapVaultWriter();
+    const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [gone, changed] }]]);
+    await applyMirror(writer, ROOT, await desiredNotes([project], byProject, ROOT_NAME, SYNCED_AT));
+
+    // WL-2 changed; WL-1 was deleted, so it is absent from the delta and
+    // present in the tombstone listing.
+    const delta = new Map([["worklode", { docs: [], tasks: [fixtureTask({ id: "WL-2", title: "Ship it" })] }]]);
+    const deleted = new Map([["worklode", [fixtureDeletedTask({ id: "WL-1" })]]]);
+    const stats = await applyMirror(writer, ROOT, await desiredTaskNotes([project], delta), {
+      pruneDocNotes: false,
+      pruneTaskNotes: false,
+      pruneOtherNotes: false,
+      removePaths: deletedTaskPaths(deleted),
+    });
+
+    expect(writer.removed).toEqual(["worklode/tasks/WL-1.md"]);
+    expect(stats.removed).toBe(1);
+    // Everything the sync did not enumerate is still untouched: the flags
+    // above are unchanged, and only the named path is exempt from them.
+    const remaining = await writer.list(ROOT);
+    expect(remaining).not.toContain("worklode/tasks/WL-1.md");
+    expect(remaining).toContain("worklode/tasks/WL-2.md");
+    expect(remaining).toContain("worklode/docs/WL-SPEC-1.md");
+    expect(remaining).toContain("worklode/worklode.md");
+    expect(remaining).toContain(`${ROOT_NAME}.md`);
+  });
+
+  // Deleted and undeleted between the two fetches: the live answer carries the
+  // note's content, the tombstone listing is the stale one, and the delete
+  // pass never looks at a desired path -- so the note is rewritten, not lost.
+  it("writes a note that is both desired and named deleted", async () => {
+    const project = fixtureProject();
+    const writer = new MapVaultWriter();
+    const delta = new Map([["worklode", { docs: [], tasks: [fixtureTask({ title: "Back from the dead" })] }]]);
+
+    const stats = await applyMirror(writer, ROOT, await desiredTaskNotes([project], delta), {
+      pruneDocNotes: false,
+      pruneTaskNotes: false,
+      pruneOtherNotes: false,
+      removePaths: deletedTaskPaths(new Map([["worklode", [fixtureDeletedTask()]]])),
+    });
+
+    expect(stats.written).toBe(1);
+    expect(stats.removed).toBe(0);
+    expect(writer.removed).toEqual([]);
+    expect(await writer.read(ROOT, "worklode/tasks/WL-1.md")).toContain("Back from the dead");
+  });
+
+  // The one exemption that outranks everything: a conflict note holds text
+  // only the user has, and the pass that would sweep it up is the same one
+  // removePaths widens.
+  it("never removes a conflict note, however it was named", async () => {
+    const project = fixtureProject();
+    const conflict = "_conflicts/worklode/WL-1 2026-08-17T14-30-00Z.md";
+    const writer = new MapVaultWriter();
+    writer.files.set(`${ROOT}/${conflict}`, "the body the user wrote");
+
+    const stats = await applyMirror(writer, ROOT, await desiredTaskNotes([project], new Map()), {
+      pruneDocNotes: false,
+      pruneTaskNotes: false,
+      pruneOtherNotes: false,
+      removePaths: new Set([conflict]),
+    });
+
+    expect(stats.removed).toBe(0);
+    expect(writer.removed).toEqual([]);
+    expect(await writer.read(ROOT, conflict)).toBe("the body the user wrote");
   });
 
   // The roll-up half: a delta cannot render the project note's counts or the

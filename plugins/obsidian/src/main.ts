@@ -6,6 +6,7 @@
 
 import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, debounce, requestUrl } from "obsidian";
 import { WorklodeApiError, WorklodeClient, type HttpTransport } from "./api/client";
+import type { Task } from "./api/types";
 import type { ProjectMembers } from "./serialize/note";
 import {
   FULL_SYNC_EVERY,
@@ -16,6 +17,7 @@ import {
 } from "./sync/incremental";
 import {
   applyMirror,
+  deletedTaskPaths,
   desiredNotes,
   desiredTaskNotes,
   foreignNotes,
@@ -213,10 +215,12 @@ export default class WorklodePlugin extends Plugin {
    *  must not stack.
    *
    *  An "incremental" run asks only for the tasks changed since the stored
-   *  watermark, writes only task notes, and deletes nothing -- see
-   *  desiredTaskNotes and MirrorOptions for why both restrictions are
-   *  required rather than an optimisation. It degrades to a full sync
-   *  whenever the watermark cannot be trusted.
+   *  watermark and writes only task notes -- see desiredTaskNotes and
+   *  MirrorOptions for why that restriction is required rather than an
+   *  optimisation. It infers no deletion from a note's absence, and instead
+   *  asks the server outright which tasks were deleted since the same
+   *  watermark. It degrades to a full sync whenever the watermark cannot be
+   *  trusted.
    *
    *  A full run with write-back enabled first pushes any locally edited task
    *  body (src/sync/writeback.ts) and renders from what the backbone answered
@@ -280,11 +284,27 @@ export default class WorklodePlugin extends Plugin {
       // enumerated. Every other failure still fails the sync.
       let docsUnavailable = false;
       const byProject = new Map<string, ProjectMembers>();
+      // The tombstoned tasks an incremental run has not seen yet, keyed by the
+      // project they were fetched under. A full run leaves this empty: it
+      // enumerates every live task and prunes what is missing from that.
+      const deleted = new Map<string, Task[]>();
       for (const project of selected) {
         if (incremental) {
           // Tasks only, and only the changed ones: an incremental run writes
           // no doc note, so fetching the documents would be wasted bytes.
-          byProject.set(project.id, { docs: [], tasks: await client.listTasks(project.id, this.state.watermark) });
+          //
+          // Two requests rather than one, because deleted=true is a switch and
+          // not an addition (044 §5): the changed live tasks to write, and the
+          // tasks deleted since the same watermark to remove. Piggybacking on
+          // the tick that already fetches makes the second request the whole
+          // cost of mirroring a deletion -- no second timer, no state of its
+          // own, and usually an empty answer.
+          const [tasks, gone] = await Promise.all([
+            client.listTasks(project.id, this.state.watermark),
+            client.listDeletedTasks(project.id, this.state.watermark),
+          ]);
+          byProject.set(project.id, { docs: [], tasks });
+          deleted.set(project.id, gone);
           continue;
         }
         const [tasks, docs] = await Promise.all([
@@ -326,9 +346,13 @@ export default class WorklodePlugin extends Plugin {
 
       const stats = incremental
         ? await applyMirror(this.writer, mountRoot, await desiredTaskNotes(selected, toRender), {
+            // Nothing is pruned by absence -- a "what changed" answer is not
+            // an inventory -- but the notes the tombstone list named are
+            // removed outright.
             pruneDocNotes: false,
             pruneTaskNotes: false,
             pruneOtherNotes: false,
+            removePaths: deletedTaskPaths(deleted),
           })
         : await applyMirror(
             this.writer,
@@ -337,7 +361,7 @@ export default class WorklodePlugin extends Plugin {
             { pruneDocNotes: !docsUnavailable, alreadyCurrent: docs?.unfetched },
           );
 
-      await this.advanceWatermark(origin, toRender);
+      await this.advanceWatermark(origin, toRender, [...deleted.values()].flat());
       this.reportSuccess(stats, docsUnavailable, incremental, writeBack, docs?.fetched ?? 0);
     } catch (err) {
       this.reportFailure(err);
@@ -407,10 +431,22 @@ export default class WorklodePlugin extends Plugin {
    *  what changed after it. It only ever moves forward -- see
    *  highestUpdatedAt -- except when the settings now point somewhere else,
    *  where the stored watermark belongs to another backbone and is dropped
-   *  rather than carried over. */
-  private async advanceWatermark(origin: string, byProject: Map<string, ProjectMembers>): Promise<void> {
+   *  rather than carried over.
+   *
+   *  The tombstoned rows count towards it as much as the live ones do: a
+   *  delete sets the row's own updated_at to the deletion instant, so a
+   *  tombstone is a position in the same history. Leaving them out would park
+   *  the watermark below a recent delete and have the server re-serve that
+   *  same tombstone on every tick. Including them is safe because both fetches
+   *  asked from the *old* watermark, so everything at or after it was in one
+   *  answer or the other. */
+  private async advanceWatermark(
+    origin: string,
+    byProject: Map<string, ProjectMembers>,
+    deleted: { updated_at: string }[] = [],
+  ): Promise<void> {
     const from = origin === this.state.origin ? this.state.watermark : "";
-    const watermark = highestUpdatedAt(from, [...byProject.values()].flatMap((m) => m.tasks));
+    const watermark = highestUpdatedAt(from, [...[...byProject.values()].flatMap((m) => m.tasks), ...deleted]);
     if (watermark === this.state.watermark && origin === this.state.origin) return;
     this.state = { watermark, origin };
     await this.saveSettings();
