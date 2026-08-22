@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -197,6 +198,37 @@ func TestReconcileRequiresAdmin(t *testing.T) {
 	nonAdmin := makeNonAdminToken(t, st, h, token)
 	if rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", nonAdmin, map[string]any{}); rec.Code != http.StatusForbidden {
 		t.Fatalf("non-admin: %d; want 403", rec.Code)
+	}
+}
+
+// TestReconcilePollSkippedWithoutApp: with no GitHub App configured the
+// endpoint still runs replay and says why polling did not happen. The poll
+// behavior itself is covered in internal/reconcile; this asserts the wiring
+// branch only.
+func TestReconcilePollSkippedWithoutApp(t *testing.T) {
+	_, h, token := newTestServer(t)
+	rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", token, map[string]any{"dry_run": true})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reconcile: %d %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Replay      json.RawMessage `json:"replay"`
+		Poll        json.RawMessage `json:"poll"`
+		PollSkipped string          `json:"poll_skipped"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(resp.Poll) != "null" || resp.PollSkipped == "" {
+		t.Fatalf("poll = %s, skipped = %q; want null + an explanation", resp.Poll, resp.PollSkipped)
+	}
+	// The skip must not take engine 1 down with it.
+	if len(resp.Replay) == 0 || string(resp.Replay) == "null" {
+		t.Fatalf("replay = %s; want engine 1 to have run anyway", resp.Replay)
+	}
+	// The reason names the config gap, not an unimplemented feature.
+	if !strings.Contains(resp.PollSkipped, "github app") {
+		t.Fatalf("poll_skipped = %q; want the missing GitHub App named", resp.PollSkipped)
 	}
 }
 

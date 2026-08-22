@@ -18,7 +18,30 @@ func newReconcileCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reconcile",
 		Short: "Repair what webhook ingestion missed",
-		Args:  cobra.NoArgs,
+		Long: `Repair what webhook ingestion missed, in two engines: replay the
+stored *.ignored events, then poll GitHub for missed PR, merge and release
+facts. Polling is skipped when the server has no GitHub App configured, and
+--task skips the replay (an ignored event's task binding is unknown before
+its apply runs, so replay cannot be task-scoped). Each engine reports its own
+section, so one being skipped or failing does not hide what the other did.
+
+--since means a different column per engine. For replay it bounds
+events.received_at — when the event arrived. For the poll it bounds
+tasks.updated_at — when the task last changed. Those diverge in exactly the
+case reconcile exists for: a task whose merge was never ingested has a stale
+updated_at, so too narrow a --since excludes the tasks most in need of
+repair. Widen it (or drop it) when hunting a known ingestion gap.
+
+The poll's "repaired" list reports what the run observed on GitHub, not what
+it changed. A task whose PRs were already recorded still appears every run,
+with the same PR numbers, so a scheduled --json consumer that alerts on a
+non-empty repaired list alerts on steady state. The counters derived from
+that list inherit the bias: worklode_reconcile_poll_repairs_total and the
+"repaired" outcome of worklode_reconcile_poll_candidates_total. What does
+track real work is the "checked" outcome of
+worklode_reconcile_poll_commit_checks_total — the commits the run had to ask
+GitHub about because nothing was recorded for them.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repo != "" && task != "" {
 				return fmt.Errorf("--repo and --task are mutually exclusive")

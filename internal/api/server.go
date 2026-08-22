@@ -35,6 +35,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
+	"github.com/sunstoneinstitute/worklode/internal/reconcile"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -237,6 +238,11 @@ type server struct {
 	// *hooks.Metrics method is nil-safe (internal/hooks/metrics.go), so
 	// callers don't need it non-nil.
 	hookMetrics *hooks.Metrics
+
+	// pollMetrics is engine 2's instrument set (internal/reconcile), used by
+	// POST /api/v1/reconcile's poll call. Set in registerRoutes alongside
+	// hookMetrics; every *reconcile.Metrics method is nil-safe.
+	pollMetrics *reconcile.Metrics
 
 	// embedder is nil unless an embedding provider is configured; recommend
 	// then runs pins-only. skillSyncer is nil unless skill sources are
@@ -533,6 +539,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	}
 	hookMetrics := hooks.NewMetrics(reg)
 	s.hookMetrics = hookMetrics
+	s.pollMetrics = reconcile.NewMetrics(reg)
 	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
