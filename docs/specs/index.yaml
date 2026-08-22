@@ -670,3 +670,11 @@ docs/specs/050-scrub-inherited-environment.md:
     sec-3: "## 3. The list"
     sec-4: "## 4. What this does not cover"
     sec-5: "## 5. Consequences"
+docs/specs/051-codex-and-amp-bindings-as-built.md:
+  sections:
+    sec-0: "## 0. Context"
+    sec-1: "## 1. Codex defines `SessionEnd`, and the adapter binds it"
+    sec-2: "## 2. Amp is a generated plugin, not a settings array"
+    sec-3: "## 3. Amp's lifecycle bindings, and the tool events left unbound"
+    sec-4: "## 4. The event map, corrected"
+    sec-5: "## 5. Work is entered through `lode next` first"
