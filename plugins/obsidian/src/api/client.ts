@@ -60,6 +60,30 @@ export class WorklodeClient {
     return this.get<{ tasks: TaskListDetail[] }>(path).then((r) => r.tasks);
   }
 
+  /**
+   * GET /api/v1/tasks?project=&deleted=true[&updated_since=]
+   *
+   * The tombstoned rows, which `deleted=true` switches the list to instead of
+   * adding to it (044 §5) -- so this answers what listTasks never can: which
+   * tasks were deleted. Each row carries a `tombstone`, and deletedTaskPaths
+   * requires one before pruning anything, because a server predating 044
+   * ignores the unknown parameter and answers with live tasks.
+   *
+   * `updatedSince` narrows it the same way it narrows listTasks: a delete sets
+   * the row's `updated_at` to the deletion instant, so passing the mirror's
+   * watermark asks for the deletes it has not seen rather than for every
+   * tombstone the backbone has ever held.
+   *
+   * No `detail=true`: nothing is rendered from these rows, only removed, so
+   * the edges and blocked flag would be two extra bulk queries spent on
+   * fields the caller drops.
+   */
+  listDeletedTasks(project: string, updatedSince?: string): Promise<Task[]> {
+    let path = `/api/v1/tasks?project=${encodeURIComponent(project)}&deleted=true`;
+    if (updatedSince) path += `&updated_since=${encodeURIComponent(updatedSince)}`;
+    return this.get<{ tasks: Task[] }>(path).then((r) => r.tasks);
+  }
+
   /** GET /api/v1/docs?project= -- the list route never serves a body (every
    *  row comes back with body: ""); GET /api/v1/docs/{id} is the one that
    *  does. */
