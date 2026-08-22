@@ -11,6 +11,17 @@ type TokenCounts struct {
 	OutputTokens       int64 `json:"output_tokens"`
 }
 
+// CostOverhead is the portion of a CostDay/CostTotals' combined figures that
+// came from usage with no task to bill to (spec 052): a main-checkout
+// orchestration session, or a worktree whose lease the reporting actor no
+// longer held. Nested under its own "overhead" key on the wire rather than
+// flattened, so its fields cannot collide with the combined totals'.
+type CostOverhead struct {
+	TokenCounts
+	CostAmount     string `json:"cost_amount"`
+	UnpricedTokens int64  `json:"unpriced_tokens"`
+}
+
 // CostDay is one day of a project's accounted usage in one currency.
 // CostAmount is a decimal string for the same reason the agent session
 // endpoints use one: numeric(14,6) does not survive a float64.
@@ -21,7 +32,8 @@ type CostDay struct {
 	CostAmount string `json:"cost_amount"`
 	// UnpricedTokens are tokens whose model had no rate on file, so
 	// CostAmount understates the bill by whatever they were worth.
-	UnpricedTokens int64 `json:"unpriced_tokens"`
+	UnpricedTokens int64        `json:"unpriced_tokens"`
+	Overhead       CostOverhead `json:"overhead"`
 }
 
 // CostTotals is the window total for one currency. Totals are per currency
@@ -30,8 +42,9 @@ type CostDay struct {
 type CostTotals struct {
 	Currency string `json:"currency"`
 	TokenCounts
-	CostAmount     string `json:"cost_amount"`
-	UnpricedTokens int64  `json:"unpriced_tokens"`
+	CostAmount     string       `json:"cost_amount"`
+	UnpricedTokens int64        `json:"unpriced_tokens"`
+	Overhead       CostOverhead `json:"overhead"`
 }
 
 // CostReport is a cost over a window: one row per day (ascending) plus
