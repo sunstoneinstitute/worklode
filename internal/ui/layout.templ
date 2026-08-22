@@ -47,6 +47,7 @@ templ Page(p PageProps) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ p.Title }</title>
 			<meta name="htmx-config" content={ htmxConfig }/>
+			<link rel="icon" type="image/svg+xml" href="/assets/logo.svg"/>
 			<link rel="stylesheet" href="/assets/app.css"/>
 		</head>
 		<body>
@@ -54,7 +55,7 @@ templ Page(p PageProps) {
 			<header class="topbar">
 				<div class="brand">
 					<span class="mark">
-						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l3 3M15 15l3 3M18 6l-3 3M9 15l-3 3" stroke="#0E1937" stroke-width="2" stroke-linecap="round"></path><circle cx="12" cy="12" r="3" fill="#0E1937"></circle></svg>
+						<img src="/assets/logo.svg" alt=""/>
 					</span>
 					worklode
 				</div>
