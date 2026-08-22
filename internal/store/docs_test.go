@@ -5333,6 +5333,57 @@ func TestDocCreateDraftReplacerSupersedesNothing(t *testing.T) {
 	}
 }
 
+// TestReplaceDocEdgesSupersedesReplacedTarget: a document-level `replaces`
+// edge can newly resolve through the repair path too, not only through
+// CreateDoc's accepted-at-create path and repointExternalEdges (WL-133) —
+// ReplaceDocEdges must run the same cascade (WL-278).
+//
+// The corpus shape here is one repointExternalEdges cannot reach on its own:
+// the replacer is tombstoned when its target arrives, so the sweep — scoped
+// to live referring documents — skips its edge. Restoring the replacer does
+// not re-sweep it, so the edge is left exactly as WL-133 describes edges
+// going stale "some other way": ReplaceDocEdges is the only pass left that
+// re-reads its frontmatter, and it owes the cascade the other two paths owe.
+func TestReplaceDocEdgesSupersedesReplacedTarget(t *testing.T) {
+	s := openDocStore(t)
+	successor := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Status: "accepted", Body: replacerBody("New", "006-old.md"),
+	})
+	if err := deleteDoc(t, s, successor.ID, "stig", "temporarily out of the corpus"); err != nil {
+		t.Fatalf("DeleteDoc(025-new): %v", err)
+	}
+
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+
+	if err := undeleteDoc(t, s, successor.ID); err != nil {
+		t.Fatalf("UndeleteDoc(025-new): %v", err)
+	}
+	before := docEdges(t, s, successor.ID)
+	want := []model.DocEdge{{Type: "replaces", ToExternal: "006-old.md"}}
+	if !slices.Equal(before, want) {
+		t.Fatalf("edges before repair = %+v, want %+v", before, want)
+	}
+	if got := docStatus(t, s, old.ID); got != "accepted" {
+		t.Fatalf("006-old status before repair = %q, want accepted", got)
+	}
+
+	if err := replaceDocEdges(t, s, successor.ID); err != nil {
+		t.Fatalf("ReplaceDocEdges(025-new): %v", err)
+	}
+	after := docEdges(t, s, successor.ID)
+	wantAfter := []model.DocEdge{{Type: "replaces", ToDoc: old.ID}}
+	if !slices.Equal(after, wantAfter) {
+		t.Fatalf("edges after repair = %+v, want %+v", after, wantAfter)
+	}
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status after repair = %q, want superseded", got)
+	}
+}
+
 // TestDocIRIRoundTrip: DocIRI renders spec 025 §4.1's project-qualified
 // subject IRI for a spec, an ADR, and a plan in the same project, and
 // DocBySubjectIRI resolves each back to its row. An unknown IRI is
