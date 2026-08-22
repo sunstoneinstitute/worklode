@@ -114,12 +114,15 @@ build.
 - **Most automatic syncs are incremental, and an incremental sync is
   partial.** It asks the server for the tasks changed since the newest
   `updated_at` it has seen (`GET /api/v1/tasks?updated_since=`) and writes
-  only task notes. Two consequences, both healed by the next full sync: a
-  task deleted from the backbone never appears in a "what changed" answer, so
-  its note stays until then — an incremental sync deletes nothing at all —
-  and the project and index notes, whose roll-ups are built from a project's
-  whole task set, are left exactly as the last full sync wrote them rather
-  than re-rendered from a partial one. A full sync runs on plugin load, on
+  only task notes. It never reads a note's absence from that answer as a
+  deletion — a "what changed" answer is not an inventory — so it asks a second
+  question in the same tick, `GET /api/v1/tasks?deleted=true&updated_since=`,
+  and removes the notes of the tasks that names. The consequence that is left,
+  healed by the next full sync: the project and index notes, whose roll-ups
+  are built from a project's whole task set, are left exactly as the last full
+  sync wrote them rather than re-rendered from a partial one — as is the note
+  of a deleted *document*, which an incremental sync neither renders nor
+  removes. A full sync runs on plugin load, on
   "Worklode: Sync now", and on every 5th automatic tick; the watermark it
   keeps lives in `data.json` (`mirrorState`) and is discarded when the base
   URL, token or mount root changes, since it means nothing against a

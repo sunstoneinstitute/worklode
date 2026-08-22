@@ -7,11 +7,15 @@ import { computeEtag } from "../serialize/note";
 export type SyncMode = "full" | "incremental";
 
 /** Automatic ticks per full sync: the 5th tick is full, the four before it
- *  incremental. An incremental sync sees no deletions and refreshes no
- *  project or index note, so the full one is what prunes a deleted task's
- *  note and corrects the roll-ups -- this is how stale either may get. Five
- *  keeps that within a handful of intervals while still saving four of every
- *  five full re-fetches. */
+ *  incremental. An incremental sync refreshes no project or index note, so the
+ *  full one is what corrects the roll-ups -- this is how stale they may get.
+ *  Five keeps that within a handful of intervals while still saving four of
+ *  every five full re-fetches.
+ *
+ *  Deletions are no longer part of that lag: an incremental sync asks for the
+ *  tombstoned tasks alongside the changed ones and prunes their notes on the
+ *  spot (deletedTaskPaths). A full sync still catches a deleted *document*,
+ *  whose note an incremental one neither renders nor removes. */
 export const FULL_SYNC_EVERY = 5;
 
 /** The mode for the nth automatic tick, counting from 1. Plugin load and the
