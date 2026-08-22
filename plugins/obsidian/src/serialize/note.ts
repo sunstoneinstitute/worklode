@@ -360,10 +360,9 @@ function splitDocFrontmatter(body: string): {
  *
  *  This detects a changed body only as far as the list row reflects one.
  *  `store.UpdateDocBody` bumps `version` for a plan but not for a draft spec
- *  or ADR, and truncates `updated_at` to the second, so two edits to one draft
- *  within the same second are indistinguishable here and the note keeps the
- *  earlier text until some other field moves. WL-285 tracks closing that on the
- *  server, which is the only side that can.
+ *  or ADR; for the latter, `updated_at` carries full sub-second precision
+ *  instead (WL-285), so two edits to one draft within the same wall-clock
+ *  second still move the etag even when neither edit changes title or issued.
  *
  *  Upgrading a vault re-renders every doc note once, since the old payload
  *  included `body: ""`. That is the intended effect: those are the notes with
