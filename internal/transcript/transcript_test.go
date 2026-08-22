@@ -41,6 +41,12 @@ func TestParse(t *testing.T) {
 		jsonl string
 		opts  Options
 		want  []Bucket
+		// wantTotalInput, when set, asserts that Input summed across every
+		// returned bucket still equals this value — the invariant spec 052 §3
+		// promises for an existing Options{Root: root} caller: cwd only
+		// splits a merged bucket into finer-grained rows, it never changes
+		// the total tokens that caller sees.
+		wantTotalInput *int64
 	}{
 		{
 			// Claude Code writes one line per content block, each repeating the
@@ -136,10 +142,29 @@ func TestParse(t *testing.T) {
 {"type":"assistant","cwd":"/tmp/.worktrees/xyz","timestamp":"2026-07-19T10:02:00Z","message":{"id":"msg_3","model":"claude-opus-5","usage":{"input_tokens":400,"output_tokens":0}}}
 {"type":"assistant","timestamp":"2026-07-19T10:03:00Z","message":{"id":"msg_4","model":"claude-opus-5","usage":{"input_tokens":8,"output_tokens":0}}}
 `,
-			want: []Bucket{{
-				Day: utcDay(2026, 7, 19), Model: "claude-opus-5", Speed: "standard",
-				Usage: Usage{Input: 11},
-			}},
+			// cwd is now part of the bucketing key (spec 052 §3), so the three
+			// kept entries — three distinct raw cwds, including the cwd-less
+			// one — land in three buckets instead of merging into one. The
+			// sibling worktree /tmp/.worktrees/xyz is still excluded by Root
+			// filtering, same as before.
+			want: []Bucket{
+				{
+					Day: utcDay(2026, 7, 19), Model: "claude-opus-5", Speed: "standard",
+					Cwd: "", Usage: Usage{Input: 8},
+				},
+				{
+					Day: utcDay(2026, 7, 19), Model: "claude-opus-5", Speed: "standard",
+					Cwd: "/tmp/.worktrees/x", Usage: Usage{Input: 1},
+				},
+				{
+					Day: utcDay(2026, 7, 19), Model: "claude-opus-5", Speed: "standard",
+					Cwd: "/tmp/.worktrees/x/sub", Usage: Usage{Input: 2},
+				},
+			},
+			// The invariant spec 052 §3 promises: an existing Options{Root:
+			// root} caller's total is unchanged by cwd-splitting — only the
+			// sibling worktree's 400 tokens are dropped by Root filtering.
+			wantTotalInput: int64Ptr(11),
 		},
 		{
 			// A transcript is appended to while the session runs, so the last
@@ -188,10 +213,22 @@ this is not json
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertBuckets(t, parseString(t, tt.jsonl, tt.opts), tt.want)
+			got := parseString(t, tt.jsonl, tt.opts)
+			assertBuckets(t, got, tt.want)
+			if tt.wantTotalInput != nil {
+				var total int64
+				for _, b := range got {
+					total += b.Usage.Input
+				}
+				if total != *tt.wantTotalInput {
+					t.Errorf("total Input across buckets = %d, want %d", total, *tt.wantTotalInput)
+				}
+			}
 		})
 	}
 }
+
+func int64Ptr(v int64) *int64 { return &v }
 
 // TestParseOrderIsDeterministic pins the output order (day, then model, then
 // speed) regardless of the order entries appear in, and across repeated runs —
@@ -251,14 +288,17 @@ const realisticTranscript = `
 var realisticWant = []Bucket{
 	{
 		Day: utcDay(2026, 7, 19), Model: "claude-haiku-4-5", Speed: "standard",
+		Cwd:   "/tmp/.worktrees/demo",
 		Usage: Usage{Input: 3, CacheWrite5m: 900, Output: 60},
 	},
 	{
 		Day: utcDay(2026, 7, 19), Model: "claude-opus-5", Speed: "fast",
+		Cwd:   "/tmp/.worktrees/demo",
 		Usage: Usage{Input: 2, CacheRead: 10235, Output: 30},
 	},
 	{
 		Day: utcDay(2026, 7, 19), Model: "claude-opus-5", Speed: "standard",
+		Cwd:   "/tmp/.worktrees/demo",
 		Usage: Usage{Input: 21, CacheWrite5m: 1700, CacheWrite1h: 8000, CacheRead: 2640, Output: 485},
 	},
 }
@@ -295,4 +335,28 @@ func TestParseFileReadsRealisticTranscript(t *testing.T) {
 		t.Fatalf("ParseFile with a foreign root: %v", err)
 	}
 	assertBuckets(t, other, nil)
+}
+
+func TestParseGroupsByCwd(t *testing.T) {
+	lines := []string{
+		`{"type":"assistant","cwd":"/repo/.worktrees/WL-1-a","timestamp":"2026-08-01T10:00:00Z","message":{"id":"m1","model":"claude-sonnet-5","usage":{"input_tokens":100,"output_tokens":10}}}`,
+		`{"type":"assistant","cwd":"/repo","timestamp":"2026-08-01T10:01:00Z","message":{"id":"m2","model":"claude-sonnet-5","usage":{"input_tokens":200,"output_tokens":20}}}`,
+	}
+	buckets, err := Parse(strings.NewReader(strings.Join(lines, "\n")), Options{})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(buckets) != 2 {
+		t.Fatalf("got %d buckets, want 2 (one per cwd): %+v", len(buckets), buckets)
+	}
+	byCwd := map[string]Bucket{}
+	for _, b := range buckets {
+		byCwd[b.Cwd] = b
+	}
+	if got := byCwd["/repo/.worktrees/WL-1-a"].Usage.Input; got != 100 {
+		t.Errorf("worktree bucket input = %d, want 100", got)
+	}
+	if got := byCwd["/repo"].Usage.Input; got != 200 {
+		t.Errorf("main-checkout bucket input = %d, want 200", got)
+	}
 }
