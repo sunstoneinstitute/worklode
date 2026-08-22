@@ -346,7 +346,10 @@ path, one review surface, one place `lode` talks to.
 - `doc_edges`: `covers`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`, section-scoped
   where the ends are sections. Both directions stored, checked for agreement (§14). Plans
   additionally take `blocks`/`blockedBy` between whole documents — the ordering edge that would
-  otherwise need a container row to attach to (§9.3).
+  otherwise need a container row to attach to (§9.3) — mirrored in `ns/` as `wl:blocksPlan`/
+  `wl:blockedByPlan` (§17): a distinct Plan→Plan pair, never a widened `wl:blocks`, so the
+  Task→Task closure stays type-homogeneous (ADR-0004) and `?t wl:dependsOn+ ?x` never walks
+  across document ordering.
 
 §4's canonical + versioned IRIs, `dcat:hasVersion` shape and `wl:lastRevisedIn` survive as
 the **projection** of this store; its named-graph publication transaction becomes an ordinary
@@ -1252,9 +1255,17 @@ is a signal that the ontology is missing one, not licence for a private extensio
 | `covers` | `wl:covers` | the spec sections a plan undertakes to realise; plans only (026 §5) |
 | `defers` | `wl:defers` | the spec sections a plan hands to a named owner; plans only (026 §5.3) |
 | `requires` / `isRequiredBy` | `dct:requires` / `dct:isRequiredBy` | dependency |
+| `blocks` / `blockedBy` | `wl:blocksPlan` / `wl:blockedByPlan` | document-level plan ordering; plans only (§5, §9.3) |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | supersession |
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | the design record this graduated from |
 | `amends` / `amendedBy` | — | doc-level amendment; see below |
+
+`blocks`/`blockedBy` is the one key whose spelling does not match its term's local name: the
+term is `wl:blocksPlan`/`wl:blockedByPlan`, not `wl:blocks`, because widening `wl:blocks` to
+Plan→Plan would break the Task→Task closure's type-homogeneity (ADR-0004) — the reason that
+pair was minted as its own property rather than reused (§17). The same spelling names a second,
+unrelated relation inside a plan's own `## Tasks` section, where a task's `blockedBy` (§9.1)
+mints `wl:blocks` between the tasks a plan accepts — the inverse mismatch, same two keys.
 
 ### 14.1 References carry the section
 
