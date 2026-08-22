@@ -565,20 +565,44 @@ screenshots would render as broken images — and §8 blocks remote `img src` ou
 would render as nothing at all.
 
 `lode inbox import` therefore **fetches every remote image reference in a body and rewrites it
-to `/blob/<hash>`**, using the same upload path as §5 and the installation's GitHub App token
-for `githubusercontent.com` and for `github.com/user-attachments/` — the path GitHub has since
-moved uploaded issue attachments to (WL-292). The second scope is deliberately a host *plus
-path prefix*, never the whole of `github.com`: that host also serves every ordinary page an
-issue body links to, and a token attached to those is a credential handed to a URL whoever
-filed the issue chose. The credential check judges the decoded, dot-segment-resolved path, so
-an encoded `..` cannot walk the scope back out to the rest of the host. Everything becomes a
-blob; nothing in a rendered body ever points off-site.
+to `/blob/<hash>`**, using the same upload path as §5. The body this operates on arrives as a
+request field on `POST /api/v1/inbox/promote` (`model.PromoteInput.Body`) — promote, not import,
+is where an issue-derived body first becomes `tasks.body` (§15 criterion 8) — not as the stored
+issue's own text. So any caller holding inbox-triage permission can name a repo and a
+githubusercontent URL and have the server fetch it credentialed, storing the bytes as a
+readable blob. What bounds that: the repo named must map to a known project, and the token used
+is that project's own installation token — never a token for a repo the caller could not
+already reach — so mirroring reaches nothing the caller's project access does not already cover.
+
+That installation token is sent only to the specific hosts an issue body's images actually come
+from: `user-images.githubusercontent.com`, `private-user-images.githubusercontent.com`,
+`raw.githubusercontent.com`, and the host-plus-path-prefix `github.com/user-attachments/` — the
+path GitHub has since moved uploaded issue attachments to (WL-292). Naming the parent domains
+instead — the whole of `github.com`, the whole of `githubusercontent.com` — would be wrong in
+both directions, deliberately avoided here:
+
+- **Narrower than `github.com`.** That host also serves every ordinary page an issue body links
+  to, and a token attached to those is a credential handed to a URL whoever filed the issue
+  chose. Only the `user-attachments` subtree carries the token; the check judges the decoded,
+  dot-segment-resolved path, so an encoded `..` cannot walk the scope back out to the rest of
+  the host.
+- **Narrower than `githubusercontent.com` as a whole.** GitHub redirects a private image's URL to
+  `objects.githubusercontent.com`, an S3-backed host that carries its auth as a signature in the
+  query string — and S3 rejects a request that carries both a query signature and an
+  `Authorization` header ("Only one auth mechanism allowed"), so a token could never work there
+  anyway. Scoping to the whole parent domain would turn a fetch that works today into a `400`.
+  `raw.githubusercontent.com` on a private repo is the case that actually needs the token; the
+  allowlist stops at the three `githubusercontent.com` hosts above, never the domain they share.
+
+Everything becomes a blob; nothing in a rendered body ever points off-site.
 
 This makes import a URL-fetching operation on attacker-influenced input, so it needs the usual
 SSRF guard:
 
 - Fetch only `https`, only from a host allowlist (`*.githubusercontent.com`,
-  `github.com`) — the import path knows exactly which host it expects.
+  `github.com`) — the import path knows exactly which host it expects. This allowlist is wider
+  than the token scope above: a public repo's images fetch unauthenticated from any host on it,
+  and only the four hosts above ever receive the installation token.
 - Resolve and check the IP before connecting, rejecting private, loopback, link-local, and
   metadata ranges, with the check applied again on every redirect hop.
 - Cap redirects at 3, the response at `maxBlobBytes`, and the whole fetch at a 30-second
