@@ -314,6 +314,66 @@ func TestCoveredSectionsReadsRetiredSpelling(t *testing.T) {
 	}
 }
 
+// TestFrontmatterDefers pins 026 §5.3: a plan's handoff of a section to a
+// named owner is a list of {spec, to} entries, with no scalar shorthand — a
+// deferral without an owner is just an uncovered section, which needs no
+// syntax.
+func TestFrontmatterDefers(t *testing.T) {
+	const src = `---
+status: accepted
+defers:
+- spec: docs/specs/025-documents-in-the-backbone.md#sec-12
+  to: docs/specs/006-knowledge-graph.md
+- spec: docs/specs/025-documents-in-the-backbone.md#sec-13
+  to: docs/plans/2026-08-10-successor.md
+---
+# A plan
+`
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	want := DeferralList{
+		{Spec: "docs/specs/025-documents-in-the-backbone.md#sec-12", To: "docs/specs/006-knowledge-graph.md"},
+		{Spec: "docs/specs/025-documents-in-the-backbone.md#sec-13", To: "docs/plans/2026-08-10-successor.md"},
+	}
+	if got := doc.Frontmatter.Defers; !reflect.DeepEqual(got, want) {
+		t.Errorf("Defers = %#v, want %#v", got, want)
+	}
+}
+
+// TestFrontmatterDefersRejectsBareScalar: a deferral without an owner is just
+// an uncovered section (026 §5.3), so unlike `covers`, `defers` has no scalar
+// shorthand — a bare reference must fail to decode rather than silently mean
+// something.
+func TestFrontmatterDefersRejectsBareScalar(t *testing.T) {
+	src := "---\ndefers: docs/specs/025-documents-in-the-backbone.md#sec-12\n---\n\n## 1. X {#sec-1}\n"
+	if _, err := Parse([]byte(src)); err == nil {
+		t.Fatal("Parse succeeded for bare scalar defers, want decode error")
+	}
+}
+
+// TestFrontmatterDefersRoundTrips confirms an untouched header carrying
+// `defers` re-renders verbatim, same as every other field (source() keeps the
+// original bytes while nothing has changed).
+func TestFrontmatterDefersRoundTrips(t *testing.T) {
+	const src = `---
+status: accepted
+defers:
+- spec: docs/specs/025-documents-in-the-backbone.md#sec-12
+  to: docs/specs/006-knowledge-graph.md
+---
+# A plan
+`
+	doc, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := string(doc.Bytes()); got != src {
+		t.Errorf("round-trip differs:\ngot:  %q\nwant: %q", got, src)
+	}
+}
+
 func TestNoFrontmatter(t *testing.T) {
 	src := "# Title\n\n## 1. X {#sec-1}\n\nBody.\n"
 	doc, err := Parse([]byte(src))
