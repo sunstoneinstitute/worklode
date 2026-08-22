@@ -118,6 +118,11 @@ nav.global a{
 }
 nav.global a:hover{background:var(--surface-2);text-decoration:none}
 nav.global a.active{color:var(--ink);background:var(--sunk);font-weight:600}
+/* Unreached: no .templ emits nav .cnt yet. Spec 032 §2 fixes the global nav
+ * destinations (Intake, Reviews, ...) each carrying a pending-item count; keep
+ * this for that markup and re-run the WCAG 1.4.3 contrast check against
+ * --sunk/--surface when it lands (the --ink-3 pairing was authored below AA
+ * once already, see WL-261). */
 nav.global a .cnt{font-size:11px;font-weight:600;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:0 6px;line-height:16px}
 nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:var(--warn-bg)}
 /* A project sidebar stacks both landmarks — Primary, then the back-link,
@@ -128,17 +133,6 @@ nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:v
 }
 .top-right{display:flex;align-items:center;gap:12px;margin-left:auto}
 
-/* prototype mode switch */
-.modeswitch{display:flex;align-items:center;gap:8px}
-.modeswitch .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);font-weight:600}
-.seg{display:flex;background:var(--sunk);border:1px solid var(--line);border-radius:9px;padding:3px}
-.seg button{
-  border:0;background:transparent;color:var(--ink-2);font-weight:600;font-size:12.5px;
-  padding:5px 11px;border-radius:6px;display:flex;align-items:center;gap:6px;line-height:1
-}
-.seg button .tag{font-size:10px;font-weight:700;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
-.seg button[aria-pressed="true"] .tag{color:var(--accent-ink);background:var(--accent);border-color:var(--accent-line)}
 .iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--control-line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center}
 .iconbtn:hover{background:var(--surface-2)}
 .iconbtn svg{width:17px;height:17px}
@@ -169,6 +163,10 @@ nav.local a:hover{background:var(--surface-2);text-decoration:none}
 nav.local a.active{background:var(--sunk);color:var(--ink);font-weight:600}
 nav.local a .ic{width:15px;height:15px;flex:0 0 auto;color:var(--ink-3)}
 nav.local a.active .ic{color:var(--ink)}
+/* Unreached: no .templ emits local nav .cnt yet. Spec 032 §2's project local
+ * nav (Crew, Work, Deliverables, Reviews, ...) carries the same pending-item
+ * counts as the global nav above; keep for that markup and re-run the WCAG
+ * 1.4.3 contrast check against --sunk/--surface when it lands. */
 nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink-3)}
 
 /* ---------- main + canvas/rail ---------- */
@@ -340,6 +338,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .field p{margin:0}
 .srclist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 
+/* Unreached: no .templ emits .rec yet. Spec 032 §5 fixes the Selection
+ * dossier's AI recommendation with its layered audit path (concise
+ * recommendation, then claims/evidence, then the immutable run record); keep
+ * for that markup and re-run the WCAG 1.4.3 contrast check when it lands. */
 .rec{background:var(--ev-rec-bg);border:1px solid color-mix(in srgb,var(--ev-rec) 30%,transparent);border-radius:10px;padding:12px 14px}
 .rec .rh{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ev-rec);font-size:12.5px;margin-bottom:6px}
 .rec .audit{display:flex;gap:14px;margin-top:10px;font-size:12px}
@@ -412,12 +414,20 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 
 .launchgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:640px){.launchgrid{grid-template-columns:1fr}.mode.active{grid-template-columns:1fr}}
+/* Unreached: no .templ emits .lct yet. Spec 032 §3's Approved launch mode
+ * confirms accountability, outputs, review requirements, working surfaces and
+ * automation authority in boxes shaped like these; keep for that markup and
+ * re-run the WCAG 1.4.3 contrast check when it lands. */
 .lct{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 13px}
 .lct .lh{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
 .crewline{display:flex;align-items:center;gap:8px;padding:5px 0}
 .crewline .avatar{width:24px;height:24px;font-size:9px}
 .crewline b{font-weight:600}
 .crewline .role{color:var(--ink-3);font-size:12px;margin-left:auto}
+/* Unreached: no .templ emits .blocker yet. Spec 032 §3 ("Incomplete launch
+ * configuration blocks only the capability that depends on it") calls for a
+ * banner like this on the Approved launch canvas; keep for that markup and
+ * re-run the WCAG 1.4.3 contrast check when it lands. */
 .blocker{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;background:var(--warn-bg);border-radius:8px;font-size:12.5px;color:var(--ink-2)}
 .blocker svg{width:15px;height:15px;color:var(--warn);flex:0 0 auto;margin-top:1px}
 
