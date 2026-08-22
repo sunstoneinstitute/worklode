@@ -138,11 +138,15 @@ kubectl kustomize deploy/overlays/admin | grep -c LODE_WEB_OPEN
 # → 0
 ```
 
-CI proof: `validate-kustomize` in `pr-checks.yml` builds every directory
-under `deploy/overlays/`, so the new overlay is covered with no workflow
-change.
+CI proof: `validate-kustomize` in `pr-checks.yml` does **not** discover
+overlays — it builds exactly the list in its `environments:` input
+(`environments: hzdev hzprod`, `pr-checks.yml:199`). Add `admin` to that
+list in the same commit, or the new overlay ships unvalidated while the
+job reports green.
 
 - [ ] `deploy/overlays/admin/` with the three files and the deltas above
+- [ ] `admin` added to `validate-kustomize`'s `environments:` list in
+      `pr-checks.yml`
 - [ ] `kubectl kustomize deploy/overlays/admin` builds; the three asserts hold
 - [ ] Commit
 
@@ -285,8 +289,9 @@ values are wrong. Delete the directory and `docs/prod-cutover.md` (§4.1 is
 remaining `hzprod` references outside `docs/specs/` and `docs/plans/` —
 after Task 3 there should be none, so this is a check, not a rewrite.
 
-- [ ] `deploy/overlays/hzprod/` deleted; `validate-kustomize` and
-      `check-overlays.sh` green
+- [ ] `deploy/overlays/hzprod/` deleted; `hzprod` removed from
+      `validate-kustomize`'s `environments:` list in `pr-checks.yml`; the
+      job and `check-overlays.sh` green
 - [ ] `docs/prod-cutover.md` deleted
 - [ ] `grep -rn hzprod --exclude-dir=docs .` shows only historical records
 - [ ] Commit
