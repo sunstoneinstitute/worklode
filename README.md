@@ -234,6 +234,44 @@ gh webhook forward --repo=sunstoneinstitute/<repo> \
 or use a [smee.io](https://smee.io) relay as the App's webhook URL and pipe
 it to the same local endpoint.
 
+## Setup checks & reconciliation
+
+Three commands answer "is this wired up, and did anything get missed" (spec
+013):
+
+- `lode doctor` — client-side setup checks: config, token, server
+  reachability, git hooks, worktree lease. It exits non-zero on any failure
+  and names the fix for each, and still reports what it can with the server
+  unreachable.
+- `lode project doctor [repo]` — per-repo webhook-ingestion health, admin
+  only: App installation, last delivery, unapplied events, and repos that
+  send webhooks but map to no project. A repo flagged `STALE` — no delivery
+  since it was mapped — is the cue to reconcile.
+- `lode reconcile [--repo X | --task Y] [--since D] [--dry-run]` — repair
+  what ingestion missed, admin only. Engine 1 replays stored `*.ignored`
+  events; engine 2 polls GitHub for missed PR, merge and release facts.
+
+```bash
+lode project doctor                       # every mapped repo
+lode reconcile --repo acme/app --dry-run  # what would be repaired
+lode reconcile --since 720h               # org-wide, last 30 days
+```
+
+Two things to know before scheduling it:
+
+- `--since` takes RFC 3339 or a Go duration and resolves against the server
+  clock, but it means a different column per engine: `events.received_at` for
+  the replay, `tasks.updated_at` for the poll. A task whose merge was never
+  ingested is exactly the one whose `updated_at` is stale, so too narrow a
+  `--since` excludes the tasks most in need of repair.
+- The poll's `repaired` list reports what the run *observed* on GitHub, not
+  what it changed — an already-current task appears in it every run. Do not
+  alert on it being non-empty; compare runs, or read the
+  `worklode_reconcile_poll_*` metrics.
+
+Polling is skipped when the server has no GitHub App configured; the run
+still replays, and says why polling did not happen.
+
 ## Flux setup
 
 Point Flux's notification-controller at `/hooks/flux` with a

@@ -81,6 +81,31 @@ type ReconcileResponse struct {
 	RunID       string        `json:"run_id"`
 	DryRun      bool          `json:"dry_run"`
 	Replay      *ReplayResult `json:"replay"`
-	Poll        any           `json:"poll"` // *PollResult once a later plan adds engine 2 to this endpoint
+	Poll        *PollResult   `json:"poll"`
 	PollSkipped string        `json:"poll_skipped,omitempty"`
+}
+
+// PollResult is one reconcile poll run's report (spec 013 engine 2). Like
+// ReplayResult it is a section of the POST /api/v1/reconcile response body,
+// so ADR 036 puts it here rather than in internal/reconcile.
+//
+// Repaired lists what the run observed about each candidate, not what it
+// changed: a task whose PRs and commits were already recorded still appears,
+// with the same PR numbers and shas every run. A scheduled --json consumer
+// that alerts on a non-empty Repaired therefore alerts on steady state.
+type PollResult struct {
+	RunID      string       `json:"run_id"`
+	DryRun     bool         `json:"dry_run"`
+	Candidates int          `json:"candidates"`
+	Repaired   []TaskRepair `json:"repaired,omitempty"`
+	Errors     []string     `json:"errors,omitempty"`
+}
+
+// TaskRepair is what the run did (or would do) for one task.
+type TaskRepair struct {
+	TaskID        string   `json:"task_id"`
+	Repo          string   `json:"repo"`
+	State         string   `json:"state"` // state before the run
+	PRsUpdated    []int64  `json:"prs_updated,omitempty"`
+	CommitsLanded []string `json:"commits_landed,omitempty"`
 }

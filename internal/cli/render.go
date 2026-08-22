@@ -593,7 +593,17 @@ func ReconcileRender(w io.Writer, resp model.ReconcileResponse) {
 	case resp.PollSkipped != "":
 		fmt.Fprintf(w, "poll: skipped (%s)\n", resp.PollSkipped)
 	case resp.Poll != nil:
-		fmt.Fprintf(w, "poll: %v\n", resp.Poll)
+		// "observed" rather than verb: a candidate line lists the facts the
+		// run found on GitHub, which for an already-current task is every
+		// fact it has. Only the dry-run wording is about intent.
+		fmt.Fprintf(w, "poll: examined %d candidate task(s)\n", resp.Poll.Candidates)
+		for _, rep := range resp.Poll.Repaired {
+			fmt.Fprintf(w, "  %s (%s, was %s): %d PR(s), %d landed commit(s)\n",
+				rep.TaskID, rep.Repo, rep.State, len(rep.PRsUpdated), len(rep.CommitsLanded))
+		}
+		for _, e := range resp.Poll.Errors {
+			fmt.Fprintf(w, "  error: %s\n", e)
+		}
 	}
 }
 

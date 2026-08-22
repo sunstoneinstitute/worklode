@@ -18,7 +18,24 @@ func newReconcileCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reconcile",
 		Short: "Repair what webhook ingestion missed",
-		Args:  cobra.NoArgs,
+		Long: `Repair what webhook ingestion missed, in two engines: replay the
+stored *.ignored events, then poll GitHub for missed PR, merge and release
+facts. Polling is skipped when the server has no GitHub App configured; the
+run reports why.
+
+--since means a different column per engine. For replay it bounds
+events.received_at — when the event arrived. For the poll it bounds
+tasks.updated_at — when the task last changed. Those diverge in exactly the
+case reconcile exists for: a task whose merge was never ingested has a stale
+updated_at, so too narrow a --since excludes the tasks most in need of
+repair. Widen it (or drop it) when hunting a known ingestion gap.
+
+The poll's "repaired" list reports what the run observed on GitHub, not what
+it changed. A task already fully recorded still appears, with the same PR
+numbers and shas every run, so a scheduled --json consumer that alerts on a
+non-empty repaired list alerts on steady state. Compare runs, or read the
+worklode_reconcile_poll_* metrics, to see actual change.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if repo != "" && task != "" {
 				return fmt.Errorf("--repo and --task are mutually exclusive")
