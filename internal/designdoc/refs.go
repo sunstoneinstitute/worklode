@@ -42,6 +42,14 @@ type Ref struct {
 // every edge and let the two disagree (025 §14).
 var ActingRels = []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"}
 
+// StoredRels is what a consumer recording (or reporting) the rows a
+// frontmatter writes actually reads: ActingRels plus `blockedBy`, the one
+// inverse spelling that is not merely a restatement. It writes no row of its
+// own — it writes the *same* `blocks` row with its two ends swapped, so plan
+// ordering can be authored from either end (025 §5). Still one row, still one
+// direction stored; only who typed it moves.
+var StoredRels = append(slices.Clone(ActingRels), "blockedBy")
+
 // refListRelOrder is the fixed order Refs walks the RefList fields, acting
 // spelling before its inverse.
 var refListRelOrder = []struct {

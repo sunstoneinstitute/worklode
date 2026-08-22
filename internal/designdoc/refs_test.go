@@ -247,8 +247,8 @@ func TestFrontmatterRefsNil(t *testing.T) {
 	}
 }
 
-// ActingRels is the set store and the importer record; the inverse spellings
-// are read back off the acting row (025 §14) and must stay out of it.
+// ActingRels is the acting-direction set; the inverse spellings are read back
+// off the acting row (025 §14) and must stay out of it.
 func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 	for _, rel := range ActingRels {
 		switch rel {
@@ -260,6 +260,24 @@ func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 		if !contains(ActingRels, rel) {
 			t.Errorf("ActingRels is missing %q", rel)
 		}
+	}
+}
+
+// StoredRels is what store and the importer read: ActingRels plus exactly one
+// inverse spelling. `blockedBy` earns its place because it writes the same
+// `blocks` row with its ends swapped (025 §5) rather than a second row; the
+// other three inverses restate a row and so write nothing.
+func TestStoredRelsIsActingRelsPlusBlockedBy(t *testing.T) {
+	for _, rel := range ActingRels {
+		if !contains(StoredRels, rel) {
+			t.Errorf("StoredRels is missing acting relation %q", rel)
+		}
+	}
+	if !contains(StoredRels, "blockedBy") {
+		t.Error("StoredRels is missing blockedBy")
+	}
+	if len(StoredRels) != len(ActingRels)+1 {
+		t.Errorf("StoredRels = %v, want ActingRels plus blockedBy only", StoredRels)
 	}
 }
 

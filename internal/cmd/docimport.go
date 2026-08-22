@@ -302,10 +302,10 @@ func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
 }
 
 // importRefs lists the frontmatter references one document would become edges
-// from: the same walk and the same acting-direction rel set the server records
-// (designdoc.ActingRels), so the dry run reports what the import will write.
+// from: the same walk and the same rel set the server records
+// (designdoc.StoredRels), so the dry run reports what the import will write.
 func importRefs(fm *designdoc.Frontmatter) []string {
-	refs := fm.RefsFor(designdoc.ActingRels...)
+	refs := fm.RefsFor(designdoc.StoredRels...)
 	out := make([]string, len(refs))
 	for i, r := range refs {
 		out[i] = r.Ref
