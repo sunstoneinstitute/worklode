@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 )
 
 // typedID matches 025 §14.3's <KEY>-<TYPE>-<n> grammar (generalized by 029
@@ -29,7 +30,9 @@ const (
 	// targetTask: a bare task number or a full task id — dispatch to
 	// runTaskShow.
 	targetTask targetKind = iota
-	// targetDoc: a SPEC or ADR shorthand — dispatch to runDocShow.
+	// targetDoc: a SPEC or ADR shorthand, or any other doc-ref shape — a
+	// path, a filename, a number form, a bare slug — dispatch to runDocShow,
+	// whose resolveDocRef owns the full grammar.
 	targetDoc
 	// targetUnshowable: a PLAN, MILE, or DEL id — a real entity kind with no
 	// show support yet (spec 029 §4).
@@ -71,6 +74,12 @@ var unshowableReason = map[string]string{
 
 // classify decides what arg names, by grammar alone — no filesystem or
 // network access, so it is table-testable without cobra or a server.
+//
+// The last arm routes every remaining doc-ref shape — a path, a filename, a
+// number-plus-slug form, a bare slug — to resolveDocRef, which owns that
+// grammar (026 §3); classify only recognizes the silhouette. A bare number
+// is checked as a task first, so `lode show 45` stays task 45 — spec 45 is
+// `--spec 45` or `WL-SPEC-45` (the grammar collision WL-129 records).
 func classify(arg string) showTarget {
 	if m := typedID.FindStringSubmatch(arg); m != nil {
 		typ := m[2]
@@ -86,8 +95,18 @@ func classify(arg string) showTarget {
 	if bareTaskNumber.MatchString(arg) || taskID.MatchString(arg) {
 		return showTarget{Kind: targetTask}
 	}
+	// Shape-match with any #fragment stripped; the fragment's own grammar is
+	// resolveDocRef's business.
+	if base, _ := designdoc.SplitFragment(arg); looksLikePath(base) || docRefShape.MatchString(base) {
+		return showTarget{Kind: targetDoc}
+	}
 	return showTarget{Kind: targetUnclassified}
 }
+
+// docRefShape is the silhouette of resolveDocRef's non-path, non-shorthand
+// forms: a lowercase slug, optionally digit-led ("025-documents-in-the-
+// backbone"). Bare digits never reach it — the task arm runs first.
+var docRefShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 // showKinds lists the valid --kind values, and the seven per-kind flags, in
 // the order the brief's surface documents them.
@@ -116,7 +135,14 @@ func newShowCmd() *cobra.Command {
 
   lode show <id>                    classify the id and dispatch (a task,
                                     a document, or an entity kind with no
-                                    show support yet)
+                                    show support yet). A document is named
+                                    by shorthand (WL-SPEC-25), slug
+                                    (design-doc-queries), number-and-slug
+                                    (025-documents-in-the-backbone), or
+                                    corpus path/filename — the same refs
+                                    the lode doc verbs resolve. A bare
+                                    number is always a task; a document by
+                                    bare number is --spec/--adr <n>.
   lode show --<kind> <ordinal>      name the kind and its bare ordinal
                                     directly, e.g. --spec 15, --task 12
   lode show --kind <K> <ordinal>    the generic form of the same thing
@@ -295,6 +321,6 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet 
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
-		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document id (WL-SPEC-25, WL-ADR-7)", arg)
+		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document ref (WL-SPEC-25, a slug, a corpus path)", arg)
 	}
 }

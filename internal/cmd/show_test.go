@@ -35,9 +35,18 @@ func TestClassify(t *testing.T) {
 		{"WL-DEL-3", targetUnshowable, "DEL"},
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
-		{"wl-12", targetUnclassified, ""},
-		{"garbage", targetUnclassified, ""},
+		// Doc-ref shapes: slugs, number forms, paths — resolveDocRef owns
+		// the grammar, classify only the silhouette, so a lowercase
+		// near-miss ("wl-12", "garbage") is a doc lookup that misses, not a
+		// grammar error here.
+		{"design-doc-queries", targetDoc, ""},
+		{"025-documents-in-the-backbone", targetDoc, ""},
+		{"docs/specs/025-documents-in-the-backbone.md", targetDoc, ""},
+		{"014-fixture.md#sec-2", targetDoc, ""},
+		{"wl-12", targetDoc, ""},
+		{"garbage", targetDoc, ""},
 		{"NO-SPEC", targetUnclassified, ""},
+		{"WL_12", targetUnclassified, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.arg, func(t *testing.T) {
@@ -244,6 +253,32 @@ func TestShowDispatchesSpecToDocShow(t *testing.T) {
 	}
 	if out != fixtureSpec {
 		t.Fatalf("show output = %q; want the fixture verbatim", out)
+	}
+}
+
+// TestShowDocBySlugAndPath covers the positional doc-ref shapes beyond the
+// typed shorthand (WL-129): a backbone slug with no number prefix, its
+// prefix, and a corpus path — all rendering the same way `lode doc get`
+// would resolve the name.
+func TestShowDocBySlugAndPath(t *testing.T) {
+	setupDocServer(t, "WL", map[string]string{
+		"014-fixture.md":    fixtureSpec,
+		"naming-fixture.md": fixtureSpec,
+	})
+
+	for _, ref := range []string{
+		"naming-fixture",            // exact slug
+		"naming",                    // slug prefix
+		"docs/specs/014-fixture.md", // corpus path
+		"014-fixture",               // number-and-slug form
+	} {
+		out, err := runLode(t, "show", ref)
+		if err != nil {
+			t.Fatalf("lode show %s: %v\noutput: %s", ref, err, out)
+		}
+		if out != fixtureSpec {
+			t.Fatalf("show %s = %q; want the fixture verbatim", ref, out)
+		}
 	}
 }
 
