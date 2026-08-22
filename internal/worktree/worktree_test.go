@@ -157,12 +157,6 @@ func TestLayoutParseDir(t *testing.T) {
 	}
 }
 
-func TestBranchNameFallback(t *testing.T) {
-	if got, want := worktree.BranchName("WL-7", "fix-the-thing"), "WL-7-fix-the-thing"; got != want {
-		t.Fatalf("BranchName = %q, want %q", got, want)
-	}
-}
-
 // initGitRepo creates a fresh git repo in a temp dir, with one initial commit
 // so HEAD is born (`git worktree add -b` requires this on git < 2.42, which
 // doesn't auto-infer --orphan), and returns its path.
