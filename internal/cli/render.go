@@ -721,6 +721,17 @@ func wrapSkillDesc(s string, width int) []string {
 	return lines
 }
 
+// SkillSyncRender prints a one-line summary of a skill sync report, then one
+// "error:" line per per-source failure (real work can still have happened
+// alongside those, per SkillSyncReport's doc comment).
+func SkillSyncRender(w io.Writer, report model.SkillSyncReport) {
+	fmt.Fprintf(w, "synced %d skill(s): %d changed, %d deleted, %d embedded\n",
+		report.Synced, report.Changed, report.Deleted, report.Embedded)
+	for _, e := range report.Errors {
+		fmt.Fprintf(w, "  error: %s\n", e)
+	}
+}
+
 // tableWidth is the column count SkillTable renders to: the terminal's when w
 // is one, else a conventional 80 so piped and captured output stays stable.
 // It does not go unlimited off-TTY the way table.flush does, because a skill
