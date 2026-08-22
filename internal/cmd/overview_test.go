@@ -48,6 +48,37 @@ components:
 	}
 }
 
+// TestDeriveRejectsForeignManifest covers WL-270: a components.yaml
+// copy-pasted from another repo must refuse to derive, naming both repos,
+// instead of minting this repo's hasPart edges onto the other repo's
+// component IRIs.
+func TestDeriveRejectsForeignManifest(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	man := `repo: github.com/acme/app
+components:
+  - iri: https://worklode.io/ns/id/component/github.com/acme/app
+    name: app
+    paths: ["**"]
+`
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "components.yaml"),
+		[]byte(man), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runDeriveLocal(t.Context(), root, "github.com", "other", "tool", true, nil, derive.Options{})
+	if err == nil {
+		t.Fatal("foreign manifest derived without complaint")
+	}
+	for _, want := range []string{"github.com/acme/app", "github.com/other/tool"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %v; want it to name %s", err, want)
+		}
+	}
+}
+
 func TestDeriveRequiresManifest(t *testing.T) {
 	_, err := runDeriveLocal(t.Context(), t.TempDir(), "github.com", "acme", "app", true, nil, derive.Options{})
 	if err == nil || !strings.Contains(err.Error(), "components.yaml") {
