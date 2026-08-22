@@ -219,6 +219,38 @@ have Docker access set up before its cache directory exists, or vice versa —
 so `build-image`'s `runs-on` requires both rather than treating either as
 implied by the other: `runs-on: ["docker","gha-buildcache"]`.
 
+## `/tmp` inode exhaustion (WL-188)
+
+`/tmp` on hel01 is a tmpfs with a fixed `nr_inodes=1048576` — `df -h /tmp`
+can report terabytes free while `df -i /tmp` is pinned at 100%, and the
+failure that follows is `ENOSPC` on whichever job happens to write next, with
+nothing in the error pointing at inodes. This bit once already (WL-147/WL-188):
+a test harness bug downloaded the Go module cache into a per-run temp `HOME`
+and failed to clean it up, and forty-six abandoned trees at ~18,000 inodes
+each exhausted the tmpfs while it still showed 100+ GB free.
+
+**Diagnose it fast**: `df -i /tmp` next to `df -h /tmp` — a huge gap between
+`Use%` on the two is this failure, not a real disk-space problem. `du --inodes
+/tmp/*` finds the offender.
+
+**Fixed at the runner level**: both `hel01` and `hel01-2` set `TMPDIR` in
+their systemd units, pointing at a directory on `/dev/md2` (real inodes, 2.9
+TB free) instead of the tmpfs — `/home/ghrunner/tmp` for `hel01`,
+`/home/ghrunner/runner2-home/tmp` for `hel01-2` (matching each runner's own
+cache-separation directory, see *Two executors* above). Any job or test
+harness that respects `TMPDIR` (Go's `os.TempDir()`, most `mktemp` usage)
+no longer touches the tmpfs at all, regardless of which repo or job leaks.
+This is scoped to the two runner services only — local dev, `docker compose`,
+and interactive shells on hel01 still share the tmpfs `/tmp`, so a bug outside
+CI can still refill it; watch for it with the `df -i` check above rather than
+assuming the tmpfs is now safe from every source.
+
+Considered and not done: raising or dropping tmpfs `nr_inodes` (treats the
+symptom, not the source, and a wrong value in either direction just moves the
+threshold); a systemd-tmpfiles aging rule on `/tmp` (host-wide blast radius
+for a runner-specific problem — worth revisiting if a non-runner source turns
+out to be the one refilling it).
+
 ## Extending self-hosted coverage
 
 `_test.yml`, `_lint.yml` and `_build-image.yml` all take a `runs-on` input
