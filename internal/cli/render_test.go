@@ -198,6 +198,34 @@ func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 	}
 }
 
+func TestSkillSyncRender(t *testing.T) {
+	var buf bytes.Buffer
+	SkillSyncRender(&buf, model.SkillSyncReport{Synced: 12, Changed: 3, Deleted: 1, Embedded: 3})
+	want := "synced 12 skill(s): 3 changed, 1 deleted, 3 embedded\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("SkillSyncRender = %q, want %q", got, want)
+	}
+}
+
+// A partial failure still reports the real work alongside the per-source
+// errors (SkillSyncReport's doc comment) — the errors must not replace the
+// counts.
+func TestSkillSyncRenderPartialFailure(t *testing.T) {
+	var buf bytes.Buffer
+	SkillSyncRender(&buf, model.SkillSyncReport{
+		Synced: 5, Changed: 2, Errors: []string{"acme/other: not installed"},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"synced 5 skill(s): 2 changed, 0 deleted, 0 embedded",
+		"  error: acme/other: not installed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 func TestTaskDetailRenderHierarchy(t *testing.T) {
 	var buf bytes.Buffer
 	TaskDetailRender(&buf, model.TaskDetail{
