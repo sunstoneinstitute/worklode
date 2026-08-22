@@ -106,3 +106,5 @@ configMapGenerator:
       - migrations/0046_participant_role_check.down.sql
       - migrations/0047_state_log_txid.up.sql
       - migrations/0047_state_log_txid.down.sql
+      - migrations/0048_project_overhead_usage.up.sql
+      - migrations/0048_project_overhead_usage.down.sql
