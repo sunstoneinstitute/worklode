@@ -13,6 +13,8 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // TaskInput carries the fields for creating a new task. Draft creates the
@@ -138,6 +140,11 @@ func allStates() []string {
 	}
 	return slices.Sorted(maps.Keys(seen))
 }
+
+// validTaskKinds mirrors the tasks.kind CHECK constraint (via ns.TaskKinds,
+// the same source the API gate uses), so a store caller cannot write a kind
+// Postgres would refuse with a raw constraint error (WL-101).
+var validTaskKinds = ns.Set(ns.TaskKinds)
 
 // containerForbiddenStates are the delivery states a task with children can
 // never occupy. They are earned by observed deploy facts about a specific
@@ -352,8 +359,11 @@ func secretsJSON(names []string) ([]byte, error) {
 // still checked). concern follows special clearing rules: "" or "none" clears
 // it to NULL; any other value must be a valid concern. A blank title is
 // rejected, mirroring CreateTask: every task keeps a title for its whole life.
-// secretNames, when non-nil, replaces the whole tasks.secrets list.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition *bool) error {
+// secretNames, when non-nil, replaces the whole tasks.secrets list. kind,
+// when non-nil, retags the task (WL-101) — validated against validKinds
+// here as well as at the API gate, so no store caller can write a kind the
+// CHECK constraint would refuse with a raw error.
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition *bool, kind *string) error {
 	if title != nil && strings.TrimSpace(*title) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
@@ -362,6 +372,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if concern != nil && *concern != "" && *concern != "none" && !ValidConcern(*concern) {
 		return fmt.Errorf("unknown concern %q: %w", *concern, ErrInvalidInput)
+	}
+	if kind != nil && !validTaskKinds[*kind] {
+		return fmt.Errorf("unknown kind %q: %w", *kind, ErrInvalidInput)
 	}
 	var sets []string
 	var args []any
@@ -394,6 +407,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if needsDecomposition != nil {
 		set("needs_decomposition", *needsDecomposition)
+	}
+	if kind != nil {
+		set("kind", *kind)
 	}
 	set("updated_at", now.UTC())
 	args = append(args, id)
