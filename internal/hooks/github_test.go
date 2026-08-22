@@ -17,6 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -317,6 +320,95 @@ func TestEmptySecretIs503(t *testing.T) {
 	rr := deliver(t, h, "issues", "d-1", "issues_opened.json")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
+	}
+}
+
+// TestFailedApplyKeepsDeliveryForReplay covers WL-247: a delivery whose
+// apply fails must answer 500 but keep its event row (applied_at NULL), so
+// the replay engine repairs it — previously the rollback took the row with
+// it and the delivery was gone. The apply failure is induced by hiding the
+// issues table for the first delivery.
+func TestFailedApplyKeepsDeliveryForReplay(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := hooks.NewMetrics(reg)
+	e := newEnvWithMetrics(t, m)
+	db := e.st.DBForTests()
+
+	if _, err := db.Exec(`ALTER TABLE issues RENAME TO issues_hidden`); err != nil {
+		t.Fatalf("hide issues table: %v", err)
+	}
+	rr := deliver(t, e.h, "issues", "d-fail", "issues_opened.json")
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("delivery with broken apply: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if _, err := db.Exec(`ALTER TABLE issues_hidden RENAME TO issues`); err != nil {
+		t.Fatalf("restore issues table: %v", err)
+	}
+
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-fail' AND applied_at IS NULL`); n != 1 {
+		t.Fatalf("unapplied event rows = %d, want 1 (the delivery must survive the failed apply)", n)
+	}
+	if got := testutil.ToFloat64(m.Events().WithLabelValues("github", "issues", "apply_failed")); got != 1 {
+		t.Fatalf("apply_failed metric = %v, want 1", got)
+	}
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 {
+		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+		t.Fatalf("issue rows after replay = %d, want 1", n)
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-fail' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("applied_at not set after replay")
+	}
+
+	// A redelivery of an already-applied event stays a duplicate no-op.
+	rr = deliver(t, e.h, "issues", "d-fail", "issues_opened.json")
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
+		t.Fatalf("redelivery after replay: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+		t.Fatalf("issue rows after redelivery = %d, want 1", n)
+	}
+}
+
+// TestFailedApplyRepairedByRedelivery covers the second remedy WL-247 opens
+// up: GitHub's manual redelivery re-runs the apply for a recorded-but-
+// unapplied delivery instead of acking duplicate and doing nothing.
+func TestFailedApplyRepairedByRedelivery(t *testing.T) {
+	e := newEnv(t)
+	db := e.st.DBForTests()
+
+	if _, err := db.Exec(`ALTER TABLE issues RENAME TO issues_hidden`); err != nil {
+		t.Fatalf("hide issues table: %v", err)
+	}
+	rr := deliver(t, e.h, "issues", "d-retry", "issues_opened.json")
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("delivery with broken apply: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if _, err := db.Exec(`ALTER TABLE issues_hidden RENAME TO issues`); err != nil {
+		t.Fatalf("restore issues table: %v", err)
+	}
+
+	rr = deliver(t, e.h, "issues", "d-retry", "issues_opened.json")
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "duplicate" {
+		t.Fatalf("redelivery: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM issues`); n != 1 {
+		t.Fatalf("issue rows after redelivery = %d, want 1 (apply must re-run)", n)
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-retry' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("applied_at not set after redelivery repair")
+	}
+	if n := e.eventCount(t); n != 1 {
+		t.Fatalf("event rows = %d, want 1", n)
 	}
 }
 
