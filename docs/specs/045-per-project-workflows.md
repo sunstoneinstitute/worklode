@@ -251,7 +251,7 @@ rule (§1.2) covers states the new definition dropped.
 
 ### 4.3 Migration {#sec-4.3}
 
-Migration `0038_project_workflows`:
+Migration `0046_project_workflows`:
 
 ```sql
 ALTER TABLE projects ADD COLUMN workflows jsonb;
@@ -289,7 +289,7 @@ render raw).
 | `DeleteTask` parking (`softdelete.go:111`) | `in_progress → ready` |
 | Ranking (`ranking.go:69`) | `WHERE t.state = 'ready'` |
 | `CreateTask` initial state (`tasks.go:168`) | `draft` / `ready` (§3) |
-| `done` endpoint (`lifecycle.go:254`) | `→ merged`; every pre-merged state has a core edge to `merged` |
+| `done` endpoint (`lifecycle.go:254`) | `→ merged`; every state `done` accepts (`ready`, `in_progress`, `in_review`) reaches it by a core edge, and `draft` keeps refusing |
 | `abandon` (`lifecycle.go:262`) | core edges to `abandoned` |
 | `reopen` + `reopenableStates` (`lifecycle.go:236`) | the core reopen edges — the set is the vocabulary's post-merged states plus `abandoned`, static because core edges span the vocabulary |
 | Hierarchy roll-up (§5.4) | parents move only among core states |
@@ -343,7 +343,8 @@ delivery").
 
 > Amends 004 §6.4, restating it workflow-independently.
 
-The state machine of a task with children is exactly the mandatory core:
+The state machine of a task with children lies entirely within the mandatory
+core:
 `draft → ready` (manual), `ready ↔ in_progress`, `in_progress → merged`,
 `in_progress → abandoned`, `merged → ready`. Every roll-up target
 (`hierarchy_resolve.go:50-60`) is a mandatory state, so **hierarchy never

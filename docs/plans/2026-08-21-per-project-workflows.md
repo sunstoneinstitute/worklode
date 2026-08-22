@@ -60,7 +60,7 @@ repoints the test at the old table's literal, kept as a test fixture).
 - [ ] store rules + validation with named-reason errors
 - [ ] equivalence test pinning builtin default == legalTransitions
 
-### Task 2 — Migration 0038 and the workflow-aware guard
+### Task 2 — Migration 0046 and the workflow-aware guard
 
 ```yaml
 kind: feature
@@ -71,7 +71,7 @@ skills:
 blockedBy: [1]
 ```
 
-Migration `0038_project_workflows`: `ALTER TABLE projects ADD COLUMN
+Migration `0046_project_workflows`: `ALTER TABLE projects ADD COLUMN
 workflows jsonb; ALTER TABLE tasks ADD COLUMN workflow text;` — down drops
 both. No backfill; `tasks_state_check` untouched.
 
