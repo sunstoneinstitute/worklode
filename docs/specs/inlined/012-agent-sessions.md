@@ -32,6 +32,15 @@ agents.
 
 ## 1. Schema
 
+> Pending `052-project-overhead-cost.md#sec-1` (not yet effective)
+
+> **Amended by spec 052 §1.** Usage with no task to bill to — a main-checkout
+> orchestration session, or a worktree this actor no longer holds the lease
+> on — is recorded in two new tables, `project_overhead_usage` and
+> `project_daily_overhead_cost`, mirroring `agent_session_usage` and
+> `project_daily_cost` but keyed to a project directly rather than through a
+> lease. Nothing below changes.
+
 One new table; `leases` is unchanged.
 
 ```sql
@@ -135,6 +144,16 @@ with a date — out of scope here; the table records what the vendor charged.
 
 ## 3. Store and API
 
+> Pending `052-project-overhead-cost.md#sec-2` (not yet effective)
+
+> **Amended by spec 052 §2.** A third store entry point,
+> `ReportProjectOverheadUsage`, and a new `POST /api/v1/projects/{id}/overhead-usage`
+> route join `TouchAgentSession`/`EndAgentSession` below — it has no lease to
+> check a holder against, since overhead usage is not attached to any lease.
+> `ProjectCost` also changes: its report becomes the combined total of
+> task-attributed and overhead spend, with overhead's own share broken out
+> alongside it. `TaskCost`, below, is unchanged.
+
 Two store functions, shaped like the existing `Claim` / `Renew` / `Release`
 family. Both resolve the active lease with `activeLeaseTx` and require the
 caller to be its holder, returning `ErrNotFound` for a non-holder — the same
@@ -207,6 +226,17 @@ Everything is named `agent-session`, never `session`: `internal/api/session.go`
 already owns "session" for web and CLI auth.
 
 ## 4. Hook wiring
+
+> Pending `052-project-overhead-cost.md#sec-3` (not yet effective)
+
+> **Amended by spec 052 §3.** The table below still names the right calls,
+> but `heartbeat`, `session-end`, and `worktree-enter`'s guard no longer
+> requires the hook's own directory to carry a task id — only that it is
+> inside a git worktree at all — so a main-checkout session reports too, with
+> every token that resolves to no task (or to a task this actor no longer
+> holds the lease on) billed as project overhead instead of dropped. The
+> other rows and rules below are unchanged; see 052 §3 for exactly which
+> handlers change and which deliberately do not.
 
 `hookrun.Payload.SessionID` already carries the value. `lode hook` gains three
 events (`heartbeat`, `worktree-enter`, `worktree-exit`) and `session-end` gains
