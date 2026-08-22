@@ -1420,3 +1420,71 @@ func TestSubmitDoc(t *testing.T) {
 		t.Errorf("non-numeric id status = %d, want 400", rr.Code)
 	}
 }
+
+// TestCreateDocRecordsAuthoringTask covers 025 §12: the document a task wrote
+// points back at that task, so "which task produced this spec?" is answerable.
+// Both halves are checked, because both are the design: a create carrying the
+// caller's worktree task records it, and a create carrying none is a document
+// with no authoring task rather than a refusal (migration 0044).
+func TestCreateDocRecordsAuthoringTask(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Write spec 025", "kind": "design",
+		"priority": "medium",
+	})
+	taskID, _ := task["id"].(string)
+	if taskID == "" {
+		t.Fatalf("task = %v, want one with an id", task)
+	}
+
+	authored := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x",
+		Body: docSpecBody, GeneratedByTask: taskID,
+	})
+	if authored.GeneratedByTask != taskID {
+		t.Errorf("generated_by_task = %q, want %q", authored.GeneratedByTask, taskID)
+	}
+
+	// Read back, not just echoed from the create response: the column is what
+	// answers the question later.
+	rr := doReq(t, h, "GET", docPath(authored.ID, ""), token, nil)
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if detail.GeneratedByTask != taskID {
+		t.Errorf("detail generated_by_task = %q, want %q", detail.GeneratedByTask, taskID)
+	}
+
+	// The event log carries it too, inside the recorded request — provenance
+	// survives even if the row is later tombstoned.
+	events := pollEvents(t, h, token, "?type=doc.created", 1)
+	payload := eventPayload(t, events[0].(map[string]any))
+	req, _ := payload["request"].(map[string]any)
+	if req["generated_by_task"] != taskID {
+		t.Errorf("doc.created payload request = %v, want generated_by_task %q", req, taskID)
+	}
+
+	// No worktree, no authoring task, and the create still lands: a human in
+	// the cockpit and an agent working ad hoc both author documents.
+	unauthored := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "adr", Number: 51, Slug: "051-x", Body: docSpecBody,
+	})
+	if unauthored.GeneratedByTask != "" {
+		t.Errorf("generated_by_task = %q, want empty for a create carrying no task",
+			unauthored.GeneratedByTask)
+	}
+
+	// A worktree can outlive the task it was named for, so the id is checked
+	// rather than reaching the caller as an anonymous constraint failure.
+	rr = doReq(t, h, "POST", "/api/v1/docs", token, map[string]any{
+		"project": "proj", "kind": "spec", "number": 26, "slug": "026-x",
+		"body": docSpecBody, "generated_by_task": "WL-9999",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown authoring task status = %d, want 422, body %s", rr.Code, rr.Body.String())
+	}
+	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "WL-9999") {
+		t.Errorf("error = %q, want it to name the task", msg)
+	}
+}

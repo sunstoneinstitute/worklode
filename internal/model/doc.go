@@ -8,20 +8,26 @@ import "time"
 // "" when unset, the body being the authority for it as for Title; Assignee
 // defaults to the creator and is what the accept gate checks.
 type Doc struct {
-	ID        int64     `json:"id"`
-	Project   string    `json:"project"`
-	Kind      string    `json:"kind"`   // spec | adr | plan
-	Number    int       `json:"number"` // 0 for plans
-	Slug      string    `json:"slug"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"` // the full markdown, frontmatter included
-	Status    string    `json:"status"`
-	Version   int       `json:"version"`
-	Issued    string    `json:"issued"` // YYYY-MM-DD, "" when unset
-	Assignee  string    `json:"assignee"`
-	CreatedBy string    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        int64  `json:"id"`
+	Project   string `json:"project"`
+	Kind      string `json:"kind"`   // spec | adr | plan
+	Number    int    `json:"number"` // 0 for plans
+	Slug      string `json:"slug"`
+	Title     string `json:"title"`
+	Body      string `json:"body"` // the full markdown, frontmatter included
+	Status    string `json:"status"`
+	Version   int    `json:"version"`
+	Issued    string `json:"issued"` // YYYY-MM-DD, "" when unset
+	Assignee  string `json:"assignee"`
+	CreatedBy string `json:"created_by"`
+	// GeneratedByTask is the task that authored this document (025 §12,
+	// projected as prov:wasGeneratedBy), "" when no task did — a cockpit
+	// author, an agent outside a claimed worktree, a corpus import. Distinct
+	// from CreatedBy, which names the actor rather than the unit of work, and
+	// set once at create: revising a document does not change who wrote it.
+	GeneratedByTask string    `json:"generated_by_task"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 	// Tombstone carries the delete record (044 §2) and is nil on a live
 	// document. See Task.Tombstone.
 	Tombstone *Tombstone `json:"tombstone,omitempty"`
@@ -101,6 +107,11 @@ type CreateDocInput struct {
 	Body     string `json:"body"`
 	Assignee string `json:"assignee,omitempty"`
 	Status   string `json:"status,omitempty"`
+	// GeneratedByTask names the task authoring the document (025 §12). The
+	// CLI fills it from the worktree lease it is standing in; it is omitted
+	// when the caller is bound to no task, which leaves the document with no
+	// authoring task rather than refusing the create.
+	GeneratedByTask string `json:"generated_by_task,omitempty"`
 }
 
 // UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and

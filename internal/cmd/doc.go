@@ -106,8 +106,13 @@ func newDocNewCmd() *cobra.Command {
 			if sc.Project == "" {
 				return errNoProject
 			}
+			// The task this document is being written under (025 §12). Empty
+			// outside a bound worktree, which records no authoring task
+			// rather than refusing the create — a human in the cockpit and an
+			// agent working ad hoc both author documents legitimately.
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
 				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Assignee: assignee,
+				GeneratedByTask: currentTaskID(),
 			})
 			if err != nil {
 				return err

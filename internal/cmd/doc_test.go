@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // docTestBody is a minimal well-formed document: an H1 title and no
@@ -693,5 +694,46 @@ func TestDocAnchorsMissingFile(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("err = nil, want the read to fail")
+	}
+}
+
+// TestDocNewRecordsWorktreeTask walks the whole chain 025 §12 needs: `lode
+// next` binds a worktree to a task, and a `lode doc new` run from inside that
+// worktree records the binding on the document. The CLI reads the task the
+// same way every other worktree-aware command does, so claiming into a
+// worktree is the only setup a document author does.
+func TestDocNewRecordsWorktreeTask(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Write the spec")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+	if out, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v\noutput: %s", err, out)
+	}
+	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-write-the-spec"))
+
+	file := writeDocFile(t, docTestBody)
+	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "1", "--slug", "test-spec", "--file", file, "--json")
+	if err != nil {
+		t.Fatalf("doc new: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out).GeneratedByTask; got != task.ID {
+		t.Errorf("generated_by_task = %q, want %q: a document written under a "+
+			"leased worktree records the task that wrote it", got, task.ID)
+	}
+
+	// The same command outside any worktree records no task and still creates
+	// the document — an ad hoc author is not refused (migration 0044).
+	t.Chdir(t.TempDir())
+	out, err = runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+		"--number", "1", "--slug", "test-adr", "--file", file, "--json")
+	if err != nil {
+		t.Fatalf("doc new outside a worktree: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out).GeneratedByTask; got != "" {
+		t.Errorf("generated_by_task = %q, want empty outside a bound worktree", got)
 	}
 }

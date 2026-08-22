@@ -158,6 +158,11 @@ export interface Doc {
   issued: string; // YYYY-MM-DD, "" when unset
   assignee: string;
   created_by: string;
+  /** The task that authored the document (025 §12, projected as
+   *  prov:wasGeneratedBy); "" when no task did -- a cockpit author, an agent
+   *  outside a claimed worktree, a corpus import. Distinct from created_by,
+   *  which names the actor rather than the unit of work. */
+  generated_by_task: string;
   created_at: string;
   updated_at: string;
   tombstone?: Tombstone;
