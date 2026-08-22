@@ -212,7 +212,10 @@ page lists both directions of both edges ("Follow-up to", "Follow-ups", "Duplica
 > commit horizon so the log is totally ordered; `event_subscribers` rows
 > give it offset-tracked, at-least-once subscribers, and
 > `GET /api/v1/events/stream` serves it live. The log stops being
-> write-only.
+> write-only. `state_log` gains the same `txid xid8` and commit horizon
+> (WL-119): `graph_projection.last_txid` replaces `last_state_log_id` so the
+> graph projector's watermark, like the event log's since 0021, only ever
+> advances past committed rows.
 
 ```sql
 CREATE TABLE events (
