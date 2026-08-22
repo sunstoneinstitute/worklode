@@ -1,6 +1,6 @@
 ---
 name: worklode-lode-plugin
-description: Use when working in plugins/ — the /lode:* slash commands, the lode-worker agent, and the plugin marketplace. Triggers: "add a slash command", "a new /lode: command", "the lode plugin", "disable-model-invocation", "plugin marketplace", "marketplace.json", "the codex plugin", "sync-codex-marketplace", "plugin install". Also use after changing the lode CLI — "renamed a lode command", "removed a flag", "changed --json output", "TestAgentSurfaces failed", "the skills reference a command that no longer exists" — because the plugin skills hardcode invocations. Not for implementing the Go CLI itself.
+description: Use when working in plugins/claude/lode/ or its marketplace mirrors — the /lode:* slash commands, the lode-worker agent, and the plugin marketplace. Triggers: "add a slash command", "a new /lode: command", "the lode plugin", "disable-model-invocation", "plugin marketplace", "marketplace.json", "the codex plugin", "sync-codex-marketplace", "plugin install". Also use after changing the lode CLI — "renamed a lode command", "removed a flag", "changed --json output", "TestAgentSurfaces failed", "the skills reference a command that no longer exists" — because the plugin skills hardcode invocations. Not for implementing the Go CLI itself or the Obsidian plugin in plugins/obsidian/.
 ---
 
 # The lode plugin
@@ -16,6 +16,14 @@ set `disable-model-invocation: true`, so they are reachable only as the slash
 commands `/lode:next` and friends; `working-under-worklode` stays
 model-invocable — it is the done/block/release judgment loop a worktree session
 loads on its own.
+
+`worklode` is a different shape again: a model-invocable orientation reference
+(entities, edges, the task state machine, the doc model, the full command
+catalog) meant to be pasted, as a pointer, into the CLAUDE.md of *any* project
+this instance of Worklode manages — not just this repo. Its
+`references/commands.md` is generated (`internal/cmd/commandref_test.go`), so a
+CLI change that adds or removes a command or flag fails `make test` on its own
+rather than rotting silently, the same shape as the Codex mirror below.
 
 ## Marketplace
 

@@ -94,6 +94,9 @@ func PlanTasks(d *Document) ([]PlanTask, error) {
 	if err := checkPlanTaskNumbering(defs); err != nil {
 		return nil, err
 	}
+	if err := checkPlanTaskTitles(defs); err != nil {
+		return nil, err
+	}
 	if err := checkPlanTaskBlockedBy(defs); err != nil {
 		return nil, err
 	}
@@ -225,6 +228,25 @@ func checkPlanTaskNumbering(defs []PlanTask) error {
 				"task numbers must run 1, 2, 3… in document order without gaps: "+
 					"task %q is number %d, want %d", def.Title, def.Number, i+1)
 		}
+	}
+	return nil
+}
+
+// checkPlanTaskTitles enforces that no two declarations in one plan share a
+// title. The title is a declaration's identity across a re-accept (025 §9.2):
+// it is what the minted task records, and what says whether a declaration
+// already has a row. Two declarations spelled the same way would have one
+// identity between them, so the ambiguity is refused at the parse rather than
+// resolved by a coin flip at the mint.
+func checkPlanTaskTitles(defs []PlanTask) error {
+	seen := make(map[string]int, len(defs))
+	for _, def := range defs {
+		if first, dup := seen[def.Title]; dup {
+			return fmt.Errorf(
+				"tasks %d and %d share the title %q: a title is a task declaration's identity across a re-accept (025 §9.2)",
+				first, def.Number, def.Title)
+		}
+		seen[def.Title] = def.Number
 	}
 	return nil
 }

@@ -67,6 +67,30 @@ func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root st
 	return taskID, root, nil
 }
 
+// currentTaskID is resolveWorktreeTask's answer-or-nothing form: the task the
+// working directory's worktree is bound to, or "" when the caller is not in a
+// bound worktree — not inside a repo, not under the worktree base, no
+// binding. Every failure is the same answer because the caller is a command
+// for which task context is provenance it records if it has it, not a
+// precondition it enforces: `lode doc new` run from a plain checkout still
+// creates the document (025 §12, migration 0044). Commands that genuinely
+// need the binding use resolveWorktreeTask and get its diagnosis.
+func currentTaskID() string {
+	dir, err := workingDir()
+	if err != nil {
+		return ""
+	}
+	l, err := layoutFrom(dir)
+	if err != nil {
+		return ""
+	}
+	taskID, _, err := resolveWorktreeTask(l, dir, "")
+	if err != nil {
+		return ""
+	}
+	return taskID
+}
+
 // unboundHelp renders the two ways out of an unbound checkout: say which task,
 // or claim one into a worktree that carries the binding. The description
 // column is sized to the widest form so a long one (`lode task block <id>
@@ -201,17 +225,6 @@ func newNextCmd() *cobra.Command {
 	return cmd
 }
 
-// slugFromBranch recovers the slug from a "<prefix><id>-<slug>" branch
-// without assuming the prefix. The first "<id>-" is the prefix-adjacent one,
-// so a slug that repeats the task id stays intact. Falls back to branch
-// itself if id is absent.
-func slugFromBranch(branch, id string) string {
-	if i := strings.Index(branch, id+"-"); i >= 0 {
-		return branch[i+len(id)+1:]
-	}
-	return branch
-}
-
 func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, strictFocus bool) error {
 	warnDeprecatedTaskKind(cmd, kind)
 	c, cfg, err := newAPIClientWithConfig()
@@ -247,7 +260,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 
 	// The server is the authority on the branch name (rendered from
 	// LODE_BRANCH_TEMPLATE), so both paths take it from the claim response.
-	var taskID, slug, branch string
+	// An empty branch is a server bug, not something to paper over
+	// client-side: a fallback here could place the worktree at a path the
+	// server does not agree with.
+	var taskID, branch string
 	switch {
 	case id != "":
 		resp, _, err := c.ClaimTask(ctx, id, pending, 0)
@@ -256,7 +272,6 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		}
 		taskID = id
 		branch = resp.Branch
-		slug = slugFromBranch(resp.Branch, id)
 	default:
 		sc, err := resolveScope(ctx, cmd, c, cfg, scope)
 		if err != nil {
@@ -270,11 +285,11 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 			return printNoReadyTask(cmd)
 		}
 		taskID = resp.Task.ID
-		slug = resp.Task.Slug
 		branch = resp.Task.Branch
 	}
 	if branch == "" {
-		branch = worktree.BranchName(taskID, slug)
+		rollbackClaim(ctx, c, taskID, root, "")
+		return fmt.Errorf("server returned no branch name for %s", taskID)
 	}
 
 	dir := layout.Dir(root, branch)
@@ -286,6 +301,14 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 	if err := addWorktree(root, dir, branch); err != nil {
 		rollbackClaim(ctx, c, taskID, root, dir)
 		return fmt.Errorf("set up worktree for %s: %w", taskID, err)
+	}
+
+	// Printed as soon as the worktree exists, not only on full success — a
+	// later failure (e.g. the brief fetch) rolls the worktree back via
+	// rollbackClaim, and the operator should still see where it was before
+	// that happened.
+	if !jsonOut(cmd) {
+		fmt.Fprintf(cmd.OutOrStdout(), "worktree: %s\n", dir)
 	}
 
 	if err := worktree.SetTaskID(dir, taskID); err != nil {

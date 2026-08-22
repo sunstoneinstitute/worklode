@@ -500,6 +500,86 @@ func TestPreCommitIgnoresStampedWorktreeOutsideTheBase(t *testing.T) {
 
 // --- session-start emits additionalContext ----------------------------------
 
+// TestSessionStartOutputPerHarness covers WL-287 and WL-303: the brief
+// reaches stdout in the shape each harness consumes — plain text for Amp (its
+// plugin replays stdout as the first-turn context message), the JSON envelope
+// for Claude Code and for Codex (verified against codex-cli 0.147.0, whose
+// session-start.command.output schema is the same two fields), and nothing
+// for Copilot, whose documented envelope is a different shape and stays
+// unshipped until it can be verified (ADR 051 §6).
+func TestSessionStartOutputPerHarness(t *testing.T) {
+	_, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Harness brief")
+
+	run := func(harness, sessionID string) string {
+		t.Helper()
+		var outBuf, errBuf bytes.Buffer
+		code := Run(context.Background(), Options{
+			Event:   "session-start",
+			Harness: harness,
+			Stdin: bytes.NewReader(payloadJSON(t, Payload{
+				Cwd: wtDir, SessionID: sessionID, HookEventName: "SessionStart"})),
+			Stdout: &outBuf,
+			Stderr: &errBuf,
+		})
+		if code != 0 {
+			t.Fatalf("session-start --harness %s exit = %d (stderr: %s)", harness, code, errBuf.String())
+		}
+		return outBuf.String()
+	}
+
+	amp := run("amp", "s-amp")
+	if strings.Contains(amp, "hookSpecificOutput") {
+		t.Fatalf("amp stdout is the Claude envelope, want plain text: %q", amp)
+	}
+	if !strings.Contains(amp, taskID) || !strings.Contains(amp, "Harness brief") {
+		t.Fatalf("amp stdout missing the brief: %q", amp)
+	}
+
+	if out := run("copilot", "s-copilot"); out != "" {
+		t.Fatalf("copilot stdout = %q, want empty (no verified consumer)", out)
+	}
+
+	// Codex parses stdout against session-start.command.output, which sets
+	// additionalProperties:false at both levels and drops the context
+	// entirely when JSON-looking stdout fails to parse. So assert the exact
+	// key set, not just that the brief is somewhere in there: an extra key
+	// is not a cosmetic diff, it silently costs Codex the whole brief.
+	var codex map[string]any
+	codexOut := run("codex", "s-codex")
+	if err := json.Unmarshal([]byte(codexOut), &codex); err != nil {
+		t.Fatalf("codex stdout is not valid JSON: %v\nstdout: %s", err, codexOut)
+	}
+	if len(codex) != 1 {
+		t.Fatalf("codex envelope top-level keys = %v, want only hookSpecificOutput", keysOf(codex))
+	}
+	hso, ok := codex["hookSpecificOutput"].(map[string]any)
+	if !ok {
+		t.Fatalf("codex envelope has no hookSpecificOutput object: %s", codexOut)
+	}
+	if len(hso) != 2 {
+		t.Fatalf("codex hookSpecificOutput keys = %v, want exactly hookEventName and additionalContext", keysOf(hso))
+	}
+	if hso["hookEventName"] != "SessionStart" {
+		t.Fatalf("codex hookEventName = %v, want SessionStart", hso["hookEventName"])
+	}
+	ctx, _ := hso["additionalContext"].(string)
+	if !strings.Contains(ctx, taskID) || !strings.Contains(ctx, "Harness brief") {
+		t.Fatalf("codex additionalContext missing the brief: %q", ctx)
+	}
+}
+
+// keysOf names a map's keys for a failure message.
+func keysOf(m map[string]any) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	slices.Sort(ks)
+	return ks
+}
+
 func TestSessionStartEmitsAdditionalContext(t *testing.T) {
 	_, c, _ := newRealServer(t)
 	root := initGitRepo(t)

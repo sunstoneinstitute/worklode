@@ -52,6 +52,7 @@ func open(why string) routeGuard { return routeGuard{perm: permPublic, public: w
 var routeGuards = map[string]routeGuard{
 	// --- web UI (spec 032) ---------------------------------------------------
 	"GET /{$}":                            guarded(permWebRead),
+	"GET /ideas":                          guarded(permWebRead),
 	"GET /intake":                         guarded(permWebRead),
 	"GET /projects":                       guarded(permWebRead),
 	"GET /projects/{id}":                  guarded(permWebRead),
@@ -63,6 +64,8 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
 	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
 	"POST /projects/{id}/tasks":           guarded(permWebWrite),
+	"POST /preview":                       guarded(permWebWrite),
+	"POST /dictate":                       guarded(permWebWrite),
 	"GET /projects/{id}/{section}":        guarded(permWebRead),
 	"GET /work":                           guarded(permWebRead),
 	"GET /reviews":                        guarded(permWebRead),
@@ -71,6 +74,8 @@ var routeGuards = map[string]routeGuard{
 	"GET /tasks/{id}":                     guarded(permWebRead),
 	"GET /docs":                           guarded(permWebRead),
 	"GET /docs/{id}":                      guarded(permWebRead),
+	"GET /docs/ref/{ref...}":              guarded(permWebRead),
+	"GET /drift":                          guarded(permWebRead),
 	// The cockpit's one decision act (029 §7.3). permApprovalDecide rather
 	// than permWebWrite: deciding an approval is a different capability from
 	// filing a task through a form, and the route is additionally gated by
@@ -84,6 +89,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /auth/callback":          open("finishes the login flow"),
 	"POST /hooks/github":          open("authenticated by HMAC signature, not by an actor"),
 	"POST /hooks/flux":            open("authenticated by HMAC signature, not by an actor"),
+	"POST /hooks/catalog":         open("authenticated by HMAC signature, not by an actor"),
 	"GET /auth/oidc/config":       open("issuer discovery the CLI needs before it can log in"),
 	"POST /auth/oidc/token":       open("exchanges a verified Keycloak ID token for a wl_ token"),
 	"GET /.well-known/lode-login": open("login-endpoint discovery, by definition pre-login"),
@@ -145,6 +151,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/accept":          guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revise":          guarded(permDocWrite),
 	"PUT /api/v1/docs/{id}/revision":         guarded(permDocWrite),
+	"DELETE /api/v1/docs/{id}/revision":      guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revision/accept": guarded(permDocWrite),
 	// The document half of 044 §5; see the task entries above.
 	"DELETE /api/v1/docs/{id}":        guarded(permDocWrite),
@@ -228,6 +235,18 @@ var routeGuards = map[string]routeGuard{
 	// --- reconciliation (spec 013) ---------------------------------------------
 	"GET /api/v1/repos/doctor": guarded(permReconcile),
 	"POST /api/v1/reconcile":   guarded(permReconcile),
+
+	// --- drift & overview (spec 007) ------------------------------------------
+	// One permission for all five reads: they are one screen's worth of the
+	// same picture, and an actor who may see the frontier may see what is
+	// drifting from it.
+	"GET /api/v1/overview":      guarded(permOverviewRead),
+	"GET /api/v1/drift":         guarded(permOverviewRead),
+	"GET /api/v1/gaps":          guarded(permOverviewRead),
+	"GET /api/v1/frontier":      guarded(permOverviewRead),
+	"GET /api/v1/critical-path": guarded(permOverviewRead),
+	// The one write on this surface, and admin-only; see permDeriveRun.
+	"POST /api/v1/derive": guarded(permDeriveRun),
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which

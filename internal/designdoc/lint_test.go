@@ -50,3 +50,15 @@ func TestLintAnchors(t *testing.T) {
 		})
 	}
 }
+
+func TestValidAnchor(t *testing.T) {
+	for a, want := range map[string]bool{
+		"sec-2.1": true, "sec-2.1a": true, "sec-purpose": true, "sec-4-1": true,
+		"2.1": false, "sec-": false, "sec-Ü": false, "SEC-1": false,
+		"": false, "sec-A": false, "sec-a b": false, "sec-.1": false,
+	} {
+		if got := ValidAnchor(a); got != want {
+			t.Errorf("ValidAnchor(%q) = %v; want %v", a, got, want)
+		}
+	}
+}

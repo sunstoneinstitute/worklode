@@ -146,6 +146,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 		"GET /auth/oidc/config",
 		"POST /auth/cli/token",
 		"POST /auth/oidc/token",
+		"POST /hooks/catalog",
 		"POST /hooks/flux",
 		"POST /hooks/github",
 	}
@@ -170,12 +171,13 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 
 // TestNoWriteRouteIsPublic is a blunter cross-check on the same surface: a
 // route that mutates state must never be reachable without either an actor or
-// a signature. The two signed webhooks and the two login-flow POSTs are the
+// a signature. The three signed webhooks and the two login-flow POSTs are the
 // enumerated exceptions, each of which authenticates by other means.
 func TestNoWriteRouteIsPublic(t *testing.T) {
 	signedOrLogin := map[string]bool{
 		"POST /hooks/github":    true, // HMAC
 		"POST /hooks/flux":      true, // HMAC
+		"POST /hooks/catalog":   true, // HMAC
 		"POST /auth/oidc/token": true, // verifies a Keycloak ID token
 		"POST /auth/cli/token":  true, // redeems a one-time code
 	}

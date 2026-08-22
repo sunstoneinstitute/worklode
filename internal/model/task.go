@@ -100,6 +100,16 @@ type EditTaskInput struct {
 	// Secrets, when non-nil, replaces the task's declared secret names
 	// wholesale (spec 017).
 	Secrets *[]string `json:"secrets"`
+	// Kind, when non-nil, retags the task (WL-101): validated against the
+	// same kind set creation uses, deprecated aliases normalised the same
+	// way.
+	Kind *string `json:"kind"`
+	// Artifacts, when non-nil, declares each listed catalog address as
+	// verified-by for this task (spec 029 §3.1), which is what routes a
+	// /hooks/catalog delivery to it. Declarations are additive and
+	// idempotent — an entity may hold several addresses, and there is no
+	// undeclare surface yet.
+	Artifacts *[]string `json:"artifacts"`
 }
 
 // EdgeInput is the request body for adding or removing a task edge

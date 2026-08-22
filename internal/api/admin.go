@@ -27,6 +27,11 @@ var validActorKinds = map[string]bool{
 // get a clean 422 instead of a raw constraint violation.
 var projectKeyRe = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,9}$`)
 
+// reservedProjectKeys are the <TYPE> tokens of the <PROJECTKEY>-<TYPE>-<n>
+// document shorthand (025 §14.3). The same CHECK constraint rejects them; this
+// mirrors it for a clean 422.
+var reservedProjectKeys = map[string]bool{"SPEC": true, "ADR": true}
+
 // --- projects ---------------------------------------------------------
 
 // toProjectJSON builds the wire form of a project, normalizing nil repo and
@@ -61,6 +66,11 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	if !projectKeyRe.MatchString(req.Key) {
 		writeErr(w, http.StatusUnprocessableEntity,
 			"key must be an uppercase code matching ^[A-Z][A-Z0-9]{1,9}$")
+		return
+	}
+	if reservedProjectKeys[req.Key] {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"key SPEC and ADR are reserved by the document shorthand (025 §14.3)")
 		return
 	}
 	if err := s.st.CreateProject(r.Context(), req.ID, req.Name, req.Key); err != nil {
@@ -551,7 +561,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	// provenance record disagree with tasks.body, and any replay of it would
 	// undo the mirroring. Deliberately outside recordEvent: this fetches over
 	// the network, and a slow origin must never hold a database lock.
-	req.Body = s.mirrorRemoteImages(r.Context(), req.Body)
+	req.Body = s.mirrorRemoteImages(r.Context(), req.Repo, req.Body)
 
 	var created *model.Task
 	err = s.recordEvent(r.Context(), "cli", "issue.promoted", req,

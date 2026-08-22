@@ -18,7 +18,9 @@ materialized into the OS keystore at claim time; you never see or handle them.
   access to it — there is no PR to open and no repo file to edit, so do not
   attempt it yourself. Mint a task and block, per "Executing tasks" below. Do
   not invent names — they are org-unique and env-var style
-  (`^[A-Z][A-Z0-9_]*$`).
+  (`^[A-Z][A-Z0-9_]*$`), and loader-sensitive names are rejected: nothing
+  starting `LD_` or `DYLD_`, and not `PATH`, `IFS`, `ENV`, `BASH_ENV`,
+  `PYTHONPATH`, `NODE_OPTIONS`, `CLASSPATH` and friends (ADR 047).
 - A catalog entry holds a credential, not a whole credentialed asset — on
   macOS and Windows a keystore item is capped at ~2.5-3 KB, so an asset like a
   full kubeconfig has to be split into a plaintext template plus the client
@@ -28,7 +30,14 @@ materialized into the OS keystore at claim time; you never see or handle them.
 
 - Run credentialed commands via `lode secrets exec -- <command> [args...]`
   from inside the task worktree. The command's environment gets exactly the
-  task's materialized names.
+  task's materialized names, plus the shell plumbing (`PATH`, `HOME`, locale).
+  Credential-shaped variables from the operator's own shell — `AWS_*`,
+  `ANTHROPIC_API_KEY`, anything containing `TOKEN`/`SECRET`/`PASSWORD` — are
+  stripped (ADR 050), so a command that only worked because such a variable
+  was exported now fails. A missing *credential* is a missing declared secret,
+  handled below. A stripped non-credential — `AWS_REGION` and its kind go with
+  their namespace — is a report that the pattern is too broad: say so and
+  block, do not re-export it and do not declare it as a secret.
 - `lode secrets status` shows declared vs materialized names.
 - NEVER probe `op`, ask the operator for a value, or read
   `.worklode/secrets.env` expecting values — it holds `op://` references only.

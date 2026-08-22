@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -48,6 +49,10 @@ type DocInput struct {
 	Body      string
 	Assignee  string
 	CreatedBy string
+	// GeneratedByTask is the task that authored the document (025 §12). Empty
+	// for every caller bound to no task — a cockpit author, an agent outside a
+	// worktree, `lode doc import` — which is a normal state, not a refusal.
+	GeneratedByTask string
 	// Status is honoured only by the corpus importer; the API's create path
 	// always leaves it empty, which means draft.
 	Status string
@@ -81,7 +86,8 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 //
 // Status is the corpus importer's affordance. Creating a spec or ADR straight
 // at accepted must therefore establish what AcceptDoc would have: the 025 §6.1
-// depth gate runs here too, and the sections land published.
+// depth gate runs here too, the sections land published, and the supersession
+// cascade fires on every document-level `replaces` edge that resolves.
 func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Doc, error) {
 	if !validDocKinds[in.Kind] {
 		return nil, fmt.Errorf("doc kind %q: %w", in.Kind, ErrInvalidInput)
@@ -137,11 +143,12 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	var id int64
 	err = tx.QueryRow(
 		`INSERT INTO docs (project_id, kind, number, slug, title, body, status, version,
-		                   issued, assignee, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $11)
+		                   issued, assignee, created_by, generated_by_task, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $12, $12)
 		 RETURNING id`,
 		in.Project, in.Kind, number, in.Slug, title, in.Body, status,
-		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy), ts,
+		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy),
+		nullText(in.GeneratedByTask), ts,
 	).Scan(&id)
 	if err != nil {
 		// The two unique indexes are the identity rules of 025 §5, so a
@@ -153,6 +160,16 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		if isUniqueViolationOn(err, "docs_project_kind_number") {
 			return nil, fmt.Errorf("project %s already has %s %d: %w",
 				in.Project, in.Kind, in.Number, ErrDocExists)
+		}
+		// A worktree can outlive the task it was named for, so an authoring
+		// task the backbone has never heard of is a caller mistake worth
+		// naming rather than an anonymous constraint failure. ErrInvalidInput
+		// and not ErrNotFound: the request names a document to create and a
+		// bad field on it, and mapStoreErr flattens ErrNotFound to a bare
+		// "not found" that would read as if the document were missing.
+		if pgViolation(err, "23503", "docs_generated_by_task_fkey") {
+			return nil, fmt.Errorf("generated_by_task names no task %q: %w",
+				in.GeneratedByTask, ErrInvalidInput)
 		}
 		return nil, fmt.Errorf("insert doc %s/%s: %w", in.Project, in.Slug, err)
 	}
@@ -166,13 +183,23 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 			return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
 		}
 	}
-	if err := rebuildEdges(tx, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
+	}
+	// The third thing AcceptDoc does, after the depth gate and the publish flag:
+	// what this document replaces stops being current the moment it lands
+	// accepted. Only targets already in the corpus and already accepted move —
+	// supersedeReplacedDocs' own guard — so an import that writes the replacing
+	// document first is caught later instead, by repointExternalEdges (WL-133).
+	if acceptedAtCreate {
+		if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+			return nil, err
+		}
 	}
 	// A reference resolves once, at write time, so references already stored
 	// unresolved because this document did not exist yet are re-pointed now —
 	// that is what makes corpus import order-independent (WL-130).
-	if err := repointExternalEdges(tx, in.Project, id, eventID); err != nil {
+	if err := repointExternalEdges(tx, in.Project, ts, id, eventID); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -180,12 +207,12 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, err
 	}
 
-	return &model.Doc{
-		ID: id, Project: in.Project, Kind: in.Kind, Number: in.Number,
-		Slug: in.Slug, Title: title, Body: in.Body, Status: status, Version: 1,
-		Issued: parsed.issued, Assignee: assignee, CreatedBy: in.CreatedBy,
-		CreatedAt: ts, UpdatedAt: ts,
-	}, nil
+	// Read the row back rather than restating the input: repointExternalEdges
+	// may have superseded this very document on the way in — an already-imported
+	// accepted document that replaces it, whose cascade could not reach it until
+	// now — and a caller told "accepted" by a create that landed superseded is
+	// the same order-dependence this whole path exists to remove.
+	return getDocTx(tx, id)
 }
 
 // UpdateDocBody replaces a document's body in place, rebuilding its sections
@@ -222,6 +249,19 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 			return nil, fmt.Errorf("load doc %d slug: %w", id, err)
 		}
 	}
+	if kind == "plan" {
+		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
+			return nil, err
+		}
+		// A plan is edited in place rather than revised (025 §9), so its body
+		// edit is what a spec's accepted revision is: the next version of the
+		// document. Nothing else moves the number for a plan, and re-accepting
+		// one needs it to — the acceptance event's external id is derived from
+		// the document's IRI and version (§15.3), so a re-accept at an
+		// unchanged version collapses at the log, which is exactly the no-op
+		// an unedited plan should be.
+		version++
+	}
 	ts := now.UTC().Truncate(time.Second)
 
 	// The frontmatter is part of the body, so title and issued are rederived
@@ -232,16 +272,16 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	// property of the text.
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
-		                 updated_at = $5
+		                 version = $5, updated_at = $6
 		  WHERE id = $1`,
-		id, body, title, nullText(parsed.issued), ts,
+		id, body, title, nullText(parsed.issued), version, ts,
 	); err != nil {
 		return nil, fmt.Errorf("update doc %d body: %w", id, err)
 	}
 	if err := rebuildSections(tx, id, kind, parsed.doc, version); err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, id, kind, project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, kind, project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -266,9 +306,9 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 // including accepted and superseded; there is no published anchor to protect
 // because no anchor is being restated.
 //
-// The clock is unused (nothing here is timestamped) and taken only so the
-// signature matches the other document writers.
-func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
+// The clock stamps only an artifact declaration the re-read frontmatter
+// carries (rebuildEdges); nothing else here is timestamped.
+func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 	d, err := lockDoc(tx, id)
 	if err != nil {
 		return err
@@ -277,7 +317,7 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := rebuildEdges(tx, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
 		return err
 	}
 	return logDocChange(tx, id, eventID,
@@ -290,6 +330,10 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 // in the same transaction. For a plan it mints the plan's execution tasks
 // instead (see acceptPlanDoc) — the second return is that minted set, in
 // definition order, and nil for a spec or ADR.
+//
+// A plan is also accepted from accepted: re-acceptance is how a declaration
+// added to an accepted plan reaches the task set (§9.2), and it mints only
+// what has no row yet.
 //
 // The depth limit is evaluated at publication (025 §6 rule 6), so a first
 // accept still rejects an anchored heading below designdoc.DepthLimit even
@@ -305,15 +349,22 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
 		return nil, nil, err
 	}
-	// Draft-only applies to both branches: a plan already accepted must never
-	// mint a second time, which is what keeps doc.status = accepted ⟺ its
-	// tasks exist true by construction (025 §9.2).
+	if d.kind == "plan" {
+		// A plan is accepted from draft and re-accepted while accepted
+		// (025 §9.2): it stays freely mutable, and re-acceptance is how a
+		// declaration added after the first accept reaches the task set.
+		// Superseded is still refused — there is nothing left to execute.
+		if d.status != "draft" && d.status != "accepted" {
+			return nil, nil, fmt.Errorf(
+				"doc %d is %s: a plan is accepted from draft or re-accepted while accepted (025 §9.2): %w",
+				id, d.status, ErrInvalidInput)
+		}
+		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
+	}
+	// Draft-only for a spec or ADR: an accepted one is revised (§7.2), never
+	// re-accepted.
 	if d.status != "draft" {
 		return nil, nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
-	}
-
-	if d.kind == "plan" {
-		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
 	}
 
 	parsed, err := parseDocBody(d.kind, d.body)
@@ -347,15 +398,23 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 }
 
 // acceptPlanDoc is AcceptDoc's plan branch (025 §9.2): parse the plan body's
-// ## Tasks declarations, mint one draft task per definition with plan_doc set
-// to id, wire each definition's blockedBy numbers as blocks edges between the
-// minted tasks, then flip the document to accepted — all inside the caller's
-// transaction, so accept and mint are one commit and a failed mint leaves the
-// document draft.
+// ## Tasks declarations, mint one draft task per declaration that has no row
+// yet with plan_doc set to id, wire the newly minted tasks' blockedBy numbers
+// as blocks edges, then flip the document to accepted — all inside the
+// caller's transaction, so accept and mint are one commit and a failed mint
+// leaves the document as it was.
+//
+// Re-accepting an accepted plan runs the same code: a declaration whose title
+// already names a row is left alone — no re-mint, no field overwrite, no
+// state change — so a re-accept of an unedited plan mints nothing and is a
+// safe no-op. The match is on plan_task_key, the declaration title recorded at
+// mint, which is why a title edit inside the plan reads as withdrawing one
+// declaration and adding another: a minted task is execution fact and outlives
+// its declaration, so nothing here deletes a task whose declaration is gone.
 //
 // Plans carry no sections and no anchors (025 §9), so none of the spec/ADR
 // branch's section or diff machinery runs here: there is nothing to publish
-// and no depth gate to evaluate. d.status is already known draft —
+// and no depth gate to evaluate. d.status is already known draft or accepted —
 // AcceptDoc checks it before branching.
 func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	parsed, err := parseDocBody(d.kind, d.body)
@@ -366,33 +425,52 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err != nil {
 		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %w: %w", id, err, ErrInvalidInput)
 	}
+	minted, err := plantaskRows(tx, id)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	// First pass mints every task and records its minted id by definition
-	// number; second pass wires blockedBy once every number resolves, so a
-	// forward reference (task 1 blockedBy task 2) needs no reordering.
-	mintedID := make(map[int]string, len(defs))
+	// First pass resolves every definition number to a task id — minting the
+	// ones that have none — and the second wires blockedBy once every number
+	// resolves, so a forward reference (task 1 blockedBy task 2) needs no
+	// reordering.
+	taskID := make(map[int]string, len(defs))
+	fresh := make(map[int]bool, len(defs))
 	tasks := make([]model.Task, 0, len(defs))
 	for _, def := range defs {
+		if existing, ok := minted[def.Title]; ok {
+			taskID[def.Number] = existing
+			continue
+		}
 		task, err := CreateTask(tx, now, TaskInput{
-			ProjectID: d.project,
-			Title:     def.Title,
-			Body:      def.Body,
-			Priority:  def.Priority,
-			Kind:      def.Kind,
-			Skills:    def.Skills,
-			CreatedBy: actorID,
-			Draft:     true,
-			PlanDoc:   id,
+			ProjectID:   d.project,
+			Title:       def.Title,
+			Body:        def.Body,
+			Priority:    def.Priority,
+			Kind:        def.Kind,
+			Skills:      def.Skills,
+			CreatedBy:   actorID,
+			Draft:       true,
+			PlanDoc:     id,
+			PlanTaskKey: def.Title,
 		}, eventID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("mint task %d of plan %d: %w", def.Number, id, err)
 		}
-		mintedID[def.Number] = task.ID
+		taskID[def.Number] = task.ID
+		fresh[def.Number] = true
 		tasks = append(tasks, *task)
 	}
+	// Only a newly minted task gets its declared blockers wired. An edge into
+	// a task that already exists would change how that task ranks and when it
+	// is claimable — a change to an existing row, which re-acceptance does not
+	// make.
 	for _, def := range defs {
+		if !fresh[def.Number] {
+			continue
+		}
 		for _, blocker := range def.BlockedBy {
-			if err := AddEdge(tx, now, mintedID[blocker], mintedID[def.Number], "blocks", eventID); err != nil {
+			if err := AddEdge(tx, now, taskID[blocker], taskID[def.Number], "blocks", eventID); err != nil {
 				return nil, nil, fmt.Errorf(
 					"wire blocks edge task %d -> %d of plan %d: %w", blocker, def.Number, id, err)
 			}
@@ -404,8 +482,14 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
 		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
-	if err := logDocChange(tx, id, eventID,
-		map[string]string{"field": "status", "old": d.status, "new": "accepted"}); err != nil {
+	// A first accept logs the status move; a re-accept logs what it minted,
+	// because the status did not move and an "accepted -> accepted" line would
+	// say nothing about what changed.
+	change := map[string]string{"field": "status", "old": d.status, "new": "accepted"}
+	if d.status == "accepted" {
+		change = map[string]string{"field": "plan_tasks", "new": strconv.Itoa(len(tasks))}
+	}
+	if err := logDocChange(tx, id, eventID, change); err != nil {
 		return nil, nil, err
 	}
 	doc, err := getDocTx(tx, id)
@@ -413,6 +497,70 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		return nil, nil, err
 	}
 	return doc, tasks, nil
+}
+
+// plantaskRows reads a plan's minted task set as declaration title -> task id
+// (025 §9.2): what acceptPlanDoc matches declarations against, and what
+// checkPlanTasksMinted uses to decide whether a body edit has a task set to
+// stay consistent with.
+//
+// Soft-deleted tasks are included deliberately. A deleted task is withdrawn
+// work, not absent work; skipping it here would have the next re-accept mint
+// its declaration again and undo the withdrawal, and the partial unique index
+// on (plan_doc, plan_task_key) would refuse the insert anyway.
+func plantaskRows(tx *sql.Tx, docID int64) (map[string]string, error) {
+	rows, err := tx.Query(
+		`SELECT plan_task_key, id FROM tasks WHERE plan_doc = $1`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+	}
+	defer rows.Close()
+	minted := map[string]string{}
+	for rows.Next() {
+		var key, taskID string
+		if err := rows.Scan(&key, &taskID); err != nil {
+			return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+		}
+		minted[key] = taskID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+	}
+	return minted, nil
+}
+
+// checkPlanTasksMinted refuses a plan body edit that would leave a plan whose
+// tasks are already minted without the valid ## Tasks section a re-accept has
+// to read (025 §9.2). Without it an accepted plan's declarations could be
+// rewritten into something unparseable, and the drift between the document and
+// its task set would surface only at the next accept — or never.
+//
+// It binds only once something has been minted. A draft plan is written a
+// paragraph at a time and its ## Tasks section is legitimately incomplete
+// until the accept gate reads it, and an accepted plan that minted nothing is
+// §9.2's historical import, which never had a task set to stay consistent
+// with.
+//
+// What it does not refuse is a declaration that disappeared or was retitled.
+// §9.2 is explicit that a minted task outlives its declaration — withdrawing
+// work is a task transition, not a document edit — so an edit that drops one
+// leaves the row alone, and one that retitles it declares a task the next
+// re-accept mints. Only the ambiguity a re-accept cannot resolve is an error,
+// and designdoc.PlanTasks names it.
+func checkPlanTasksMinted(tx *sql.Tx, id int64, doc *designdoc.Document) error {
+	minted, err := plantaskRows(tx, id)
+	if err != nil {
+		return err
+	}
+	if len(minted) == 0 {
+		return nil
+	}
+	if _, err := designdoc.PlanTasks(doc); err != nil {
+		return fmt.Errorf(
+			"doc %d has %d minted task(s), so its \"## Tasks\" section must stay readable: %w: %w",
+			id, len(minted), err, ErrInvalidInput)
+	}
+	return nil
 }
 
 // ReviseDoc opens a candidate revision against an accepted spec or ADR: a copy
@@ -477,6 +625,63 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 	}
 	return logDocChange(tx, id, eventID,
 		map[string]string{"field": "revision", "new": "updated"})
+}
+
+// DiscardRevision withdraws a document's open candidate revision without
+// landing it — the close-without-merging half of the pull request 025 §7.2
+// says a revision structurally is. Deleting the row frees the
+// one-candidate-per-document slot, so the next ReviseDoc succeeds immediately
+// instead of hitting ErrRevisionExists. ErrNotFound if no revision is open.
+//
+// Gated on the document's assignee or the revision's created_by: anyone with
+// doc.write may propose a revision, and either its author or the document's
+// assignee may withdraw it. That pairing is what keeps ReviseDoc open — an
+// unwanted candidate can always be cleared by someone.
+//
+// Unlike AcceptRevision this checks no status: a candidate left behind on a
+// document that has since been superseded is exactly the litter discard
+// exists to remove.
+//
+// Nothing is stamped, so now goes unused; the signature matches the other
+// document writers, as ReplaceDocEdges' does.
+func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID int64) (*model.Doc, error) {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	// The revision is read before the gate because the gate depends on its
+	// created_by. Nothing is disclosed by that ordering: whether a candidate
+	// is open is already on the detail endpoint for any doc.read holder.
+	var createdBy sql.NullString
+	var body string
+	err = tx.QueryRow(
+		`SELECT created_by, body FROM doc_revisions WHERE doc_id = $1 FOR UPDATE`, id).
+		Scan(&createdBy, &body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("doc %d has no open revision: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load revision of doc %d: %w", id, err)
+	}
+	if err := checkRevisionDiscarder(id, d.assignee, createdBy.String, actorID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {
+		return nil, fmt.Errorf("discard revision of doc %d: %w", id, err)
+	}
+	// The one state_log row in this file that carries a body, because this is
+	// the one verb after which the text is nowhere else: doc_revisions has no
+	// history and the delete is hard, the docs row never held a candidate, and
+	// the request that asked for the discard names no body to record. An
+	// accepted body stays on the document; an edited one is in the update's
+	// own event payload.
+	if err := logDocChange(tx, id, eventID, map[string]string{
+		"field": "revision", "new": "discarded", "discarded_body": body,
+	}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
 }
 
 // AcceptRevision lands a document's open candidate revision: it runs the
@@ -562,7 +767,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, id, d.kind, d.project, candidate.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, d.kind, d.project, candidate.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 
@@ -670,9 +875,31 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 	return nil
 }
 
+// checkRevisionDiscarder gates withdrawing an open candidate on the document's
+// assignee or the revision's author. Wider than checkDocAssignee on purpose:
+// accepting is the maintainer's act, but closing a proposal without merging it
+// is also the proposer's, which is what lets ReviseDoc stay open to any
+// doc.write holder (025 §7.2's pull-request analogy).
+//
+// An empty actorID matches nobody, including a revision or document whose own
+// column is empty.
+func checkRevisionDiscarder(id int64, assignee, createdBy, actorID string) error {
+	if actorID != "" && (actorID == assignee || actorID == createdBy) {
+		return nil
+	}
+	return fmt.Errorf(
+		"revision of doc %d was opened by %q and the doc is assigned to %q: %q may discard neither: %w",
+		id, createdBy, assignee, actorID, ErrForbidden)
+}
+
 // CheckDocAcceptable re-runs AcceptDoc's gates without accepting anything, and
 // returns the same sentinels: ErrNotFound, ErrForbidden for an actor that is
 // not the assignee, ErrInvalidInput for a document that is not draft.
+//
+// The first return says the accept has already happened and mints nothing
+// more: an accepted plan re-accepted at a version it was accepted at. That is
+// a legal no-op rather than a refusal (025 §9.2), and the caller answers with
+// the document unchanged.
 //
 // It exists for one caller. The typed accept emission (025 §15.3) derives its
 // external id from the document's IRI and version, so a second accept of the
@@ -681,28 +908,31 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 // return. Without this the request would report success for an accept that
 // did not happen, to an actor who may not even be the assignee. The gates live
 // here, next to the ones AcceptDoc runs, so the two cannot drift.
-func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) error {
-	var status, assignee string
+func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) (settled bool, err error) {
+	var kind, status, assignee string
 	var assigneeCol sql.NullString
-	err := s.db.QueryRowContext(ctx,
-		`SELECT status, assignee FROM docs WHERE id = $1`, id).Scan(&status, &assigneeCol)
+	err = s.db.QueryRowContext(ctx,
+		`SELECT kind, status, assignee FROM docs WHERE id = $1`, id).Scan(&kind, &status, &assigneeCol)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("doc %d: %w", id, ErrNotFound)
+		return false, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
-		return fmt.Errorf("load doc %d: %w", id, err)
+		return false, fmt.Errorf("load doc %d: %w", id, err)
 	}
 	assignee = assigneeCol.String
 	// Assignee first, matching AcceptDoc: standing to touch the document does
 	// not depend on its state, and checking state first would disclose it to
 	// an actor who has none.
 	if err := checkDocAssignee(id, assignee, actorID); err != nil {
-		return err
+		return false, err
+	}
+	if kind == "plan" && status == "accepted" {
+		return true, nil
 	}
 	if status != "draft" {
-		return fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
+		return false, fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
 	}
-	return nil
+	return false, nil
 }
 
 // supersedeReplacedDocs flips every accepted document a document-level
@@ -915,14 +1145,16 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 // docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
 // fragment included; fromAnchor is "" for a document-level edge. coverage and
 // completedWith carry a covers entry's authored level and, for a partial
-// entry, its fullCoverageWith closure (026 §2.1, §5); every other relation
-// leaves both zero.
+// entry, its fullCoverageWith closure (026 §2.1, §5); owner carries a defers
+// entry's named owner, verbatim, the same way (026 §5.3). Every other
+// relation leaves all three zero.
 type docEdgeRef struct {
 	fromAnchor    string
 	typ           string
 	ref           string
 	coverage      string
 	completedWith []string
+	owner         string
 }
 
 // docEdgeRow is one edge after resolution — exactly the tuple
@@ -1034,9 +1266,42 @@ func closureEqual(a, b []closureRef) bool {
 // rather than inventing a fourth state. A partial edge's fullCoverageWith
 // closure is resolved the same way doc_edges resolves its own targets and
 // stored in doc_coverage_completed_with, in authored order.
-func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
+//
+// A defers edge (026 §5.3) is checked, not merely written: the from end must
+// be a plan, the `spec` reference must carry a `#sec-N` fragment (unlike
+// covers, which tolerates a whole-document claim — a whole-document deferral
+// would silently defer sections not yet written), the owner must be named,
+// must carry no fragment (an owner is a document, 026 §5.3 — secmeta.py
+// refuses the same), and must not resolve to the deferring plan itself. The
+// owner is
+// then resolved exactly as a fullCoverageWith target and stored as the
+// edge's sole doc_coverage_completed_with row, at position 0. coverage stays
+// NULL for a defers edge — a deferral is not a level. The same entry
+// authored twice is one edge, same as covers; the same section deferred to
+// two different owners is the contradiction covers refuses for two
+// disagreeing levels, refused here as ErrInvalidInput too.
+func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
+	}
+	// The artifact key is not an edge — it declares the catalog address(es)
+	// this document is verified by (029 §3.1), which is what routes a
+	// /hooks/catalog delivery to it (WL-255). Declarations are additive and
+	// idempotent: removing the key from a later body does not undeclare, the
+	// same as every other declaration surface.
+	if fm != nil {
+		for _, a := range fm.Artifact {
+			a = strings.TrimSpace(a)
+			if a == "" {
+				continue
+			}
+			if utf8.RuneCountInString(a) > maxArtifactURI {
+				return fmt.Errorf("doc %d artifact %q is too long: %w", docID, a[:40]+"…", ErrInvalidInput)
+			}
+			if err := DeclareArtifact(tx, now, "doc", strconv.FormatInt(docID, 10), a); err != nil {
+				return err
+			}
+		}
 	}
 	seen := map[docEdgeRow]docEdgeSeen{}
 	for _, e := range frontmatterEdges(fm) {
@@ -1048,6 +1313,26 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 		if e.typ == "blocks" {
 			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved); err != nil {
 				return err
+			}
+		}
+		if e.typ == "defers" {
+			if kind != "plan" {
+				return fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (026 §5.3): %w",
+					docID, e.ref, docID, kind, ErrInvalidInput)
+			}
+			if fragment == "" {
+				return fmt.Errorf(
+					"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
+			}
+			if strings.TrimSpace(e.owner) == "" {
+				return fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
+			}
+			if _, ownerFragment := designdoc.SplitFragment(e.owner); ownerFragment != "" {
+				return fmt.Errorf(
+					"doc %d defers %q to %q: the owner is a document, no fragment (026 §5.3): %w",
+					docID, e.ref, e.owner, ErrInvalidInput)
 			}
 		}
 
@@ -1069,6 +1354,17 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 				return err
 			}
 		}
+		if e.typ == "defers" {
+			closure, err = resolveClosure(tx, project, []string{e.owner})
+			if err != nil {
+				return err
+			}
+			if len(closure) == 1 && closure[0].resolved && closure[0].toDoc == docID {
+				return fmt.Errorf(
+					"doc %d defers %q to itself: a plan cannot defer a section to itself (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
+			}
+		}
 
 		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
@@ -1086,6 +1382,10 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 			if level == "partial" && !closureEqual(prior.closure, closure) {
 				return fmt.Errorf("doc %d %s %q twice, both %s but with different fullCoverageWith closures (026 §5.1): %w",
 					docID, e.typ, e.ref, level, ErrInvalidInput)
+			}
+			if e.typ == "defers" && !closureEqual(prior.closure, closure) {
+				return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
 			}
 			continue
 		}
@@ -1106,12 +1406,14 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 			return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, docID, e.ref, err)
 		}
 
-		if level != "partial" {
+		if level != "partial" && e.typ != "defers" {
 			continue
 		}
 		// resolveClosure already dropped blank entries, so pos here is a
 		// contiguous 0-based rank — unlike ranging over the raw completedWith
-		// list, which would reopen the gap resolveClosure closed.
+		// list, which would reopen the gap resolveClosure closed. A defers
+		// edge's closure is always the single resolved owner (026 §5.3), so
+		// this loop writes exactly one doc_coverage_completed_with row for it.
 		for pos, c := range closure {
 			var toDocCol sql.NullInt64
 			var toExternalCol sql.NullString
@@ -1157,11 +1459,20 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 // failing this document's creation for it would wedge an import on an unrelated
 // defect.
 //
+// A re-pointed document-level `replaces` edge also carries a side effect: the
+// supersession cascade its replacing document could not run, because at accept
+// (or accepted-at-create) time the target was not in the corpus yet. It runs
+// here instead, from the replacing end, once the edge resolves — see
+// supersedeReplacedFrom.
+//
 // The re-point is attributed to the creating document's event and logged as an
 // edges change on each referring document whose rows moved.
-func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) error {
+func repointExternalEdges(tx *sql.Tx, project string, ts time.Time, newDocID, eventID int64) error {
 	// Distinct referring documents whose rows changed, logged once each below.
 	touched := map[int64]bool{}
+	// Referring documents whose re-pointed row was a document-level `replaces`
+	// edge, so the cascade is re-run from each of them below.
+	replacers := map[int64]bool{}
 	type externalEdge struct {
 		id         int64
 		fromDoc    int64
@@ -1197,6 +1508,12 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 		}
 		if !resolved || toDoc != newDocID {
 			continue
+		}
+		// Recorded before the duplicate branch: both branches leave a resolved
+		// document-level `replaces` row from c.fromDoc to newDocID standing, so
+		// both owe the cascade.
+		if c.typ == "replaces" && c.fromAnchor == "" {
+			replacers[c.fromDoc] = true
 		}
 		// The pre-check reads live state and candidates run in id order, so two
 		// spellings of one target in one document collapse: the first
@@ -1286,6 +1603,44 @@ func repointExternalEdges(tx *sql.Tx, project string, newDocID, eventID int64) e
 		}
 		if err := logDocChange(tx, id, eventID,
 			map[string]string{"field": "edges"}); err != nil {
+			return err
+		}
+	}
+	// After the edge changes are logged: the supersession is their consequence,
+	// and reads that way in the state log.
+	return supersedeReplacedFrom(tx, ts, replacers, eventID)
+}
+
+// supersedeReplacedFrom re-runs the supersession cascade from each document in
+// replacers, for the documents whose `replaces` edge only just resolved.
+//
+// The cascade normally fires once, when the replacing document is accepted
+// (AcceptDoc, AcceptRevision) or created accepted (CreateDoc). A corpus import
+// that writes the replacing document before its target defeats that: at accept
+// time the edge was still to_external and named no row, so nothing moved.
+// repointExternalEdges is where that edge finally resolves, so it is also where
+// the missed cascade belongs (WL-133).
+//
+// Two guards decide whether a replacer's cascade runs at all. A draft replacer
+// has superseded nothing yet — its own accept will run the cascade, now that
+// the edge resolves. A plan never cascades, matching acceptPlanDoc, which does
+// not run one either. Whether a *target* moves stays supersedeReplacedDocs'
+// own judgement: only an accepted one does, so a draft target is still left to
+// climb 025 §7's ladder rather than being pushed past accepted.
+func supersedeReplacedFrom(tx *sql.Tx, ts time.Time, replacers map[int64]bool, eventID int64) error {
+	for _, from := range slices.Sorted(maps.Keys(replacers)) {
+		var kind, status string
+		err := tx.QueryRow(`SELECT kind, status FROM docs WHERE id = $1`, from).Scan(&kind, &status)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read status of replacing doc %d: %w", from, err)
+		}
+		if kind == "plan" || status == "draft" {
+			continue
+		}
+		if err := supersedeReplacedDocs(tx, ts, from, eventID); err != nil {
 			return err
 		}
 	}
@@ -1450,6 +1805,15 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // contributes nothing to any outcome, so it is dropped here rather than carried
 // to a level that cannot use it.
 //
+// defers carries its named owner the same way a partial covers entry carries
+// its fullCoverageWith closure: the ref is the deferred section and the owner
+// rides beside it as docEdgeRef.owner rather than a separate walk.
+// rebuildEdges resolves the owner exactly as it resolves a fullCoverageWith
+// target and stores it in doc_coverage_completed_with at position 0 (026
+// §5.3) — the same completion side-table a partial entry uses, because a
+// deferral is that same assertion read at level zero: full coverage of this
+// section arrives with the named owner.
+//
 // The implements edge *type* is a different subject: a component's evidence
 // about its own code (026 §6.2), declared in `.worklode/implements.yaml`. That
 // is 025 §11 machinery, and it is not built — so no writer emits the type here
@@ -1471,20 +1835,29 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 				e.completedWith = r.Coverage.FullCoverageWith
 			}
 		}
+		if r.Deferral != nil {
+			e.owner = r.Deferral.To
+		}
 		out = append(out, e)
 	}
 	return out
 }
 
-// resolveDocRef finds the document in project that base names, base being a
-// reference with any "#…" fragment already removed. Resolution is
-// same-project only: a cross-corpus reference has no row here and belongs in
-// to_external (025 §14.3).
+// resolveDocRef finds the document that base names, base being a reference
+// with any "#…" fragment already removed.
 //
 // Three forms are tried, in order: the slug, 025 §14.3's <KEY>-<TYPE>-<n>
-// shorthand against this project's key, and a bare corpus number. The number
-// form must match exactly one spec or ADR — a project can hold a spec 25 and
-// an ADR 25, and a reference that cannot say which resolves to neither.
+// shorthand, and a bare corpus number. The number form must match exactly one
+// spec or ADR — a project can hold a spec 25 and an ADR 25, and a reference
+// that cannot say which resolves to neither.
+//
+// Distance decides the scope, as 025 §14.3 does: the slug and bare-number
+// forms are same-project only, because a filename or a corpus number means
+// nothing outside the corpus that mints it, so a cross-corpus reference in
+// either form belongs in to_external. The shorthand is the one form that
+// crosses, which is what it exists for — it carries the project key, and
+// projects_key_format makes projects.key unique and excludes SPEC/ADR, so the
+// key alone identifies the corpus and the middle token can never be one.
 //
 // 026 §4.3's NO-SPEC sentinel needs no case of its own: it matches none of the
 // three forms, so it falls through to to_external, which is where a
@@ -1519,9 +1892,9 @@ func resolveDocRef(tx *sql.Tx, project, base string) (int64, bool, error) {
 	if sh, ok := designdoc.ParseShorthand(base); ok {
 		err := tx.QueryRow(
 			`SELECT d.id FROM docs d JOIN projects p ON p.id = d.project_id
-			  WHERE d.project_id = $1 AND d.kind = $2 AND d.number = $3 AND p.key = $4
+			  WHERE p.key = $1 AND d.kind = $2 AND d.number = $3
 			  ORDER BY (d.deleted_at IS NULL) DESC, d.id LIMIT 1`,
-			project, sh.Kind(), sh.Number, sh.Key).Scan(&id)
+			sh.Key, sh.Kind(), sh.Number).Scan(&id)
 		if err == nil {
 			return id, true, nil
 		}
@@ -1574,7 +1947,7 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 // docColumns is the SELECT list scanDoc expects, in order. The three
 // tombstone columns (migration 0034) are last so positional scans elsewhere
 // are unaffected by their addition; they are all-null or all-set together.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at, deleted_at, deleted_by, delete_justification`
+const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -1584,11 +1957,12 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	var d model.Doc
 	var number sql.NullInt64
 	var issued sql.NullTime
-	var assignee, createdBy sql.NullString
+	var assignee, createdBy, generatedByTask sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
-		&d.Status, &d.Version, &issued, &assignee, &createdBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.Status, &d.Version, &issued, &assignee, &createdBy, &generatedByTask,
+		&d.CreatedAt, &d.UpdatedAt,
 		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
 	}
@@ -1599,6 +1973,7 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	}
 	d.Assignee = assignee.String
 	d.CreatedBy = createdBy.String
+	d.GeneratedByTask = generatedByTask.String
 	d.CreatedAt = d.CreatedAt.UTC()
 	d.UpdatedAt = d.UpdatedAt.UTC()
 	return &d, nil
@@ -1706,36 +2081,56 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 }
 
 // NeedsPlanning returns the accepted specs that have at least one section no
-// accepted plan discharges, each with the anchors that made it a gap and why
-// (026 §2.1). project narrows the answer; "" answers over every project.
+// accepted or superseded plan discharges, each with the anchors that made it
+// a gap and why (026 §2.1). project narrows the answer; "" answers over every
+// project.
 //
-// A section is discharged when some accepted plan's `covers` edge claims it
-// `full`, or claims it `partial` with a `fullCoverageWith` set that closes:
-// every named plan is itself accepted and itself contributes `full` or
-// `partial` to that same section. `fullCoverageWith` is checked, never taken
-// on trust — an empty list, an unresolved reference, a draft target, a `none`
-// target, or a target that does not itself cover the section all leave it
-// open. An undischarged section is classified "partial" when some accepted
-// plan claims it `partial` (whether or not that claim closed), "bound-only"
-// when every accepted plan naming it claims `none`, and "unplanned" when no
-// accepted plan names it at all.
+// The discharging set is not `accepted` alone: 026 §2.1's "A superseded plan
+// discharges what it covered" reads the status as "not draft", since a
+// superseded plan is one that was accepted and then carried out (025 §9's "a
+// plan is spent once executed") — reading the set as `accepted` alone would
+// report a shipped third of the corpus as unplanned work. A section is
+// discharged when some such plan's `covers` edge claims it `full`, or claims
+// it `partial` with a `fullCoverageWith` set that closes: every named plan is
+// itself accepted or superseded and itself contributes `full` or `partial` to
+// that same section. `fullCoverageWith` is checked, never taken on trust — an
+// empty list, an unresolved reference, a draft target, a `none` target, or a
+// target that does not itself cover the section all leave it open.
 //
-// Three further consequences are deliberate:
+// An undischarged section is classified by the strongest reading that holds,
+// in order: "partial" when some accepted-or-superseded plan claims it
+// `partial` (whether or not that claim closed); "deferred" when none claims
+// `partial` but some such plan hands it off to a named owner with `defers`
+// (026 §5.3) — the report names the owner, recovered from the same
+// doc_coverage_completed_with row a partial entry's fullCoverageWith uses,
+// because a deferral is that same assertion read at level zero; "bound-only"
+// when every accepted-or-superseded plan naming it claims `none`; "unplanned"
+// when no such plan names it, deferral included, at all. A deferral is
+// delivered by any covering plan discharging the section under the rules
+// above, so it is checked against the same `cov`/`closed` machinery as
+// covers, not against who was named.
+//
+// Four further consequences are deliberate:
 //
 //   - A whole-document edge (to_anchor IS NULL) discharges nothing. It cannot
 //     say which present section it undertakes and would silently claim future
 //     ones (026 §2.1), so it never appears in the discharged set.
 //   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
 //     §4.3), so it falls out of the join without a case of its own.
-//   - Only accepted documents on both ends participate: a draft spec is not
-//     yet owed planning, and a draft plan has not yet undertaken work. A
-//     tombstoned document participates on neither end (044 §4) — it is neither
-//     owed planning nor able to discharge a section.
+//   - Only an accepted spec and an accepted-or-superseded plan participate: a
+//     draft spec is not yet owed planning, and a draft plan has not yet
+//     undertaken work — its `defers` entries do not classify a section either.
+//     A tombstoned document participates on neither end (044 §4) — it is
+//     neither owed planning nor able to discharge or defer a section.
+//   - A deferral's owner is reported however it resolved at write time: a
+//     slug when the reference named a live document, the reference text
+//     verbatim (`w.to_external`) when it did not — the same fallback
+//     fullCoverageWith uses.
 //
 // A plan naming itself in its own `fullCoverageWith` closes its own section.
-// §2.1's closure test is only that each named plan is accepted and
-// contributes `full` or `partial` — it says nothing about the naming plan —
-// so this is not a bug; narrowing it to siblings would be a spec change
+// §2.1's closure test is only that each named plan is accepted or superseded
+// and contributes `full` or `partial` — it says nothing about the naming plan
+// — so this is not a bug; narrowing it to siblings would be a spec change
 // (tracked in docs/follow-ups.md).
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -1746,8 +2141,28 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		       JOIN docs p ON p.id = e.from_doc
 		      WHERE e.type = 'covers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		        AND p.kind = 'plan' AND p.status = 'accepted'
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded')
 		        AND p.deleted_at IS NULL
+		 ),
+		 def_raw AS (
+		     SELECT e.to_doc AS doc_id, e.to_anchor AS anchor,
+		            coalesce(owner_doc.slug, w.to_external) AS owner
+		       FROM doc_edges e
+		       JOIN docs p ON p.id = e.from_doc
+		       JOIN doc_coverage_completed_with w ON w.edge_id = e.id
+		       LEFT JOIN docs owner_doc ON owner_doc.id = w.to_doc
+		      WHERE e.type = 'defers'
+		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded')
+		        AND p.deleted_at IS NULL
+		 ),
+		 def AS (
+		     SELECT doc_id, anchor,
+		            -- Comma without a space: the CLI joins anchors with spaces,
+		            -- so a spaced separator would split one gap across tokens.
+		            string_agg(DISTINCT owner, ',' ORDER BY owner) AS owner
+		       FROM def_raw
+		      GROUP BY doc_id, anchor
 		 ),
 		 closed AS (
 		     SELECT c.id
@@ -1773,16 +2188,21 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		      GROUP BY c.doc_id, c.anchor
 		 )
 		 SELECT `+docColumnsD+`, count(*)::int,
-		        coalesce(json_agg(json_build_object(
+		        coalesce(json_agg(json_strip_nulls(json_build_object(
 		                     'anchor', sec.anchor,
-		                     'coverage', CASE WHEN r.doc_id IS NULL   THEN 'unplanned'
-		                                      WHEN r.any_partial      THEN 'partial'
-		                                      ELSE 'bound-only' END)
+		                     'coverage', CASE WHEN coalesce(r.any_partial, false) THEN 'partial'
+		                                      WHEN def.doc_id IS NOT NULL         THEN 'deferred'
+		                                      WHEN r.doc_id IS NOT NULL           THEN 'bound-only'
+		                                      ELSE 'unplanned' END,
+		                     'owner', CASE WHEN NOT coalesce(r.any_partial, false)
+		                                        AND def.doc_id IS NOT NULL
+		                                   THEN def.owner END))
 		                 ORDER BY sec.position)
 		                 FILTER (WHERE r.discharged IS NOT TRUE), '[]')::text
 		   FROM docs d
 		   JOIN doc_sections sec ON sec.doc_id = d.id
 		   LEFT JOIN resolved r ON r.doc_id = sec.doc_id AND r.anchor = sec.anchor
+		   LEFT JOIN def ON def.doc_id = sec.doc_id AND def.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
 		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
@@ -1910,11 +2330,15 @@ func (s *Store) BareSupersededSections(ctx context.Context, project, kind string
 // tombstoned task is out on top of that (044 §4), matching planUnfinished.
 //
 // This departs from 025 §18's "unminted or unfinished" deliberately, as the
-// 2026-08-03 plan-acceptance plan records: through the accept path an
-// accepted-but-unminted plan cannot exist, and the only accepted plans with no
-// task set are the importer's *spent* plans, which must not be reported as
+// 2026-08-03 plan-acceptance plan records: the accepted plans with no task set
+// at all are the importer's *spent* plans, which must not be reported as
 // pending work. The ordering need §18's "unminted" arm served is covered by
 // the plan-to-plan blocks predicate (planBlockedCondition).
+//
+// A declaration added to an accepted plan and not yet re-accepted (025 §9.2)
+// is invisible here, because whether one exists is a fact about the body and
+// not about any row. Re-accepting the plan is what makes it visible; nothing
+// SQL can see says it is owed.
 func (s *Store) NeedsExecution(ctx context.Context, project string) ([]model.Doc, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+docColumnsD+`
@@ -1977,6 +2401,7 @@ var docEdgeInverse = map[string]string{
 	"requires":       "isRequiredBy",
 	"wasDerivedFrom": "hadDerivation",
 	"blocks":         "blockedBy",
+	"defers":         "isDeferredBy",
 }
 
 // ListDocEdges returns a document's edges in both directions: out are the
@@ -2061,7 +2486,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
-// create|update|accept|revise|edges.
+// create|update|accept|revise|discard|edges.
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —

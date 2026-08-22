@@ -7,17 +7,22 @@ import (
 	"time"
 )
 
-// recordGitHubEvent inserts one github-source event with the given type and
-// payload, returning its id. apply is nil: applied_at stays NULL, as it does
-// for a real *.ignored delivery.
-func recordGitHubEvent(t *testing.T, s *Store, externalID, typ, payload string) int64 {
+// recordEvent inserts one event with the given source, type and payload,
+// returning its id. apply is nil: applied_at stays NULL, as it does for a
+// real *.ignored or unrouted delivery.
+func recordEvent(t *testing.T, s *Store, source, externalID, typ, payload string) int64 {
 	t.Helper()
-	id, _, err := s.RecordEvent(context.Background(), "github", externalID, typ,
+	id, _, err := s.RecordEvent(context.Background(), source, externalID, typ,
 		[]byte(payload), nil)
 	if err != nil {
 		t.Fatalf("record event %s: %v", externalID, err)
 	}
 	return id
+}
+
+func recordGitHubEvent(t *testing.T, s *Store, externalID, typ, payload string) int64 {
+	t.Helper()
+	return recordEvent(t, s, "github", externalID, typ, payload)
 }
 
 func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
@@ -37,20 +42,39 @@ func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("mark applied: %v", err)
 	}
-	// A non-github source is never a replay candidate.
+	// An unrouted catalog delivery is a replay candidate too (WL-256): its
+	// declaration may arrive later, and applied_at NULL is what says so.
+	unrouted := recordEvent(t, s, "catalog", "c-1", "catalog.published",
+		`{"artifact":"gs://nobody/declares-this","state":"published"}`)
+	filedCatalog := recordEvent(t, s, "catalog", "c-2", "catalog.published",
+		`{"artifact":"gs://someone/declares-this","state":"published"}`)
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return MarkEventApplied(tx, filedCatalog, s.Now())
+	}); err != nil {
+		t.Fatalf("mark catalog applied: %v", err)
+	}
+	// Sources outside replaySources are never candidates — cli events have no
+	// apply to re-run, and flux never marks applied_at at all, so including it
+	// would make the candidate set grow without bound.
 	if _, _, err := s.RecordEvent(ctx, "cli", "d-5", "task.created", nil, nil); err != nil {
 		t.Fatalf("record cli event: %v", err)
 	}
+	recordEvent(t, s, "flux", "f-1", "flux.Kustomization.ReconciliationSucceeded", `{}`)
 
-	got, err := s.UnappliedGitHubEvents(ctx, UnappliedFilter{})
+	got, err := s.UnappliedEvents(ctx, UnappliedFilter{})
 	if err != nil {
 		t.Fatalf("unfiltered: %v", err)
 	}
-	if ids := eventIDs(got); len(ids) != 3 || ids[0] != early || ids[1] != late || ids[2] != other {
-		t.Fatalf("unfiltered ids = %v; want [%d %d %d] in id order", ids, early, late, other)
+	if ids := eventIDs(got); len(ids) != 4 ||
+		ids[0] != early || ids[1] != late || ids[2] != other || ids[3] != unrouted {
+		t.Fatalf("unfiltered ids = %v; want [%d %d %d %d] in id order",
+			ids, early, late, other, unrouted)
 	}
 
-	got, err = s.UnappliedGitHubEvents(ctx, UnappliedFilter{Repo: "acme/app"})
+	// A repo filter reads the delivery payload's repository.full_name, which
+	// only github deliveries carry, so it scopes the run to github by
+	// construction.
+	got, err = s.UnappliedEvents(ctx, UnappliedFilter{Repo: "acme/app"})
 	if err != nil {
 		t.Fatalf("repo filter: %v", err)
 	}
@@ -59,7 +83,7 @@ func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
 	}
 
 	cutoff := time.Now().Add(time.Hour)
-	got, err = s.UnappliedGitHubEvents(ctx, UnappliedFilter{Since: &cutoff})
+	got, err = s.UnappliedEvents(ctx, UnappliedFilter{Since: &cutoff})
 	if err != nil {
 		t.Fatalf("since filter: %v", err)
 	}
@@ -71,7 +95,7 @@ func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
 // A candidate read carries whole delivery payloads, so the caller must be
 // able to bound it — and the bound has to keep the oldest-first order, or a
 // batched replay would skip events instead of resuming after them.
-func TestUnappliedGitHubEventsLimit(t *testing.T) {
+func TestUnappliedEventsLimit(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -82,7 +106,7 @@ func TestUnappliedGitHubEventsLimit(t *testing.T) {
 	recordGitHubEvent(t, s, "l-3", "push.ignored",
 		`{"repository":{"full_name":"acme/app"}}`)
 
-	got, err := s.UnappliedGitHubEvents(ctx, UnappliedFilter{Limit: 2})
+	got, err := s.UnappliedEvents(ctx, UnappliedFilter{Limit: 2})
 	if err != nil {
 		t.Fatalf("limit: %v", err)
 	}
@@ -92,7 +116,7 @@ func TestUnappliedGitHubEventsLimit(t *testing.T) {
 
 	// The limit binds as an argument, not by string interpolation, and it
 	// composes with the other filters.
-	got, err = s.UnappliedGitHubEvents(ctx, UnappliedFilter{Repo: "acme/app", Limit: 1})
+	got, err = s.UnappliedEvents(ctx, UnappliedFilter{Repo: "acme/app", Limit: 1})
 	if err != nil {
 		t.Fatalf("repo+limit: %v", err)
 	}

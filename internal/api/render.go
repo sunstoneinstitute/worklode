@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -43,6 +44,26 @@ func boardView(b *model.BoardResponse, inboxCount int, title, active string) ui.
 			Workload:   f.Workload,
 			Message:    f.Message,
 		})
+	}
+	return v
+}
+
+// driftView maps spec 007's four read surfaces into the drift board's view.
+// drift and gaps are nil when no graph-server is configured; graphEnabled is
+// what tells the page the difference between "no findings" and "nothing
+// looked", so it is passed rather than inferred from the nil slices.
+func driftView(frontier []model.FrontierTask, cp *model.CriticalPath, drift *model.Drift, gaps []model.Gap, graphEnabled bool) ui.DriftView {
+	v := ui.DriftView{
+		Page:         ui.PageProps{Title: "worklode: drift", ActiveGlobal: "knowledge"},
+		Frontier:     frontier,
+		Gaps:         gaps,
+		GraphEnabled: graphEnabled,
+	}
+	if cp != nil {
+		v.CriticalPath = *cp
+	}
+	if drift != nil {
+		v.Drift = *drift
 	}
 	return v
 }
@@ -152,8 +173,9 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 }
 
 // deliverablesView maps a project's declared deliverables into the project's
-// Deliverables page. No row carries a state, because none is stored (spec 029
-// §3.2) — the page says so once rather than per row.
+// Deliverables page. A row's state is not stored (spec 029 §3.2): it is the
+// newest evidence reported against the declared address, carried on the read
+// projection, and empty until an emitter reports one.
 func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.DeliverablesView {
 	v := ui.DeliverablesView{
 		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Deliverables"},
@@ -164,12 +186,15 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.D
 	}
 	for _, d := range items {
 		v.Deliverables = append(v.Deliverables, ui.DeliverableRow{
-			ID:          d.ID,
-			Name:        d.Name,
-			Description: d.Description,
-			URL:         d.URL,
-			CreatedBy:   d.CreatedBy,
-			CreatedAt:   d.CreatedAt,
+			ID:            d.ID,
+			Name:          d.Name,
+			Description:   d.Description,
+			URL:           d.URL,
+			CreatedBy:     d.CreatedBy,
+			CreatedAt:     d.CreatedAt,
+			Artifact:      d.Artifact,
+			ReportedState: d.ReportedState,
+			ReportedAt:    d.ReportedAt,
 		})
 	}
 	return v
@@ -192,10 +217,16 @@ func docsView(docs []model.Doc) ui.DocsView {
 }
 
 // docView maps one document's detail projection into its page.
-func docView(d *model.DocDetail) ui.DocView {
+//
+// md may be nil, which renders every body afresh; see the mdcache field.
+func docView(md *mdrender.Cache, d *model.DocDetail) ui.DocView {
 	return ui.DocView{
-		Page:     ui.PageProps{Title: "worklode: " + d.Slug},
-		Doc:      d.Doc,
+		Page: ui.PageProps{Title: "worklode: " + d.Slug},
+		Doc:  d.Doc,
+		// Rendered here rather than in ui for the reason taskView gives.
+		// DocBody rather than Body: a document's {#sec-N} headings are
+		// addressable anchors, and the Sections table links at them.
+		BodyHTML: md.DocBody(d.Doc.Body),
 		Ref:      docRef(d.Doc),
 		Sections: d.Sections,
 		Edges:    docEdgeRows(d.Edges),
@@ -213,7 +244,8 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 	out := make([]ui.DocEdgeRow, 0, len(edges))
 	for _, e := range edges {
 		row := ui.DocEdgeRow{Type: e.Type, Anchor: e.FromAnchor, Label: e.ToExternal}
-		if e.ToDoc != 0 {
+		switch {
+		case e.ToDoc != 0:
 			row.URL = docPageURL(e.ToDoc)
 			row.Label = e.ToSlug
 			if row.Label == "" {
@@ -221,7 +253,22 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 			}
 			row.Ref = docEdgeRef(e)
 			if e.ToAnchor != "" {
+				// The fragment rides the link, not just the label (WL-301).
+				row.URL += "#" + e.ToAnchor
 				row.Label += "#" + e.ToAnchor
+			}
+		case e.ToExternal != "":
+			// A reference the store kept verbatim — a corpus filename like
+			// "004-execution-backbone.md#sec-5.1" — still resolves at read
+			// time through the reference redirect (WL-301): the href's own
+			// #fragment survives the 302. A ref outside the grammar keeps
+			// URL "" and renders as text.
+			base, frag := designdoc.SplitFragment(e.ToExternal)
+			if _, ok := designdoc.ParseNumberForm(base); ok || designdoc.LooksLikePath(base) {
+				row.URL = "/docs/ref/" + base
+				if frag != "" {
+					row.URL += "#" + frag
+				}
 			}
 		}
 		out = append(out, row)
@@ -264,7 +311,7 @@ func formTitle(base, errMsg string) string {
 
 // newTaskView builds the new-task form, with the submitted values selected in
 // the menus and errMsg shown ("" on first render).
-func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.NewTaskView {
+func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string, dictation bool) ui.NewTaskView {
 	return ui.NewTaskView{
 		Form: ui.FormShell{
 			Page:      ui.PageProps{Title: formTitle("worklode: "+project.Name+": new task", errMsg)},
@@ -272,6 +319,7 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.
 			Action:    "/projects/" + project.ID + "/tasks",
 			CancelURL: "/projects/" + project.ID,
 			Error:     errMsg,
+			Dictation: dictation,
 		},
 		Title:      v.Title,
 		Body:       v.Body,
@@ -283,7 +331,7 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.
 }
 
 // newDeliverableView builds the deliverable form the same way.
-func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string) ui.NewDeliverableView {
+func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string, dictation bool) ui.NewDeliverableView {
 	return ui.NewDeliverableView{
 		Form: ui.FormShell{
 			Page:      ui.PageProps{Title: formTitle("worklode: "+project.Name+": new deliverable", errMsg)},
@@ -291,10 +339,12 @@ func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errM
 			Action:    "/projects/" + project.ID + "/deliverables",
 			CancelURL: "/projects/" + project.ID + "/deliverables",
 			Error:     errMsg,
+			Dictation: dictation,
 		},
 		Name:        v.Name,
 		Description: v.Description,
 		URL:         v.URL,
+		Artifact:    v.Artifact,
 	}
 }
 

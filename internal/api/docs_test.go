@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -698,6 +699,107 @@ func TestAcceptDoc(t *testing.T) {
 	}
 }
 
+// TestReAcceptPlanMintsAddedDeclaration: the whole re-accept path through the
+// endpoint (025 §9.2). A plan edited after acceptance carries a new version,
+// so its accept event is a new event and the mint runs, returning only the
+// declaration that had no row; re-accepting the same version again mints
+// nothing and still answers 200 with the document.
+func TestReAcceptPlanMintsAddedDeclaration(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "remint-plan", Body: docPlanMintBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("first accept status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var first model.AcceptDocResponse
+	decodeInto(t, rr, &first)
+	if len(first.Tasks) != 2 {
+		t.Fatalf("first accept minted %d tasks, want 2", len(first.Tasks))
+	}
+
+	// The no-op path below must not swallow the assignee gate: another actor
+	// re-accepting an accepted plan is still 403.
+	bobToken := docActor(t, st, "bob")
+	if rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), bobToken, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("other actor re-accept status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+
+	// Re-accepting at the same version: the event id collides, apply is
+	// skipped, and the endpoint says so by answering with the document and no
+	// minted tasks rather than by refusing.
+	rr = doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unedited re-accept status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	var settled model.AcceptDocResponse
+	decodeInto(t, rr, &settled)
+	if settled.Status != "accepted" || len(settled.Tasks) != 0 {
+		t.Errorf("unedited re-accept = %+v, want the accepted doc and no minted tasks", settled)
+	}
+
+	edited := docPlanMintBody + `
+### Task 3 — Third task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do the third thing.
+`
+	rr = doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("edit status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("re-accept status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var second model.AcceptDocResponse
+	decodeInto(t, rr, &second)
+	if len(second.Tasks) != 1 {
+		t.Fatalf("re-accept minted %d tasks, want 1", len(second.Tasks))
+	}
+	if second.Tasks[0].Title != "Third task" {
+		t.Errorf("minted %q, want the added declaration", second.Tasks[0].Title)
+	}
+	for _, task := range first.Tasks {
+		if second.Tasks[0].ID == task.ID {
+			t.Errorf("re-accept returned an already-minted task %s", task.ID)
+		}
+	}
+
+	// The event says what actually happened: the second acceptance left
+	// "accepted", not "draft" — an append-only log may not record a transition
+	// the document never made. Read from the table rather than through
+	// /api/v1/events, whose commit-horizon predicate (025 §15) may not have
+	// caught up with an event committed a moment ago.
+	rows, err := st.DBForTests().Query(
+		`SELECT payload->>'wl:fromStatus' FROM events WHERE type = 'wl:DocumentAccepted' ORDER BY id`)
+	if err != nil {
+		t.Fatalf("read acceptance events: %v", err)
+	}
+	defer rows.Close()
+	var fromStatuses []string
+	for rows.Next() {
+		var from string
+		if err := rows.Scan(&from); err != nil {
+			t.Fatalf("scan wl:fromStatus: %v", err)
+		}
+		fromStatuses = append(fromStatuses, from)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read acceptance events: %v", err)
+	}
+	if !slices.Equal(fromStatuses, []string{"wlc:draft", "wlc:accepted"}) {
+		t.Errorf("wl:fromStatus values = %v, want [wlc:draft wlc:accepted]", fromStatuses)
+	}
+}
+
 // TestAcceptPlanReturnsMintedTasks: accepting a plan returns the doc and the
 // tasks it minted in one response (025 §9.2); accepting a spec or ADR
 // carries no "tasks" key at all, so the response stays byte-identical to
@@ -819,6 +921,73 @@ func TestDocRevisionLifecycle(t *testing.T) {
 			t.Errorf("%s last_revised_in = %d, want %d", sec.Anchor, sec.LastRevisedIn, want)
 		}
 	}
+}
+
+// TestDocRevisionDiscard walks DELETE /api/v1/docs/{id}/revision: a third
+// party is refused, the proposer withdraws their own candidate, and the slot
+// the withdrawal frees takes a fresh one straight away (025 §7.2).
+//
+// The token identity is alice, who is the spec's assignee; bob proposes.
+func TestDocRevisionDiscard(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	bobToken := docActor(t, st, "bob")
+	carolToken := docActor(t, st, "carol")
+	spec := acceptedSpec(t, h, token, "proj", "025-x", 25)
+
+	// Nothing open yet: 404, not a silent success.
+	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("discard with no open revision status = %d, want 404", rr.Code)
+	}
+
+	// Proposing stays open to any doc.write holder, so bob may open one on
+	// alice's document.
+	if rr := doReq(t, h, "POST", docPath(spec.ID, "/revise"), bobToken, nil); rr.Code != http.StatusOK {
+		t.Fatalf("revise as bob status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	// Carol is neither the assignee nor the proposer.
+	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), carolToken, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("third-party discard status = %d, want 403, body %s", rr.Code, rr.Body.String())
+	}
+	rr := doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if detail.Revision == nil {
+		t.Fatal("the refused discard removed the candidate anyway")
+	}
+
+	// The proposer withdraws their own, and the response is the document,
+	// unchanged.
+	rr = doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), bobToken, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("author discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	var after model.Doc
+	decodeInto(t, rr, &after)
+	if after.Version != 1 || after.Body != docSpecBody {
+		t.Errorf("doc = version %d, want the accepted version untouched by a discard", after.Version)
+	}
+
+	// The slot is free: a fresh candidate opens rather than 409ing. This one
+	// is bob's again, and the assignee withdraws it — the other half of the
+	// gate.
+	if rr := doReq(t, h, "POST", docPath(spec.ID, "/revise"), bobToken, nil); rr.Code != http.StatusOK {
+		t.Fatalf("revise after a discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("assignee discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	decodeInto(t, rr, &detail)
+	if detail.Revision != nil {
+		t.Errorf("revision = %+v, want it withdrawn", detail.Revision)
+	}
+
+	// Two discards happened, and each recorded its own event: the type string
+	// is the handler's, so nothing else in the suite would catch a typo in it.
+	// Polled, not read once — the commit horizon is cluster-wide.
+	pollEvents(t, h, token, "?type=doc.revision_discarded", 2)
 }
 
 // TestDocRevisionRefusals covers the states with nothing to revise: a draft
@@ -1249,5 +1418,73 @@ func TestSubmitDoc(t *testing.T) {
 	}
 	if rr := doReq(t, h, "POST", "/api/v1/docs/025-x/submit", token, nil); rr.Code != http.StatusBadRequest {
 		t.Errorf("non-numeric id status = %d, want 400", rr.Code)
+	}
+}
+
+// TestCreateDocRecordsAuthoringTask covers 025 §12: the document a task wrote
+// points back at that task, so "which task produced this spec?" is answerable.
+// Both halves are checked, because both are the design: a create carrying the
+// caller's worktree task records it, and a create carrying none is a document
+// with no authoring task rather than a refusal (migration 0044).
+func TestCreateDocRecordsAuthoringTask(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	task := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Write spec 025", "kind": "design",
+		"priority": "medium",
+	})
+	taskID, _ := task["id"].(string)
+	if taskID == "" {
+		t.Fatalf("task = %v, want one with an id", task)
+	}
+
+	authored := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x",
+		Body: docSpecBody, GeneratedByTask: taskID,
+	})
+	if authored.GeneratedByTask != taskID {
+		t.Errorf("generated_by_task = %q, want %q", authored.GeneratedByTask, taskID)
+	}
+
+	// Read back, not just echoed from the create response: the column is what
+	// answers the question later.
+	rr := doReq(t, h, "GET", docPath(authored.ID, ""), token, nil)
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if detail.GeneratedByTask != taskID {
+		t.Errorf("detail generated_by_task = %q, want %q", detail.GeneratedByTask, taskID)
+	}
+
+	// The event log carries it too, inside the recorded request — provenance
+	// survives even if the row is later tombstoned.
+	events := pollEvents(t, h, token, "?type=doc.created", 1)
+	payload := eventPayload(t, events[0].(map[string]any))
+	req, _ := payload["request"].(map[string]any)
+	if req["generated_by_task"] != taskID {
+		t.Errorf("doc.created payload request = %v, want generated_by_task %q", req, taskID)
+	}
+
+	// No worktree, no authoring task, and the create still lands: a human in
+	// the cockpit and an agent working ad hoc both author documents.
+	unauthored := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "adr", Number: 51, Slug: "051-x", Body: docSpecBody,
+	})
+	if unauthored.GeneratedByTask != "" {
+		t.Errorf("generated_by_task = %q, want empty for a create carrying no task",
+			unauthored.GeneratedByTask)
+	}
+
+	// A worktree can outlive the task it was named for, so the id is checked
+	// rather than reaching the caller as an anonymous constraint failure.
+	rr = doReq(t, h, "POST", "/api/v1/docs", token, map[string]any{
+		"project": "proj", "kind": "spec", "number": 26, "slug": "026-x",
+		"body": docSpecBody, "generated_by_task": "WL-9999",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown authoring task status = %d, want 422, body %s", rr.Code, rr.Body.String())
+	}
+	if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "WL-9999") {
+		t.Errorf("error = %q, want it to name the task", msg)
 	}
 }

@@ -8,8 +8,11 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
+	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -71,6 +74,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
 	}, []string{"decision", "outcome"})
+	s.dictations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_dictations_total",
+		Help: "Dictation requests (POST /dictate, WL-299), by outcome (" +
+			strings.Join(dictationOutcomes, ", ") + "). The proxy call to the speech-to-text provider is the only outbound work; 'unconfigured' on a deployment with no provider is a stale page or a hand-built request, never the button, which is not rendered then.",
+	}, []string{"outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
 		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
@@ -120,6 +128,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(imageMirrorOutcomes, ", ") +
 			"). Each remote reference contributes exactly one outcome. Anything but 'mirrored' or 'deduplicated' leaves an off-site URL in a task body, which renders as nothing.",
 	}, []string{"outcome"})
+	s.mirrorTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_image_mirror_tokens_total",
+		Help: "GitHub App installation tokens a mirroring pass minted for the images it was about to fetch, by outcome (" +
+			strings.Join(mirrorTokenOutcomes, ", ") +
+			"). One per promote that had remote images, not one per image. A 'failed' rate above zero means private-repo images are being fetched unauthenticated, which shows up on worklode_image_mirrors_total as fetch_failed.",
+	}, []string{"outcome"})
 	s.kindAliasUses = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_kind_alias_uses_total",
 		Help: "Requests naming a deprecated task kind that was normalised to its current name, by alias and surface (" +
@@ -161,6 +175,24 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_event_stream_events_sent_total",
 		Help: "Events pushed to event-log followers, summed across all open streams.",
 	})
+	// Spec 007's two families. http_requests_total cannot answer either
+	// question: a 503 from a graph-less instance and a 500 from a broken
+	// SPARQL endpoint are both "not 200", and one POST /api/v1/derive runs
+	// two derivers whose outcomes differ independently of its status code.
+	s.overviewReads = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_overview_reads_total",
+		Help: "Spec 007 overview reads, by read (" +
+			strings.Join(overviewReadKinds, ", ") + ") and outcome (" +
+			strings.Join(overviewReadOutcomes, ", ") +
+			"). Sustained no_graph means the instance is serving the surface with LODE_GRAPHSERVER_URL unset, so drift and gaps are answering nothing.",
+	}, []string{"read", "outcome"})
+	s.deriveRuns = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_derive_runs_total",
+		Help: "Server-side deriver runs (POST /api/v1/derive), by source (" +
+			strings.Join(deriveSources, ", ") + ") and outcome (" +
+			strings.Join(deriveOutcomes, ", ") +
+			"). One observation per deriver, not per request. A steady 'skipped' share is healthy — it is the content hash matching, costing no write; 'refused_empty' is the guard against a broken input replacing a graph with nothing.",
+	}, []string{"source", "outcome"})
 	// The horizon's position is a scrape-time fact, not something a handler
 	// increments, so it is a collector rather than a gauge. It lives here
 	// because this is where it gets registered: eventbus.NewMetrics, which
@@ -172,14 +204,15 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.dictations, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.taskBlobRefs,
-		s.blobGCRuns, s.blobGCObjects, s.imageMirrors,
-		s.kindAliasUses, s.deletes)
+		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
+		s.kindAliasUses, s.deletes,
+		s.overviewReads, s.deriveRuns)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -225,6 +258,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
 	}
+	for _, outcome := range dictationOutcomes {
+		s.dictations.WithLabelValues(outcome)
+	}
 	// Every decision/outcome pair, so an instance where nobody has decided an
 	// approval reads as a flat zero rather than as no-data — the difference
 	// between "no decision was refused" and "refusals are not being counted".
@@ -255,6 +291,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, outcome := range imageMirrorOutcomes {
 		s.imageMirrors.WithLabelValues(outcome)
 	}
+	for _, outcome := range mirrorTokenOutcomes {
+		s.mirrorTokens.WithLabelValues(outcome)
+	}
 	// Every reachable entity/op/outcome combination, so an instance where
 	// nobody has deleted anything reads as a flat zero rather than as no-data
 	// — the difference between "no delete was refused" and "refusals are not
@@ -269,6 +308,26 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 				}
 				s.deletes.WithLabelValues(entity, op, outcome)
 			}
+		}
+	}
+	// Every reachable read/outcome pair, so an instance nobody has asked for
+	// an overview on reads as a flat zero rather than as no-data. no_graph is
+	// minted only for the two graph-backed reads: the other three are
+	// computed from the backbone and cannot return ErrNoGraph, so the series
+	// would be permanently flat while claiming to mean something.
+	for _, read := range overviewReadKinds {
+		for _, outcome := range overviewReadOutcomes {
+			if outcome == overviewNoGraph && read != readDrift && read != readGaps {
+				continue
+			}
+			s.overviewReads.WithLabelValues(read, outcome)
+		}
+	}
+	// Both derivers in full, so an instance where nobody has run them reads
+	// as a flat zero across every outcome rather than as no-data.
+	for _, source := range deriveSources {
+		for _, outcome := range deriveOutcomes {
+			s.deriveRuns.WithLabelValues(source, outcome)
 		}
 	}
 	// Every alias on every surface, because the whole point of this counter is
@@ -554,6 +613,18 @@ func (s *server) observeFormSubmission(form, outcome string) {
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
 }
 
+// dictationOutcomes bounds worklode_dictations_total's one label.
+var dictationOutcomes = []string{"ok", "unconfigured", "too_large", "bad_request", "provider_error"}
+
+// observeDictation records one POST /dictate, by outcome. Nil-safe like
+// every observer here.
+func (s *server) observeDictation(outcome string) {
+	if s.dictations == nil {
+		return
+	}
+	s.dictations.WithLabelValues(outcome).Inc()
+}
+
 // observeEventSubscriberSeek records one successful admin seek of a
 // subscriber's offsets. Called on success only, matching observeAssignment.
 // Nil-safe: tests build a *server directly without initMetrics.
@@ -650,6 +721,20 @@ var imageMirrorOutcomes = []string{
 	mirrorCapped,        // over the per-body reference cap; skipped without a fetch
 }
 
+// mirrorTokenOutcomes is the complete label set for
+// worklode_image_mirror_tokens_total. A pass on an instance with no GitHub App
+// configured contributes nothing: not minting a token that was never
+// configured is not an outcome of a mint.
+var mirrorTokenOutcomes = []string{
+	mirrorTokenMinted, // GitHub issued a token for the issue's repo
+	mirrorTokenFailed, // the App is not installed there, or GitHub refused
+}
+
+const (
+	mirrorTokenMinted = "minted"
+	mirrorTokenFailed = "failed"
+)
+
 const (
 	mirrorStored        = "mirrored"
 	mirrorDeduplicated  = "deduplicated"
@@ -667,6 +752,15 @@ func (s *server) observeImageMirror(outcome string, n int) {
 		return
 	}
 	s.imageMirrors.WithLabelValues(outcome).Add(float64(n))
+}
+
+// observeMirrorToken records one installation-token mint for a mirroring
+// pass. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeMirrorToken(outcome string) {
+	if s.mirrorTokens == nil {
+		return
+	}
+	s.mirrorTokens.WithLabelValues(outcome).Inc()
 }
 
 // observeBlobUpload records one POST /api/v1/blobs, called exactly once on
@@ -759,4 +853,98 @@ func (s *server) observeDelete(entity, op, outcome string) {
 		return
 	}
 	s.deletes.WithLabelValues(entity, op, outcome).Inc()
+}
+
+// The complete, bounded label sets for worklode_overview_reads_total (spec
+// 007). The project filter is deliberately not a label: it is caller-chosen
+// and unbounded, and which project someone looked at is a question for the
+// access log, not for a counter.
+var (
+	overviewReadKinds    = []string{readOverview, readDrift, readGaps, readFrontier, readCriticalPath}
+	overviewReadOutcomes = []string{overviewOK, overviewNoGraph, overviewErrored}
+)
+
+const (
+	readOverview     = "overview"
+	readDrift        = "drift"
+	readGaps         = "gaps"
+	readFrontier     = "frontier"
+	readCriticalPath = "critical_path"
+
+	overviewOK      = "ok"
+	overviewNoGraph = "no_graph"
+	overviewErrored = "error"
+)
+
+// overviewOutcome classifies an internal/overview error for the
+// worklode_overview_reads_total outcome label. An unconfigured graph is its
+// own outcome and not an error: the deployment has no endpoint, which is a
+// standing fact about the instance rather than a failure of the request.
+func overviewOutcome(err error) string {
+	switch {
+	case err == nil:
+		return overviewOK
+	case errors.Is(err, overview.ErrNoGraph):
+		return overviewNoGraph
+	default:
+		return overviewErrored
+	}
+}
+
+// observeOverviewRead records one spec 007 read, called exactly once on every
+// exit path of each of the five handlers.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeOverviewRead(read, outcome string) {
+	if s.overviewReads == nil {
+		return
+	}
+	s.overviewReads.WithLabelValues(read, outcome).Inc()
+}
+
+// The complete, bounded label sets for worklode_derive_runs_total. The graph
+// IRI is not a label: it is one per source, so it would say nothing the
+// source does not, and it would stop being bounded the day a deriver derives
+// a graph per repo.
+var (
+	deriveSources  = []string{deriveDeploy, derivePRAffects}
+	deriveOutcomes = []string{deriveWritten, deriveSkipped, deriveRefusedEmpty, deriveErrored}
+)
+
+const (
+	deriveDeploy    = "deploy"
+	derivePRAffects = "pr-affects"
+
+	deriveWritten      = "written"       // the graph was replaced
+	deriveSkipped      = "skipped"       // the content hash matched; no write
+	deriveRefusedEmpty = "refused_empty" // derive.ErrWouldEmptyGraph
+	deriveErrored      = "error"         // input read or PUT failed
+)
+
+// deriveOutcome classifies one derive.Run for the worklode_derive_runs_total
+// outcome label. refused_empty is separated from error because it is the
+// guard doing its job — a deriver produced nothing and was stopped from
+// replacing a populated graph — and its rate is the one worth alerting on.
+func deriveOutcome(res model.DeriveResult, err error) string {
+	switch {
+	case errors.Is(err, derive.ErrWouldEmptyGraph):
+		return deriveRefusedEmpty
+	case err != nil:
+		return deriveErrored
+	case res.Skipped:
+		return deriveSkipped
+	default:
+		return deriveWritten
+	}
+}
+
+// observeDeriveRun records one deriver's run, called once per deriver rather
+// than once per POST /api/v1/derive: a request runs both, and a skipped
+// no-op beside a replaced graph is exactly the distinction the request's
+// status code cannot carry.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeDeriveRun(source, outcome string) {
+	if s.deriveRuns == nil {
+		return
+	}
+	s.deriveRuns.WithLabelValues(source, outcome).Inc()
 }

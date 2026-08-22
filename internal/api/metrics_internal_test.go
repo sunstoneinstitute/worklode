@@ -12,6 +12,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/sunstoneinstitute/worklode/internal/derive"
+	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -473,4 +476,162 @@ func countNavSeries(t *testing.T, g prometheus.Gatherer) int {
 		}
 	}
 	return 0
+}
+
+func TestOverviewOutcome(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil", nil, "ok"},
+		{"no graph", overview.ErrNoGraph, "no_graph"},
+		{"wrapped no graph", fmt.Errorf("gap report: %w", overview.ErrNoGraph), "no_graph"},
+		{"other", errors.New("boom"), "error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := overviewOutcome(tt.err); got != tt.want {
+				t.Fatalf("overviewOutcome(%v) = %q, want %q", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestObserveOverviewRead: every read/outcome pair the handlers can produce
+// is counted, and the pre-initialised series are there before the first
+// request — except no_graph on the three backbone-authoritative reads, which
+// cannot return ErrNoGraph and must not carry a permanently flat series.
+func TestObserveOverviewRead(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeOverviewRead(readOverview, overviewOutcome(nil))
+	s.observeOverviewRead(readDrift, overviewOutcome(overview.ErrNoGraph))
+	s.observeOverviewRead(readDrift, overviewOutcome(overview.ErrNoGraph))
+	s.observeOverviewRead(readGaps, overviewOutcome(errors.New("sparql said no")))
+
+	for _, tc := range []struct {
+		read, outcome string
+		want          float64
+	}{
+		{readOverview, "ok", 1},
+		{readDrift, "no_graph", 2},
+		{readGaps, "error", 1},
+		{readFrontier, "ok", 0}, // pre-initialised, never observed
+	} {
+		got := testutil.ToFloat64(s.overviewReads.WithLabelValues(tc.read, tc.outcome))
+		if got != tc.want {
+			t.Errorf("overviewReads{%s,%s} = %v, want %v", tc.read, tc.outcome, got, tc.want)
+		}
+	}
+
+	labels := gatheredLabelPairs(t, reg, "worklode_overview_reads_total", "read", "outcome")
+	for _, read := range []string{readOverview, readFrontier, readCriticalPath} {
+		if slices.Contains(labels, read+"/"+overviewNoGraph) {
+			t.Errorf("worklode_overview_reads_total has a %s/no_graph series; that read is backbone-authoritative and cannot return ErrNoGraph", read)
+		}
+	}
+	for _, read := range []string{readDrift, readGaps} {
+		if !slices.Contains(labels, read+"/"+overviewNoGraph) {
+			t.Errorf("worklode_overview_reads_total is missing %s/no_graph; a graph-less instance must read as a flat count, not as no-data", read)
+		}
+	}
+}
+
+func TestDeriveOutcome(t *testing.T) {
+	tests := []struct {
+		name string
+		res  model.DeriveResult
+		err  error
+		want string
+	}{
+		{"written", model.DeriveResult{Bytes: 12}, nil, "written"},
+		{"skipped", model.DeriveResult{Skipped: true}, nil, "skipped"},
+		{"refused empty", model.DeriveResult{}, derive.ErrWouldEmptyGraph, "refused_empty"},
+		{"wrapped refused empty", model.DeriveResult{},
+			fmt.Errorf("observed/deploy: %w (the deriver produced no triples)", derive.ErrWouldEmptyGraph),
+			"refused_empty"},
+		{"error", model.DeriveResult{}, errors.New("PUT failed"), "error"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := deriveOutcome(tt.res, tt.err); got != tt.want {
+				t.Fatalf("deriveOutcome(%+v, %v) = %q, want %q", tt.res, tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestObserveDeriveRun: one observation per deriver, and every source/outcome
+// pair is pre-initialised so an instance nobody has run the derivers on reads
+// as a flat zero rather than as no-data.
+func TestObserveDeriveRun(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeDeriveRun(deriveDeploy, deriveOutcome(model.DeriveResult{Bytes: 40}, nil))
+	s.observeDeriveRun(derivePRAffects, deriveOutcome(model.DeriveResult{Skipped: true}, nil))
+	s.observeDeriveRun(derivePRAffects, deriveOutcome(model.DeriveResult{}, derive.ErrWouldEmptyGraph))
+
+	for _, tc := range []struct {
+		source, outcome string
+		want            float64
+	}{
+		{deriveDeploy, "written", 1},
+		{deriveDeploy, "error", 0}, // pre-initialised, never observed
+		{derivePRAffects, "skipped", 1},
+		{derivePRAffects, "refused_empty", 1},
+	} {
+		got := testutil.ToFloat64(s.deriveRuns.WithLabelValues(tc.source, tc.outcome))
+		if got != tc.want {
+			t.Errorf("deriveRuns{%s,%s} = %v, want %v", tc.source, tc.outcome, got, tc.want)
+		}
+	}
+
+	labels := gatheredLabelPairs(t, reg, "worklode_derive_runs_total", "source", "outcome")
+	if want := len(deriveSources) * len(deriveOutcomes); len(labels) != want {
+		t.Fatalf("worklode_derive_runs_total has %d series (%v), want %d — every source/outcome pair pre-initialised",
+			len(labels), labels, want)
+	}
+}
+
+// TestObserveOverviewNilSafe checks a *server built without initMetrics (as
+// tests in this package do) does not panic on either new instrument.
+func TestObserveOverviewNilSafe(t *testing.T) {
+	s := &server{}
+	s.observeOverviewRead(readDrift, overviewNoGraph)
+	s.observeDeriveRun(deriveDeploy, deriveWritten)
+}
+
+// gatheredLabelPairs returns "<first value>/<second value>" for every series
+// of a metric family, sorted. Looked up by label name rather than by
+// position: Gather sorts label pairs alphabetically, which is not the order
+// the CounterVec declares them in.
+func gatheredLabelPairs(t *testing.T, reg *prometheus.Registry, name, first, second string) []string {
+	t.Helper()
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var out []string
+	for _, mf := range mfs {
+		if mf.GetName() != name {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			byName := map[string]string{}
+			for _, lp := range m.GetLabel() {
+				byName[lp.GetName()] = lp.GetValue()
+			}
+			out = append(out, byName[first]+"/"+byName[second])
+		}
+	}
+	if len(out) == 0 {
+		t.Fatalf("%s not registered", name)
+	}
+	slices.Sort(out)
+	return out
 }

@@ -157,12 +157,6 @@ func TestLayoutParseDir(t *testing.T) {
 	}
 }
 
-func TestBranchNameFallback(t *testing.T) {
-	if got, want := worktree.BranchName("WL-7", "fix-the-thing"), "WL-7-fix-the-thing"; got != want {
-		t.Fatalf("BranchName = %q, want %q", got, want)
-	}
-}
-
 // initGitRepo creates a fresh git repo in a temp dir, with one initial commit
 // so HEAD is born (`git worktree add -b` requires this on git < 2.42, which
 // doesn't auto-infer --orphan), and returns its path.
@@ -287,6 +281,88 @@ func TestRoot(t *testing.T) {
 func TestRootOutsideGit(t *testing.T) {
 	if _, ok := worktree.Root(t.TempDir()); ok {
 		t.Fatalf("Root outside a git worktree: ok = true, want false")
+	}
+}
+
+// In the main checkout MainRoot is Root — including from a subdirectory,
+// which is the shape `lode install` is normally run in.
+func TestMainRootInMainCheckout(t *testing.T) {
+	dir := initGitRepo(t)
+	want, ok := worktree.Root(dir)
+	if !ok {
+		t.Fatalf("Root: ok = false, want true")
+	}
+	sub := filepath.Join(dir, "a", "b")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	for _, from := range []string{dir, sub} {
+		got, ok := worktree.MainRoot(from)
+		if !ok {
+			t.Fatalf("MainRoot(%s): ok = false, want true", from)
+		}
+		if got != want {
+			t.Fatalf("MainRoot(%s) = %q, want the main root %q", from, got, want)
+		}
+	}
+}
+
+// The reason MainRoot exists (WL-219): inside a linked worktree, Root is that
+// worktree's own path, and anchoring repo-root files there dirties the task
+// branch. MainRoot resolves the checkout that owns the common git dir instead.
+func TestMainRootFromLinkedWorktree(t *testing.T) {
+	dir := initGitRepo(t)
+	want, ok := worktree.Root(dir)
+	if !ok {
+		t.Fatalf("Root: ok = false, want true")
+	}
+	wt := addWorktreeUnderBase(t, dir, "WL-1-x")
+
+	own, ok := worktree.Root(wt)
+	if !ok {
+		t.Fatalf("Root(linked worktree): ok = false, want true")
+	}
+	if own == want {
+		t.Fatalf("Root(linked worktree) = %q, want the worktree's own path, not the main root", own)
+	}
+	got, ok := worktree.MainRoot(wt)
+	if !ok {
+		t.Fatalf("MainRoot(linked worktree): ok = false, want true")
+	}
+	if got != want {
+		t.Fatalf("MainRoot(linked worktree) = %q, want the main root %q", got, want)
+	}
+}
+
+func TestMainRootOutsideGit(t *testing.T) {
+	if _, ok := worktree.MainRoot(t.TempDir()); ok {
+		t.Fatalf("MainRoot outside a git worktree: ok = true, want false")
+	}
+}
+
+// A bare clone's linked worktree has no main checkout to fall back to: the
+// common dir's parent is not a worktree root at all. MainRoot must degrade to
+// the caller's own root rather than hand back a path outside the repo.
+func TestMainRootBareCloneFallsBackToOwnRoot(t *testing.T) {
+	src := initGitRepo(t)
+	bare := filepath.Join(t.TempDir(), "bare.git")
+	if out, err := exec.Command("git", "clone", "--bare", src, bare).CombinedOutput(); err != nil {
+		t.Fatalf("git clone --bare: %v\n%s", err, out)
+	}
+	linked := filepath.Join(t.TempDir(), "linked")
+	if out, err := exec.Command("git", "-C", bare, "worktree", "add", linked).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	own, ok := worktree.Root(linked)
+	if !ok {
+		t.Fatalf("Root(bare clone worktree): ok = false, want true")
+	}
+	got, ok := worktree.MainRoot(linked)
+	if !ok {
+		t.Fatalf("MainRoot(bare clone worktree): ok = false, want true")
+	}
+	if got != own {
+		t.Fatalf("MainRoot(bare clone worktree) = %q, want the fallback %q", got, own)
 	}
 }
 

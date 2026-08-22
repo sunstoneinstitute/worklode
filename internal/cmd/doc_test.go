@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // docTestBody is a minimal well-formed document: an H1 title and no
@@ -437,6 +438,25 @@ func TestDocLifecycle(t *testing.T) {
 		t.Errorf("doc revise --file: body = %q, want %q", rev.Body, revisedBody)
 	}
 
+	// revise: --discard withdraws the candidate and frees the slot, so the
+	// open above can be repeated and the accept below still has one to land.
+	out, err = runLode(t, "doc", "revise", idArg, "--discard")
+	if err != nil {
+		t.Fatalf("doc revise --discard: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "discarded the candidate revision") {
+		t.Errorf("doc revise --discard output = %q, want it to report the withdrawal", out)
+	}
+	if out, err := runLode(t, "doc", "revise", idArg, "--discard"); err == nil {
+		t.Errorf("doc revise --discard with nothing open: want an error, got %q", out)
+	}
+	if out, err := runLode(t, "doc", "revise", idArg, "--json"); err != nil {
+		t.Fatalf("doc revise (reopen after a discard): %v\noutput: %s", err, out)
+	}
+	if out, err := runLode(t, "doc", "revise", idArg, "--file", revFile, "--json"); err != nil {
+		t.Fatalf("doc revise --file (after a discard): %v\noutput: %s", err, out)
+	}
+
 	// revise: land the candidate
 	out, err = runLode(t, "doc", "revise", idArg, "--accept", "--json")
 	if err != nil {
@@ -542,12 +562,52 @@ kind: chore
 Do it.
 `
 
+// docOwnerSpec is a minimal spec, the named owner of docPlanCoveringSec1's
+// defers entry below.
+const docOwnerSpec = `---
+status: draft
+---
+
+# Owner spec
+`
+
+// docPlanCoveringSec1DefersSec2 covers sec-1 and defers sec-2 to owner-spec
+// (026 §5.3), for the deferred-gap rendering case in
+// TestDocListNeedsPlanningAndExecution.
+const docPlanCoveringSec1DefersSec2 = `---
+status: draft
+covers:
+  - my-spec#sec-1
+defers:
+  - spec: my-spec#sec-2
+    to: owner-spec
+---
+
+# Part one
+
+## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do it.
+`
+
 // TestDocListNeedsPlanningAndExecution: both selectors reach the server and
-// render — the spec with its gap anchors, the plan with its open task.
+// render — the spec with its gap anchors, including a deferred one carrying
+// its owner (026 §5.3), and the plan with its open task.
 func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
+	ownerFile := writeDocFile(t, docOwnerSpec)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "2", "--slug", "owner-spec", "--file", ownerFile); err != nil {
+		t.Fatalf("doc new owner spec: %v", err)
+	}
 	specFile := writeDocFile(t, docSpecTwoSections)
 	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
 		"--number", "1", "--slug", "my-spec", "--file", specFile); err != nil {
@@ -556,7 +616,7 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if _, err := runLode(t, "doc", "accept", "my-spec"); err != nil {
 		t.Fatalf("doc accept spec: %v", err)
 	}
-	planFile := writeDocFile(t, docPlanCoveringSec1)
+	planFile := writeDocFile(t, docPlanCoveringSec1DefersSec2)
 	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
 		"--slug", "part-one", "--file", planFile); err != nil {
 		t.Fatalf("doc new plan: %v", err)
@@ -569,8 +629,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc list --needs-planning: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "my-spec") || !strings.Contains(out, "sec-2") {
-		t.Errorf("needs-planning output = %q, want the spec and its unplanned anchor", out)
+	if !strings.Contains(out, "my-spec") || !strings.Contains(out, "sec-2(deferred:owner-spec)") {
+		t.Errorf("needs-planning output = %q, want the spec and its deferred anchor with its owner", out)
 	}
 	if strings.Contains(out, "sec-1") {
 		t.Errorf("needs-planning output = %q, want sec-1 omitted: an accepted plan covers it", out)
@@ -588,8 +648,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 		t.Fatalf("json = %+v, want one doc and one gap", resp)
 	}
 	if resp.PlanningGaps[0].Sections != 2 || len(resp.PlanningGaps[0].Gaps) != 1 ||
-		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "unplanned"}) {
-		t.Errorf("gap = %+v, want 2 sections with sec-2 unplanned", resp.PlanningGaps[0])
+		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "deferred", Owner: "owner-spec"}) {
+		t.Errorf("gap = %+v, want 2 sections with sec-2 deferred to owner-spec", resp.PlanningGaps[0])
 	}
 
 	out, err = runLode(t, "doc", "list", "--project", "proj", "--needs-execution")
@@ -674,5 +734,46 @@ func TestDocAnchorsMissingFile(t *testing.T) {
 	cmd.SetErr(io.Discard)
 	if err := cmd.Execute(); err == nil {
 		t.Fatal("err = nil, want the read to fail")
+	}
+}
+
+// TestDocNewRecordsWorktreeTask walks the whole chain 025 §12 needs: `lode
+// next` binds a worktree to a task, and a `lode doc new` run from inside that
+// worktree records the binding on the document. The CLI reads the task the
+// same way every other worktree-aware command does, so claiming into a
+// worktree is the only setup a document author does.
+func TestDocNewRecordsWorktreeTask(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Write the spec")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+	if out, err := runLode(t, "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode next: %v\noutput: %s", err, out)
+	}
+	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-write-the-spec"))
+
+	file := writeDocFile(t, docTestBody)
+	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "1", "--slug", "test-spec", "--file", file, "--json")
+	if err != nil {
+		t.Fatalf("doc new: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out).GeneratedByTask; got != task.ID {
+		t.Errorf("generated_by_task = %q, want %q: a document written under a "+
+			"leased worktree records the task that wrote it", got, task.ID)
+	}
+
+	// The same command outside any worktree records no task and still creates
+	// the document — an ad hoc author is not refused (migration 0044).
+	t.Chdir(t.TempDir())
+	out, err = runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+		"--number", "1", "--slug", "test-adr", "--file", file, "--json")
+	if err != nil {
+		t.Fatalf("doc new outside a worktree: %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out).GeneratedByTask; got != "" {
+		t.Errorf("generated_by_task = %q, want empty outside a bound worktree", got)
 	}
 }

@@ -495,10 +495,75 @@ func TestPatchTask(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown task status = %d, want 404", rr.Code)
 	}
-	// Unknown field.
-	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "bug"})
+	// Unknown field. kind stopped being one when WL-101 made it editable,
+	// so the probe uses a field nothing accepts.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"nonsense": "x"})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("unknown field status = %d, want 400", rr.Code)
+	}
+}
+
+// TestPatchTaskDeclaresArtifacts covers WL-255's task surface: a PATCH with
+// "artifacts" declares each catalog address for the task (additively and
+// idempotently), an invalid list is refused, and a declaration for an
+// unknown task rolls back with the 404.
+func TestPatchTaskDeclaresArtifacts(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Dataset task", "priority": "high", "kind": "feature",
+	})
+
+	const addr = "bigquery://sunstone-prod/cow/casualties"
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"artifacts": []string{addr}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("declare status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	// Re-declaring plus a second address: both present, no duplicate.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token,
+		map[string]any{"artifacts": []string{addr, "gs://sunstone-prod/cow/exports"}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("second declare status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	countDecls := func() int {
+		var n int
+		if err := st.DBForTests().QueryRow(
+			`SELECT COUNT(*) FROM artifact_declarations WHERE entity_kind = 'task' AND entity_id = 'WL-1'`,
+		).Scan(&n); err != nil {
+			t.Fatalf("count declarations: %v", err)
+		}
+		return n
+	}
+	if n := countDecls(); n != 2 {
+		t.Fatalf("declarations = %d, want 2", n)
+	}
+
+	for name, body := range map[string]map[string]any{
+		"empty list":  {"artifacts": []string{}},
+		"blank entry": {"artifacts": []string{"  "}},
+		"over-long":   {"artifacts": []string{strings.Repeat("x", 2001)}},
+	} {
+		rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, body)
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s status = %d, want 422; body %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	if n := countDecls(); n != 2 {
+		t.Fatalf("declarations after rejected patches = %d, want 2", n)
+	}
+
+	// Unknown task: the 404 must not leave a dangling declaration behind.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-99", token, map[string]any{"artifacts": []string{addr}})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown task status = %d, want 404", rr.Code)
+	}
+	var n int
+	if err := st.DBForTests().QueryRow(
+		`SELECT COUNT(*) FROM artifact_declarations WHERE entity_id = 'WL-99'`).Scan(&n); err != nil {
+		t.Fatalf("count WL-99 declarations: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("dangling declarations for unknown task = %d, want 0", n)
 	}
 }
 
@@ -1288,11 +1353,52 @@ func TestTaskSecretsRejectsBadNames(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
 	}
-	rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
-		"project": "secbad", "title": "bad", "priority": "medium", "kind": "chore",
-		"secrets": []string{"op://Employee/GitHub token/credential"},
+	// A value or ref smuggled into the name field, then names that satisfy the
+	// grammar but redirect loading in a `lode secrets exec` child (ADR 047).
+	for _, name := range []string{
+		"op://Employee/GitHub token/credential",
+		"LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "PATH", "IFS", "BASH_ENV",
+	} {
+		rec = doReq(t, h, http.MethodPost, "/api/v1/tasks", token, map[string]any{
+			"project": "secbad", "title": "bad", "priority": "medium", "kind": "chore",
+			"secrets": []string{name},
+		})
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("secret name %q: %d %s; want 422", name, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// TestPatchTaskKind covers WL-101: kind becomes editable through PATCH, with
+// the creation gate's validation, alias normalisation, and a change-log
+// entry through the normal event path.
+func TestPatchTaskKind(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Retag me", "priority": "medium", "kind": "feature",
 	})
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("bad secret name: %d %s; want 422", rec.Code, rec.Body.String())
+
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "design"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("retag status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["kind"] != "design" {
+		t.Fatalf("kind after patch = %v, want design", got["kind"])
+	}
+
+	// The retired alias normalises exactly as creation does.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "spec"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alias retag status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["kind"] != "design" {
+		t.Fatalf("kind after alias patch = %v, want design", got["kind"])
+	}
+
+	// An unknown kind is refused with the shared message.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "epic"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown kind status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 }

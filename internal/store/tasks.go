@@ -13,6 +13,8 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
+
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // TaskInput carries the fields for creating a new task. Draft creates the
@@ -34,6 +36,16 @@ type TaskInput struct {
 	// Written only by AcceptDoc's plan branch (025 §9.2) — no other caller
 	// sets it.
 	PlanDoc int64
+	// PlanTaskKey is the title of the ## Tasks declaration this task was
+	// minted from — the declaration's identity, which a re-accept matches
+	// against to mint only what has no row yet (025 §9.2). Required exactly
+	// when PlanDoc is set (a CHECK constraint holds the pair together), and
+	// written only by AcceptDoc's plan branch.
+	//
+	// It is stored rather than derived from Title because a minted task's
+	// title is execution fact: editing it must not detach the task from its
+	// declaration and have the next re-accept mint a duplicate.
+	PlanTaskKey string
 	// AboutDoc is the document this task is about (0 = none) — the review or
 	// design task's reference to the document that triggered its minting
 	// (025 §15.4). Distinct from PlanDoc.
@@ -129,6 +141,11 @@ func allStates() []string {
 	return slices.Sorted(maps.Keys(seen))
 }
 
+// validTaskKinds mirrors the tasks.kind CHECK constraint (via ns.TaskKinds,
+// the same source the API gate uses), so a store caller cannot write a kind
+// Postgres would refuse with a raw constraint error (WL-101).
+var validTaskKinds = ns.Set(ns.TaskKinds)
+
 // containerForbiddenStates are the delivery states a task with children can
 // never occupy. They are earned by observed deploy facts about a specific
 // commit (spec 004 §5.2) and a container has no commit of its own. Checked on
@@ -192,10 +209,10 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, about_doc)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15)`,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16)`,
 		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
-		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullID(in.AboutDoc),
+		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -342,8 +359,11 @@ func secretsJSON(names []string) ([]byte, error) {
 // still checked). concern follows special clearing rules: "" or "none" clears
 // it to NULL; any other value must be a valid concern. A blank title is
 // rejected, mirroring CreateTask: every task keeps a title for its whole life.
-// secretNames, when non-nil, replaces the whole tasks.secrets list.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition *bool) error {
+// secretNames, when non-nil, replaces the whole tasks.secrets list. kind,
+// when non-nil, retags the task (WL-101) — validated against validKinds
+// here as well as at the API gate, so no store caller can write a kind the
+// CHECK constraint would refuse with a raw error.
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition *bool, kind *string) error {
 	if title != nil && strings.TrimSpace(*title) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
@@ -352,6 +372,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if concern != nil && *concern != "" && *concern != "none" && !ValidConcern(*concern) {
 		return fmt.Errorf("unknown concern %q: %w", *concern, ErrInvalidInput)
+	}
+	if kind != nil && !validTaskKinds[*kind] {
+		return fmt.Errorf("unknown kind %q: %w", *kind, ErrInvalidInput)
 	}
 	var sets []string
 	var args []any
@@ -384,6 +407,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if needsDecomposition != nil {
 		set("needs_decomposition", *needsDecomposition)
+	}
+	if kind != nil {
+		set("kind", *kind)
 	}
 	set("updated_at", now.UTC())
 	args = append(args, id)
@@ -849,6 +875,31 @@ func (s *Store) ListEdges(ctx context.Context, taskID string) (out, in []Edge, e
 	return out, in, nil
 }
 
+// AllBlockEdges returns every 'blocks' edge, ordered by from_task then
+// to_task, for the overview's critical-path join (007: the DAG spans
+// backbone blocks edges plus KG requires edges, and the deriver needs the
+// whole edge set at once rather than one task's edges via ListEdges).
+//
+// Both ends are filtered to live tasks (044 §4). Soft delete leaves the
+// task_edges rows in place, so without the joins a deleted task would enter
+// the critical path and inflate a live task's depth — and the same surface
+// reads BlockingFanOut, which does filter, so the two must agree.
+func (s *Store) AllBlockEdges(ctx context.Context) ([]Edge, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT e.from_task, e.to_task FROM task_edges e
+		   JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
+		   JOIN tasks b ON b.id = e.to_task   AND b.deleted_at IS NULL
+		  WHERE e.type = 'blocks' ORDER BY e.from_task, e.to_task`)
+	if err != nil {
+		return nil, fmt.Errorf("all block edges: %w", err)
+	}
+	return collectRows(rows, "all block edges", func(r rowScanner) (Edge, error) {
+		e := Edge{Type: "blocks"}
+		err := r.Scan(&e.FromTask, &e.ToTask)
+		return e, err
+	})
+}
+
 // TaskEdges is one task's edges, in the same split ListEdges returns.
 type TaskEdges struct {
 	Out []Edge
@@ -1010,6 +1061,11 @@ var blockedCondition = `e.type = 'blocks'
 // outstanding" (025 §9.3): any open task in its set, or a set not yet minted
 // because the document is still draft (§7's literal sentence would read that
 // empty set as finished; §10 calls an unminted set unfinished).
+//
+// An accepted plan carrying a declaration that has no row yet (025 §9.2)
+// counts as finished once its minted tasks close. That is the same limit
+// NeedsExecution documents: the declaration is in the body, and this predicate
+// reads rows. Re-accepting the plan mints it and the gate closes again.
 //
 // "Open" is taskClosed's complement, so this and blockedCondition cannot drift
 // on what closed means. It binds `bt` on top of the aliases taskClosed binds.

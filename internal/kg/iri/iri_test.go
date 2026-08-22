@@ -18,6 +18,10 @@ func TestGrammar(t *testing.T) {
 		{"component slug with slashes", iri.Component("github.com/sunstoneinstitute/worklode"),
 			base + "id/component/github.com/sunstoneinstitute/worklode"},
 		{"doc", iri.Doc("spec-worklode-006"), base + "id/doc/spec-worklode-006"},
+		{"section (025 §3)", iri.Section("spec-worklode-025", "sec-3"),
+			base + "id/section/spec-worklode-025/sec-3"},
+		{"versioned doc (025 §4)", iri.DocVersion("spec-worklode-025", 3),
+			base + "id/doc/spec-worklode-025/v3"},
 		{"deliverable", iri.Deliverable("WL-DEL-1"), base + "id/deliverable/WL-DEL-1"},
 		{"issue", iri.Issue("github.com", "sunstoneinstitute", "worklode", 42),
 			base + "id/issue/github.com/sunstoneinstitute/worklode/42"},
@@ -30,6 +34,15 @@ func TestGrammar(t *testing.T) {
 		{"environment", iri.Environment("prod"), base + "id/environment/prod"},
 		{"commit", iri.Commit("github.com", "sunstoneinstitute", "worklode", "a16c2a7"),
 			base + "id/commit/github.com/sunstoneinstitute/worklode/a16c2a7"},
+		{"declared graph", iri.DeclaredGraph("adr-worklode-0007"),
+			base + "graph/declared/adr-worklode-0007"},
+		{"observed graph (org-global source)", iri.ObservedGraph("deploy"),
+			base + "graph/observed/deploy"},
+		{"observed graph (repo-local source)",
+			iri.RepoObservedGraph("go-imports", "github.com", "sunstoneinstitute", "worklode"),
+			base + "graph/observed/go-imports/github.com/sunstoneinstitute/worklode"},
+		{"repo", iri.Repo("github.com", "sunstoneinstitute", "worklode"),
+			base + "id/repo/github.com/sunstoneinstitute/worklode"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

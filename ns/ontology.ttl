@@ -57,16 +57,6 @@ wl:DesignDoc a owl:Class ;
         prov:wasGeneratedBy (§12, the task that wrote it), prov:wasRevisionOf and
         prov:wasAttributedTo (§4) on documents, and all three have prov:Entity as their domain.""" .
 
-wl:Plan a owl:Class ;
-    rdfs:subClassOf foaf:Document , prov:Entity ;
-    wl:layer wlc:execution ;
-    rdfs:comment """An executable document: a bundle of task definitions with instructions
-        attached. Reviewable and accept-gated like a DesignDoc, but spent once executed, freely
-        mutable, and carrying no frozen section anchors — nothing may pin a claim to a plan.
-        A sibling of DesignDoc, never a subclass: 025 §2 dropped wl:Plan because the section
-        lock would be harmful here, and 025 §9 restored it on that same reasoning. Acceptance
-        mints its tasks (025 §9.2).""" .
-
 wl:ADR a owl:Class ;
     rdfs:subClassOf wl:DesignDoc ;
     wl:layer wlc:intent .
@@ -86,11 +76,13 @@ wl:Section a owl:Class ;
 wl:Plan a owl:Class ;
     rdfs:subClassOf foaf:Document , prov:Entity ;
     wl:layer wlc:execution ;
-    rdfs:comment """An executable document: accepting it mints its tasks (025 §4-§5). A sibling of
-        wl:DesignDoc, not a subclass — a plan is spent by execution rather than superseded, and
-        takes no wl:Section parts and no anchors. 025 §2 dropped the class when plan-shaped work
-        was a task subtree; 025 §9 (accepted) reintroduced plans as documents, mirrored here by
-        spec 025 §17.""" .
+    rdfs:comment """An executable document: a bundle of task definitions with instructions
+        attached, minted as tasks when it is accepted (025 §9.2). Reviewable and accept-gated
+        like a DesignDoc, but spent by execution rather than superseded, freely mutable, and
+        taking no wl:Section parts and no frozen anchors — the section lock that protects a
+        spec would be harmful here, so nothing may pin a claim to a plan (025 §2). A sibling
+        of wl:DesignDoc, never a subclass: 025 §9 reintroduced plans as documents on that
+        same reasoning, mirrored here by spec 025 §17.""" .
 
 wl:Deliverable a owl:Class ;
     wl:layer wlc:intent ;
@@ -390,6 +382,41 @@ wl:completedWith a owl:ObjectProperty ;
         a named plan that does not itself cover the section leaves it partially planned
         (026 §2.1).""" .
 
+wl:defers a owl:ObjectProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Section ;
+    rdfs:comment """A Plan's explicit handoff of a Section it will not build (026 §5.3). The
+        deferring plan contributes no coverage; the section stays a planning gap, named rather
+        than silent, until some plan covers it. The owner hangs off the qualified wl:Deferral
+        node, never off this edge. Frontmatter key `defers`, entries {spec, to}; projected as a
+        doc_edges 'defers' row with the owner in the completion side-table.""" .
+
+wl:Deferral a owl:Class ;
+    wl:layer wlc:execution ;
+    rdfs:comment """A qualified wl:defers: which document owns the handed-off Section. Reified
+        beside the direct edge, never in place of it, mirroring wl:Coverage — the node names both
+        ends itself for 026 §6.3's reasons.""" .
+
+wl:deferringPlan a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range wl:Plan .
+
+wl:deferredSection a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range wl:Section .
+
+wl:deferredTo a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Deferral ;
+    rdfs:range [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan ) ] ;
+    rdfs:comment """The owner: the document whose plans are expected to cover the deferred
+        section. Usually a spec, whose future plans inherit the handoff; a plan when the
+        successor already exists (026 §5.3). Naming an owner gates nothing — delivery is any
+        plan covering the section (026 §2.1).""" .
+
 wl:affects a owl:ObjectProperty ;
     wl:layer wlc:execution ;
     rdfs:range wl:Component ;
@@ -424,6 +451,12 @@ wl:concern a owl:DatatypeProperty ;
         scheme — the backbone owns the enum (006 Open Q3). The legal values are the tasks.concern
         CHECK constraint (migration 0002_prioritization).""" .
 
+wl:unmatchedPath a owl:DatatypeProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain doap:Project ;
+    rdfs:range xsd:string ;
+    rdfs:comment "A repo-relative path prefix matched by no component in the repo's .worklode/components.yaml — a coverage gap (spec 007 §1, §3.2). Subject is the repo (doap:Project) node; written only by the repo-layout deriver." .
+
 wl:taskKind a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
@@ -445,6 +478,31 @@ wl:blocks a owl:ObjectProperty, owl:TransitiveProperty ;
     rdfs:domain wl:Task ;
     rdfs:range wl:Task ;
     rdfs:comment "This task blocks that task (backbone-authoritative, spec 004). Transitive." .
+
+wl:blockedByPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:layer wlc:execution ;
+    rdfs:subPropertyOf dct:requires ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Plan ;
+    rdfs:comment """This plan is ordered after that plan — the document-level blocks edge
+        (025 §5, §9.3): every task in this plan is held while any task in the blocking plan's
+        set is open. A distinct property, never a widened wl:dependsOn, so the Task→Task
+        closure stays type-homogeneous (ADR-0004) and ?t wl:dependsOn+ ?x never walks across
+        document ordering. Transitive, so plan-ordering reachability is a property path
+        (?p wl:blockedByPlan+ ?x) with no reasoner. Declared by the document-level plan
+        frontmatter keys `blocks`/`blockedBy` (025 §5) — document references, unlike the
+        task-level `blockedBy` numbers inside a plan's ## Tasks, which mint Task→Task
+        wl:blocks edges (025 §9.2) — and stored as a doc_edges 'blocks' row between the
+        two plan documents.""" .
+
+wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
+    wl:layer wlc:execution ;
+    owl:inverseOf wl:blockedByPlan ;
+    rdfs:domain wl:Plan ;
+    rdfs:range wl:Plan ;
+    rdfs:comment """This plan is ordered before that plan (document-level blocks edge,
+        backbone-authoritative doc_edges; 025 §5, §9.3). Transitive. "Plan B after plan A"
+        is A wl:blocksPlan B.""" .
 
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;

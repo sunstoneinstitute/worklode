@@ -148,6 +148,65 @@ func TestLogChange(t *testing.T) {
 	}
 }
 
+// TestRecordEventThenApplyKeepsRowOnApplyFailure covers WL-247: the row
+// commits before the apply runs, a failed apply reports *ApplyFailedError
+// and leaves the row awaiting replay (applied_at NULL), a redelivery re-runs
+// the apply, and an applied event stays a no-op.
+func TestRecordEventThenApplyKeepsRowOnApplyFailure(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	boom := errors.New("apply failed")
+	id1, inserted, err := s.RecordEventThenApply(ctx, "github", "d9", "push", nil,
+		func(tx *sql.Tx, eventID int64) error { return boom })
+	var applyFailed *ApplyFailedError
+	if !errors.As(err, &applyFailed) {
+		t.Fatalf("err = %v; want *ApplyFailedError", err)
+	}
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v; want it to wrap the apply's own error", err)
+	}
+	if !inserted || applyFailed.EventID != id1 {
+		t.Fatalf("inserted = %v, EventID = %d; want true, %d", inserted, applyFailed.EventID, id1)
+	}
+
+	var appliedAt sql.NullTime
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT applied_at FROM events WHERE source = 'github' AND external_id = 'd9'`,
+	).Scan(&appliedAt); err != nil {
+		t.Fatalf("row must survive the failed apply: %v", err)
+	}
+	if appliedAt.Valid {
+		t.Fatalf("applied_at = %v; want NULL (awaiting replay)", appliedAt.Time)
+	}
+
+	// Redelivery: the row exists but was never applied, so apply runs again.
+	applyCalls := 0
+	apply := func(tx *sql.Tx, eventID int64) error {
+		applyCalls++
+		return MarkEventApplied(tx, eventID, s.Now())
+	}
+	id2, inserted, err := s.RecordEventThenApply(ctx, "github", "d9", "push", nil, apply)
+	if err != nil {
+		t.Fatalf("redelivery: %v", err)
+	}
+	if inserted || id2 != id1 {
+		t.Fatalf("redelivery: inserted = %v, id = %d; want false, %d", inserted, id2, id1)
+	}
+	if applyCalls != 1 {
+		t.Fatalf("redelivery: apply called %d times; want 1", applyCalls)
+	}
+
+	// A third delivery finds the event applied and skips the apply.
+	_, inserted, err = s.RecordEventThenApply(ctx, "github", "d9", "push", nil, apply)
+	if err != nil {
+		t.Fatalf("third delivery: %v", err)
+	}
+	if inserted || applyCalls != 1 {
+		t.Fatalf("third delivery: inserted = %v, applyCalls = %d; want false, 1", inserted, applyCalls)
+	}
+}
+
 func TestRecordEventWithID(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()

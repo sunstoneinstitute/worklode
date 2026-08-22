@@ -1,24 +1,33 @@
 // Package projector projects the backbone into the data-platform knowledge
 // graph (spec 006 §11). Authority stays split: the backbone (this repo,
-// Postgres) owns execution facts, Task is the one bridge between the two
-// systems, and it is projected read-only into the graph — design facts
-// (specs, ADRs, plans) are never projected from the backbone. graph-server
+// Postgres) owns execution facts and — since 025 §5 moved authoring there —
+// the design documents, and both are projected read-only into the graph.
+// Tasks render into the project's own named graph; each document's canonical
+// node renders into its per-document declared graph (007 §1.1's
+// declared/<slug>, iri.DeclaredGraph), whose writer is this projector now
+// that the backbone is the authoring surface (WL-289). graph-server
 // exposes no SPARQL Update, so there is no per-subject patch and no
-// read-modify-write of graph state: the write unit is the whole project
-// graph. RunOnce re-renders every task of a dirty project from the backbone
-// and PUTs the complete graph, replacing what graph-server held for it.
+// read-modify-write of graph state: the write unit is a whole named graph.
+// RunOnce re-renders every task and document of a dirty project from the
+// backbone and PUTs the complete graphs, replacing what graph-server held.
 // Deterministic rendering (graphproj.Document sorts and dedupes rendered
 // lines) makes an unchanged re-projection byte-identical, so re-running
-// after a crash or a duplicated batch is idempotent. One task mutation writes
-// no outbox row — SetTaskSkills (internal/store/tasks.go) — which is
-// harmless since skills are not projected; the only effect is a
-// dct:modified that lags until the task's next real event.
+// after a crash or a duplicated batch is idempotent. Failures are isolated
+// per project: the watermark is global, so a project that cannot be written
+// is quarantined in graph_projection_failures and retried on its own backoff
+// schedule while the watermark advances past every project that did succeed.
+// One task mutation writes no outbox row — SetTaskSkills
+// (internal/store/tasks.go) — which is harmless since skills are not
+// projected; the only effect is a dct:modified that lags until the task's
+// next real event.
 package projector
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
@@ -41,17 +50,28 @@ type Projector struct {
 	gc    *graphserver.Client
 	m     *Metrics // nil-safe; Task 4
 	batch int
+	clock func() time.Time // nil means time.Now; see now()
 }
 
-// New returns a projector reading at most batch state_log rows per run.
+// New returns a projector reading at most batch transactions' worth of
+// state_log rows per run (store.DirtyProjects).
 func New(st *store.Store, gc *graphserver.Client, m *Metrics, batch int) *Projector {
 	return &Projector{st: st, gc: gc, m: m, batch: batch}
 }
 
-// RunOnce projects every project dirtied since the checkpoint, then advances
-// the checkpoint. It returns how many project graphs were (re-)written. On
-// error the checkpoint is left untouched so the next run retries the same
-// batch.
+// RunOnce projects every project dirtied since the checkpoint plus every
+// quarantined project whose retry is due, then advances the checkpoint. It
+// returns how many project graphs were (re-)written and joins the failures of
+// the ones that were not.
+//
+// A project that fails is isolated, not fatal: it is recorded in the
+// quarantine table (see failure and retryDelay), the loop continues, and the
+// checkpoint still advances past the transactions that dirtied it so no
+// healthy project is held back by it. The one case that still leaves the checkpoint alone is
+// failing to *write* the quarantine row — without that row the project would
+// be forgotten, so the old behaviour (retry the whole batch next run) is the
+// safe fallback. Errors reading the checkpoint, the dirty batch or the
+// quarantine table abort the run before anything is projected.
 func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 	start := time.Now()
 	defer func() {
@@ -70,19 +90,139 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 	if err != nil {
 		return 0, fmt.Errorf("projector: %w", err)
 	}
+	quarantined, err := p.st.ProjectionFailures(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("projector: %w", err)
+	}
 
+	now := p.now()
+	prior := make(map[string]store.ProjectionFailure, len(quarantined))
+	for _, f := range quarantined {
+		prior[f.ProjectID] = f
+	}
+	still := len(quarantined)
+
+	// A dirty project is attempted whatever its backoff says: fresh content
+	// is the event most likely to clear a content-specific rejection, and the
+	// bypass costs nothing above baseline — a dirty project is one the
+	// projector would render and PUT anyway, so the render the backoff saves
+	// is only the one for a project with no new events.
+	dirty := make(map[string]bool, len(projects))
 	for _, id := range projects {
-		if err := p.projectOne(ctx, id); err != nil {
-			return 0, fmt.Errorf("projector: %w", err)
+		dirty[id] = true
+	}
+	targets := slices.Clone(projects)
+	for _, f := range quarantined {
+		if !dirty[f.ProjectID] && !f.NextAttemptAt.After(now) {
+			targets = append(targets, f.ProjectID)
 		}
 	}
 
-	if through != cp {
-		if err := p.st.SetProjectionCheckpoint(ctx, through); err != nil {
-			return 0, fmt.Errorf("projector: %w", err)
+	var errs []error
+	quarantineWritten := true
+	for _, id := range targets {
+		perr := p.projectOne(ctx, id)
+		if perr == nil {
+			n++
+			if _, was := prior[id]; was {
+				if cerr := p.st.ClearProjectionFailure(ctx, id); cerr != nil {
+					// The stale row costs one redundant re-PUT next
+					// time it comes due, which is idempotent.
+					errs = append(errs, fmt.Errorf("projector: %w", cerr))
+					continue
+				}
+				still--
+				slog.Info("graph projection recovered", "project", id,
+					"attempts", prior[id].Attempts)
+			}
+			continue
+		}
+
+		errs = append(errs, perr)
+		next := failure(prior[id], id, now, perr)
+		if rerr := p.st.RecordProjectionFailure(ctx, next); rerr != nil {
+			errs = append(errs, fmt.Errorf("projector: %w", rerr))
+			// Only a *first* failure needs the checkpoint held back: a
+			// repeat one already has a row remembering the debt, and
+			// freezing the watermark over it would reinstate exactly the
+			// blast radius this quarantine exists to remove.
+			if next.Attempts == 1 {
+				quarantineWritten = false
+			}
+			continue
+		}
+		if next.Attempts == 1 {
+			still++
+		}
+		p.m.recordProjectFailure()
+		slog.Error("graph projection failed for project", "project", id,
+			"attempts", next.Attempts, "retry_at", next.NextAttemptAt, "err", perr)
+	}
+
+	if through != cp && quarantineWritten {
+		if cerr := p.st.SetProjectionCheckpoint(ctx, through); cerr != nil {
+			errs = append(errs, fmt.Errorf("projector: %w", cerr))
 		}
 	}
-	return len(projects), nil
+	p.m.setQuarantined(still)
+	return n, errors.Join(errs...)
+}
+
+// Retry cadence for a quarantined project. The first re-attempt is immediate
+// — the next 10s poll — because the common failure is transient (graph-server
+// restarting, a network blip) and recovers on its own. From the second
+// consecutive failure the delay doubles from retryBase, so a project failing
+// for a reason that will not fix itself stops costing a full graph render and
+// PUT every 10s. retryCap keeps the worst-case detection lag for a project
+// that *is* fixed bounded, and any new task activity in the project bypasses
+// the wait entirely.
+const (
+	retryBase = time.Minute
+	retryCap  = 30 * time.Minute
+)
+
+// retryDelay returns how long after the attempts'th consecutive failure the
+// project may be re-attempted: 0, 1m, 2m, 4m … capped at retryCap.
+func retryDelay(attempts int) time.Duration {
+	if attempts <= 1 {
+		return 0
+	}
+	d := retryBase
+	for i := 2; i < attempts; i++ {
+		if d >= retryCap {
+			break
+		}
+		d *= 2
+	}
+	return min(d, retryCap)
+}
+
+// failure builds the quarantine row for a project that just failed. prior is
+// its existing row, zero when there is none, so a first failure starts the
+// clock and a repeat one only advances it.
+func failure(prior store.ProjectionFailure, id string, now time.Time, err error) store.ProjectionFailure {
+	f := store.ProjectionFailure{
+		ProjectID:     id,
+		Attempts:      1,
+		FirstFailedAt: now,
+		LastFailedAt:  now,
+		LastError:     err.Error(),
+	}
+	if prior.Attempts > 0 {
+		f.Attempts = prior.Attempts + 1
+		f.FirstFailedAt = prior.FirstFailedAt
+	}
+	f.NextAttemptAt = now.Add(retryDelay(f.Attempts))
+	return f
+}
+
+// now is the projector's clock, overridable in tests that need to reach past
+// a backoff without sleeping.
+func (p *Projector) now() time.Time {
+	if p.clock != nil {
+		return p.clock()
+	}
+	return time.Now().UTC()
 }
 
 // projectOne renders one project's whole graph from the backbone and
@@ -121,6 +261,23 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	doc := graphproj.Document(triples)
 	if _, err := p.gc.PutGraph(ctx, Branch, iri.ProjectGraph(id), doc); err != nil {
 		return fmt.Errorf("put graph for project %s: %w", id, err)
+	}
+
+	// The project's documents render into their own declared graphs
+	// (WL-289): one graph per document, replaced whole, in the same attempt
+	// — a failure quarantines the project as a unit, documents included.
+	// Live documents only; a tombstoned document (044) keeps its last
+	// projected graph until a delete path exists, noted in
+	// docs/follow-ups.md.
+	docs, err := p.st.ListDocs(ctx, store.DocFilter{Project: id})
+	if err != nil {
+		return fmt.Errorf("list docs for project %s: %w", id, err)
+	}
+	for _, d := range docs {
+		body := graphproj.Document(graphproj.DocTriples(d))
+		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), body); err != nil {
+			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
+		}
 	}
 	p.m.recordProject()
 	return nil

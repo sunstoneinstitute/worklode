@@ -67,7 +67,11 @@ templ NewTask(v NewTaskView) {
 			</p>
 			<p class="fieldrow">
 				<label for="body">Body</label>
-				<textarea id="body" name="body" rows="8" placeholder="What has to be true when this is done?">{ v.Body }</textarea>
+				@MarkdownInput(MarkdownInputView{
+					ID: "body", Name: "body", Rows: 8,
+					Placeholder: "What has to be true when this is done?",
+					Value:       v.Body, Dictation: v.Form.Dictation,
+				})
 			</p>
 			@selectField("priority", "Priority", v.Priorities)
 			@selectField("kind", "Kind", v.Kinds)
@@ -95,7 +99,11 @@ templ NewDeliverable(v NewDeliverableView) {
 			</p>
 			<p class="fieldrow">
 				<label for="description">Description</label>
-				<textarea id="description" name="description" rows="6" placeholder="What is shipped, and how would someone recognise it?">{ v.Description }</textarea>
+				@MarkdownInput(MarkdownInputView{
+					ID: "description", Name: "description", Rows: 6,
+					Placeholder: "What is shipped, and how would someone recognise it?",
+					Value:       v.Description, Dictation: v.Form.Dictation,
+				})
 			</p>
 			<p class="fieldrow">
 				<label for="url">URL <span class="muted">(optional)</span></label>
@@ -104,6 +112,16 @@ templ NewDeliverable(v NewDeliverableView) {
 					The address this deliverable lives at, when it is known in advance.
 					Adding it records where to look; whether the deliverable is live stays
 					a fact an emitter or prober reports.
+				</span>
+			</p>
+			<p class="fieldrow">
+				<label for="artifact">Artifact address <span class="muted">(optional)</span></label>
+				<input id="artifact" name="artifact" type="text" maxlength="2000" placeholder="bigquery://project.dataset.table" value={ v.Artifact }/>
+				<span class="hint">
+					The catalog address this deliverable is verified by (spec 029 §3.1)
+					&mdash; <span class="mono">bigquery://</span>, <span class="mono">iceberg://</span>,
+					<span class="mono">gs://</span>, &hellip; Emitters report state against this
+					exact address, so copy it from the catalog rather than typing it.
 				</span>
 			</p>
 		}

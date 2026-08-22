@@ -1,6 +1,6 @@
 // web.go implements the web UI's read surfaces (its writes — the two
 // creation forms — live in webform.go): it builds the presentation views
-// internal/ui's templ components render (the shared Page shell, the seven
+// internal/ui's templ components render (the shared Page shell, the eight
 // global destinations and the project-local destinations spec 032 §2 defines)
 // and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
 // from internal/ui — see assetHandler). When OIDC is configured every page
@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
@@ -99,8 +100,9 @@ func (s *server) blobOrigin() string {
 // contentSecurityPolicy is the policy every rendered page carries (set in one
 // place, renderWeb). Each directive is what the pages actually load:
 //
-//   - script-src 'self': layout.templ's /assets/theme.js and /assets/htmx.min.js
-//     and cliauth.templ's /assets/copy.js. No page has an inline script.
+//   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js, and
+//     /assets/htmx.min.js, and cliauth.templ's /assets/copy.js. No page has
+//     an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
 //     meta turns off the unnonced <style> htmx would otherwise inject for its
@@ -284,6 +286,54 @@ func (s *server) workPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "board page", ui.Board(view))
 }
 
+// driftPage handles GET /drift: spec 007's read surface as a page — the ready
+// frontier and the critical path from the backbone, violations, stale intent
+// and gaps from the knowledge graph. It is read-only: the page offers no act,
+// because resolving drift means changing a declaration or the code.
+//
+// An unconfigured graph is not an error here. The JSON API answers 503 for a
+// graph-backed read (see failedOverviewRead) because a client asked for
+// exactly that read; the page asked for all four, two of which are
+// backbone-authoritative, so ErrNoGraph degrades the page to its honest half
+// the way overview.Roll degrades its counts.
+func (s *server) driftPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	frontier, err := s.overview.Frontier(ctx, "")
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	cp, err := s.overview.CriticalPath(ctx)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	graphEnabled := true
+	drift, err := s.overview.DriftReport(ctx, false)
+	if errors.Is(err, overview.ErrNoGraph) {
+		graphEnabled, drift, err = false, nil, nil
+	}
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	var gaps []model.Gap
+	if graphEnabled {
+		gaps, err = s.overview.GapReport(ctx)
+		if errors.Is(err, overview.ErrNoGraph) {
+			graphEnabled, gaps, err = false, nil, nil
+		}
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+	}
+
+	view := driftView(frontier, cp, drift, gaps, graphEnabled)
+	s.renderWeb(w, r, http.StatusOK, "drift page", ui.Drift(view))
+}
+
 // projectsPage handles GET /projects: the cross-project portfolio (spec 032
 // §2), linking each project to its canonical cockpit URL.
 func (s *server) projectsPage(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +440,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range refs {
-		refs[i].URL = "/blob/" + refs[i].Hash
+		refs[i].URL = blobURL(refs[i].Hash, refs[i].Filename)
 	}
 
 	view := taskView(s.mdcache, t, blocked, entries, out, in)
@@ -445,7 +495,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	view := docView(detail)
+	view := docView(s.mdcache, detail)
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
 }
 

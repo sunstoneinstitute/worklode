@@ -244,7 +244,11 @@ but are never crew members; the project lead remains the accountable human.
 - **Participants** (stored, per project and role-labelled): who is *on* the
   investigation, visible before any task is picked up. The UI calls this set the
   **Crew**. One actor may carry several project role labels; exactly one participant
-  is the project lead. Agents, advisory-only approvers and reviewers, and notification
+  is the project lead. Role labels are drawn from a fixed vocabulary (WL-297) —
+  `member` (the default), `editor`, `science-lead`, `reporter`, `domain-expert`,
+  `data-scientist`, `engineer` — enforced by a CHECK constraint and offered as the
+  Crew form's dropdown; widening it changes the migration, the store's list, and the
+  form together. Agents, advisory-only approvers and reviewers, and notification
   recipients are not silently added to it.
 - **Contributors** (derived): everyone who was ever assigned a task in the project.
   Derivation is the point — an engineer who fixed a pipeline task gets credit on the

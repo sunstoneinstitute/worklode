@@ -62,6 +62,36 @@ type BoardFailure struct {
 	Message    string
 }
 
+// --- drift board (spec 007) --------------------------------------------------
+
+// DriftView is the read-only drift board at /drift: four of spec 007's five
+// views, composed from internal/model directly because every field is a fact
+// the overview service already computed in the shape the page renders.
+//
+// Frontier and CriticalPath are backbone-authoritative and always render.
+// GraphEnabled reports whether a graph-server is configured; when it is not,
+// Drift and Gaps carry no data — not zero findings — so the page says the
+// graph is unconfigured rather than showing empty tables that would read as
+// "no drift".
+type DriftView struct {
+	Page         PageProps
+	Frontier     []model.FrontierTask
+	CriticalPath model.CriticalPath
+	Drift        model.Drift
+	Gaps         []model.Gap
+	GraphEnabled bool
+}
+
+// gapSubject names what a gap finding is about: the component with no
+// governing doc, or the repository holding an unmatched path (spec 007 §4.2
+// sets exactly one of the two).
+func gapSubject(g model.Gap) string {
+	if g.Component != "" {
+		return g.Component
+	}
+	return g.Repo
+}
+
 // --- projects portfolio -----------------------------------------------------
 
 // ProjectsView is the cross-project portfolio. It embeds model.Project rows
@@ -272,10 +302,11 @@ type DeliverablesView struct {
 	Deliverables []DeliverableRow
 }
 
-// DeliverableRow is one declared deliverable. It carries no state: spec 029
-// §3.2 makes deliverable state a fact emitters and probers report, and no
-// such report exists yet, so the page says the state is unreported rather
-// than showing one.
+// DeliverableRow is one declared deliverable. Spec 029 §3.2 makes deliverable
+// state a fact emitters and probers report, never one the deliverable stores,
+// so ReportedState and ReportedAt come from the newest evidence filed against
+// Artifact and are empty until something reports. A row with nothing reported
+// says "Declared" rather than inventing a status.
 type DeliverableRow struct {
 	ID          string
 	Name        string
@@ -283,6 +314,45 @@ type DeliverableRow struct {
 	URL         string
 	CreatedBy   string
 	CreatedAt   time.Time
+
+	// Artifact is the address the deliverable declares it is verified by
+	// (029 §3.1) — a catalog identifier, not necessarily a browser link, so
+	// it renders as text and never as an href.
+	Artifact string
+
+	// ReportedState is the newest reported state of Artifact
+	// (published | updated | deprecated | removed | failed), "" when nothing
+	// has reported; ReportedAt is when that report says it happened.
+	ReportedState string
+	ReportedAt    *time.Time
+}
+
+// deliverableChip maps a deliverable's reported state to its .chip variant.
+// An unreported deliverable keeps the "declared" evidence chip: a declaration
+// is all it honestly carries (spec 032 §1). Anything reported is observed
+// evidence, coloured by what the state means for the deliverable.
+func deliverableChip(state string) string {
+	switch state {
+	case "":
+		return "declared"
+	case "published", "updated":
+		return "ok"
+	case "deprecated":
+		return "warn"
+	case "removed", "failed":
+		return "crit"
+	default:
+		return "observed"
+	}
+}
+
+// deliverableLabel is the chip's text: the reported state, or "Declared" when
+// nothing has reported one.
+func deliverableLabel(state string) string {
+	if state == "" {
+		return "Declared"
+	}
+	return strings.ToUpper(state[:1]) + state[1:]
 }
 
 // --- crew --------------------------------------------------------------------
@@ -299,9 +369,12 @@ type CrewView struct {
 	// AddAction is where the add-member form POSTs. Add is what the person
 	// typed, preserved so a rejected submit comes back with the form filled
 	// in, and AddError is the one message to fix ("" on first render).
+	// Roles is the fixed role vocabulary as the dropdown's options (WL-297),
+	// with the submitted (or default) role marked selected.
 	AddAction string
 	Add       CrewFormValues
 	AddError  string
+	Roles     []FormOption
 
 	// RemoveAction is where each non-lead member's Remove button POSTs; the
 	// member is named in a hidden field. RemoveError is the one message a
@@ -323,10 +396,10 @@ type CrewWorkItem struct {
 	State string
 }
 
-// CrewFormValues are the add-member form's fields as submitted. Role is a
-// free-form label (spec 029 §6.1), so it is a text field and not a menu:
-// what a person does on a project is org vocabulary, not a closed set this
-// page gets to offer.
+// CrewFormValues are the add-member form's fields as submitted. Role is one
+// of the fixed project-role vocabulary (WL-297) — CrewView.Roles carries the
+// menu the page offers, and the store and migration 0046's CHECK enforce the
+// same set.
 type CrewFormValues struct {
 	Actor string
 	Role  string
@@ -367,8 +440,15 @@ type DocRow struct {
 // sections with their accept-time state, its edges in both directions, and
 // the open candidate revision when one exists (nil otherwise).
 type DocView struct {
-	Page     PageProps
-	Doc      model.Doc
+	Page PageProps
+	Doc  model.Doc
+	// BodyHTML is Doc.Body rendered from markdown and sanitised by
+	// internal/mdrender, filled in by internal/api for the reason TaskView's
+	// field gives. The document flavour keeps a {#sec-N} heading anchor, so
+	// the Sections table below can link into the body; nothing else about the
+	// allowlist differs. The same "never assign anything else here" rule
+	// applies.
+	BodyHTML template.HTML
 	Ref      string
 	Sections []model.DocSection
 	Edges    []DocEdgeRow
@@ -425,6 +505,22 @@ type FormShell struct {
 	Action    string
 	CancelURL string
 	Error     string
+	// Dictation reports whether the server has a speech-to-text provider
+	// configured (WL-299); it decides whether MarkdownInput offers the
+	// microphone, never whether the input works.
+	Dictation bool
+}
+
+// MarkdownInputView is one MarkdownInput component (WL-299): the textarea's
+// own attributes plus whether dictation is offered. Value is the draft as
+// submitted, preserved across a refused form post like every other field.
+type MarkdownInputView struct {
+	ID          string
+	Name        string
+	Rows        int
+	Placeholder string
+	Value       string
+	Dictation   bool
 }
 
 // NewTaskView is the "New task" form (POST to Form.Action), rendering the
@@ -441,14 +537,16 @@ type NewTaskView struct {
 	Draft      bool
 }
 
-// NewDeliverableView is the "Declare a deliverable" form: exactly the three
-// descriptive fields spec 029 §3.1 gives a custom deliverable, and nothing
-// that would let a person assert its state.
+// NewDeliverableView is the "Declare a deliverable" form: exactly the
+// descriptive fields spec 029 §3.1 gives a custom deliverable — name,
+// description, URL, and the artifact address the ingest routes reports by —
+// and nothing that would let a person assert its state.
 type NewDeliverableView struct {
 	Form        FormShell
 	Name        string
 	Description string
 	URL         string
+	Artifact    string
 }
 
 // --- presentation helpers ---------------------------------------------------

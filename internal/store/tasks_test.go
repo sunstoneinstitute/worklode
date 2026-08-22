@@ -1282,16 +1282,19 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 		t.Fatalf("insert plan b: %v", err)
 	}
 
+	// PlanTaskKey travels with PlanDoc: a CHECK constraint holds the pair
+	// together, because a minted task must say which declaration it covers
+	// (025 §9.2).
 	inA1 := defaultTaskInput()
-	inA1.PlanDoc = planA
+	inA1.PlanDoc, inA1.PlanTaskKey = planA, "A first"
 	a1 := createTask(t, s, taskTestNow, inA1)
 
 	inA2 := defaultTaskInput()
-	inA2.PlanDoc = planA
+	inA2.PlanDoc, inA2.PlanTaskKey = planA, "A second"
 	a2 := createTask(t, s, taskTestNow, inA2)
 
 	inB := defaultTaskInput()
-	inB.PlanDoc = planB
+	inB.PlanDoc, inB.PlanTaskKey = planB, "B first"
 	b1 := createTask(t, s, taskTestNow, inB)
 
 	unplanned := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -1599,7 +1602,7 @@ func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, b
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition)
+			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil)
 		})
 	return err
 }
@@ -1953,7 +1956,7 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 	// Update replaces the whole list; empty clears.
 	next := []string{"GITHUB_TOKEN"}
 	err = s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil)
+		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil, nil)
 	})
 	if err != nil {
 		t.Fatalf("update secrets: %v", err)
@@ -1973,16 +1976,20 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 	if err := s.CreateProject(ctx, "secproj2", "Secrets2", "SF"); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
-		func(tx *sql.Tx, eventID int64) error {
-			_, err := CreateTask(tx, s.Now(), TaskInput{
-				ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
-				Secrets: []string{"op://Employee/x"},
-			}, eventID)
-			return err
-		})
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("create with bad secret name: %v; want ErrInvalidInput", err)
+	// The store re-checks independently of the API, so the loader-sensitive
+	// deny-list (ADR 047) has to hold here too, not only at the HTTP edge.
+	for _, name := range []string{"op://Employee/x", "LD_PRELOAD", "DYLD_LIBRARY_PATH", "PATH", "PYTHONPATH"} {
+		_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.create", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				_, err := CreateTask(tx, s.Now(), TaskInput{
+					ProjectID: "secproj2", Title: "bad", Priority: "medium", Kind: "chore",
+					Secrets: []string{name},
+				}, eventID)
+				return err
+			})
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("create with secret name %q: %v; want ErrInvalidInput", name, err)
+		}
 	}
 }
 

@@ -25,13 +25,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
+	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/overview"
+	"github.com/sunstoneinstitute/worklode/internal/reconcile"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -40,12 +44,14 @@ import (
 )
 
 // Config carries server configuration. The webhook secrets and cluster/env
-// map are consumed by the /hooks/github and /hooks/flux endpoints.
+// map are consumed by the /hooks/github, /hooks/flux and /hooks/catalog
+// endpoints.
 type Config struct {
-	BootstrapToken      string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
-	GitHubWebhookSecret string            // LODE_GITHUB_WEBHOOK_SECRET
-	FluxWebhookSecret   string            // LODE_FLUX_WEBHOOK_SECRET
-	ClusterEnvMap       map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
+	BootstrapToken       string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
+	GitHubWebhookSecret  string            // LODE_GITHUB_WEBHOOK_SECRET
+	FluxWebhookSecret    string            // LODE_FLUX_WEBHOOK_SECRET
+	CatalogWebhookSecret string            // LODE_CATALOG_WEBHOOK_SECRET
+	ClusterEnvMap        map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// InstanceEnv (LODE_INSTANCE_ENV) is which kind of instance this is: "dev"
 	// or "prod", nothing else, empty meaning prod (039 §3). It is not
@@ -116,9 +122,19 @@ type Config struct {
 	// default 0.35. LODE_SKILL_SCORE_FLOOR.
 	SkillScoreFloor string
 
+	// Speech-to-text for the cockpit's dictation button (WL-299). Off unless
+	// SpeechToTextAPIKey is set: the forms then render no microphone and
+	// POST /dictate answers 503, with everything else unchanged.
+	// SpeechToTextURL overrides the ElevenLabs API base for tests and
+	// self-hosted gateways; empty means https://api.elevenlabs.io.
+	SpeechToTextAPIKey string // LODE_ELEVENLABS_API_KEY
+	SpeechToTextURL    string // LODE_ELEVENLABS_URL
+
 	// Blob storage (spec 021). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
 	// exactly as before, so a local docker-compose stack needs no bucket.
+	// Once they are set the access and secret keys are required too, and a
+	// missing one fails the boot rather than 502ing every blob operation.
 	BlobEndpoint  string // LODE_BLOB_ENDPOINT, e.g. https://hel1.your-objectstorage.com
 	BlobBucket    string // LODE_BLOB_BUCKET
 	BlobRegion    string // LODE_BLOB_REGION
@@ -152,6 +168,18 @@ type Config struct {
 	// takes eventbus's 1s default; e2e sets it low so the test does not wait
 	// a second per step.
 	EventPoll time.Duration
+
+	// Graph is the knowledge-graph client, nil when LODE_GRAPHSERVER_URL is
+	// unset; shared with the projector so one process has one client.
+	//
+	// A live client rather than a URL because serve.go already builds one for
+	// the projector: the endpoint, its OAuth client credentials and their
+	// token source are graphserver.FromEnv's business (spec 006 §11), and
+	// handing the server a URL would mean a second client with a second token
+	// source against the same endpoint. Nil disables the graph-backed reads
+	// (drift, gaps) and POST /api/v1/derive; the frontier and the critical
+	// path are backbone-authoritative and answer either way.
+	Graph *graphserver.Client
 
 	// Metrics is the registry the server registers its instruments on and
 	// serves at /metrics on the admin handler. Nil (tests) gets a private
@@ -202,12 +230,29 @@ type server struct {
 	// when nil, addRepo skips done_state discovery.
 	appAuth *githubauth.AppAuth
 
+	// overview is spec 007's read surface (see overview.go). Always non-nil:
+	// the frontier and the critical path are computed from the backbone, so
+	// they answer on an instance with no graph configured. cfg.Graph being
+	// nil is what disables the graph-backed reads, inside the service.
+	overview *overview.Service
+
+	// repoReader is the pr-affects deriver's GitHub reader, nil when the
+	// GitHub App is not configured (postDerive then refuses with 503). Built
+	// once and shared: it caches one installation token per repo, so a run
+	// over many PRs in one repo mints one token rather than one per read.
+	repoReader *derive.GitHubReader
+
 	// hookMetrics is the webhook/replay instrument set (internal/hooks),
 	// shared by the webhook handlers and POST /api/v1/reconcile's replay
 	// call. Set in registerRoutes, right after hooks.NewMetrics(reg); every
 	// *hooks.Metrics method is nil-safe (internal/hooks/metrics.go), so
 	// callers don't need it non-nil.
 	hookMetrics *hooks.Metrics
+
+	// pollMetrics is engine 2's instrument set (internal/reconcile), used by
+	// POST /api/v1/reconcile's poll call. Set in registerRoutes alongside
+	// hookMetrics; every *reconcile.Metrics method is nil-safe.
+	pollMetrics *reconcile.Metrics
 
 	// embedder is nil unless an embedding provider is configured; recommend
 	// then runs pins-only. skillSyncer is nil unless skill sources are
@@ -250,9 +295,9 @@ type server struct {
 	// allowlist and IP checks apply.
 	mirrorFetcherForTest *safefetch.Fetcher
 
-	// mdcache memoises rendered task-body HTML on the body's content hash,
-	// so a hostile body costs one render per edit rather than one per view
-	// (WL-222). Nil in every test that builds a *server directly;
+	// mdcache memoises rendered task- and document-body HTML on the body's
+	// content hash, so a hostile body costs one render per edit rather than
+	// one per view (WL-222). Nil in every test that builds a *server directly;
 	// *mdrender.Cache is nil-safe and renders each call when nil.
 	mdcache *mdrender.Cache
 
@@ -287,6 +332,8 @@ type server struct {
 	// These are the only web routes that write, so this is where a rejected
 	// or refused cockpit write becomes visible.
 	formSubmissions *prometheus.CounterVec
+	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
+	dictations *prometheus.CounterVec
 
 	// crewChanges counts Crew membership changes, by surface (api, web),
 	// action (add, remove), and outcome; see crew.go and observeCrewChange. Labels
@@ -356,6 +403,14 @@ type server struct {
 	// as nothing.
 	imageMirrors *prometheus.CounterVec
 
+	// mirrorTokens counts the installation tokens a mirroring pass minted for
+	// the images it was about to fetch, by outcome; see inbox_mirror.go and
+	// observeMirrorToken. Counted apart from imageMirrors because one token
+	// covers a whole pass, and because a failure here is silent by design:
+	// mirroring falls back to unauthenticated fetches, so a private repo's
+	// images turn into fetch_failed with nothing on that series saying why.
+	mirrorTokens *prometheus.CounterVec
+
 	// taskBlobRefs counts the explicit half of a task's blob reference graph
 	// changed by the attach/detach endpoints, by action; see blobs.go and
 	// observeTaskBlobRef. The embedded half follows the task body via
@@ -378,6 +433,17 @@ type server struct {
 	// are discoverable by querying the documents themselves rather than by
 	// watching a request-shaped metric (WL-138).
 	kindAliasUses *prometheus.CounterVec
+
+	// overviewReads counts spec 007's five read endpoints by read and
+	// outcome, and deriveRuns counts each server-side deriver a POST
+	// /api/v1/derive ran, by source and outcome. See overview.go and
+	// observeOverviewRead/observeDeriveRun. http_requests_total cannot stand
+	// in for either: a graph-less instance answering 503 and a broken SPARQL
+	// endpoint answering 500 are both "not 200", and one POST runs two
+	// derivers whose outcomes differ — a skipped no-op and a replaced graph
+	// are the same 200.
+	overviewReads *prometheus.CounterVec
+	deriveRuns    *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -420,11 +486,13 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// apply the policy (webGuard); an unauthenticated visitor is sent to
 	// /auth/login, and when no login provider is configured the UI stays open
 	// as in v1 — as one named decision rather than a silent passthrough (see
-	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The seven
+	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The eight
 	// global destinations (spec 032 §2) and the project-local destinations
 	// below each record one worklode_web_navigation_requests_total
 	// observation via navWrap.
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
+	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
+		"Low-friction idea capture, looser than and promotable into Intake, arrives with spec 032 §5.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
 		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8.")))
 	r.web("GET /projects", s.navWrap("projects", s.projectsPage))
@@ -440,6 +508,11 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
 	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
 	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
+	// The MarkdownInput component's fragment endpoints (WL-299): not
+	// navWrapped — they answer a fragment or JSON to the component's fetch,
+	// never a navigated page.
+	r.web("POST /preview", s.previewMarkdown)
+	r.web("POST /dictate", s.dictate)
 	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
 	r.web("GET /work", s.navWrap("work", s.workPage))
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
@@ -459,6 +532,13 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// where the body — the artifact itself — comes from a file.
 	r.web("GET /docs", s.navWrap("knowledge", s.docsPage))
 	r.web("GET /docs/{id}", s.navWrap("knowledge", s.docPage))
+	// The reference redirect (WL-301): not navWrapped — it answers a 302,
+	// never a page.
+	r.web("GET /docs/ref/{ref...}", s.docRefRedirect)
+	// The drift board (spec 007) is the graph-backed half of Knowledge, so it
+	// marks that destination current rather than taking an eighth nav entry
+	// (see primaryNav's doc comment). Read-only: it renders no act.
+	r.web("GET /drift", s.navWrap("drift", s.driftPage))
 	// Deciding an approval is a web-session act (029 §7.3): the session's
 	// group claims are at most as old as the login that stored them, a bearer
 	// token's are as old as the token, and an open instance has no identity to
@@ -489,8 +569,10 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	}
 	hookMetrics := hooks.NewMetrics(reg)
 	s.hookMetrics = hookMetrics
+	s.pollMetrics = reconcile.NewMetrics(reg)
 	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
+	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
 	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.
@@ -544,6 +626,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
 	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
 	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)
+	r.api("DELETE /api/v1/docs/{id}/revision", s.discardDocRevision)
 	r.api("POST /api/v1/docs/{id}/revision/accept", s.acceptDocRevision)
 	r.api("DELETE /api/v1/docs/{id}", s.deleteDoc)
 	r.api("POST /api/v1/docs/{id}/undelete", s.undeleteDoc)
@@ -603,6 +686,17 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 
 	r.api("GET /api/v1/whoami", s.whoami)
 	r.api("POST /api/v1/reconcile", s.reconcile)
+
+	// Spec 007's read surface (overview.go). The frontier and the critical
+	// path answer from the backbone alone; drift and gaps need a graph and
+	// 503 without one. The derive POST is admin-only — it replaces org-wide
+	// named graphs.
+	r.api("GET /api/v1/overview", s.getOverview)
+	r.api("GET /api/v1/drift", s.getDrift)
+	r.api("GET /api/v1/gaps", s.getGaps)
+	r.api("GET /api/v1/frontier", s.getFrontier)
+	r.api("GET /api/v1/critical-path", s.getCriticalPath)
+	r.api("POST /api/v1/derive", s.postDerive)
 
 	// The table describes exactly the routes above: an entry nothing
 	// registered is dead policy that reads like a guard, so it fails the boot
@@ -695,6 +789,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	}
 	s.appAuth = appAuth
 
+	// Spec 007's read surface, and the reader its server-side derivers need.
+	// The service is always built — see the field comment — while the reader
+	// exists only when the GitHub App does.
+	s.overview = &overview.Service{Store: st, Graph: cfg.Graph}
+	if appAuth != nil {
+		s.repoReader = &derive.GitHubReader{Auth: appAuth}
+	}
+
 	s.skillFloor = 0.35
 	if cfg.SkillScoreFloor != "" {
 		f, err := strconv.ParseFloat(cfg.SkillScoreFloor, 64)
@@ -733,6 +835,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// Blob storage (spec 021). The feature is off unless an endpoint and a
 	// bucket are both named; the injected store is the test path and wins, so
 	// a test never has to stand up an S3 endpoint to exercise the handlers.
+	// NewS3 then requires the credentials as well, so a half-configured
+	// deployment refuses to boot instead of serving 502s.
 	switch {
 	case cfg.BlobStoreForTest != nil:
 		s.blobs = cfg.BlobStoreForTest

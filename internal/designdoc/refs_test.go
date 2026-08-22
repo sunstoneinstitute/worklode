@@ -135,6 +135,91 @@ func TestFrontmatterRefsDropsBlankReferences(t *testing.T) {
 	}
 }
 
+// defersFixture pairs a covers entry with two defers entries, so ordering
+// (covers before defers before requires) and the Deferral payload are both
+// observable.
+const defersFixture = `---
+status: accepted
+covers:
+- docs/specs/025-documents.md#sec-11
+defers:
+- spec: docs/specs/025-documents.md#sec-12
+  to: docs/specs/006-knowledge-graph.md
+- spec: docs/specs/025-documents.md#sec-13
+  to: docs/plans/2026-08-10-successor.md
+requires:
+- docs/specs/004-execution-backbone.md
+---
+# A plan
+`
+
+func TestFrontmatterRefsWalksDefers(t *testing.T) {
+	doc, err := Parse([]byte(defersFixture))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := doc.Frontmatter.Refs()
+	want := []Ref{
+		{Rel: "covers", Ref: "docs/specs/025-documents.md#sec-11"},
+		{Rel: "defers", Ref: "docs/specs/025-documents.md#sec-12"},
+		{Rel: "defers", Ref: "docs/specs/025-documents.md#sec-13"},
+		{Rel: "requires", Ref: "docs/specs/004-execution-backbone.md"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Refs() returned %d refs, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i].SrcAnchor != want[i].SrcAnchor || got[i].Rel != want[i].Rel || got[i].Ref != want[i].Ref {
+			t.Errorf("Refs()[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// The defers entry rides along with its reference: it is the one relation
+// carrying the named owner (026 §5.3).
+func TestFrontmatterRefsCarriesDeferralEntry(t *testing.T) {
+	doc, err := Parse([]byte(defersFixture))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := doc.Frontmatter.Refs()
+	defers := got[1]
+	if defers.Deferral == nil {
+		t.Fatalf("Refs()[1].Deferral = nil, want the defers entry")
+	}
+	if defers.SrcAnchor != "" {
+		t.Errorf("SrcAnchor = %q, want empty", defers.SrcAnchor)
+	}
+	if want := "docs/specs/006-knowledge-graph.md"; defers.Deferral.To != want {
+		t.Errorf("Deferral.To = %q, want %q", defers.Deferral.To, want)
+	}
+	for _, r := range got {
+		if r.Rel != "defers" && r.Deferral != nil {
+			t.Errorf("rel %q carries a deferral entry, want nil", r.Rel)
+		}
+	}
+}
+
+func TestFrontmatterRefsForDefers(t *testing.T) {
+	doc, err := Parse([]byte(defersFixture))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	got := doc.Frontmatter.RefsFor("defers")
+	want := []string{
+		"docs/specs/025-documents.md#sec-12",
+		"docs/specs/025-documents.md#sec-13",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("RefsFor() returned %d refs, want %d: %+v", len(got), len(want), got)
+	}
+	for i, r := range got {
+		if r.Ref != want[i] {
+			t.Errorf("RefsFor()[%d].Ref = %q, want %q", i, r.Ref, want[i])
+		}
+	}
+}
+
 func TestFrontmatterRefsFor(t *testing.T) {
 	got := refsFixtureFrontmatter(t).RefsFor("requires", "amends")
 	want := []string{
@@ -171,7 +256,7 @@ func TestActingRelsExcludesInverseSpellings(t *testing.T) {
 			t.Errorf("ActingRels contains inverse spelling %q", rel)
 		}
 	}
-	for _, rel := range []string{"covers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"} {
+	for _, rel := range []string{"covers", "defers", "requires", "blocks", "wasDerivedFrom", "amends", "replaces"} {
 		if !contains(ActingRels, rel) {
 			t.Errorf("ActingRels is missing %q", rel)
 		}

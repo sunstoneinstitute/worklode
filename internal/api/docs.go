@@ -85,6 +85,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	req.Slug = strings.TrimSpace(req.Slug)
 	req.Assignee = strings.TrimSpace(req.Assignee)
 	req.Status = strings.TrimSpace(req.Status)
+	req.GeneratedByTask = strings.TrimSpace(req.GeneratedByTask)
 	// A stated status bypasses the accept gate, so it needs the importer's
 	// authority. Without it the field stays refused exactly as before.
 	if req.Status != "" {
@@ -128,7 +129,11 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Body:      req.Body,
 				Assignee:  req.Assignee,
 				CreatedBy: actorID,
-				Status:    req.Status,
+				// The authoring task (025 §12). Left empty by every caller
+				// bound to no task, which is a document with no authoring
+				// task — a normal state, not a refusal. See migration 0044.
+				GeneratedByTask: req.GeneratedByTask,
+				Status:          req.Status,
 			}, eventID)
 			if err != nil {
 				return err
@@ -489,9 +494,13 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	now := s.st.Now()
 	var accepted *model.Doc
 	var minted []model.Task
+	// From is the status the document is actually leaving, not a constant: a
+	// plan re-accepted while accepted leaves "accepted" (025 §9.2), and an
+	// event saying otherwise would put a transition that did not happen in the
+	// append-only log.
 	ev := eventbus.DocumentAccepted{
 		Doc: store.DocIRI(*doc), Actor: actorID, At: now,
-		Version: doc.Version, From: "wlc:draft", To: "wlc:accepted",
+		Version: doc.Version, From: "wlc:" + doc.Status, To: "wlc:accepted",
 	}
 	_, inserted, err := eventbus.Emit(r.Context(), s.st, docSource, ev,
 		func(tx *sql.Tx, eventID int64) error {
@@ -517,7 +526,18 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		// not even admit, so the refusal AcceptDoc would have raised is raised
 		// here instead. Typing the event must not quietly change what the
 		// endpoint answers.
-		err := s.st.CheckDocAcceptable(r.Context(), id, actorID)
+		settled, err := s.st.CheckDocAcceptable(r.Context(), id, actorID)
+		if settled {
+			// An accepted plan re-accepted at a version already accepted:
+			// every declaration in this body has a row, so the accept has
+			// nothing left to do (025 §9.2). Answering with the document and
+			// an empty minted set says exactly that. A plan edited since
+			// carries a new version, so this is not the path it takes. The op
+			// is already counted as a success above; counting it again here
+			// would make one request two.
+			writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *doc})
+			return
+		}
 		if err == nil {
 			// Unreachable by construction: a failed accept rolls its event
 			// back with it, so an event at this version implies the document
@@ -605,6 +625,37 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeDocRevision(w, r, id)
+}
+
+// discardDocRevision handles DELETE /api/v1/docs/{id}/revision: withdraws the
+// open candidate without landing it (025 §7.2's close-without-merging), which
+// frees the document's one candidate slot. Either the assignee or the
+// revision's author may; anyone else gets 403.
+//
+// It answers with the document, which the discard leaves untouched — read
+// inside the discarding transaction like acceptDocRevision's, and the reason
+// no discard response type is owed to internal/model.
+func (s *server) discardDocRevision(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	var doc *model.Doc
+	err := s.recordDocEvent(w, r, "discard", "doc.revision_discarded", id, nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.DiscardRevision(tx, now, id, actorID, eventID)
+			if err != nil {
+				return err
+			}
+			doc = d
+			return nil
+		})
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
 }
 
 // acceptDocRevision handles POST /api/v1/docs/{id}/revision/accept: runs the

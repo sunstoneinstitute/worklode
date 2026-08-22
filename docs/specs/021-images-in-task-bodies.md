@@ -121,12 +121,36 @@ not ours:
 |---|---|
 | `Content-Type` | Set as object metadata at upload, and overridden per-request via `response-content-type` from `blobs.media_type` |
 | `Content-Length` | The object store's own, always correct |
-| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, bare `attachment` for everything else. The `filename="…"` half is not implemented: `task_blobs.filename` is per-reference and `/blob/{hash}` is per-blob, so the route has no single name to serve a shared blob under |
+| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, `attachment` for everything else, plus `filename="…"` when the reference names one (below) |
 | `Cache-Control` | `response-cache-control: private, max-age=31536000, immutable` — safe because the URL is content-addressed |
 
+**The name travels with the reference, not with the blob.** `task_blobs.filename` is
+per-reference and `/blob/{hash}` is per-blob, so one blob two tasks attached under different
+names has no single name the route could look up. Every surface that mints a reference — the
+task detail response, the task blob list, the brief, the cockpit's attachments card — therefore
+appends the reference's own name as a query parameter, `/blob/{hash}?filename=crash.log`, and
+the route echoes it into `response-content-disposition`. A reference with no name (every
+embedded image) keeps the bare URL and the bare token. Body text is never rewritten this way:
+an embedded `](/blob/<hash>)` must keep matching the anchored grammar that pins its blob
+against GC (§11).
+
+The name is caller-controlled — it arrives on a URL anyone may craft — so it is encoded per RFC
+6266 (`filename="…"` plus the percent-encoded `filename*` for anything non-ASCII) and reduced
+first: control characters stripped, last path segment only, invalid UTF-8 and anything over 200
+bytes refused. The parameter is deliberately **not** part of anything signed. On the
+object-storage leg it cannot be tampered with anyway — SigV4 signs the presigned URL's whole
+query string, `response-content-disposition` included. On our own leg it is unsigned, so a
+caller who may already read a blob may choose what their own browser saves it as; that grants
+no access, since the bytes, the media type and the inline/attachment token are all decided
+server-side from `blobs`, and only the token carries §6's weight. The residual risk — a
+hand-crafted link that saves a known blob under a misleading name — is strictly weaker than the
+same actor hosting the file themselves, and signing would not remove it: whoever can mint a
+link can mint one under the name they wanted.
+
 Setting `Content-Type` at PUT time *and* overriding on presign is deliberate belt-and-braces:
-the override is what actually reaches the browser, and the stored metadata keeps the object
-self-describing for anyone reading the bucket directly.
+the override is what actually reaches the browser, and the stored `Content-Type` keeps the
+object self-describing for anyone reading the bucket directly. It is a system header, not the
+user metadata §6 rules out.
 
 The redirect itself is `Cache-Control: private, max-age=60`, comfortably inside the presign
 TTL of 5 minutes, so a page with twenty images issues twenty redirects once and then serves
@@ -253,8 +277,9 @@ Nothing is rejected on type. A core dump is a legitimate attachment, and an allo
 blocks it buys nothing once §6 guarantees non-embeddable types are never served inline.
 
 **SVG is embeddable deliberately.** It is a first-class asset in the repos this serves, and
-rejecting it would push authors into lossy PNG screenshots of vector work. §6's CSP neuters
-script inside it.
+rejecting it would push authors into lossy PNG screenshots of vector work. What contains script
+inside it is §6's cross-origin boundary, not a CSP: a hostile SVG runs in the object store's
+origin, not the app's.
 
 ---
 
@@ -262,7 +287,10 @@ script inside it.
 
 A blob is bytes an authenticated user uploaded. The redirect target is a different origin from
 the app, which is itself a useful boundary — a hostile SVG or HTML payload executes in the
-object store's origin, where there is no session cookie and nothing to steal.
+object store's origin, not in ours. That origin is not empty (path-style addressing shares it
+with every other bucket on the endpoint, Velero's and CNPG's included), but S3 carries no
+ambient credential: every read there needs SigV4 or a presign, so script running in it holds
+nothing it did not already have.
 
 The redirect response carries:
 
@@ -275,20 +303,35 @@ and the presigned URL carries, via `response-*` overrides:
 
 ```
 Content-Type: <sniffed media type>
-Content-Disposition: inline | attachment; filename="…"
-X-Content-Type-Options: nosniff        (bucket-level default; see below)
-Content-Security-Policy: default-src 'none'; sandbox
+Content-Disposition: inline | attachment      (plus filename="…"; see §2)
 ```
 
-Hetzner's S3 API does not expose `response-content-security-policy`; `Content-Security-Policy`
-and `X-Content-Type-Options` are therefore set as **object metadata at upload time**, where
-RGW returns them on every GET. If the gateway strips unknown metadata headers,
-`Content-Disposition: attachment` on every non-embeddable type is the fallback that carries the
-security weight on its own.
+**`Content-Disposition` carries the security weight on its own**, and that is the whole of the
+per-object hardening. There is no `Content-Security-Policy` and no `X-Content-Type-Options` on
+a served blob. The S3 API exposes no `response-*` override for either, and object metadata is
+not a substitute: `PutObject`'s metadata map is *user* metadata, serialised as
+`x-amz-meta-<key>`, so a `content-security-policy` entry comes back as
+`x-amz-meta-content-security-policy` — a header no browser acts on. Turning user metadata into
+a real response header takes a gateway-side `rgw_extended_http_attrs` mapping that nothing in
+this deployment configures. An earlier draft of this section proposed setting both headers as
+object metadata; it could not have worked against RGW, and uploads now send no user metadata at
+all.
 
-**Not yet verified**, for the same reason as §2: no bucket is provisioned and no credentials are
-configured in this environment. Whether RGW preserves these two headers as object metadata is
-still open, tracked by **WL-206** alongside the §2 presign-override check.
+The `filename` half §2 adds changes none of that: it is cosmetic, it never moves the
+inline/attachment token, and a name a caller invents cannot make bytes executable that the
+token already downloads rather than renders.
+
+So the controls that do hold are the ones §5 already relies on: every non-embeddable type is
+served `attachment`, which downloads rather than executes, and the embeddable set is a fixed
+list of image and video types. SVG is the one embeddable type that can carry script, and is
+embeddable deliberately (§5). Two things contain it, and neither is a header we set: an SVG
+loaded through `<img>` — which is how §8 renders it — cannot run script at all, so the exposure
+is a direct top-level navigation to the blob URL; and that navigation lands in the object
+store's origin, per the boundary above.
+
+The `response-*` overrides themselves are **not yet verified** against a real gateway, for the
+same reason as §2: no bucket is provisioned and no credentials are configured in this
+environment. That check is tracked by **WL-206**.
 
 The task page's own CSP must list the object-storage endpoint in `img-src` and `media-src`,
 since that is where the redirect lands.
@@ -504,8 +547,13 @@ would render as nothing at all.
 
 `lode inbox import` therefore **fetches every remote image reference in a body and rewrites it
 to `/blob/<hash>`**, using the same upload path as §5 and the installation's GitHub App token
-for `githubusercontent.com`. Everything becomes a blob; nothing in a rendered body ever points
-off-site.
+for `githubusercontent.com` and for `github.com/user-attachments/` — the path GitHub has since
+moved uploaded issue attachments to (WL-292). The second scope is deliberately a host *plus
+path prefix*, never the whole of `github.com`: that host also serves every ordinary page an
+issue body links to, and a token attached to those is a credential handed to a URL whoever
+filed the issue chose. The credential check judges the decoded, dot-segment-resolved path, so
+an encoded `..` cannot walk the scope back out to the rest of the host. Everything becomes a
+blob; nothing in a rendered body ever points off-site.
 
 This makes import a URL-fetching operation on attacker-influenced input, so it needs the usual
 SSRF guard:
@@ -539,6 +587,12 @@ already sets for Velero and CNPG against this endpoint.
 **Blobs are unconfigured by default.** With no endpoint set, uploads return `501` and every
 other surface behaves exactly as it does today, so a local `docker compose` stack keeps working
 with no bucket. Worth a `lode doctor` line rather than a silent absence.
+
+**Once an endpoint and a bucket are named, the two keys are required too**, and a missing one
+fails the boot rather than degrading. An empty static credential provider fails per request, not
+at construction, so naming a bucket while the ESO secret is missing would otherwise yield a
+server that reports healthy and `502`s every upload and every serve. Endpoint and bucket remain
+the on-switch: with either unset the feature stays off and uploads `501` as above.
 
 ---
 

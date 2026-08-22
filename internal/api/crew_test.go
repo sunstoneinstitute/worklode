@@ -150,7 +150,7 @@ func TestAddCrewMemberAPIRefusals(t *testing.T) {
 		{"duplicate role", "/api/v1/projects/proj/participants",
 			map[string]any{"actor": "ada", "role": "editor"}, http.StatusUnprocessableEntity, "already holds role"},
 		{"second lead", "/api/v1/projects/proj/participants",
-			map[string]any{"actor": "bob", "role": "co-lead", "lead": true}, http.StatusUnprocessableEntity, "already has a lead"},
+			map[string]any{"actor": "bob", "role": "domain-expert", "lead": true}, http.StatusUnprocessableEntity, "already has a lead"},
 		{"blank role", "/api/v1/projects/proj/participants",
 			map[string]any{"actor": "bob", "role": "   "}, http.StatusCreated, ""},
 	}
@@ -236,10 +236,11 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 		form url.Values
 		want string
 	}{
-		{"unknown actor", url.Values{"actor": {"nosuch"}, "role": {"reviewer"}}, "No actor with that id"},
+		{"unknown actor", url.Values{"actor": {"nosuch"}, "role": {"reporter"}}, "No actor with that id"},
 		{"duplicate role", url.Values{"actor": {"ada"}, "role": {"editor"}}, "already holds role"},
-		{"second lead", url.Values{"actor": {"ada"}, "role": {"co-lead"}, "lead": {"1"}}, "already has a lead"},
-		{"no actor", url.Values{"actor": {"  "}, "role": {"reviewer"}}, "Actor is required."},
+		{"second lead", url.Values{"actor": {"ada"}, "role": {"science-lead"}, "lead": {"1"}}, "already has a lead"},
+		{"no actor", url.Values{"actor": {"  "}, "role": {"reporter"}}, "Actor is required."},
+		{"unknown role", url.Values{"actor": {"ada"}, "role": {"astronaut"}}, "Unknown role"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,17 +250,22 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 			}
 			body := rr.Body.String()
 			bodyContains(t, body, tc.want)
-			// The typed values come back in the form, and the roster is
-			// still rendered around it.
-			bodyContains(t, body, `value="`+strings.TrimSpace(tc.form.Get("actor"))+`"`,
-				`value="`+tc.form.Get("role")+`"`, "Ada Person")
+			// The typed values come back in the form — the actor input
+			// filled in, the submitted role's option selected where it is
+			// one the dropdown offers (WL-297) — and the roster is still
+			// rendered around it.
+			bodyContains(t, body, `value="`+strings.TrimSpace(tc.form.Get("actor"))+`"`, "Ada Person")
+			if role := tc.form.Get("role"); validCrewRole(role) &&
+				!strings.Contains(body, `<option value="`+role+`" selected`) {
+				t.Errorf("submitted role %q did not come back selected:\n%s", role, body)
+			}
 			if tc.form.Get("lead") != "" && !strings.Contains(body, `id="lead" name="lead" type="checkbox" value="1" checked`) {
 				t.Errorf("the lead checkbox did not come back checked:\n%s", body)
 			}
 		})
 	}
 
-	// Nothing was written by the four refusals: the roster still holds the
+	// Nothing was written by the five refusals: the roster still holds the
 	// one seeded row.
 	crew, err := st.ListParticipants(context.Background(), "proj")
 	if err != nil {
@@ -270,7 +276,7 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 	}
 
 	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="rejected",surface="web"} 4`) {
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="rejected",surface="web"} 5`) {
 		t.Errorf("metrics missing the web rejected counter:\n%s", metrics)
 	}
 }
@@ -552,7 +558,7 @@ func TestListCrewMembersAPI(t *testing.T) {
 	for _, body := range []map[string]any{
 		{"actor": "bob", "role": "reporter"},
 		{"actor": "bob", "role": "editor"},
-		{"actor": "ada", "role": "lead-role", "lead": true},
+		{"actor": "ada", "role": "science-lead", "lead": true},
 	} {
 		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
 			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
@@ -575,8 +581,8 @@ func TestListCrewMembersAPI(t *testing.T) {
 	if lead.Actor != "ada" || !lead.Lead || lead.DisplayName != "Ada Person" {
 		t.Fatalf("first member = %+v, want ada, lead, Ada Person", lead)
 	}
-	if len(lead.Roles) != 1 || lead.Roles[0] != "lead-role" {
-		t.Fatalf("lead roles = %v, want [lead-role]", lead.Roles)
+	if len(lead.Roles) != 1 || lead.Roles[0] != "science-lead" {
+		t.Fatalf("lead roles = %v, want [science-lead]", lead.Roles)
 	}
 	if other.Actor != "bob" || other.Lead || other.DisplayName != "Bob Person" {
 		t.Fatalf("second member = %+v, want bob, not lead, Bob Person", other)
@@ -619,4 +625,15 @@ func TestRemoveCrewMemberFormCrossOrigin(t *testing.T) {
 	if len(crew) != 1 {
 		t.Fatalf("crew = %+v, want the member untouched", crew)
 	}
+}
+
+// validCrewRole mirrors the store vocabulary for the selection assertion
+// above; an out-of-vocabulary submission has no option to re-select.
+func validCrewRole(role string) bool {
+	for _, r := range store.ParticipantRoles() {
+		if r == role {
+			return true
+		}
+	}
+	return false
 }

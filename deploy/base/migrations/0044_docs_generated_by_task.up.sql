@@ -1,0 +1,33 @@
+-- The task that authored a document (025 §12: prov:wasGeneratedBy).
+--
+-- The links that already existed run task→doc: tasks.plan_doc (the plan whose
+-- acceptance minted the task, 025 §9.2) and tasks.about_doc (the document a
+-- review or design task was minted against, 025 §15.4). Neither records the
+-- case §12 is about — a task that authors a *new* document — so the ontology's
+-- claim that wlc:design's output "is reachable by prov:wasGeneratedBy"
+-- (ns/concept.ttl) had nothing behind it. This column is that edge, and the
+-- graph projection emits it as prov:wasGeneratedBy.
+--
+-- Set at create time from the caller's worktree lease (worktree.Layout.TaskID,
+-- the same binding `lode next` and `lode install` stamp), never edited
+-- afterwards: it records who wrote the document, which does not change when
+-- the document is later revised.
+--
+-- Nullable by design, like plan_doc and about_doc. A document authored by a
+-- human in the cockpit, by an agent working outside a claimed task's worktree,
+-- or backfilled by `lode doc import` has no authoring task, and that is a
+-- normal representable state — §12 says how to express the edge when it
+-- exists, not that every document must have one, and no SHACL shape in
+-- ns/shapes.ttl makes prov:wasGeneratedBy mandatory on wl:DesignDoc.
+--
+-- Not mirrored on doc_revisions. That table holds at most one open candidate
+-- revision per document (0027) and the row is deleted when the revision lands
+-- or is discarded, so provenance stored there would evaporate at exactly the
+-- moment it became history. §12's invariant is document-level, not
+-- version-level; the revise case is already carried by tasks.about_doc, which
+-- a design task minted against an existing document sets and keeps. Recording
+-- per-version authorship would need a real revision-history table, which is a
+-- separate design, not a column.
+ALTER TABLE docs ADD COLUMN generated_by_task text REFERENCES tasks(id);
+CREATE INDEX docs_generated_by_task ON docs (generated_by_task)
+    WHERE generated_by_task IS NOT NULL;

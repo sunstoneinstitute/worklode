@@ -277,6 +277,40 @@ func (s *Store) GetPR(ctx context.Context, repo string, number int64) (*PullRequ
 	return pr, nil
 }
 
+// PRRef is the minimal PR identity the pr-affects deriver needs: which repo,
+// which PR, which task.
+type PRRef struct {
+	Repo   string
+	Number int64
+	TaskID string
+}
+
+// TaskPRs returns every merged or open pull request bound to a task, ordered
+// by repo then number. Two filters, both the pr-affects deriver's (007 §2.3):
+//
+//   - Unbound PRs are invisible: with no task there is no wl:affects subject
+//     to hang the triple off.
+//   - state = 'closed' — abandoned without merging — is invisible too. Its
+//     changed files never landed, so an edge from it would assert the task
+//     affected a component it demonstrably did not, and every such PR would
+//     cost a GitHub round trip on every run, forever.
+//
+// PRsForTask reads one task's PRs for display and applies neither filter.
+func (s *Store) TaskPRs(ctx context.Context) ([]PRRef, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, number, task_id FROM pull_requests
+		 WHERE task_id IS NOT NULL AND state IN ('open', 'merged')
+		 ORDER BY repo, number`)
+	if err != nil {
+		return nil, fmt.Errorf("task prs: %w", err)
+	}
+	return collectRows(rows, "task prs", func(r rowScanner) (PRRef, error) {
+		var p PRRef
+		err := r.Scan(&p.Repo, &p.Number, &p.TaskID)
+		return p, err
+	})
+}
+
 // PRsForTask returns the pull requests correlated to taskID, ordered by
 // repo then number.
 func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, error) {

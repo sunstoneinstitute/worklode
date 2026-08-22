@@ -41,29 +41,59 @@ Docker-socket ACL that stops short of that. Weigh that against `trusted`
 above before adding another job here: the whole isolation model now rests on
 `trusted` being right, not on `ghrunner` being unprivileged.
 
-Registered as a repo-level runner (not org-level) with labels `self-hosted,
-Linux, X64, hel01, gha-pgvector, docker, gha-buildcache`. `lint` targets
-`self-hosted` and `gha-buildcache`; `test` targets `gha-pgvector` and
-`gha-buildcache`; `build-image` targets `docker` and `gha-buildcache` — see
-the sections below for why each label exists rather than every job sharing
-`self-hosted`.
+Registered as two repo-level runners (not org-level), `hel01` and `hel01-2`,
+both carrying labels `self-hosted, Linux, X64, hel01, gha-pgvector, docker,
+gha-buildcache`. `lint` targets `self-hosted` and `gha-buildcache`; `test`
+targets `gha-pgvector` and `gha-buildcache`; `build-image` targets `docker`
+and `gha-buildcache` — see the sections below for why each label exists
+rather than every job sharing `self-hosted`. Either runner can pick up any
+of the three jobs; GitHub schedules to whichever is idle.
 
-Installed as a systemd service:
+Installed as systemd services:
 
 ```
 systemctl status actions.runner.sunstoneinstitute-worklode.hel01.service
+systemctl status actions.runner.sunstoneinstitute-worklode.hel01-2.service
 ```
 
-Reinstall/reconfigure from `/home/ghrunner/actions-runner` (`config.sh`,
-`svc.sh`) per GitHub's own self-hosted runner docs; a fresh registration
-token comes from `gh api -X POST
+Reinstall/reconfigure `hel01` from `/home/ghrunner/actions-runner`
+(`config.sh`, `svc.sh`) per GitHub's own self-hosted runner docs;
+`hel01-2` the same way from `/home/ghrunner/actions-runner2`. A fresh
+registration token for either comes from `gh api -X POST
 repos/sunstoneinstitute/worklode/actions/runners/registration-token`. A
-group-membership change (like the docker group above) needs the service
+group-membership change (like the docker group above) needs both services
 restarted — `usermod` alone doesn't affect an already-running process:
 
 ```
 sudo systemctl restart actions.runner.sunstoneinstitute-worklode.hel01.service
+sudo systemctl restart actions.runner.sunstoneinstitute-worklode.hel01-2.service
 ```
+
+### Two executors, one user, separate caches
+
+Both runners execute as the same `ghrunner` system user — a second
+dedicated user would double every isolation fact in this doc (docker-group
+grant, home permissions) for no security benefit, since both processes
+already run at the same privilege. What has to differ is the **cache
+state** `gha-buildcache` and Go point at, both of which resolve from
+`$HOME`: two concurrent `build-image` jobs writing into the same
+`buildkit-cache-dance` directory tree is exactly the failure mode in the
+*Persistent build caches* incident below, and while Go's own build/module
+cache format tolerates concurrent access, there's no reason to make
+`test`/`lint` share one either.
+
+`hel01-2`'s systemd unit sets `Environment=HOME=/home/ghrunner/runner2-home`
+(everything else — `User=ghrunner`, working directory under
+`actions-runner2`, docker-group membership — matches `hel01`). That single
+override redirects `go env GOCACHE`/`GOMODCACHE` and `_build-image.yml`'s
+`$HOME/.cache/gha-buildcache` onto a second, cold cache tree, so the two
+runners can run any combination of jobs concurrently without touching each
+other's files. The `gha-ci-postgres` container below is unaffected — it's
+reached over TCP, not through `$HOME`, so both runners already share it
+safely by the same per-test-database convention. Setting up a third runner
+needs the same two things: its own `actions-runner<n>` install directory,
+and a `runner<n>-home` directory (with `.cache/gha-buildcache/{mod,build}`
+pre-created per that section) named in its unit's `Environment=HOME=`.
 
 ## Postgres for `test`
 
@@ -137,6 +167,10 @@ sudo -u ghrunner mkdir -p /home/ghrunner/.cache/gha-buildcache/{mod,build}
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
 ```
 
+For `hel01-2`, whose unit overrides `$HOME` (see *Two executors* above), the
+same directory lives under that override instead:
+`/home/ghrunner/runner2-home/.cache/gha-buildcache/{mod,build}`.
+
 **It has to be an absolute path outside the checkout**, not a directory
 relative to the workspace the way `ubuntu-latest` uses `go-cache-mount/`
 today. `actions/checkout`'s clean step (`git clean -ffdx`) wipes anything
@@ -184,6 +218,38 @@ gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "
 have Docker access set up before its cache directory exists, or vice versa —
 so `build-image`'s `runs-on` requires both rather than treating either as
 implied by the other: `runs-on: ["docker","gha-buildcache"]`.
+
+## `/tmp` inode exhaustion (WL-188)
+
+`/tmp` on hel01 is a tmpfs with a fixed `nr_inodes=1048576` — `df -h /tmp`
+can report terabytes free while `df -i /tmp` is pinned at 100%, and the
+failure that follows is `ENOSPC` on whichever job happens to write next, with
+nothing in the error pointing at inodes. This bit once already (WL-147/WL-188):
+a test harness bug downloaded the Go module cache into a per-run temp `HOME`
+and failed to clean it up, and forty-six abandoned trees at ~18,000 inodes
+each exhausted the tmpfs while it still showed 100+ GB free.
+
+**Diagnose it fast**: `df -i /tmp` next to `df -h /tmp` — a huge gap between
+`Use%` on the two is this failure, not a real disk-space problem. `du --inodes
+/tmp/*` finds the offender.
+
+**Fixed at the runner level**: both `hel01` and `hel01-2` set `TMPDIR` in
+their systemd units, pointing at a directory on `/dev/md2` (real inodes, 2.9
+TB free) instead of the tmpfs — `/home/ghrunner/tmp` for `hel01`,
+`/home/ghrunner/runner2-home/tmp` for `hel01-2` (matching each runner's own
+cache-separation directory, see *Two executors* above). Any job or test
+harness that respects `TMPDIR` (Go's `os.TempDir()`, most `mktemp` usage)
+no longer touches the tmpfs at all, regardless of which repo or job leaks.
+This is scoped to the two runner services only — local dev, `docker compose`,
+and interactive shells on hel01 still share the tmpfs `/tmp`, so a bug outside
+CI can still refill it; watch for it with the `df -i` check above rather than
+assuming the tmpfs is now safe from every source.
+
+Considered and not done: raising or dropping tmpfs `nr_inodes` (treats the
+symptom, not the source, and a wrong value in either direction just moves the
+threshold); a systemd-tmpfiles aging rule on `/tmp` (host-wide blast radius
+for a runner-specific problem — worth revisiting if a non-runner source turns
+out to be the one refilling it).
 
 ## Extending self-hosted coverage
 

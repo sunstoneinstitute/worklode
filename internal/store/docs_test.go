@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -1554,6 +1555,357 @@ covers:
 	}
 }
 
+// --- defers (026 §5.3) ------------------------------------------------
+
+// TestDocDefersCreatesEdgeAndOwner: an accepted plan's defers entry becomes
+// one doc_edges row of type defers with to_doc/to_anchor set and coverage
+// NULL, plus one doc_coverage_completed_with row resolving to the owner (026
+// §5.3).
+func TestDocDefersCreatesEdgeAndOwner(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	owner := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	got := docEdges(t, s, plan.ID)
+	want := []model.DocEdge{{Type: "defers", ToDoc: spec.ID, ToAnchor: "sec-1"}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+
+	edges := docCoverageEdges(t, s, plan.ID) // covers only, empty for a defers-only plan
+	if len(edges) != 0 {
+		t.Fatalf("covers edges = %+v, want none", edges)
+	}
+
+	var edgeID int64
+	var coverage sql.NullString
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT id, coverage FROM doc_edges WHERE from_doc = $1 AND type = 'defers'`, plan.ID,
+	).Scan(&edgeID, &coverage); err != nil {
+		t.Fatalf("read defers edge: %v", err)
+	}
+	if coverage.Valid {
+		t.Errorf("defers edge coverage = %q, want NULL", coverage.String)
+	}
+	cw := docCompletedWith(t, s, edgeID)
+	want2 := []docCompletedWithRow{{position: 0, toDoc: owner.ID}}
+	if len(cw) != 1 || cw[0] != want2[0] {
+		t.Errorf("completedWith = %+v, want %+v", cw, want2)
+	}
+}
+
+// TestDocDefersOnSpecRejected: defers is plan-only — a spec defers nothing,
+// it is what work is deferred *from* (026 §5.3).
+func TestDocDefersOnSpecRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# A spec
+
+## 1. Scope {#sec-1}
+
+Scope body.
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersMissingFragmentRejected: a defers entry whose spec reference
+// carries no #sec-N fragment is refused, not tolerated-and-ignored the way a
+// whole-document covers claim is (026 §5.3).
+func TestDocDefersMissingFragmentRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersEmptyOwnerRejected: a deferral without an owner is just an
+// uncovered section, which needs no syntax — omitting `to` is refused (026
+// §5.3).
+func TestDocDefersEmptyOwnerRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: ""
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersOwnerWithFragmentRejected: the owner is a document, never a
+// section — a `to` carrying a #sec-N fragment is refused, matching
+// secmeta.py's check rather than silently stripping the fragment (026 §5.3).
+func TestDocDefersOwnerWithFragmentRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 025-documents-in-the-backbone.md#sec-2
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersToItselfRejected: a plan deferring a section to itself has
+// confused deferral with coverage; refused (026 §5.3).
+func TestDocDefersToItselfRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: main-plan
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersSameSectionTwoOwnersRejected: the same section deferred to two
+// different owners is a contradiction the frontmatter cannot mean, refused
+// the way conflicting covers levels are (026 §5.3, §5.1).
+func TestDocDefersSameSectionTwoOwnersRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 4,
+		Slug: "004-execution-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 004-execution-backbone.md
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersIdenticalEntryTwiceDeduped: the same entry twice is one edge,
+// not an error (026 §5.3).
+func TestDocDefersIdenticalEntryTwiceDeduped(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	got := docEdges(t, s, plan.ID)
+	if len(got) != 1 {
+		t.Fatalf("edges = %+v, want one edge", got)
+	}
+}
+
+// TestDocDefersUnresolvableSpecLandsInExternal: an unresolvable `spec`
+// reference lands verbatim in to_external, same as a covers typo — it reads
+// as an unplanned section rather than an error (026 §5.3).
+func TestDocDefersUnresolvableSpecLandsInExternal(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 999-nowhere.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	got := docEdges(t, s, plan.ID)
+	want := []model.DocEdge{{Type: "defers", ToExternal: "999-nowhere.md#sec-1"}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+}
+
+// TestDocSchemaDefersEdgeSucceeds: migration 0045 admits 'defers' to
+// doc_edges' type CHECK.
+func TestDocSchemaDefersEdgeSucceeds(t *testing.T) {
+	s := openTestStore(t)
+	seedDocsProject(t, s)
+
+	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	if err != nil {
+		t.Fatalf("insert plan doc: %v", err)
+	}
+	specID, err := insertDoc(t, s, "spec", 25, "documents-in-the-backbone")
+	if err != nil {
+		t.Fatalf("insert spec doc: %v", err)
+	}
+
+	ctx := context.Background()
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
+		 VALUES ($1, 'defers', $2, 'sec-1')`,
+		planID, specID)
+	if err != nil {
+		t.Fatalf("insert defers edge: %v", err)
+	}
+}
+
+// TestDocSchemaBogusEdgeTypeViolatesCheck: doc_edges_type_check still refuses
+// a type outside the admitted set (migration 0045 only adds 'defers' to it).
+func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
+	s := openTestStore(t)
+	seedDocsProject(t, s)
+
+	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	if err != nil {
+		t.Fatalf("insert plan doc: %v", err)
+	}
+	specID, err := insertDoc(t, s, "spec", 25, "documents-in-the-backbone")
+	if err != nil {
+		t.Fatalf("insert spec doc: %v", err)
+	}
+
+	ctx := context.Background()
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
+		 VALUES ($1, 'bogus', $2, 'sec-1')`,
+		planID, specID)
+	if err == nil {
+		t.Fatal("expected CHECK violation, got nil error")
+	}
+	if !isCheckViolationOn(err, "doc_edges_type_check") {
+		t.Fatalf("expected doc_edges_type_check CHECK violation, got: %v", err)
+	}
+}
+
 // TestDocCreateDuplicateIsErrDocExists: both unique indexes map onto one
 // sentinel, so the API can answer 409 without decoding pgconn.
 func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
@@ -1599,9 +1951,9 @@ func TestDocUpdateBodyKeepsIssued(t *testing.T) {
 	}
 }
 
-// TestDocResolveRefShorthand covers 025 §14.3's <KEY>-<TYPE>-<n> form:
-// resolution is same-project only, so a reference naming another project's
-// key is external even when this project holds that number.
+// TestDocResolveRefShorthand covers 025 §14.3's <KEY>-<TYPE>-<n> form against
+// the referring document's own corpus: the key must be a real project's, and
+// the type token is verified against the target's kind rather than trusted.
 func TestDocResolveRefShorthand(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
@@ -1638,6 +1990,79 @@ requires:
 		if got[i] != want[i] {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
+	}
+}
+
+// TestDocResolveRefShorthandCrossesProjects: 025 §14.3's "distance decides
+// which form is canonical". The shorthand is the form for a reference across
+// corpora, so it resolves on the project key alone; a filename and a bare
+// number carry no corpus and stay same-project, landing in to_external when
+// only another project holds the target.
+func TestDocResolveRefShorthandCrossesProjects(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('cms','CMS','CMS')`); err != nil {
+		t.Fatal(err)
+	}
+	// The target lives in cms only; p1 holds no spec 4 and no such slug.
+	target := mustCreateDoc(t, s, DocInput{
+		Project: "cms", Kind: "spec", Number: 4, Slug: "004-content-model",
+		Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+requires:
+  - CMS-SPEC-4#sec-3
+  - 004-content-model.md
+  - "004"
+---
+
+# Referring plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "referring", Body: body, CreatedBy: "stig",
+	})
+
+	// Unresolved edges (to_doc NULL, coalesced to 0) sort ahead of the
+	// resolved one.
+	want := []model.DocEdge{
+		{Type: "requires", ToExternal: "004"},
+		{Type: "requires", ToExternal: "004-content-model.md"},
+		{Type: "requires", ToDoc: target.ID, ToAnchor: "sec-3"},
+	}
+	got := docEdges(t, s, plan.ID)
+	if len(got) != len(want) {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestProjectKeySpecAndADRReserved: SPEC and ADR are the <TYPE> token of the
+// document shorthand, which resolves on the project key alone (025 §14.3), so
+// the projects_key_format CHECK rejects them as keys.
+func TestProjectKeySpecAndADRReserved(t *testing.T) {
+	s := openDocStore(t)
+	for _, key := range []string{"SPEC", "ADR"} {
+		_, err := s.db.ExecContext(t.Context(),
+			`INSERT INTO projects (id, name, key) VALUES ($1, $1, $2)`,
+			strings.ToLower(key), key)
+		if err == nil {
+			t.Errorf("project key %q accepted, want rejected by projects_key_format", key)
+			continue
+		}
+		if !strings.Contains(err.Error(), "projects_key_format") {
+			t.Errorf("project key %q: err = %v, want a projects_key_format violation", key, err)
+		}
+	}
+	// A key that merely contains them is still fine.
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('specs','Specs','SPECS')`); err != nil {
+		t.Errorf("project key SPECS rejected: %v", err)
 	}
 }
 
@@ -1733,6 +2158,20 @@ func updateRevision(t *testing.T, s *Store, id int64, body string) error {
 			return UpdateRevision(tx, s.Now(), id, body, eventID)
 		})
 	return err
+}
+
+// discardRevision runs DiscardRevision through RecordDocEvent.
+func discardRevision(t *testing.T, s *Store, id int64, actor string) (*model.Doc, error) {
+	t.Helper()
+	var out *model.Doc
+	_, _, err := s.RecordDocEvent(t.Context(), "discard", "cli",
+		fmt.Sprintf("doc-revision-discard-%d", docEventSeq.Add(1)), "doc.revision_discarded", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			out, err = DiscardRevision(tx, s.Now(), id, actor, eventID)
+			return err
+		})
+	return out, err
 }
 
 // acceptRevision runs AcceptRevision through RecordDocEvent.
@@ -1962,8 +2401,8 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 }
 
 // TestDocAcceptPlanInvariant: before accept, no task carries the plan's id;
-// after, the count equals the definition count; a second accept is
-// ErrInvalidInput, so the set can never double-mint (025 §9.2 AC2).
+// after, the count equals the definition count; a second accept of the same
+// body mints nothing, so the set can never double-mint (025 §9.2 AC2).
 func TestDocAcceptPlanInvariant(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
@@ -1983,11 +2422,17 @@ func TestDocAcceptPlanInvariant(t *testing.T) {
 		t.Fatalf("tasks with plan_doc after accept = %d, want %d", after, len(minted))
 	}
 
-	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("second accept err = %v, want ErrInvalidInput", err)
+	// Re-accepting an unedited plan is a no-op, not a refusal: every
+	// declaration already has a row, so there is nothing to mint (025 §9.2).
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("second accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("second accept minted %d tasks, want none", len(again))
 	}
 	if got := countTasksWithPlanDoc(t, s, doc.ID); got != after {
-		t.Fatalf("tasks with plan_doc after rejected second accept = %d, want unchanged %d", got, after)
+		t.Fatalf("tasks with plan_doc after the second accept = %d, want unchanged %d", got, after)
 	}
 }
 
@@ -2058,6 +2503,339 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("readyCandidates after task1 merged omitted %s", task2)
+	}
+}
+
+// planMintBodyFourth is planMintBody with a fourth declaration appended,
+// blocked by task 1, and Task 2's prose rewritten: the shape of a plan edited
+// after acceptance (025 §9.2).
+var planMintBodyFourth = strings.Replace(planMintBody,
+	"Do the second thing.", "Do the second thing, differently.", 1) + `
+### Task 4 — Fourth task
+
+` + "```yaml" + `
+kind: chore
+priority: high
+blockedBy: [1]
+` + "```" + `
+
+Do the fourth thing.
+`
+
+// taskSnapshot is the part of a minted task a re-accept must not touch.
+type taskSnapshot struct {
+	Title, Body, Kind, Priority, State string
+	UpdatedAt                          time.Time
+}
+
+func snapshotTask(t *testing.T, s *Store, id string) taskSnapshot {
+	t.Helper()
+	task, err := s.GetTask(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetTask(%s): %v", id, err)
+	}
+	return taskSnapshot{
+		Title: task.Title, Body: task.Body, Kind: task.Kind,
+		Priority: task.Priority, State: task.State, UpdatedAt: task.UpdatedAt,
+	}
+}
+
+// TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations: an accepted plan stays
+// freely mutable, so re-accepting one mints the declarations that have no row
+// yet and leaves every existing row alone (025 §9.2) — including a row whose
+// declaration's prose changed, and one that has since left draft. The new
+// task's declared blockedBy is wired even though its blocker was minted by the
+// first accept.
+func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "remint-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if len(minted) != 3 {
+		t.Fatalf("first accept minted %d tasks, want 3", len(minted))
+	}
+	// Execution has started on task 1: a re-accept must not walk it back.
+	if err := transition(t, s, taskTestNow, minted[0].ID, "draft", "ready"); err != nil {
+		t.Fatalf("transition %s to ready: %v", minted[0].ID, err)
+	}
+	before := map[string]taskSnapshot{}
+	for _, task := range minted {
+		before[task.ID] = snapshotTask(t, s, task.ID)
+	}
+
+	if _, err := updateDocBody(t, s, doc.ID, planMintBodyFourth); err != nil {
+		t.Fatalf("UpdateDocBody on the accepted plan: %v", err)
+	}
+
+	accepted, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("re-accept: %v", err)
+	}
+	if accepted.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", accepted.Status)
+	}
+	if len(again) != 1 {
+		t.Fatalf("re-accept minted %d tasks, want 1", len(again))
+	}
+	if again[0].Title != "Fourth task" || again[0].Kind != "chore" || again[0].Priority != "high" {
+		t.Errorf("minted %+v, want the fourth declaration", again[0])
+	}
+	if got := countTasksWithPlanDoc(t, s, doc.ID); got != 4 {
+		t.Errorf("tasks with plan_doc = %d, want 4", got)
+	}
+
+	for id, want := range before {
+		if got := snapshotTask(t, s, id); got != want {
+			t.Errorf("task %s = %+v after the re-accept, want it untouched (%+v)", id, got, want)
+		}
+	}
+
+	// The new task's blockedBy names a task the first accept minted, so the
+	// edge crosses the two accepts.
+	var edgeType string
+	err = s.db.QueryRow(`SELECT type FROM task_edges WHERE from_task = $1 AND to_task = $2`,
+		minted[0].ID, again[0].ID).Scan(&edgeType)
+	if err != nil {
+		t.Fatalf("read edge %s -> %s: %v", minted[0].ID, again[0].ID, err)
+	}
+	if edgeType != "blocks" {
+		t.Errorf("edge type = %q, want blocks", edgeType)
+	}
+}
+
+// TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp: an edit that adds no
+// declaration — prose rewritten under an existing one — leaves the re-accept
+// with nothing to mint, and that is a success rather than an error (025 §9.2).
+func TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "noop-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	before := map[string]taskSnapshot{}
+	for _, task := range minted {
+		before[task.ID] = snapshotTask(t, s, task.ID)
+	}
+
+	edited := strings.Replace(planMintBody, "Do the first thing.", "Do the first thing, carefully.", 1)
+	if _, err := updateDocBody(t, s, doc.ID, edited); err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("re-accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("re-accept minted %d tasks, want none", len(again))
+	}
+	if got := countTasksWithPlanDoc(t, s, doc.ID); got != len(minted) {
+		t.Errorf("tasks with plan_doc = %d, want unchanged %d", got, len(minted))
+	}
+	for id, want := range before {
+		if got := snapshotTask(t, s, id); got != want {
+			t.Errorf("task %s = %+v after the no-op re-accept, want it untouched (%+v)", id, got, want)
+		}
+	}
+}
+
+// TestDocAcceptPlanReAcceptNeverRemintsDeletedTask: a soft-deleted task keeps
+// its declaration's key, so the withdrawal survives the next re-accept
+// (025 §9.2 — withdrawing work is a task transition, and re-acceptance leaves
+// existing rows alone).
+func TestDocAcceptPlanReAcceptNeverRemintsDeletedTask(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "withdrawn-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+
+	_, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if err := deleteTask(t, s, minted[2].ID, "stig", "not needed after all"); err != nil {
+		t.Fatalf("delete %s: %v", minted[2].ID, err)
+	}
+
+	_, again, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("re-accept: %v", err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("re-accept minted %d tasks, want none: the declaration still has its row", len(again))
+	}
+}
+
+// TestDocUpdateBodyMintedPlanRequiresReadableTasks: once a plan has minted
+// tasks, a body edit that leaves its ## Tasks section unreadable is refused at
+// the write rather than surfacing as drift at the next accept (025 §9.2). The
+// body does not move.
+func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "drift-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+
+	for name, body := range map[string]string{
+		"section removed":  "---\nstatus: accepted\n---\n\n# A plan\n\nNo tasks here.\n",
+		"kindless fence":   strings.Replace(planMintBody, "kind: feature\n", "", 1),
+		"duplicate titles": strings.Replace(planMintBody, "Task 3 — Third task", "Task 3 — First task", 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := updateDocBody(t, s, doc.ID, body)
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("err = %v, want ErrInvalidInput", err)
+			}
+			got, err := s.GetDoc(t.Context(), doc.ID)
+			if err != nil {
+				t.Fatalf("GetDoc: %v", err)
+			}
+			if got.Body != planMintBody {
+				t.Errorf("body moved to %q, want the refused edit not to land", got.Body)
+			}
+		})
+	}
+}
+
+// TestDocUpdateBodyUnmintedPlanTasksUnchecked: the readable-## Tasks rule
+// binds only once something is minted. A draft plan is written a paragraph at
+// a time, and an accepted plan that minted nothing is §9.2's historical
+// import; neither has a task set to drift from.
+func TestDocUpdateBodyUnmintedPlanTasksUnchecked(t *testing.T) {
+	s := openDocStore(t)
+	draft := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "draft-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	half := "---\nstatus: draft\n---\n\n# A plan\n\nStill thinking.\n"
+	if _, err := updateDocBody(t, s, draft.ID, half); err != nil {
+		t.Fatalf("UpdateDocBody on an unaccepted plan: %v", err)
+	}
+
+	imported := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "imported-plan", Body: planBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	if _, err := updateDocBody(t, s, imported.ID, half); err != nil {
+		t.Fatalf("UpdateDocBody on an accepted plan that minted nothing: %v", err)
+	}
+}
+
+// TestDocUpdateBodyPlanBumpsVersion: a plan is edited in place rather than
+// revised (025 §9), so its body edit is the next version of the document —
+// which is what lets the acceptance event of §15.3, keyed on IRI and version,
+// tell a re-accept after an edit from a retry of the same accept.
+func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "versioned-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	if doc.Version != 1 {
+		t.Fatalf("version = %d, want 1", doc.Version)
+	}
+	updated, err := updateDocBody(t, s, doc.ID,
+		strings.Replace(planMintBody, "Do the first thing.", "Do it now.", 1))
+	if err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Errorf("version = %d, want 2", updated.Version)
+	}
+
+	// A draft spec's body edit is not a publication, so its version holds.
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 91, Slug: "091-x", Body: specBody, CreatedBy: "stig",
+	})
+	editedSpec, err := updateDocBody(t, s, spec.ID, specBody+"\nmore\n")
+	if err != nil {
+		t.Fatalf("UpdateDocBody on a draft spec: %v", err)
+	}
+	if editedSpec.Version != 1 {
+		t.Errorf("spec version = %d, want 1", editedSpec.Version)
+	}
+}
+
+// TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles: 0043 backfills
+// plan_task_key from tasks.title, and nothing before it stopped two
+// declarations in one plan from sharing a title. The earliest row keeps the
+// title — the key a re-accept then matches that declaration to — and the rest
+// are disambiguated, so the partial unique index can be created and no
+// existing row is lost.
+func TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles(t *testing.T) {
+	s := OpenUnmigratedTestStore(t)
+	if err := s.Migrate(migrationsThrough(t, 42)); err != nil {
+		t.Fatalf("migrate through 0042: %v", err)
+	}
+	db := s.DBForTests()
+	if _, err := db.Exec(`INSERT INTO projects (id, name, key) VALUES ('p1','P1','P1')`); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	var planID int64
+	if err := db.QueryRow(
+		`INSERT INTO docs (project_id, kind, slug, title, body, created_at, updated_at)
+		 VALUES ('p1', 'plan', 'dup-plan', 'Dup plan', 'body', now(), now()) RETURNING id`,
+	).Scan(&planID); err != nil {
+		t.Fatalf("seed plan doc: %v", err)
+	}
+	// Inserted directly: the store is held at 0042, where tasks has no
+	// plan_task_key column for CreateTask to write.
+	for i, id := range []string{"P1-1", "P1-2", "P1-3"} {
+		created := taskTestNow.Add(time.Duration(i) * time.Second)
+		title := "Same title"
+		if id == "P1-3" {
+			title = "Its own title"
+		}
+		if _, err := db.Exec(
+			`INSERT INTO tasks (id, project_id, title, body, priority, kind, state,
+			                    created_at, updated_at, plan_doc)
+			 VALUES ($1, 'p1', $2, 'b', 'medium', 'feature', 'draft', $3, $3, $4)`,
+			id, title, created, planID); err != nil {
+			t.Fatalf("seed task %s: %v", id, err)
+		}
+	}
+
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate to latest: %v", err)
+	}
+
+	keys := map[string]string{}
+	rows, err := db.Query(`SELECT id, plan_task_key FROM tasks ORDER BY id`)
+	if err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, key string
+		if err := rows.Scan(&id, &key); err != nil {
+			t.Fatalf("scan key: %v", err)
+		}
+		keys[id] = key
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read keys: %v", err)
+	}
+	if len(keys) != 3 {
+		t.Fatalf("kept %d tasks, want all 3", len(keys))
+	}
+	if keys["P1-1"] != "Same title" {
+		t.Errorf("earliest duplicate key = %q, want the title itself", keys["P1-1"])
+	}
+	if keys["P1-2"] == "Same title" || keys["P1-2"] == "" {
+		t.Errorf("later duplicate key = %q, want it disambiguated", keys["P1-2"])
+	}
+	if keys["P1-3"] != "Its own title" {
+		t.Errorf("unique title key = %q, want the title itself", keys["P1-3"])
 	}
 }
 
@@ -2431,6 +3209,106 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 	}
 }
 
+// TestDocDiscardRevisionStanding: the assignee and the revision's author may
+// each withdraw an open candidate; a third party may not (025 §7.2).
+//
+// mustAcceptedSpec's documents are created by stig, and CreateDoc defaults the
+// assignee to the creator, so stig is the assignee throughout and ada is the
+// proposer.
+func TestDocDiscardRevisionStanding(t *testing.T) {
+	t.Run("author", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x")
+		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if _, err := discardRevision(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("DiscardRevision by the author: %v", err)
+		}
+		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("assignee", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x")
+		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+			t.Fatalf("DiscardRevision by the assignee: %v", err)
+		}
+		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("third party", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x")
+		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if _, err := discardRevision(t, s, doc.ID, "bob"); !errors.Is(err, ErrForbidden) {
+			t.Fatalf("DiscardRevision by a third party = %v, want ErrForbidden", err)
+		}
+		if _, err := s.GetDocRevision(t.Context(), doc.ID); err != nil {
+			t.Fatalf("the refused discard removed the candidate anyway: %v", err)
+		}
+	})
+}
+
+// TestDocDiscardRevisionFreesTheSlot: doc_revisions is keyed on doc_id, so the
+// point of a discard is that the next ReviseDoc succeeds immediately rather
+// than hitting ErrRevisionExists. The accepted version is untouched by either.
+func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	back, err := discardRevision(t, s, doc.ID, "ada")
+	if err != nil {
+		t.Fatalf("DiscardRevision: %v", err)
+	}
+	if back.Version != 1 || back.Body != specBody {
+		t.Errorf("returned doc = version %d, want the accepted version untouched", back.Version)
+	}
+
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc after a discard: %v, want the slot free", err)
+	}
+	rev, err := s.GetDocRevision(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rev.CreatedBy != "stig" || rev.Body != specBody {
+		t.Errorf("revision = %+v, want a fresh copy of the accepted body opened by stig", rev)
+	}
+	got, err := s.GetDoc(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 1 || got.Body != specBody {
+		t.Errorf("doc = version %d, want the accepted version untouched by a discard", got.Version)
+	}
+}
+
+// TestDocDiscardRevisionWithoutOpenRevision: nothing to withdraw is
+// ErrNotFound, for the assignee as much as for anyone.
+func TestDocDiscardRevisionWithoutOpenRevision(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+
+	if _, err := discardRevision(t, s, doc.ID, "stig"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
 // setDocStatus forces a document's status, standing in for the states only
 // another act — a supersession, a corpus import — can produce.
 func setDocStatus(t *testing.T, s *Store, id int64, status string) {
@@ -2458,6 +3336,59 @@ func TestDocUpdateRevisionOnSupersededDoc(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "superseded") {
 		t.Errorf("err = %v, want it to name the status", err)
+	}
+}
+
+// TestDocDiscardRevisionOnSupersededDoc: the case that separates discard from
+// the other two revision verbs. A candidate stranded on a document superseded
+// since it opened can no longer be edited or landed, so withdrawing it must
+// still work — otherwise the row is unremovable.
+func TestDocDiscardRevisionOnSupersededDoc(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	setDocStatus(t, s, doc.ID, "superseded")
+
+	if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("DiscardRevision on a superseded doc: %v", err)
+	}
+	if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocDiscardRevisionLogsTheWithdrawnBody: doc_revisions has no history and
+// the discard is a hard delete, so the state_log row is the only surviving
+// copy of the withdrawn text.
+func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("DiscardRevision: %v", err)
+	}
+
+	var change []byte
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT change FROM state_log
+		  WHERE entity_kind = 'doc' AND entity_id = $1
+		    AND change->>'new' = 'discarded'
+		  ORDER BY id DESC LIMIT 1`, strconv.FormatInt(doc.ID, 10)).Scan(&change); err != nil {
+		t.Fatalf("read the discard's state_log row: %v", err)
+	}
+	var got map[string]string
+	if err := json.Unmarshal(change, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["discarded_body"] != revisedSpecBody {
+		t.Errorf("discarded_body = %q, want the withdrawn candidate", got["discarded_body"])
 	}
 }
 
@@ -2646,6 +3577,70 @@ func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
 		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Published: true},
 		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 2, Published: true},
 		{Anchor: "sec-2.1", Number: "2.1", Heading: "Detail", Depth: 3, Position: 2, LastRevisedIn: 2, Published: true},
+	}
+	if got := docSections(t, s, doc.ID); !slices.Equal(got, want) {
+		t.Errorf("sections =\n%+v\nwant\n%+v", got, want)
+	}
+}
+
+// subheadingSpecBody is a spec whose sec-2 holds an anchorless "#### Tie-
+// breaking" block — legal per 025 §6.1, which makes a heading deeper than the
+// addressability limit content within its nearest anchored ancestor rather
+// than a node of its own.
+const subheadingSpecBody = `---
+status: draft
+issued: 2026-08-01
+---
+
+# Documents in the backbone
+
+Intro prose.
+
+## 1. Scope {#sec-1}
+
+Scope body.
+
+## 2. Model {#sec-2}
+
+Model body.
+
+#### Tie-breaking
+
+Oldest first.
+`
+
+// TestDocAcceptRevisionStampsAnchorlessSubheadingEdit: an edit confined to an
+// anchorless subheading moves its anchored ancestor's last_revised_in in the
+// database. Section.Body stops at the next heading of any level, so a diff
+// over bodies alone would accept this revision as touching nothing and leave
+// every coverage claim against sec-2 falsely fresh — the silent-staleness half
+// of 025 §6 rule 5.
+func TestDocAcceptRevisionStampsAnchorlessSubheadingEdit(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-subheading",
+		Body: subheadingSpecBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	revised := strings.NewReplacer(
+		"status: draft", "status: accepted",
+		"Oldest first.", "Highest priority first.",
+	).Replace(subheadingSpecBody)
+	if err := updateRevision(t, s, doc.ID, revised); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := acceptRevision(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+
+	want := []model.DocSection{
+		{Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2, Position: 0, LastRevisedIn: 1, Published: true},
+		{Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2, Position: 1, LastRevisedIn: 2, Published: true},
 	}
 	if got := docSections(t, s, doc.ID); !slices.Equal(got, want) {
 		t.Errorf("sections =\n%+v\nwant\n%+v", got, want)
@@ -3207,12 +4202,80 @@ func levelledPlan(t *testing.T, s *Store, slug string, accept bool, refs ...cove
 	return accepted
 }
 
+// deferralRef is one `defers` entry for a test plan body: the deferred
+// section and its named owner (026 §5.3).
+type deferralRef struct {
+	spec string
+	to   string
+}
+
+// deferringPlanBody renders a mintable plan whose frontmatter defers each ref
+// to its named owner (026 §5.3), and optionally covers others at explicit
+// levels alongside it — the NeedsPlanning precedence tests need both keys on
+// one plan.
+func deferringPlanBody(defers []deferralRef, covers ...coverageRef) string {
+	var b strings.Builder
+	b.WriteString("---\nstatus: draft\n")
+	if len(covers) > 0 {
+		b.WriteString("covers:\n")
+		for _, r := range covers {
+			if r.level == "" && len(r.fullCoverageWith) == 0 {
+				b.WriteString("  - " + r.ref + "\n")
+				continue
+			}
+			b.WriteString("  - spec: " + r.ref + "\n")
+			if r.level != "" {
+				b.WriteString("    coverage: " + r.level + "\n")
+			}
+			if len(r.fullCoverageWith) > 0 {
+				b.WriteString("    fullCoverageWith:\n")
+				for _, cw := range r.fullCoverageWith {
+					b.WriteString("      - " + cw + "\n")
+				}
+			}
+		}
+	}
+	if len(defers) > 0 {
+		b.WriteString("defers:\n")
+		for _, d := range defers {
+			b.WriteString("  - spec: " + d.spec + "\n")
+			b.WriteString("    to: " + d.to + "\n")
+		}
+	}
+	b.WriteString("---\n\n# A deferring plan\n\n## Tasks\n\n### Task 1 — Only task\n\n")
+	b.WriteString("```yaml\nkind: chore\n```\n\nDo it.\n")
+	return b.String()
+}
+
+// deferringPlan creates a plan deferring refs to their owners (and optionally
+// covering others), accepting it when accept is set.
+func deferringPlan(t *testing.T, s *Store, slug string, accept bool, defers []deferralRef, covers ...coverageRef) *model.Doc {
+	t.Helper()
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: slug, Body: deferringPlanBody(defers, covers...), CreatedBy: "stig",
+	})
+	if !accept {
+		return doc
+	}
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan %s: %v", slug, err)
+	}
+	return accepted
+}
+
 // gapAnchors renders anchor(coverage) for each of a gap's sections, in
-// order, so tests can assert against a plain string slice.
+// order, so tests can assert against a plain string slice. A deferred section
+// carries its owner (026 §2.1, §5.3), rendered the way DocPlanningTable does:
+// "sec-N(deferred:OWNER)".
 func gapAnchors(gap model.DocPlanningGap) []string {
 	out := make([]string, len(gap.Gaps))
 	for i, s := range gap.Gaps {
-		out[i] = s.Anchor + "(" + s.Coverage + ")"
+		if s.Coverage == "deferred" && s.Owner != "" {
+			out[i] = s.Anchor + "(deferred:" + s.Owner + ")"
+		} else {
+			out[i] = s.Anchor + "(" + s.Coverage + ")"
+		}
 	}
 	return out
 }
@@ -3567,6 +4630,177 @@ func TestDocNeedsPlanningNoneByOneAndPartialByAnotherIsPartialGap(t *testing.T) 
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
 		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
 		t.Fatalf("gaps = %v, want sec-1 partial: partial dominates bound-only", gaps)
+	}
+}
+
+// TestDocNeedsPlanningSupersededPlanDischarges: 026 §2.1's amended discharging
+// set is "accepted or superseded" — a superseded plan is one that was
+// accepted and then carried out (025 §9), so its full claim still discharges
+// the section it covered.
+func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	plan := levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+	setDocStatus(t, s, plan.ID, "superseded")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 discharged: a superseded plan discharges what it covered", gaps)
+	}
+}
+
+// --- NeedsPlanning defers classification (026 §2.1, §5.3) -----------------
+
+// TestDocNeedsPlanningDeferredSectionReportsOwner: an accepted plan's defers
+// entry reports the section "deferred" with its owner's slug; a section no
+// plan names at all stays "unplanned" (026 §2.1, §5.3).
+func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to owner-spec", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDeferredOutranksBoundOnly: with one plan bound by a
+// section (`none`) and another deferring it, the section reports deferred —
+// a deferral says who is owed the rest, not merely that the section was read
+// (026 §2.1's precedence: partial > deferred > bound-only > unplanned).
+func TestDocNeedsPlanningDeferredOutranksBoundOnly(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
+	deferringPlan(t, s, "plan-b", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred: deferred outranks bound-only", gaps)
+	}
+}
+
+// TestDocNeedsPlanningTwoDeferralOwnersAggregated: §5.3's one-owner rule is
+// per plan, so two plans may defer one section to two owners. The report
+// aggregates them deterministically, comma-joined without a space — the CLI
+// joins anchors with spaces, so a spaced separator would split the token.
+func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-a", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 7, Slug: "owner-b", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-a"}})
+	deferringPlan(t, s, "plan-b", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-b"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-a,owner-b)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to owner-a,owner-b", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDeferralDeliveredByCoveringPlan: a deferral is
+// delivered by any plan discharging the section, not only by the named owner
+// — once a second accepted plan covers the section `full`, it disappears
+// from the gaps the same as any other discharged section (026 §2.1).
+func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 discharged: a deferral is delivered by any covering plan", gaps)
+	}
+}
+
+// TestDocNeedsPlanningPartialWithDeferralReportsPartial: a section claimed
+// `partial` by one plan and deferred by another reports "partial" — partial
+// outranks deferred in 026 §2.1's precedence.
+func TestDocNeedsPlanningPartialWithDeferralReportsPartial(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 partial: partial outranks deferred", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDraftPlanDeferralIgnored: a draft plan has not yet
+// undertaken work, so its defers entries classify nothing (026 §2.1).
+func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", false, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(unplanned)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 unplanned: a draft plan's deferral does not count", gaps)
+	}
+}
+
+// TestDocNeedsPlanningSupersededPlanDeferralCounts: the deferring set is
+// accepted or superseded, never draft (026 §5.3) — a superseded plan's
+// deferral stands, being spent does not deliver a handoff the plan never
+// made.
+func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	plan := deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+	setDocStatus(t, s, plan.ID, "superseded")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 still deferred: a superseded plan's deferral stands", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDeferralOwnerExternalVerbatim: an owner reference this
+// project cannot resolve is reported verbatim, the same fallback
+// fullCoverageWith uses (026 §2.1, §5.3).
+func TestDocNeedsPlanningDeferralOwnerExternalVerbatim(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "999-nowhere-owner.md"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:999-nowhere-owner.md)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to the unresolved reference verbatim", gaps)
 	}
 }
 
@@ -3951,6 +5185,154 @@ func TestDocBareSupersededViaAcceptPath(t *testing.T) {
 	}
 }
 
+// replacerBody is a minimal accepted-at-create spec whose document-level
+// `replaces` names ref. The corpus importer's shape: status in the
+// frontmatter, no separate accept.
+func replacerBody(title, ref string) string {
+	return "---\nstatus: accepted\nissued: 2026-08-01\nreplaces:\n  \".\":\n    - " + ref +
+		"\n---\n\n# " + title + "\n\n## 1. Scope {#sec-1}\n\nBody.\n"
+}
+
+// docStatus reads one document's stored status, which is the thing the
+// cascade moves — CreateDoc's return value is a projection of the same row,
+// asserted separately where it matters.
+func docStatus(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	d, err := s.GetDoc(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetDoc(%d): %v", id, err)
+	}
+	return d.Status
+}
+
+// TestDocCreateAcceptedSupersedesReplaced: creating a document accepted runs
+// the same supersession cascade AcceptDoc does, so an importer recording a
+// document at the status it actually reached does not leave the document it
+// replaces claiming to be current too (WL-133).
+func TestDocCreateAcceptedSupersedesReplaced(t *testing.T) {
+	s := openDocStore(t)
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Status: "accepted", Body: replacerBody("New", "006-old.md"),
+	})
+
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status = %q, want superseded", got)
+	}
+}
+
+// TestDocCreateAcceptedSupersedesReplacedOutOfOrder: the same corpus imported
+// successor-first. The `replaces` edge starts unresolved, so the cascade has
+// no row to flip at create time; repointExternalEdges resolves the edge when
+// the target arrives and runs the missed cascade there, which is what makes
+// the outcome independent of import order (WL-133, on WL-130's mechanism).
+func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
+	s := openDocStore(t)
+	successor := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Status: "accepted", Body: replacerBody("New", "006-old.md"),
+	})
+	before := docEdges(t, s, successor.ID)
+	want := []model.DocEdge{{Type: "replaces", ToExternal: "006-old.md"}}
+	if !slices.Equal(before, want) {
+		t.Fatalf("edges before the target exists = %+v, want %+v", before, want)
+	}
+
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status = %q, want superseded", got)
+	}
+	// CreateDoc reports the row it landed, not the status it was asked for:
+	// this document was superseded on the way in.
+	if old.Status != "superseded" {
+		t.Errorf("CreateDoc(006-old).Status = %q, want superseded", old.Status)
+	}
+	after := docEdges(t, s, successor.ID)
+	wantAfter := []model.DocEdge{{Type: "replaces", ToDoc: old.ID}}
+	if !slices.Equal(after, wantAfter) {
+		t.Fatalf("edges after the target arrives = %+v, want %+v", after, wantAfter)
+	}
+}
+
+// TestDocCreateAcceptedLeavesDraftTargetAlone: 025 §7's ladder is draft ->
+// accepted -> superseded, and a draft pushed straight to superseded is
+// reachable by no verb. Neither new cascade path may do it — not the
+// accepted-at-create one, and not the one repointExternalEdges runs when the
+// edge resolves late.
+func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
+	t.Run("at create", func(t *testing.T) {
+		s := openDocStore(t)
+		old := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+			CreatedBy: "stig",
+		})
+		mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+			Status: "accepted", Body: replacerBody("New", "006-old.md"),
+		})
+		if got := docStatus(t, s, old.ID); got != "draft" {
+			t.Fatalf("006-old status = %q, want draft", got)
+		}
+	})
+
+	t.Run("on the late re-point", func(t *testing.T) {
+		s := openDocStore(t)
+		mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+			Status: "accepted", Body: replacerBody("New", "006-old.md"),
+		})
+		old := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+			CreatedBy: "stig",
+		})
+		if got := docStatus(t, s, old.ID); got != "draft" {
+			t.Fatalf("006-old status = %q, want draft", got)
+		}
+		// The draft target is still reachable by the verb that moves it, and
+		// accepting it is what finally makes it supersedable.
+		if _, _, err := acceptDoc(t, s, old.ID, "stig"); err != nil {
+			t.Fatalf("AcceptDoc(006-old): %v", err)
+		}
+		if got := docStatus(t, s, old.ID); got != "accepted" {
+			t.Fatalf("006-old status after accept = %q, want accepted", got)
+		}
+	})
+}
+
+// TestDocCreateDraftReplacerSupersedesNothing: the cascade is acceptance's
+// consequence, so the replacing end is guarded too. Here the edge resolves
+// late — the case repointExternalEdges now cascades on — but its document is
+// still draft, so nothing moves until that document's own accept. (At create
+// the guard is structural: a draft create never reaches the cascade.)
+func TestDocCreateDraftReplacerSupersedesNothing(t *testing.T) {
+	s := openDocStore(t)
+	successor := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nreplaces:\n  \".\":\n    - 006-old.md\n---\n\n" +
+			"# New\n\n## 1. Scope {#sec-1}\n\nBody.\n",
+	})
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
+		CreatedBy: "stig", Status: "accepted",
+	})
+	if got := docStatus(t, s, old.ID); got != "accepted" {
+		t.Fatalf("006-old status = %q, want accepted: a draft replacer supersedes nothing", got)
+	}
+	if _, _, err := acceptDoc(t, s, successor.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc(025-new): %v", err)
+	}
+	if got := docStatus(t, s, old.ID); got != "superseded" {
+		t.Fatalf("006-old status after the replacer's accept = %q, want superseded", got)
+	}
+}
+
 // TestDocIRIRoundTrip: DocIRI renders spec 025 §4.1's project-qualified
 // subject IRI for a spec, an ADR, and a plan in the same project, and
 // DocBySubjectIRI resolves each back to its row. An unknown IRI is
@@ -4254,5 +5636,64 @@ func TestDocEdgeTypesWithoutWriter(t *testing.T) {
 	slices.Sort(unwritten)
 	if want := []string{"implements"}; !slices.Equal(unwritten, want) {
 		t.Errorf("doc_edges types with no writer = %v, want %v", unwritten, want)
+	}
+}
+
+// seedDocsTask inserts a task in the doc tests' project, for the authoring
+// edge 025 §12 asks for. Direct SQL, like seedDocsProject: what is under test
+// is the docs row, not how the task got there.
+func seedDocsTask(t *testing.T, s *Store, id string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(context.Background(),
+		`INSERT INTO tasks (id, project_id, title, priority, kind, state, created_at, updated_at)
+		 VALUES ($1, 'p1', 'Write the spec', 'medium', 'design', 'in_progress', now(), now())`,
+		id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCreateDocRecordsGeneratedByTask pins 025 §12's authorship edge at the
+// store: the task that wrote a document is persisted and read back, a create
+// naming no task leaves it unset rather than failing, and a create naming a
+// task that does not exist is refused with a message pointing at the field.
+func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
+	s := openDocStore(t)
+	seedDocsTask(t, s, "P1-1")
+
+	authored := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x",
+		Body: specBody, CreatedBy: "stig", GeneratedByTask: "P1-1",
+	})
+	if authored.GeneratedByTask != "P1-1" {
+		t.Errorf("GeneratedByTask = %q, want P1-1", authored.GeneratedByTask)
+	}
+	// Read back through scanDoc, which is what every later query uses.
+	got, err := s.GetDoc(t.Context(), authored.ID)
+	if err != nil {
+		t.Fatalf("GetDoc: %v", err)
+	}
+	if got.GeneratedByTask != "P1-1" {
+		t.Errorf("GetDoc GeneratedByTask = %q, want P1-1", got.GeneratedByTask)
+	}
+
+	// Nullable by design: a document nothing claimed a task for is a normal
+	// state, the same way tasks.plan_doc and tasks.about_doc are nullable.
+	unauthored := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 51, Slug: "051-x",
+		Body: specBody, CreatedBy: "stig",
+	})
+	if unauthored.GeneratedByTask != "" {
+		t.Errorf("GeneratedByTask = %q, want empty", unauthored.GeneratedByTask)
+	}
+
+	_, err = createDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-x",
+		Body: specBody, CreatedBy: "stig", GeneratedByTask: "P1-404",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown authoring task: err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "P1-404") {
+		t.Errorf("err = %q, want it to name the task", err)
 	}
 }

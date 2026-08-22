@@ -116,6 +116,109 @@ func TestCompareSections(t *testing.T) {
 			wantChanged: []string{"sec-1"},
 		},
 		{
+			// 025 §6.1: an anchorless heading is content within sec-4, so an
+			// edit confined to it is an edit to sec-4. Section.Body alone stops
+			// at the next heading of any level and would report no change,
+			// leaving claims against sec-4 falsely fresh.
+			name: "edit under an anchorless subheading changes its anchored ancestor",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n\n" +
+				"## 5. Next {#sec-5}\n\nBody five.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nHighest priority first.\n\n" +
+				"## 5. Next {#sec-5}\n\nBody five.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4"},
+		},
+		{
+			// The heading text of an anchorless subheading is content too, so
+			// renaming it changes its ancestor — unlike rewording an anchored
+			// heading, which is explicitly not a change (025 §3).
+			name: "anchorless subheading renamed changes its anchored ancestor",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Ties\n\nOldest first.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4"},
+		},
+		{
+			// An anchored descendant is a node of its own: its body belongs to
+			// it, never to its parent, so editing sec-4.1 leaves sec-4 alone
+			// even though the anchorless heading beside it does roll up.
+			name: "anchored descendant's body does not roll up into its parent",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body, edited.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4.1"},
+		},
+		{
+			// The walk stops at an anchored descendant, so an anchorless
+			// heading nested under sec-4.1 rolls up into sec-4.1, not sec-4.
+			name: "anchorless heading rolls up to its nearest anchored ancestor only",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"### 4.1 Weights {#sec-4.1}\n\nWeights body.\n\n" +
+				"#### Tie-breaking\n\nHighest priority first.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4.1"},
+		},
+		{
+			// A heading contributes its parsed fields, not its source line, so
+			// respacing one is not content. Over-stamping last_revised_in
+			// mass-invalidates valid claims, which rule 5 forbids too.
+			name: "anchorless subheading respaced is not a change",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"####   Tie-breaking\n\nOldest first.\n",
+			depthLimit: DepthLimit,
+		},
+		{
+			// Structure alone: the prose is untouched, only the anchorless
+			// heading dividing it is gone. The newline join is what keeps this
+			// from collapsing to the same string on both sides.
+			name: "anchorless subheading removed with its prose kept is a change",
+			accepted: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\n" +
+				"#### Tie-breaking\n\nOldest first.\n",
+			candidate: "# Spec\n\n" +
+				"## 4. Ranking {#sec-4}\n\nIntro.\n\nOldest first.\n",
+			depthLimit:  DepthLimit,
+			wantChanged: []string{"sec-4"},
+		},
+		{
+			// An anchorless heading with no anchored ancestor is inside no
+			// section, so nothing owns its text and nothing is stamped. 025
+			// §6.1 scopes the roll-up to headings below the addressability
+			// limit; a top-level anchorless heading is a separate gap, tracked
+			// in docs/follow-ups.md.
+			name: "anchorless heading with no anchored ancestor belongs to nobody",
+			accepted: "# Spec\n\n" +
+				"## 1. First {#sec-1}\n\nBody one.\n\n" +
+				"## Appendix\n\nAppendix body.\n",
+			candidate: "# Spec\n\n" +
+				"## 1. First {#sec-1}\n\nBody one.\n\n" +
+				"## Appendix\n\nAppendix body, edited.\n",
+			depthLimit: DepthLimit,
+		},
+		{
 			name: "depth-4 anchored heading exceeds default limit",
 			accepted: "# Spec\n\n" +
 				"## 1. First {#sec-1}\n\nBody.\n\n" +

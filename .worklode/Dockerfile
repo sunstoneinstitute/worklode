@@ -27,7 +27,7 @@ RUN groupadd -g "$AGENT_GID" agent \
     && useradd -m -u "$AGENT_UID" -g "$AGENT_GID" -s /bin/bash agent
 
 # Node.js: a pinned tarball, not Debian's apt package (too old for the 22+
-# obsidian/ needs — CLAUDE.md), and not NodeSource's apt repo (one fewer
+# plugins/obsidian/ needs — CLAUDE.md), and not NodeSource's apt repo (one fewer
 # trusted key to manage). Same pin-plus-checksum shape as
 # scripts/tailwind.sha256, table keyed by TARGETARCH so this builds on both
 # amd64 and arm64 under buildx.

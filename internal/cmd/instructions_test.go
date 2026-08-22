@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -426,6 +427,144 @@ func TestInstallWritesInstructions(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, claudeFile)); !os.IsNotExist(err) {
 		t.Fatalf("CLAUDE.md survived uninstall: %v", err)
 	}
+}
+
+// gitIn runs one git command in dir, failing the test on a non-zero exit.
+// Signing and identity are pinned so a temp repo never depends on the
+// developer's global config.
+func gitIn(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	c := exec.Command("git", append([]string{
+		"-c", "commit.gpgsign=false",
+		"-c", "user.email=test@example.com", "-c", "user.name=test",
+	}, args...)...)
+	c.Dir = dir
+	out, err := c.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+	return string(out)
+}
+
+// linkedWorktree creates <root>/.worktrees/<name> as a real linked worktree —
+// the layout `lode next` produces — and returns its path.
+func linkedWorktree(t *testing.T, root, name string) string {
+	t.Helper()
+	dir := filepath.Join(root, ".worktrees", name)
+	gitIn(t, root, "worktree", "add", "-b", name, dir)
+	return dir
+}
+
+// assertWorktreeClean fails when dir's working tree carries any change at all.
+// It is the actual regression assertion for WL-219: an install run inside a
+// task worktree must leave that task's branch exactly as it found it.
+func assertWorktreeClean(t *testing.T, dir string) {
+	t.Helper()
+	if out := gitIn(t, dir, "status", "--porcelain"); out != "" {
+		t.Fatalf("install dirtied the task worktree %s:\n%s", dir, out)
+	}
+}
+
+// TestInstallFromLinkedWorktreeWritesToMainCheckout is the WL-219 regression:
+// AGENTS.md/CLAUDE.md are tracked files, so an install run from a task
+// worktree anchors them at the main checkout — the worktree inherits them
+// rather than committing a copy onto its own branch.
+func TestInstallFromLinkedWorktreeWritesToMainCheckout(t *testing.T) {
+	root := initGitRepo(t)
+	wt := linkedWorktree(t, root, "WL-1-fix-the-thing")
+
+	res, err := installHooks(discardCmd(), wt, hookTargets{vcs: vcsGit}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks from a linked worktree: %v", err)
+	}
+	if res.Instructions == nil {
+		t.Fatal("install result carries no instructions stanza")
+	}
+	if res.Instructions.AgentsMD != instrCreated || res.Instructions.ClaudeMD != instrCreated {
+		t.Fatalf("instructions = %+v, want both created", res.Instructions)
+	}
+	if got := readFile(t, filepath.Join(root, agentsFile)); !strings.Contains(got, agentsBlockBegin) {
+		t.Fatalf("main checkout's AGENTS.md has no managed block: %q", got)
+	}
+	if fileExists(filepath.Join(wt, agentsFile)) {
+		t.Fatalf("%s written into the task worktree %s", agentsFile, wt)
+	}
+	if fileExists(filepath.Join(wt, claudeFile)) {
+		t.Fatalf("%s written into the task worktree %s", claudeFile, wt)
+	}
+	assertWorktreeClean(t, wt)
+
+	// Uninstall follows the block to where install put it, so running it from
+	// the worktree strips the main checkout rather than finding nothing.
+	ures, err := uninstallHooks(wt, hookTargets{vcs: vcsGit}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("uninstallHooks from a linked worktree: %v", err)
+	}
+	if ures.Instructions == nil {
+		t.Fatal("uninstall result carries no instructions stanza")
+	}
+	if ures.Instructions.AgentsMD != instrRemoved || ures.Instructions.ClaudeMD != instrRemoved {
+		t.Fatalf("instructions = %+v, want both removed", ures.Instructions)
+	}
+	if fileExists(filepath.Join(root, agentsFile)) {
+		t.Fatalf("%s survived uninstall in the main checkout", agentsFile)
+	}
+	assertWorktreeClean(t, wt)
+}
+
+// TestInstallFromLinkedWorktreeFollowsAgentsSymlink covers the layout this
+// repo itself uses: AGENTS.md is a symlink to CLAUDE.md, both tracked. The
+// block must land in the main checkout's CLAUDE.md, through the main
+// checkout's own symlink, leaving the task worktree's copies untouched — that
+// pair is exactly what an install from a WL-46 worktree dirtied.
+func TestInstallFromLinkedWorktreeFollowsAgentsSymlink(t *testing.T) {
+	root := initGitRepo(t)
+	const authored = "# Repo\n\nAuthored prose.\n"
+	if err := os.WriteFile(filepath.Join(root, claudeFile), []byte(authored), 0o644); err != nil {
+		t.Fatalf("write %s: %v", claudeFile, err)
+	}
+	if err := os.Symlink(claudeFile, filepath.Join(root, agentsFile)); err != nil {
+		t.Fatalf("symlink %s -> %s: %v", agentsFile, claudeFile, err)
+	}
+	gitIn(t, root, "add", agentsFile, claudeFile)
+	gitIn(t, root, "commit", "-m", "instruction files")
+
+	wt := linkedWorktree(t, root, "WL-2-fix-the-thing")
+	if got := readFile(t, filepath.Join(wt, claudeFile)); got != authored {
+		t.Fatalf("worktree %s = %q, want the committed prose", claudeFile, got)
+	}
+
+	res, err := installHooks(discardCmd(), wt, hookTargets{vcs: vcsGit}, harness.ScopeLocal)
+	if err != nil {
+		t.Fatalf("installHooks from a linked worktree: %v", err)
+	}
+	// AGENTS.md gained a block it did not have; CLAUDE.md *is* AGENTS.md, so
+	// it is already satisfied rather than suggested.
+	if res.Instructions.AgentsMD != instrAdded || res.Instructions.ClaudeMD != instrSatisfied {
+		t.Fatalf("instructions = %+v, want added/satisfied", res.Instructions)
+	}
+
+	// The main checkout's symlink survives, and the block landed in its target.
+	info, err := os.Lstat(filepath.Join(root, agentsFile))
+	if err != nil {
+		t.Fatalf("lstat main %s: %v", agentsFile, err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("main %s is no longer a symlink", agentsFile)
+	}
+	mainClaude := readFile(t, filepath.Join(root, claudeFile))
+	if !strings.Contains(mainClaude, agentsBlockBegin) {
+		t.Fatalf("main %s has no managed block: %q", claudeFile, mainClaude)
+	}
+	if !strings.Contains(mainClaude, "Authored prose.") {
+		t.Fatalf("main %s lost its authored prose: %q", claudeFile, mainClaude)
+	}
+
+	// The task worktree's own pair is byte-for-byte what it was checked out as.
+	if got := readFile(t, filepath.Join(wt, claudeFile)); got != authored {
+		t.Fatalf("task worktree %s was rewritten: %q", claudeFile, got)
+	}
+	assertWorktreeClean(t, wt)
 }
 
 // The block is repo-level, so a directory outside any git repo has nowhere to

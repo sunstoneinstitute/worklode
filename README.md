@@ -234,6 +234,37 @@ gh webhook forward --repo=sunstoneinstitute/<repo> \
 or use a [smee.io](https://smee.io) relay as the App's webhook URL and pipe
 it to the same local endpoint.
 
+## Setup checks & reconciliation
+
+Three commands answer "is this wired up, and did anything get missed" (spec
+013):
+
+- `lode doctor` — client-side setup checks: config, token, server
+  reachability, `current_project`, git hooks, worktree lease. It exits
+  non-zero on any failure and names the fix for each, and still reports what
+  it can with the server unreachable.
+- `lode project doctor [repo]` — per-repo webhook-ingestion health, admin
+  only: App installation, last delivery, unapplied events, and repos that
+  send webhooks but map to no project. A repo flagged `STALE` — no delivery
+  since it was mapped — is the cue to reconcile.
+- `lode reconcile [--repo X | --task Y] [--since D] [--dry-run]` — repair
+  what ingestion missed, admin only. Engine 1 replays stored `*.ignored`
+  events; engine 2 polls GitHub for missed PR, merge and release facts. Each
+  reports its own section, so one being skipped or failing does not hide what
+  the other did: `--task` skips the replay, and the poll is skipped when the
+  server has no GitHub App configured.
+
+```bash
+lode project doctor                       # every mapped repo
+lode reconcile --repo acme/app --dry-run  # what would be repaired
+lode reconcile --since 720h               # org-wide, last 30 days
+```
+
+`--since` takes RFC 3339 or a Go duration against the server clock. Read
+`lode reconcile --help` before scheduling it: `--since` means a different
+column per engine, and the poll's `repaired` list reports what the run
+*observed*, not what it changed — both are easy to build a wrong alert on.
+
 ## Flux setup
 
 Point Flux's notification-controller at `/hooks/flux` with a
@@ -281,6 +312,38 @@ Set `LODE_FLUX_WEBHOOK_SECRET` on the server to the same HMAC key, and
 valid environments — any other value is a startup error, since delivery
 tracking has no other stage. A cluster missing from the map falls back to
 `dev`.
+
+## Data catalog setup
+
+`POST /hooks/catalog` receives what a data catalog reports about an artifact
+and files it as evidence against whatever open deliverable, task or document
+declared that artifact address (spec 029 §3.2). Authentication is the same
+`generic-hmac` scheme as the Flux hook: `X-Signature: sha256=<hex>` over the
+exact request bytes, keyed by `LODE_CATALOG_WEBHOOK_SECRET`. An unset secret
+answers 503. `X-Catalog-Delivery` is the idempotency key when the emitter has
+one; without it the SHA-256 of the body is used.
+
+```json
+{
+  "event": "dataset.published",
+  "artifact": "bigquery://sunstone-prod/cow/casualties",
+  "state": "published",
+  "catalog": "prod",
+  "version": "2026-08-19T09:12:00Z",
+  "url": "https://catalog.example.org/datasets/cow.casualties",
+  "occurred_at": "2026-08-19T09:12:03Z",
+  "detail": {}
+}
+```
+
+`artifact` and `state` are required; `state` is one of `published`, `updated`,
+`deprecated`, `removed`, `failed`. The ack is
+`{"status":"ok"|"duplicate"|"unrouted"}` — `unrouted` means the delivery was
+recorded but no open entity declares that address. Artifact addresses are
+compared exactly (whitespace-trimmed, no case or scheme normalisation).
+
+**The contract is provisional.** No data-platform emitter exists yet; it is
+shaped after the Flux hook and will be settled against the first real one.
 
 ## Task branches
 
@@ -383,12 +446,80 @@ disables projection entirely; set but otherwise misconfigured, it fails
 `lode serve`'s boot rather than silently running without it.
 
 Forcing a full re-projection — after a schema change to the projected shape,
-say — is a watermark rewind: `UPDATE graph_projection SET
-last_state_log_id = 0`. The next run treats every project as dirty again.
+say — is a watermark rewind: `UPDATE graph_projection SET last_txid = 0`. The
+next run treats every project as dirty again.
+
+The watermark counts *transactions*, not `state_log` rows, and the scan stops
+at the commit horizon (`pg_snapshot_xmin`) for the reason 025 §15 gives for
+the event log: `state_log` ids are assigned at INSERT time, so a slower
+transaction can commit a lower id after a faster one committed a higher one,
+and a row-id watermark would skip it. The cost is the same as the event log's
+— a long-running transaction anywhere on the instance holds the horizon, and
+so the projector, back; `worklode_event_horizon_id` is where that shows.
+
+**When one project is stuck.** The watermark is global, but a failure is not:
+a project that cannot be rendered or written is recorded in
+`graph_projection_failures` and the watermark advances past it, so the rest
+keep flowing. `worklode_graph_projection_quarantined_projects` staying above
+zero is the signal — `worklode_graph_projection_runs_total{result="error"}`
+climbing without it means the batch itself is broken, not one project. Which
+project, since when, and the last error are in that table; the projector
+re-attempts it immediately, then on a 1m→30m doubling backoff, and
+immediately again whenever the project has new task activity. The row is
+deleted the moment a projection succeeds; deleting it by hand only forgets
+that the project owes one.
 
 The compose stack ships **no** graph-server; the Oxigraph container it can
 start is test-only (see `docs/follow-ups.md`), so projection has nowhere to
 write locally today.
+
+## Drift & overview
+
+The graph holds two layers of the same `dct:requires` relation: **declared**
+(what a design document says the architecture is, one named graph per doc) and
+**observed** (what the code, the manifests and the estate actually do, one
+named graph per deriver source). Drift is the set difference between them —
+edges observed but not declared are violations, edges declared but not observed
+are stale intent (spec 007).
+
+Each deriver owns exactly one graph and replaces it wholesale, so a run is
+idempotent and re-running is free: the runner hashes the rendered N-Triples,
+stores the hash in the graph, and short-circuits when it matches. A run that
+produced no triples will not replace a graph that currently holds content —
+that is nearly always broken inputs, not an empty world — unless you say
+`--allow-empty`.
+
+Derivers split by what they read. The repo-local ones (`go-imports`,
+`repo-layout`) need a checkout, so each repo runs them from its own CI:
+
+```bash
+lode derive                 # writes observed/<source>/<host>/<owner>/<repo>
+lode derive --dry-run       # print the N-Triples instead of writing
+```
+
+The server-side ones (`pr-affects`, `deploy`) read the backbone's own rows and
+run in one place, admin-only:
+
+```bash
+lode derive --server        # POST /api/v1/derive
+```
+
+Reading the result — every command takes `--json`, which passes the server's
+own bytes through, or re-encodes the same shape when `--component`/`--task`
+narrowed it client-side:
+
+| Command | Shows |
+|---|---|
+| `lode overview` | one-screen roll-up: drift counts, gaps, frontier size, critical head |
+| `lode drift [--component IRI] [--acknowledged]` | violations and stale intent; accepted deviations, marked expired |
+| `lode gaps` | components with no governing document, and repo paths no component claims |
+| `lode frontier` (alias `ready`) | the ranked ready set, annotated with depth and fan-out |
+| `lode critical-path [--task ID]` | the estimate-free critical path, plus any dependency cycles |
+
+`GET /drift` renders the same views as a read-only web page. All of it needs
+`LODE_GRAPHSERVER_URL` (see the table above) — without it the frontier and
+critical path still work, since those come from the backbone, and the
+graph-backed reads answer 503.
 
 ## Cluster watcher
 
@@ -663,9 +794,22 @@ outside contributor cannot self-authorise; the workflow listens for the
 `labeled` PR event so adding the label re-triggers the run.
 
 The gate also skips the checks for **docs-only PRs** — every changed file
-markdown (`*.md`) or under `docs/`. The `can-be-tested` label overrides this.
-Jobs skipped via `if:` count as satisfied for branch-protection required
-checks, so a skipped run does not block merging.
+markdown (`*.md`) or under `docs/` or `www/`. The `can-be-tested` label
+overrides this. Jobs skipped via `if:` count as satisfied for
+branch-protection required checks, so a skipped run does not block merging.
+
+Some markdown is input rather than prose, and is **exempt** from that skip
+because changing it can break something no other job would catch:
+
+| Exempt path | What would go unchecked |
+|---|---|
+| `docs/specs/`, `docs/plans/` | the `internal/designdoc` parser, `secfmt.py -l`, `inlinespec.py --check` |
+| `plugins/` | the Codex marketplace mirror check |
+| `CLAUDE.md`, `internal/cmd/CLAUDE.md`, `.claude/skills/`, `docs/agent-surfaces.md` | `TestAgentSurfaces`, which catches agent instructions naming `lode` commands or flags that no longer exist |
+
+The skip is a CI-correctness gate, not a review one. Nothing CI runs reads
+prose for injected instructions, so exempting a path here does not make its
+content trustworthy — that is what review at merge is for.
 
 ## License
 

@@ -106,8 +106,13 @@ func newDocNewCmd() *cobra.Command {
 			if sc.Project == "" {
 				return errNoProject
 			}
+			// The task this document is being written under (025 §12). Empty
+			// outside a bound worktree, which records no authoring task
+			// rather than refusing the create — a human in the cockpit and an
+			// agent working ad hoc both author documents legitimately.
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
 				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Assignee: assignee,
+				GeneratedByTask: currentTaskID(),
 			})
 			if err != nil {
 				return err
@@ -314,10 +319,14 @@ func isPlanFile(doc *designdoc.Document) bool {
 // named "get" rather than "show" deliberately: 026 §3 consolidated document
 // reading into `lode show`, and internal/cmd/show_test.go's
 // TestDocHasNoShowVerb pins that `lode doc` must never grow a "show" child.
-// `lode doc`'s write verbs need a read to be usable on their own, and `lode
-// show` cannot reach a backbone document yet — its resolver is
-// filesystem-based (026 §0). Extending it is part 3's job, tracked as
-// WL-129.
+//
+// The split with `lode show` is settled (WL-129): both read the backbone,
+// and a slug names the same document in either. `lode show` is the rendered
+// read — human ref forms (shorthand, number, slug, path), body text out —
+// while `get` is the structural read: id or slug in, the full DocDetail
+// (frontmatter-derived fields, sections, edges) out, and the only reader
+// for plans. Neither is an alias of the other because they answer different
+// questions about the same row.
 func newDocGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <id-or-slug>",
@@ -386,7 +395,7 @@ func newDocEditCmd() *cobra.Command {
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accept <id-or-slug>",
-		Short: "Accept a document (draft -> accepted); only the assignee may accept it",
+		Short: "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the assignee may accept it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
@@ -530,17 +539,18 @@ func newDocUndeleteCmd() *cobra.Command {
 	return cmd
 }
 
-// newDocReviseCmd is one command over the three candidate-revision verbs
+// newDocReviseCmd is one command over the four candidate-revision verbs
 // (025 §7.2): bare opens a candidate, --file updates its body, --accept lands
-// it as the document's next version. --file and --accept together is refused
-// by MarkFlagsMutuallyExclusive — landing a body written in the same breath
-// would skip the read a candidate revision exists for.
+// it as the document's next version, --discard withdraws it without landing.
+// The three flags are mutually exclusive — landing a body written in the same
+// breath would skip the read a candidate revision exists for, and discarding
+// one in the same breath as editing or landing it is incoherent.
 func newDocReviseCmd() *cobra.Command {
 	var file string
-	var accept bool
+	var accept, discard bool
 	cmd := &cobra.Command{
 		Use:   "revise <id-or-slug>",
-		Short: "Open, update, or land a document's candidate revision",
+		Short: "Open, update, land, or discard a document's candidate revision",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
@@ -561,6 +571,12 @@ func newDocReviseCmd() *cobra.Command {
 					return err
 				}
 				raw, msg = r, fmt.Sprintf("accepted revision on doc %d: now version %d", d.ID, d.Version)
+			case discard:
+				d, r, err := c.DiscardDocRevision(cmd.Context(), id)
+				if err != nil {
+					return err
+				}
+				raw, msg = r, fmt.Sprintf("discarded the candidate revision on doc %d", d.ID)
 			case cmd.Flags().Changed("file"):
 				body, err := readBodyFile(cmd, file)
 				if err != nil {
@@ -588,6 +604,7 @@ func newDocReviseCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&file, "file", "", `replace the open candidate's body with this file ("-" for stdin)`)
 	cmd.Flags().BoolVar(&accept, "accept", false, "land the open candidate as the document's next version")
-	cmd.MarkFlagsMutuallyExclusive("file", "accept")
+	cmd.Flags().BoolVar(&discard, "discard", false, "withdraw the open candidate without landing it")
+	cmd.MarkFlagsMutuallyExclusive("file", "accept", "discard")
 	return cmd
 }

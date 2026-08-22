@@ -474,6 +474,16 @@ func TestCreateProjectKeyValidation(t *testing.T) {
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("duplicate WL status = %d, want 409; body %s", rr.Code, rr.Body.String())
 	}
+	// SPEC and ADR are the document shorthand's type token (025 §14.3) and are
+	// reserved, so they are a clean 422 rather than a raw CHECK violation.
+	for _, key := range []string{"SPEC", "ADR"} {
+		rr = doReq(t, h, "POST", "/api/v1/projects", token,
+			map[string]any{"id": strings.ToLower(key), "name": key, "key": key})
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("reserved key %s status = %d, want 422; body %s",
+				key, rr.Code, rr.Body.String())
+		}
+	}
 }
 
 func TestCreateActorAndTokenLifecycle(t *testing.T) {
@@ -775,6 +785,7 @@ func TestBoard(t *testing.T) {
 			Ready []struct {
 				ID     string `json:"id"`
 				Parent string `json:"parent"`
+				Branch string `json:"branch"`
 			} `json:"ready"`
 			Blocked []struct {
 				ID string `json:"id"`
@@ -795,6 +806,14 @@ func TestBoard(t *testing.T) {
 	}
 	if p.Ready[1].Parent != "" {
 		t.Fatalf("the container reported a parent of %q, want none", p.Ready[1].Parent)
+	}
+	// The board must carry the same real branch name /tasks would serve for
+	// the same task (WL-183) — the projection used to hand-clear it to "".
+	if want := store.BranchFor(&model.Task{ID: "WL-1", Title: "Ready one"}); p.Ready[0].Branch != want {
+		t.Fatalf("ready[0] branch = %q, want %q", p.Ready[0].Branch, want)
+	}
+	if p.Ready[0].Branch == "" {
+		t.Fatalf("ready[0] branch is empty, want a real branch name")
 	}
 	if len(p.Blocked) != 1 || p.Blocked[0].ID != "WL-2" {
 		t.Fatalf("blocked = %+v", p.Blocked)

@@ -49,6 +49,19 @@ func pages(t *testing.T) map[string]string {
 			Sections: []model.DocSection{{Anchor: "sec-1", Heading: "1. H"}},
 		}),
 		"projects": Projects(ProjectsView{Page: PageProps{Title: "Projects", ActiveGlobal: "projects"}, Projects: []model.Project{{ID: "p", Name: "Project"}}}),
+		// GraphEnabled, so the two drift tables and the gap table render
+		// alongside the frontier and critical-path ones.
+		"drift": Drift(DriftView{
+			Page:         PageProps{Title: "Drift", ActiveGlobal: "knowledge"},
+			Frontier:     []model.FrontierTask{{ID: "T-1", Title: "t", Priority: "high", Concern: "c", FanOut: 2, Depth: 1, IsCritical: true}},
+			CriticalPath: model.CriticalPath{MaxDepth: 1, Tasks: []model.FrontierTask{{ID: "T-1", Depth: 1, FanOut: 2, IsCritical: true}}, Cycles: [][]string{{"T-2", "T-3"}}},
+			Drift: model.Drift{
+				Violations:  []model.DriftEdge{{From: "svc/a", To: "svc/b"}},
+				StaleIntent: []model.DriftEdge{{From: "svc/c", To: "svc/d"}},
+			},
+			Gaps:         []model.Gap{{Component: "svc/a"}, {Repo: "r", Path: "cmd/x"}},
+			GraphEnabled: true,
+		}),
 		"home": Home(HomeView{
 			Page: PageProps{Title: "Home", ActiveGlobal: "home"},
 			Mode: "actor",
@@ -57,7 +70,7 @@ func pages(t *testing.T) map[string]string {
 				{ProjectID: "p2", Name: "Beta", Key: "BET", RoleBadge: "Member", Signal: "You are on this project", InProgress: 0, InReview: 0, Blocked: 0, CrewInitials: []string{"AB"}},
 			},
 		}),
-		"deliverables": Deliverables(DeliverablesView{Page: PageProps{Title: "Deliverables"}, Project: proj, Deliverables: []DeliverableRow{{ID: "d", Name: "D", URL: "https://example.org/x", CreatedAt: now}}}),
+		"deliverables": Deliverables(DeliverablesView{Page: PageProps{Title: "Deliverables"}, Project: proj, Deliverables: []DeliverableRow{{ID: "d", Name: "D", URL: "https://example.org/x", CreatedAt: now, Artifact: "bigquery://sunstone-prod/cow/casualties", ReportedState: "published", ReportedAt: &now}}}),
 		"newtask":      NewTask(NewTaskView{Form: FormShell{Page: PageProps{Title: "New task"}, Project: proj}}),
 		"placeholder":  Placeholder(PlaceholderView{Page: PageProps{Title: "Crew"}, Heading: "Crew", Project: &proj}),
 	}

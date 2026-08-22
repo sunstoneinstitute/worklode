@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -45,7 +46,7 @@ func normalizeSection(s string) string {
 // fallback runDocShowByOrdinal uses when the project key is unknown) never
 // run it themselves: a flag's kind must still be enforced when there is no
 // shorthand to route it through.
-func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
+func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bool) error {
 	section = normalizeSection(section)
 
 	c, cfg, err := newAPIClientWithConfig()
@@ -63,11 +64,22 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	doc, refSection, err := resolveDocRef(list.Docs, cfg.ProjectKey, ref)
 	if err != nil {
 		var unresolved *designdoc.UnresolvedError
-		if errors.As(err, &unresolved) {
-			// 026 §4.2 tier 3: printed, exit code unaffected.
-			return writeUnresolved(cmd, err)
+		if !errors.As(err, &unresolved) {
+			return err
 		}
-		return err
+		// 026 §4.2 tier 2, live since 025 landed (WL-276): the key names
+		// another project — or this checkout has no project_key at all —
+		// and the backbone is reachable (the ListDocs above proved it), so
+		// resolve against the docs of the project whose key it is. Only a
+		// key the backbone does not know falls through to tier 3.
+		doc, refSection, err = resolveForeignDocRef(ctx, c, unresolved.Key, ref)
+		if err != nil {
+			if errors.As(err, &unresolved) {
+				// 026 §4.2 tier 3: printed, exit code unaffected.
+				return writeUnresolved(cmd, err)
+			}
+			return err
+		}
 	}
 
 	if expectedKind != "" {
@@ -87,6 +99,25 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	if err != nil {
 		return err
 	}
+
+	if inline {
+		// The consolidated view (WL-84): every effective claim folded into
+		// the section it acts on, transitively; --section narrows to one
+		// subtree with its folds intact.
+		inliner := newDocInliner(func(id int64) (*model.DocDetail, error) {
+			d, _, err := c.GetDoc(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return &d, nil
+		})
+		out, err := inliner.consolidateDoc(&detail, section)
+		if err != nil {
+			return err
+		}
+		return writeDocShow(cmd, doc, section, []byte(out))
+	}
+
 	data := []byte(detail.Body)
 
 	if section == "" {
@@ -104,6 +135,31 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 		return fmt.Errorf("no section %s in %s", section, doc.Slug)
 	}
 	return writeDocShow(cmd, doc, section, []byte(text))
+}
+
+// resolveForeignDocRef is 026 §4.2's tier 2: resolve a shorthand whose key
+// is not the current checkout's against the backbone's own knowledge of the
+// org. The project whose key it is supplies the candidate docs, and the ref
+// then resolves through the same pure grammar as a local one — kind check
+// included. A key no project carries returns *designdoc.UnresolvedError
+// (tier 3); a known key whose document is missing is a defect and errors
+// (the §4.2 table's "the key is known and the document is not").
+func resolveForeignDocRef(ctx context.Context, c *cli.Client, key, ref string) (model.Doc, string, error) {
+	projects, _, err := c.ListProjects(ctx)
+	if err != nil {
+		return model.Doc{}, "", fmt.Errorf("resolve project key %s: %w", key, err)
+	}
+	for _, p := range projects.Projects {
+		if p.Key != key {
+			continue
+		}
+		list, _, err := c.ListDocs(ctx, cli.DocListFilter{Project: p.ID})
+		if err != nil {
+			return model.Doc{}, "", fmt.Errorf("list %s docs: %w", p.ID, err)
+		}
+		return resolveDocRef(list.Docs, key, ref)
+	}
+	return model.Doc{}, "", &designdoc.UnresolvedError{Key: key}
 }
 
 // unresolvedResult is the --json shape of a tier-3 UnresolvedError.

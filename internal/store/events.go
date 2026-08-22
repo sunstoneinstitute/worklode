@@ -50,7 +50,9 @@ func scanEvent(row rowScanner) (Event, error) {
 // This makes redelivered webhooks and re-run watcher ticks safe to retry.
 //
 // If apply returns an error, the whole transaction (including the event
-// insert) rolls back and that error is returned.
+// insert) rolls back and that error is returned. A caller whose applies are
+// replay-safe and must not lose the delivery on a failed apply uses
+// RecordEventThenApply instead.
 //
 // apply may be nil to record an event with no side effect.
 func (s *Store) RecordEvent(
@@ -94,6 +96,91 @@ func (s *Store) RecordEvent(
 	})
 	if txErr != nil {
 		return 0, false, txErr
+	}
+	return id, inserted, nil
+}
+
+// ApplyFailedError reports that RecordEventThenApply durably recorded the
+// event but its apply failed. The event row is committed with a NULL
+// applied_at, so the replay engine (spec 013 engine 1) — or a manual
+// redelivery — can re-run the apply; nothing was lost.
+type ApplyFailedError struct {
+	EventID int64
+	Err     error
+}
+
+func (e *ApplyFailedError) Error() string {
+	return fmt.Sprintf("event %d recorded, apply failed: %v", e.EventID, e.Err)
+}
+
+func (e *ApplyFailedError) Unwrap() error { return e.Err }
+
+// RecordEventThenApply is RecordEvent with the delivery's durability split
+// from its effect: the event row commits in its own transaction first, and
+// apply runs in a second one. A failed apply therefore returns
+// *ApplyFailedError and leaves the row behind with applied_at NULL — the
+// state the replay engine (spec 013 engine 1) exists to repair — instead of
+// rolling the delivery back and answering an error nothing will redeliver
+// (WL-247).
+//
+// The split changes the dedup contract too: a redelivered event whose row
+// exists but was never marked applied gets its apply run (inserted=false),
+// so redelivering a failed delivery repairs it. Only an event already
+// marked applied skips apply. That makes this method specific to sources
+// whose applies set the applied_at marker and are order-safe under replay —
+// today the GitHub webhook path. Everything else keeps RecordEvent's
+// one-transaction atomicity.
+//
+// apply may be nil to record an event with no side effect; such a row is
+// left awaiting replay exactly as under RecordEvent.
+func (s *Store) RecordEventThenApply(
+	ctx context.Context,
+	source, externalID, typ string,
+	payload []byte,
+	apply func(tx *sql.Tx, eventID int64) error,
+) (id int64, inserted bool, err error) {
+	needApply := apply != nil
+	txErr := s.Tx(ctx, func(tx *sql.Tx) error {
+		receivedAt := s.nowFn().UTC()
+		scanErr := tx.QueryRowContext(ctx,
+			`INSERT INTO events (source, external_id, type, payload, received_at)
+			 VALUES ($1, $2, $3, $4, $5)
+			 ON CONFLICT (source, external_id) DO NOTHING
+			 RETURNING id`,
+			source, externalID, typ, payload, receivedAt,
+		).Scan(&id)
+		if errors.Is(scanErr, sql.ErrNoRows) {
+			// Already recorded. Re-run apply only if no apply ever
+			// completed, so a redelivery repairs a failed delivery and a
+			// completed one stays a no-op.
+			var appliedAt sql.NullTime
+			if err := tx.QueryRowContext(ctx,
+				`SELECT id, applied_at FROM events WHERE source = $1 AND external_id = $2`,
+				source, externalID,
+			).Scan(&id, &appliedAt); err != nil {
+				return fmt.Errorf("look up existing event: %w", err)
+			}
+			inserted = false
+			needApply = needApply && !appliedAt.Valid
+			return nil
+		}
+		if scanErr != nil {
+			return fmt.Errorf("insert event: %w", scanErr)
+		}
+		inserted = true
+		return nil
+	})
+	if txErr != nil {
+		return 0, false, txErr
+	}
+
+	if !needApply {
+		return id, inserted, nil
+	}
+	if applyErr := s.Tx(ctx, func(tx *sql.Tx) error {
+		return apply(tx, id)
+	}); applyErr != nil {
+		return id, inserted, &ApplyFailedError{EventID: id, Err: applyErr}
 	}
 	return id, inserted, nil
 }

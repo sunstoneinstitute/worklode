@@ -90,3 +90,19 @@ configMapGenerator:
       - migrations/0038_approvals.down.sql
       - migrations/0039_skill_qualifier.up.sql
       - migrations/0039_skill_qualifier.down.sql
+      - migrations/0040_catalog_evidence.up.sql
+      - migrations/0040_catalog_evidence.down.sql
+      - migrations/0041_graph_projection_failures.up.sql
+      - migrations/0041_graph_projection_failures.down.sql
+      - migrations/0042_reserve_spec_adr_keys.up.sql
+      - migrations/0042_reserve_spec_adr_keys.down.sql
+      - migrations/0043_plan_task_key.up.sql
+      - migrations/0043_plan_task_key.down.sql
+      - migrations/0044_docs_generated_by_task.up.sql
+      - migrations/0044_docs_generated_by_task.down.sql
+      - migrations/0045_doc_edges_defers.up.sql
+      - migrations/0045_doc_edges_defers.down.sql
+      - migrations/0046_participant_role_check.up.sql
+      - migrations/0046_participant_role_check.down.sql
+      - migrations/0047_state_log_txid.up.sql
+      - migrations/0047_state_log_txid.down.sql

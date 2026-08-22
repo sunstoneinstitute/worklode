@@ -547,7 +547,38 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	reportSession(ctx, opts, c, taskID, root, p.SessionID, p.TranscriptPath)
 
 	skillPaths := ensureSkills(ctx, opts, c, brief, root)
-	emitAdditionalContext(opts.Stdout, compactBrief(brief, skillPaths))
+	emitSessionContext(opts, compactBrief(brief, skillPaths))
+}
+
+// emitSessionContext writes the brief to stdout in the shape the harness
+// actually consumes at session start (WL-287):
+//
+//   - Claude Code (and the empty default) reads the documented
+//     hookSpecificOutput.additionalContext envelope.
+//   - Codex reads the same envelope, byte for byte: its
+//     session-start.command.output schema declares
+//     hookSpecificOutput.{hookEventName,additionalContext} exactly as Claude
+//     Code's does, and WL-303 verified end to end against codex-cli 0.147.0
+//     that the string reaches the model (ADR 051 §6).
+//   - Amp gets plain text: the generated plugin captures the hook's stdout
+//     and returns it as the thread's first-turn context message.
+//   - Copilot gets nothing: its documented envelope is a *different* shape
+//     (flat additionalContext, no hookSpecificOutput wrapper) and no
+//     installed CLI existed to verify it against, so shipping one would be
+//     the unverified envelope ADR 051 §0 forbids.
+//
+// Codex rejects unknown keys and drops the context outright when stdout
+// looks like JSON but fails its schema, so the envelope must stay exactly
+// these two fields — see ADR 051 §6 before adding a third.
+func emitSessionContext(opts Options, text string) {
+	switch opts.Harness {
+	case "amp":
+		fmt.Fprintln(opts.Stdout, text)
+	case "copilot":
+		// No verified consumer; see above.
+	default:
+		emitAdditionalContext(opts.Stdout, text)
+	}
 }
 
 // ensureSkills lazily fetches brief-referenced skill archives into the local

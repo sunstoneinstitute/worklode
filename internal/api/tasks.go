@@ -41,8 +41,11 @@ func validSecretNames(names []string) bool {
 }
 
 // invalidSecretNameMsg is shared by every handler that gates on
-// validSecretNames, so the message cannot drift from the grammar.
-const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$"
+// validSecretNames, so the message cannot drift from the grammar. It names
+// both halves of the contract: a caller told only the pattern after
+// submitting PATH would read the rejection as a bug (ADR 047 §4).
+const invalidSecretNameMsg = "invalid secret name: must match ^[A-Z][A-Z0-9_]*$ " +
+	"and must not be loader-sensitive (LD_*, DYLD_*, PATH, IFS, ENV, BASH_ENV, PYTHONPATH, ...)"
 
 // validKinds mirrors the tasks.kind CHECK constraint (migration 0025) and
 // wlc:TaskKind in ns/concept.ttl. The list is generated from the Turtle by
@@ -235,7 +238,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Blobs = make([]model.TaskBlob, 0, len(blobs))
 	for _, b := range blobs {
-		b.URL = "/blob/" + b.Hash
+		b.URL = blobURL(b.Hash, b.Filename)
 		resp.Blobs = append(resp.Blobs, b)
 	}
 
@@ -483,13 +486,22 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
-		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil {
+		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil &&
+		req.Artifacts == nil && req.Kind == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
 	if req.Title != nil && strings.TrimSpace(*req.Title) == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "title must not be blank")
 		return
+	}
+	if req.Kind != nil {
+		normalized := s.normalizeTaskKind(*req.Kind, "edit")
+		if !validKinds[normalized] {
+			writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
+			return
+		}
+		req.Kind = &normalized
 	}
 	if req.Priority != nil && !validPriorities[*req.Priority] {
 		writeErr(w, http.StatusUnprocessableEntity, invalidPriorityMsg)
@@ -502,6 +514,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	if req.Secrets != nil && !validSecretNames(*req.Secrets) {
 		writeErr(w, http.StatusUnprocessableEntity, invalidSecretNameMsg)
 		return
+	}
+	if req.Artifacts != nil {
+		if msg := validateArtifacts(*req.Artifacts); msg != "" {
+			writeErr(w, http.StatusUnprocessableEntity, msg)
+			return
+		}
 	}
 	var stateFrom string
 	if req.State != nil {
@@ -516,11 +534,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.recordEvent(r.Context(), "cli", "task.updated", req,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.Kind); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{
 				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
+				"kind": req.Kind,
 			} {
 				if val == nil {
 					continue
@@ -533,6 +552,17 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			if req.Secrets != nil {
 				if err := store.LogChange(tx, "task", id, eventID,
 					map[string]any{"field": "secrets", "new": *req.Secrets}); err != nil {
+					return err
+				}
+			}
+			if req.Artifacts != nil {
+				for _, a := range *req.Artifacts {
+					if err := store.DeclareArtifact(tx, s.st.Now(), "task", id, strings.TrimSpace(a)); err != nil {
+						return err
+					}
+				}
+				if err := store.LogChange(tx, "task", id, eventID,
+					map[string]any{"field": "artifacts", "new": *req.Artifacts}); err != nil {
 					return err
 				}
 			}

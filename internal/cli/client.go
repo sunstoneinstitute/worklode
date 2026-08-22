@@ -1041,6 +1041,15 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 		model.UpdateDocBodyInput{Body: body})
 }
 
+// DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
+// open candidate without landing it and freeing the document's one candidate
+// slot. Either the document's assignee or the revision's author may (025
+// §7.2); anyone else gets 403. The document itself is unchanged, and is what
+// the response carries.
+func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodDelete, docPath(id, "/revision"), nil)
+}
+
 // AcceptDocRevision calls POST /api/v1/docs/{id}/revision/accept, landing the
 // open candidate as the document's next version. A candidate that breaks the
 // 025 §6 anchor rules is refused with the violations named.
@@ -1323,8 +1332,8 @@ func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit
 }
 
 // SyncSkills calls POST /api/v1/skills/sync (admin-only).
-func (c *Client) SyncSkills(ctx context.Context) ([]byte, error) {
-	return c.do(ctx, http.MethodPost, "/api/v1/skills/sync", nil)
+func (c *Client) SyncSkills(ctx context.Context) (model.SkillSyncReport, []byte, error) {
+	return doJSON[model.SkillSyncReport](ctx, c, http.MethodPost, "/api/v1/skills/sync", nil, "skill sync report")
 }
 
 // --- board and timeline -------------------------------------------------
@@ -1600,4 +1609,55 @@ func (c *Client) BlobGC(ctx context.Context, dryRun bool, graceHours *int) (mode
 // two failures apart.
 func (c *Client) WhoAmI(ctx context.Context) (model.WhoAmI, []byte, error) {
 	return doJSON[model.WhoAmI](ctx, c, http.MethodGet, "/api/v1/whoami", nil, "whoami")
+}
+
+// --- drift & overview (spec 007) -------------------------------------------
+
+// Overview calls GET /api/v1/overview: the one-screen roll-up. An empty
+// project rolls up every project.
+func (c *Client) Overview(ctx context.Context, project string) (model.Overview, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	return doJSON[model.Overview](ctx, c, http.MethodGet, withQuery("/api/v1/overview", q), nil, "overview")
+}
+
+// Drift calls GET /api/v1/drift. With acknowledged the response also carries
+// the accepted deviations, active and expired.
+func (c *Client) Drift(ctx context.Context, acknowledged bool) (model.Drift, []byte, error) {
+	q := url.Values{}
+	if acknowledged {
+		q.Set("acknowledged", "1")
+	}
+	return doJSON[model.Drift](ctx, c, http.MethodGet, withQuery("/api/v1/drift", q), nil, "drift")
+}
+
+// Gaps calls GET /api/v1/gaps: components with no governing doc, and repo
+// paths no component claims.
+func (c *Client) Gaps(ctx context.Context) (model.GapList, []byte, error) {
+	return doJSON[model.GapList](ctx, c, http.MethodGet, "/api/v1/gaps", nil, "gaps")
+}
+
+// Frontier calls GET /api/v1/frontier: the ready set in pickup order,
+// annotated with the overview-only criticality measures.
+func (c *Client) Frontier(ctx context.Context, project string) (model.FrontierList, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	return doJSON[model.FrontierList](ctx, c, http.MethodGet, withQuery("/api/v1/frontier", q), nil, "frontier")
+}
+
+// CriticalPath calls GET /api/v1/critical-path: the estimate-free critical
+// path over blocks + requires, plus any cycles found on the way.
+func (c *Client) CriticalPath(ctx context.Context) (model.CriticalPath, []byte, error) {
+	return doJSON[model.CriticalPath](ctx, c, http.MethodGet, "/api/v1/critical-path", nil, "critical path")
+}
+
+// RunDerive calls POST /api/v1/derive: run the server-side derivers
+// (pr-affects, deploy). The repo-local derivers run from a checkout instead,
+// through `lode derive` without --server.
+func (c *Client) RunDerive(ctx context.Context) (model.DeriveResponse, []byte, error) {
+	return doJSON[model.DeriveResponse](ctx, c, http.MethodPost, "/api/v1/derive", nil, "derive results")
 }

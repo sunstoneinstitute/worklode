@@ -168,11 +168,12 @@ outright once it is fixed over annotating it as resolved.
   declare a deliverable (§3.1's name/description/URL) and read the list back,
   but four pieces of §2/§3 are deliberately absent. Milestones do not exist,
   so a deliverable hangs off its project rather than a milestone — the
-  nullable `milestone_id` is a column the milestone table will add. Nothing
-  reports deliverable **state** (§3.2's push emitters and poll prober), so the
-  page says the state is unreported instead of showing one; that is the
-  substantial next slice, and until it lands "is the project published" has no
-  answer. Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
+  nullable `milestone_id` is a column the milestone table will add. §3.2's
+  **poll prober** does not exist: a push emitter can now report state (the
+  signed data-catalog ingest files evidence against the declared address), but
+  an address nothing pushes about is never checked, so "is the project
+  published" is answered only for the deliverables an emitter covers.
+  Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
   is not modelled — only by address. And no CLI verb exists: `lode deliverable
   list/add` would mirror `POST|GET /api/v1/projects/{id}/deliverables`.
 - `[gated]` **`project_entity_seq` carries only `DEL`**: spec 029 §4 gives milestones,
@@ -248,7 +249,11 @@ outright once it is fixed over annotating it as resolved.
   honoured If-Match compare-and-swap since 2026-07-25
   (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
   Needed before a second work-graph writer exists; spec 006 should-have 6.
-  Adding it changes `PutGraph`'s signature.
+  Adding it changes `PutGraph`'s signature. WL-266 (spec 007 §1.1) scoped this
+  as hardening, not a prerequisite: the multi-repo `lode derive` case is solved
+  by per-repo graph partitioning, and same-graph races are last-write-wins over
+  fully recomputed documents — at worst one run stale, self-healing on the next
+  run.
 - `[P3]` **Publishing `ns/*.ttl` under `worklode.io/ns/` is unowned** (spec 006
   must-have 3, publishing half): decided 2026-08-06 that this repo serves the
   files from its own site, without rdf-registry (rdf-registry#31 closed).
@@ -349,7 +354,7 @@ Design items landed in spec 025. These are the mechanical leftovers.
   insufficient to catch a real layout regression at those breakpoints.
 - `[gated]` **Part 1's honest-unavailable pages** (`/projects/{id}/crew`,
   `/projects/{id}/reviews`, `/projects/{id}/decisions`,
-  `/projects/{id}/documents`, `/projects/{id}/activity`, `/intake`,
+  `/projects/{id}/documents`, `/projects/{id}/activity`, `/ideas`, `/intake`,
   `/reviews`, `/deliveries`) are placeholders naming their owning spec
   section; replace each with its real implementation as Parts 2–4 land.
   Deliverables has left this list — it is a built destination now, and so has
@@ -424,19 +429,6 @@ one pass.
   self-hosted branch of `_test.yml` the way `postgres-dsn` already is. Worth
   doing when the graph gets a second consumer — part 2's projector, or a CI
   SHACL gate over projected graphs.
-- `[gated]` **Cross-project edges project dangling, untyped IRIs** — owned by
-  **WL-117**, which must decide before per-graph SHACL validation can be
-  turned on. Knowledge-graph part 2 (the projector plan) shipped without
-  deciding this, so the decision moved rather than being resolved: a
-  `blocks`/`child_of`/`follow_up_to` edge that crosses projects lands `A
-  wl:blocks B` in P1's named graph and `B wl:dependsOn A` in P2's; neither
-  graph holds both ends, so each carries an object IRI with no `rdf:type`
-  beside it. Per-graph SHACL validation then fails: `wl:followUpTo`'s
-  `sh:class wl:Task` (`ns/shapes.ttl`) is unsatisfied by a foreign end. Two
-  candidate answers — emit a bare `rdf:type wl:Task` stub for out-of-graph
-  ends, or scope validation to the union of the project graphs — and the
-  choice is the projector's, not the renderer's.
-
 ## From WL-141 — three-valued plan coverage (2026-08-20)
 
 - `[gated]` **A plan can close its own section by naming itself in
@@ -531,10 +523,10 @@ while dogfooding it against the real corpus.
   (including `Closed`, which costs a second round trip in `store.GetTask`'s
   implementation), and none of these six callers read anything but the
   not-found error.
-- `[P4]` **`obsidian/src/api/types.ts`'s hand-kept `Task` interface lacks
+- `[P4]` **`plugins/obsidian/src/api/types.ts`'s hand-kept `Task` interface lacks
   `closed`** (`internal/model/task.go`'s `Closed bool`), and already lacked
   `secrets`. Pre-existing drift, not introduced here — WL-76 (generate
-  `obsidian/src/api/types.ts` from `internal/model` instead of hand-mirroring)
+  `plugins/obsidian/src/api/types.ts` from `internal/model` instead of hand-mirroring)
   is the real fix; noting it here because this plan's `model.Task.Closed`
   read is what surfaced the gap.
 - `[P4]` **Every spec in `docs/specs/` is `status: draft`** — all 24 files,
@@ -651,3 +643,74 @@ while dogfooding it against the real corpus.
   visible in `git status`, since `info/exclude` does not hide tracked files, so
   it is recoverable. Worth either matching `withinStore`'s rigour or saying so
   in the comment.
+
+## From WL-124 — anchorless subheadings in the accept diff (2026-08-21)
+
+- `[P3]` **An anchorless heading with no anchored ancestor is diffed by
+  nobody.** WL-124 made `designdoc.effectiveContent` roll an anchorless heading
+  into its nearest anchored ancestor, but that walk starts from a section:
+  a top-level `## Appendix` sitting beside `## 1. First {#sec-1}` has
+  `Parent == nil`, so an edit under it still marks nothing `Changed` and stamps
+  no `last_revised_in` — the same silent staleness, one level up. Nothing on
+  the write path refuses the shape: `LintAnchors` skips anchorless headings and
+  `DepthViolations` only inspects anchored ones. 025 §6.1 scopes its "content
+  within the nearest anchored ancestor" rule to headings *below* the
+  addressability limit and says nothing about a shallow one, so the fix is a
+  spec decision first: either require every H2 in a spec or ADR to be anchored
+  (a lint, enforced at accept), or define what owns an unowned heading.
+  `internal/designdoc/diff_test.go` pins today's behaviour under
+  "anchorless heading with no anchored ancestor belongs to nobody".
+
+## From WL-145 — incremental plan re-acceptance (2026-08-22)
+
+- `[P3]` **Migration 0043 backfills `plan_task_key` from `tasks.title`, the
+  source the column exists to stop trusting.** A task minted before 0043 and
+  renamed since (`lode task edit --title`) carries a key its declaration no
+  longer spells, so the first re-accept of that plan mints the declaration a
+  second time. The blast radius is one duplicate draft task per renamed task,
+  visible in the accept's own output and closable; it is bounded to plans that
+  existed before 0043, since every later mint records the key at mint. A
+  one-shot re-key would have to parse each accepted plan's body and match
+  declarations to rows by ordinal, which is guesswork of its own — worth doing
+  only if a real plan turns out to be affected.
+- `[P3]` **An accepted plan's unminted declaration is invisible to every
+  SQL-side query.** `NeedsExecution` and `planUnfinished`
+  (`internal/store/tasks.go`) read rows, and a declaration added to an accepted
+  plan but not yet re-accepted is a fact about the body. So `lode doc list
+  --needs-execution` omits such a plan once its minted tasks close, and a
+  downstream plan's tasks become claimable while the upstream plan still
+  declares unstarted work. 025 §18's "unminted" arm always meant this; making
+  it detectable needs the accept-time parse to record a declaration count, or a
+  reconciler that re-reads bodies.
+
+## From WL-205 — reconcile poll wiring (2026-08-22)
+
+- `[P3]` **`README.md` hardcodes `lode` invocations but is not an agent
+  surface.** `surfaceFiles` in `internal/cmd/agentsurfaces_test.go` scans
+  `CLAUDE.md`, `internal/cmd/CLAUDE.md`, `docs/agent-surfaces.md`,
+  `.claude/skills/**` and `plugins/**`, and `docs/agent-surfaces.md`'s
+  register omits the README too. So the README's `lode` examples — quickstart,
+  project scoping, backlog import, and now the reconciliation section — rot
+  silently on the next rename. Adding `README.md` to `surfaceFiles` is a
+  one-line change, but the README's placeholder-heavy examples will need
+  exemptions or rewording first, which is why it did not ride along with the
+  section that prompted it.
+- `[P3]` **The `reconcile.Options` mapping in `internal/api/reconcile.go` is
+  untested.** `internal/reconcile`'s tests call `Poll` directly with their own
+  `Options`, and the API test only covers the App-less skip branch, so a
+  transposed or dropped field (notably `RunID`, which `Poll` requires and which
+  doubles as the system event's `external_id`) would ship green. Covering it
+  means an `api.NewServer` built with a fake App key against a fake GitHub;
+  the poll-engine plan's Task 13 explicitly declined to rebuild the server
+  fixture for that, so it wants a shared test-server option, not a one-off.
+
+## From WL-289 — document projection v1 (2026-08-22)
+
+- `[P3]` **A tombstoned document keeps its last projected declared graph.**
+  `projectOne` projects the live documents of a dirty project
+  (`store.ListDocs`, which excludes tombstones by default), so deleting a
+  document (044) leaves its `declared/<slug>` graph holding the last
+  projection until something overwrites it. The fix is a delete/empty-PUT
+  pass over the project's tombstoned docs in the same cycle; it did not ride
+  along with the v1 node projection because 044's delete semantics for graph
+  artifacts deserve their own look.

@@ -70,6 +70,25 @@ func TestDocPlanningTableAnnotatesAnchorsWithCoverage(t *testing.T) {
 	}
 }
 
+// TestDocPlanningTableAnnotatesDeferredAnchorWithOwner: a "deferred" gap
+// carrying an owner renders as sec-N(deferred:OWNER) rather than the plain
+// sec-N(coverage) form (026 §2.1, §5.3).
+func TestDocPlanningTableAnnotatesDeferredAnchorWithOwner(t *testing.T) {
+	var b strings.Builder
+	DocPlanningTable(&b, []model.Doc{{ID: 1, Number: 7, Slug: "007-drift-and-overview"}},
+		[]model.DocPlanningGap{{
+			Doc: 1, Sections: 2,
+			Gaps: []model.DocSectionGap{
+				{Anchor: "sec-1", Coverage: "deferred", Owner: "006-knowledge-graph"},
+				{Anchor: "sec-2", Coverage: "unplanned"},
+			},
+		}})
+	out := b.String()
+	if !strings.Contains(out, "sec-1(deferred:006-knowledge-graph) sec-2(unplanned)") {
+		t.Fatalf("DocPlanningTable output missing the deferred owner annotation:\n%s", out)
+	}
+}
+
 // TestBoardSectionGroupsChildren checks that a parent's children render
 // directly beneath it while the rest of the rows keep the order the server
 // sent — the server already sorts by priority, so a plain id sort would be
@@ -176,6 +195,34 @@ func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 	}
 	if strings.Index(lines[1], "first") != strings.Index(lines[3], "second") {
 		t.Fatalf("descriptions are not in the same column:\n%s", buf.String())
+	}
+}
+
+func TestSkillSyncRender(t *testing.T) {
+	var buf bytes.Buffer
+	SkillSyncRender(&buf, model.SkillSyncReport{Synced: 12, Changed: 3, Deleted: 1, Embedded: 3})
+	want := "synced 12 skill(s): 3 changed, 1 deleted, 3 embedded\n"
+	if got := buf.String(); got != want {
+		t.Fatalf("SkillSyncRender = %q, want %q", got, want)
+	}
+}
+
+// A partial failure still reports the real work alongside the per-source
+// errors (SkillSyncReport's doc comment) — the errors must not replace the
+// counts.
+func TestSkillSyncRenderPartialFailure(t *testing.T) {
+	var buf bytes.Buffer
+	SkillSyncRender(&buf, model.SkillSyncReport{
+		Synced: 5, Changed: 2, Errors: []string{"acme/other: not installed"},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"synced 5 skill(s): 2 changed, 0 deleted, 0 embedded",
+		"  error: acme/other: not installed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -778,6 +825,55 @@ func TestReconcileRenderNamesDryRun(t *testing.T) {
 		"replay: would repair 3 of 4 candidate event(s), 1 still unmapped",
 		"  error: boom",
 		"poll: skipped (no github app configured)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// The poll section renders its own fields, per candidate, and carries its
+// own dry-run marker — the counts alone do not say whether anything was
+// written.
+func TestReconcileRenderPoll(t *testing.T) {
+	var buf bytes.Buffer
+	ReconcileRender(&buf, model.ReconcileResponse{
+		RunID: "r3", DryRun: true,
+		Replay: &model.ReplayResult{},
+		Poll: &model.PollResult{
+			RunID: "r3", DryRun: true, Candidates: 2,
+			Repaired: []model.TaskRepair{{
+				TaskID: "WL-7", Repo: "acme/app", State: "in_review",
+				PRsUpdated: []int64{12}, CommitsLanded: []string{"abc", "def"},
+			}},
+			Errors: []string{"acme/other: not installed"},
+		},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"poll: examined (dry run) 2 candidate task(s)",
+		"  WL-7 (acme/app, was in_review): 1 PR(s), 2 landed commit(s)",
+		"  error: acme/other: not installed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// A failed poll must not swallow the replay report: engine 1 has already
+// written by then, so the operator needs both lines.
+func TestReconcileRenderPollFailureKeepsReplay(t *testing.T) {
+	var buf bytes.Buffer
+	ReconcileRender(&buf, model.ReconcileResponse{
+		RunID:     "r4",
+		Replay:    &model.ReplayResult{Candidates: 2, Replayed: 2},
+		PollError: "acme/app: 502 from github",
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"replay: repaired 2 of 2 candidate event(s), 0 still unmapped",
+		"poll: failed (acme/app: 502 from github)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)

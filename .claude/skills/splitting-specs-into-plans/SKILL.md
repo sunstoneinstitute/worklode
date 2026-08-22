@@ -62,19 +62,23 @@ governing constraint from a forgotten section.
 
 ### Aggregate coverage is a query
 
-For a spec section `S`, over accepted plans naming it:
+For a spec section `S`, over accepted-or-superseded plans naming it (a
+superseded plan is spent, and discharges what it covered — 026 §2.1):
 
 - any plan claims `full` → **fully planned**;
 - a plan claims `partial` with `fullCoverageWith: [P…]`, every `P` exists and
-  is accepted and contributes `full` or `partial` to `S` → **fully planned**;
+  is accepted or superseded and contributes `full` or `partial` to `S` →
+  **fully planned**;
 - otherwise, any `partial` claim → **partially planned** (report the gap);
-- only `none` claims → **bound only**;
+- only `none` claims, no deferral → **bound only**;
+- a plan `defers` `S` to a named owner and nothing claims `partial` →
+  **deferred**, owner named (026 §5.3);
 - no plan names `S` → **unplanned**.
 
 The backbone runs that query — `lode doc list --needs-planning --json` returns
 each accepted spec's uncovered anchors already classified `unplanned`,
-`partial` or `bound-only` (026 §2.1), so "which sections has nobody planned"
-needs no reading of plans at all.
+`partial`, `bound-only` or `deferred` (with the deferral's `owner`; 026 §2.1),
+so "which sections has nobody planned" needs no reading of plans at all.
 
 ### Validator contract
 

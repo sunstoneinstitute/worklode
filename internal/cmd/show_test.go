@@ -35,9 +35,18 @@ func TestClassify(t *testing.T) {
 		{"WL-DEL-3", targetUnshowable, "DEL"},
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
-		{"wl-12", targetUnclassified, ""},
-		{"garbage", targetUnclassified, ""},
+		// Doc-ref shapes: slugs, number forms, paths — resolveDocRef owns
+		// the grammar, classify only the silhouette, so a lowercase
+		// near-miss ("wl-12", "garbage") is a doc lookup that misses, not a
+		// grammar error here.
+		{"design-doc-queries", targetDoc, ""},
+		{"025-documents-in-the-backbone", targetDoc, ""},
+		{"docs/specs/025-documents-in-the-backbone.md", targetDoc, ""},
+		{"014-fixture.md#sec-2", targetDoc, ""},
+		{"wl-12", targetDoc, ""},
+		{"garbage", targetDoc, ""},
 		{"NO-SPEC", targetUnclassified, ""},
+		{"WL_12", targetUnclassified, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.arg, func(t *testing.T) {
@@ -122,6 +131,14 @@ func setupDocServer(t *testing.T, projectKey string, files map[string]string) st
 		listed := make([]model.Doc, len(docs))
 		copy(listed, docs)
 		writeTestJSON(t, w, model.DocListResponse{Docs: listed})
+	})
+	// Tier 2 (026 §4.2, WL-276) resolves a foreign key through the project
+	// list; this stub knows only its own project, so any foreign key stays
+	// tier-3 unresolved, which is what the single-project tests assert.
+	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
+			{ID: "proj", Name: "proj", Key: projectKey},
+		}})
 	})
 	mux.HandleFunc("GET /api/v1/docs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -244,6 +261,125 @@ func TestShowDispatchesSpecToDocShow(t *testing.T) {
 	}
 	if out != fixtureSpec {
 		t.Fatalf("show output = %q; want the fixture verbatim", out)
+	}
+}
+
+// setupCrossProjectDocServer stands up a backbone stub knowing two projects
+// — "proj" (key WL) with fixture spec 14, and "cms" (key CMS) with fixture
+// spec 4 — filtering GET /api/v1/docs by ?project= and serving GET
+// /api/v1/projects, which is what 026 §4.2's tier 2 resolves through. The
+// repo config binds the checkout to "proj"/WL.
+func setupCrossProjectDocServer(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".worklode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".worklode", "config.toml"),
+		[]byte("current_project = \"proj\"\nproject_key = \"WL\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(repo)
+
+	docs := []model.Doc{
+		{ID: 1, Project: "proj", Kind: "spec", Number: 14, Slug: "014-fixture", Title: "014-fixture", Status: "accepted", Version: 1},
+		{ID: 2, Project: "cms", Kind: "spec", Number: 4, Slug: "004-cms-doc", Title: "004-cms-doc", Status: "accepted", Version: 1},
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
+			{ID: "proj", Name: "Proj", Key: "WL"},
+			{ID: "cms", Name: "CMS", Key: "CMS"},
+		}})
+	})
+	mux.HandleFunc("GET /api/v1/docs", func(w http.ResponseWriter, r *http.Request) {
+		project := r.URL.Query().Get("project")
+		var listed []model.Doc
+		for _, d := range docs {
+			if project == "" || d.Project == project {
+				listed = append(listed, d)
+			}
+		}
+		writeTestJSON(t, w, model.DocListResponse{Docs: listed})
+	})
+	mux.HandleFunc("GET /api/v1/docs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		for _, d := range docs {
+			if d.ID == id {
+				d.Body = fixtureSpec
+				writeTestJSON(t, w, model.DocDetail{Doc: d})
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+}
+
+// TestShowResolvesForeignShorthand covers 026 §4.2 tier 2 going live
+// (WL-276): a shorthand whose key belongs to another registered project
+// resolves against that project's backbone docs; a known key with a missing
+// document is a defect; only an unknown key still prints tier 3's
+// unresolved line.
+func TestShowResolvesForeignShorthand(t *testing.T) {
+	setupCrossProjectDocServer(t)
+
+	out, err := runLode(t, "show", "CMS-SPEC-4")
+	if err != nil {
+		t.Fatalf("lode show CMS-SPEC-4: %v\noutput: %s", err, out)
+	}
+	if out != fixtureSpec {
+		t.Fatalf("show CMS-SPEC-4 = %q; want the fixture verbatim", out)
+	}
+
+	// Kind check still applies across projects.
+	if out, err := runLode(t, "show", "CMS-ADR-4"); err == nil || !strings.Contains(err.Error(), "ADR") {
+		t.Fatalf("CMS-ADR-4 on a spec: err = %v, out = %q; want a kind mismatch", err, out)
+	}
+
+	// Known key, no such document: a defect, not a tier-3 print.
+	if out, err := runLode(t, "show", "CMS-SPEC-99"); err == nil {
+		t.Fatalf("CMS-SPEC-99 resolved: %q; want an error", out)
+	}
+
+	// Unknown key: tier 3 — printed, exit code unaffected.
+	out, err = runLode(t, "show", "ZZ-SPEC-1")
+	if err != nil {
+		t.Fatalf("lode show ZZ-SPEC-1: %v", err)
+	}
+	if !strings.Contains(out, "unresolved: project ZZ not known here") {
+		t.Fatalf("ZZ-SPEC-1 output = %q; want the tier-3 unresolved line", out)
+	}
+}
+
+// TestShowDocBySlugAndPath covers the positional doc-ref shapes beyond the
+// typed shorthand (WL-129): a backbone slug with no number prefix, its
+// prefix, and a corpus path — all rendering the same way `lode doc get`
+// would resolve the name.
+func TestShowDocBySlugAndPath(t *testing.T) {
+	setupDocServer(t, "WL", map[string]string{
+		"014-fixture.md":    fixtureSpec,
+		"naming-fixture.md": fixtureSpec,
+	})
+
+	for _, ref := range []string{
+		"naming-fixture",            // exact slug
+		"naming",                    // slug prefix
+		"docs/specs/014-fixture.md", // corpus path
+		"014-fixture",               // number-and-slug form
+	} {
+		out, err := runLode(t, "show", ref)
+		if err != nil {
+			t.Fatalf("lode show %s: %v\noutput: %s", ref, err, out)
+		}
+		if out != fixtureSpec {
+			t.Fatalf("show %s = %q; want the fixture verbatim", ref, out)
+		}
 	}
 }
 

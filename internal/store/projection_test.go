@@ -27,6 +27,7 @@ func TestDirtyProjects(t *testing.T) {
 	ctx := t.Context()
 	a := makeTask(t, s, "d1", "alpha", "first")
 	makeTask(t, s, "d2", "beta", "second")
+	AwaitCommitHorizon(t, s) // the watermark only advances through it
 
 	projects, through, err := s.DirtyProjects(ctx, 0, 100)
 	if err != nil {
@@ -78,7 +79,8 @@ func TestDirtyProjects(t *testing.T) {
 		t.Fatalf("dirty after cross-project edge = %v, %v; want both projects", projects, err)
 	}
 
-	// The limit bounds the scan, and through only covers what was read.
+	// The limit bounds the scan (in transactions), and through only covers
+	// what was read.
 	projects, part, err := s.DirtyProjects(ctx, 0, 1)
 	if err != nil || len(projects) != 1 || projects[0] != "alpha" {
 		t.Fatalf("limited scan = %v, %v; want just [alpha]", projects, err)
@@ -101,5 +103,134 @@ func TestDirtyProjects(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("resume from part = %v; want beta still present", rest)
+	}
+}
+
+// TestDirtyProjectsKeepsWatermarkBehindOpenTransaction reproduces WL-119.
+// state_log ids are assigned at INSERT time, so a transaction that took the
+// lower id can commit after one that took the higher id: tx A inserts row N
+// and stays open, tx B inserts row N+1 and commits. A watermark that advanced
+// to the highest id it saw would checkpoint at N+1 while beta was projected,
+// and row N would never be scanned once A committed — alpha's graph would
+// stay stale until its next event. Checkpointing only through the commit
+// horizon holds the watermark below both, so alpha is still dirty afterwards.
+func TestDirtyProjectsKeepsWatermarkBehindOpenTransaction(t *testing.T) {
+	s := outboxStore(t)
+	ctx := t.Context()
+
+	AwaitCommitHorizon(t, s)
+	_, base, err := s.DirtyProjects(ctx, 0, 100)
+	if err != nil {
+		t.Fatalf("baseline watermark: %v", err)
+	}
+
+	// tx A takes the lower state_log id and stays open.
+	txA, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin tx A: %v", err)
+	}
+	defer txA.Rollback() //nolint:errcheck // committed below; this is the failure path
+	var eventA int64
+	if err := txA.QueryRowContext(ctx,
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ('cli', 'horizon-alpha', 'task.created', NULL, now()) RETURNING id`).
+		Scan(&eventA); err != nil {
+		t.Fatalf("insert event in tx A: %v", err)
+	}
+	if _, err := CreateTask(txA, time.Now().UTC(), TaskInput{
+		ProjectID: "alpha", Title: "committed last", Priority: "medium", Kind: "feature",
+	}, eventA); err != nil {
+		t.Fatalf("create task in tx A: %v", err)
+	}
+
+	// tx B commits with the higher state_log id.
+	makeTask(t, s, "horizon-beta", "beta", "committed first")
+
+	// beta projects right away — dirtiness is read from what is visible —
+	// but the watermark may not pass a transaction that is still open.
+	projects, through, err := s.DirtyProjects(ctx, base, 100)
+	if err != nil {
+		t.Fatalf("dirty with tx A open: %v", err)
+	}
+	if len(projects) != 1 || projects[0] != "beta" {
+		t.Fatalf("dirty with tx A open = %v; want just [beta]", projects)
+	}
+	if through != base {
+		t.Fatalf("watermark moved to %d with tx A still open; want %d — "+
+			"alpha's lower state_log id has not committed yet", through, base)
+	}
+
+	if err := txA.Commit(); err != nil {
+		t.Fatalf("commit tx A: %v", err)
+	}
+
+	// The row that committed late is still ahead of the watermark, so alpha
+	// is picked up rather than skipped.
+	projects, _, err = s.DirtyProjects(ctx, through, 100)
+	if err != nil {
+		t.Fatalf("dirty after commit: %v", err)
+	}
+	if len(projects) != 2 || projects[0] != "alpha" || projects[1] != "beta" {
+		t.Fatalf("dirty after tx A committed = %v; want [alpha beta] — "+
+			"alpha's lower state_log id must not have been skipped", projects)
+	}
+}
+
+func TestProjectionFailuresRoundTrip(t *testing.T) {
+	s := outboxStore(t) // projects alpha and beta
+	ctx := t.Context()
+
+	if fails, err := s.ProjectionFailures(ctx); err != nil || len(fails) != 0 {
+		t.Fatalf("initial quarantine = %v, %v; want empty", fails, err)
+	}
+
+	t0 := time.Now().UTC().Truncate(time.Microsecond) // Postgres timestamptz resolution
+	first := ProjectionFailure{
+		ProjectID: "alpha", Attempts: 1,
+		FirstFailedAt: t0, LastFailedAt: t0, NextAttemptAt: t0,
+		LastError: "put graph: 500",
+	}
+	if err := s.RecordProjectionFailure(ctx, first); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	fails, err := s.ProjectionFailures(ctx)
+	if err != nil || len(fails) != 1 {
+		t.Fatalf("quarantine = %v, %v; want one row", fails, err)
+	}
+	if got := fails[0]; got.ProjectID != "alpha" || got.Attempts != 1 ||
+		!got.FirstFailedAt.Equal(t0) || !got.NextAttemptAt.Equal(t0) ||
+		got.LastError != "put graph: 500" {
+		t.Fatalf("row = %+v; want %+v", got, first)
+	}
+
+	// A repeat failure updates the row in place and keeps FirstFailedAt: it
+	// is how long the project has been stuck, which Attempts alone omits.
+	t1 := t0.Add(time.Minute)
+	second := ProjectionFailure{
+		ProjectID: "alpha", Attempts: 2,
+		FirstFailedAt: t0, LastFailedAt: t1, NextAttemptAt: t1.Add(time.Minute),
+		LastError: "put graph: 400",
+	}
+	if err := s.RecordProjectionFailure(ctx, second); err != nil {
+		t.Fatalf("re-record: %v", err)
+	}
+	fails, err = s.ProjectionFailures(ctx)
+	if err != nil || len(fails) != 1 {
+		t.Fatalf("quarantine after repeat = %v, %v; want one row", fails, err)
+	}
+	if got := fails[0]; got.Attempts != 2 || !got.FirstFailedAt.Equal(t0) ||
+		!got.LastFailedAt.Equal(t1) || got.LastError != "put graph: 400" {
+		t.Fatalf("row after repeat = %+v; want %+v", got, second)
+	}
+
+	// Clearing is idempotent, so the projector can call it unconditionally.
+	if err := s.ClearProjectionFailure(ctx, "alpha"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if err := s.ClearProjectionFailure(ctx, "alpha"); err != nil {
+		t.Fatalf("clear a second time: %v", err)
+	}
+	if fails, err := s.ProjectionFailures(ctx); err != nil || len(fails) != 0 {
+		t.Fatalf("quarantine after clear = %v, %v; want empty", fails, err)
 	}
 }

@@ -55,20 +55,32 @@ func parseClusterEnvMap(s string) (map[string]string, error) {
 // termination grace period.
 const shutdownTimeout = 10 * time.Second
 
-// graphProjector builds the knowledge-graph projector when
-// LODE_GRAPHSERVER_URL is set (spec 006 §11): the same LODE_GRAPHSERVER_*
-// variables graphserver.FromEnv documents, so serve and every other caller
-// share one configuration surface. Unset means projection is disabled;
-// set-but-broken fails the boot.
-func graphProjector(reg prometheus.Registerer, st *store.Store) (*projector.Projector, error) {
+// graphClientFromEnv builds the shared graph-server client, or nil when
+// LODE_GRAPHSERVER_URL is unset (projection and the graph-backed overview
+// reads are then both off). One client per process: the projector, the
+// overview service and the server-side derivers all speak to the same
+// endpoint with the same credentials.
+//
+// The same LODE_GRAPHSERVER_* variables graphserver.FromEnv documents, so
+// serve and every other caller share one configuration surface. Unset means
+// off; set-but-broken fails the boot.
+func graphClientFromEnv() (*graphserver.Client, error) {
 	if os.Getenv("LODE_GRAPHSERVER_URL") == "" {
 		return nil, nil
 	}
-	gc, err := graphserver.FromEnv()
-	if err != nil {
-		return nil, err
+	return graphserver.FromEnv()
+}
+
+// graphProjector builds the knowledge-graph projector over gc (spec 006 §11),
+// or nil when gc is nil — no graph endpoint is configured, so projection is
+// disabled. It takes the client rather than reading the environment itself so
+// graphserver.FromEnv is called exactly once per process; see
+// graphClientFromEnv.
+func graphProjector(reg prometheus.Registerer, st *store.Store, gc *graphserver.Client) *projector.Projector {
+	if gc == nil {
+		return nil
 	}
-	return projector.New(st, gc, projector.NewMetrics(reg), 200), nil
+	return projector.New(st, gc, projector.NewMetrics(reg), 200)
 }
 
 // shutdownServers stops every server gracefully and returns the first real
@@ -177,37 +189,48 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// One graph-server client for the process: the server (spec 007's
+	// graph-backed reads and its derivers) and the projector below share it.
+	gc, err := graphClientFromEnv()
+	if err != nil {
+		return err
+	}
+
 	handler, adminHandler, err := api.NewServer(st, api.Config{
-		BackgroundCtx:       ctx,
-		BootstrapToken:      os.Getenv("LODE_BOOTSTRAP_TOKEN"),
-		GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
-		FluxWebhookSecret:   os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
-		ClusterEnvMap:       clusterEnv,
-		InstanceEnv:         instanceEnv,
-		BranchTemplate:      os.Getenv("LODE_BRANCH_TEMPLATE"),
-		OIDCIssuer:          os.Getenv("LODE_OIDC_ISSUER"),
-		OIDCClientID:        os.Getenv("LODE_OIDC_CLIENT_ID"),
-		PublicURL:           os.Getenv("LODE_PUBLIC_URL"),
-		SessionSecret:       os.Getenv("LODE_SESSION_SECRET"),
-		WebOpen:             webOpen,
-		GitHubClientID:      os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
-		GitHubClientSecret:  os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
-		TokenEncKey:         os.Getenv("LODE_TOKEN_ENC_KEY"),
-		GitHubAppID:         os.Getenv("LODE_GITHUB_APP_ID"),
-		GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
-		SecretsCatalogPath:  os.Getenv("LODE_SECRETS_CATALOG_PATH"),
-		SkillSources:        os.Getenv("LODE_SKILL_SOURCES"),
-		EmbeddingURL:        os.Getenv("LODE_EMBEDDING_URL"),
-		EmbeddingModel:      os.Getenv("LODE_EMBEDDING_MODEL"),
-		EmbeddingAPIKey:     os.Getenv("LODE_EMBEDDING_API_KEY"),
-		SkillScoreFloor:     os.Getenv("LODE_SKILL_SCORE_FLOOR"),
-		BlobEndpoint:        os.Getenv("LODE_BLOB_ENDPOINT"),
-		BlobBucket:          os.Getenv("LODE_BLOB_BUCKET"),
-		BlobRegion:          os.Getenv("LODE_BLOB_REGION"),
-		BlobAccessKey:       os.Getenv("LODE_BLOB_ACCESS_KEY"),
-		BlobSecretKey:       os.Getenv("LODE_BLOB_SECRET_KEY"),
-		BlobSpoolDir:        os.Getenv("LODE_BLOB_SPOOL_DIR"),
-		Metrics:             reg,
+		BackgroundCtx:        ctx,
+		BootstrapToken:       os.Getenv("LODE_BOOTSTRAP_TOKEN"),
+		GitHubWebhookSecret:  os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"),
+		FluxWebhookSecret:    os.Getenv("LODE_FLUX_WEBHOOK_SECRET"),
+		CatalogWebhookSecret: os.Getenv("LODE_CATALOG_WEBHOOK_SECRET"),
+		ClusterEnvMap:        clusterEnv,
+		InstanceEnv:          instanceEnv,
+		BranchTemplate:       os.Getenv("LODE_BRANCH_TEMPLATE"),
+		OIDCIssuer:           os.Getenv("LODE_OIDC_ISSUER"),
+		OIDCClientID:         os.Getenv("LODE_OIDC_CLIENT_ID"),
+		PublicURL:            os.Getenv("LODE_PUBLIC_URL"),
+		SessionSecret:        os.Getenv("LODE_SESSION_SECRET"),
+		WebOpen:              webOpen,
+		GitHubClientID:       os.Getenv("LODE_GITHUB_APP_CLIENT_ID"),
+		GitHubClientSecret:   os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"),
+		TokenEncKey:          os.Getenv("LODE_TOKEN_ENC_KEY"),
+		GitHubAppID:          os.Getenv("LODE_GITHUB_APP_ID"),
+		GitHubAppPrivateKey:  os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"),
+		SecretsCatalogPath:   os.Getenv("LODE_SECRETS_CATALOG_PATH"),
+		SkillSources:         os.Getenv("LODE_SKILL_SOURCES"),
+		EmbeddingURL:         os.Getenv("LODE_EMBEDDING_URL"),
+		EmbeddingModel:       os.Getenv("LODE_EMBEDDING_MODEL"),
+		EmbeddingAPIKey:      os.Getenv("LODE_EMBEDDING_API_KEY"),
+		SpeechToTextAPIKey:   os.Getenv("LODE_ELEVENLABS_API_KEY"),
+		SpeechToTextURL:      os.Getenv("LODE_ELEVENLABS_URL"),
+		SkillScoreFloor:      os.Getenv("LODE_SKILL_SCORE_FLOOR"),
+		BlobEndpoint:         os.Getenv("LODE_BLOB_ENDPOINT"),
+		BlobBucket:           os.Getenv("LODE_BLOB_BUCKET"),
+		BlobRegion:           os.Getenv("LODE_BLOB_REGION"),
+		BlobAccessKey:        os.Getenv("LODE_BLOB_ACCESS_KEY"),
+		BlobSecretKey:        os.Getenv("LODE_BLOB_SECRET_KEY"),
+		BlobSpoolDir:         os.Getenv("LODE_BLOB_SPOOL_DIR"),
+		Graph:                gc,
+		Metrics:              reg,
 	})
 	if err != nil {
 		return err
@@ -218,10 +241,7 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 	// the shutdown context.
 	st.StartLeaseSweeper(ctx)
 
-	proj, err := graphProjector(reg, st)
-	if err != nil {
-		return err
-	}
+	proj := graphProjector(reg, st, gc)
 	if proj != nil {
 		// Knowledge-graph projection (spec 006 §11): follow the
 		// state_log outbox and replace each dirty project's graph on
@@ -230,9 +250,12 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		// — so graph-server's per-branch lock covers it for now;
 		// If-Match CAS (006 §13.3 item 6) is wanted before any second
 		// writer.
+		// n and err are not exclusive: a run that isolates one failing
+		// project still projects its healthy siblings, so the error line
+		// carries the count too.
 		go everyUntilDone(ctx, 10*time.Second, proj.RunOnce, func(n int, err error) {
 			if err != nil {
-				slog.Error("graph projection", "err", err)
+				slog.Error("graph projection", "projected", n, "err", err)
 			} else if n > 0 {
 				slog.Info("projected project graphs", "count", n)
 			}

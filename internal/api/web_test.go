@@ -117,7 +117,7 @@ func topbarRegion(t *testing.T, body string) string {
 
 // TestTopbarKeepsOnlyChrome checks the global destinations left the topbar
 // (brand, theme toggle, avatar only — no nav landmark, no links) and that
-// the seven destinations render in the sidebar column before the content.
+// the eight destinations render in the sidebar column before the content.
 func TestTopbarKeepsOnlyChrome(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
@@ -133,13 +133,13 @@ func TestTopbarKeepsOnlyChrome(t *testing.T) {
 	assertOrder(t, body, `<div class="sidebar">`, ">Home<", ">Knowledge<", `<main id="main-content"`)
 }
 
-// TestGlobalNavOrder checks the primary nav renders the seven destinations
+// TestGlobalNavOrder checks the primary nav renders the eight destinations
 // in the exact order docs/specs/032-project-cockpit.md §2 requires: Home,
-// Intake, Projects, Work, Reviews, Deliveries, Knowledge.
+// Ideas, Intake, Projects, Work, Reviews, Deliveries, Knowledge.
 func TestGlobalNavOrder(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
-	assertOrder(t, body, ">Home<", ">Intake<", ">Projects<", ">Work<", ">Reviews<", ">Deliveries<", ">Knowledge<")
+	assertOrder(t, body, ">Home<", ">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Reviews<", ">Deliveries<", ">Knowledge<")
 }
 
 func TestGlobalDestinations(t *testing.T) {
@@ -147,7 +147,7 @@ func TestGlobalDestinations(t *testing.T) {
 
 	// Knowledge lands on /docs, the document corpus (spec 032 §2's
 	// "documents and graph-backed expert views"); /knowledge redirects there.
-	for _, path := range []string{"/", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/docs"} {
+	for _, path := range []string{"/", "/ideas", "/intake", "/projects", "/work", "/reviews", "/deliveries", "/docs"} {
 		t.Run(path, func(t *testing.T) {
 			rr := doReq(t, h, "GET", path, "", nil)
 			if rr.Code != http.StatusOK {
@@ -176,7 +176,7 @@ func TestKnowledgeIsTheDocumentCorpus(t *testing.T) {
 
 	docs := doReq(t, h, "GET", "/docs", "", nil).Body.String()
 	assertOneAriaCurrent(t, docs)
-	bodyContains(t, docs, `<a href="/docs" class="active" aria-current="page">Knowledge</a>`)
+	bodyContains(t, docs, `<a href="/docs" class="tab-secondary active" aria-current="page"><span class="tab-label">Knowledge</span></a>`)
 
 	rr := doReq(t, h, "GET", "/knowledge", "", nil)
 	if rr.Code != http.StatusFound || rr.Header().Get("Location") != "/docs" {
@@ -194,6 +194,7 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 		path string
 		want string
 	}{
+		{"/ideas", "spec 032 §5"},
 		{"/intake", "spec 032 §5"},
 		{"/deliveries", "spec 029 §3"},
 	} {
@@ -878,6 +879,42 @@ func TestTaskPage(t *testing.T) {
 	}
 }
 
+// TestTaskPageTimelineTypeIsAnAccessibleIcon asserts the Timeline "Type"
+// column (WL-298) renders each row's type as an icon, not the old plain-text
+// label, while keeping that label reachable two ways: the native title
+// tooltip for desktop hover, and an aria-label — on an element carrying
+// role="img" so assistive tech announces the label instead of trying to
+// describe the SVG — for touch and screen readers, since a title attribute
+// alone is not reliably exposed on touch.
+func TestTaskPageTimelineTypeIsAnAccessibleIcon(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+
+	// The task's own creation writes a "state" timeline entry, so a fresh
+	// task's page already carries one icon to check without seeding a PR,
+	// CI run, or other fact.
+	bodyContains(t, body,
+		`class="ticon" role="img" title="State change" aria-label="State change"`,
+		`<svg`, `aria-hidden="true"`,
+	)
+	// The old plain-text cell rendered the label as element content; the
+	// icon cell must not also render it there, only in the two attributes
+	// above — otherwise the type column is back to spending the horizontal
+	// space this task exists to save.
+	if strings.Contains(body, "<td>State change</td>") {
+		t.Errorf("timeline type cell still renders the old plain-text label:\n%s", body)
+	}
+}
+
 // TestTaskPageRendersSourceLink asserts a task with a linked PR/CI fact
 // renders a source-native "Open source" link to that fact's own URL, marked
 // rel="noreferrer" — the timeline evidence Task 4 preserves.
@@ -1121,4 +1158,24 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	bodyContains(t, rr.Body.String(), "Agent One", "on behalf of Dana")
+}
+
+// TestDriftPageRendersWithoutGraph holds the drift board's two standing
+// properties on a deployment with no graph-server: the backbone-authoritative
+// half still renders (200), the graph-backed half says so honestly instead of
+// erroring, and the whole page stays read-only — spec 007's read surface has
+// no act to offer, so it must render no mutation affordance at all.
+func TestDriftPageRendersWithoutGraph(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	rec := doReq(t, h, http.MethodGet, "/drift", "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /drift: %d %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "knowledge graph not configured") {
+		t.Fatalf("page without graph must say so:\n%s", rec.Body.String())
+	}
+	// Read-only by construction: no form, no POST affordance.
+	if strings.Contains(rec.Body.String(), "<form") {
+		t.Fatal("drift page contains a mutation affordance")
+	}
 }

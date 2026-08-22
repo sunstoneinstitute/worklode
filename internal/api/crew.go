@@ -56,6 +56,7 @@ func crewView(project ui.CockpitProject, participants []store.Participant) ui.Cr
 		Members:      make([]ui.CrewMember, 0, len(participants)),
 		AddAction:    "/projects/" + project.ID + "/crew",
 		RemoveAction: "/projects/" + project.ID + "/crew/remove",
+		Roles:        formOptions(store.ParticipantRoles(), defaultCrewRole, ""),
 	}
 	for _, p := range participants {
 		v.Members = append(v.Members, ui.CrewMember{
@@ -199,6 +200,9 @@ func (s *server) addCrewMemberFromForm(w http.ResponseWriter, r *http.Request) {
 		}
 		v := crewView(project, participants)
 		v.Add = values
+		if values.Role != "" {
+			v.Roles = formOptions(store.ParticipantRoles(), values.Role, "")
+		}
 		v.AddError = crewFormMessage(err)
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "crew page", ui.Crew(v))
 		return

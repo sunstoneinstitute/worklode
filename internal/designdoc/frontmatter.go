@@ -22,6 +22,7 @@ type Frontmatter struct {
 	Issued         string       `yaml:"issued,omitempty"`         // dct:issued
 	Covers         CoverageList `yaml:"covers,omitempty"`         // wl:covers — plans only, 026 §5
 	Implements     CoverageList `yaml:"implements,omitempty"`     // retired spelling of Covers; 026 §5.1
+	Defers         DeferralList `yaml:"defers,omitempty"`         // wl:defers — plans only, 026 §5.3
 	Requires       RefList      `yaml:"requires,omitempty"`       // dct:requires
 	IsRequiredBy   RefList      `yaml:"isRequiredBy,omitempty"`   // dct:isRequiredBy
 	Blocks         RefList      `yaml:"blocks,omitempty"`         // plans only, 025 §5 — orders whole documents
@@ -33,6 +34,7 @@ type Frontmatter struct {
 	IsReplacedBy   AnchorMap    `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
 	Task           string       `yaml:"task,omitempty"`           // transitional, no term
 	Kind           string       `yaml:"kind,omitempty"`           // transitional, no term; 026 §4.2 — "adr" or absent (spec)
+	Artifact       RefList      `yaml:"artifact,omitempty"`       // transitional, no term; catalog address(es) verifying this doc (029 §3.1) — URIs, not doc refs
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is
@@ -172,6 +174,19 @@ func (c *CoverageList) UnmarshalYAML(n *yaml.Node) error {
 		return fmt.Errorf("coverage list: want scalar or sequence, got YAML node kind %d", n.Kind)
 	}
 }
+
+// Deferral is a plan's explicit handoff of one spec section to a named
+// owner (026 §5.3): Spec is a reference with a #sec-N fragment, To the
+// document whose plans are expected to cover it. There is no scalar
+// shorthand — a deferral without an owner is just an uncovered section,
+// which needs no syntax.
+type Deferral struct {
+	Spec string `yaml:"spec,omitempty"`
+	To   string `yaml:"to,omitempty"`
+}
+
+// DeferralList is the `defers` frontmatter field. List form only.
+type DeferralList []Deferral
 
 // AnchorMap keys references by the anchor in *this* document they apply to:
 // "#sec-3" -> the sections elsewhere that it amends or replaces. Values take

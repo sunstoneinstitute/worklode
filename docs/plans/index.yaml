@@ -275,6 +275,7 @@ docs/plans/2026-07-30-design-documents-as-graph-objects.md:
   sections:
     prerequisites-sibling-plans-same-day: "## Prerequisites (sibling plans, same day)"
     already-implemented-vs-what-remains: "## Already implemented vs. what remains"
+    execution-record-wl-44-2026-08-21: "## Execution record (WL-44, 2026-08-21)"
     file-structure: "## File Structure"
     task-1-widen-taskskind-to-six-kinds-8-ac11-backbone-half: "## Task 1: Widen `tasks.kind` to six kinds (§8, AC11 backbone half)"
     task-2-rename-lslsclsid-to-wlwlcwlid-across-docs-1-ac1-docs-half: "## Task 2: Rename `ls:`/`lsc:`/`lsid:` to `wl:`/`wlc:`/`wlid:` across docs (§1, AC1 docs half)"
@@ -975,7 +976,7 @@ docs/plans/2026-08-16-obsidian-vault-mirror.md:
     task-1-get-apiv1docsbodytrue-returns-body-and-frontmatter: "### Task 1 — `GET /api/v1/docs?body=true` returns body and frontmatter"
     task-2-bulk-edge-reader-listedgesfortasks: "### Task 2 — Bulk edge reader `ListEdgesForTasks`"
     task-3-get-apiv1tasksdetailtrue-adds-blocked-and-edges: "### Task 3 — `GET /api/v1/tasks?detail=true` adds blocked and edges"
-    task-4-obsidian-scaffold-build-test-harness-and-ci: "### Task 4 — `obsidian/` scaffold, build, test harness and CI"
+    task-4-pluginsobsidian-scaffold-build-test-harness-and-ci: "### Task 4 — `plugins/obsidian/` scaffold, build, test harness and CI"
     task-5-wire-types-and-the-read-only-api-client: "### Task 5 — Wire types and the read-only API client"
     task-6-task-note-serialization-and-the-round-trip-property: "### Task 6 — Task note serialization and the round-trip property"
     task-7-doc-project-and-index-note-serialization: "### Task 7 — Doc, project and index note serialization"
@@ -1038,11 +1039,28 @@ docs/plans/2026-08-21-cloud-sandbox-provisioning.md:
     task-5-content-addressed-worker-image-tags: "### Task 5 — Content-addressed worker image tags"
     task-6-ci-job-images-build-and-image-and-script-agree: "### Task 6 — CI job: images build, and image and script agree"
     task-7-e2e-environment-only-authentication: "### Task 7 — e2e: environment-only authentication"
+docs/plans/2026-08-21-corpus-indexing-and-hybrid-search.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-role-aware-provider-interface: "### Task 1 — Role-aware provider interface"
+    task-2-pure-chunking-and-context-headers: "### Task 2 — Pure chunking and context headers"
+    task-3-migration-0046-and-the-store-moves-onto-index-chunks: "### Task 3 — Migration 0046 and the store moves onto index_chunks"
+    task-4-hybrid-search-in-the-store: "### Task 4 — Hybrid search in the store"
+    task-5-convergence-loop-invalidation-and-server-wiring: "### Task 5 — Convergence loop, invalidation, and server wiring"
+    task-6-get-apiv1search: "### Task 6 — GET /api/v1/search"
+    task-7-recommendation-becomes-a-caller-of-the-retrieval-path: "### Task 7 — Recommendation becomes a caller of the retrieval path"
+    task-8-lode-search: "### Task 8 — lode search"
+    task-9-e2e-journey-acceptance-walk-docs: "### Task 9 — e2e journey, acceptance walk, docs"
+docs/plans/2026-08-21-exit-purge-on-a-gone-lease.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-purge-secrets-on-worktree-exit-when-the-lease-is-definitely-gone: "### Task 1 — Purge secrets on worktree exit when the lease is definitely gone"
 docs/plans/2026-08-21-per-project-workflows.md:
   sections:
     tasks: "## Tasks"
     task-1-vocabulary-core-edges-entry-table-and-the-workflow-type: "### Task 1 — Vocabulary, core edges, entry table, and the workflow type"
-    task-2-migration-0038-and-the-workflow-aware-guard: "### Task 2 — Migration 0038 and the workflow-aware guard"
+    task-2-migration-0046-and-the-workflow-aware-guard: "### Task 2 — Migration 0046 and the workflow-aware guard"
     task-3-store-crud-for-workflows-and-the-task-override: "### Task 3 — Store CRUD for workflows and the task override"
     task-4-api-endpoints-guard-table-metrics: "### Task 4 — API endpoints, guard table, metrics"
     task-5-watcher-rule-review-on-workflow-change: "### Task 5 — Watcher rule: review on workflow change"

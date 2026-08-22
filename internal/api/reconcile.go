@@ -15,6 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/reconcile"
 )
 
 // whoami handles GET /api/v1/whoami: the calling actor's identity. Auth
@@ -154,10 +155,9 @@ func parseSince(s string, now time.Time) (*time.Time, error) {
 }
 
 // reconcile handles POST /api/v1/reconcile: engine 1 (replay stored events)
-// then engine 2 (poll GitHub — skipped until the App is configured AND
-// reconcile.Poll is wired in here). Synchronous by design: a
-// scoped run is fast and the unscoped run is the scheduled case where
-// waiting is acceptable (spec 013 §API).
+// then engine 2 (poll GitHub — skipped when no App is configured).
+// Synchronous by design: a scoped run is fast and the unscoped run is the
+// scheduled case where waiting is acceptable (spec 013 §API).
 func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 	var req model.ReconcileInput
 	if err := readJSON(w, r, &req); err != nil {
@@ -205,15 +205,28 @@ func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 		resp.Replay = replay
 	}
 
-	// Engine 2 (reconcile.Poll) exists but is not wired here yet; Task 13 of
-	// the poll-engine plan replaces this block with the poll call. Keep the
-	// reason truthful about which gap is blocking it: an unconfigured App is
-	// a config gap, but a configured App still skips polling because this
-	// endpoint does not call the engine yet.
+	// Engine 2. Polling asks GitHub directly, so it needs the App; without
+	// it engine 1 still ran, and the response says which config gap kept
+	// polling from happening rather than leaving poll silently null.
 	if s.appAuth == nil {
-		resp.PollSkipped = "github app auth not configured"
+		resp.PollSkipped = "github app auth not configured (LODE_GITHUB_APP_ID / LODE_GITHUB_APP_PRIVATE_KEY)"
 	} else {
-		resp.PollSkipped = "poll engine not wired into this endpoint yet"
+		poll, err := reconcile.Poll(r.Context(), s.st, s.appAuth, reconcile.Options{
+			Repo: req.Repo, Task: req.Task, Since: since, DryRun: req.DryRun, RunID: runID,
+			Log: s.log, Metrics: s.pollMetrics,
+		})
+		if err != nil {
+			// Not a 500: engine 1 has already run, and outside a dry run it
+			// has already written and marked events applied. Discarding the
+			// response would leave the operator unable to tell what was
+			// repaired or whether re-running is safe — so the poll failure
+			// gets its own section, the way per-repo failures already get
+			// PollResult.Errors.
+			s.log.Error("reconcile poll failed", "run_id", runID, "repo", req.Repo, "task", req.Task, "err", err)
+			resp.PollError = err.Error()
+		} else {
+			resp.Poll = poll
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)

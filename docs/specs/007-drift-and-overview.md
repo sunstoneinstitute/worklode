@@ -46,15 +46,37 @@ recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 006):
 | Named graph | Layer | Written by |
 |---|---|---|
 | `…/graph/declared/<designdoc-id>` | declared | design-authoring skill (008), one graph per design doc |
-| `…/graph/observed/go-imports` | observed | Go/package-import deriver |
-| `…/graph/observed/repo-layout` | observed | component-boundary deriver |
-| `…/graph/observed/pr-affects` | observed | PR-path deriver |
-| `…/graph/observed/deploy` | observed | deploy/runtime projection from `internal/hooks/` |
-| `…/graph/observed/repo-implements` | observed | implements-manifest deriver (025 §11) |
+| `…/graph/observed/go-imports/<host>/<owner>/<repo>` | observed | Go/package-import deriver (`lode derive`, one graph per repo) |
+| `…/graph/observed/repo-layout/<host>/<owner>/<repo>` | observed | component-boundary deriver (`lode derive`, one graph per repo) |
+| `…/graph/observed/pr-affects` | observed | PR-path deriver (server-side, org-global) |
+| `…/graph/observed/deploy` | observed | deploy/runtime projection from `internal/hooks/` (server-side, org-global) |
+| `…/graph/observed/repo-implements` | observed | implements-manifest deriver (025 §11; server-side, org-global) |
 
 Concrete IRI grammar for the graph names is owned by 006 (branch-free term IRIs, ADR-0006);
 the `declared` vs `observed/*` partition is this spec's requirement. A deriver **must** confine
 its writes to its own `observed/*` graph, so a bad run can never corrupt declared intent.
+
+**One writer per graph.** The deriver contract (§2) is a blind whole-graph replace, so a graph
+name must encode everything that distinguishes independent writers — otherwise two writers
+alternate-and-erase each other, and the content-hash short-circuit turns that into a permanent
+flap. The **repo-local** sources (`go-imports`, `repo-layout`) run from each repo's checkout —
+`lode derive` in N repos' CI is N writers — so their partition is **per-source-per-repo**:
+`observed/<source>/<host>/<owner>/<repo>`, the repo segment mirroring the repo instance grammar
+(`id/repo/<host>/<owner>/<name>`). Their triples are keyed by repo-owned subjects (the repo node
+and the components its own manifest declares — a component lives in one repo, §2.2), so the
+per-repo sibling graphs union cleanly; the standing queries (§3) read the family by IRI prefix,
+which is exactly the sibling-graph UNION §3 already implies. The **backbone-derived** sources
+(`pr-affects`, `deploy`, `repo-implements`) are computed server-side over already-ingested,
+all-repo state by a single writer, and stay one org-global graph per source. If a source ever
+moves from server-run to per-repo-run, its graph moves to the per-repo shape with it.
+
+*Concurrency (compare-and-swap disposition).* Per-repo partitioning — one writer per graph — is
+what makes the blind `PUT` sound; it does not require compare-and-swap. Two runs racing on the
+*same* graph (two pushes close together in one repo's CI; overlapping server runs) remain
+last-write-wins, and because every run recomputes the full document from its inputs, the surviving
+state is at worst one run stale and self-heals on the next run. `If-Match` CAS on
+`graphserver.PutGraph` (graph-server already honours it; tracked as a gated item in
+`docs/follow-ups.md`) stays a hardening follow-up, not a prerequisite of this spec.
 
 *(Alternative considered and rejected for v1: RDF-1.2 triple-term annotation tagging each edge
 with a `wl:layer` — heavier to query and to replace atomically than one graph per source.)*
@@ -65,8 +87,9 @@ with a `wl:layer` — heavier to query and to replace atomically than one graph 
 
 Five derivers share a contract, including a fifth — `observed/repo-implements`, which reads
 `.worklode/implements.yaml` and emits `<component> wl:implements <section>` (025 §11):
-- **Idempotent & full-replace.** A run computes the complete edge set for its source and `PUT`s
-  its whole `observed/*` graph. No incremental deltas; no stale edges survive a run.
+- **Idempotent & full-replace.** A run computes the complete edge set for its source *scope* —
+  the repo it runs in for the repo-local derivers, the org for the server-side ones (§1.1) — and
+  `PUT`s its whole `observed/*` graph. No incremental deltas; no stale edges survive a run.
 - **Deterministic.** Same inputs → same triples (stable IRI minting via 006's scheme).
 - **Cheap to re-run.** Triggered on a schedule (CI/cron) and/or by the relevant hook; a content
   hash of the inputs short-circuits a no-op `PUT`.
@@ -79,7 +102,7 @@ Five derivers share a contract, including a fifth — `observed/repo-implements`
 - **Map** each source package/module → the owning **Component** via the component-boundary
   manifest (deriver 2). Import edges *within* a component are dropped; edges *between* components
   become `<componentA> dct:requires <componentB>` *(006)*.
-- **Output graph:** `observed/go-imports`.
+- **Output graph:** `observed/go-imports/<host>/<owner>/<repo>` (one per repo, §1.1).
 - This layer is the ground truth that architectural-drift queries compare declared intent against.
 
 ### 2.2 `component lives-in repo` — filesystem + component-boundary manifest {#sec-2.2}
@@ -90,7 +113,9 @@ Five derivers share a contract, including a fifth — `observed/repo-implements`
   component gets a trivial whole-repo manifest (or a default).
 - **Output:** `<repo> dct:hasPart <component>` linking the `doap:Project` (repo layer) to
   each Component *(006)*.
-- **Output graph:** `observed/repo-layout`.
+- **Also output:** `<repo> wl:unmatchedPath "<top-level path prefix>"` for each top-level
+  path matched by no component — the coverage-gap input to §3.2.
+- **Output graph:** `observed/repo-layout/<host>/<owner>/<repo>` (one per repo, §1.1).
 - The manifest is also the **path→component index** consumed by derivers 1 and 3; it is the single
   place component boundaries are declared.
 
@@ -117,6 +142,14 @@ components:
   *(006)*.
 - **Output graph:** `observed/pr-affects`.
 - Feeds unimplemented/drifted-spec queries (a Task that touched a component the Spec governs).
+- **The component's `rdf:type` is deriver 2's to assert, never this deriver's** (settled by
+  WL-273, on ADR 049's principle: a node's description lives in its home graph, and validation
+  runs over the union). This deriver emits the edge only, so for a repo whose manifest is
+  committed but whose CI never runs `lode derive`, the union carries a `wl:affects` edge whose
+  object has no type and `wl:affectsShape`'s `sh:class` fails — deliberately. That violation is
+  the wiring gap made visible: the fix is publishing `observed/repo-layout/…` for that repo
+  (§1.1), not a type stub here (two writers asserting one node's type, and the assertion of the
+  very fact validation exists to check) and not a weakened shape.
 
 ### 2.4 deploy / runtime — existing Worklode hooks {#sec-2.4}
 
@@ -340,7 +373,8 @@ Read-only by construction — the only ways to change the graph are authoring de
 
 - **Two-layer wiring:** declared and `observed/*` named graphs exist and are populated; a deriver
   re-run fully replaces its own graph and touches no other. A planted declared edge and a planted
-  observed edge round-trip.
+  observed edge round-trip. Two repos' repo-local runs write disjoint graphs: re-deriving repo A
+  leaves repo B's triples untouched, and the standing queries see the union.
 - **Derivers:** all four run idempotently and confine writes to their graph. The component-boundary
   manifest format is defined and a **multi-component repo (research-stack)** resolves each path to
   the right Component; unmatched paths are reported.
