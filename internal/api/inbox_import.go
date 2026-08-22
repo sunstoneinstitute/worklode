@@ -147,7 +147,7 @@ func (s *server) importInbox(w http.ResponseWriter, r *http.Request) {
 				if pr.MergedAt != nil && !pr.MergedAt.IsZero() {
 					mergedAt = pr.MergedAt
 				}
-				if _, err := store.UpsertPR(tx, store.PullRequest{
+				if _, _, err := store.UpsertPR(tx, store.PullRequest{
 					Repo:      req.Repo,
 					Number:    pr.Number,
 					Title:     pr.Title,

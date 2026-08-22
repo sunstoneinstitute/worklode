@@ -167,7 +167,7 @@ func TestPollCandidates(t *testing.T) {
 			if err := Transition(tx, now, inReview, "in_progress", "in_review", eventID); err != nil {
 				return err
 			}
-			if _, err := UpsertPR(tx, PullRequest{
+			if _, _, err := UpsertPR(tx, PullRequest{
 				Repo: "acme/app", Number: 12, Title: "fix", State: "open",
 				HeadRef: inReview + "-fix",
 				HeadSHA: "1111111111111111111111111111111111111111",

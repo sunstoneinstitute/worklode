@@ -20,17 +20,26 @@ func openChangesStore(t *testing.T) *Store {
 // upsertPR drives UpsertPR through RecordEvent, source "github".
 func upsertPR(t *testing.T, s *Store, pr PullRequest, body string) (*PullRequest, error) {
 	t.Helper()
+	out, _, err := upsertPRWritten(t, s, pr, body)
+	return out, err
+}
+
+// upsertPRWritten is upsertPR plus UpsertPR's own write-vs-guard-rejected
+// verdict, for tests that assert on it (the non-regressing guard).
+func upsertPRWritten(t *testing.T, s *Store, pr PullRequest, body string) (*PullRequest, bool, error) {
+	t.Helper()
 	var out *PullRequest
+	var written bool
 	_, _, err := s.RecordEvent(t.Context(), "github", nextExt(t), "pull_request", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
-			out, err = UpsertPR(tx, pr, body)
+			out, written, err = UpsertPR(tx, pr, body)
 			return err
 		})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return out, nil
+	return out, written, nil
 }
 
 func upsertCIRun(t *testing.T, s *Store, r CIRun) error {
@@ -299,7 +308,7 @@ func TestUpsertPRNonRegressing(t *testing.T) {
 	stale := defaultPR(task.ID)
 	stale.Title = "fix the thing"
 	stale.UpdatedAt = t1
-	got, err := upsertPR(t, s, stale, "")
+	got, written, err := upsertPRWritten(t, s, stale, "")
 	if err != nil {
 		t.Fatalf("stale UpsertPR: %v", err)
 	}
@@ -312,15 +321,24 @@ func TestUpsertPRNonRegressing(t *testing.T) {
 	if got.MergedAt == nil || !got.MergedAt.Equal(t2) {
 		t.Fatalf("merged_at after stale upsert: got %v, want %v", got.MergedAt, t2)
 	}
+	// The guard rejected this write (WL-250): a caller that reports
+	// "this PR was updated" off the returned bool, rather than off having
+	// merely called UpsertPR, must see false here.
+	if written {
+		t.Fatalf("written after stale (guard-rejected) upsert: got true, want false")
+	}
 
 	// Equal timestamps: an ordinary redelivery of the stored payload writes.
 	redelivered := merged
 	redelivered.Title = "fix the thing (retitled)"
-	if got, err = upsertPR(t, s, redelivered, ""); err != nil {
+	if got, written, err = upsertPRWritten(t, s, redelivered, ""); err != nil {
 		t.Fatalf("redelivery UpsertPR: %v", err)
 	}
 	if got.Title != "fix the thing (retitled)" {
 		t.Fatalf("title after equal-timestamp redelivery: got %q, want the new title", got.Title)
+	}
+	if !written {
+		t.Fatalf("written after equal-timestamp redelivery: got false, want true")
 	}
 
 	// Newer: applies.
@@ -328,11 +346,14 @@ func TestUpsertPRNonRegressing(t *testing.T) {
 	newer.State = "closed"
 	newer.Title = "fix the thing (reopened then closed)"
 	newer.UpdatedAt = t3
-	if got, err = upsertPR(t, s, newer, ""); err != nil {
+	if got, written, err = upsertPRWritten(t, s, newer, ""); err != nil {
 		t.Fatalf("newer UpsertPR: %v", err)
 	}
 	if got.State != "closed" || got.MergeSHA != nil || got.MergedAt != nil {
 		t.Fatalf("row after newer upsert: got %+v, want closed with no merge data", got)
+	}
+	if !written {
+		t.Fatalf("written after newer upsert: got false, want true")
 	}
 }
 
