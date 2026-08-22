@@ -100,3 +100,5 @@ configMapGenerator:
       - migrations/0043_plan_task_key.down.sql
       - migrations/0044_docs_generated_by_task.up.sql
       - migrations/0044_docs_generated_by_task.down.sql
+      - migrations/0045_doc_edges_defers.up.sql
+      - migrations/0045_doc_edges_defers.down.sql

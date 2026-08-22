@@ -317,9 +317,10 @@ func DocTable(w io.Writer, docs []model.Doc) {
 // DocPlanningTable prints the `lode doc list --needs-planning` view: one row
 // per accepted spec, with the gap ratio 026 §2.1 shows and each undischarged
 // anchor annotated with why it is still a gap — "sec-2.4(partial)
-// sec-4(unplanned)" (026 §2.1's sample output). gaps is keyed by document id,
-// so a document without one renders as no gap rather than misaligning the
-// table.
+// sec-4(unplanned)" (026 §2.1's sample output), or "sec-4(deferred:OWNER)"
+// when a defers entry names who it is owed to (026 §5.3). gaps is keyed by
+// document id, so a document without one renders as no gap rather than
+// misaligning the table.
 func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap) {
 	byDoc := make(map[int64]model.DocPlanningGap, len(gaps))
 	for _, g := range gaps {
@@ -329,7 +330,11 @@ func DocPlanningTable(w io.Writer, docs []model.Doc, gaps []model.DocPlanningGap
 		g := byDoc[d.ID]
 		anchors := make([]string, len(g.Gaps))
 		for i, s := range g.Gaps {
-			anchors[i] = fmt.Sprintf("%s(%s)", s.Anchor, s.Coverage)
+			if s.Coverage == "deferred" && s.Owner != "" {
+				anchors[i] = fmt.Sprintf("%s(deferred:%s)", s.Anchor, s.Owner)
+			} else {
+				anchors[i] = fmt.Sprintf("%s(%s)", s.Anchor, s.Coverage)
+			}
 		}
 		return g.Sections, anchors
 	})

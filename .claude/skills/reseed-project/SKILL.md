@@ -27,8 +27,9 @@ lode doc list --needs-execution --json   # accepted plans whose task set still h
 ```
 
 `--needs-planning` returns `planning_gaps` alongside `docs`: per spec, its
-section count and the uncovered anchors classified `unplanned`, `partial` or
-`bound-only` (026 §2.1). `--needs-execution` is the backbone's own answer to
+section count and the uncovered anchors classified `unplanned`, `partial`,
+`bound-only` or `deferred` — the last with an `owner`, the document a plan
+handed the section to (026 §2.1, §5.3). `--needs-execution` is the backbone's own answer to
 "which plans are unfinished" — a plan's tasks exist because accepting it minted
 them, so plan checkboxes are never the evidence.
 

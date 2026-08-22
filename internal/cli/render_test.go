@@ -70,6 +70,25 @@ func TestDocPlanningTableAnnotatesAnchorsWithCoverage(t *testing.T) {
 	}
 }
 
+// TestDocPlanningTableAnnotatesDeferredAnchorWithOwner: a "deferred" gap
+// carrying an owner renders as sec-N(deferred:OWNER) rather than the plain
+// sec-N(coverage) form (026 §2.1, §5.3).
+func TestDocPlanningTableAnnotatesDeferredAnchorWithOwner(t *testing.T) {
+	var b strings.Builder
+	DocPlanningTable(&b, []model.Doc{{ID: 1, Number: 7, Slug: "007-drift-and-overview"}},
+		[]model.DocPlanningGap{{
+			Doc: 1, Sections: 2,
+			Gaps: []model.DocSectionGap{
+				{Anchor: "sec-1", Coverage: "deferred", Owner: "006-knowledge-graph"},
+				{Anchor: "sec-2", Coverage: "unplanned"},
+			},
+		}})
+	out := b.String()
+	if !strings.Contains(out, "sec-1(deferred:006-knowledge-graph) sec-2(unplanned)") {
+		t.Fatalf("DocPlanningTable output missing the deferred owner annotation:\n%s", out)
+	}
+}
+
 // TestBoardSectionGroupsChildren checks that a parent's children render
 // directly beneath it while the rest of the rows keep the order the server
 // sent — the server already sorts by priority, so a plain id sort would be
