@@ -19,9 +19,11 @@ import {
   desiredNotes,
   desiredTaskNotes,
   foreignNotes,
+  hydrateDocBodies,
   isSafeMountRoot,
   mountRootParent,
   mountRootParentMissing,
+  type HydratedDocs,
   type MirrorStats,
 } from "./sync/mirror";
 import { writeBackTaskNotes, type WriteBackStats } from "./sync/writeback";
@@ -293,17 +295,28 @@ export default class WorklodePlugin extends Plugin {
         byProject.set(project.id, { docs: docs ?? [], tasks });
       }
 
+      // The doc list carries no bodies at all, so the text every doc note
+      // shows comes from a second request per document -- spent only on the
+      // documents whose vault note is out of date. An incremental run renders
+      // no doc note and fetched no doc list, so it has nothing to hydrate.
+      let members = byProject;
+      let docs: HydratedDocs | undefined;
+      if (!incremental) {
+        docs = await hydrateDocBodies(this.writer, mountRoot, byProject, (id) => client.getDoc(id));
+        members = docs.byProject;
+      }
+
       // Write-back runs before the notes are rendered, so the render sees the
       // bodies the backbone just accepted rather than the ones it was fetched
       // with. Full syncs only: an incremental run holds only the tasks that
       // changed, and a note it did not fetch cannot be classified.
-      let toRender = byProject;
+      let toRender = members;
       let writeBack: WriteBackStats | undefined;
       if (this.settings.writeBack && !incremental) {
         const pushed = await writeBackTaskNotes(
           this.writer,
           mountRoot,
-          byProject,
+          members,
           (id, body) => client.patchTaskBody(id, body),
           new Date().toISOString(),
         );
@@ -321,11 +334,11 @@ export default class WorklodePlugin extends Plugin {
             this.writer,
             mountRoot,
             await desiredNotes(selected, toRender, mountRoot, new Date().toISOString()),
-            { pruneDocNotes: !docsUnavailable },
+            { pruneDocNotes: !docsUnavailable, alreadyCurrent: docs?.unfetched },
           );
 
       await this.advanceWatermark(origin, toRender);
-      this.reportSuccess(stats, docsUnavailable, incremental, writeBack);
+      this.reportSuccess(stats, docsUnavailable, incremental, writeBack, docs?.fetched ?? 0);
     } catch (err) {
       this.reportFailure(err);
     } finally {
@@ -442,6 +455,7 @@ export default class WorklodePlugin extends Plugin {
     docsUnavailable: boolean,
     incremental: boolean,
     writeBack: WriteBackStats | undefined,
+    docsFetched: number,
   ): void {
     const noteCount = stats.written + stats.skipped;
     // An incremental run saw only the changed tasks, so its count is not the
@@ -456,6 +470,12 @@ export default class WorklodePlugin extends Plugin {
     // server has no docs endpoint", not "this project has no docs".
     if (docsUnavailable) {
       message += " Doc notes skipped and left as they were: this server has no /api/v1/docs endpoint.";
+    }
+    // The honest explanation for a slow first sync: a document's text costs a
+    // request of its own, so a corpus arriving for the first time is one per
+    // document, and an unchanged one afterwards is none.
+    if (docsFetched > 0) {
+      message += ` Fetched ${docsFetched} document body/bodies.`;
     }
     // Write-back gets its own clause: "pushed" and "written" count opposite
     // directions, and a user who edited a note needs to see where their edit

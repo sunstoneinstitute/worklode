@@ -3,13 +3,14 @@ import { stringify as stringifyYaml } from "yaml";
 import {
   computeEtag,
   conflictToNote,
+  docEtag,
   docToNote,
   indexToNote,
   parseNote,
   projectToNote,
   taskToNote,
 } from "../src/serialize/note";
-import type { Doc, Project, TaskListDetail } from "../src/api/types";
+import type { Doc, DocDetail, Project, TaskListDetail } from "../src/api/types";
 
 function fixtureTask(overrides: Partial<TaskListDetail> = {}): TaskListDetail {
   return {
@@ -329,11 +330,54 @@ describe("docToNote", () => {
     expect(parseNote(note.content).body).toBe("body text\n");
   });
 
-  it("still changes the etag when the body or the version changes", async () => {
-    const d = fixtureDoc();
+  // The etag is a property of the document, not of whether this particular
+  // sync happened to fetch its text: GET /api/v1/docs blanks the body, so the
+  // same unchanged document arrives with and without one depending on what
+  // hydrateDocBodies decided. Hashing the body would make every doc note
+  // stale on alternating syncs; hashing the list row's fields cannot, and
+  // loses nothing, because version and updated_at both move when a body does.
+  it("computes the same etag whether or not the body has been fetched", async () => {
+    const listRow = fixtureDoc({ body: "" });
+    const fetched = fixtureDoc();
 
-    expect((await docToNote(fixtureDoc({ body: "different body" }))).etag).not.toBe((await docToNote(d)).etag);
-    expect((await docToNote(fixtureDoc({ version: 4 }))).etag).not.toBe((await docToNote(d)).etag);
+    expect(await docEtag(listRow)).toBe(await docEtag(fetched));
+    expect((await docToNote(listRow)).etag).toBe((await docToNote(fetched)).etag);
+  });
+
+  // ... and the extra rows a fetched DocDetail carries stay out of it for the
+  // same reason: a list row can never produce them.
+  it("ignores the rows only a fetched DocDetail carries", async () => {
+    const detail: DocDetail = {
+      ...fixtureDoc(),
+      sections: [
+        { anchor: "sec-1", number: "1", heading: "Purpose", depth: 2, position: 0, last_revised_in: 3, published: true },
+      ],
+      edges: [
+        {
+          type: "covers",
+          from_anchor: "",
+          to_doc: 4,
+          to_anchor: "",
+          to_external: "",
+          to_slug: "execution-backbone",
+          to_kind: "spec",
+          to_number: 4,
+        },
+      ],
+      edges_in: [],
+      revision: null,
+    };
+
+    expect(await docEtag(detail)).toBe(await docEtag(fixtureDoc()));
+  });
+
+  it("changes the etag when the list row changes", async () => {
+    const d = await docEtag(fixtureDoc());
+
+    expect(await docEtag(fixtureDoc({ version: 4 }))).not.toBe(d);
+    expect(await docEtag(fixtureDoc({ updated_at: "2026-08-17T09:12:00Z" }))).not.toBe(d);
+    expect(await docEtag(fixtureDoc({ status: "accepted" }))).not.toBe(d);
+    expect(await docEtag(fixtureDoc({ title: "Something else" }))).not.toBe(d);
   });
 
   it("round-trips a doc note back to its own frontmatter and body", async () => {
@@ -668,9 +712,12 @@ describe("computeEtag", () => {
 describe("golden note etags", () => {
   it("hashes the same payload it always has, per note kind", async () => {
     expect((await taskToNote(fixtureTask())).etag).toBe("9cf7929f46269e43");
-    expect((await docToNote(fixtureDoc())).etag).toBe("7cb835063c8dc0a8");
+    // Both doc-derived constants moved once, in WL-196: a doc note's etag no
+    // longer hashes the body (docEtag), and a project note's no longer hashes
+    // its docs whole.
+    expect((await docToNote(fixtureDoc())).etag).toBe("d669602c18974e01");
     expect((await projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()])).etag).toBe(
-      "54a5e9210790c806",
+      "223d037d0777dc58",
     );
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
     expect(
