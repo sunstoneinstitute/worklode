@@ -223,6 +223,23 @@ class TestPermanence(RepoCase):
         p = r.run()
         self.assertEqual(p.returncode, 2)
 
+    def test_duplicate_anchor_reports_once_not_also_as_moved(self):
+        """WL-210 defect 1: a duplicated anchor whose surviving occurrence
+        also carries a different section number must produce exactly one
+        finding -- the duplicate refusal -- not a second "moved" refusal for
+        the same root cause."""
+        r = self.repo()
+        r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
+        r.commit()
+        f = r.root / "docs/specs/001-fixture.md"
+        text = f.read_text()
+        text += "\n## 5. Cloned {#sec-2}\n\nCloned body.\n"
+        f.write_text(text)
+        p = r.run()
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("appears on more than one heading", p.stderr)
+        self.assertNotIn("moved from", p.stderr)
+
     def test_runs_without_lode(self):
         r = self.repo()
         r.write("docs/specs/001-fixture.md", SPEC.format(status="accepted"))
@@ -382,6 +399,56 @@ class TestMirrorEdges(RepoCase):
         self.assertEqual(p.returncode, 2, p.stderr)
         self.assertIn("001-a.md", p.stderr)
 
+    def test_unparseable_flow_value_on_subject_line_fails(self):
+        """WL-210 defect 2: a flow-style value on the *subject* line, not
+        just the key line, must be a refusal -- normalise() would otherwise
+        silently reject the bogus fragment it decodes to, and a real defect
+        would degrade to an unresolved note."""
+        r = self.pair('amends:\n  "#sec-1": [002-b.md#sec-2]\n')
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("001-a.md", p.stderr)
+
+    def test_unparseable_empty_flow_value_on_subject_line_fails(self):
+        """WL-210 defect 2, the empty-flow-value variant."""
+        r = self.pair('amends:\n  "#sec-1": []\n')
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("001-a.md", p.stderr)
+
+    def test_unquoted_subject_key_blames_the_key_line(self):
+        """WL-210 defect 3: an unquoted subject key must not be swallowed by
+        the comment-skip branch -- the resulting refusal must name the key
+        line itself, not the list line that follows it."""
+        r = self.pair('amends:\n  #sec-1:\n    - 002-b.md#sec-2\n')
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("#sec-1:", p.stderr)
+        self.assertNotIn("002-b.md#sec-2", p.stderr)
+
+    def test_self_edge_without_own_mirror_fails(self):
+        """WL-210 defect 4: a self-edge (acting doc == target doc) must not
+        satisfy the mirror test from a single recording -- it needs its own
+        mirror entry the same as any two-document edge."""
+        r = self.repo()
+        r.write("docs/specs/001-a.md",
+                doc(front=edge("amends", "#sec-1", "001-a.md#sec-2")))
+        r.commit()
+        p = r.run()
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("001-a.md", p.stderr)
+
+    def test_self_edge_with_own_mirror_passes(self):
+        """The positive case for defect 4: a self-edge recorded from both
+        of its own halves is a clean mirror, not a refusal."""
+        r = self.repo()
+        r.write("docs/specs/001-a.md", doc(front=(
+            edge("amends", "#sec-1", "001-a.md#sec-2")
+            + edge("amendedBy", "#sec-2", "001-a.md#sec-1"))))
+        r.commit()
+        p = r.run()
+        self.assertEqual(p.returncode, 0, p.stderr)
+
     def test_list_directly_under_edge_key_fails(self):
         """The edge keys are maps; a bare list is an edge with no subject."""
         r = self.pair("amends:\n  - 002-b.md#sec-2\n")
@@ -440,6 +507,32 @@ class TestMirrorEdges(RepoCase):
         p = r.run()
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(p.stderr, "")
+
+
+class TestExtractEdges(unittest.TestCase):
+    """extract_edges() directly -- the level WL-210 defect 5 must be fixed
+    at, rather than relying on normalise() to reject the bogus value it
+    would otherwise decode to."""
+
+    def setUp(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import secfrozen
+        self.m = secfrozen
+
+    def test_comment_only_item_has_no_value(self):
+        front = 'amends:\n  "#sec-1":\n    - # why\n'
+        self.assertEqual(list(self.m.extract_edges(front)), [])
+
+    def test_comment_only_item_alongside_a_real_one(self):
+        front = (
+            'amends:\n'
+            '  "#sec-1":\n'
+            '    - # why\n'
+            '    - 002-b.md#sec-2\n'
+        )
+        self.assertEqual(
+            list(self.m.extract_edges(front)),
+            [("amends", "#sec-1", "002-b.md#sec-2")])
 
 
 class TestCanonical(unittest.TestCase):
