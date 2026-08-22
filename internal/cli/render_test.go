@@ -785,6 +785,55 @@ func TestReconcileRenderNamesDryRun(t *testing.T) {
 	}
 }
 
+// The poll section renders its own fields, per candidate, and carries its
+// own dry-run marker — the counts alone do not say whether anything was
+// written.
+func TestReconcileRenderPoll(t *testing.T) {
+	var buf bytes.Buffer
+	ReconcileRender(&buf, model.ReconcileResponse{
+		RunID: "r3", DryRun: true,
+		Replay: &model.ReplayResult{},
+		Poll: &model.PollResult{
+			RunID: "r3", DryRun: true, Candidates: 2,
+			Repaired: []model.TaskRepair{{
+				TaskID: "WL-7", Repo: "acme/app", State: "in_review",
+				PRsUpdated: []int64{12}, CommitsLanded: []string{"abc", "def"},
+			}},
+			Errors: []string{"acme/other: not installed"},
+		},
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"poll: examined (dry run) 2 candidate task(s)",
+		"  WL-7 (acme/app, was in_review): 1 PR(s), 2 landed commit(s)",
+		"  error: acme/other: not installed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// A failed poll must not swallow the replay report: engine 1 has already
+// written by then, so the operator needs both lines.
+func TestReconcileRenderPollFailureKeepsReplay(t *testing.T) {
+	var buf bytes.Buffer
+	ReconcileRender(&buf, model.ReconcileResponse{
+		RunID:     "r4",
+		Replay:    &model.ReplayResult{Candidates: 2, Replayed: 2},
+		PollError: "acme/app: 502 from github",
+	})
+	out := buf.String()
+	for _, want := range []string{
+		"replay: repaired 2 of 2 candidate event(s), 0 still unmapped",
+		"poll: failed (acme/app: 502 from github)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("output missing %q:\n%s", want, out)
+		}
+	}
+}
+
 // The two caps a replay run works under are re-run signals, so the human
 // view has to name them — a truncated batch and a trimmed error list are
 // invisible in the counts alone.

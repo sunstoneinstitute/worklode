@@ -682,3 +682,24 @@ while dogfooding it against the real corpus.
   declares unstarted work. 025 §18's "unminted" arm always meant this; making
   it detectable needs the accept-time parse to record a declaration count, or a
   reconciler that re-reads bodies.
+
+## From WL-205 — reconcile poll wiring (2026-08-22)
+
+- `[P3]` **`README.md` hardcodes `lode` invocations but is not an agent
+  surface.** `surfaceFiles` in `internal/cmd/agentsurfaces_test.go` scans
+  `CLAUDE.md`, `internal/cmd/CLAUDE.md`, `docs/agent-surfaces.md`,
+  `.claude/skills/**` and `plugins/**`, and `docs/agent-surfaces.md`'s
+  register omits the README too. So the README's `lode` examples — quickstart,
+  project scoping, backlog import, and now the reconciliation section — rot
+  silently on the next rename. Adding `README.md` to `surfaceFiles` is a
+  one-line change, but the README's placeholder-heavy examples will need
+  exemptions or rewording first, which is why it did not ride along with the
+  section that prompted it.
+- `[P3]` **The `reconcile.Options` mapping in `internal/api/reconcile.go` is
+  untested.** `internal/reconcile`'s tests call `Poll` directly with their own
+  `Options`, and the API test only covers the App-less skip branch, so a
+  transposed or dropped field (notably `RunID`, which `Poll` requires and which
+  doubles as the system event's `external_id`) would ship green. Covering it
+  means an `api.NewServer` built with a fake App key against a fake GitHub;
+  the poll-engine plan's Task 13 explicitly declined to rebuild the server
+  fixture for that, so it wants a shared test-server option, not a one-off.
