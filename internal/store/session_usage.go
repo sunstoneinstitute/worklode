@@ -35,6 +35,14 @@ type CostDay struct {
 	// UnpricedTokens are tokens whose model had no rate on file. Cost
 	// understates the bill by whatever they were worth.
 	UnpricedTokens int64
+	// OverheadTokens/OverheadCost/OverheadUnpricedTokens are the portion of
+	// the totals above with no task to bill to (spec 052): a main-checkout
+	// orchestration session, or a worktree this actor no longer held the
+	// lease on when it reported. Always zero for a TaskCost report, which
+	// has no overhead concept.
+	OverheadTokens         TokenCounts
+	OverheadCost           string
+	OverheadUnpricedTokens int64
 }
 
 // CostReport is a cost over a window: one row per day (ascending) plus
@@ -52,6 +60,14 @@ type CostTotal struct {
 	Tokens         TokenCounts
 	Cost           string
 	UnpricedTokens int64
+	// OverheadTokens/OverheadCost/OverheadUnpricedTokens are the portion of
+	// the totals above with no task to bill to (spec 052): a main-checkout
+	// orchestration session, or a worktree this actor no longer held the
+	// lease on when it reported. Always zero for a TaskCost report, which
+	// has no overhead concept.
+	OverheadTokens         TokenCounts
+	OverheadCost           string
+	OverheadUnpricedTokens int64
 }
 
 // TaskCost is one task's usage and cost: the same per-day, per-currency
@@ -266,6 +282,170 @@ func mergeUsageBuckets(buckets []SessionUsageBucket) ([]SessionUsageBucket, erro
 	return out, nil
 }
 
+// replaceProjectOverheadUsageTx writes buckets as the complete overhead
+// usage of one (project, agent, external session id), pricing each bucket
+// against the rate in effect on its own day. Mirrors
+// replaceSessionUsageTx's replace-not-accumulate contract and return shape,
+// keyed by project instead of by an agent_sessions row -- overhead usage has
+// no lease to hang an agent_sessions row off.
+func replaceProjectOverheadUsageTx(ctx context.Context, tx *sql.Tx, projectID, agent, externalSessionID string, buckets []SessionUsageBucket) (
+	totals TokenCounts, cost string, currency string, days []time.Time, err error) {
+
+	daySet := map[time.Time]bool{}
+
+	rows, err := tx.QueryContext(ctx,
+		`DELETE FROM project_overhead_usage
+		  WHERE project_id = $1 AND agent = $2 AND external_session_id = $3
+		 RETURNING usage_day`, projectID, agent, externalSessionID)
+	if err != nil {
+		return totals, "", "", nil, fmt.Errorf("clear overhead usage for %s/%s/%s: %w", projectID, agent, externalSessionID, err)
+	}
+	for rows.Next() {
+		var day time.Time
+		if err := rows.Scan(&day); err != nil {
+			rows.Close()
+			return totals, "", "", nil, fmt.Errorf("scan cleared overhead usage day: %w", err)
+		}
+		daySet[day.UTC()] = true
+	}
+	if err := rows.Err(); err != nil {
+		return totals, "", "", nil, fmt.Errorf("clear overhead usage for %s/%s/%s: %w", projectID, agent, externalSessionID, err)
+	}
+	rows.Close()
+
+	merged, err := mergeUsageBuckets(buckets)
+	if err != nil {
+		return totals, "", "", nil, err
+	}
+
+	byCurrency := map[string]*microAmount{}
+	w := usageRowArrays{}
+	for _, b := range merged {
+		price, err := modelPriceFor(ctx, tx, b.Model, b.Speed, b.Day)
+		if err != nil {
+			return totals, "", "", nil, err
+		}
+		var amount *string
+		rowCurrency := defaultCurrency
+		if price != nil {
+			a := price.Cost(b.Tokens)
+			amount = &a
+			rowCurrency = price.Currency
+			acc, ok := byCurrency[rowCurrency]
+			if !ok {
+				acc = &microAmount{}
+				byCurrency[rowCurrency] = acc
+			}
+			if err := acc.add(a); err != nil {
+				return totals, "", "", nil, err
+			}
+		}
+		w.add(b, amount, rowCurrency)
+		totals.Add(b.Tokens)
+		daySet[b.Day] = true
+	}
+
+	if len(w.days) > 0 {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO project_overhead_usage
+			   (project_id, agent, external_session_id, usage_day, model, speed, `+usageColumns+`,
+			    cost_amount, cost_currency)
+			 SELECT $1::text, $2::text, $3::text, u.usage_day, u.model, u.speed,
+			        u.input_tokens, u.cache_write_5m_tokens, u.cache_write_1h_tokens,
+			        u.cache_read_tokens, u.output_tokens,
+			        u.cost_amount::numeric, u.cost_currency
+			   FROM unnest($4::date[], $5::text[], $6::text[], $7::bigint[], $8::bigint[],
+			               $9::bigint[], $10::bigint[], $11::bigint[], $12::text[], $13::text[])
+			        AS u(usage_day, model, speed, input_tokens, cache_write_5m_tokens,
+			             cache_write_1h_tokens, cache_read_tokens, output_tokens,
+			             cost_amount, cost_currency)`,
+			projectID, agent, externalSessionID,
+			w.days, w.models, w.speeds, w.input, w.cacheWrite5m, w.cacheWrite1h,
+			w.cacheRead, w.output, w.amounts, w.currencies,
+		); err != nil {
+			return totals, "", "", nil, fmt.Errorf("record overhead usage for %s/%s/%s: %w", projectID, agent, externalSessionID, err)
+		}
+	}
+
+	if len(byCurrency) == 1 {
+		for c, acc := range byCurrency {
+			currency, cost = c, acc.String()
+		}
+	}
+
+	days = make([]time.Time, 0, len(daySet))
+	for d := range daySet {
+		days = append(days, d)
+	}
+	sort.Slice(days, func(i, j int) bool { return days[i].Before(days[j]) })
+	return totals, cost, currency, days, nil
+}
+
+// recomputeProjectOverheadDailyCostTx rebuilds project_daily_overhead_cost
+// for projectID on the given days, from scratch -- mirrors
+// recomputeProjectDailyCostTx, but its source (project_overhead_usage) is
+// already keyed by project, so no lease/task join is needed.
+func recomputeProjectOverheadDailyCostTx(ctx context.Context, tx *sql.Tx, projectID string, days []time.Time) error {
+	if len(days) == 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM project_daily_overhead_cost WHERE project_id = $1 AND usage_day = ANY($2::date[])`,
+		projectID, days); err != nil {
+		return fmt.Errorf("clear overhead rollup for %s on %d day(s): %w", projectID, len(days), err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO project_daily_overhead_cost
+		   (project_id, usage_day, cost_currency, `+usageColumns+`,
+		    cost_amount, unpriced_tokens)
+		 SELECT $1::text, u.usage_day, u.cost_currency,
+		        SUM(u.input_tokens), SUM(u.cache_write_5m_tokens),
+		        SUM(u.cache_write_1h_tokens), SUM(u.cache_read_tokens),
+		        SUM(u.output_tokens),
+		        SUM(COALESCE(u.cost_amount, 0)),
+		        SUM(CASE WHEN u.cost_amount IS NULL
+		                 THEN u.input_tokens + u.cache_write_5m_tokens +
+		                      u.cache_write_1h_tokens + u.cache_read_tokens +
+		                      u.output_tokens
+		                 ELSE 0 END)
+		   FROM project_overhead_usage u
+		  WHERE u.project_id = $1 AND u.usage_day = ANY($2::date[])
+		  GROUP BY u.usage_day, u.cost_currency`,
+		projectID, days); err != nil {
+		return fmt.Errorf("rebuild overhead rollup for %s on %d day(s): %w", projectID, len(days), err)
+	}
+	return nil
+}
+
+// ReportProjectOverheadUsage records tokens billed by agent/externalSessionID
+// with no task to bill to (spec 052): a main-checkout orchestration session,
+// or a worktree whose lease this actor no longer held at report time.
+// Replace-not-accumulate per (project, agent, external session id) -- the
+// client re-reports a running transcript total on every heartbeat.
+// ErrInvalidInput for an unknown agent or an empty external session id;
+// ErrNotFound for an unknown project.
+func (s *Store) ReportProjectOverheadUsage(ctx context.Context, projectID, agent, externalSessionID string, buckets []SessionUsageBucket) error {
+	if !validAgent(agent) {
+		return fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
+	}
+	if externalSessionID == "" {
+		return fmt.Errorf("external session id is required: %w", ErrInvalidInput)
+	}
+	if _, err := s.GetProject(ctx, projectID); err != nil {
+		return err
+	}
+	return s.Tx(ctx, func(tx *sql.Tx) error {
+		_, _, _, days, err := replaceProjectOverheadUsageTx(ctx, tx, projectID, agent, externalSessionID, buckets)
+		if err != nil {
+			return err
+		}
+		if len(days) == 0 {
+			return nil
+		}
+		return recomputeProjectOverheadDailyCostTx(ctx, tx, projectID, days)
+	})
+}
+
 // projectForSessionTx resolves the project a session's work belongs to, up the
 // session -> lease -> task chain.
 func projectForSessionTx(ctx context.Context, tx *sql.Tx, sessionID int64) (string, error) {
@@ -345,15 +525,34 @@ func (s *Store) ProjectCost(ctx context.Context, projectID string, from, to time
 	}
 
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT usage_day, cost_currency, `+usageColumns+`,
-		        cost_amount::text, unpriced_tokens
-		   FROM project_daily_cost
-		  WHERE `+where+`
-		  ORDER BY usage_day, cost_currency`, args...)
+		`WITH t AS (
+		   SELECT usage_day, cost_currency, `+usageColumns+`, cost_amount, unpriced_tokens
+		     FROM project_daily_cost WHERE `+where+`
+		 ), o AS (
+		   SELECT usage_day, cost_currency, `+usageColumns+`, cost_amount, unpriced_tokens
+		     FROM project_daily_overhead_cost WHERE `+where+`
+		 )
+		 SELECT COALESCE(t.usage_day, o.usage_day),
+		        COALESCE(t.cost_currency, o.cost_currency),
+		        COALESCE(t.input_tokens,0) + COALESCE(o.input_tokens,0),
+		        COALESCE(t.cache_write_5m_tokens,0) + COALESCE(o.cache_write_5m_tokens,0),
+		        COALESCE(t.cache_write_1h_tokens,0) + COALESCE(o.cache_write_1h_tokens,0),
+		        COALESCE(t.cache_read_tokens,0) + COALESCE(o.cache_read_tokens,0),
+		        COALESCE(t.output_tokens,0) + COALESCE(o.output_tokens,0),
+		        (COALESCE(t.cost_amount,0) + COALESCE(o.cost_amount,0))::text,
+		        COALESCE(t.unpriced_tokens,0) + COALESCE(o.unpriced_tokens,0),
+		        COALESCE(o.input_tokens,0), COALESCE(o.cache_write_5m_tokens,0),
+		        COALESCE(o.cache_write_1h_tokens,0), COALESCE(o.cache_read_tokens,0),
+		        COALESCE(o.output_tokens,0),
+		        COALESCE(o.cost_amount,0)::text,
+		        COALESCE(o.unpriced_tokens,0)
+		   FROM t FULL OUTER JOIN o
+		     ON t.usage_day = o.usage_day AND t.cost_currency = o.cost_currency
+		  ORDER BY 1, 2`, args...)
 	if err != nil {
 		return nil, fmt.Errorf("read cost for project %s: %w", projectID, err)
 	}
-	return scanCostReport(rows, "project "+projectID)
+	return scanProjectCostReport(rows, "project "+projectID)
 }
 
 // TaskCost reports a task's usage and cost per day over [from, to], inclusive
@@ -455,6 +654,7 @@ func scanCostReport(rows *sql.Rows, desc string) (*CostReport, error) {
 			return nil, fmt.Errorf("scan cost row for %s: %w", desc, err)
 		}
 		d.Day = d.Day.UTC()
+		d.OverheadCost = "0.000000" // TaskCost has no overhead concept (spec 052 §2)
 		report.Days = append(report.Days, d)
 
 		t, ok := totals[d.Currency]
@@ -480,6 +680,64 @@ func scanCostReport(rows *sql.Rows, desc string) (*CostReport, error) {
 			Tokens:         t.tokens,
 			Cost:           t.amount.String(),
 			UnpricedTokens: t.unpriced,
+			OverheadCost:   "0.000000",
+		})
+	}
+	return report, nil
+}
+
+// scanProjectCostReport scans ProjectCost's combined (task + overhead) query
+// into per-day rows plus per-currency totals, each carrying overhead's own
+// share alongside the combined figure. Closes rows.
+func scanProjectCostReport(rows *sql.Rows, desc string) (*CostReport, error) {
+	defer rows.Close()
+	report := &CostReport{}
+	totals := map[string]*costTotal{}
+	var order []string
+	for rows.Next() {
+		var d CostDay
+		if err := rows.Scan(&d.Day, &d.Currency,
+			&d.Tokens.Input, &d.Tokens.CacheWrite5m, &d.Tokens.CacheWrite1h,
+			&d.Tokens.CacheRead, &d.Tokens.Output, &d.Cost, &d.UnpricedTokens,
+			&d.OverheadTokens.Input, &d.OverheadTokens.CacheWrite5m, &d.OverheadTokens.CacheWrite1h,
+			&d.OverheadTokens.CacheRead, &d.OverheadTokens.Output,
+			&d.OverheadCost, &d.OverheadUnpricedTokens); err != nil {
+			return nil, fmt.Errorf("scan cost row for %s: %w", desc, err)
+		}
+		d.Day = d.Day.UTC()
+		report.Days = append(report.Days, d)
+
+		t, ok := totals[d.Currency]
+		if !ok {
+			t = &costTotal{}
+			totals[d.Currency] = t
+			order = append(order, d.Currency)
+		}
+		t.tokens.Add(d.Tokens)
+		if err := t.amount.add(d.Cost); err != nil {
+			return nil, err
+		}
+		t.unpriced += d.UnpricedTokens
+		t.overheadTokens.Add(d.OverheadTokens)
+		if err := t.overheadAmount.add(d.OverheadCost); err != nil {
+			return nil, err
+		}
+		t.overheadUnpriced += d.OverheadUnpricedTokens
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read cost for %s: %w", desc, err)
+	}
+
+	for _, c := range order {
+		t := totals[c]
+		report.Totals = append(report.Totals, CostTotal{
+			Currency:               c,
+			Tokens:                 t.tokens,
+			Cost:                   t.amount.String(),
+			UnpricedTokens:         t.unpriced,
+			OverheadTokens:         t.overheadTokens,
+			OverheadCost:           t.overheadAmount.String(),
+			OverheadUnpricedTokens: t.overheadUnpriced,
 		})
 	}
 	return report, nil
@@ -489,4 +747,8 @@ type costTotal struct {
 	tokens   TokenCounts
 	amount   microAmount
 	unpriced int64
+
+	overheadTokens   TokenCounts
+	overheadAmount   microAmount
+	overheadUnpriced int64
 }
