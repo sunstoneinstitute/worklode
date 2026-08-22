@@ -740,6 +740,52 @@ func TestDocUpdateBodyDraftSpec(t *testing.T) {
 	}
 }
 
+// TestDocUpdateBodySameSecondIsDistinguishable: a draft spec/ADR keeps its
+// version across a body edit (025 §7), so updated_at is the only externally
+// visible signal that a second edit landed. Two edits inside the same
+// wall-clock second, changing neither title nor issued, must still produce
+// distinguishable updated_at values (WL-285) rather than collapsing into an
+// update with no observable trace.
+func TestDocUpdateBodySameSecondIsDistinguishable(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	// Same second, different instants: this is what "landed in the same
+	// wall-clock second" means, not two calls sharing one identical now().
+	base := time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
+	editedOnce := "---\nstatus: draft\nissued: 2026-08-01\n---\n\n# Documents in the backbone\n\n## 1. Scope {#sec-1}\n\nfirst edit\n"
+	editedTwice := "---\nstatus: draft\nissued: 2026-08-01\n---\n\n# Documents in the backbone\n\n## 1. Scope {#sec-1}\n\nsecond edit\n"
+
+	s.SetNowFunc(func() time.Time { return base.Add(100 * time.Millisecond) })
+	first, err := updateDocBody(t, s, doc.ID, editedOnce)
+	if err != nil {
+		t.Fatalf("UpdateDocBody (first): %v", err)
+	}
+
+	s.SetNowFunc(func() time.Time { return base.Add(900 * time.Millisecond) })
+	second, err := updateDocBody(t, s, doc.ID, editedTwice)
+	if err != nil {
+		t.Fatalf("UpdateDocBody (second): %v", err)
+	}
+
+	if !first.UpdatedAt.Truncate(time.Second).Equal(second.UpdatedAt.Truncate(time.Second)) {
+		t.Fatalf("test setup invalid: updated_at values are not in the same wall-clock second: %s, %s",
+			first.UpdatedAt, second.UpdatedAt)
+	}
+	if first.Title != second.Title || first.Issued != second.Issued {
+		t.Fatalf("test setup invalid: title/issued moved between edits: %+v, %+v", first, second)
+	}
+	if first.Version != second.Version {
+		t.Fatalf("test setup invalid: version moved between edits: %d, %d", first.Version, second.Version)
+	}
+	if first.UpdatedAt.Equal(second.UpdatedAt) {
+		t.Errorf("updated_at = %s for both edits; a second edit in the same wall-clock second left no trace",
+			first.UpdatedAt)
+	}
+}
+
 // TestDocUpdateBodyPreservesSectionState: an anchor that survives a rebuild
 // keeps its published flag and last_revised_in — those are accept-time facts,
 // not source facts.
