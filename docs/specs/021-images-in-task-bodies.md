@@ -253,8 +253,9 @@ Nothing is rejected on type. A core dump is a legitimate attachment, and an allo
 blocks it buys nothing once §6 guarantees non-embeddable types are never served inline.
 
 **SVG is embeddable deliberately.** It is a first-class asset in the repos this serves, and
-rejecting it would push authors into lossy PNG screenshots of vector work. §6's CSP neuters
-script inside it.
+rejecting it would push authors into lossy PNG screenshots of vector work. What contains script
+inside it is §6's cross-origin boundary, not a CSP: a hostile SVG runs in the object store's
+origin, not the app's.
 
 ---
 
@@ -276,19 +277,29 @@ and the presigned URL carries, via `response-*` overrides:
 ```
 Content-Type: <sniffed media type>
 Content-Disposition: inline | attachment; filename="…"
-X-Content-Type-Options: nosniff        (bucket-level default; see below)
-Content-Security-Policy: default-src 'none'; sandbox
 ```
 
-Hetzner's S3 API does not expose `response-content-security-policy`; `Content-Security-Policy`
-and `X-Content-Type-Options` are therefore set as **object metadata at upload time**, where
-RGW returns them on every GET. If the gateway strips unknown metadata headers,
-`Content-Disposition: attachment` on every non-embeddable type is the fallback that carries the
-security weight on its own.
+**`Content-Disposition` carries the security weight on its own**, and that is the whole of the
+per-object hardening. There is no `Content-Security-Policy` and no `X-Content-Type-Options` on
+a served blob. The S3 API exposes no `response-*` override for either, and object metadata is
+not a substitute: `PutObject`'s metadata map is *user* metadata, serialised as
+`x-amz-meta-<key>`, so a `content-security-policy` entry comes back as
+`x-amz-meta-content-security-policy` — a header no browser acts on. Turning user metadata into
+a real response header takes a gateway-side `rgw_extended_http_attrs` mapping that nothing in
+this deployment configures. An earlier draft of this section proposed setting both headers as
+object metadata; it could not have worked against RGW, and uploads now send no user metadata at
+all.
 
-**Not yet verified**, for the same reason as §2: no bucket is provisioned and no credentials are
-configured in this environment. Whether RGW preserves these two headers as object metadata is
-still open, tracked by **WL-206** alongside the §2 presign-override check.
+So the controls that do hold are the ones §5 already relies on: every non-embeddable type is
+served `attachment`, which downloads rather than executes, and the embeddable set is a fixed
+list of image and video types. SVG is the one embeddable type that can carry script and is
+embeddable deliberately (§5); it is served `inline`, and what contains it is the cross-origin
+boundary above — it executes in the object store's origin, where there is no session cookie and
+nothing to steal.
+
+The `response-*` overrides themselves are **not yet verified** against a real gateway, for the
+same reason as §2: no bucket is provisioned and no credentials are configured in this
+environment. That check is tracked by **WL-206**.
 
 The task page's own CSP must list the object-storage endpoint in `img-src` and `media-src`,
 since that is where the redirect lands.
@@ -539,6 +550,12 @@ already sets for Velero and CNPG against this endpoint.
 **Blobs are unconfigured by default.** With no endpoint set, uploads return `501` and every
 other surface behaves exactly as it does today, so a local `docker compose` stack keeps working
 with no bucket. Worth a `lode doctor` line rather than a silent absence.
+
+**Half-configured is a boot failure, not a degraded mode.** All four of endpoint, bucket, access
+key and secret key are required together: an empty static credential provider fails per request,
+not at construction, so naming a bucket while the ESO secret is missing would otherwise yield a
+server that reports healthy and `502`s every upload and every serve. The server refuses to start
+instead.
 
 ---
 

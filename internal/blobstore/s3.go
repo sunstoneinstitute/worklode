@@ -33,8 +33,12 @@ type s3Store struct {
 
 // NewS3 builds a Store backed by an S3-compatible endpoint.
 func NewS3(cfg S3Config) (Store, error) {
-	if cfg.Endpoint == "" || cfg.Bucket == "" {
-		return nil, errors.New("blobstore: endpoint and bucket are required")
+	// Credentials are required here rather than at first use: an empty static
+	// provider fails per-request with ErrStaticCredentialsEmpty, so a fumbled
+	// secret would boot a healthy-looking server that 502s every upload and
+	// every serve. Fail the boot instead.
+	if cfg.Endpoint == "" || cfg.Bucket == "" || cfg.AccessKey == "" || cfg.SecretKey == "" {
+		return nil, errors.New("blobstore: endpoint, bucket, access key and secret key are all required")
 	}
 	region := cfg.Region
 	if region == "" {
@@ -44,6 +48,12 @@ func NewS3(cfg S3Config) (Store, error) {
 		Region:       region,
 		BaseEndpoint: aws.String(cfg.Endpoint),
 		UsePathStyle: true,
+		// Since the Jan-2025 SDK change the default is WhenSupported, which
+		// puts x-amz-checksum-crc32 on every PutObject. Ceph RGW's support for
+		// flexible checksums is version-dependent, and this is the most common
+		// way an S3-compatible gateway rejects an otherwise valid request.
+		// Send one only where the API requires it.
+		RequestChecksumCalculation: aws.RequestChecksumCalculationWhenRequired,
 		Credentials: credentials.NewStaticCredentialsProvider(
 			cfg.AccessKey, cfg.SecretKey, ""),
 	})
@@ -57,13 +67,10 @@ func (s *s3Store) Put(ctx context.Context, key string, r io.Reader, size int64, 
 		Body:          r,
 		ContentLength: aws.Int64(size),
 		ContentType:   aws.String(mediaType),
-		// Metadata the gateway returns on every GET, keeping the object
-		// self-describing for anyone reading the bucket directly. The
-		// presign overrides in PresignGet are what actually reach a browser.
-		Metadata: map[string]string{
-			"x-content-type-options":  "nosniff",
-			"content-security-policy": "default-src 'none'; sandbox",
-		},
+		// No user metadata: PutObjectInput.Metadata serialises as
+		// x-amz-meta-<key>, which no browser reads, so it cannot carry
+		// Content-Security-Policy or X-Content-Type-Options. Content-Disposition
+		// on the presigned URL is what carries the serving hardening (021 §6).
 	})
 	if err != nil {
 		return fmt.Errorf("put %s: %w", key, err)
