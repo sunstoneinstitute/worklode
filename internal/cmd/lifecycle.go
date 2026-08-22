@@ -225,17 +225,6 @@ func newNextCmd() *cobra.Command {
 	return cmd
 }
 
-// slugFromBranch recovers the slug from a "<prefix><id>-<slug>" branch
-// without assuming the prefix. The first "<id>-" is the prefix-adjacent one,
-// so a slug that repeats the task id stays intact. Falls back to branch
-// itself if id is absent.
-func slugFromBranch(branch, id string) string {
-	if i := strings.Index(branch, id+"-"); i >= 0 {
-		return branch[i+len(id)+1:]
-	}
-	return branch
-}
-
 func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, strictFocus bool) error {
 	warnDeprecatedTaskKind(cmd, kind)
 	c, cfg, err := newAPIClientWithConfig()
@@ -271,7 +260,10 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 
 	// The server is the authority on the branch name (rendered from
 	// LODE_BRANCH_TEMPLATE), so both paths take it from the claim response.
-	var taskID, slug, branch string
+	// An empty branch is a server bug, not something to paper over
+	// client-side: a fallback here could place the worktree at a path the
+	// server does not agree with.
+	var taskID, branch string
 	switch {
 	case id != "":
 		resp, _, err := c.ClaimTask(ctx, id, pending, 0)
@@ -280,7 +272,6 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		}
 		taskID = id
 		branch = resp.Branch
-		slug = slugFromBranch(resp.Branch, id)
 	default:
 		sc, err := resolveScope(ctx, cmd, c, cfg, scope)
 		if err != nil {
@@ -294,11 +285,11 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 			return printNoReadyTask(cmd)
 		}
 		taskID = resp.Task.ID
-		slug = resp.Task.Slug
 		branch = resp.Task.Branch
 	}
 	if branch == "" {
-		branch = worktree.BranchName(taskID, slug)
+		rollbackClaim(ctx, c, taskID, root, "")
+		return fmt.Errorf("server returned no branch name for %s", taskID)
 	}
 
 	dir := layout.Dir(root, branch)
