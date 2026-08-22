@@ -41,29 +41,59 @@ Docker-socket ACL that stops short of that. Weigh that against `trusted`
 above before adding another job here: the whole isolation model now rests on
 `trusted` being right, not on `ghrunner` being unprivileged.
 
-Registered as a repo-level runner (not org-level) with labels `self-hosted,
-Linux, X64, hel01, gha-pgvector, docker, gha-buildcache`. `lint` targets
-`self-hosted` and `gha-buildcache`; `test` targets `gha-pgvector` and
-`gha-buildcache`; `build-image` targets `docker` and `gha-buildcache` — see
-the sections below for why each label exists rather than every job sharing
-`self-hosted`.
+Registered as two repo-level runners (not org-level), `hel01` and `hel01-2`,
+both carrying labels `self-hosted, Linux, X64, hel01, gha-pgvector, docker,
+gha-buildcache`. `lint` targets `self-hosted` and `gha-buildcache`; `test`
+targets `gha-pgvector` and `gha-buildcache`; `build-image` targets `docker`
+and `gha-buildcache` — see the sections below for why each label exists
+rather than every job sharing `self-hosted`. Either runner can pick up any
+of the three jobs; GitHub schedules to whichever is idle.
 
-Installed as a systemd service:
+Installed as systemd services:
 
 ```
 systemctl status actions.runner.sunstoneinstitute-worklode.hel01.service
+systemctl status actions.runner.sunstoneinstitute-worklode.hel01-2.service
 ```
 
-Reinstall/reconfigure from `/home/ghrunner/actions-runner` (`config.sh`,
-`svc.sh`) per GitHub's own self-hosted runner docs; a fresh registration
-token comes from `gh api -X POST
+Reinstall/reconfigure `hel01` from `/home/ghrunner/actions-runner`
+(`config.sh`, `svc.sh`) per GitHub's own self-hosted runner docs;
+`hel01-2` the same way from `/home/ghrunner/actions-runner2`. A fresh
+registration token for either comes from `gh api -X POST
 repos/sunstoneinstitute/worklode/actions/runners/registration-token`. A
-group-membership change (like the docker group above) needs the service
+group-membership change (like the docker group above) needs both services
 restarted — `usermod` alone doesn't affect an already-running process:
 
 ```
 sudo systemctl restart actions.runner.sunstoneinstitute-worklode.hel01.service
+sudo systemctl restart actions.runner.sunstoneinstitute-worklode.hel01-2.service
 ```
+
+### Two executors, one user, separate caches
+
+Both runners execute as the same `ghrunner` system user — a second
+dedicated user would double every isolation fact in this doc (docker-group
+grant, home permissions) for no security benefit, since both processes
+already run at the same privilege. What has to differ is the **cache
+state** `gha-buildcache` and Go point at, both of which resolve from
+`$HOME`: two concurrent `build-image` jobs writing into the same
+`buildkit-cache-dance` directory tree is exactly the failure mode in the
+*Persistent build caches* incident below, and while Go's own build/module
+cache format tolerates concurrent access, there's no reason to make
+`test`/`lint` share one either.
+
+`hel01-2`'s systemd unit sets `Environment=HOME=/home/ghrunner/runner2-home`
+(everything else — `User=ghrunner`, working directory under
+`actions-runner2`, docker-group membership — matches `hel01`). That single
+override redirects `go env GOCACHE`/`GOMODCACHE` and `_build-image.yml`'s
+`$HOME/.cache/gha-buildcache` onto a second, cold cache tree, so the two
+runners can run any combination of jobs concurrently without touching each
+other's files. The `gha-ci-postgres` container below is unaffected — it's
+reached over TCP, not through `$HOME`, so both runners already share it
+safely by the same per-test-database convention. Setting up a third runner
+needs the same two things: its own `actions-runner<n>` install directory,
+and a `runner<n>-home` directory (with `.cache/gha-buildcache/{mod,build}`
+pre-created per that section) named in its unit's `Environment=HOME=`.
 
 ## Postgres for `test`
 
@@ -136,6 +166,10 @@ different places:
 sudo -u ghrunner mkdir -p /home/ghrunner/.cache/gha-buildcache/{mod,build}
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
 ```
+
+For `hel01-2`, whose unit overrides `$HOME` (see *Two executors* above), the
+same directory lives under that override instead:
+`/home/ghrunner/runner2-home/.cache/gha-buildcache/{mod,build}`.
 
 **It has to be an absolute path outside the checkout**, not a directory
 relative to the workspace the way `ubuntu-latest` uses `go-cache-mount/`
