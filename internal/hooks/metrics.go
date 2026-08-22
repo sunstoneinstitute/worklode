@@ -129,9 +129,14 @@ func (m *Metrics) approvalIngest(action string) {
 	m.approvals.WithLabelValues(action).Inc()
 }
 
-func (m *Metrics) catalogEvidenceWritten(state, entityKind string) {
+// catalogEvidenceFiled counts one apply's evidence rows — from a live
+// delivery or from reconcile's replay of a stored one, which write the same
+// rows and so are counted the same way.
+func (m *Metrics) catalogEvidenceFiled(res catalogResult) {
 	if m == nil {
 		return
 	}
-	m.catalogEvidence.WithLabelValues(state, entityKind).Inc()
+	for _, e := range res.Written {
+		m.catalogEvidence.WithLabelValues(res.State, e.Kind).Inc()
+	}
 }

@@ -1,10 +1,12 @@
 // Engine 1 of lode reconcile (spec 013): re-apply stored events whose apply
-// never ran — *.ignored deliveries recorded before their repo was mapped.
-// Offline: the payload is intact in events.payload, so no GitHub call is
-// needed. Re-running is harmless because the applies are order-safe, not
-// merely idempotent: a replayed event may be older than facts that already
-// landed, so the fact upserts are guarded to be non-regressing (see
-// store.UpsertPR) and transitions are guarded on the from-state.
+// never ran — GitHub *.ignored deliveries recorded before their repo was
+// mapped, and catalog deliveries that matched no declaration when they
+// arrived (029 §3.2, WL-256). Offline: the payload is intact in
+// events.payload, so no GitHub call is needed. Re-running is harmless because
+// the applies are order-safe, not merely idempotent: a replayed event may be
+// older than facts that already landed, so the fact upserts are guarded to be
+// non-regressing (see store.UpsertPR) and transitions are guarded on the
+// from-state.
 
 package hooks
 
@@ -57,12 +59,15 @@ type ReplayOptions struct {
 	Metrics       *Metrics
 }
 
-// Replay applies every unapplied github event whose repo is now mapped, in
-// arrival order, each in its own transaction. The apply receives the
-// ORIGINAL event's id, so any resulting state_log transition points at the
-// real GitHub event — the timeline reads "applied late". Events whose repo
-// is still unmapped are left untouched for a later run. A single event whose
-// apply fails is reported and skipped; a store failure aborts the run.
+// Replay applies every unapplied event whose route now exists — a github
+// delivery whose repo is mapped, a catalog delivery whose artifact is now
+// declared — in arrival order, each in its own transaction. The apply
+// receives the ORIGINAL event's id, so any resulting state_log transition or
+// evidence row points at the real delivery — the timeline reads "applied
+// late". Events still without a route (unmapped repo, undeclared artifact)
+// are left untouched for a later run and counted in StillUnmapped. A single
+// event whose apply fails is reported and skipped; a store failure aborts the
+// run.
 //
 // One run covers at most a batch of candidates (opts.Limit, default
 // defaultReplayBatch); a full batch is reported as truncated so the caller
@@ -72,7 +77,7 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 	if limit <= 0 {
 		limit = defaultReplayBatch
 	}
-	evs, err := st.UnappliedGitHubEvents(ctx, store.UnappliedFilter{
+	evs, err := st.UnappliedEvents(ctx, store.UnappliedFilter{
 		Repo: opts.Repo, Since: opts.Since, Limit: limit,
 	})
 	if err != nil {
@@ -91,8 +96,13 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 		res.Errors = append(res.Errors, fmt.Sprintf(format, args...))
 	}
 	a := &applier{st: st, log: log, resolveBranch: opts.ResolveBranch, metrics: opts.Metrics}
+	ca := &catalogApplier{st: st, log: log}
 
 	for _, ev := range evs {
+		if ev.Source == "catalog" {
+			replayCatalog(ctx, st, ca, ev, opts, res, addErr)
+			continue
+		}
 		var env envelope
 		if err := json.Unmarshal(ev.Payload, &env); err != nil {
 			addErr("event %d: parse payload: %v", ev.ID, err)
@@ -131,4 +141,42 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 		opts.Metrics.replayOutcome("replayed")
 	}
 	return res, nil
+}
+
+// replayCatalog re-applies one stored catalog delivery: it files the recorded
+// fact against whatever declares the artifact now. A delivery still matching
+// no declaration is left unapplied — counted in StillUnmapped, the same
+// "nothing routes it yet" outcome an unmapped repo gets — so a declaration
+// added later still finds it.
+func replayCatalog(ctx context.Context, st *store.Store, ca *catalogApplier,
+	ev store.Event, opts ReplayOptions, res *model.ReplayResult, addErr func(string, ...any)) {
+	var applied catalogResult
+	apply, err := ca.applyStored(ev.Payload, &applied)
+	if err != nil {
+		addErr("event %d: %v", ev.ID, err)
+		opts.Metrics.replayOutcome("error")
+		return
+	}
+	if opts.DryRun {
+		// Whether a stored delivery routes is only knowable from inside the
+		// apply's transaction (the declaration lookup runs there), so a dry
+		// run reports what it would attempt, not what would route.
+		res.Replayed++
+		opts.Metrics.replayOutcome("dry_run")
+		return
+	}
+	if txErr := st.Tx(ctx, func(tx *sql.Tx) error { return apply(tx, ev.ID) }); txErr != nil {
+		addErr("event %d (%s): %v", ev.ID, ev.Type, txErr)
+		opts.Metrics.replayOutcome("error")
+		return
+	}
+	if !applied.Routed() {
+		res.StillUnmapped++
+		opts.Metrics.replayOutcome("still_unmapped")
+		return
+	}
+	// Counted after the transaction committed, as the webhook path does it.
+	opts.Metrics.catalogEvidenceFiled(applied)
+	res.Replayed++
+	opts.Metrics.replayOutcome("replayed")
 }

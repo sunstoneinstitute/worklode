@@ -408,3 +408,149 @@ func TestReplayCapsReportedErrors(t *testing.T) {
 		t.Fatalf("errors_omitted = %d, want %d", res.ErrorsOmitted, overflow)
 	}
 }
+
+// TestReplayFilesCatalogEvidenceAfterDeclaration is WL-256's fix: a catalog
+// delivery that matched no declaration when it arrived is a replay candidate,
+// and the run that follows the declaration files the stored fact against it.
+func TestReplayFilesCatalogEvidenceAfterDeclaration(t *testing.T) {
+	e := newCatalogEnv(t)
+	if got := ackStatus(t, catalogDeliver(t, e.h, "d-early",
+		catalogBody(catalogArtifact, "published"))); got != "unrouted" {
+		t.Fatalf("delivery before the declaration acked %q, want unrouted", got)
+	}
+
+	// The declaration shows up afterwards — the ordering the ack promised is
+	// recoverable.
+	id := e.seedDeliverable(t, "casualties", catalogArtifact)
+
+	reg := prometheus.NewRegistry()
+	m := hooks.NewMetrics(reg)
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{Metrics: m})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 || res.StillUnmapped != 0 {
+		t.Fatalf("replay result = %+v; want 1 candidate, 1 replayed", res)
+	}
+	if got := e.evidenceRows(t, "deliverable", id); got != 1 {
+		t.Fatalf("evidence rows after replay = %d, want 1", got)
+	}
+	// Provenance: the evidence points at the ORIGINAL delivery, and that
+	// delivery is now marked applied, so it leaves the candidate set.
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM artifact_evidence ae
+		   JOIN events ev ON ev.id = ae.event_id
+		  WHERE ev.external_id = 'd-early' AND ev.applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("evidence joined to the applied original event = %d rows, want 1", n)
+	}
+	if got := testutil.ToFloat64(m.CatalogEvidence().WithLabelValues("published", "deliverable")); got != 1 {
+		t.Errorf("catalog_evidence{published,deliverable} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.ReplayEvents().WithLabelValues("replayed")); got != 1 {
+		t.Errorf("replay_events{replayed} = %v, want 1", got)
+	}
+
+	// Second replay: nothing left to do, and no second evidence row.
+	res, err = hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("second replay: %v", err)
+	}
+	if res.Candidates != 0 {
+		t.Fatalf("second replay = %+v; want a no-op", res)
+	}
+	if got := e.evidenceRows(t, "deliverable", id); got != 1 {
+		t.Fatalf("evidence rows after the second replay = %d, want 1", got)
+	}
+}
+
+// TestCatalogRoutedDeliveryIsMarkedApplied: a delivery that routed at arrival
+// is done, so it must not linger as a replay candidate. That marker is what
+// keeps the candidate set finite rather than every catalog delivery ever.
+func TestCatalogRoutedDeliveryIsMarkedApplied(t *testing.T) {
+	e := newCatalogEnv(t)
+	e.seedDeliverable(t, "casualties", catalogArtifact)
+
+	if got := ackStatus(t, catalogDeliver(t, e.h, "d-live",
+		catalogBody(catalogArtifact, "published"))); got != "ok" {
+		t.Fatalf("ack = %q, want ok", got)
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-live' AND applied_at IS NOT NULL`); n != 1 {
+		t.Fatalf("applied_at set on the routed delivery = %d rows, want 1", n)
+	}
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 0 {
+		t.Fatalf("replay result = %+v; want no candidates", res)
+	}
+}
+
+// TestReplayLeavesStillUnroutedCatalogDelivery: a delivery nothing declares
+// yet is counted as still unrouted and left unapplied, so the declaration can
+// still arrive tomorrow. Nothing is written for it in the meantime.
+func TestReplayLeavesStillUnroutedCatalogDelivery(t *testing.T) {
+	e := newCatalogEnv(t)
+	catalogDeliver(t, e.h, "d-orphan", catalogBody("gs://nobody/declares-this", "published"))
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 0 || res.StillUnmapped != 1 {
+		t.Fatalf("replay result = %+v; want 1 candidate, 0 replayed, 1 still unrouted", res)
+	}
+	if n := e.rawQueryInt(t, `SELECT COUNT(*) FROM artifact_evidence`); n != 0 {
+		t.Fatalf("wrote %d evidence row(s) for an undeclared address, want 0", n)
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-orphan' AND applied_at IS NULL`); n != 1 {
+		t.Fatalf("still-unrouted delivery left unapplied = %d rows, want 1", n)
+	}
+}
+
+// TestReplayDryRunLeavesCatalogDeliveryUnapplied: --dry-run reports what it
+// would attempt and writes nothing — no evidence, no marker.
+func TestReplayDryRunLeavesCatalogDeliveryUnapplied(t *testing.T) {
+	e := newCatalogEnv(t)
+	catalogDeliver(t, e.h, "d-dry", catalogBody(catalogArtifact, "published"))
+	id := e.seedDeliverable(t, "casualties", catalogArtifact)
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if res.Candidates != 1 || res.Replayed != 1 {
+		t.Fatalf("dry run = %+v; want 1 candidate it would replay", res)
+	}
+	if got := e.evidenceRows(t, "deliverable", id); got != 0 {
+		t.Fatalf("dry run wrote %d evidence row(s), want 0", got)
+	}
+	if n := e.rawQueryInt(t,
+		`SELECT COUNT(*) FROM events WHERE external_id = 'd-dry' AND applied_at IS NULL`); n != 1 {
+		t.Fatalf("dry run marked the delivery applied; want it left as a candidate")
+	}
+}
+
+// TestReplayReportsUnusableCatalogPayload: a stored payload the current
+// validation rejects is reported and skipped, not retried forever as an
+// apply that cannot succeed.
+func TestReplayReportsUnusableCatalogPayload(t *testing.T) {
+	e := newCatalogEnv(t)
+	if _, err := e.st.DBForTests().Exec(
+		`INSERT INTO events (source, external_id, type, payload, received_at)
+		 VALUES ('catalog', 'd-bad', 'catalog.published', '{"artifact":"gs://x","state":"vanished"}'::jsonb, now())`,
+	); err != nil {
+		t.Fatalf("seed unusable catalog event: %v", err)
+	}
+
+	res, err := hooks.Replay(context.Background(), e.st, hooks.ReplayOptions{})
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if res.Replayed != 0 || len(res.Errors) != 1 {
+		t.Fatalf("replay result = %+v; want 0 replayed and 1 reported error", res)
+	}
+}
