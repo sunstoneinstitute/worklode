@@ -53,7 +53,8 @@ type Projector struct {
 	clock func() time.Time // nil means time.Now; see now()
 }
 
-// New returns a projector reading at most batch state_log rows per run.
+// New returns a projector reading at most batch transactions' worth of
+// state_log rows per run (store.DirtyProjects).
 func New(st *store.Store, gc *graphserver.Client, m *Metrics, batch int) *Projector {
 	return &Projector{st: st, gc: gc, m: m, batch: batch}
 }
@@ -65,8 +66,8 @@ func New(st *store.Store, gc *graphserver.Client, m *Metrics, batch int) *Projec
 //
 // A project that fails is isolated, not fatal: it is recorded in the
 // quarantine table (see failure and retryDelay), the loop continues, and the
-// checkpoint still advances past its state_log rows so no healthy project is
-// held back by it. The one case that still leaves the checkpoint alone is
+// checkpoint still advances past the transactions that dirtied it so no
+// healthy project is held back by it. The one case that still leaves the checkpoint alone is
 // failing to *write* the quarantine row — without that row the project would
 // be forgotten, so the old behaviour (retry the whole batch next run) is the
 // safe fallback. Errors reading the checkpoint, the dirty batch or the

@@ -106,6 +106,7 @@ func TestMetricsGaugeCountsUntouchedQuarantine(t *testing.T) {
 	base := time.Now().UTC()
 	p.SetClock(func() time.Time { return base })
 	createTask(t, s, "m5", "alpha", "poison")
+	store.AwaitCommitHorizon(t, s) // the checkpoint may only pass a settled batch
 
 	f.setFail(true)
 	for i := 1; i <= 2; i++ { // attempt 2 sets a retryBase wait
