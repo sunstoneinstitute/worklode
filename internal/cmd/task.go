@@ -552,6 +552,7 @@ func newTaskEditCmd() *cobra.Command {
 				in.Priority = &priority
 			}
 			if cmd.Flags().Changed("kind") {
+				warnDeprecatedTaskKind(cmd, kindFlag)
 				in.Kind = &kindFlag
 			}
 			if cmd.Flags().Changed("needs-decomposition") {

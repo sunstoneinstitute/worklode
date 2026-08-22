@@ -45,6 +45,7 @@ var taskKindCommands = []string{
 	"lode next",
 	"lode task add",
 	"lode task claim",
+	"lode task edit",
 	"lode task list",
 }
 
