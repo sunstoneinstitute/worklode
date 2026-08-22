@@ -52,6 +52,7 @@ func open(why string) routeGuard { return routeGuard{perm: permPublic, public: w
 var routeGuards = map[string]routeGuard{
 	// --- web UI (spec 032) ---------------------------------------------------
 	"GET /{$}":                            guarded(permWebRead),
+	"GET /ideas":                          guarded(permWebRead),
 	"GET /intake":                         guarded(permWebRead),
 	"GET /projects":                       guarded(permWebRead),
 	"GET /projects/{id}":                  guarded(permWebRead),

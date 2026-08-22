@@ -59,12 +59,15 @@ The application presents a persistent global navigation region with these
 primary destinations:
 
 1. **Home** — personal work, decisions, supervised agents, and the Morning Brief;
-2. **Intake** — capture and the Discovery-to-Editorial-Evaluation pipeline;
-3. **Projects** — the cross-project portfolio;
-4. **Work** — task-oriented saved queries and the ready frontier;
-5. **Reviews** — decisions awaiting the current actor;
-6. **Deliveries** — publication, deployment, and operational evidence; and
-7. **Knowledge** — documents and graph-backed expert views.
+2. **Ideas** — low-friction capture of a loose idea or spark, ahead of and
+   looser than Intake: not scoped to research, and promotable into Intake
+   rather than a member of its pipeline;
+3. **Intake** — capture and the Discovery-to-Editorial-Evaluation pipeline;
+4. **Projects** — the cross-project portfolio;
+5. **Work** — task-oriented saved queries and the ready frontier;
+6. **Reviews** — decisions awaiting the current actor;
+7. **Deliveries** — publication, deployment, and operational evidence; and
+8. **Knowledge** — documents and graph-backed expert views.
 
 When a project or candidate dossier is open, its left sidebar provides local
 navigation for Overview, Crew, Work, Deliverables, Reviews, Decisions, Documents,

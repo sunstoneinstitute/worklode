@@ -468,11 +468,13 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// apply the policy (webGuard); an unauthenticated visitor is sent to
 	// /auth/login, and when no login provider is configured the UI stays open
 	// as in v1 — as one named decision rather than a silent passthrough (see
-	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The seven
+	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The eight
 	// global destinations (spec 032 §2) and the project-local destinations
 	// below each record one worklode_web_navigation_requests_total
 	// observation via navWrap.
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
+	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
+		"Low-friction idea capture, looser than and promotable into Intake, arrives with spec 032 §5.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
 		"Intake capture and the Discovery-to-Editorial-Evaluation pipeline arrive with spec 032 §5 and spec 029 §8.")))
 	r.web("GET /projects", s.navWrap("projects", s.projectsPage))

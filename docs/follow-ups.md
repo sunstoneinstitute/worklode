@@ -354,7 +354,7 @@ Design items landed in spec 025. These are the mechanical leftovers.
   insufficient to catch a real layout regression at those breakpoints.
 - `[gated]` **Part 1's honest-unavailable pages** (`/projects/{id}/crew`,
   `/projects/{id}/reviews`, `/projects/{id}/decisions`,
-  `/projects/{id}/documents`, `/projects/{id}/activity`, `/intake`,
+  `/projects/{id}/documents`, `/projects/{id}/activity`, `/ideas`, `/intake`,
   `/reviews`, `/deliveries`) are placeholders naming their owning spec
   section; replace each with its real implementation as Parts 2–4 land.
   Deliverables has left this list — it is a built destination now, and so has
