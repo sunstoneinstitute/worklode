@@ -256,10 +256,10 @@ func TestEmbedMarkupWithoutPoster(t *testing.T) {
 // silence — so the element is asserted after a render, not before.
 func TestEmbedMarkupSurvivesTheSanitiser(t *testing.T) {
 	video := strings.Repeat("a", 64)
-	got := string(mdrender.Body("a body\n\n" + embedMarkup("flash.mp4", model.BlobResponse{
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, "a body\n\n"+embedMarkup("flash.mp4", model.BlobResponse{
 		Hash: video, MediaType: "video/mp4", URL: "/blob/" + video,
 		PosterURL: "/blob/" + posterHash,
-	}) + "\n"))
+	})+"\n"))
 	for _, want := range []string{
 		`<video`, `src="/blob/` + video + `"`, `poster="/blob/` + posterHash + `"`,
 		`controls`, `preload="metadata"`, `</video>`,

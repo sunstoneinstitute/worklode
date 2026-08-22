@@ -219,14 +219,14 @@ func docsView(docs []model.Doc) ui.DocsView {
 // docView maps one document's detail projection into its page.
 //
 // md may be nil, which renders every body afresh; see the mdcache field.
-func docView(md *mdrender.Cache, d *model.DocDetail) ui.DocView {
+func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail) ui.DocView {
 	return ui.DocView{
 		Page: ui.PageProps{Title: "worklode: " + d.Slug},
 		Doc:  d.Doc,
 		// Rendered here rather than in ui for the reason taskView gives.
 		// DocBody rather than Body: a document's {#sec-N} headings are
 		// addressable anchors, and the Sections table links at them.
-		BodyHTML: md.DocBody(d.Doc.Body),
+		BodyHTML: md.DocBody(keys, d.Doc.Body),
 		Ref:      docRef(d.Doc),
 		Sections: d.Sections,
 		Edges:    docEdgeRows(d.Edges),
@@ -464,14 +464,14 @@ func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
 // outgoing child_of names the parent while an incoming one names a child.
 //
 // md may be nil, which renders every body afresh; see the mdcache field.
-func taskView(md *mdrender.Cache, t *model.Task, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
+func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
 	view := ui.TaskView{
 		Page: ui.PageProps{Title: "worklode: " + t.ID},
 		Task: *t,
 		// Sanitising happens here rather than in ui: internal/ui is a
 		// stdlib + internal/model leaf and cannot import mdrender's
 		// goldmark/bluemonday dependencies (ADR 036 §3, CLAUDE.md).
-		BodyHTML: md.Body(t.Body),
+		BodyHTML: md.Body(keys, t.Body),
 		Blocked:  blocked,
 		Timeline: timelineRows(entries),
 	}
