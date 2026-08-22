@@ -27,7 +27,7 @@ func (s *server) decomposeTask(w http.ResponseWriter, r *http.Request) {
 	actorID := actorIDFrom(r)
 
 	var children []model.Task
-	err := s.recordEvent(r.Context(), "cli", "task.decomposed", req,
+	err := s.recordTaskEvent(r.Context(), "cli", "task.decomposed", id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
 			children, err = store.Decompose(tx, s.st.Now(), id, req.Into, actorID, eventID)

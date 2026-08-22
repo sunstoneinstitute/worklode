@@ -146,9 +146,15 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 	if err != nil {
 		return nil, err
 	}
+	payload, err := EventPayload(map[string]any{
+		"task": taskID, "actor": actorID, "worktree": worktree,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	var lease *Lease
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.claimed", nil,
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.claimed", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			now := s.nowFn().UTC().Truncate(time.Second)
 
@@ -257,8 +263,13 @@ func (s *Store) Renew(ctx context.Context, taskID, actorID string, ttl time.Dura
 		return nil, err
 	}
 
+	payload, err := EventPayload(map[string]any{"task": taskID, "actor": actorID})
+	if err != nil {
+		return nil, err
+	}
+
 	var lease *Lease
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.renewed", nil,
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.renewed", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			l, err := activeLeaseTx(tx, taskID)
 			if err != nil {
@@ -298,7 +309,12 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 		return err
 	}
 
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.released", nil,
+	payload, err := EventPayload(map[string]any{"task": taskID, "actor": actorID})
+	if err != nil {
+		return err
+	}
+
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.released", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			l, err := activeLeaseTx(tx, taskID)
 			if err != nil {
@@ -332,8 +348,15 @@ func (s *Store) RebindLeaseWorktree(ctx context.Context, taskID, actorID, worktr
 		return nil, err
 	}
 
+	payload, err := EventPayload(map[string]any{
+		"task": taskID, "actor": actorID, "worktree": worktree,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	var lease *Lease
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.rebound", nil,
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.rebound", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			l, err := activeLeaseTx(tx, taskID)
 			if err != nil {
@@ -479,7 +502,11 @@ func (s *Store) ExpireLeases(ctx context.Context, now time.Time) (int, error) {
 
 	for _, e := range candidates {
 		extID := fmt.Sprintf("lease-expired-%d", e.leaseID)
-		_, inserted, err := s.RecordEvent(ctx, "system", extID, "lease.expired", nil,
+		payload, err := EventPayload(map[string]any{"task": e.taskID, "lease": e.leaseID})
+		if err != nil {
+			return count, err
+		}
+		_, inserted, err := s.RecordEvent(ctx, "system", extID, "lease.expired", payload,
 			func(tx *sql.Tx, eventID int64) error {
 				// Re-check inside the tx: a release may have won the race.
 				var stillActive int

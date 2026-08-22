@@ -285,7 +285,9 @@ func (s *server) recordFormTask(ctx context.Context, projectID string, v taskFor
 			return err
 		}
 		created = t
-		return nil
+		// Same reason as POST /api/v1/tasks': the id is minted inside this
+		// transaction, after the payload was marshalled (025 §15.2).
+		return store.AttributeEventToTask(tx, eventID, t.ID)
 	}); err != nil {
 		return nil, err
 	}
