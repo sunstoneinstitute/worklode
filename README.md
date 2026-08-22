@@ -446,8 +446,16 @@ disables projection entirely; set but otherwise misconfigured, it fails
 `lode serve`'s boot rather than silently running without it.
 
 Forcing a full re-projection — after a schema change to the projected shape,
-say — is a watermark rewind: `UPDATE graph_projection SET
-last_state_log_id = 0`. The next run treats every project as dirty again.
+say — is a watermark rewind: `UPDATE graph_projection SET last_txid = 0`. The
+next run treats every project as dirty again.
+
+The watermark counts *transactions*, not `state_log` rows, and the scan stops
+at the commit horizon (`pg_snapshot_xmin`) for the reason 025 §15 gives for
+the event log: `state_log` ids are assigned at INSERT time, so a slower
+transaction can commit a lower id after a faster one committed a higher one,
+and a row-id watermark would skip it. The cost is the same as the event log's
+— a long-running transaction anywhere on the instance holds the horizon, and
+so the projector, back; `worklode_event_horizon_id` is where that shows.
 
 **When one project is stuck.** The watermark is global, but a failure is not:
 a project that cannot be rendered or written is recorded in
