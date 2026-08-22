@@ -388,6 +388,13 @@ type server struct {
 	blobUploads *prometheus.CounterVec
 	blobServes  *prometheus.CounterVec
 
+	// posterExtractions counts the ffmpeg run every uploaded video gets, by
+	// outcome; see storePoster and observePosterExtraction. It is the only
+	// signal that this deployment's image actually carries ffmpeg: a poster
+	// that cannot be extracted is not an upload failure, so blobUploads reads
+	// "stored" either way and nothing else would notice.
+	posterExtractions *prometheus.CounterVec
+
 	// blobGCRuns counts POST /api/v1/blobs/gc invocations by mode (dry_run,
 	// apply) and outcome; blobGCObjects counts what each run found or acted
 	// on, by action. See blobgc.go and observeBlobGC.

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // pngBytes is a 1x1 PNG; http.DetectContentType sniffs it as image/png.
@@ -540,5 +542,126 @@ func TestServeBlobFilenameKeepsTheInlineToken(t *testing.T) {
 	txt := uploadedHash(t, h, token, []byte("plain log line\n"))
 	if got := servedDisposition(t, h, token, txt, "filename=notes.png"); got != "attachment; filename=notes.png" {
 		t.Fatalf("text disposition = %q, want it to stay an attachment", got)
+	}
+}
+
+// webmBytes is an EBML header; http.DetectContentType sniffs it as
+// video/webm, which is what puts an upload on the poster path.
+var webmBytes = []byte{0x1A, 0x45, 0xDF, 0xA3, 0x01, 0x02, 0x03, 0x04}
+
+// jpegBytes is what the stub ffmpeg below emits as its extracted frame.
+var jpegBytes = []byte{0xFF, 0xD8, 0xFF, 0xE0, 'f', 'r', 'a', 'm', 'e'}
+
+// stubFFmpeg puts an ffmpeg on PATH that ignores its input and writes
+// jpegBytes, or — when ok is false — no ffmpeg at all. The real binary is in
+// the server image but not on the test runner, so the stub is what keeps the
+// upload path's poster half covered; internal/ffmpeg owns the round trip
+// against a real one.
+func stubFFmpeg(t *testing.T, ok bool) {
+	t.Helper()
+	dir := t.TempDir()
+	if ok {
+		script := "#!/bin/sh\nprintf '\\377\\330\\377\\340frame'\n"
+		if err := os.WriteFile(filepath.Join(dir, "ffmpeg"), []byte(script), 0o755); err != nil {
+			t.Fatalf("write stub: %v", err)
+		}
+	}
+	t.Setenv("PATH", dir)
+}
+
+// uploadedBlob posts body and returns the decoded upload response.
+func uploadedBlob(t *testing.T, h http.Handler, token string, body []byte) model.BlobResponse {
+	t.Helper()
+	rec := postBlob(t, h, token, "", body)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+	var b model.BlobResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &b); err != nil {
+		t.Fatalf("decode upload: %v", err)
+	}
+	return b
+}
+
+// TestUploadVideoExtractsPoster: an uploaded video answers with a second blob
+// — its first frame — which is a real, servable blob and not a promise
+// (spec 021 §5, resolving Q021.2).
+func TestUploadVideoExtractsPoster(t *testing.T) {
+	stubFFmpeg(t, true)
+	_, h, token, fake := newTestServerBlobs(t)
+
+	video := uploadedBlob(t, h, token, webmBytes)
+	if video.MediaType != "video/webm" {
+		t.Fatalf("media type = %q, want video/webm", video.MediaType)
+	}
+	sum := sha256.Sum256(jpegBytes)
+	poster := hex.EncodeToString(sum[:])
+	if video.PosterURL != "/blob/"+poster {
+		t.Fatalf("poster_url = %q, want /blob/%s", video.PosterURL, poster)
+	}
+
+	// The poster is an ordinary blob: stored, indexed, and servable under its
+	// own hash, which is what lets a body cite it and GC account for it.
+	if _, err := fake.Open(blobstore.Key(poster)); err != nil {
+		t.Fatalf("poster object: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/blob/"+poster, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusFound {
+		t.Fatalf("serve poster: %d %s", rec.Code, rec.Body)
+	}
+	if got := rec.Header().Get("Location"); !strings.Contains(got, "image%2Fjpeg") {
+		t.Fatalf("poster is not served as a JPEG: %s", got)
+	}
+}
+
+// TestUploadVideoTwiceKeepsThePoster: the second upload of the same recording
+// deduplicates, and must still answer with the poster. Extraction happens
+// before the dedup check precisely so the answer does not degrade to a black
+// rectangle on the second paste.
+func TestUploadVideoTwiceKeepsThePoster(t *testing.T) {
+	stubFFmpeg(t, true)
+	_, h, token, _ := newTestServerBlobs(t)
+
+	first := uploadedBlob(t, h, token, webmBytes)
+	second := uploadedBlob(t, h, token, webmBytes)
+	if second.Hash != first.Hash {
+		t.Fatalf("hash changed on re-upload: %s then %s", first.Hash, second.Hash)
+	}
+	if second.PosterURL != first.PosterURL {
+		t.Fatalf("poster_url = %q on the deduplicated upload, want %q", second.PosterURL, first.PosterURL)
+	}
+}
+
+// TestUploadVideoWithoutFFmpeg: a deployment whose image has no ffmpeg stores
+// the video and says nothing about a poster. A missing poster is decoration
+// lost, never an upload refused.
+func TestUploadVideoWithoutFFmpeg(t *testing.T) {
+	stubFFmpeg(t, false)
+	_, h, token, fake := newTestServerBlobs(t)
+
+	video := uploadedBlob(t, h, token, webmBytes)
+	if video.PosterURL != "" {
+		t.Fatalf("poster_url = %q with no ffmpeg on PATH", video.PosterURL)
+	}
+	if fake.Puts() != 1 {
+		t.Fatalf("puts = %d, want just the video", fake.Puts())
+	}
+}
+
+// TestUploadImageHasNoPoster: only videos take the ffmpeg path. An image that
+// tried to would waste a subprocess on every screenshot.
+func TestUploadImageHasNoPoster(t *testing.T) {
+	stubFFmpeg(t, true)
+	_, h, token, fake := newTestServerBlobs(t)
+
+	img := uploadedBlob(t, h, token, pngBytes)
+	if img.PosterURL != "" {
+		t.Fatalf("poster_url = %q for an image", img.PosterURL)
+	}
+	if fake.Puts() != 1 {
+		t.Fatalf("puts = %d, want just the image", fake.Puts())
 	}
 }

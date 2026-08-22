@@ -103,6 +103,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(blobServeOutcomes, ", ") +
 			"). Sustained 'not_found' means task bodies reference blobs the index has lost, which renders as broken images.",
 	}, []string{"outcome"})
+	s.posterExtractions = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_video_poster_extractions_total",
+		Help: "First-frame poster extractions attempted for uploaded videos, by outcome (" +
+			strings.Join(posterExtractionOutcomes, ", ") +
+			"). A solid line of 'unavailable' means this image shipped without ffmpeg and every embedded video renders as a black rectangle.",
+	}, []string{"outcome"})
 	s.taskBlobRefs = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_blob_refs_total",
 		Help: "Explicit task blob references changed by the attach/detach endpoints, by action (" +
@@ -209,7 +215,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.crewChanges,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
-		s.blobUploads, s.blobServes, s.taskBlobRefs,
+		s.blobUploads, s.blobServes, s.posterExtractions, s.taskBlobRefs,
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns)
@@ -276,6 +282,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range blobServeOutcomes {
 		s.blobServes.WithLabelValues(outcome)
+	}
+	for _, outcome := range posterExtractionOutcomes {
+		s.posterExtractions.WithLabelValues(outcome)
 	}
 	for _, action := range taskBlobRefActions {
 		s.taskBlobRefs.WithLabelValues(action)
@@ -692,6 +701,16 @@ var (
 		"unconfigured",  // no bucket on this instance
 		"storage_error", // presign failed, or the index read did
 	}
+	// posterExtractionOutcomes is the complete, bounded label set for
+	// worklode_video_poster_extractions_total.
+	posterExtractionOutcomes = []string{
+		"stored",        // a frame decoded and was indexed as its own blob
+		"deduplicated",  // the same frame was already a known blob
+		"unavailable",   // no ffmpeg in this image
+		"failed",        // ffmpeg ran and could not produce a frame
+		"storage_error", // the object store refused the PUT
+		"error",         // indexing the poster failed
+	}
 	// taskBlobRefActions is the complete, bounded label set for
 	// worklode_task_blob_refs_total.
 	taskBlobRefActions = []string{"attached", "detached"}
@@ -783,6 +802,16 @@ func (s *server) observeBlobServe(outcome string) {
 		return
 	}
 	s.blobServes.WithLabelValues(outcome).Inc()
+}
+
+// observePosterExtraction records one attempt to extract a poster frame from
+// an uploaded video, called exactly once on every exit path of storePoster.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observePosterExtraction(outcome string) {
+	if s.posterExtractions == nil {
+		return
+	}
+	s.posterExtractions.WithLabelValues(outcome).Inc()
 }
 
 // observeTaskBlobRef records one attach or detach of a task's explicit blob
