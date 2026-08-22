@@ -1318,6 +1318,23 @@ func TestRepoConfigOverridesCurrentProject(t *testing.T) {
 	}
 }
 
+func TestCurrentProjectFromRepoConfig(t *testing.T) {
+	home, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\n")
+	writeRepoConfig(t, filepath.Join(home, "git", "proj"), ".worklode", "current_project = \"repo-proj\"\n")
+
+	if got := cli.CurrentProjectFrom(workDir); got != "repo-proj" {
+		t.Fatalf("CurrentProjectFrom = %q, want %q", got, "repo-proj")
+	}
+}
+
+func TestCurrentProjectFromUserConfigFallback(t *testing.T) {
+	_, workDir := repoTestHome(t, "current_project = \"user-proj\"\n") // no repo-local config written
+
+	if got := cli.CurrentProjectFrom(workDir); got != "user-proj" {
+		t.Fatalf("CurrentProjectFrom = %q, want %q", got, "user-proj")
+	}
+}
+
 func TestLoadConfigProjectKeyFromUserConfig(t *testing.T) {
 	_, workDir := repoTestHome(t, "server = \"https://wl.example.com\"\nproject_key = \"WL\"\n")
 
