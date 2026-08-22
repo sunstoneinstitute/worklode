@@ -680,3 +680,4 @@ docs/specs/051-codex-and-amp-bindings-as-built.md:
     sec-3: "## 3. Amp's lifecycle bindings, and the tool events left unbound"
     sec-4: "## 4. The event map, corrected"
     sec-5: "## 5. Work is entered through `lode next` first"
+    sec-6: "## 6. What each harness does with session-start stdout"
