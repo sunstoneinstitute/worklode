@@ -342,12 +342,12 @@ func TestAddParticipant(t *testing.T) {
 
 	// added_by is stored, and an empty one stores NULL rather than an
 	// invented actor.
-	if err := addParticipant(t, s, "p1", "bob", "observer", false, ""); err != nil {
+	if err := addParticipant(t, s, "p1", "bob", "domain-expert", false, ""); err != nil {
 		t.Fatalf("add with no acting actor: %v", err)
 	}
 	var by sql.NullString
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT added_by FROM project_participants WHERE project_id = 'p1' AND actor_id = 'bob' AND role = 'observer'`,
+		`SELECT added_by FROM project_participants WHERE project_id = 'p1' AND actor_id = 'bob' AND role = 'domain-expert'`,
 	).Scan(&by); err != nil {
 		t.Fatalf("read added_by: %v", err)
 	}
