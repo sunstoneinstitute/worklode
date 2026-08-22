@@ -79,15 +79,22 @@ func newCache(maxBytes, maxEntries int, m *Metrics) *Cache {
 	}
 }
 
-// Body renders an untrusted markdown body to sanitised HTML, reusing an
+// Body renders an untrusted markdown task body to sanitised HTML, reusing an
 // earlier render of the same body when there is one. The safety contract is
 // Body's, unchanged: this only decides how often it runs.
 //
 // Nil-safe. A nil *Cache renders every call, which is what a server built
 // directly in a test wants.
-func (c *Cache) Body(body string) template.HTML {
+func (c *Cache) Body(body string) template.HTML { return c.render(taskFlavour, body) }
+
+// DocBody is Body for a design-document body: the same cache, keyed so that a
+// body reaching both flavours is stored once per flavour rather than served
+// under whichever rendered it first.
+func (c *Cache) DocBody(body string) template.HTML { return c.render(docFlavour, body) }
+
+func (c *Cache) render(f flavour, body string) template.HTML {
 	if c == nil {
-		html, _ := render(body)
+		html, _ := render(f, body)
 		return html
 	}
 
@@ -96,17 +103,17 @@ func (c *Cache) Body(body string) template.HTML {
 	// — up to the API's 1 MiB request cap — so an entry would blow the byte
 	// bound to avoid work that was never the expensive kind.
 	if len(body) > maxBody {
-		html, outcome := render(body)
-		c.metrics.render(outcome)
+		html, outcome := render(f, body)
+		c.metrics.render(f.kind, outcome)
 		return html
 	}
 
-	key := keyOf(body)
+	key := keyOf(f.kind, body)
 	if html, ok := c.get(key); ok {
-		c.metrics.lookup("hit")
+		c.metrics.lookup(f.kind, "hit")
 		return html
 	}
-	c.metrics.lookup("miss")
+	c.metrics.lookup(f.kind, "miss")
 
 	v, _, _ := c.flight.Do(string(key[:]), func() (any, error) {
 		// A caller that lost the race to start this flight may have been
@@ -115,17 +122,23 @@ func (c *Cache) Body(body string) template.HTML {
 		if html, ok := c.get(key); ok {
 			return html, nil
 		}
-		html, outcome := render(body)
-		c.metrics.render(outcome)
+		html, outcome := render(f, body)
+		c.metrics.render(f.kind, outcome)
 		c.put(key, html)
 		return html, nil
 	})
 	return v.(template.HTML)
 }
 
-// keyOf is the cache key: the body's own content, hashed. See Cache's doc
-// comment for why the hash has to be a cryptographic one.
-func keyOf(body string) [32]byte { return sha256.Sum256([]byte(body)) }
+// keyOf is the cache key: the body's own content, hashed, under the flavour
+// that rendered it. See Cache's doc comment for why the hash has to be a
+// cryptographic one. The flavour is in the key because the two pipelines
+// produce different HTML for the same input — a document body's "{#sec-1}" is
+// an anchor, a task body's is text — so sharing an entry would serve one
+// page's render on the other.
+func keyOf(kind, body string) [32]byte {
+	return sha256.Sum256([]byte(kind + "\x00" + body))
+}
 
 func (c *Cache) get(key [32]byte) (template.HTML, bool) {
 	c.mu.Lock()

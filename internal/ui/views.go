@@ -437,8 +437,15 @@ type DocRow struct {
 // sections with their accept-time state, its edges in both directions, and
 // the open candidate revision when one exists (nil otherwise).
 type DocView struct {
-	Page     PageProps
-	Doc      model.Doc
+	Page PageProps
+	Doc  model.Doc
+	// BodyHTML is Doc.Body rendered from markdown and sanitised by
+	// internal/mdrender, filled in by internal/api for the reason TaskView's
+	// field gives. The document flavour keeps a {#sec-N} heading anchor, so
+	// the Sections table below can link into the body; nothing else about the
+	// allowlist differs. The same "never assign anything else here" rule
+	// applies.
+	BodyHTML template.HTML
 	Ref      string
 	Sections []model.DocSection
 	Edges    []DocEdgeRow

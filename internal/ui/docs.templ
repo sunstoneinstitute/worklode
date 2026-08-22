@@ -6,9 +6,11 @@ package ui
 // submitted whole through the API or `lode doc`, and a textarea in a browser
 // would be a worse editor pretending to be the source of truth.
 //
-// The body renders inside a <pre>, the same way the task page renders a task's
-// body: there is no markdown renderer in this repo, and inventing one here
-// would make the page disagree with what is stored.
+// The body arrives as v.BodyHTML, already rendered and sanitised by
+// internal/mdrender, the way the task page's body does. A spec is long-form
+// prose with headings, tables and code fences, none of which survive the <pre>
+// this used to be; the document flavour also keeps the {#sec-N} heading
+// anchors, which is what lets the Sections table link into it.
 
 // Docs carries the link to /drift because Knowledge is where the graph-backed
 // expert views live (layout.templ's primaryNav doc comment): the drift board
@@ -93,7 +95,13 @@ templ Doc(v DocView) {
 								<tr><th>Anchor</th><th>Heading</th><th>Last revised in</th><th>Published</th></tr>
 								for _, sec := range v.Sections {
 									<tr>
-										<td class="mono">{ "#" + sec.Anchor }</td>
+										// The anchor links at the heading it names in the
+										// body below, which is what makes this table a table
+										// of contents rather than a list of fragment names.
+										// An anchor outside the 025 §3 grammar is stored but
+										// dropped by the sanitiser, so its link goes nowhere
+										// — the corpus lint is what stops one being written.
+										<td class="mono"><a href={ "#" + sec.Anchor }>{ "#" + sec.Anchor }</a></td>
 										<td>{ sec.Heading }</td>
 										<td class="mono">{ sec.LastRevisedIn }</td>
 										<td>
@@ -119,7 +127,14 @@ templ Doc(v DocView) {
 			</section>
 			<section class="card">
 				<div class="hd"><h3>Body</h3></div>
-				<div class="bd"><pre>{ v.Doc.Body }</pre></div>
+				// BodyHTML is emitted unescaped for the reason task.templ
+				// gives: internal/mdrender has already reduced it to an
+				// allowlist. The document flavour adds one attribute to that
+				// allowlist, an id on a heading matching the section-anchor
+				// grammar, and nothing else.
+				<div class="bd prose">
+					@templ.Raw(string(v.BodyHTML))
+				</div>
 			</section>
 		}
 	}

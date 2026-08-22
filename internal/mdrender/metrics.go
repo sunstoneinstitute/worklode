@@ -12,10 +12,11 @@ type Metrics struct {
 	bytes     prometheus.Gauge
 }
 
-// lookupResults and renderOutcomes bound the two label values. Both are
-// closed sets fixed at compile time; neither ever carries a task id, a body
-// or anything else an author controls.
+// bodyKinds, lookupResults and renderOutcomes bound the label values. All
+// three are closed sets fixed at compile time; none ever carries a task id, a
+// body or anything else an author controls.
 var (
+	bodyKinds      = []string{kindTask, kindDoc}
 	lookupResults  = []string{"hit", "miss"}
 	renderOutcomes = []string{outcomeOK, outcomeOversize, outcomeFallback}
 )
@@ -25,19 +26,19 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		lookups: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_mdrender_cache_lookups_total",
-			Help: "Task-body render cache lookups, by result (hit, miss).",
-		}, []string{"result"}),
+			Help: "Body render cache lookups, by body kind (task, doc) and result (hit, miss).",
+		}, []string{"kind", "result"}),
 		renders: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_mdrender_renders_total",
-			Help: "Task-body renders actually performed, by outcome (ok, oversize, fallback). A cache hit performs none.",
-		}, []string{"outcome"}),
+			Help: "Body renders actually performed, by body kind (task, doc) and outcome (ok, oversize, fallback). A cache hit performs none.",
+		}, []string{"kind", "outcome"}),
 		evictions: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_mdrender_cache_evictions_total",
-			Help: "Entries evicted from the task-body render cache to stay inside its byte and entry bounds.",
+			Help: "Entries evicted from the body render cache to stay inside its byte and entry bounds.",
 		}),
 		bytes: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "worklode_mdrender_cache_bytes",
-			Help: "Rendered HTML currently held by the task-body render cache.",
+			Help: "Rendered HTML currently held by the body render cache.",
 		}),
 	}
 	reg.MustRegister(m.lookups, m.renders, m.evictions, m.bytes)
@@ -45,11 +46,13 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	// Pre-initialise every series so alert expressions see 0 rather than
 	// no-data, as internal/api/metrics.go does for its bounded-label
 	// counters.
-	for _, r := range lookupResults {
-		m.lookups.WithLabelValues(r)
-	}
-	for _, o := range renderOutcomes {
-		m.renders.WithLabelValues(o)
+	for _, k := range bodyKinds {
+		for _, r := range lookupResults {
+			m.lookups.WithLabelValues(k, r)
+		}
+		for _, o := range renderOutcomes {
+			m.renders.WithLabelValues(k, o)
+		}
 	}
 	return m
 }
@@ -61,18 +64,18 @@ func (m *Metrics) Renders() *prometheus.CounterVec { return m.renders }
 func (m *Metrics) Evictions() prometheus.Counter   { return m.evictions }
 func (m *Metrics) Bytes() prometheus.Gauge         { return m.bytes }
 
-func (m *Metrics) lookup(result string) {
+func (m *Metrics) lookup(kind, result string) {
 	if m == nil {
 		return
 	}
-	m.lookups.WithLabelValues(result).Inc()
+	m.lookups.WithLabelValues(kind, result).Inc()
 }
 
-func (m *Metrics) render(outcome string) {
+func (m *Metrics) render(kind, outcome string) {
 	if m == nil {
 		return
 	}
-	m.renders.WithLabelValues(outcome).Inc()
+	m.renders.WithLabelValues(kind, outcome).Inc()
 }
 
 func (m *Metrics) evicted(n int) {

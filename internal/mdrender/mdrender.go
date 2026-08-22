@@ -1,9 +1,16 @@
-// Package mdrender turns an untrusted task body into safe HTML.
+// Package mdrender turns a markdown body into safe HTML.
 //
 // The pipeline is GitHub's: render permissively, then sanitise the OUTPUT
 // HTML. Escaping at the parser instead would forbid the limited inline HTML
 // authors expect; sanitising after gives the same expressiveness with an
 // allowlist that is easy to audit in one place.
+//
+// There are two flavours of body, differing only in the parser option and the
+// one attribute that option produces — see flavour. A task body is untrusted
+// (spec 020's inbox import writes GitHub issue text straight into it); a
+// design-document body arrives through the doc.write-gated docs API, which is
+// a different threat model but not a reason to run a different pipeline. Both
+// run this one.
 package mdrender
 
 import (
@@ -15,6 +22,7 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	mdhtml "github.com/yuin/goldmark/renderer/html"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -58,6 +66,15 @@ var (
 // links it would otherwise keep.
 var linkHref = regexp.MustCompile(`\A[\t\n\f\r ]*(?i:https?:|mailto:|[#?]|/(?:[^/\\]|\z))`)
 
+// sectionAnchor is the only id value a rendered body may carry, and only on a
+// heading (see buildDocPolicy). It is the 025 section 3 anchor grammar: the
+// "sec-" prefix, then a section number (3.1a) or a lowercase slug (purpose).
+//
+// It must agree with internal/designdoc's anchorRE, which is what the corpus
+// itself is linted against; TestSectionAnchorMatchesDesigndoc fails if the two
+// drift apart. \A and \z rather than ^ and $ for the reason blobSrc gives.
+var sectionAnchor = regexp.MustCompile(`\Asec-[a-z0-9][a-z0-9.-]*\z`)
+
 var md = goldmark.New(
 	goldmark.WithExtensions(extension.GFM),
 	// Unsafe here means "let raw HTML through to the sanitiser", not "trust
@@ -65,7 +82,24 @@ var md = goldmark.New(
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
 
-var policy = buildPolicy()
+// mdDoc is md plus goldmark's attribute syntax, which is what turns the
+// corpus's "## 3.1 Title {#sec-3.1}" into <h3 id="sec-3.1"> instead of into
+// literal text. The option is not global because a task body has no anchor
+// convention: enabling it there would start eating "{#...}" out of prose that
+// never meant it as markup.
+//
+// WithAttribute lets an author write any attribute, not just id — the
+// allowlist, not the parser, is what keeps that harmless.
+var mdDoc = goldmark.New(
+	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithParserOptions(parser.WithAttribute()),
+	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
+)
+
+var (
+	policy    = buildPolicy()
+	docPolicy = buildDocPolicy()
+)
 
 // buildPolicy assembles the allowlist from an empty policy rather than from
 // bluemonday.UGCPolicy.
@@ -139,6 +173,53 @@ func buildPolicy() *bluemonday.Policy {
 
 	return p
 }
+
+// buildDocPolicy is buildPolicy plus the single attribute a design document
+// needs: an id on a heading, so the Sections table on the document page can
+// link at the section it names.
+//
+// buildPolicy's reason for dropping the global id — an attacker-chosen id
+// enables DOM clobbering — is not weakened here. Two things keep it: the id is
+// allowed on headings only, and its value must be a section anchor, so a body
+// cannot name "main-content", "global-nav" or any other id the page's own
+// chrome uses. It also cannot collide with a form control name, which is the
+// other half of the clobbering trick.
+//
+// This must stay the ONLY policy registered for id, on any element: bluemonday
+// allows an attribute when any registered policy matches, so a second, looser
+// id rule anywhere would make sectionAnchor dead code. That is the trap
+// buildPolicy exists to avoid, and TestDocPolicyAllowsOnlyAnchorIDs is what
+// fails if it is sprung.
+func buildDocPolicy() *bluemonday.Policy {
+	p := buildPolicy()
+	p.AllowAttrs("id").Matching(sectionAnchor).OnElements("h1", "h2", "h3", "h4", "h5", "h6")
+	return p
+}
+
+// flavour is one render pipeline: the parser that produced the HTML, the
+// allowlist that reduces it, and the name both are reported under. The two
+// differ by exactly one parser option and one attribute; everything that makes
+// the pipeline safe — the caps, balance, the rest of the allowlist — is shared
+// on purpose, because a document body being more trusted than a task body is
+// not a reason to sanitise it less.
+type flavour struct {
+	kind   string
+	md     goldmark.Markdown
+	policy *bluemonday.Policy
+}
+
+// Body kinds, reported as the "kind" label of the cache's metrics and mixed
+// into the cache key so one body cannot be served under the other flavour's
+// render.
+const (
+	kindTask = "task"
+	kindDoc  = "doc"
+)
+
+var (
+	taskFlavour = flavour{kind: kindTask, md: md, policy: policy}
+	docFlavour  = flavour{kind: kindDoc, md: mdDoc, policy: docPolicy}
+)
 
 // maxRendered bounds what balance will emit.
 //
@@ -232,7 +313,7 @@ const (
 	outcomeFallback = "fallback"
 )
 
-// Body renders an untrusted markdown body to sanitised HTML.
+// Body renders an untrusted markdown task body to sanitised HTML.
 //
 // Callers pass the result to templ.Raw, which takes a string, so the
 // template.HTML type is erased at that boundary: the safety contract is this
@@ -242,22 +323,30 @@ const (
 // wants (*Cache).Body instead — see cache.go for why paying this per view is
 // not affordable.
 func Body(body string) template.HTML {
-	html, _ := render(body)
+	html, _ := render(taskFlavour, body)
+	return html
+}
+
+// DocBody renders a design-document body to sanitised HTML. It is Body with
+// section anchors kept: same caps, same balance pass, same allowlist but for
+// an id on a heading. (*Cache).DocBody is the cached form.
+func DocBody(body string) template.HTML {
+	html, _ := render(docFlavour, body)
 	return html
 }
 
 // render is Body plus the outcome label the cache reports.
-func render(body string) (template.HTML, string) {
+func render(f flavour, body string) (template.HTML, string) {
 	if len(body) > maxBody {
 		return template.HTML(template.HTMLEscapeString(body)), outcomeOversize
 	}
 	var buf bytes.Buffer
-	if err := md.Convert([]byte(body), &buf); err != nil {
+	if err := f.md.Convert([]byte(body), &buf); err != nil {
 		// Defensive: goldmark cannot fail writing into a bytes.Buffer. Kept so
 		// that a future sink which can fail does not lose the body.
 		return template.HTML(template.HTMLEscapeString(body)), outcomeFallback
 	}
-	out, err := balance(policy.SanitizeBytes(buf.Bytes()))
+	out, err := balance(f.policy.SanitizeBytes(buf.Bytes()))
 	if err != nil {
 		// Escaped source reads badly, but it is the only safe fallback: the
 		// unbalanced fragment is exactly what balance exists to suppress.

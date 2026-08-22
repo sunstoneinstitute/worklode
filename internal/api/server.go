@@ -287,9 +287,9 @@ type server struct {
 	// allowlist and IP checks apply.
 	mirrorFetcherForTest *safefetch.Fetcher
 
-	// mdcache memoises rendered task-body HTML on the body's content hash,
-	// so a hostile body costs one render per edit rather than one per view
-	// (WL-222). Nil in every test that builds a *server directly;
+	// mdcache memoises rendered task- and document-body HTML on the body's
+	// content hash, so a hostile body costs one render per edit rather than
+	// one per view (WL-222). Nil in every test that builds a *server directly;
 	// *mdrender.Cache is nil-safe and renders each call when nil.
 	mdcache *mdrender.Cache
 
