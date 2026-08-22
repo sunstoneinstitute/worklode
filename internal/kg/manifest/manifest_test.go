@@ -3,7 +3,9 @@ package manifest_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
@@ -85,6 +87,56 @@ components:
 	}
 }
 
+// TestGlobBacktrackingIsBounded is the WL-265 regression case: a pattern of
+// 25 alternating "**"/literal segments matched against a path that holds
+// every "a" segment but not the trailing literal. Unmemoized, this pattern
+// shape is exponential in the number of "**" segments (the WL-120 review
+// measured ~3.2 billion recursive calls, ~20s, for this exact case); with
+// matchSegs memoized on (pattern index, segment index) it must finish
+// quickly regardless.
+func TestGlobBacktrackingIsBounded(t *testing.T) {
+	var patSegs []string
+	for i := 0; i < 12; i++ {
+		patSegs = append(patSegs, "**", "a")
+	}
+	patSegs = append(patSegs, "ZZZ") // never present, so every "**" is tried in full
+	pattern := strings.Join(patSegs, "/")
+
+	pathSegs := make([]string, 30)
+	for i := range pathSegs {
+		pathSegs[i] = "a"
+	}
+	pathSegs[len(pathSegs)-1] = "not-zzz" // holds every "a" but not the trailing literal
+	p := strings.Join(pathSegs, "/")
+
+	m := mustParse(t, `
+repo: r
+components:
+  - iri: https://worklode.io/ns/id/component/r/c
+    name: c
+    paths: ["`+pattern+`"]
+`)
+
+	done := make(chan bool, 1)
+	start := time.Now()
+	go func() {
+		_, ok := m.Match(p)
+		done <- ok
+	}()
+
+	select {
+	case ok := <-done:
+		if ok {
+			t.Fatalf("Match(%q) against pattern %q = true; want false (no ZZZ segment)", p, pattern)
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Fatalf("Match took %s; want well under the multi-second blowup this regression guards against", elapsed)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Match did not return within 5s; ** backtracking is unbounded again")
+	}
+}
+
 func TestParseRejects(t *testing.T) {
 	cases := []struct{ name, yaml string }{
 		{"not yaml", "{nope"},
@@ -94,6 +146,9 @@ func TestParseRejects(t *testing.T) {
 		{"component without name", "repo: r\ncomponents: [{iri: i, paths: ['**']}]"},
 		{"component without paths", "repo: r\ncomponents: [{iri: i, name: n}]"},
 		{"bad glob", "repo: r\ncomponents: [{iri: i, name: n, paths: ['[']}]"},
+		{"leading slash", "repo: r\ncomponents: [{iri: i, name: n, paths: ['/internal/**']}]"},
+		{"trailing slash", "repo: r\ncomponents: [{iri: i, name: n, paths: ['internal/**/']}]"},
+		{"doubled slash", "repo: r\ncomponents: [{iri: i, name: n, paths: ['internal//**']}]"},
 		{"duplicate name", "repo: r\ncomponents: [{iri: i1, name: n, paths: ['a/**']}, {iri: i2, name: n, paths: ['b/**']}]"},
 	}
 	for _, tc := range cases {
