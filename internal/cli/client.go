@@ -1332,8 +1332,8 @@ func (c *Client) RecommendSkills(ctx context.Context, taskID, text string, limit
 }
 
 // SyncSkills calls POST /api/v1/skills/sync (admin-only).
-func (c *Client) SyncSkills(ctx context.Context) ([]byte, error) {
-	return c.do(ctx, http.MethodPost, "/api/v1/skills/sync", nil)
+func (c *Client) SyncSkills(ctx context.Context) (model.SkillSyncReport, []byte, error) {
+	return doJSON[model.SkillSyncReport](ctx, c, http.MethodPost, "/api/v1/skills/sync", nil, "skill sync report")
 }
 
 // --- board and timeline -------------------------------------------------

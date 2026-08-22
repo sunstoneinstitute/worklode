@@ -1673,7 +1673,7 @@ func TestClientSyncSkills(t *testing.T) {
 	// alice (the newTestServer token) is an admin, but api.Config{} has no
 	// skill sources configured, so this exercises the path/method wiring
 	// and surfaces the server's own 422 rather than a decode error.
-	_, err := c.SyncSkills(context.Background())
+	_, _, err := c.SyncSkills(context.Background())
 	if err == nil {
 		t.Fatal("SyncSkills with no sources configured: want error, got nil")
 	}
