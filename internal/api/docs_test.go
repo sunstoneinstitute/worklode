@@ -1432,6 +1432,7 @@ func TestCreateDocRecordsAuthoringTask(t *testing.T) {
 
 	task := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Write spec 025", "kind": "design",
+		"priority": "medium",
 	})
 	taskID, _ := task["id"].(string)
 	if taskID == "" {
