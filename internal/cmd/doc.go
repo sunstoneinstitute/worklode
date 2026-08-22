@@ -319,10 +319,14 @@ func isPlanFile(doc *designdoc.Document) bool {
 // named "get" rather than "show" deliberately: 026 §3 consolidated document
 // reading into `lode show`, and internal/cmd/show_test.go's
 // TestDocHasNoShowVerb pins that `lode doc` must never grow a "show" child.
-// `lode doc`'s write verbs need a read to be usable on their own, and `lode
-// show` cannot reach a backbone document yet — its resolver is
-// filesystem-based (026 §0). Extending it is part 3's job, tracked as
-// WL-129.
+//
+// The split with `lode show` is settled (WL-129): both read the backbone,
+// and a slug names the same document in either. `lode show` is the rendered
+// read — human ref forms (shorthand, number, slug, path), body text out —
+// while `get` is the structural read: id or slug in, the full DocDetail
+// (frontmatter-derived fields, sections, edges) out, and the only reader
+// for plans. Neither is an alias of the other because they answer different
+// questions about the same row.
 func newDocGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <id-or-slug>",
