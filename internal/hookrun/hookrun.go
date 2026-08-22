@@ -555,18 +555,26 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 //
 //   - Claude Code (and the empty default) reads the documented
 //     hookSpecificOutput.additionalContext envelope.
+//   - Codex reads the same envelope, byte for byte: its
+//     session-start.command.output schema declares
+//     hookSpecificOutput.{hookEventName,additionalContext} exactly as Claude
+//     Code's does, and WL-303 verified end to end against codex-cli 0.147.0
+//     that the string reaches the model (ADR 051 §6).
 //   - Amp gets plain text: the generated plugin captures the hook's stdout
 //     and returns it as the thread's first-turn context message.
-//   - Codex and Copilot get nothing. Neither consumes session-start stdout
-//     in any shape verified to date (ADR 051's re-verification posture), so
-//     an envelope would be dead bytes at best and payload confusion at
-//     worst; their session-start binding still renews the lease and opens
-//     the session, which is what it is bound for.
+//   - Copilot gets nothing: its documented envelope is a *different* shape
+//     (flat additionalContext, no hookSpecificOutput wrapper) and no
+//     installed CLI existed to verify it against, so shipping one would be
+//     the unverified envelope ADR 051 §0 forbids.
+//
+// Codex rejects unknown keys and drops the context outright when stdout
+// looks like JSON but fails its schema, so the envelope must stay exactly
+// these two fields — see ADR 051 §6 before adding a third.
 func emitSessionContext(opts Options, text string) {
 	switch opts.Harness {
 	case "amp":
 		fmt.Fprintln(opts.Stdout, text)
-	case "codex", "copilot":
+	case "copilot":
 		// No verified consumer; see above.
 	default:
 		emitAdditionalContext(opts.Stdout, text)
