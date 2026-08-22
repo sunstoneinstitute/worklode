@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/projector"
@@ -161,6 +162,48 @@ func TestRunOnceProjectsCreatedTask(t *testing.T) {
 	}
 	if got := f.count(iri.ProjectGraph("alpha")); got != 1 {
 		t.Fatalf("PUTs after idempotent rerun = %d; want 1", got)
+	}
+}
+
+// TestRunOnceProjectsDocuments covers WL-289: a document mutation dirties
+// its project, and the project's documents render into their per-document
+// declared graphs with the canonical node's facts — including
+// prov:wasGeneratedBy naming the authoring task.
+func TestRunOnceProjectsDocuments(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	taskID := createTask(t, s, "doc-t1", "alpha", "author the spec")
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("drain task create: %v", err)
+	}
+
+	_, _, err := s.RecordEvent(ctx, "cli", "doc-c1", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, cerr := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 1, Slug: "001-alpha-spec",
+				Body:            "---\nstatus: draft\n---\n# Spec 1 — Alpha spec\n",
+				GeneratedByTask: taskID,
+			}, eventID)
+			return cerr
+		})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+
+	n, err := p.RunOnce(ctx)
+	if err != nil || n != 1 {
+		t.Fatalf("RunOnce = %d, %v; want 1 project, nil", n, err)
+	}
+	declared := f.last(iri.DeclaredGraph("001-alpha-spec"))
+	subj := "<" + iri.Doc("001-alpha-spec") + ">"
+	for _, want := range []string{
+		subj + " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + iri.Term("Spec") + ">",
+		subj + " <" + graphproj.ProvWasGeneratedBy + "> <" + iri.Task(taskID) + ">",
+		subj + " <" + graphproj.DCATVersion + "> \"1\"",
+	} {
+		if !strings.Contains(declared, want) {
+			t.Errorf("declared graph missing %q\n%s", want, declared)
+		}
 	}
 }
 
