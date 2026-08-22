@@ -265,7 +265,7 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 		})
 	}
 
-	// Nothing was written by the four refusals: the roster still holds the
+	// Nothing was written by the five refusals: the roster still holds the
 	// one seeded row.
 	crew, err := st.ListParticipants(context.Background(), "proj")
 	if err != nil {
@@ -276,7 +276,7 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 	}
 
 	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
-	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="rejected",surface="web"} 4`) {
+	if !strings.Contains(metrics, `worklode_crew_changes_total{action="add",outcome="rejected",surface="web"} 5`) {
 		t.Errorf("metrics missing the web rejected counter:\n%s", metrics)
 	}
 }
