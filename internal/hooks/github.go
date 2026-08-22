@@ -239,9 +239,22 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		apply = markApplied(h.st, h.ap.applyFunc(event, env, body, resolvedCommitish))
 	}
 
-	_, inserted, err := h.st.RecordEvent(r.Context(), "github", delivery, typ, body, apply)
+	// RecordEventThenApply, not RecordEvent: the row commits before the
+	// apply runs, so a failed apply leaves the delivery recorded with
+	// applied_at NULL — repairable by the replay engine or a manual
+	// redelivery — instead of vanishing with the rollback. GitHub does not
+	// redeliver on its own, so the 500 below is a signal, not a retry
+	// (WL-247).
+	_, inserted, err := h.st.RecordEventThenApply(r.Context(), "github", delivery, typ, body, apply)
 	if err != nil {
-		h.log.Error("github webhook: apply", "event", event, "delivery", delivery, "err", err)
+		var applyFailed *store.ApplyFailedError
+		if errors.As(err, &applyFailed) {
+			result = "apply_failed"
+			h.log.Error("github webhook: recorded, apply failed (awaiting replay)",
+				"event", event, "delivery", delivery, "event_id", applyFailed.EventID, "err", err)
+		} else {
+			h.log.Error("github webhook: record", "event", event, "delivery", delivery, "err", err)
+		}
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
