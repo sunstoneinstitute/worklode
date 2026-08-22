@@ -524,7 +524,7 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -533,7 +533,7 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 	// project), so it is external, fragment included.
 	specEdges := docEdges(t, s, spec.ID)
 	if len(specEdges) != 1 ||
-		specEdges[0] != (model.DocEdge{Type: "requires", ToExternal: "004-execution-backbone.md#sec-6"}) {
+		!reflect.DeepEqual(specEdges[0], model.DocEdge{Type: "requires", ToExternal: "004-execution-backbone.md#sec-6"}) {
 		t.Fatalf("spec edges = %+v, want one external requires", specEdges)
 	}
 }
@@ -584,7 +584,7 @@ y
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -1023,7 +1023,7 @@ func TestReplaceDocEdges(t *testing.T) {
 		{Type: "covers", ToDoc: spec.ID, ToAnchor: "sec-5"},
 		{Type: "wasDerivedFrom", ToDoc: spec.ID},
 	}
-	if got := docEdges(t, s, plan.ID); !slices.Equal(got, want) {
+	if got := docEdges(t, s, plan.ID); !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 	after, err := s.GetDoc(t.Context(), plan.ID)
@@ -1150,7 +1150,7 @@ requires:
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -1634,7 +1634,7 @@ defers:
 
 	got := docEdges(t, s, plan.ID)
 	want := []model.DocEdge{{Type: "defers", ToDoc: spec.ID, ToAnchor: "sec-1"}}
-	if len(got) != 1 || got[0] != want[0] {
+	if len(got) != 1 || !reflect.DeepEqual(got[0], want[0]) {
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 
@@ -1895,7 +1895,7 @@ defers:
 	})
 	got := docEdges(t, s, plan.ID)
 	want := []model.DocEdge{{Type: "defers", ToExternal: "999-nowhere.md#sec-1"}}
-	if len(got) != 1 || got[0] != want[0] {
+	if len(got) != 1 || !reflect.DeepEqual(got[0], want[0]) {
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 }
@@ -2034,7 +2034,7 @@ requires:
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -2083,7 +2083,7 @@ requires:
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Errorf("edge %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -2139,7 +2139,7 @@ func TestDocResolveRefBareNumberAmbiguous(t *testing.T) {
 		Body: "---\nstatus: draft\nrequires: \"025\"\n---\n\n# B\n",
 	})
 	want := model.DocEdge{Type: "requires", ToExternal: "025"}
-	if edges := docEdges(t, s, ambiguous.ID); len(edges) != 1 || edges[0] != want {
+	if edges := docEdges(t, s, ambiguous.ID); len(edges) != 1 || !reflect.DeepEqual(edges[0], want) {
 		t.Fatalf("edges = %+v, want %+v", edges, want)
 	}
 }
@@ -2162,7 +2162,7 @@ func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 	})
 
 	want := model.DocEdge{Type: "requires", ToExternal: "025-documents-in-the-backbone-2.md"}
-	if edges := docEdges(t, s, plan.ID); len(edges) != 1 || edges[0] != want {
+	if edges := docEdges(t, s, plan.ID); len(edges) != 1 || !reflect.DeepEqual(edges[0], want) {
 		t.Fatalf("edges = %+v, want %+v", edges, want)
 	}
 }
@@ -3893,7 +3893,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		t.Fatalf("plan edges out = %+v, want %+v", out, wantOut)
 	}
 	for i := range wantOut {
-		if out[i] != wantOut[i] {
+		if !reflect.DeepEqual(out[i], wantOut[i]) {
 			t.Errorf("plan edge out %d = %+v, want %+v", i, out[i], wantOut[i])
 		}
 	}
@@ -3905,7 +3905,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDocEdges(spec): %v", err)
 	}
-	if len(out) != 1 || out[0] != (model.DocEdge{Type: "requires", ToExternal: "004-execution-backbone.md#sec-6"}) {
+	if len(out) != 1 || !reflect.DeepEqual(out[0], model.DocEdge{Type: "requires", ToExternal: "004-execution-backbone.md#sec-6"}) {
 		t.Fatalf("spec edges out = %+v, want one external requires", out)
 	}
 	// The covers edge lands on the spec's #sec-5, so from the spec's end that
@@ -3924,9 +3924,76 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		t.Fatalf("spec edges in = %+v, want %+v", in, wantIn)
 	}
 	for i := range wantIn {
-		if in[i] != wantIn[i] {
+		if !reflect.DeepEqual(in[i], wantIn[i]) {
 			t.Errorf("spec edge in %d = %+v, want %+v", i, in[i], wantIn[i])
 		}
+	}
+}
+
+// TestDocListEdgesIncludesCompletedWith: doc_coverage_completed_with backs a
+// partial covers entry's fullCoverageWith closure and a defers entry's owner
+// alike (026 §5, §5.3), but ListDocEdges did not join it in — a document's
+// own edge listing understated what its frontmatter asserted (WL-291), even
+// though NeedsPlanning already resolved the owner from the same table.
+// Checked in both directions: the plan's own covers/defers row, and the
+// spec's inbound isCoveredBy/isDeferredBy reading of that same row.
+func TestDocListEdgesIncludesCompletedWith(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustAcceptedSpec(t, s, "025-x")
+	owner := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	closer := levelledPlan(t, s, "closer-plan", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+	partial := levelledPlan(t, s, "partial-plan", true,
+		coverageRef{ref: "025-x#sec-1", level: "partial", fullCoverageWith: []string{"closer-plan.md"}})
+	deferrer := deferringPlan(t, s, "deferring-plan", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	out, _, err := s.ListDocEdges(t.Context(), partial.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(partial): %v", err)
+	}
+	if len(out) != 1 || out[0].Type != "covers" {
+		t.Fatalf("partial plan edges = %+v, want one covers edge", out)
+	}
+	if want := []string{closer.Slug}; !slices.Equal(out[0].CompletedWith, want) {
+		t.Errorf("covers edge CompletedWith = %v, want %v", out[0].CompletedWith, want)
+	}
+
+	out, _, err = s.ListDocEdges(t.Context(), deferrer.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(deferrer): %v", err)
+	}
+	if len(out) != 1 || out[0].Type != "defers" {
+		t.Fatalf("deferring plan edges = %+v, want one defers edge", out)
+	}
+	if want := []string{owner.Slug}; !slices.Equal(out[0].CompletedWith, want) {
+		t.Errorf("defers edge CompletedWith = %v, want %v", out[0].CompletedWith, want)
+	}
+
+	_, in, err := s.ListDocEdges(t.Context(), spec.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(spec): %v", err)
+	}
+	var sawCovered, sawDeferred bool
+	for _, e := range in {
+		switch {
+		case e.Type == "isCoveredBy" && e.ToDoc == partial.ID:
+			sawCovered = true
+			if want := []string{closer.Slug}; !slices.Equal(e.CompletedWith, want) {
+				t.Errorf("isCoveredBy CompletedWith = %v, want %v", e.CompletedWith, want)
+			}
+		case e.Type == "isDeferredBy" && e.ToDoc == deferrer.ID:
+			sawDeferred = true
+			if want := []string{owner.Slug}; !slices.Equal(e.CompletedWith, want) {
+				t.Errorf("isDeferredBy CompletedWith = %v, want %v", e.CompletedWith, want)
+			}
+		}
+	}
+	if !sawCovered {
+		t.Errorf("no isCoveredBy edge from partial-plan in spec's inbound edges: %+v", in)
+	}
+	if !sawDeferred {
+		t.Errorf("no isDeferredBy edge from deferring-plan in spec's inbound edges: %+v", in)
 	}
 }
 
@@ -3996,14 +4063,14 @@ func TestDocCreateWritesPlanBlocksEdge(t *testing.T) {
 
 	got := docEdges(t, s, two.ID)
 	want := []model.DocEdge{{Type: "blocks", ToDoc: three.ID}}
-	if !slices.Equal(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-two = %+v, want %+v", got, want)
 	}
 	// The blockedBy row leaves plan-one, which is where "plan-one blocks
 	// plan-two" belongs — plan-two only authored it.
 	gotOne := docEdges(t, s, one.ID)
 	wantOne := []model.DocEdge{{Type: "blocks", ToDoc: two.ID}}
-	if !slices.Equal(gotOne, wantOne) {
+	if !reflect.DeepEqual(gotOne, wantOne) {
 		t.Fatalf("edges of plan-one = %+v, want %+v", gotOne, wantOne)
 	}
 }
@@ -4030,7 +4097,7 @@ func TestDocBlockedByWritesTheSameRowAsBlocks(t *testing.T) {
 	}
 	got := docEdges(t, s, early.ID)
 	want := []model.DocEdge{{Type: "blocks", ToDoc: late.ID}}
-	if !slices.Equal(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-early = %+v, want %+v", got, want)
 	}
 
@@ -4044,7 +4111,7 @@ func TestDocBlockedByWritesTheSameRowAsBlocks(t *testing.T) {
 		Project: "p1", Kind: "plan", Slug: "plan-second-early", CreatedBy: "stig",
 		Body: "---\nstatus: draft\nblocks: plan-second-late\n---\n\n# Plan early\n",
 	})
-	if got, want := docEdges(t, s, a.ID), []model.DocEdge{{Type: "blocks", ToDoc: b.ID}}; !slices.Equal(got, want) {
+	if got, want := docEdges(t, s, a.ID), []model.DocEdge{{Type: "blocks", ToDoc: b.ID}}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-second-early declared with blocks = %+v, want %+v", got, want)
 	}
 }
@@ -4070,7 +4137,7 @@ func TestDocBlockedByIsOwnedByItsAuthor(t *testing.T) {
 		t.Fatalf("rewrite plan-early: %v", err)
 	}
 	want := []model.DocEdge{{Type: "blocks", ToDoc: late.ID}}
-	if got := docEdges(t, s, early.ID); !slices.Equal(got, want) {
+	if got := docEdges(t, s, early.ID); !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-early after its own rewrite = %+v, want %+v", got, want)
 	}
 
@@ -4102,7 +4169,7 @@ func TestDocBlocksDeclaredFromBothEndsIsOneRow(t *testing.T) {
 	}
 
 	want := []model.DocEdge{{Type: "blocks", ToDoc: late.ID}}
-	if got := docEdges(t, s, early.ID); !slices.Equal(got, want) {
+	if got := docEdges(t, s, early.ID); !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-early = %+v, want exactly %+v", got, want)
 	}
 }
@@ -4341,7 +4408,7 @@ func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
 		{Type: "blocks", ToDoc: last.ID},
 	}
 	slices.SortFunc(want, func(x, y model.DocEdge) int { return cmp.Compare(x.ToDoc, y.ToDoc) })
-	if !slices.Equal(got, want) {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges of plan-first = %+v, want %+v", got, want)
 	}
 }
@@ -5472,7 +5539,7 @@ func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
 	})
 	before := docEdges(t, s, successor.ID)
 	want := []model.DocEdge{{Type: "replaces", ToExternal: "006-old.md"}}
-	if !slices.Equal(before, want) {
+	if !reflect.DeepEqual(before, want) {
 		t.Fatalf("edges before the target exists = %+v, want %+v", before, want)
 	}
 
@@ -5490,7 +5557,7 @@ func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
 	}
 	after := docEdges(t, s, successor.ID)
 	wantAfter := []model.DocEdge{{Type: "replaces", ToDoc: old.ID}}
-	if !slices.Equal(after, wantAfter) {
+	if !reflect.DeepEqual(after, wantAfter) {
 		t.Fatalf("edges after the target arrives = %+v, want %+v", after, wantAfter)
 	}
 }
@@ -5598,7 +5665,7 @@ func TestReplaceDocEdgesSupersedesReplacedTarget(t *testing.T) {
 	}
 	before := docEdges(t, s, successor.ID)
 	want := []model.DocEdge{{Type: "replaces", ToExternal: "006-old.md"}}
-	if !slices.Equal(before, want) {
+	if !reflect.DeepEqual(before, want) {
 		t.Fatalf("edges before repair = %+v, want %+v", before, want)
 	}
 	if got := docStatus(t, s, old.ID); got != "accepted" {
@@ -5610,7 +5677,7 @@ func TestReplaceDocEdgesSupersedesReplacedTarget(t *testing.T) {
 	}
 	after := docEdges(t, s, successor.ID)
 	wantAfter := []model.DocEdge{{Type: "replaces", ToDoc: old.ID}}
-	if !slices.Equal(after, wantAfter) {
+	if !reflect.DeepEqual(after, wantAfter) {
 		t.Fatalf("edges after repair = %+v, want %+v", after, wantAfter)
 	}
 	if got := docStatus(t, s, old.ID); got != "superseded" {
@@ -5702,7 +5769,7 @@ func TestDocCreateRepointsExternalEdges(t *testing.T) {
 			}
 		}
 		spec := newSpec(t, s)
-		if got := docEdges(t, s, plan.ID); !slices.Equal(got, want(spec.ID)) {
+		if got := docEdges(t, s, plan.ID); !reflect.DeepEqual(got, want(spec.ID)) {
 			t.Fatalf("edges = %+v, want %+v", got, want(spec.ID))
 		}
 	})
@@ -5711,7 +5778,7 @@ func TestDocCreateRepointsExternalEdges(t *testing.T) {
 		s := openDocStore(t)
 		spec := newSpec(t, s)
 		plan := newPlan(t, s)
-		if got := docEdges(t, s, plan.ID); !slices.Equal(got, want(spec.ID)) {
+		if got := docEdges(t, s, plan.ID); !reflect.DeepEqual(got, want(spec.ID)) {
 			t.Fatalf("edges = %+v, want %+v", got, want(spec.ID))
 		}
 	})
@@ -5758,7 +5825,7 @@ requires:
 		{Type: "requires", ToDoc: spec.ID},
 		{Type: "requires", ToDoc: spec.ID, ToAnchor: "sec-5"},
 	}
-	if got := docEdges(t, s, plan.ID); !slices.Equal(got, want) {
+	if got := docEdges(t, s, plan.ID); !reflect.DeepEqual(got, want) {
 		t.Fatalf("edges = %+v, want %+v", got, want)
 	}
 }
@@ -5789,7 +5856,7 @@ func TestDocCreateRepointIsProjectScoped(t *testing.T) {
 		Project: "p1", Kind: "spec", Number: 25,
 		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
 	})
-	if got := docEdges(t, s, other.ID); !slices.Equal(got, before) {
+	if got := docEdges(t, s, other.ID); !reflect.DeepEqual(got, before) {
 		t.Fatalf("p2 edges = %+v, want %+v unchanged", got, before)
 	}
 }

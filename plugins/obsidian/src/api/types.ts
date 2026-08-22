@@ -118,6 +118,13 @@ export interface DocSection {
  * to_slug, to_kind and to_number name the far end for a reader: an edge is
  * stored by id, and "document 42" tells a human nothing. A read resolves
  * them alongside the id; an unresolved to_external edge leaves them empty.
+ *
+ * completed_with carries the doc_coverage_completed_with side-table (026
+ * §5, §5.3) that only a covers or defers edge ever populates: a partial
+ * covers entry's fullCoverageWith closure, in authored order, or a defers
+ * entry's single-element owner. Each element is a slug when the reference
+ * resolved to a live document, or the reference verbatim when it did not.
+ * Absent for every other edge, and for a full/none covers entry.
  */
 export interface DocEdge {
   type: string;
@@ -128,6 +135,7 @@ export interface DocEdge {
   to_slug: string;
   to_kind: string;
   to_number: number;
+  completed_with?: string[];
 }
 
 /** A document's open candidate revision (025 §7.2), matching

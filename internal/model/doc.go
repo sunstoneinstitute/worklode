@@ -79,15 +79,24 @@ type DocRevision struct {
 // alongside the id in the same query (store.ListDocEdges); write paths that
 // only state an edge leave them zero, as does an unresolved ToExternal edge,
 // which names no row to resolve.
+//
+// CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
+// §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
+// covers entry's fullCoverageWith closure, in authored order, or a `defers`
+// entry's single-element owner. Each element is a slug when the reference
+// resolved to a live document, or the reference verbatim when it did not —
+// the same fallback NeedsPlanning's owner column uses. Nil for every other
+// edge, and for a `full`/`none` covers entry.
 type DocEdge struct {
-	Type       string `json:"type"`
-	FromAnchor string `json:"from_anchor"`
-	ToDoc      int64  `json:"to_doc"`
-	ToAnchor   string `json:"to_anchor"`
-	ToExternal string `json:"to_external"`
-	ToSlug     string `json:"to_slug"`
-	ToKind     string `json:"to_kind"`
-	ToNumber   int    `json:"to_number"`
+	Type          string   `json:"type"`
+	FromAnchor    string   `json:"from_anchor"`
+	ToDoc         int64    `json:"to_doc"`
+	ToAnchor      string   `json:"to_anchor"`
+	ToExternal    string   `json:"to_external"`
+	ToSlug        string   `json:"to_slug"`
+	ToKind        string   `json:"to_kind"`
+	ToNumber      int      `json:"to_number"`
+	CompletedWith []string `json:"completed_with,omitempty"`
 }
 
 // CreateDocInput is the request body for POST /api/v1/docs. Number is omitted

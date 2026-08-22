@@ -2515,8 +2515,17 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	outRows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
 		        coalesce(e.to_anchor,''), coalesce(e.to_external,''),
-		        coalesce(d.slug,''), coalesce(d.kind,''), coalesce(d.number,0)
-		   FROM doc_edges e LEFT JOIN docs d ON d.id = e.to_doc
+		        coalesce(d.slug,''), coalesce(d.kind,''), coalesce(d.number,0),
+		        cw.items
+		   FROM doc_edges e
+		   LEFT JOIN docs d ON d.id = e.to_doc
+		   LEFT JOIN LATERAL (
+		            SELECT coalesce(json_agg(coalesce(wd.slug, w.to_external)
+		                             ORDER BY w.position), '[]')::text AS items
+		              FROM doc_coverage_completed_with w
+		              LEFT JOIN docs wd ON wd.id = w.to_doc
+		             WHERE w.edge_id = e.id
+		        ) cw ON true
 		  WHERE e.from_doc = $1
 		  ORDER BY e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
 		           coalesce(e.to_anchor,''), coalesce(e.to_external,'')`, docID)
@@ -2530,11 +2539,22 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 
 	// from_doc and to_anchor swap into the reader's frame: the row is read
 	// from docID's end, so what the writer called its target anchor is the
-	// anchor here, and its source anchor is the far one.
+	// anchor here, and its source anchor is the far one. completedWith is
+	// read the same way regardless of direction — it describes the stored
+	// row itself (e.id), not which end docID sits at.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
-		        d.slug, d.kind, coalesce(d.number,0)
-		   FROM doc_edges e JOIN docs d ON d.id = e.from_doc
+		        d.slug, d.kind, coalesce(d.number,0),
+		        cw.items
+		   FROM doc_edges e
+		   JOIN docs d ON d.id = e.from_doc
+		   LEFT JOIN LATERAL (
+		            SELECT coalesce(json_agg(coalesce(wd.slug, w.to_external)
+		                             ORDER BY w.position), '[]')::text AS items
+		              FROM doc_coverage_completed_with w
+		              LEFT JOIN docs wd ON wd.id = w.to_doc
+		             WHERE w.edge_id = e.id
+		        ) cw ON true
 		  WHERE e.to_doc = $1 AND d.deleted_at IS NULL
 		  ORDER BY e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,'')`, docID)
 	if err != nil {
@@ -2556,15 +2576,29 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 }
 
 // scanDocEdges drains a query selecting the DocEdge columns in order: the
-// five stored ones, then the joined far end's slug, kind and number.
+// five stored ones, the joined far end's slug, kind and number, then the
+// completedWith closure as a JSON array of strings (never NULL — the caller's
+// lateral join coalesces an edge with no doc_coverage_completed_with rows to
+// "[]", following NeedsPlanning's json_agg-to-text convention rather than
+// scanning a native Postgres array).
 func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 	defer rows.Close()
 	var out []model.DocEdge
 	for rows.Next() {
 		var e model.DocEdge
+		var completedWithJSON string
 		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
-			&e.ToSlug, &e.ToKind, &e.ToNumber); err != nil {
+			&e.ToSlug, &e.ToKind, &e.ToNumber, &completedWithJSON); err != nil {
 			return nil, err
+		}
+		if err := json.Unmarshal([]byte(completedWithJSON), &e.CompletedWith); err != nil {
+			return nil, fmt.Errorf("decode completedWith of doc edge: %w", err)
+		}
+		// "[]" unmarshals to a non-nil empty slice; nil is the DocEdge zero
+		// value for "no completedWith", so every equality check downstream —
+		// tests included — sees one consistent absence rather than two.
+		if len(e.CompletedWith) == 0 {
+			e.CompletedWith = nil
 		}
 		out = append(out, e)
 	}
