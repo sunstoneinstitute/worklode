@@ -124,6 +124,24 @@ build.
   keeps lives in `data.json` (`mirrorState`) and is discarded when the base
   URL, token or mount root changes, since it means nothing against a
   different backbone.
+- **A doc note's text costs one extra request, spent only when it changed.**
+  `GET /api/v1/docs` blanks the markdown on every row — a corpus listing would
+  otherwise be the largest response the server sends — so a document's text
+  comes from `GET /api/v1/docs/{id}`, one request per document. A full sync
+  spends one only where the note already in the vault is out of date, which it
+  decides from the `etag` and `serializer` recorded in that note's own `wl`
+  block, exactly as it decides whether to rewrite the file. So a new document
+  always fetches, a changed one fetches again, and an untouched corpus costs no
+  document requests at all. A doc note's `etag` is computed from the list row
+  and deliberately not from the body, so it means the same thing whether or not
+  this particular sync fetched the text. Unlike a missing docs endpoint, a
+  document that cannot be fetched fails the sync: rendering its note without
+  the body would write a blank note over the text already in the vault. One
+  gap, tracked as WL-285 and closable only on the server: a *draft* spec or ADR
+  keeps its `version` across a body edit and its `updated_at` is truncated to
+  the second, so two edits to one draft inside the same second look identical
+  from the list route and the note keeps the earlier text until some other
+  field moves.
 - **A server with no docs endpoint costs the doc notes only.** The plugin
   ships independently of the binary, so `GET /api/v1/docs` may be absent
   (404). Projects and tasks still mirror, the sync notice says doc notes were

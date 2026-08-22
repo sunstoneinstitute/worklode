@@ -3,7 +3,7 @@
 // index — plus the machinery shared across them.
 
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import type { Doc, Project, Task, TaskListDetail } from "../api/types";
+import type { Doc, DocDetail, Project, Task, TaskListDetail } from "../api/types";
 
 /** A rendered note: where it goes, what it contains, and what it was made from. */
 export interface Note {
@@ -342,6 +342,45 @@ function splitDocFrontmatter(body: string): {
   return { frontmatter: parsed as Record<string, unknown>, malformed: false, body: fence.rest };
 }
 
+/** A doc note's etag payload: the list row, and pointedly not the body.
+ *
+ *  A document's text costs its own request, so the mirror holds it only for the
+ *  documents it is about to rewrite (hydrateDocBodies); everything else it
+ *  carries is the blank-bodied row `GET /api/v1/docs` answers with. Hashing the
+ *  body would therefore give the same unchanged document two different etags
+ *  depending on whether this sync happened to fetch it. Hashing the row alone
+ *  makes the etag a property of the document rather than of the fetch — which
+ *  is what lets a sync decide, before spending a request, whether the note it
+ *  already holds is current.
+ *
+ *  The rows only a fetched DocDetail carries (sections, edges, revision) are
+ *  destructured away for that same reason: a list row cannot produce them.
+ *  Everything else is in by default, so a field added to internal/model.Doc
+ *  joins the digest rather than silently falling out of it.
+ *
+ *  This detects a changed body only as far as the list row reflects one.
+ *  `store.UpdateDocBody` bumps `version` for a plan but not for a draft spec
+ *  or ADR, and truncates `updated_at` to the second, so two edits to one draft
+ *  within the same second are indistinguishable here and the note keeps the
+ *  earlier text until some other field moves. WL-285 tracks closing that on the
+ *  server, which is the only side that can.
+ *
+ *  Upgrading a vault re-renders every doc note once, since the old payload
+ *  included `body: ""`. That is the intended effect: those are the notes with
+ *  no text in them. */
+function docIdentity(d: Doc): Record<string, unknown> {
+  // The named bindings exist to be discarded; `identity` is the payload.
+  const { body, sections, edges, edges_in, revision, ...identity } = d as Doc & Partial<DocDetail>;
+  return identity;
+}
+
+/** The etag `docToNote` will stamp into a document's note, computable from a
+ *  list row alone. Exported so the sync can ask "is the note I already hold
+ *  current?" before deciding to spend a request on the body. */
+export function docEtag(d: Doc): Promise<string> {
+  return computeEtag(docIdentity(d));
+}
+
 /** Renders a stored document: its own frontmatter (lifted out of the body,
  *  see splitDocFrontmatter) verbatim, plus the reserved `wl` block beside it.
  *  The document's own frontmatter is never edited, only accompanied — see
@@ -352,7 +391,7 @@ export async function docToNote(d: Doc): Promise<Note> {
   const hasAliases = Object.prototype.hasOwnProperty.call(source, "aliases");
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
-  const etag = await computeEtag(d);
+  const etag = await docEtag(d);
   const body = split.body;
   // The one case this bit exists for: a spec, ADR or plan body opens with its
   // own "# <Title>", so injecting one would render the note with two.
@@ -450,7 +489,10 @@ function renderProjectBody(projectId: string, docs: Doc[], tasks: TaskListDetail
 }
 
 export async function projectToNote(p: Project, docs: Doc[], tasks: TaskListDetail[]): Promise<Note> {
-  const etag = await computeEtag({ project: p, docs, tasks });
+  // Docs enter by identity, for the reason docIdentity gives: hashing them
+  // whole would tie this note's etag to which of its docs this sync happened
+  // to fetch. The rendered body only ever names slugs anyway.
+  const etag = await computeEtag({ project: p, docs: docs.map(docIdentity), tasks });
 
   // A generated body opens with the generated-by notice, never a heading, so
   // this is always true. Asked anyway: one rule, put to every note kind.
