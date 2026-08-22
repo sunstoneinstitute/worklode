@@ -15,9 +15,11 @@ import (
 func TestTaskPageLinksBareTaskIDs(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj") // key "WL"
-	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Target"})
 	createTaskViaAPI(t, h, token, map[string]any{
-		"project": "proj", "title": "Mentions",
+		"project": "proj", "title": "Target", "priority": "medium", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Mentions", "priority": "medium", "kind": "feature",
 		"body": "Follows WL-1, encoded UTF-8, and ZZQ-3 is nobody's project.",
 	})
 
