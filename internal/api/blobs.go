@@ -7,6 +7,8 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -22,6 +24,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/ffmpeg"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -70,9 +73,14 @@ func checkSpoolWritable(dir string) error {
 // blobResponse projects a stored blob onto the wire shape the endpoints
 // answer with. URL is the permanent root-relative reference a task body
 // embeds — never the presigned object URL, which expires in minutes and must
-// not be persisted anywhere.
-func blobResponse(b model.Blob) model.BlobResponse {
-	return model.BlobResponse{Hash: b.Hash, MediaType: b.MediaType, Size: b.Size, URL: "/blob/" + b.Hash}
+// not be persisted anywhere. poster is the hash of the video's extracted
+// first frame, or "" for everything else.
+func blobResponse(b model.Blob, poster string) model.BlobResponse {
+	r := model.BlobResponse{Hash: b.Hash, MediaType: b.MediaType, Size: b.Size, URL: "/blob/" + b.Hash}
+	if poster != "" {
+		r.PosterURL = "/blob/" + poster
+	}
+	return r
 }
 
 // maxFilenameBytes caps the download name a reference may carry. Longer than
@@ -254,11 +262,21 @@ func (s *server) uploadBlob(w http.ResponseWriter, r *http.Request) {
 	// labelled image/png that sniffs as HTML is stored, and served, as HTML.
 	mediaType := http.DetectContentType(sniff)
 
+	// A video's poster is extracted before the dedup check, and from the
+	// spooled file rather than from the bucket, so re-uploading the same
+	// recording answers with the same poster it did the first time instead of
+	// silently dropping to a black rectangle. The extra ffmpeg run on a
+	// deduplicated video is the price, and it is one frame.
+	var poster string
+	if blobref.Video(mediaType) {
+		poster = s.storePoster(r.Context(), f.Name())
+	}
+
 	// Dedup before any object-store traffic: a re-uploaded screenshot costs
 	// one query and nothing else.
 	if existing, err := s.st.GetBlob(r.Context(), hash); err == nil {
 		s.observeBlobUpload("deduplicated")
-		writeJSON(w, http.StatusOK, blobResponse(existing))
+		writeJSON(w, http.StatusOK, blobResponse(existing, poster))
 		return
 	}
 
@@ -282,7 +300,55 @@ func (s *server) uploadBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.observeBlobUpload("stored")
-	writeJSON(w, http.StatusOK, blobResponse(b))
+	writeJSON(w, http.StatusOK, blobResponse(b, poster))
+}
+
+// storePoster extracts the first frame of the just-spooled video at path and
+// stores it as a blob of its own, returning its hash — or "" when there is no
+// poster to be had.
+//
+// Every failure is a "": a poster is decoration, and refusing a 100 MiB
+// screen recording because a frame would not decode would trade the whole
+// feature for the garnish. The outcome is counted either way, so an image
+// that shipped without ffmpeg reads as a flat line of "unavailable" rather
+// than as silence.
+//
+// The poster is an ordinary blob, indexed and content-addressed like any
+// other, which is what keeps it out of the schema: whatever body embeds the
+// <video poster="/blob/…"> pins it through the same reference graph as the
+// video itself, and a poster nobody ever embedded is collected by the same GC
+// sweep (spec 021 §11).
+func (s *server) storePoster(ctx context.Context, path string) string {
+	img, err := ffmpeg.Poster(ctx, path)
+	if err != nil {
+		if errors.Is(err, ffmpeg.ErrUnavailable) {
+			s.observePosterExtraction("unavailable")
+			return ""
+		}
+		s.log.Warn("video poster", "err", err)
+		s.observePosterExtraction("failed")
+		return ""
+	}
+
+	sum := sha256.Sum256(img)
+	hash := hex.EncodeToString(sum[:])
+	if _, err := s.st.GetBlob(ctx, hash); err == nil {
+		s.observePosterExtraction("deduplicated")
+		return hash
+	}
+	// Object-then-row, for the reason uploadBlob gives.
+	if err := s.blobs.Put(ctx, blobstore.Key(hash), bytes.NewReader(img), int64(len(img)), ffmpeg.PosterMediaType); err != nil {
+		s.log.Error("poster put", "hash", hash, "err", err)
+		s.observePosterExtraction("storage_error")
+		return ""
+	}
+	if _, err := s.st.InsertBlob(ctx, hash, ffmpeg.PosterMediaType, int64(len(img))); err != nil {
+		s.log.Error("poster index", "hash", hash, "err", err)
+		s.observePosterExtraction("error")
+		return ""
+	}
+	s.observePosterExtraction("stored")
+	return hash
 }
 
 // writerFunc adapts a func to io.Writer for the TeeReader above.

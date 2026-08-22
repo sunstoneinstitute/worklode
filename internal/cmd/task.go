@@ -1237,7 +1237,7 @@ func newTaskAttachCmd() *cobra.Command {
 					if body != "" && !strings.HasSuffix(body, "\n") {
 						body += "\n"
 					}
-					body += fmt.Sprintf("\n![%s](%s)\n", altText, blob.URL)
+					body += "\n" + embedMarkup(altText, blob) + "\n"
 					appended = true
 					fmt.Fprintf(cmd.OutOrStdout(), "embedded %s (%s)\n", name, blob.Hash[:12])
 					continue
@@ -1261,6 +1261,33 @@ func newTaskAttachCmd() *cobra.Command {
 	cmd.Flags().StringVar(&alt, "alt", "",
 		"alt text for the embedded image (default: the filename, which is not alt text)")
 	return cmd
+}
+
+// embedMarkup renders the body fragment that makes a freshly uploaded blob
+// render in place (spec 021 §5, §9).
+//
+// An image is markdown. A video cannot be — `![](…)` is an <img>, which shows
+// a video file as a broken image — so it is the raw <video> the sanitiser's
+// allowlist exists for (spec 021 §8), carrying the poster frame the upload
+// extracted. Without that poster the element is a black rectangle until
+// someone presses play, which is a poor answer to "show me the bug".
+//
+// preload="metadata" rather than the default: the poster is already the still
+// frame, so fetching the video body before anyone asks to watch it buys
+// nothing and costs a screen recording per page view.
+//
+// alt is an image concept and is dropped for a video, which is why --alt's
+// help says "image": <video> has no alt attribute, and a title tooltip is not
+// an accessible name. A video's description belongs in the prose around it.
+func embedMarkup(alt string, blob model.BlobResponse) string {
+	if !blobref.Video(blob.MediaType) {
+		return fmt.Sprintf("![%s](%s)", alt, blob.URL)
+	}
+	poster := ""
+	if blob.PosterURL != "" {
+		poster = fmt.Sprintf(" poster=%q", blob.PosterURL)
+	}
+	return fmt.Sprintf("<video src=%q%s controls preload=\"metadata\"></video>", blob.URL, poster)
 }
 
 // newTaskDetachCmd is `lode task detach`: clear an explicit reference from a
