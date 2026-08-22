@@ -1,0 +1,45 @@
+// worklode-hook v1 — installed by `lode install`; do not edit.
+//
+// Amp's JSON hook actions can only send a user message or redact tool input,
+// so no hook binding in Amp's settings can reach the worklode CLI. Amp's
+// Plugin API can: it runs this file under Bun and hands each handler a shell.
+// So this plugin does exactly what a hook binding does in every other harness
+// — pipe the hook payload into `lode hook <event>` — and nothing else. There
+// is no worklode logic here; the binary is the integration.
+//
+// The payload carries the thread id and nothing more. `lode hook` resolves the
+// worktree from its own working directory, which it inherits from Amp, so
+// sending a cwd would only restate what the subprocess already knows.
+//
+// `amp` and the handler arguments are typed `any` deliberately: Amp executes
+// this file with Bun, which strips types without resolving them, and importing
+// `@ampcode/plugin` would make a generated file depend on a package the user
+// may not have installed.
+
+export const description = "Worklode: binds Amp's session and turn events to `lode hook`."
+
+export default function (amp: any) {
+	// bind wraps one `lode hook` invocation as an Amp event handler. It returns
+	// nothing on every path, which is how a handler tells Amp to leave the turn
+	// exactly as the agent produced it — for session.start (a fire-and-forget
+	// event) and for agent.start/agent.end (request events whose "no
+	// modification" result is an absent one) alike.
+	const bind = (ampEvent: string, run: (payload: string, ctx: any) => Promise<any>) =>
+		async (event: any, ctx: any): Promise<void> => {
+			const payload = JSON.stringify({
+				hook_event_name: ampEvent,
+				session_id: event?.thread?.id ?? ctx?.thread?.id ?? "",
+			})
+			try {
+				await run(payload, ctx)
+			} catch (err) {
+				// A `lode` that is not on PATH, a backbone that is down, a
+				// non-zero exit: none of them are the user's problem mid-turn.
+				// Worklode degrades to the git pre-commit heartbeat rather than
+				// interrupting the session.
+				ctx?.logger?.debug?.(`worklode: ${ampEvent} hook failed: ${err}`)
+			}
+		}
+
+{{ range .Bindings }}	amp.on({{ .Event | js }}, bind({{ .Event | js }}, (payload: string, ctx: any) => ctx.$`echo ${payload} | {{ .Command }}`))
+{{ end }}}

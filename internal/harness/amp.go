@@ -1,24 +1,86 @@
 package harness
 
 import (
+	"bytes"
+	_ "embed"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"text/template"
 )
 
-// ampNoHooksNote explains an install that wrote nothing. Without it the
-// report would look like a failure rather than the honest ceiling it is.
-const ampNoHooksNote = "amp hook actions cannot run a shell command, so no lifecycle events are bound; " +
-	"skills and the git pre-commit heartbeat still work"
-
-// Amp is the amp adapter. Amp's hook actions are limited to sending a user
-// message and redacting tool input — there is no shell action of any kind,
-// and no session or stop event — so Amp cannot reach `lode hook` and this
-// adapter binds nothing rather than writing an inert config. Its settings
-// file is located (for the report and for detection) but never written.
+// ampBindings is every Amp event Worklode listens to, in the vocabulary of
+// Amp's Plugin API rather than its settings hooks. Amp's JSON hook actions can
+// only send a user message or redact tool input, so the Plugin API — a
+// TypeScript file Amp runs under Bun, with a shell in hand — is the only Amp
+// surface that reaches `lode hook`.
 //
-// Amp's Plugin API can run shell commands, but it is TypeScript registered
-// through amp.on(); that is a code-generating adapter, not a config-merging
-// one, and is out of scope for v1.
+// Heartbeat is bound to the two ends of a turn. Amp has no Stop event; a turn
+// begins at agent.start (the user submitted a prompt) and ends at agent.end,
+// and between them those cover a session that is working and one sitting idle
+// at the prompt.
+//
+// tool.call and tool.result are deliberately unbound even though the API
+// offers them. Both are request events on the agent's critical path — a
+// handler runs before the tool executes, and again before its result reaches
+// the model — so binding them would put a `lode hook` subprocess between the
+// agent and every tool call it makes, dozens of times a turn, to report a
+// heartbeat agent.end already reports. Claude Code declines the same trade
+// with PostToolUse for the same reason.
+//
+// SessionEnd and WorktreeEnter have nothing behind them: Amp's Plugin API
+// stops at session.start, agent.start/end and tool.call/result — there is no
+// session-end or subagent event at all — and EnterWorktree is a Claude Code
+// tool, not an Amp one. Both are reported unbound.
+var ampBindings = []hookBinding{
+	{Event: "session.start", Command: "lode hook session-start --harness amp"},
+	{Event: "agent.start", Command: "lode hook heartbeat --harness amp"},
+	{Event: "agent.end", Command: "lode hook heartbeat --harness amp"},
+}
+
+// ampCeilingNote says why two events stay unbound. The install report already
+// names them; this says the ceiling is Amp's API rather than an install that
+// fell short, so nobody goes looking for the setting that would fix it.
+const ampCeilingNote = "Amp's Plugin API has no session-end and no subagent event, so those stay unbound " +
+	"whatever is installed; the git pre-commit heartbeat still covers commit cadence"
+
+// ampReloadNote is install-time advice: Amp loads its plugins at startup, so a
+// freshly written plugin does nothing in the session that installed it.
+const ampReloadNote = "Amp loads plugins at startup, so restart Amp to pick this one up"
+
+// ampPluginMarker identifies the generated plugin as Worklode's own — the same
+// word githooks.Marker uses, spelled for a TypeScript comment. Uninstall
+// removes only a file carrying it, so a `worklode.ts` someone else wrote is
+// never deleted.
+const ampPluginMarker = "worklode-hook"
+
+//go:embed ampplugin.ts.tmpl
+var ampPluginTemplate string
+
+// ampPlugin renders the plugin from ampBindings, so the file Amp executes and
+// the event table Events() reports are the same table read twice — an adapter
+// cannot claim a binding its generated code does not make.
+var ampPlugin = template.Must(template.New("ampplugin.ts").Funcs(template.FuncMap{
+	"js": func(s string) (string, error) {
+		b, err := json.Marshal(s)
+		return string(b), err
+	},
+}).Parse(ampPluginTemplate))
+
+// ampCommandPattern is what a binding's command may look like before it is
+// pasted, unquoted, into the generated file's shell template. The table is
+// ours, so this is a guard against a future edit rather than against input:
+// anything outside this shape would be shell text in a place that cannot quote
+// it. amp_test.go holds every binding to it.
+var ampCommandPattern = regexp.MustCompile(`^lode hook [a-z][a-z-]* --harness amp$`)
+
+// Amp is the amp adapter, and the only code-generating one: where every other
+// harness reads a config file Worklode merges into, Amp reads a TypeScript
+// plugin Worklode writes whole. That makes the file ours outright — install
+// rewrites it, uninstall deletes it — and leaves Amp's settings.json, which
+// this adapter still locates for Detect, untouched in both directions.
 type Amp struct{}
 
 func init() { register(Amp{}) }
@@ -37,7 +99,30 @@ func ampSettingsPath() (string, error) {
 	return filepath.Join(home, ".config", "amp", "settings.json"), nil
 }
 
-// Detect: Amp is configured for the user (its settings file exists).
+// ampPluginPath is the one file this adapter writes, for either scope.
+//
+// Amp reads plugins from `<config dir>/plugins/`, a sibling of settings.json,
+// so it is derived from the settings path — which keeps AMP_SETTINGS_FILE the
+// single override for "where Amp's config lives".
+//
+// Amp also reads a project-local `.amp/plugins/`, and this adapter
+// deliberately does not write there for project scope. The file is executable
+// code that shells out on every turn; committing it would run `lode hook` in
+// the checkout of every contributor, including those with no `lode` installed
+// and no interest in Worklode. As with codex, both scopes write the user-level
+// file and the `lode hook` guard is what scopes behaviour to Worklode
+// worktrees.
+func ampPluginPath() (string, error) {
+	settings, err := ampSettingsPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(settings), "plugins", "worklode.ts"), nil
+}
+
+// Detect: Amp is configured for the user (its settings file exists). The
+// plugin directory is a sibling that need not exist yet, so the settings file
+// stays the signal.
 func (Amp) Detect(repoDir string) (bool, error) {
 	path, err := ampSettingsPath()
 	if err != nil {
@@ -57,24 +142,64 @@ func (Amp) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 	return []SkillTarget{{Dir: filepath.Join(home, ".agents", "skills")}}, nil
 }
 
-// Events is empty: no Amp event can run `lode hook`.
-func (Amp) Events() map[Event][]string { return map[Event][]string{} }
+// Events is ampBindings read the other way round, so the event table cannot
+// drift from what install actually writes (spec 008 §17.1).
+func (Amp) Events() map[Event][]string { return eventsFor(ampBindings) }
 
-// InstallHooks writes nothing and reports every Worklode event unbound —
-// degraded coverage, not a failure (spec 008 §17.1).
+// ampPluginSource renders the plugin file. It takes no arguments and depends
+// on nothing but ampBindings, so two installs produce identical bytes.
+func ampPluginSource() ([]byte, error) {
+	var buf bytes.Buffer
+	if err := ampPlugin.Execute(&buf, struct{ Bindings []hookBinding }{ampBindings}); err != nil {
+		return nil, fmt.Errorf("render amp plugin: %w", err)
+	}
+	return buf.Bytes(), nil
+}
+
+// InstallHooks writes the plugin file, which is ours entire.
 func (a Amp) InstallHooks(repoDir, scope string) (HookInstall, error) {
-	path, err := ampSettingsPath()
+	path, err := ampPluginPath()
 	if err != nil {
 		return HookInstall{}, err
 	}
-	return HookInstall{Path: path, Unbound: missingEvents(a), Notes: []string{ampNoHooksNote}}, nil
+	src, err := ampPluginSource()
+	if err != nil {
+		return HookInstall{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return HookInstall{}, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, src, 0o644); err != nil {
+		return HookInstall{}, fmt.Errorf("write %s: %w", path, err)
+	}
+	return HookInstall{
+		Path:    path,
+		Bound:   boundNames(ampBindings),
+		Unbound: missingEvents(a),
+		Notes:   []string{ampCeilingNote, ampReloadNote},
+	}, nil
 }
 
-// UninstallHooks has nothing to remove, so it never touches the file.
+// UninstallHooks deletes the generated plugin, and only that: a file at the
+// same path without our marker is someone else's and is reported ActionNone
+// rather than removed. A missing file is ActionNone too, not an error.
 func (Amp) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
-	path, err := ampSettingsPath()
+	path, err := ampPluginPath()
 	if err != nil {
 		return HookUninstall{}, err
 	}
-	return HookUninstall{Path: path, Action: ActionNone}, nil
+	existing, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return HookUninstall{Path: path, Action: ActionNone}, nil
+	}
+	if err != nil {
+		return HookUninstall{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	if !bytes.Contains(existing, []byte(ampPluginMarker)) {
+		return HookUninstall{Path: path, Action: ActionNone}, nil
+	}
+	if err := os.Remove(path); err != nil {
+		return HookUninstall{}, fmt.Errorf("remove %s: %w", path, err)
+	}
+	return HookUninstall{Path: path, Action: ActionRemoved}, nil
 }
