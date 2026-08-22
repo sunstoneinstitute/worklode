@@ -382,13 +382,18 @@ func assertOverviewSurface(t *testing.T, body, blockerID, dependentID string) {
 		t.Fatalf("missing Observed status evidence:\n%s", body)
 	}
 
-	// The highest-signal exception names the blocker, states the evidence it
-	// rests on, and links back to the blocking task.
+	// The highest-signal exception names the root blocker, its det-v1 evidence
+	// (docs/research/cockpit-exception-ranking.md §6) naming what it holds —
+	// here just the one dependent task, at its own priority — and links back
+	// to the blocking task.
 	if !strings.Contains(body, "Highest-signal exception") {
 		t.Fatalf("missing the highest-signal exception card:\n%s", body)
 	}
-	if !strings.Contains(body, "Blocks "+dependentID+" (blocker state") {
-		t.Fatalf("missing blocker evidence \"Blocks %s (blocker state ...)\":\n%s", dependentID, body)
+	if !strings.Contains(body, blockerID+" (ready, unclaimed) has held 1 task for") {
+		t.Fatalf("missing root evidence header %q (ready, unclaimed) has held 1 task for ...:\n%s", blockerID, body)
+	}
+	if !strings.Contains(body, "— "+dependentID+" (medium).") {
+		t.Fatalf("missing the held-task chain naming %s (medium):\n%s", dependentID, body)
 	}
 	if !strings.Contains(body, `<a href="/tasks/`+blockerID+`">`) {
 		t.Fatalf("missing the source link back to the blocking task /tasks/%s:\n%s", blockerID, body)

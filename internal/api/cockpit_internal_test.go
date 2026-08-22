@@ -279,10 +279,11 @@ func TestMapWorkItemNoAssigneeNoLease(t *testing.T) {
 	}
 }
 
-// TestBlockerConcernsNamesBlockingPlan: a ready task held only by a plan
-// ordered before its own (025 §9.3) is blocked and says which plan holds it,
-// even when that plan is still draft and has minted no task to name.
-func TestBlockerConcernsNamesBlockingPlan(t *testing.T) {
+// TestRankSecondaryConcernsNamesBlockingPlan: a ready task held only by a
+// plan ordered before its own (025 §9.3) is blocked and its root-cause
+// concern names that plan, even when it is still draft and has minted no
+// task to name. See cockpit_rank_test.go for det-v1's fuller coverage.
+func TestRankSecondaryConcernsNamesBlockingPlan(t *testing.T) {
 	f := store.ProjectWorkFact{
 		Task: model.Task{ID: "WL-2", State: "ready"},
 		BlockingPlans: []model.DocRef{
@@ -292,11 +293,11 @@ func TestBlockerConcernsNamesBlockingPlan(t *testing.T) {
 	if !f.Blocked() {
 		t.Fatalf("Blocked() = false for a task a plan holds, which Claim refuses")
 	}
-	got := blockerConcerns(f)
+	got := rankSecondaryConcerns([]store.ProjectWorkFact{f}, time.Now())
 	if len(got) != 1 || got[0].Kind != "blocker" || got[0].Title != "Plan A" || got[0].URL != "/docs/7" {
 		t.Fatalf("concerns = %#v, want one blocker naming Plan A at /docs/7", got)
 	}
 	if !strings.Contains(got[0].Evidence.Summary, "plan-a") {
-		t.Errorf("evidence = %q, want it to name the blocking plan", got[0].Evidence.Summary)
+		t.Errorf("evidence = %q, want it to name the blocking plan (slug plan-a)", got[0].Evidence.Summary)
 	}
 }
