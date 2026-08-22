@@ -150,7 +150,7 @@ func TestAddCrewMemberAPIRefusals(t *testing.T) {
 		{"duplicate role", "/api/v1/projects/proj/participants",
 			map[string]any{"actor": "ada", "role": "editor"}, http.StatusUnprocessableEntity, "already holds role"},
 		{"second lead", "/api/v1/projects/proj/participants",
-			map[string]any{"actor": "bob", "role": "co-lead", "lead": true}, http.StatusUnprocessableEntity, "already has a lead"},
+			map[string]any{"actor": "bob", "role": "domain-expert", "lead": true}, http.StatusUnprocessableEntity, "already has a lead"},
 		{"blank role", "/api/v1/projects/proj/participants",
 			map[string]any{"actor": "bob", "role": "   "}, http.StatusCreated, ""},
 	}
@@ -552,7 +552,7 @@ func TestListCrewMembersAPI(t *testing.T) {
 	for _, body := range []map[string]any{
 		{"actor": "bob", "role": "reporter"},
 		{"actor": "bob", "role": "editor"},
-		{"actor": "ada", "role": "lead-role", "lead": true},
+		{"actor": "ada", "role": "science-lead", "lead": true},
 	} {
 		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token, body); rr.Code != http.StatusCreated {
 			t.Fatalf("seed add %v: status %d, body %s", body, rr.Code, rr.Body.String())
@@ -575,8 +575,8 @@ func TestListCrewMembersAPI(t *testing.T) {
 	if lead.Actor != "ada" || !lead.Lead || lead.DisplayName != "Ada Person" {
 		t.Fatalf("first member = %+v, want ada, lead, Ada Person", lead)
 	}
-	if len(lead.Roles) != 1 || lead.Roles[0] != "lead-role" {
-		t.Fatalf("lead roles = %v, want [lead-role]", lead.Roles)
+	if len(lead.Roles) != 1 || lead.Roles[0] != "science-lead" {
+		t.Fatalf("lead roles = %v, want [science-lead]", lead.Roles)
 	}
 	if other.Actor != "bob" || other.Lead || other.DisplayName != "Bob Person" {
 		t.Fatalf("second member = %+v, want bob, not lead, Bob Person", other)

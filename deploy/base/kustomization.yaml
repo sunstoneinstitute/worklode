@@ -102,3 +102,5 @@ configMapGenerator:
       - migrations/0044_docs_generated_by_task.down.sql
       - migrations/0045_doc_edges_defers.up.sql
       - migrations/0045_doc_edges_defers.down.sql
+      - migrations/0046_participant_role_check.up.sql
+      - migrations/0046_participant_role_check.down.sql

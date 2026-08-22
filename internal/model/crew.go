@@ -26,8 +26,9 @@ type ParticipantListResponse struct {
 // AddCrewMemberInput is the request body of POST
 // /api/v1/projects/{id}/participants. Actor is required; an empty Role
 // defaults to "member" server-side, so adding someone to the Crew without an
-// opinion about what they do is one field. Role is a free-form label, not an
-// enum — what a person does on a project is org vocabulary.
+// opinion about what they do is one field. Role is drawn from the fixed
+// project-role vocabulary (WL-297; store.ParticipantRoles) — an unknown one
+// is refused naming the valid set.
 type AddCrewMemberInput struct {
 	Actor string `json:"actor"`
 	Role  string `json:"role"`
