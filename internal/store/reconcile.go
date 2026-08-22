@@ -23,8 +23,19 @@ func MarkEventApplied(tx *sql.Tx, eventID int64, at time.Time) error {
 	return nil
 }
 
+// replaySources are the event sources engine 1 can re-apply: a github
+// delivery recorded before its repo was mapped (or whose apply failed), and a
+// catalog delivery that matched no declaration when it arrived (029 §3.2,
+// WL-256). Both leave applied_at NULL exactly when there is still an apply to
+// run, so the candidate set stays finite. Flux is deliberately absent: its
+// handler never sets applied_at at all, so every flux row would be a
+// permanent candidate with nothing to replay.
+var replaySources = []string{"github", "catalog"}
+
 // UnappliedFilter bounds the replay candidate set. Zero values disable each
-// filter. Repo matches the delivery payload's repository.full_name.
+// filter. Repo matches the delivery payload's repository.full_name — which
+// only github deliveries carry, so a repo-scoped run is github-only by
+// construction.
 type UnappliedFilter struct {
 	Repo  string
 	Since *time.Time
@@ -37,12 +48,13 @@ type UnappliedFilter struct {
 	Limit int
 }
 
-// UnappliedGitHubEvents returns github-source events whose apply has not
-// completed — *.ignored deliveries and anything the replayer has not reached
-// yet — oldest first, so replay preserves arrival order.
-func (s *Store) UnappliedGitHubEvents(ctx context.Context, f UnappliedFilter) ([]Event, error) {
-	where := "source = 'github' AND applied_at IS NULL"
+// UnappliedEvents returns replay-source events whose apply has not completed
+// — github *.ignored deliveries, unrouted catalog deliveries, and anything
+// the replayer has not reached yet — oldest first, so replay preserves
+// arrival order.
+func (s *Store) UnappliedEvents(ctx context.Context, f UnappliedFilter) ([]Event, error) {
 	var args sqlArgs
+	where := "source = ANY(" + args.next(replaySources) + ") AND applied_at IS NULL"
 	if f.Repo != "" {
 		where += " AND payload->'repository'->>'full_name' = " + args.next(f.Repo)
 	}

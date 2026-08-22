@@ -69,6 +69,21 @@ func TestCatalogEvidenceRoundTrip(t *testing.T) {
 		"iceberg://sunstone-prod/nobody/declares-this", "published"); got != "unrouted" {
 		t.Fatalf("undeclared address acked %q, want unrouted", got)
 	}
+	// ...and recording it is only worth anything because reconcile can file it
+	// once the declaration exists (WL-256). Declare the address it named, run
+	// reconcile, and the earlier delivery's fact reaches the deliverable.
+	late := createDeliverable(t, srv.URL, "Late declaration",
+		"iceberg://sunstone-prod/nobody/declares-this")
+	rec, _, err := admin.Reconcile(ctx, model.ReconcileInput{})
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if rec.Replay == nil || rec.Replay.Replayed != 1 {
+		t.Fatalf("reconcile replay = %+v, want 1 replayed", rec.Replay)
+	}
+	if got := deliverableByID(t, srv.URL, "cow", late)["reported_state"]; got != "published" {
+		t.Fatalf("reported_state after reconcile = %v, want published", got)
+	}
 
 	if got := deliverCatalog(t, srv.URL, "e2e-published", catalogArtifact, "published"); got != "ok" {
 		t.Fatalf("first delivery acked %q, want ok", got)
