@@ -107,6 +107,12 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 		gathered = append(gathered, facts)
 	}
 
+	// This first pass reports what gatherRepo fetched, not yet what apply
+	// actually wrote — PRsUpdated is corrected below, after applyFacts runs,
+	// to the PRs whose UpsertPR call the non-regressing guard accepted
+	// (WL-250). It still has to be built here: the event summary marshalled
+	// just below must exist before RecordEvent starts the transaction, so it
+	// necessarily records the attempted view.
 	for _, f := range gathered {
 		for _, c := range f.tasks {
 			repair := model.TaskRepair{TaskID: c.TaskID, Repo: f.repo, State: c.State}
@@ -149,9 +155,15 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 	if err != nil {
 		return nil, fmt.Errorf("encode run summary: %w", err)
 	}
+	// prWrites collects UpsertPR's actual write-vs-guard-rejected verdict,
+	// keyed by (repo, PR number), as applyFacts runs inside the transaction
+	// below. res.Repaired is corrected against it once the transaction
+	// commits, so a repair whose only PR was guard-rejected as stale is not
+	// reported as updated (WL-250).
+	prWrites := map[prWriteKey]bool{}
 	_, inserted, err := st.RecordEvent(ctx, "system", opts.RunID, "reconcile.poll", summary,
 		func(tx *sql.Tx, eventID int64) error {
-			return applyFacts(tx, st.Now(), eventID, gathered)
+			return applyFacts(tx, st.Now(), eventID, gathered, prWrites)
 		})
 	if err != nil {
 		opts.Metrics.candidateOutcome("error", polled)
@@ -163,6 +175,24 @@ func Poll(ctx context.Context, st *store.Store, app *githubauth.AppAuth, opts Op
 		opts.Metrics.candidateOutcome("error", polled)
 		return nil, fmt.Errorf("reconcile poll: run id %q already recorded; no facts were applied", opts.RunID)
 	}
+
+	// Correct the attempted PRsUpdated built above to what UpsertPR actually
+	// wrote; drop a repair that turns out empty (its only PRs were
+	// guard-rejected and it landed no commits either).
+	repaired := res.Repaired[:0]
+	for _, r := range res.Repaired {
+		kept := r.PRsUpdated[:0]
+		for _, num := range r.PRsUpdated {
+			if prWrites[prWriteKey{repo: r.Repo, number: num}] {
+				kept = append(kept, num)
+			}
+		}
+		r.PRsUpdated = kept
+		if len(r.PRsUpdated) > 0 || len(r.CommitsLanded) > 0 {
+			repaired = append(repaired, r)
+		}
+	}
+	res.Repaired = repaired
 
 	// Counted only past the apply: every other exit wrote nothing, so
 	// crediting a repair there would report facts that never landed.
@@ -372,16 +402,29 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 	return f, nil
 }
 
+// prWriteKey identifies one PR for the write-verdict map applyFacts fills in:
+// PR numbers are only unique within a repo.
+type prWriteKey struct {
+	repo   string
+	number int64
+}
+
 // applyFacts writes one run's gathered facts inside the reconcile.poll
 // event's transaction: PR upserts, task commits, main-branch appends,
 // release frontiers, then ResolveDelivery per candidate. Every write is an
 // upsert or a from-state-guarded transition, so a re-run converges.
-func applyFacts(tx *sql.Tx, now time.Time, eventID int64, gathered []*repoFacts) error {
+//
+// prWrites records each UpsertPR call's actual write-vs-guard-rejected
+// verdict so the caller can correct PollResult.Repaired[].PRsUpdated to what
+// was actually written, not what gatherRepo merely fetched (WL-250).
+func applyFacts(tx *sql.Tx, now time.Time, eventID int64, gathered []*repoFacts, prWrites map[prWriteKey]bool) error {
 	for _, f := range gathered {
 		for _, pr := range f.prs {
-			if _, err := store.UpsertPR(tx, pr, f.prBodies[pr.Number]); err != nil {
+			_, written, err := store.UpsertPR(tx, pr, f.prBodies[pr.Number])
+			if err != nil {
 				return err
 			}
+			prWrites[prWriteKey{repo: f.repo, number: pr.Number}] = written
 		}
 		for _, tc := range f.mergedCommits {
 			if err := store.InsertTaskCommit(tx, tc); err != nil {

@@ -586,7 +586,7 @@ func TestHomePageActorTiers(t *testing.T) {
 	// Seeded before the other two projects' tasks so pawait stays the least
 	// recently active project whatever the PR upsert touches.
 	seedEvent(t, st, "home-approval", func(tx *sql.Tx, _ int64) error {
-		if _, err := store.UpsertPR(tx, store.PullRequest{
+		if _, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: "acme/widgets", Number: 7, Title: "Awaiting PR", State: "open",
 			HeadRef: awaitTask + "-awaiting", HeadSHA: "shaawait",
 			URL: "https://github.com/acme/widgets/pull/7", OpenedAt: st.Now(),
@@ -776,7 +776,7 @@ func TestTaskPage(t *testing.T) {
 		mergeSHA = "mergesha1"
 	)
 	seedEvent(t, st, "pr-open", func(tx *sql.Tx, _ int64) error {
-		_, err := store.UpsertPR(tx, store.PullRequest{
+		_, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "open",
 			HeadRef: "WL-1-add-feature", HeadSHA: "headsha1",
 			URL: "https://github.com/org/app/pull/7", OpenedAt: st.Now(),
@@ -786,7 +786,7 @@ func TestTaskPage(t *testing.T) {
 	seedEvent(t, st, "pr-merge", func(tx *sql.Tx, _ int64) error {
 		merged := st.Now()
 		ms := mergeSHA
-		_, err := store.UpsertPR(tx, store.PullRequest{
+		_, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "merged",
 			HeadRef: "WL-1-add-feature", HeadSHA: "headsha1", MergeSHA: &ms,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: st.Now(), MergedAt: &merged,
@@ -926,7 +926,7 @@ func TestTaskPageRendersSourceLink(t *testing.T) {
 	})
 	const url = "https://github.com/org/app/pull/9"
 	seedEvent(t, st, "pr-good", func(tx *sql.Tx, _ int64) error {
-		_, err := store.UpsertPR(tx, store.PullRequest{
+		_, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: "org/app", Number: 9, Title: "Linked", State: "open",
 			HeadRef: "WL-1-linked", HeadSHA: "sha-good",
 			URL: url, OpenedAt: st.Now(),
@@ -959,7 +959,7 @@ func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
 	})
 	const hostile = "javascript:alert(document.cookie)"
 	seedEvent(t, st, "pr-hostile", func(tx *sql.Tx, _ int64) error {
-		_, err := store.UpsertPR(tx, store.PullRequest{
+		_, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: "org/app", Number: 1, Title: "Hostile", State: "open",
 			HeadRef: "WL-1-hostile", HeadSHA: "sha-hostile",
 			URL: hostile, OpenedAt: st.Now(),

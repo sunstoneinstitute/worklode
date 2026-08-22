@@ -43,7 +43,7 @@ func TestTaskTimeline(t *testing.T) {
 
 	// PR opened on the correlated branch.
 	seedEvent(t, st, "pr-open", func(tx *sql.Tx, _ int64) error {
-		_, err := store.UpsertPR(tx, store.PullRequest{
+		_, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "open",
 			HeadRef: "WL-1-add-feature", HeadSHA: headSHA,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: at(1),
@@ -78,7 +78,7 @@ func TestTaskTimeline(t *testing.T) {
 	seedEvent(t, st, "pr-merge", func(tx *sql.Tx, _ int64) error {
 		merged := at(4)
 		ms := mergeSHA
-		_, err := store.UpsertPR(tx, store.PullRequest{
+		_, _, err := store.UpsertPR(tx, store.PullRequest{
 			Repo: repo, Number: 7, Title: "Add feature", State: "merged",
 			HeadRef: "WL-1-add-feature", HeadSHA: headSHA, MergeSHA: &ms,
 			URL: "https://github.com/org/app/pull/7", OpenedAt: at(1), MergedAt: &merged,
