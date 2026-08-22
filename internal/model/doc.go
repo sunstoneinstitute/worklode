@@ -86,16 +86,25 @@ type DocRevision struct {
 // "wl:025" from another project's document resolves across the boundary.
 // Without it a client that links by slug has to assume the far end shares the
 // near end's project, which is right until it silently is not.
+//
+// CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
+// §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
+// covers entry's fullCoverageWith closure, in authored order, or a `defers`
+// entry's single-element owner. Each element is a slug when the reference
+// resolved to a live document, or the reference verbatim when it did not —
+// the same fallback NeedsPlanning's owner column uses. Nil for every other
+// edge, and for a `full`/`none` covers entry.
 type DocEdge struct {
-	Type       string `json:"type"`
-	FromAnchor string `json:"from_anchor"`
-	ToDoc      int64  `json:"to_doc"`
-	ToAnchor   string `json:"to_anchor"`
-	ToExternal string `json:"to_external"`
-	ToProject  string `json:"to_project"`
-	ToSlug     string `json:"to_slug"`
-	ToKind     string `json:"to_kind"`
-	ToNumber   int    `json:"to_number"`
+	Type          string   `json:"type"`
+	FromAnchor    string   `json:"from_anchor"`
+	ToDoc         int64    `json:"to_doc"`
+	ToAnchor      string   `json:"to_anchor"`
+	ToExternal    string   `json:"to_external"`
+	ToProject     string   `json:"to_project"`
+	ToSlug        string   `json:"to_slug"`
+	ToKind        string   `json:"to_kind"`
+	ToNumber      int      `json:"to_number"`
+	CompletedWith []string `json:"completed_with,omitempty"`
 }
 
 // CreateDocInput is the request body for POST /api/v1/docs. Number is omitted

@@ -302,6 +302,75 @@ func TestReplaceDocEdges(t *testing.T) {
 	}
 }
 
+// TestDocDetailEdgesIncludeCompletedWith: GET /api/v1/docs/{id} (what
+// `lode doc get --json` shows) must carry a partial covers entry's
+// fullCoverageWith closure and a defers entry's owner (026 §5, §5.3) — both
+// live in the doc_coverage_completed_with side-table, not doc_edges itself,
+// so a document's own edge listing previously understated what its
+// frontmatter asserted (WL-291).
+func TestDocDetailEdgesIncludeCompletedWith(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: docSpecBody,
+	})
+	owner := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 26, Slug: "026-owner", Body: docSpecBody,
+	})
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "closer-plan",
+		Body: "---\nstatus: draft\ncovers:\n  - " + spec.Slug + ".md#sec-1\n---\n\n# Closer\n",
+	})
+	partial := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "partial-plan",
+		Body: `---
+status: draft
+covers:
+  - spec: ` + spec.Slug + `.md#sec-1
+    coverage: partial
+    fullCoverageWith:
+      - closer-plan.md
+---
+
+# Partial
+`,
+	})
+	deferrer := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "deferring-plan",
+		Body: `---
+status: draft
+defers:
+  - spec: ` + spec.Slug + `.md#sec-2
+    to: ` + owner.Slug + `.md
+---
+
+# Deferring
+`,
+	})
+
+	rr := doReq(t, h, "GET", docPath(partial.ID, ""), token, nil)
+	var partialDetail model.DocDetail
+	decodeInto(t, rr, &partialDetail)
+	if len(partialDetail.Edges) != 1 || partialDetail.Edges[0].Type != "covers" {
+		t.Fatalf("partial plan edges = %+v, want one covers edge", partialDetail.Edges)
+	}
+	if want := []string{"closer-plan"}; !slices.Equal(partialDetail.Edges[0].CompletedWith, want) {
+		t.Errorf("covers edge completed_with = %v, want %v", partialDetail.Edges[0].CompletedWith, want)
+	}
+
+	rr = doReq(t, h, "GET", docPath(deferrer.ID, ""), token, nil)
+	var deferrerDetail model.DocDetail
+	decodeInto(t, rr, &deferrerDetail)
+	if len(deferrerDetail.Edges) != 1 || deferrerDetail.Edges[0].Type != "defers" {
+		t.Fatalf("deferring plan edges = %+v, want one defers edge", deferrerDetail.Edges)
+	}
+	if want := []string{owner.Slug}; !slices.Equal(deferrerDetail.Edges[0].CompletedWith, want) {
+		t.Errorf("defers edge completed_with = %v, want %v", deferrerDetail.Edges[0].CompletedWith, want)
+	}
+}
+
 // TestCreateDocRejectsParseDefect: an anchor defect makes a section
 // unaddressable, so the document never lands — and the 422 names the anchor.
 func TestCreateDocRejectsParseDefect(t *testing.T) {
