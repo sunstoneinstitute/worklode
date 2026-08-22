@@ -12,9 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
@@ -69,6 +73,122 @@ func checkSpoolWritable(dir string) error {
 // not be persisted anywhere.
 func blobResponse(b model.Blob) model.BlobResponse {
 	return model.BlobResponse{Hash: b.Hash, MediaType: b.MediaType, Size: b.Size, URL: "/blob/" + b.Hash}
+}
+
+// maxFilenameBytes caps the download name a reference may carry. Longer than
+// any filename a filesystem accepts, short enough that the presigned URL's
+// response-content-disposition override stays well inside every gateway's
+// query-string limit.
+const maxFilenameBytes = 200
+
+// blobURL renders the root-relative reference a client follows to fetch one
+// blob reference. The name rides along as a query parameter because
+// `task_blobs.filename` is per-reference while `/blob/{hash}` is per-blob
+// (spec 021 §2): one blob two tasks attached under different names has no
+// single name the route could serve it under, so the reference carries its
+// own. A reference with no name (every embedded image) keeps the bare URL.
+//
+// The parameter is deliberately outside anything signed — see
+// contentDisposition. Body text is never rewritten this way: an embedded
+// `](/blob/<hash>)` must keep matching blobref's anchored grammar, or the
+// reference stops pinning its blob against GC.
+func blobURL(hash, filename string) string {
+	u := "/blob/" + hash
+	if name := sanitizeFilename(filename); name != "" {
+		u += "?filename=" + url.QueryEscape(name)
+	}
+	return u
+}
+
+// sanitizeFilename reduces a caller-supplied name to something safe to put in
+// a response header, or returns "" when nothing usable is left. The value
+// reaches us from a query parameter anyone may craft, so it is treated as
+// hostile even though it was originally a `lode task attach` basename:
+//
+//   - control characters go first, CR and LF above all — they are the header
+//     injection vector, and nothing legitimate carries them;
+//   - only the last path segment survives, so neither `../` nor a Windows
+//     `C:\` prefix can suggest a directory to a browser that honours one;
+//   - invalid UTF-8 is refused outright rather than repaired, because the
+//     RFC 8187 half of the header must be well-formed UTF-8.
+//
+// What it does not do is police extensions: naming a text file `.exe` is a
+// social problem, not a serving one, and §6's inline/attachment token — not
+// the filename — is what decides whether the bytes can execute.
+func sanitizeFilename(s string) string {
+	if s == "" || len(s) > maxFilenameBytes || !utf8.ValidString(s) {
+		return ""
+	}
+	s = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+	if i := strings.LastIndexAny(s, `/\`); i >= 0 {
+		s = s[i+1:]
+	}
+	s = strings.TrimSpace(s)
+	if s == "." || s == ".." {
+		return ""
+	}
+	return s
+}
+
+// contentDisposition renders the header spec 021 §2 promises: the
+// inline/attachment token, plus the reference's own name when it has one.
+// Formatting goes through mime.FormatMediaType rather than string
+// concatenation — it owns the quoting rules and the RFC 2231/8187 encoding of
+// a non-ASCII value, and a name it cannot represent comes back as "" rather
+// than as a malformed header. A non-ASCII name gets both halves RFC 6266 asks
+// for: a folded ASCII `filename=` for anything that reads only that, and the
+// exact percent-encoded `filename*` after it, which every current browser
+// prefers.
+//
+// The name is not part of anything signed, and that is the intended design.
+// The presigned S3 URL this value ends up in is SigV4-signed over its query
+// string, response-content-disposition included, so the name cannot be
+// swapped on the object-store leg. On our own leg — `/blob/{hash}?filename=`
+// — the parameter is unsigned, so a caller who may read a blob may choose
+// what their own browser saves it as. That grants no access: the bytes,
+// the media type and the inline/attachment token are all decided server-side
+// from `blobs`, and only the token carries §6's security weight. The residual
+// risk is a hand-crafted link that saves a known blob under a misleading
+// name, which is strictly weaker than the same actor hosting the file
+// themselves, and signing the parameter would not remove it — whoever can
+// mint a link can mint one with the name they wanted in the first place.
+func contentDisposition(kind, filename string) string {
+	name := sanitizeFilename(filename)
+	if name == "" {
+		return kind
+	}
+	full := mime.FormatMediaType(kind, map[string]string{"filename": name})
+	if full == "" {
+		return kind
+	}
+	ascii := foldASCII(name)
+	if ascii == name {
+		return full // already `kind; filename="…"`
+	}
+	// full is `kind; filename*=utf-8''…`; keep that param and put the folded
+	// ASCII fallback in front of it.
+	_, star, ok := strings.Cut(full, "; ")
+	fallback := mime.FormatMediaType(kind, map[string]string{"filename": ascii})
+	if !ok || fallback == "" {
+		return full
+	}
+	return fallback + "; " + star
+}
+
+// foldASCII maps every non-ASCII rune to '_' for the RFC 6266 fallback half.
+// Quoting the result is mime.FormatMediaType's job, not ours.
+func foldASCII(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r > 0x7f {
+			return '_'
+		}
+		return r
+	}, s)
 }
 
 // uploadBlob handles POST /api/v1/blobs. It streams the request body to a
@@ -202,10 +322,14 @@ func (s *server) serveBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	disposition := "attachment"
+	kind := "attachment"
 	if blobref.Embeddable(b.MediaType) {
-		disposition = "inline"
+		kind = "inline"
 	}
+	// The name is the reference's, echoed back from the URL blobURL minted;
+	// a request without one still gets the bare token, which is what an
+	// embedded image and a hand-typed hash URL both look like.
+	disposition := contentDisposition(kind, r.URL.Query().Get("filename"))
 
 	url, err := s.blobs.PresignGet(r.Context(), blobstore.Key(hash), presignTTL, blobstore.GetOptions{
 		ContentType:        b.MediaType,
@@ -246,7 +370,7 @@ func (s *server) listTaskBlobs(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]model.TaskBlob, 0, len(refs))
 	for _, b := range refs {
-		b.URL = "/blob/" + b.Hash
+		b.URL = blobURL(b.Hash, b.Filename)
 		out = append(out, b)
 	}
 	writeJSON(w, http.StatusOK, model.TaskBlobsResponse{Blobs: out})
