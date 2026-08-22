@@ -2,7 +2,9 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +131,52 @@ func TestOpenDeclarationsForArtifactPerKindOpenness(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("open declarations = %+v, want %+v", got, want)
 		}
+	}
+}
+
+// TestDocFrontmatterDeclaresArtifact covers WL-255's doc surface: the
+// `artifact:` frontmatter key declares each listed catalog address for the
+// document — on create and again on a body edit — and declarations are
+// additive: an edit that drops the key undeclares nothing.
+func TestDocFrontmatterDeclaresArtifact(t *testing.T) {
+	s := openTaskStore(t)
+
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "horndb", Kind: "spec", Number: 9, Slug: "artifact-spec",
+		Body: "---\nstatus: draft\nartifact: " + testArtifact + "\n---\n# Spec 9 — Artifact spec\n",
+	})
+	docID := strconv.FormatInt(doc.ID, 10)
+
+	got := openDeclarations(t, s, testArtifact)
+	if len(got) != 1 || got[0] != (DeclaredEntity{Kind: "doc", ID: docID}) {
+		t.Fatalf("after create: open declarations = %+v, want one doc %s", got, docID)
+	}
+
+	// A body edit with a list declares the new address and re-declares the
+	// old one as a no-op; an edit dropping the key entirely undeclares
+	// nothing.
+	second := "gs://sunstone-prod/cow/exports"
+	if _, err := updateDocBody(t, s, doc.ID,
+		"---\nstatus: draft\nartifact:\n- "+testArtifact+"\n- "+second+"\n---\n# Spec 9 — Artifact spec\n"); err != nil {
+		t.Fatalf("update body: %v", err)
+	}
+	if got := openDeclarations(t, s, second); len(got) != 1 || got[0].ID != docID {
+		t.Fatalf("after edit: declarations for %s = %+v, want the doc", second, got)
+	}
+	if _, err := updateDocBody(t, s, doc.ID,
+		"---\nstatus: draft\n---\n# Spec 9 — Artifact spec\n"); err != nil {
+		t.Fatalf("update body dropping key: %v", err)
+	}
+	if got := openDeclarations(t, s, testArtifact); len(got) != 1 {
+		t.Fatalf("dropping the key undeclared: %+v", got)
+	}
+
+	// The cap holds on the doc path too.
+	long := "gs://" + strings.Repeat("x", 2000)
+	_, err := updateDocBody(t, s, doc.ID,
+		"---\nstatus: draft\nartifact: "+long+"\n---\n# Spec 9 — Artifact spec\n")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("over-long artifact: err = %v, want ErrInvalidInput", err)
 	}
 }
 

@@ -523,10 +523,10 @@ func newTaskSkillsCmd() *cobra.Command {
 func newTaskEditCmd() *cobra.Command {
 	var title, body, bodyFile, concern, priority string
 	var needsDecomposition, noUpload bool
-	var secretNames []string
+	var secretNames, artifacts []string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag",
+		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag, or declare an artifact it is verified by",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var in model.EditTaskInput
@@ -561,8 +561,11 @@ func newTaskEditCmd() *cobra.Command {
 				}
 				in.Secrets = &names
 			}
-			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.Secrets == nil {
-				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --needs-decomposition, or --secrets")
+			if cmd.Flags().Changed("artifact") {
+				in.Artifacts = &artifacts
+			}
+			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.Secrets == nil && in.Artifacts == nil {
+				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --needs-decomposition, --secrets, or --artifact")
 			}
 
 			c, cfg, err := newAPIClientWithConfig()
@@ -601,6 +604,8 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
 		"replace the task's declared secret names (comma-separated; 'none' clears)")
+	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
+		"declare a catalog address this task is verified by (repeat the flag for each; additive, never removes)")
 	return cmd
 }
 
