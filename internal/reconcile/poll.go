@@ -342,11 +342,22 @@ func gatherRepo(ctx context.Context, st *store.Store, app *githubauth.AppAuth, r
 	// Append order is commit date, not the sha order the requests were made
 	// in: main_commits ids are permanent and a frontier read against them
 	// must not place a later commit below an earlier one. The sha tiebreak
-	// keeps equal (or missing) dates deterministic for --json.
+	// keeps equal dates deterministic for --json.
+	//
+	// A zero date — GitHub's compare response omitting
+	// base_commit.commit.committer.date — sorts LAST, not first, because
+	// applyFacts records it as pushed_at = now. Ordering it first while
+	// dating it last is the over-advance hazard this sort exists to remove:
+	// the commit would take the lowest id in the batch while claiming to
+	// have landed after every commit above it.
 	sort.SliceStable(f.landedSHAs, func(i, j int) bool {
 		a, b := f.landedSHAs[i], f.landedSHAs[j]
-		if !f.landedAt[a].Equal(f.landedAt[b]) {
-			return f.landedAt[a].Before(f.landedAt[b])
+		da, db := f.landedAt[a], f.landedAt[b]
+		if da.IsZero() != db.IsZero() {
+			return db.IsZero()
+		}
+		if !da.Equal(db) {
+			return da.Before(db)
 		}
 		return a < b
 	})
