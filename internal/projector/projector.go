@@ -1,12 +1,15 @@
 // Package projector projects the backbone into the data-platform knowledge
 // graph (spec 006 §11). Authority stays split: the backbone (this repo,
-// Postgres) owns execution facts, Task is the one bridge between the two
-// systems, and it is projected read-only into the graph — design facts
-// (specs, ADRs, plans) are never projected from the backbone. graph-server
+// Postgres) owns execution facts and — since 025 §5 moved authoring there —
+// the design documents, and both are projected read-only into the graph.
+// Tasks render into the project's own named graph; each document's canonical
+// node renders into its per-document declared graph (007 §1.1's
+// declared/<slug>, iri.DeclaredGraph), whose writer is this projector now
+// that the backbone is the authoring surface (WL-289). graph-server
 // exposes no SPARQL Update, so there is no per-subject patch and no
-// read-modify-write of graph state: the write unit is the whole project
-// graph. RunOnce re-renders every task of a dirty project from the backbone
-// and PUTs the complete graph, replacing what graph-server held for it.
+// read-modify-write of graph state: the write unit is a whole named graph.
+// RunOnce re-renders every task and document of a dirty project from the
+// backbone and PUTs the complete graphs, replacing what graph-server held.
 // Deterministic rendering (graphproj.Document sorts and dedupes rendered
 // lines) makes an unchanged re-projection byte-identical, so re-running
 // after a crash or a duplicated batch is idempotent. Failures are isolated
@@ -257,6 +260,23 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	doc := graphproj.Document(triples)
 	if _, err := p.gc.PutGraph(ctx, Branch, iri.ProjectGraph(id), doc); err != nil {
 		return fmt.Errorf("put graph for project %s: %w", id, err)
+	}
+
+	// The project's documents render into their own declared graphs
+	// (WL-289): one graph per document, replaced whole, in the same attempt
+	// — a failure quarantines the project as a unit, documents included.
+	// Live documents only; a tombstoned document (044) keeps its last
+	// projected graph until a delete path exists, noted in
+	// docs/follow-ups.md.
+	docs, err := p.st.ListDocs(ctx, store.DocFilter{Project: id})
+	if err != nil {
+		return fmt.Errorf("list docs for project %s: %w", id, err)
+	}
+	for _, d := range docs {
+		body := graphproj.Document(graphproj.DocTriples(d))
+		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), body); err != nil {
+			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
+		}
 	}
 	p.m.recordProject()
 	return nil
