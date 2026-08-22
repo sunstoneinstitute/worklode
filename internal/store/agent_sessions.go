@@ -120,8 +120,14 @@ func (s *Store) TouchAgentSession(ctx context.Context, taskID, actorID, agent, a
 	}
 	now := s.nowFn().UTC().Truncate(time.Second)
 	extID := fmt.Sprintf("agent-session-%d-%s-%s", lease.ID, agent, sessionID)
+	payload, err := EventPayload(map[string]any{
+		"task": taskID, "actor": actorID, "agent": agent, "session": sessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	_, inserted, err := s.RecordEvent(ctx, "cli", extID, "agent_session.started", nil,
+	_, inserted, err := s.RecordEvent(ctx, "cli", extID, "agent_session.started", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			// Re-check inside the tx, with a FOR SHARE lock: the lease may have
 			// been released (or released and re-claimed) since heldLease read
@@ -291,7 +297,14 @@ func (s *Store) EndAgentSession(ctx context.Context, taskID, actorID, agent, ses
 		return err
 	}
 
-	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.ended", nil,
+	payload, err := EventPayload(map[string]any{
+		"task": taskID, "actor": actorID, "agent": agent, "session": sessionID,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "agent_session.ended", payload,
 		func(tx *sql.Tx, eventID int64) error {
 			var rowID int64
 			err := tx.QueryRow(

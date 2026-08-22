@@ -153,12 +153,13 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 		return nil
 	}
 
-	// The payload names the rule and the document, not the minted task id:
-	// RecordEvent marshals it before the transaction opens, and the id is
-	// allocated from the project counter inside apply. The link exists in the
-	// other direction — CreateTask writes a state_log row for the new task
-	// attributed to this event — so "why does this task exist" still reads
-	// task → task.created event → prov:wasInformedBy → the document event.
+	// The payload names the rule and the document; the minted task id is
+	// added by store.AttributeEventToTask inside apply, because RecordEvent
+	// marshals the payload before the transaction opens and the id is
+	// allocated from the project counter inside it (025 §15.2). CreateTask
+	// also writes a state_log row for the new task attributed to this event,
+	// so "why does this task exist" reads task → task.created event →
+	// prov:wasInformedBy → the document event from either direction.
 	payload, err := json.Marshal(map[string]any{
 		"rule":               act.Rule,
 		"doc":                store.DocIRI(*doc),
@@ -174,7 +175,7 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 			// CreateTask writes that state_log row itself, attributed to this
 			// event id, so there is no second LogChange here — the task's
 			// timeline already starts at the mint.
-			_, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
+			t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
 				ProjectID: doc.Project,
 				Title:     act.Title,
 				Body:      act.Body,
@@ -183,7 +184,10 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 				AboutDoc:  doc.ID,
 				CreatedBy: watcherActorID,
 			}, eventID)
-			return err
+			if err != nil {
+				return err
+			}
+			return store.AttributeEventToTask(tx, eventID, t.ID)
 		})
 	if err != nil {
 		return fmt.Errorf("doc-lifecycle: mint %s task for event %d: %w", act.TaskKind, ev.ID, err)

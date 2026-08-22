@@ -1185,6 +1185,36 @@ func (s *server) recordEvent(ctx context.Context, source, eventType string, v an
 	return err
 }
 
+// recordTaskEvent is recordEvent for an event about one task: the payload is
+// v's JSON object with "task" set to the task id, the key every task-scoped
+// payload names its subject under (025 §15.2), so GET /api/v1/events
+// attributes the event without a second read of state_log. v may be nil for
+// an event whose payload is the attribution and nothing else.
+//
+// Events whose task id is minted inside the transaction (task.created,
+// issue.promoted) cannot use this — nothing knows the id yet when the
+// payload is marshalled. They call store.AttributeEventToTask from apply
+// instead.
+func (s *server) recordTaskEvent(ctx context.Context, source, eventType, taskID string, v any,
+	apply func(tx *sql.Tx, eventID int64) error) error {
+	fields := map[string]json.RawMessage{}
+	if v != nil {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(b, &fields); err != nil {
+			return fmt.Errorf("%s payload is not a JSON object: %w", eventType, err)
+		}
+	}
+	id, err := json.Marshal(taskID)
+	if err != nil {
+		return err
+	}
+	fields["task"] = id
+	return s.recordEvent(ctx, source, eventType, fields, apply)
+}
+
 // randomExternalID returns a random hex string used as the (source,
 // external_id) identity for server-originated events.
 func randomExternalID() (string, error) {
