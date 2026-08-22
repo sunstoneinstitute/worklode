@@ -505,6 +505,22 @@ type FormShell struct {
 	Action    string
 	CancelURL string
 	Error     string
+	// Dictation reports whether the server has a speech-to-text provider
+	// configured (WL-299); it decides whether MarkdownInput offers the
+	// microphone, never whether the input works.
+	Dictation bool
+}
+
+// MarkdownInputView is one MarkdownInput component (WL-299): the textarea's
+// own attributes plus whether dictation is offered. Value is the draft as
+// submitted, preserved across a refused form post like every other field.
+type MarkdownInputView struct {
+	ID          string
+	Name        string
+	Rows        int
+	Placeholder string
+	Value       string
+	Dictation   bool
 }
 
 // NewTaskView is the "New task" form (POST to Form.Action), rendering the

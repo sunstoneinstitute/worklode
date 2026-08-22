@@ -122,6 +122,14 @@ type Config struct {
 	// default 0.35. LODE_SKILL_SCORE_FLOOR.
 	SkillScoreFloor string
 
+	// Speech-to-text for the cockpit's dictation button (WL-299). Off unless
+	// SpeechToTextAPIKey is set: the forms then render no microphone and
+	// POST /dictate answers 503, with everything else unchanged.
+	// SpeechToTextURL overrides the ElevenLabs API base for tests and
+	// self-hosted gateways; empty means https://api.elevenlabs.io.
+	SpeechToTextAPIKey string // LODE_ELEVENLABS_API_KEY
+	SpeechToTextURL    string // LODE_ELEVENLABS_URL
+
 	// Blob storage (spec 021). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
 	// exactly as before, so a local docker-compose stack needs no bucket.
@@ -324,6 +332,8 @@ type server struct {
 	// These are the only web routes that write, so this is where a rejected
 	// or refused cockpit write becomes visible.
 	formSubmissions *prometheus.CounterVec
+	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
+	dictations *prometheus.CounterVec
 
 	// crewChanges counts Crew membership changes, by surface (api, web),
 	// action (add, remove), and outcome; see crew.go and observeCrewChange. Labels
@@ -498,6 +508,11 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
 	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
 	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
+	// The MarkdownInput component's fragment endpoints (WL-299): not
+	// navWrapped — they answer a fragment or JSON to the component's fetch,
+	// never a navigated page.
+	r.web("POST /preview", s.previewMarkdown)
+	r.web("POST /dictate", s.dictate)
 	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
 	r.web("GET /work", s.navWrap("work", s.workPage))
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))

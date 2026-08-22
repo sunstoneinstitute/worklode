@@ -282,7 +282,7 @@ func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
 // newTaskView builds the new-task form, with the submitted values selected in
 // the menus and errMsg shown ("" on first render).
-func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.NewTaskView {
+func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string, dictation bool) ui.NewTaskView {
 	return ui.NewTaskView{
 		Form: ui.FormShell{
 			Page:      ui.PageProps{Title: "worklode: " + project.Name + ": new task"},
@@ -290,6 +290,7 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.
 			Action:    "/projects/" + project.ID + "/tasks",
 			CancelURL: "/projects/" + project.ID,
 			Error:     errMsg,
+			Dictation: dictation,
 		},
 		Title:      v.Title,
 		Body:       v.Body,
@@ -301,7 +302,7 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string) ui.
 }
 
 // newDeliverableView builds the deliverable form the same way.
-func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string) ui.NewDeliverableView {
+func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string, dictation bool) ui.NewDeliverableView {
 	return ui.NewDeliverableView{
 		Form: ui.FormShell{
 			Page:      ui.PageProps{Title: "worklode: " + project.Name + ": new deliverable"},
@@ -309,6 +310,7 @@ func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errM
 			Action:    "/projects/" + project.ID + "/deliverables",
 			CancelURL: "/projects/" + project.ID + "/deliverables",
 			Error:     errMsg,
+			Dictation: dictation,
 		},
 		Name:        v.Name,
 		Description: v.Description,

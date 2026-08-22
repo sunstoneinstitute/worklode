@@ -74,6 +74,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
 	}, []string{"decision", "outcome"})
+	s.dictations = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_dictations_total",
+		Help: "Dictation requests (POST /dictate, WL-299), by outcome (" +
+			strings.Join(dictationOutcomes, ", ") + "). The proxy call to the speech-to-text provider is the only outbound work; 'unconfigured' on a deployment with no provider is a stale page or a hand-built request, never the button, which is not rendered then.",
+	}, []string{"outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
 		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
@@ -199,7 +204,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.dictations, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
@@ -252,6 +257,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
+	}
+	for _, outcome := range dictationOutcomes {
+		s.dictations.WithLabelValues(outcome)
 	}
 	// Every decision/outcome pair, so an instance where nobody has decided an
 	// approval reads as a flat zero rather than as no-data — the difference
@@ -603,6 +611,18 @@ func (s *server) observeFormSubmission(form, outcome string) {
 		return
 	}
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
+}
+
+// dictationOutcomes bounds worklode_dictations_total's one label.
+var dictationOutcomes = []string{"ok", "unconfigured", "too_large", "bad_request", "provider_error"}
+
+// observeDictation records one POST /dictate, by outcome. Nil-safe like
+// every observer here.
+func (s *server) observeDictation(outcome string) {
+	if s.dictations == nil {
+		return
+	}
+	s.dictations.WithLabelValues(outcome).Inc()
 }
 
 // observeEventSubscriberSeek records one successful admin seek of a
