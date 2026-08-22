@@ -1,6 +1,6 @@
 // web.go implements the web UI's read surfaces (its writes — the two
 // creation forms — live in webform.go): it builds the presentation views
-// internal/ui's templ components render (the shared Page shell, the seven
+// internal/ui's templ components render (the shared Page shell, the eight
 // global destinations and the project-local destinations spec 032 §2 defines)
 // and serves /assets/ (self-hosted stylesheet and fonts, embedded and served
 // from internal/ui — see assetHandler). When OIDC is configured every page
@@ -100,8 +100,9 @@ func (s *server) blobOrigin() string {
 // contentSecurityPolicy is the policy every rendered page carries (set in one
 // place, renderWeb). Each directive is what the pages actually load:
 //
-//   - script-src 'self': layout.templ's /assets/theme.js and /assets/htmx.min.js
-//     and cliauth.templ's /assets/copy.js. No page has an inline script.
+//   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js, and
+//     /assets/htmx.min.js, and cliauth.templ's /assets/copy.js. No page has
+//     an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
 //     meta turns off the unnonced <style> htmx would otherwise inject for its
