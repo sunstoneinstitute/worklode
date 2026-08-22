@@ -130,7 +130,15 @@ func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 // stored timestamp yields to the first event that carries one, so nothing
 // freezes, and an event with no timestamp yields to any row that has one,
 // because it cannot prove it is newer. Both unknown writes unconditionally.
-func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
+//
+// The returned bool is the guard's own verdict: true on a first insert or a
+// guard-accepted update, false when the WHERE clause rejected the update as
+// stale. A caller that reports "this PR was updated" (reconcile's
+// PollResult.Repaired, WL-250) must gate on this, not on having merely asked
+// UpsertPR to write — the row is always returned via GetPRTx regardless, for
+// callers like the webhook path whose lifecycle effects stay unconditional
+// even when the fact columns did not move.
+func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, bool, error) {
 	candidate := TaskIDFromRef(pr.HeadRef)
 	if candidate == "" {
 		candidate = TaskIDFromBody(body)
@@ -139,7 +147,7 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 	if candidate != "" {
 		exists, err := taskExists(tx, candidate)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if exists {
 			taskID = &candidate
@@ -167,7 +175,7 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 		updatedAt = sql.NullTime{Time: pr.UpdatedAt.UTC(), Valid: true}
 	}
 
-	_, err := tx.Exec(
+	result, err := tx.Exec(
 		`INSERT INTO pull_requests (repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, nullif($13, ''))
 		 ON CONFLICT (repo, number) DO UPDATE SET
@@ -184,10 +192,21 @@ func UpsertPR(tx *sql.Tx, pr PullRequest, body string) (*PullRequest, error) {
 		pr.Repo, pr.Number, pr.Title, pr.State, taskIDArg, pr.HeadRef, pr.HeadSHA, mergeSHA, pr.URL, openedAt, mergedAt, updatedAt, pr.Author,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("upsert PR %s#%d: %w", pr.Repo, pr.Number, err)
+		return nil, false, fmt.Errorf("upsert PR %s#%d: %w", pr.Repo, pr.Number, err)
+	}
+	// On a fresh insert (no conflict) the WHERE clause never runs and the row
+	// always counts as affected; on a conflict it counts only if the guard's
+	// WHERE matched, which is exactly the "did this write land" signal.
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return nil, false, fmt.Errorf("upsert PR %s#%d: rows affected: %w", pr.Repo, pr.Number, err)
 	}
 
-	return GetPRTx(tx, pr.Repo, pr.Number)
+	row, err := GetPRTx(tx, pr.Repo, pr.Number)
+	if err != nil {
+		return nil, false, err
+	}
+	return row, affected > 0, nil
 }
 
 // ExistingPRNumbers returns the pull-request numbers already stored for repo.

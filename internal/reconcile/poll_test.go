@@ -153,7 +153,7 @@ func seedStaleTask(t *testing.T, st *store.Store) (taskID string) {
 			if err := store.Transition(tx, now, taskID, "in_progress", "in_review", eventID); err != nil {
 				return err
 			}
-			_, err = store.UpsertPR(tx, store.PullRequest{
+			_, _, err = store.UpsertPR(tx, store.PullRequest{
 				Repo: "acme/app", Number: 12, Title: "fix", State: "open",
 				HeadRef: taskID + "-fix", HeadSHA: headSHA,
 				URL: "u", OpenedAt: now,
@@ -256,6 +256,89 @@ func TestPollRepairsMergedWhileDown(t *testing.T) {
 	}
 }
 
+// TestPollDoesNotCountGuardRejectedPRAsUpdated is WL-250: PollResult.Repaired
+// must report what UpsertPR's non-regressing guard actually wrote, not merely
+// what gatherRepo fetched from GitHub. Here the stored PR is already newer
+// than what GitHub answers (a stale read, or a duplicate replay of an old
+// delivery) — a request the guard exists for — so the write is rejected and
+// the run must not claim the PR as repaired.
+func TestPollDoesNotCountGuardRejectedPRAsUpdated(t *testing.T) {
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	if err := st.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if err := st.AddRepo(ctx, "demo", "acme/app"); err != nil {
+		t.Fatalf("map repo: %v", err)
+	}
+
+	local := time.Date(2026, 7, 25, 12, 0, 0, 0, time.UTC)
+	staleGitHubRead := local.Add(-time.Hour) // older than what's already stored
+
+	var taskID string
+	if _, _, err := st.RecordEvent(ctx, "cli", "seed-"+t.Name(), "test.seed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			now := st.Now()
+			task, err := store.CreateTask(tx, now, store.TaskInput{
+				ProjectID: "demo", Title: "fix crash", Priority: "medium", Kind: "bug",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			taskID = task.ID
+			if err := store.Transition(tx, now, taskID, "ready", "in_progress", eventID); err != nil {
+				return err
+			}
+			if err := store.Transition(tx, now, taskID, "in_progress", "in_review", eventID); err != nil {
+				return err
+			}
+			_, _, err = store.UpsertPR(tx, store.PullRequest{
+				Repo: "acme/app", Number: 12, Title: "fix (already current)", State: "open",
+				HeadRef: taskID + "-fix", HeadSHA: headSHA,
+				URL: "u", OpenedAt: now,
+				UpdatedAt: local,
+			}, "")
+			return err
+		}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	routes := map[string]string{
+		"/repos/acme/app": `{"default_branch": "main"}`,
+		"/repos/acme/app/pulls/12": `{
+			"number": 12, "title": "fix (stale read)", "state": "open", "merged": false,
+			"body": "", "html_url": "u",
+			"created_at": "2026-07-19T09:00:00Z",
+			"updated_at": "` + staleGitHubRead.Format(time.RFC3339) + `",
+			"head": {"ref": "` + taskID + `-fix", "sha": "` + headSHA + `"}
+		}`,
+		"/repos/acme/app/releases": `[]`,
+	}
+	app := newFakeGitHub(t, routes)
+
+	res, err := reconcile.Poll(ctx, st, app, reconcile.Options{RunID: "run-guard-reject"})
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if res.Candidates != 1 {
+		t.Fatalf("candidates = %d; want 1", res.Candidates)
+	}
+	if len(res.Repaired) != 0 {
+		t.Fatalf("repaired = %+v; want none — the only gathered PR was guard-rejected as stale", res.Repaired)
+	}
+
+	prs, err := st.PRsForTask(ctx, taskID)
+	if err != nil {
+		t.Fatalf("PRs for task: %v", err)
+	}
+	if len(prs) != 1 || prs[0].Title != "fix (already current)" {
+		t.Fatalf("stored PR = %+v; want the guard to have kept the newer local title", prs)
+	}
+	if got := taskState(t, st, taskID); got != "in_review" {
+		t.Fatalf("task state = %q; want untouched in_review", got)
+	}
+}
+
 // seedOpenTask adds a second task in the same repo whose PR is still open, so
 // the run has two candidates in one repo.
 func seedOpenTask(t *testing.T, st *store.Store) (taskID string) {
@@ -276,7 +359,7 @@ func seedOpenTask(t *testing.T, st *store.Store) (taskID string) {
 			if err := store.Transition(tx, now, taskID, "in_progress", "in_review", eventID); err != nil {
 				return err
 			}
-			_, err = store.UpsertPR(tx, store.PullRequest{
+			_, _, err = store.UpsertPR(tx, store.PullRequest{
 				Repo: "acme/app", Number: 13, Title: "other", State: "open",
 				HeadRef: taskID + "-other", HeadSHA: otherSHA,
 				URL: "u2", OpenedAt: now,

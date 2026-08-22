@@ -368,7 +368,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		mergedAt = gh.MergedAt
 	}
 
-	pr, err := store.UpsertPR(tx, store.PullRequest{
+	pr, _, err := store.UpsertPR(tx, store.PullRequest{
 		Repo:      repo,
 		Number:    gh.Number,
 		Title:     gh.Title,
