@@ -15,6 +15,7 @@ type PlanningOutcome string
 const (
 	Full      PlanningOutcome = "full"
 	Partial   PlanningOutcome = "partial"
+	Deferred  PlanningOutcome = "deferred"
 	BoundOnly PlanningOutcome = "boundOnly"
 	Unplanned PlanningOutcome = "unplanned"
 )
@@ -100,6 +101,15 @@ type claim struct {
 	fullCoverageWith []string
 }
 
+// deferral is one plan's explicit handoff of a section to a named owner
+// (026 §5.3), resolved once at index build time the same way claim is:
+// Section need not re-parse frontmatter per query.
+type deferral struct {
+	plan   string // repo-relative
+	status string // the plan's frontmatter status
+	owner  string // repo-relative reference to the document the section is handed to
+}
+
 // discharges reports whether status is in 026 §2.1's discharging set for
 // coverage purposes: not draft. A superseded plan is spent (025 §9: accepted,
 // then executed) and discharges what it covered exactly as an accepted plan
@@ -120,6 +130,7 @@ type sectionKey struct {
 // section.
 type PlanIndex struct {
 	claims map[sectionKey][]claim
+	defers map[sectionKey][]deferral
 	status map[string]string // repo-relative plan path -> frontmatter status
 
 	// specDir and planDir are the two corpus directories exactly as loaded
@@ -146,6 +157,7 @@ type PlanIndex struct {
 func NewPlanIndex(docs []CorpusDoc) *PlanIndex {
 	ix := &PlanIndex{
 		claims: make(map[sectionKey][]claim),
+		defers: make(map[sectionKey][]deferral),
 		status: make(map[string]string),
 	}
 	ix.specDir, ix.planDir = corpusDirs(docs)
@@ -173,6 +185,22 @@ func NewPlanIndex(docs []CorpusDoc) *PlanIndex {
 				fullCoverageWith: normalizeList(entry.FullCoverageWith, home),
 			})
 		}
+		for _, entry := range planDeferralEntries(d) {
+			rawTarget, anchor := SplitFragment(entry.Spec)
+			if anchor == "" || rawTarget == "NO-SPEC" {
+				// Unlike covers, a defers entry with no #sec-N fragment is
+				// rejected outright at write time (026 §5.3) — this mirrors
+				// covers' own defensive skip rather than assuming the corpus
+				// is already valid.
+				continue
+			}
+			key := sectionKey{spec: normalizeRef(rawTarget, home), anchor: anchor}
+			ix.defers[key] = append(ix.defers[key], deferral{
+				plan:   plan,
+				status: d.Status,
+				owner:  normalizeRef(entry.To, home),
+			})
+		}
 	}
 	return ix
 }
@@ -191,6 +219,19 @@ func planCoverageEntries(d CorpusDoc) CoverageList {
 		return nil
 	}
 	return doc.Frontmatter.CoverageEntries()
+}
+
+// planDeferralEntries recovers d's `defers` entries (026 §5.3), the same way
+// planCoverageEntries recovers `covers`: CorpusDoc.Edges is 025 §16.2's
+// sync-projected relation shape and does not carry the named owner, so this
+// re-parses the frontmatter captured in d.Source. d.Source is required for
+// the same reason planCoverageEntries states.
+func planDeferralEntries(d CorpusDoc) DeferralList {
+	doc, err := Parse(d.Source)
+	if err != nil || doc.Frontmatter == nil {
+		return nil
+	}
+	return doc.Frontmatter.Defers
 }
 
 // resolveDoc canonicalises ref — a bare filename, an already-canonical
@@ -319,7 +360,14 @@ func normalizeList(refs []string, home string) []string {
 // need executing from a superseded one that is done, and from a draft one
 // still awaiting acceptance (026 §2.4) — deduplicated and sorted ascending
 // by Path.
-func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []CoveringPlan) {
+//
+// The third return is the deferred-to owner: non-empty only when the outcome
+// is Deferred, in which case it is every distinct owner an accepted-or-
+// superseded plan's `defers` names for this section (026 §5.3), sorted and
+// comma-joined — the same join spelling internal/store/docs.go's
+// NeedsPlanning uses, so the two consumers agree on both the outcome and its
+// detail for the same section.
+func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []CoveringPlan, string) {
 	key := sectionKey{spec: resolveDoc(specPath, ix.specCanon, ix.specDir), anchor: anchor}
 
 	var hasFull, hasPartial, hasNone, hasClosedPartial bool
@@ -353,16 +401,46 @@ func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []Coveri
 	}
 	sort.Slice(covering, func(i, j int) bool { return covering[i].Path < covering[j].Path })
 
+	owner := ix.deferredOwner(key)
+
+	// 026 §2.1's precedence over the undischarged readings: partial, then
+	// deferred, then bound-only, then unplanned. Full (and a closed partial)
+	// discharges the section outright and is decided first, exactly as
+	// before defers was indexed.
 	outcome := Unplanned
 	switch {
 	case hasFull || hasClosedPartial:
 		outcome = Full
 	case hasPartial:
 		outcome = Partial
+	case owner != "":
+		outcome = Deferred
 	case hasNone:
 		outcome = BoundOnly
 	}
-	return outcome, covering
+	if outcome != Deferred {
+		owner = ""
+	}
+	return outcome, covering, owner
+}
+
+// deferredOwner returns the comma-joined, sorted, deduplicated set of owners
+// an accepted-or-superseded plan's `defers` names for key (026 §5.3) — the
+// same "not draft" eligibility rule Section applies to a covers claim
+// (discharges), not a separate rule invented for defers. "" when no such
+// plan defers this section.
+func (ix *PlanIndex) deferredOwner(key sectionKey) string {
+	seen := map[string]bool{}
+	var owners []string
+	for _, d := range ix.defers[key] {
+		if !discharges(d.status) || seen[d.owner] {
+			continue
+		}
+		seen[d.owner] = true
+		owners = append(owners, d.owner)
+	}
+	sort.Strings(owners)
+	return strings.Join(owners, ",")
 }
 
 // closes reports whether a partial claim's fullCoverageWith discharges the

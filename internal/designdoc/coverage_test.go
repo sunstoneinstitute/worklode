@@ -31,20 +31,30 @@ func buildIndex(t *testing.T, planFiles map[string]string) *designdoc.PlanIndex 
 	return designdoc.NewPlanIndex(docs)
 }
 
-// checkSection asserts one Section() call: outcome, and the covering-plan
-// list (nil compares equal to an empty want slice).
+// checkSection asserts one Section() call: outcome, the covering-plan list
+// (nil compares equal to an empty want slice), and the deferred-to owner.
+// wantOwner is variadic purely so the ~30 pre-existing call sites that predate
+// the owner return need not all be touched to pass "" explicitly; every
+// caller that cares passes exactly one string.
 func checkSection(t *testing.T, ix *designdoc.PlanIndex, spec, anchor string,
-	wantOutcome designdoc.PlanningOutcome, want []designdoc.CoveringPlan) {
+	wantOutcome designdoc.PlanningOutcome, want []designdoc.CoveringPlan, wantOwner ...string) {
 	t.Helper()
-	outcome, covering := ix.Section(spec, anchor)
+	if len(wantOwner) > 1 {
+		t.Fatalf("checkSection: got %d wantOwner args, want 0 or 1", len(wantOwner))
+	}
+	outcome, covering, owner := ix.Section(spec, anchor)
 	if outcome != wantOutcome {
 		t.Errorf("Section(%q,%q) outcome = %q, want %q", spec, anchor, outcome, wantOutcome)
 	}
-	if len(covering) == 0 && len(want) == 0 {
-		return
-	}
-	if !reflect.DeepEqual(covering, want) {
+	if !(len(covering) == 0 && len(want) == 0) && !reflect.DeepEqual(covering, want) {
 		t.Errorf("Section(%q,%q) covering = %+v, want %+v", spec, anchor, covering, want)
+	}
+	wantOwn := ""
+	if len(wantOwner) == 1 {
+		wantOwn = wantOwner[0]
+	}
+	if owner != wantOwn {
+		t.Errorf("Section(%q,%q) owner = %q, want %q", spec, anchor, owner, wantOwn)
 	}
 }
 
@@ -591,4 +601,120 @@ func TestSectionAbsolutePathAndLeadingSlashRefBothResolve(t *testing.T) {
 	want := []designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}}
 	checkSection(t, ix, specPath, "sec-1", designdoc.Full, want)
 	checkSection(t, ix, "/"+specSec1, "sec-1", designdoc.Full, want)
+}
+
+// A plan may defer a section it does not cover at all — `covers` and
+// `defers` are independent frontmatter fields (026 §5.3) — and an accepted
+// plan's deferral alone reports the section deferred, with its owner, and no
+// covering plan (a defers claim is not a covers claim, so it never appears in
+// the covering list).
+func TestSectionDeferred_NoCoveringPlan(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: accepted\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# A\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Deferred, nil,
+		"docs/specs/006-knowledge-graph.md")
+}
+
+// A superseded plan's deferral still discharges the "not draft" eligibility
+// test (026 §2.1's "not `draft`" discharging set applies to defers exactly as
+// it does to covers), the same as TestSectionSuperseded_DischargesFull.
+func TestSectionDeferred_SupersededPlanStillDefers(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: superseded\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# A\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Deferred, nil,
+		"docs/specs/006-knowledge-graph.md")
+}
+
+// A draft plan's deferral binds nothing (026 §2.1's "a draft plan has not yet
+// undertaken work" applies to defers too, per WL-290's brief: the same
+// eligibility rule as covers, not a separate one for defers), so the section
+// stays unplanned.
+func TestSectionUnplanned_DraftDefersDoesNotDefer(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: draft\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# A\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
+}
+
+// Precedence (026 §2.1): partial outranks deferred. Plan a partially covers
+// the section; plan b (a different plan, so the combination is unambiguous)
+// defers the same section. The outcome is partial, not deferred, and the
+// owner is not reported.
+func TestSectionPartial_OutranksDeferred(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: accepted\ncovers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    coverage: partial\n" +
+			"---\n# A\n\nBody.\n",
+		"b.md": "---\nstatus: accepted\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# B\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Partial,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "partial"}})
+}
+
+// Precedence (026 §2.1): deferred outranks bound-only. Plan a claims `none`
+// on the section (bound-only material on its own); plan b defers it. The
+// outcome is deferred, with the owner, not bound-only.
+func TestSectionDeferred_OutranksBoundOnly(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: accepted\ncovers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    coverage: none\n" +
+			"---\n# A\n\nBody.\n",
+		"b.md": "---\nstatus: accepted\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# B\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Deferred, nil,
+		"docs/specs/006-knowledge-graph.md")
+}
+
+// Two plans deferring the same section to two different owners report both,
+// sorted and comma-joined — the same join spelling
+// internal/store/docs.go's NeedsPlanning uses for `string_agg`.
+func TestSectionDeferred_MultipleOwnersSortedAndJoined(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: accepted\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/010-later.md\n" +
+			"---\n# A\n\nBody.\n",
+		"b.md": "---\nstatus: accepted\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/005-earlier.md\n" +
+			"---\n# B\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Deferred, nil,
+		"docs/specs/005-earlier.md,docs/specs/010-later.md")
+}
+
+// The same owner named by two plans reports once, the same dedup
+// NeedsPlanning's `DISTINCT` gives the store-side answer.
+func TestSectionDeferred_DuplicateOwnerDeduplicates(t *testing.T) {
+	ix := buildIndex(t, map[string]string{
+		"a.md": "---\nstatus: accepted\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# A\n\nBody.\n",
+		"b.md": "---\nstatus: superseded\ndefers:\n" +
+			"  - spec: " + specSec1 + "#sec-1\n" +
+			"    to: docs/specs/006-knowledge-graph.md\n" +
+			"---\n# B\n\nBody.\n",
+	})
+	checkSection(t, ix, specSec1, "sec-1", designdoc.Deferred, nil,
+		"docs/specs/006-knowledge-graph.md")
 }
