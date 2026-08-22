@@ -515,6 +515,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
 	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
 	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
+	r.web("GET /projects/{id}/deleted", s.navWrap("deleted", s.deletedPage))
+	r.web("POST /projects/{id}/deleted/tasks/restore", s.navWrap("deleted", s.restoreTaskFromForm))
+	r.web("POST /projects/{id}/deleted/docs/restore", s.navWrap("deleted", s.restoreDocFromForm))
 	// The MarkdownInput component's fragment endpoints (WL-299): not
 	// navWrapped — they answer a fragment or JSON to the component's fetch,
 	// never a navigated page.

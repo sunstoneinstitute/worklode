@@ -719,6 +719,11 @@ func sidebar(p CockpitProject, active string) templ.Component {
 // Deliverables, Reviews, Decisions, Documents, Activity), marking the item
 // matching active as aria-current="page". The Work item links to the
 // overview's #work anchor and is never marked current.
+//
+// Deleted follows them, outside that order deliberately: it is spec 044's
+// tombstone review rather than one of 032 §2's destinations, and it is last
+// because a deleted row is the rarest thing anyone comes here to read. Spec
+// 032 §2's list is owed an amendment naming it (docs/follow-ups.md).
 func localNav(projectID, active string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -755,7 +760,7 @@ func localNav(projectID, active string) templ.Component {
 		var templ_7745c5c3_Var23 templ.SafeURL
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinURLErrs("/projects/" + projectID + "#work")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout.templ`, Line: 260, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout.templ`, Line: 265, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -782,6 +787,10 @@ func localNav(projectID, active string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/activity", "Activity", "activity", active).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/deleted", "Deleted", "deleted", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

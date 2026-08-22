@@ -419,6 +419,53 @@ type CrewMember struct {
 	IsLead      bool
 }
 
+// --- deleted -----------------------------------------------------------------
+
+// DeletedView is a project's tombstoned tasks and documents (spec 044 §2),
+// the project-local Deleted destination. Every other cockpit page reads
+// through the same filtered store calls the CLI does, so a deleted row
+// disappears from all of them; this page is the one that shows them, and the
+// only surface besides the CLI and the JSON API where the justification a
+// delete carried can be read.
+//
+// Restoring is a per-row form, one action per entity kind: the two undeletes
+// are different capabilities (permTaskWrite and permDocWrite) and a single
+// route could carry only one of them.
+type DeletedView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	Tasks        []model.Task
+	Docs         []DeletedDocRow
+
+	// RestoreTaskAction and RestoreDocAction are where a row's Restore
+	// button POSTs; the row is named in a hidden field. RestoreError is the
+	// one message a refused restore shows ("" otherwise).
+	RestoreTaskAction string
+	RestoreDocAction  string
+	RestoreError      string
+}
+
+// DeletedDocRow is one tombstoned document, with the corpus reference
+// pre-formatted the way the document index formats it ("spec 25"). Bodies are
+// dropped before the view is built, for the reason docsView states.
+type DeletedDocRow struct {
+	Doc model.Doc
+	URL string
+	Ref string
+}
+
+// tombstone reads the delete record off a task or document for rendering.
+// Every row on this page has one — the lists it comes from select on
+// `deleted_at IS NOT NULL` — but the field is a pointer on the wire, so the
+// nil case still needs an answer rather than a panic.
+func tombstone(t *model.Tombstone) model.Tombstone {
+	if t == nil {
+		return model.Tombstone{}
+	}
+	return *t
+}
+
 // --- documents ---------------------------------------------------------------
 
 // DocsView is the document corpus index (GET /docs): every spec, ADR and plan

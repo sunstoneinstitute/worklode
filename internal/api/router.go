@@ -64,18 +64,26 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
 	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
 	"POST /projects/{id}/tasks":           guarded(permWebWrite),
-	"POST /preview":                       guarded(permWebWrite),
-	"POST /dictate":                       guarded(permWebWrite),
-	"GET /projects/{id}/{section}":        guarded(permWebRead),
-	"GET /work":                           guarded(permWebRead),
-	"GET /reviews":                        guarded(permWebRead),
-	"GET /deliveries":                     guarded(permWebRead),
-	"GET /knowledge":                      guarded(permWebRead),
-	"GET /tasks/{id}":                     guarded(permWebRead),
-	"GET /docs":                           guarded(permWebRead),
-	"GET /docs/{id}":                      guarded(permWebRead),
-	"GET /docs/ref/{ref...}":              guarded(permWebRead),
-	"GET /drift":                          guarded(permWebRead),
+	// The cockpit's tombstone review (044 §2) and its two Restore buttons.
+	// Reading the page is an ordinary web read; restoring carries the
+	// permission the JSON API's undelete carries — permTaskWrite for a task,
+	// permDocWrite for a document (044 §5) — rather than permWebWrite, which
+	// is why they are two routes and not one.
+	"GET /projects/{id}/deleted":                guarded(permWebRead),
+	"POST /projects/{id}/deleted/tasks/restore": guarded(permTaskWrite),
+	"POST /projects/{id}/deleted/docs/restore":  guarded(permDocWrite),
+	"POST /preview":                             guarded(permWebWrite),
+	"POST /dictate":                             guarded(permWebWrite),
+	"GET /projects/{id}/{section}":              guarded(permWebRead),
+	"GET /work":                                 guarded(permWebRead),
+	"GET /reviews":                              guarded(permWebRead),
+	"GET /deliveries":                           guarded(permWebRead),
+	"GET /knowledge":                            guarded(permWebRead),
+	"GET /tasks/{id}":                           guarded(permWebRead),
+	"GET /docs":                                 guarded(permWebRead),
+	"GET /docs/{id}":                            guarded(permWebRead),
+	"GET /docs/ref/{ref...}":                    guarded(permWebRead),
+	"GET /drift":                                guarded(permWebRead),
 	// The cockpit's one decision act (029 §7.3). permApprovalDecide rather
 	// than permWebWrite: deciding an approval is a different capability from
 	// filing a task through a form, and the route is additionally gated by

@@ -714,3 +714,18 @@ while dogfooding it against the real corpus.
   pass over the project's tombstoned docs in the same cycle; it did not ride
   along with the v1 node projection because 044's delete semantics for graph
   artifacts deserve their own look.
+
+## From WL-238 — the cockpit's Deleted destination (2026-08-22)
+
+- `[P3]` **Spec 032 §2's project-local navigation still names eight
+  destinations; the cockpit now renders nine.** WL-238 adds Deleted — spec
+  044's tombstone review — as the last item in `localNav`
+  (`internal/ui/layout.templ`), deliberately outside 032 §2's fixed order
+  because it belongs to 044 rather than to the cockpit spec. 032 §2 (or 044
+  §5, which lists only the API and CLI surfaces) is owed an amendment naming
+  it, so the destination list stops being a spec that the page contradicts.
+- `[P3]` **The Deleted page is per project and has no instance-wide view.** A
+  document or task is always project-scoped, so nothing is unreachable, but
+  reviewing every delete across an instance still means visiting each project.
+  A global destination was out of WL-238's scope for the same reason the nav
+  item above is a deviation: it would be a second addition to 032 §2's list.
