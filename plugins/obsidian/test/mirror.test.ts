@@ -4,6 +4,7 @@ import {
   desiredNotes,
   desiredPath,
   desiredTaskNotes,
+  DOC_FETCH_CONCURRENCY,
   foreignNotes,
   hydrateDocBodies,
   isConflictNotePath,
@@ -986,35 +987,58 @@ describe("hydrateDocBodies", () => {
     return { ...row, body: withFrontmatter({ status: row.status }, `# ${row.title}\n\ntext of ${row.slug}\n`) };
   }
 
-  /** A fetchDoc that records what it was asked for and answers from `rows`. */
-  function recordingFetch(rows: Doc[]): { fetch: (id: number) => Promise<Doc>; asked: number[] } {
+  /** A fetchDoc that records what it was asked for, answers from `rows`, and
+   *  tracks how many calls were ever in flight at once -- the bound
+   *  DOC_FETCH_CONCURRENCY claims. Resolving on a later microtask is what makes
+   *  overlap observable at all; a synchronous answer would serialize. */
+  function recordingFetch(rows: Doc[]): {
+    fetch: (id: number) => Promise<Doc>;
+    asked: number[];
+    maxInFlight: () => number;
+  } {
     const asked: number[] = [];
     const byId = new Map(rows.map((r) => [r.id, r]));
+    let inFlight = 0;
+    let peak = 0;
     return {
       asked,
+      maxInFlight: () => peak,
       fetch: async (id) => {
         asked.push(id);
-        const row = byId.get(id);
-        if (row === undefined) throw new Error(`no such doc: ${id}`);
-        return fetchedFor(row);
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        try {
+          await Promise.resolve();
+          await Promise.resolve();
+          const row = byId.get(id);
+          if (row === undefined) throw new Error(`no such doc: ${id}`);
+          return fetchedFor(row);
+        } finally {
+          inFlight--;
+        }
       },
     };
   }
 
-  /** Renders and applies one full sync over `rows`, hydrating first, exactly
-   *  as src/main.ts does. Returns the writer so a caller can read the notes
-   *  the sync left behind, and the ids the sync fetched. */
+  /** Renders and applies one full sync over `rows`, hydrating first and
+   *  carrying `unfetched` into applyMirror, exactly as src/main.ts does. */
   async function syncOnce(
     writer: MapVaultWriter,
     rows: Doc[],
-  ): Promise<{ asked: number[]; fetched: number; written: number; skipped: number }> {
-    const { fetch, asked } = recordingFetch(rows);
+  ): Promise<{ asked: number[]; fetched: number; written: number; skipped: number; maxInFlight: number }> {
+    const { fetch, asked, maxInFlight } = recordingFetch(rows);
     const byProject = new Map([["worklode", { docs: rows, tasks: [fixtureTask()] }]]);
     const hydrated = await hydrateDocBodies(writer, ROOT, byProject, fetch);
     const desired = await desiredNotes([fixtureProject()], hydrated.byProject, ROOT_NAME, SYNCED_AT);
     expect(desired.conflicts).toEqual([]);
-    const stats = await applyMirror(writer, ROOT, desired);
-    return { asked, fetched: hydrated.fetched, written: stats.written, skipped: stats.skipped };
+    const stats = await applyMirror(writer, ROOT, desired, { alreadyCurrent: hydrated.unfetched });
+    return {
+      asked,
+      fetched: hydrated.fetched,
+      written: stats.written,
+      skipped: stats.skipped,
+      maxInFlight: maxInFlight(),
+    };
   }
 
   it("fetches every document on a first sync, and renders its body", async () => {
@@ -1070,14 +1094,49 @@ describe("hydrateDocBodies", () => {
     expect(parsed.body).toContain("text of documents");
   });
 
-  it("re-fetches only the document that changed", async () => {
+  // The assertion that actually catches a blank write in a mixed batch: the
+  // document that was not fetched still has its text afterwards, even though
+  // it was rendered from a blank list row in the same pass.
+  it("re-fetches only the document that changed, and leaves the other's text intact", async () => {
     const writer = new MapVaultWriter();
     const stable = listRow({ id: 4, slug: "backbone" });
     await syncOnce(writer, [listRow({ id: 25, slug: "documents", version: 3 }), stable]);
+    const stablePath = "worklode/docs/backbone.md";
+    const before = await writer.read(ROOT, stablePath);
 
     const second = await syncOnce(writer, [listRow({ id: 25, slug: "documents", version: 4 }), stable]);
 
     expect(second.asked).toEqual([25]);
+    expect(await writer.read(ROOT, stablePath)).toBe(before);
+    expect(parseNote(await writer.read(ROOT, stablePath)).body).toContain("text of backbone");
+  });
+
+  // The TOCTOU applyMirror's `alreadyCurrent` closes. Between hydrate's read
+  // and applyMirror's there is a whole fetch phase; a note that disappears in
+  // that window must not be recreated from the blank list row, because the
+  // blank would carry the correct etag and no later sync would find it stale.
+  it("does not write a blank note when an unfetched note vanishes mid-sync", async () => {
+    const writer = new MapVaultWriter();
+    const rows = [listRow({ id: 25, slug: "documents" })];
+    await syncOnce(writer, rows);
+
+    const path = "worklode/docs/documents.md";
+    const byProject = new Map([["worklode", { docs: rows, tasks: [fixtureTask()] }]]);
+    const hydrated = await hydrateDocBodies(writer, ROOT, byProject, () => {
+      throw new Error("must not fetch: the note was current when it was asked about");
+    });
+    expect(hydrated.unfetched).toContain(path);
+
+    writer.files.delete(`${ROOT}/${path}`);
+    const desired = await desiredNotes([fixtureProject()], hydrated.byProject, ROOT_NAME, SYNCED_AT);
+    await applyMirror(writer, ROOT, desired, { alreadyCurrent: hydrated.unfetched });
+
+    // Left missing rather than written blank, and the next sync restores it
+    // with its text, because a missing note is stale.
+    expect(writer.files.has(`${ROOT}/${path}`)).toBe(false);
+    const repair = await syncOnce(writer, rows);
+    expect(repair.asked).toEqual([25]);
+    expect(parseNote(await writer.read(ROOT, path)).body).toContain("text of documents");
   });
 
   it("re-fetches a document whose note was deleted or corrupted", async () => {
@@ -1117,6 +1176,25 @@ describe("hydrateDocBodies", () => {
     expect(hydrated.fetched).toBe(0);
   });
 
+  // The grouping key is the trusted one, exactly as in filterSafe and
+  // writeBackTask: a document whose own `project` disagrees is one desiredNotes
+  // drops, and asking about doc.project would ask about a different file than
+  // the one applyMirror decides on.
+  it("spends no request on a document whose own project is not the one it came under", async () => {
+    const writer = new MapVaultWriter();
+    const { fetch, asked } = recordingFetch([]);
+    const stray = listRow({ id: 25, slug: "documents", project: "elsewhere" });
+    const byProject = new Map([["worklode", { docs: [stray], tasks: [] }]]);
+
+    const hydrated = await hydrateDocBodies(writer, ROOT, byProject, fetch);
+
+    expect(asked).toEqual([]);
+    expect(hydrated.unfetched.size).toBe(0);
+    const desired = await desiredNotes([fixtureProject()], hydrated.byProject, ROOT_NAME, SYNCED_AT);
+    expect(desired.notes.some((n) => n.path.includes("docs/"))).toBe(false);
+    expect(desired.conflicts).toHaveLength(1);
+  });
+
   it("leaves the input map alone and keeps the tasks beside the docs", async () => {
     const writer = new MapVaultWriter();
     const row = listRow({ id: 25, slug: "documents" });
@@ -1153,6 +1231,11 @@ describe("hydrateDocBodies", () => {
     for (const row of rows) {
       expect(await writer.read(ROOT, `worklode/docs/${row.slug}.md`)).toContain(`text of ${row.slug}`);
     }
+    // Pins the bound in both directions: more than one at a time (or the
+    // limit buys nothing over a serial loop), never more than the constant
+    // (or a corpus arrives as one burst of simultaneous requests).
+    expect(first.maxInFlight).toBeGreaterThan(1);
+    expect(first.maxInFlight).toBe(DOC_FETCH_CONCURRENCY);
   });
 });
 

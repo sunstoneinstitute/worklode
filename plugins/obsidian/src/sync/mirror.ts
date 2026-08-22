@@ -75,6 +75,18 @@ export interface MirrorOptions {
    *  renders neither of the first two (see desiredTaskNotes) and would
    *  otherwise delete both. */
   pruneOtherNotes?: boolean;
+  /** Note paths the caller has already established are current, and which must
+   *  be skipped whatever this render produced for them. hydrateDocBodies fills
+   *  it with the doc notes it chose not to fetch: their rendered content has no
+   *  body in it, and is only harmless because the note on disk is not going to
+   *  be replaced by it.
+   *
+   *  Deciding that here instead would ask the vault a second time, a whole
+   *  fetch phase later. A note deleted or edited in between would answer
+   *  differently the second time and be written blank -- durably, because the
+   *  blank note would carry the correct etag and no later sync would find it
+   *  stale. So the sync that fetched is the one that gets to say. */
+  alreadyCurrent?: Set<string>;
 }
 
 type NoteKind = "project" | "doc" | "task";
@@ -438,6 +450,13 @@ export async function applyMirror(
   const desiredPaths = new Set(desired.notes.map((n) => n.path));
 
   for (const note of desired.notes) {
+    if (options.alreadyCurrent?.has(note.path)) {
+      stats.skipped++;
+      continue;
+    }
+    // existing.has is a fast path, not part of the rule: readWl answers
+    // undefined for an absent file too, so the two agree. It saves a throwing
+    // read per note on a first sync, when none of them exist.
     if (existing.has(note.path) && (await isNoteCurrent(writer, root, note.path, note.etag))) {
       stats.skipped++;
       continue;
@@ -517,68 +536,92 @@ async function isNoteCurrent(writer: VaultWriter, root: string, path: string, et
  *  one document, so the first sync of a corpus is one request per document; a
  *  few in flight keeps that from being a serial wait without turning a sync
  *  into a burst of dozens of simultaneous requests. */
-const DOC_FETCH_CONCURRENCY = 4;
+export const DOC_FETCH_CONCURRENCY = 4;
 
-/** Fills in the document bodies this sync is actually going to write, and no
- *  others.
+/** What a sync knows about doc bodies after hydrateDocBodies has run. */
+export interface HydratedDocs {
+  /** `byProject` with every fetched document swapped in. A new map; the input
+   *  is left alone. */
+  byProject: Map<string, ProjectMembers>;
+  /** How many documents cost a request. */
+  fetched: number;
+  /** The note paths of the documents deliberately left unfetched -- pass
+   *  straight to applyMirror as `alreadyCurrent`. */
+  unfetched: Set<string>;
+}
+
+/** Fills in the document bodies this sync is going to write, and no others.
  *
- *  GET /api/v1/docs never serves a body -- withoutDocBodies blanks it, because
- *  a corpus listing would otherwise be the largest response the server sends --
- *  so a doc note rendered from a list row alone is a `wl` block and nothing
- *  else. GET /api/v1/docs/{id} serves the markdown, one document per request,
- *  which a whole-corpus sync must not pay on every tick.
+ *  `GET /api/v1/docs` never serves a body (withoutDocBodies: a corpus listing
+ *  would otherwise be the largest response the server sends), so a doc note
+ *  rendered from a list row alone is a `wl` block and nothing else. `GET
+ *  /api/v1/docs/{id}` serves the markdown, one document per request, which a
+ *  whole-corpus sync must not pay on every tick.
  *
- *  A body is therefore fetched exactly when the vault does not already hold a
- *  current note for that document -- `isNoteCurrent`, the same predicate
- *  applyMirror's skip uses, asked here before rendering instead of there after
- *  it. That equivalence is what makes the whole scheme safe: every document
- *  applyMirror would write has been fetched here first, and every document it
- *  will skip is left with its blank body, rendered into a note that is then
- *  never written. A new document has no note and so always fetches; a version
- *  bump (or any other change to the list row) moves the etag and fetches again;
- *  an untouched document costs one vault read and no request at all.
+ *  So a body is fetched exactly when the vault holds no current note for that
+ *  document -- `isNoteCurrent`, the question applyMirror's skip asks, asked
+ *  here before rendering instead of there after it. A new document has no note
+ *  and always fetches; a moved etag fetches again; an untouched document costs
+ *  one vault read and no request. The unfetched documents keep their blank
+ *  bodies and are rendered anyway, which is safe only because their notes are
+ *  never written -- hence `unfetched`, which says so to applyMirror outright
+ *  rather than leaving it to re-derive the same answer from a vault that has
+ *  moved on since (see MirrorOptions.alreadyCurrent).
  *
- *  The staleness answer lives in the note's own `wl` block rather than in
- *  plugin state, mirroring how the incremental task sync stores its watermark
- *  against a syncOrigin: what the vault holds is the thing being decided about,
- *  so reading it needs no invalidation rules for a changed server, token or
- *  mount root.
+ *  The answer lives in the note's own `wl` block rather than in plugin state,
+ *  mirroring how the incremental task sync keeps its watermark against a
+ *  syncOrigin: what the vault holds is the thing being decided about, so
+ *  reading it needs no invalidation rules for a changed server, token or mount
+ *  root.
  *
- *  A fetch that fails rejects, failing the sync -- the same treatment every
- *  doc error but a missing endpoint already gets (see listDocsIfPresent).
- *  Swallowing it would render that document's note from the blank body the
- *  list row carries, which applyMirror would then write over the text it
- *  already had.
+ *  A failed fetch rejects, failing the sync -- unlike a missing docs endpoint
+ *  (listDocsIfPresent). Swallowing it would render that note from the blank
+ *  list row, writing an empty note over text already in the vault.
  *
- *  Returns a new map; the input is left alone. The fetched document replaces
- *  the list row wholesale rather than donating just its body, so the note's
- *  metadata and its text come from the same read of the same version. */
+ *  The fetched document replaces the list row wholesale rather than donating
+ *  just its body, so a note's metadata and its text come from one read of one
+ *  version. */
 export async function hydrateDocBodies(
   writer: VaultWriter,
   root: string,
   byProject: Map<string, ProjectMembers>,
   fetchDoc: (id: number) => Promise<Doc>,
-): Promise<{ byProject: Map<string, ProjectMembers>; fetched: number }> {
+): Promise<HydratedDocs> {
   const hydrated = new Map<string, ProjectMembers>();
-  const stale: { projectId: string; index: number; id: number }[] = [];
+  const unfetched = new Set<string>();
 
-  for (const [projectId, members] of byProject) {
-    hydrated.set(projectId, { docs: [...members.docs], tasks: members.tasks });
-    for (const [index, doc] of members.docs.entries()) {
-      // An unsafe path is a note desiredNotes drops and reports; there is
-      // nothing for a fetched body to be rendered into.
-      const path = desiredPath("doc", doc.project, doc.slug);
-      if (path === undefined) continue;
-      if (await isNoteCurrent(writer, root, path, await docEtag(doc))) continue;
-      stale.push({ projectId, index, id: doc.id });
-    }
-  }
+  // One flat list, so the whole corpus shares a single concurrency budget
+  // rather than one per project. The staleness scan itself runs concurrently
+  // for the reason desiredNotes gives: it awaits a digest and a vault read per
+  // document, and a serial pass would make a sync as slow as its doc count.
+  const scanned = await Promise.all(
+    [...byProject].map(async ([projectId, members]) => {
+      hydrated.set(projectId, { docs: [...members.docs], tasks: members.tasks });
+      return Promise.all(
+        members.docs.map(async (doc, index) => {
+          // The grouping key, not doc.project: filterSafe judges the note's
+          // path against the key too, so a document whose own project
+          // disagrees is one desiredNotes drops -- and asking about
+          // doc.project would be asking about a different file than the one
+          // applyMirror decides on.
+          const path = doc.project === projectId ? desiredPath("doc", projectId, doc.slug) : undefined;
+          if (path === undefined) return undefined;
+          if (await isNoteCurrent(writer, root, path, await docEtag(doc))) {
+            unfetched.add(path);
+            return undefined;
+          }
+          return { projectId, index, id: doc.id };
+        }),
+      );
+    }),
+  );
 
+  const stale = scanned.flat().filter((entry) => entry !== undefined);
   await mapWithLimit(stale, DOC_FETCH_CONCURRENCY, async (entry) => {
     hydrated.get(entry.projectId)!.docs[entry.index] = await fetchDoc(entry.id);
   });
 
-  return { byProject: hydrated, fetched: stale.length };
+  return { byProject: hydrated, fetched: stale.length, unfetched };
 }
 
 /** Runs `fn` over every item with at most `limit` of them in flight. Rejects
@@ -587,7 +630,7 @@ export async function hydrateDocBodies(
  *  completion order does not matter. */
 async function mapWithLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+  const workers = Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, async () => {
     for (let i = next++; i < items.length; i = next++) {
       await fn(items[i]);
     }

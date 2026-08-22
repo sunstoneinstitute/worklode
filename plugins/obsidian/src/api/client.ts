@@ -78,7 +78,7 @@ export class WorklodeClient {
    * documents whose vault note is out of date -- see hydrateDocBodies.
    */
   getDoc(id: number): Promise<DocDetail> {
-    return this.get<DocDetail>(`/api/v1/docs/${encodeURIComponent(String(id))}`);
+    return this.get<DocDetail>(`/api/v1/docs/${id}`);
   }
 
   /**
