@@ -1555,6 +1555,330 @@ covers:
 	}
 }
 
+// --- defers (026 §5.3) ------------------------------------------------
+
+// TestDocDefersCreatesEdgeAndOwner: an accepted plan's defers entry becomes
+// one doc_edges row of type defers with to_doc/to_anchor set and coverage
+// NULL, plus one doc_coverage_completed_with row resolving to the owner (026
+// §5.3).
+func TestDocDefersCreatesEdgeAndOwner(t *testing.T) {
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	owner := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+
+	got := docEdges(t, s, plan.ID)
+	want := []model.DocEdge{{Type: "defers", ToDoc: spec.ID, ToAnchor: "sec-1"}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+
+	edges := docCoverageEdges(t, s, plan.ID) // covers only, empty for a defers-only plan
+	if len(edges) != 0 {
+		t.Fatalf("covers edges = %+v, want none", edges)
+	}
+
+	var edgeID int64
+	var coverage sql.NullString
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT id, coverage FROM doc_edges WHERE from_doc = $1 AND type = 'defers'`, plan.ID,
+	).Scan(&edgeID, &coverage); err != nil {
+		t.Fatalf("read defers edge: %v", err)
+	}
+	if coverage.Valid {
+		t.Errorf("defers edge coverage = %q, want NULL", coverage.String)
+	}
+	cw := docCompletedWith(t, s, edgeID)
+	want2 := []docCompletedWithRow{{position: 0, toDoc: owner.ID}}
+	if len(cw) != 1 || cw[0] != want2[0] {
+		t.Errorf("completedWith = %+v, want %+v", cw, want2)
+	}
+}
+
+// TestDocDefersOnSpecRejected: defers is plan-only — a spec defers nothing,
+// it is what work is deferred *from* (026 §5.3).
+func TestDocDefersOnSpecRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# A spec
+
+## 1. Scope {#sec-1}
+
+Scope body.
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersMissingFragmentRejected: a defers entry whose spec reference
+// carries no #sec-N fragment is refused, not tolerated-and-ignored the way a
+// whole-document covers claim is (026 §5.3).
+func TestDocDefersMissingFragmentRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersEmptyOwnerRejected: a deferral without an owner is just an
+// uncovered section, which needs no syntax — omitting `to` is refused (026
+// §5.3).
+func TestDocDefersEmptyOwnerRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: ""
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersToItselfRejected: a plan deferring a section to itself has
+// confused deferral with coverage; refused (026 §5.3).
+func TestDocDefersToItselfRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: main-plan
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersSameSectionTwoOwnersRejected: the same section deferred to two
+// different owners is a contradiction the frontmatter cannot mean, refused
+// the way conflicting covers levels are (026 §5.3, §5.1).
+func TestDocDefersSameSectionTwoOwnersRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 4,
+		Slug: "004-execution-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 004-execution-backbone.md
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocDefersIdenticalEntryTwiceDeduped: the same entry twice is one edge,
+// not an error (026 §5.3).
+func TestDocDefersIdenticalEntryTwiceDeduped(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	got := docEdges(t, s, plan.ID)
+	if len(got) != 1 {
+		t.Fatalf("edges = %+v, want one edge", got)
+	}
+}
+
+// TestDocDefersUnresolvableSpecLandsInExternal: an unresolvable `spec`
+// reference lands verbatim in to_external, same as a covers typo — it reads
+// as an unplanned section rather than an error (026 §5.3).
+func TestDocDefersUnresolvableSpecLandsInExternal(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6,
+		Slug: "006-knowledge-graph", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 999-nowhere.md#sec-1
+    to: 006-knowledge-graph.md
+---
+
+# Plan
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	got := docEdges(t, s, plan.ID)
+	want := []model.DocEdge{{Type: "defers", ToExternal: "999-nowhere.md#sec-1"}}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("edges = %+v, want %+v", got, want)
+	}
+}
+
+// TestDocSchemaDefersEdgeSucceeds: migration 0045 admits 'defers' to
+// doc_edges' type CHECK.
+func TestDocSchemaDefersEdgeSucceeds(t *testing.T) {
+	s := openTestStore(t)
+	seedDocsProject(t, s)
+
+	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	if err != nil {
+		t.Fatalf("insert plan doc: %v", err)
+	}
+	specID, err := insertDoc(t, s, "spec", 25, "documents-in-the-backbone")
+	if err != nil {
+		t.Fatalf("insert spec doc: %v", err)
+	}
+
+	ctx := context.Background()
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
+		 VALUES ($1, 'defers', $2, 'sec-1')`,
+		planID, specID)
+	if err != nil {
+		t.Fatalf("insert defers edge: %v", err)
+	}
+}
+
+// TestDocSchemaBogusEdgeTypeViolatesCheck: doc_edges_type_check still refuses
+// a type outside the admitted set (migration 0045 only adds 'defers' to it).
+func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
+	s := openTestStore(t)
+	seedDocsProject(t, s)
+
+	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	if err != nil {
+		t.Fatalf("insert plan doc: %v", err)
+	}
+	specID, err := insertDoc(t, s, "spec", 25, "documents-in-the-backbone")
+	if err != nil {
+		t.Fatalf("insert spec doc: %v", err)
+	}
+
+	ctx := context.Background()
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO doc_edges (from_doc, type, to_doc, to_anchor)
+		 VALUES ($1, 'bogus', $2, 'sec-1')`,
+		planID, specID)
+	if err == nil {
+		t.Fatal("expected CHECK violation, got nil error")
+	}
+	if !isCheckViolationOn(err, "doc_edges_type_check") {
+		t.Fatalf("expected doc_edges_type_check CHECK violation, got: %v", err)
+	}
+}
+
 // TestDocCreateDuplicateIsErrDocExists: both unique indexes map onto one
 // sentinel, so the API can answer 409 without decoding pgconn.
 func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
@@ -3851,12 +4175,80 @@ func levelledPlan(t *testing.T, s *Store, slug string, accept bool, refs ...cove
 	return accepted
 }
 
+// deferralRef is one `defers` entry for a test plan body: the deferred
+// section and its named owner (026 §5.3).
+type deferralRef struct {
+	spec string
+	to   string
+}
+
+// deferringPlanBody renders a mintable plan whose frontmatter defers each ref
+// to its named owner (026 §5.3), and optionally covers others at explicit
+// levels alongside it — the NeedsPlanning precedence tests need both keys on
+// one plan.
+func deferringPlanBody(defers []deferralRef, covers ...coverageRef) string {
+	var b strings.Builder
+	b.WriteString("---\nstatus: draft\n")
+	if len(covers) > 0 {
+		b.WriteString("covers:\n")
+		for _, r := range covers {
+			if r.level == "" && len(r.fullCoverageWith) == 0 {
+				b.WriteString("  - " + r.ref + "\n")
+				continue
+			}
+			b.WriteString("  - spec: " + r.ref + "\n")
+			if r.level != "" {
+				b.WriteString("    coverage: " + r.level + "\n")
+			}
+			if len(r.fullCoverageWith) > 0 {
+				b.WriteString("    fullCoverageWith:\n")
+				for _, cw := range r.fullCoverageWith {
+					b.WriteString("      - " + cw + "\n")
+				}
+			}
+		}
+	}
+	if len(defers) > 0 {
+		b.WriteString("defers:\n")
+		for _, d := range defers {
+			b.WriteString("  - spec: " + d.spec + "\n")
+			b.WriteString("    to: " + d.to + "\n")
+		}
+	}
+	b.WriteString("---\n\n# A deferring plan\n\n## Tasks\n\n### Task 1 — Only task\n\n")
+	b.WriteString("```yaml\nkind: chore\n```\n\nDo it.\n")
+	return b.String()
+}
+
+// deferringPlan creates a plan deferring refs to their owners (and optionally
+// covering others), accepting it when accept is set.
+func deferringPlan(t *testing.T, s *Store, slug string, accept bool, defers []deferralRef, covers ...coverageRef) *model.Doc {
+	t.Helper()
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: slug, Body: deferringPlanBody(defers, covers...), CreatedBy: "stig",
+	})
+	if !accept {
+		return doc
+	}
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan %s: %v", slug, err)
+	}
+	return accepted
+}
+
 // gapAnchors renders anchor(coverage) for each of a gap's sections, in
-// order, so tests can assert against a plain string slice.
+// order, so tests can assert against a plain string slice. A deferred section
+// carries its owner (026 §2.1, §5.3), rendered the way DocPlanningTable does:
+// "sec-N(deferred:OWNER)".
 func gapAnchors(gap model.DocPlanningGap) []string {
 	out := make([]string, len(gap.Gaps))
 	for i, s := range gap.Gaps {
-		out[i] = s.Anchor + "(" + s.Coverage + ")"
+		if s.Coverage == "deferred" && s.Owner != "" {
+			out[i] = s.Anchor + "(deferred:" + s.Owner + ")"
+		} else {
+			out[i] = s.Anchor + "(" + s.Coverage + ")"
+		}
 	}
 	return out
 }
@@ -4211,6 +4603,134 @@ func TestDocNeedsPlanningNoneByOneAndPartialByAnotherIsPartialGap(t *testing.T) 
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
 		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
 		t.Fatalf("gaps = %v, want sec-1 partial: partial dominates bound-only", gaps)
+	}
+}
+
+// TestDocNeedsPlanningSupersededPlanDischarges: 026 §2.1's amended discharging
+// set is "accepted or superseded" — a superseded plan is one that was
+// accepted and then carried out (025 §9), so its full claim still discharges
+// the section it covered.
+func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	plan := levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+	setDocStatus(t, s, plan.ID, "superseded")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 discharged: a superseded plan discharges what it covered", gaps)
+	}
+}
+
+// --- NeedsPlanning defers classification (026 §2.1, §5.3) -----------------
+
+// TestDocNeedsPlanningDeferredSectionReportsOwner: an accepted plan's defers
+// entry reports the section "deferred" with its owner's slug; a section no
+// plan names at all stays "unplanned" (026 §2.1, §5.3).
+func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to owner-spec", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDeferralDeliveredByCoveringPlan: a deferral is
+// delivered by any plan discharging the section, not only by the named owner
+// — once a second accepted plan covers the section `full`, it disappears
+// from the gaps the same as any other discharged section (026 §2.1).
+func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "full"})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 discharged: a deferral is delivered by any covering plan", gaps)
+	}
+}
+
+// TestDocNeedsPlanningPartialWithDeferralReportsPartial: a section claimed
+// `partial` by one plan and deferred by another reports "partial" — partial
+// outranks deferred in 026 §2.1's precedence.
+func TestDocNeedsPlanningPartialWithDeferralReportsPartial(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+	levelledPlan(t, s, "plan-b", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(partial)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 partial: partial outranks deferred", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDraftPlanDeferralIgnored: a draft plan has not yet
+// undertaken work, so its defers entries classify nothing (026 §2.1).
+func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", false, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(unplanned)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 unplanned: a draft plan's deferral does not count", gaps)
+	}
+}
+
+// TestDocNeedsPlanningSupersededPlanDeferralCounts: the deferring set is
+// accepted or superseded, never draft (026 §5.3) — a superseded plan's
+// deferral stands, being spent does not deliver a handoff the plan never
+// made.
+func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	plan := deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+	setDocStatus(t, s, plan.ID, "superseded")
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 still deferred: a superseded plan's deferral stands", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDeferralOwnerExternalVerbatim: an owner reference this
+// project cannot resolve is reported verbatim, the same fallback
+// fullCoverageWith uses (026 §2.1, §5.3).
+func TestDocNeedsPlanningDeferralOwnerExternalVerbatim(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "999-nowhere-owner.md"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:999-nowhere-owner.md)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to the unresolved reference verbatim", gaps)
 	}
 }
 

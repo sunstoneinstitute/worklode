@@ -239,10 +239,15 @@ func sectionMetas(doc *Document, name string) ([]SectionMeta, error) {
 var anchorRels = []string{"amends", "amendedBy", "replaces", "isReplacedBy"}
 
 // planEdges is a plan's edges: its coverage assertions — the retired
-// `implements` spelling read as `covers` (026 §5.1) — followed by the anchor
-// relations every document kind can carry.
+// `implements` spelling read as `covers` (026 §5.1) — then its defers
+// handoffs (026 §5.3), then the anchor relations every document kind can
+// carry. A defers entry projects the same way a covers entry does — the
+// section it names becomes the edge's target anchor — but carries no owner:
+// EdgeMeta has no field for it, the same deliberate omission as covers
+// carrying no coverage level. The owner lives in the backbone's
+// doc_coverage_completed_with, not the sync-projected corpus.
 func planEdges(fm *Frontmatter) []EdgeMeta {
-	return edgeMetas(fm.RefsFor(append([]string{"covers"}, anchorRels...)...))
+	return edgeMetas(fm.RefsFor(append([]string{"covers", "defers"}, anchorRels...)...))
 }
 
 // anchorEdges extracts the amends/amendedBy/replaces/isReplacedBy edges from

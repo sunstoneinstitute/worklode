@@ -1144,14 +1144,16 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 // docEdgeRef is one frontmatter reference before resolution. ref is verbatim,
 // fragment included; fromAnchor is "" for a document-level edge. coverage and
 // completedWith carry a covers entry's authored level and, for a partial
-// entry, its fullCoverageWith closure (026 §2.1, §5); every other relation
-// leaves both zero.
+// entry, its fullCoverageWith closure (026 §2.1, §5); owner carries a defers
+// entry's named owner, verbatim, the same way (026 §5.3). Every other
+// relation leaves all three zero.
 type docEdgeRef struct {
 	fromAnchor    string
 	typ           string
 	ref           string
 	coverage      string
 	completedWith []string
+	owner         string
 }
 
 // docEdgeRow is one edge after resolution — exactly the tuple
@@ -1263,6 +1265,18 @@ func closureEqual(a, b []closureRef) bool {
 // rather than inventing a fourth state. A partial edge's fullCoverageWith
 // closure is resolved the same way doc_edges resolves its own targets and
 // stored in doc_coverage_completed_with, in authored order.
+//
+// A defers edge (026 §5.3) is checked, not merely written: the from end must
+// be a plan, the `spec` reference must carry a `#sec-N` fragment (unlike
+// covers, which tolerates a whole-document claim — a whole-document deferral
+// would silently defer sections not yet written), the owner must be named,
+// and the owner must not resolve to the deferring plan itself. The owner is
+// then resolved exactly as a fullCoverageWith target and stored as the
+// edge's sole doc_coverage_completed_with row, at position 0. coverage stays
+// NULL for a defers edge — a deferral is not a level. The same entry
+// authored twice is one edge, same as covers; the same section deferred to
+// two different owners is the contradiction covers refuses for two
+// disagreeing levels, refused here as ErrInvalidInput too.
 func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
@@ -1277,6 +1291,21 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 		if e.typ == "blocks" {
 			if err := checkPlanOrdering(tx, docID, kind, e.ref, toDoc, resolved); err != nil {
 				return err
+			}
+		}
+		if e.typ == "defers" {
+			if kind != "plan" {
+				return fmt.Errorf("doc %d defers %q, but defers is plan-only and doc %d is a %s (026 §5.3): %w",
+					docID, e.ref, docID, kind, ErrInvalidInput)
+			}
+			if fragment == "" {
+				return fmt.Errorf(
+					"doc %d defers %q with no #sec-N fragment: defers is section-scoped, unlike covers (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
+			}
+			if strings.TrimSpace(e.owner) == "" {
+				return fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
 			}
 		}
 
@@ -1298,6 +1327,17 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 				return err
 			}
 		}
+		if e.typ == "defers" {
+			closure, err = resolveClosure(tx, project, []string{e.owner})
+			if err != nil {
+				return err
+			}
+			if len(closure) == 1 && closure[0].resolved && closure[0].toDoc == docID {
+				return fmt.Errorf(
+					"doc %d defers %q to itself: a plan cannot defer a section to itself (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
+			}
+		}
 
 		row := docEdgeRow{fromAnchor: e.fromAnchor, typ: e.typ}
 		if resolved {
@@ -1315,6 +1355,10 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 			if level == "partial" && !closureEqual(prior.closure, closure) {
 				return fmt.Errorf("doc %d %s %q twice, both %s but with different fullCoverageWith closures (026 §5.1): %w",
 					docID, e.typ, e.ref, level, ErrInvalidInput)
+			}
+			if e.typ == "defers" && !closureEqual(prior.closure, closure) {
+				return fmt.Errorf("doc %d defers %q twice, deferred to two different owners (026 §5.3): %w",
+					docID, e.ref, ErrInvalidInput)
 			}
 			continue
 		}
@@ -1335,12 +1379,14 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 			return fmt.Errorf("insert %s edge from doc %d to %q: %w", e.typ, docID, e.ref, err)
 		}
 
-		if level != "partial" {
+		if level != "partial" && e.typ != "defers" {
 			continue
 		}
 		// resolveClosure already dropped blank entries, so pos here is a
 		// contiguous 0-based rank — unlike ranging over the raw completedWith
-		// list, which would reopen the gap resolveClosure closed.
+		// list, which would reopen the gap resolveClosure closed. A defers
+		// edge's closure is always the single resolved owner (026 §5.3), so
+		// this loop writes exactly one doc_coverage_completed_with row for it.
 		for pos, c := range closure {
 			var toDocCol sql.NullInt64
 			var toExternalCol sql.NullString
@@ -1732,6 +1778,15 @@ func blocksChainText(tx *sql.Tx, chain []int64) (string, error) {
 // contributes nothing to any outcome, so it is dropped here rather than carried
 // to a level that cannot use it.
 //
+// defers carries its named owner the same way a partial covers entry carries
+// its fullCoverageWith closure: the ref is the deferred section and the owner
+// rides beside it as docEdgeRef.owner rather than a separate walk.
+// rebuildEdges resolves the owner exactly as it resolves a fullCoverageWith
+// target and stores it in doc_coverage_completed_with at position 0 (026
+// §5.3) — the same completion side-table a partial entry uses, because a
+// deferral is that same assertion read at level zero: full coverage of this
+// section arrives with the named owner.
+//
 // The implements edge *type* is a different subject: a component's evidence
 // about its own code (026 §6.2), declared in `.worklode/implements.yaml`. That
 // is 025 §11 machinery, and it is not built — so no writer emits the type here
@@ -1752,6 +1807,9 @@ func frontmatterEdges(fm *designdoc.Frontmatter) []docEdgeRef {
 			if e.coverage == "partial" {
 				e.completedWith = r.Coverage.FullCoverageWith
 			}
+		}
+		if r.Deferral != nil {
+			e.owner = r.Deferral.To
 		}
 		out = append(out, e)
 	}
@@ -1996,36 +2054,56 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 }
 
 // NeedsPlanning returns the accepted specs that have at least one section no
-// accepted plan discharges, each with the anchors that made it a gap and why
-// (026 §2.1). project narrows the answer; "" answers over every project.
+// accepted or superseded plan discharges, each with the anchors that made it
+// a gap and why (026 §2.1). project narrows the answer; "" answers over every
+// project.
 //
-// A section is discharged when some accepted plan's `covers` edge claims it
-// `full`, or claims it `partial` with a `fullCoverageWith` set that closes:
-// every named plan is itself accepted and itself contributes `full` or
-// `partial` to that same section. `fullCoverageWith` is checked, never taken
-// on trust — an empty list, an unresolved reference, a draft target, a `none`
-// target, or a target that does not itself cover the section all leave it
-// open. An undischarged section is classified "partial" when some accepted
-// plan claims it `partial` (whether or not that claim closed), "bound-only"
-// when every accepted plan naming it claims `none`, and "unplanned" when no
-// accepted plan names it at all.
+// The discharging set is not `accepted` alone: 026 §2.1's "A superseded plan
+// discharges what it covered" reads the status as "not draft", since a
+// superseded plan is one that was accepted and then carried out (025 §9's "a
+// plan is spent once executed") — reading the set as `accepted` alone would
+// report a shipped third of the corpus as unplanned work. A section is
+// discharged when some such plan's `covers` edge claims it `full`, or claims
+// it `partial` with a `fullCoverageWith` set that closes: every named plan is
+// itself accepted or superseded and itself contributes `full` or `partial` to
+// that same section. `fullCoverageWith` is checked, never taken on trust — an
+// empty list, an unresolved reference, a draft target, a `none` target, or a
+// target that does not itself cover the section all leave it open.
 //
-// Three further consequences are deliberate:
+// An undischarged section is classified by the strongest reading that holds,
+// in order: "partial" when some accepted-or-superseded plan claims it
+// `partial` (whether or not that claim closed); "deferred" when none claims
+// `partial` but some such plan hands it off to a named owner with `defers`
+// (026 §5.3) — the report names the owner, recovered from the same
+// doc_coverage_completed_with row a partial entry's fullCoverageWith uses,
+// because a deferral is that same assertion read at level zero; "bound-only"
+// when every accepted-or-superseded plan naming it claims `none`; "unplanned"
+// when no such plan names it, deferral included, at all. A deferral is
+// delivered by any covering plan discharging the section under the rules
+// above, so it is checked against the same `cov`/`closed` machinery as
+// covers, not against who was named.
+//
+// Four further consequences are deliberate:
 //
 //   - A whole-document edge (to_anchor IS NULL) discharges nothing. It cannot
 //     say which present section it undertakes and would silently claim future
 //     ones (026 §2.1), so it never appears in the discharged set.
 //   - `covers: NO-SPEC` resolves to no row and lands in to_external (026
 //     §4.3), so it falls out of the join without a case of its own.
-//   - Only accepted documents on both ends participate: a draft spec is not
-//     yet owed planning, and a draft plan has not yet undertaken work. A
-//     tombstoned document participates on neither end (044 §4) — it is neither
-//     owed planning nor able to discharge a section.
+//   - Only an accepted spec and an accepted-or-superseded plan participate: a
+//     draft spec is not yet owed planning, and a draft plan has not yet
+//     undertaken work — its `defers` entries do not classify a section either.
+//     A tombstoned document participates on neither end (044 §4) — it is
+//     neither owed planning nor able to discharge or defer a section.
+//   - A deferral's owner is reported however it resolved at write time: a
+//     slug when the reference named a live document, the reference text
+//     verbatim (`w.to_external`) when it did not — the same fallback
+//     fullCoverageWith uses.
 //
 // A plan naming itself in its own `fullCoverageWith` closes its own section.
-// §2.1's closure test is only that each named plan is accepted and
-// contributes `full` or `partial` — it says nothing about the naming plan —
-// so this is not a bug; narrowing it to siblings would be a spec change
+// §2.1's closure test is only that each named plan is accepted or superseded
+// and contributes `full` or `partial` — it says nothing about the naming plan
+// — so this is not a bug; narrowing it to siblings would be a spec change
 // (tracked in docs/follow-ups.md).
 func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc, []model.DocPlanningGap, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -2036,8 +2114,26 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		       JOIN docs p ON p.id = e.from_doc
 		      WHERE e.type = 'covers'
 		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
-		        AND p.kind = 'plan' AND p.status = 'accepted'
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded')
 		        AND p.deleted_at IS NULL
+		 ),
+		 def_raw AS (
+		     SELECT e.to_doc AS doc_id, e.to_anchor AS anchor,
+		            coalesce(owner_doc.slug, w.to_external) AS owner
+		       FROM doc_edges e
+		       JOIN docs p ON p.id = e.from_doc
+		       JOIN doc_coverage_completed_with w ON w.edge_id = e.id
+		       LEFT JOIN docs owner_doc ON owner_doc.id = w.to_doc
+		      WHERE e.type = 'defers'
+		        AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		        AND p.kind = 'plan' AND p.status IN ('accepted','superseded')
+		        AND p.deleted_at IS NULL
+		 ),
+		 def AS (
+		     SELECT doc_id, anchor,
+		            string_agg(DISTINCT owner, ', ' ORDER BY owner) AS owner
+		       FROM def_raw
+		      GROUP BY doc_id, anchor
 		 ),
 		 closed AS (
 		     SELECT c.id
@@ -2063,16 +2159,21 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		      GROUP BY c.doc_id, c.anchor
 		 )
 		 SELECT `+docColumnsD+`, count(*)::int,
-		        coalesce(json_agg(json_build_object(
+		        coalesce(json_agg(json_strip_nulls(json_build_object(
 		                     'anchor', sec.anchor,
-		                     'coverage', CASE WHEN r.doc_id IS NULL   THEN 'unplanned'
-		                                      WHEN r.any_partial      THEN 'partial'
-		                                      ELSE 'bound-only' END)
+		                     'coverage', CASE WHEN coalesce(r.any_partial, false) THEN 'partial'
+		                                      WHEN def.doc_id IS NOT NULL         THEN 'deferred'
+		                                      WHEN r.doc_id IS NOT NULL           THEN 'bound-only'
+		                                      ELSE 'unplanned' END,
+		                     'owner', CASE WHEN NOT coalesce(r.any_partial, false)
+		                                        AND def.doc_id IS NOT NULL
+		                                   THEN def.owner END))
 		                 ORDER BY sec.position)
 		                 FILTER (WHERE r.discharged IS NOT TRUE), '[]')::text
 		   FROM docs d
 		   JOIN doc_sections sec ON sec.doc_id = d.id
 		   LEFT JOIN resolved r ON r.doc_id = sec.doc_id AND r.anchor = sec.anchor
+		   LEFT JOIN def ON def.doc_id = sec.doc_id AND def.anchor = sec.anchor
 		  WHERE d.kind = 'spec' AND d.status = 'accepted'
 		    AND d.deleted_at IS NULL
 		    AND ($1 = '' OR d.project_id = $1)
@@ -2271,6 +2372,7 @@ var docEdgeInverse = map[string]string{
 	"requires":       "isRequiredBy",
 	"wasDerivedFrom": "hadDerivation",
 	"blocks":         "blockedBy",
+	"defers":         "isDeferredBy",
 }
 
 // ListDocEdges returns a document's edges in both directions: out are the

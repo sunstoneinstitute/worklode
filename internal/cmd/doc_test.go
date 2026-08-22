@@ -562,12 +562,52 @@ kind: chore
 Do it.
 `
 
+// docOwnerSpec is a minimal spec, the named owner of docPlanCoveringSec1's
+// defers entry below.
+const docOwnerSpec = `---
+status: draft
+---
+
+# Owner spec
+`
+
+// docPlanCoveringSec1DefersSec2 covers sec-1 and defers sec-2 to owner-spec
+// (026 §5.3), for the deferred-gap rendering case in
+// TestDocListNeedsPlanningAndExecution.
+const docPlanCoveringSec1DefersSec2 = `---
+status: draft
+covers:
+  - my-spec#sec-1
+defers:
+  - spec: my-spec#sec-2
+    to: owner-spec
+---
+
+# Part one
+
+## Tasks
+
+### Task 1 — Only task
+
+` + "```yaml" + `
+kind: chore
+` + "```" + `
+
+Do it.
+`
+
 // TestDocListNeedsPlanningAndExecution: both selectors reach the server and
-// render — the spec with its gap anchors, the plan with its open task.
+// render — the spec with its gap anchors, including a deferred one carrying
+// its owner (026 §5.3), and the plan with its open task.
 func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
+	ownerFile := writeDocFile(t, docOwnerSpec)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--number", "2", "--slug", "owner-spec", "--file", ownerFile); err != nil {
+		t.Fatalf("doc new owner spec: %v", err)
+	}
 	specFile := writeDocFile(t, docSpecTwoSections)
 	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
 		"--number", "1", "--slug", "my-spec", "--file", specFile); err != nil {
@@ -576,7 +616,7 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if _, err := runLode(t, "doc", "accept", "my-spec"); err != nil {
 		t.Fatalf("doc accept spec: %v", err)
 	}
-	planFile := writeDocFile(t, docPlanCoveringSec1)
+	planFile := writeDocFile(t, docPlanCoveringSec1DefersSec2)
 	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
 		"--slug", "part-one", "--file", planFile); err != nil {
 		t.Fatalf("doc new plan: %v", err)
@@ -589,8 +629,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc list --needs-planning: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "my-spec") || !strings.Contains(out, "sec-2") {
-		t.Errorf("needs-planning output = %q, want the spec and its unplanned anchor", out)
+	if !strings.Contains(out, "my-spec") || !strings.Contains(out, "sec-2(deferred:owner-spec)") {
+		t.Errorf("needs-planning output = %q, want the spec and its deferred anchor with its owner", out)
 	}
 	if strings.Contains(out, "sec-1") {
 		t.Errorf("needs-planning output = %q, want sec-1 omitted: an accepted plan covers it", out)
@@ -608,8 +648,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 		t.Fatalf("json = %+v, want one doc and one gap", resp)
 	}
 	if resp.PlanningGaps[0].Sections != 2 || len(resp.PlanningGaps[0].Gaps) != 1 ||
-		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "unplanned"}) {
-		t.Errorf("gap = %+v, want 2 sections with sec-2 unplanned", resp.PlanningGaps[0])
+		resp.PlanningGaps[0].Gaps[0] != (model.DocSectionGap{Anchor: "sec-2", Coverage: "deferred", Owner: "owner-spec"}) {
+		t.Errorf("gap = %+v, want 2 sections with sec-2 deferred to owner-spec", resp.PlanningGaps[0])
 	}
 
 	out, err = runLode(t, "doc", "list", "--project", "proj", "--needs-execution")
