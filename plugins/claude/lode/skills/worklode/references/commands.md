@@ -191,6 +191,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --justification
 - `lode task detach` — Remove an attached blob from a task
 - `lode task done` — Mark a task merged (in_review -> merged)
+- `lode task duplicate` — Mark a task as a duplicate of the canonical task for the same request
+  Flags: --of
 - `lode task edit` — Edit a task's title, body, concern, priority, or needs-decomposition flag, or declare an artifact it is verified by
   Flags: --artifact, --body, --body-file, --concern, --kind, --needs-decomposition, --no-upload, --priority, --secrets, --title
 - `lode task follow-up` — Record that a task was spun out of the work on another task
@@ -218,6 +220,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task unblock` — Remove a blocking edge from another task
   Flags: --by
 - `lode task undelete` — Restore a deleted task, clearing its tombstone
+- `lode task unduplicate` — Drop a task's duplicate edge to its canonical task
 - `lode task unfollow-up` — Drop a task's follow-up edge to its origin
 - `lode task unparent` — Detach a task from its parent
 

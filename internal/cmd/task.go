@@ -52,6 +52,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskUnparentCmd(),
 		newTaskFollowUpCmd(),
 		newTaskUnfollowUpCmd(),
+		newTaskDuplicateCmd(),
+		newTaskUnduplicateCmd(),
 		newTaskTreeCmd(),
 		newTaskDecomposeCmd(),
 		newTaskBriefCmd(),
@@ -1060,6 +1062,32 @@ func newTaskUnfollowUpCmd() *cobra.Command {
 			}
 			return "", fmt.Errorf("%s is not a follow-up to anything", t.Task.ID)
 		}, (*cli.Client).UnfollowUp)
+}
+
+func newTaskDuplicateCmd() *cobra.Command {
+	cmd := newTaskEdgeCmd("duplicate <id>",
+		"Mark a task as a duplicate of the canonical task for the same request",
+		"of", "id of the canonical task this one duplicates (required)",
+		"%s is now marked a duplicate of %s", (*cli.Client).Duplicate)
+	// The verb reads as "copy this task" to anyone who has not met the edge;
+	// the alias is the spelling that cannot.
+	cmd.Aliases = []string{"dupe"}
+	return cmd
+}
+
+func newTaskUnduplicateCmd() *cobra.Command {
+	cmd := newTaskUnEdgeCmd("unduplicate <id>", "Drop a task's duplicate edge to its canonical task",
+		"%s is no longer marked a duplicate of %s",
+		func(t model.TaskDetail) (string, error) {
+			for _, e := range t.Edges.Out {
+				if e.Type == "duplicate_of" {
+					return e.To, nil
+				}
+			}
+			return "", fmt.Errorf("%s is not marked a duplicate of anything", t.Task.ID)
+		}, (*cli.Client).Unduplicate)
+	cmd.Aliases = []string{"undupe"}
+	return cmd
 }
 
 func newTaskTreeCmd() *cobra.Command {

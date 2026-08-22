@@ -504,6 +504,19 @@ wl:blocksPlan a owl:ObjectProperty, owl:TransitiveProperty ;
         backbone-authoritative doc_edges; 025 §5, §9.3). Transitive. "Plan B after plan A"
         is A wl:blocksPlan B.""" .
 
+wl:duplicateOf a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Task ;
+    rdfs:comment """This task is the same request as that task, which is the canonical one
+        (backbone duplicate_of, spec 004 §1.3). Provenance, not scheduling: deliberately NOT
+        a subproperty of dct:requires and deliberately not transitive, and it absorbs nothing
+        -- the canonical task inherits none of the duplicate's skills, edges or body.
+        Functional -- a duplicate names exactly one canonical task, mirroring the
+        task_edges_single_canonical index. Distinct from wl:mirrors, which pairs a Task with
+        the external Issue tracking it; this pairs two Tasks. No named inverse: the canonical
+        task's duplicates are a backwards traversal, not a second stored edge.""" .
+
 wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;

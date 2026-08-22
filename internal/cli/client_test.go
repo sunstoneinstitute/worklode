@@ -475,6 +475,75 @@ func TestClientFollowUpUnfollow(t *testing.T) {
 	}
 }
 
+// TestClientDuplicateUnduplicate checks Duplicate issues POST
+// /api/v1/tasks/WL-2/edges with body {"to":"WL-1","type":"duplicate_of"} and
+// Unduplicate issues the same body with DELETE. It also pins the "no
+// absorption" rule of 004 §1.3 at the surface an agent actually calls: the
+// canonical task is untouched by the marking.
+func TestClientDuplicateUnduplicate(t *testing.T) {
+	_, c, _ := newTestServer(t)
+	ctx := context.Background()
+	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	canonical, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Canonical", Priority: "high", Kind: "bug"})
+	if err != nil {
+		t.Fatalf("CreateTask canonical: %v", err)
+	}
+	dupe, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Duplicate", Priority: "high", Kind: "bug"})
+	if err != nil {
+		t.Fatalf("CreateTask dupe: %v", err)
+	}
+	if canonical.ID != "WL-1" || dupe.ID != "WL-2" {
+		t.Fatalf("ids = %s, %s, want WL-1, WL-2", canonical.ID, dupe.ID)
+	}
+
+	if _, err := c.Duplicate(ctx, dupe.ID, canonical.ID); err != nil {
+		t.Fatalf("Duplicate: %v", err)
+	}
+	detail, _, err := c.GetTask(ctx, dupe.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	found := false
+	for _, e := range detail.Edges.Out {
+		if e.Type == "duplicate_of" && e.To == canonical.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("out edges = %+v, want a duplicate_of edge to %s", detail.Edges.Out, canonical.ID)
+	}
+
+	// No absorption: the canonical task gains an in-edge and nothing else.
+	canon, _, err := c.GetTask(ctx, canonical.ID)
+	if err != nil {
+		t.Fatalf("GetTask canonical: %v", err)
+	}
+	if canon.Task.State != canonical.State || canon.Task.Priority != canonical.Priority ||
+		canon.Task.Body != canonical.Body || len(canon.Task.Skills) != len(canonical.Skills) {
+		t.Fatalf("canonical = %+v, want %+v unchanged: duplicate_of absorbs nothing",
+			canon.Task, canonical)
+	}
+	if canon.Hierarchy.Progress.Total != 0 {
+		t.Fatalf("canonical progress total = %d, want 0: a duplicate is not a child",
+			canon.Hierarchy.Progress.Total)
+	}
+
+	if _, err := c.Unduplicate(ctx, dupe.ID, canonical.ID); err != nil {
+		t.Fatalf("Unduplicate: %v", err)
+	}
+	detail, _, err = c.GetTask(ctx, dupe.ID)
+	if err != nil {
+		t.Fatalf("GetTask after unduplicate: %v", err)
+	}
+	for _, e := range detail.Edges.Out {
+		if e.Type == "duplicate_of" {
+			t.Fatalf("out edges = %+v, want no duplicate_of edge after Unduplicate", detail.Edges.Out)
+		}
+	}
+}
+
 func TestClientBriefAndRebindWorktree(t *testing.T) {
 	_, c, _ := newTestServer(t)
 	ctx := context.Background()

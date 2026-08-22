@@ -43,11 +43,13 @@ func TestTaskTriples(t *testing.T) {
 		{From: "WL-42", To: "WL-1", Type: "child_of"},     // WL-42 is a child of WL-1
 		{From: "WL-42", To: "WL-99", Type: "blocks"},      // WL-42 blocks WL-99
 		{From: "WL-42", To: "WL-7", Type: "follow_up_to"}, // WL-42 is a follow-up to WL-7
+		{From: "WL-42", To: "WL-5", Type: "duplicate_of"}, // WL-42 duplicates WL-5
 	}
 	in := []model.Edge{
 		{From: "WL-3", To: "WL-42", Type: "blocks"},       // WL-3 blocks WL-42
 		{From: "WL-9", To: "WL-42", Type: "child_of"},     // WL-9 is a child of WL-42 — belongs on WL-9's subject, must emit nothing here
 		{From: "WL-8", To: "WL-42", Type: "follow_up_to"}, // WL-8 is a follow-up to WL-42 — no named inverse, must emit nothing here
+		{From: "WL-6", To: "WL-42", Type: "duplicate_of"}, // WL-6 duplicates WL-42 — no named inverse, must emit nothing here
 	}
 
 	triples := TaskTriples(task, out, in)
@@ -73,6 +75,7 @@ func TestTaskTriples(t *testing.T) {
 		DCTIsPartOf + " " + IRIRef(iri.Task("WL-1")).String():                               true,
 		iri.Term("blocks") + " " + IRIRef(iri.Task("WL-99")).String():                       true,
 		iri.Term("followUpTo") + " " + IRIRef(iri.Task("WL-7")).String():                    true,
+		iri.Term("duplicateOf") + " " + IRIRef(iri.Task("WL-5")).String():                   true,
 		iri.Term("dependsOn") + " " + IRIRef(iri.Task("WL-3")).String():                     true,
 	}
 
