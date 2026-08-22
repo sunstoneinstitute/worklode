@@ -235,6 +235,51 @@ func TestControlBoundaryContrastMeetsAA(t *testing.T) {
 	}
 }
 
+// TestPrimaryButtonBoundaryContrastMeetsAA holds the same 1.4.11 rule for
+// .btn.primary, which does not use --control-line: it is filled with --accent
+// and outlined with --accent-line, so both of those are what identifies it
+// against the surface behind it. Either one clearing 3:1 would do — a filled
+// control is bounded by its own fill — but holding both is what keeps a later
+// palette edit from moving the boundary onto the token that lost it. Held
+// against the same four surfaces as --control-line, because --accent is a fill
+// elsewhere too (.chip.lead, .decision .dh, .step.current .pip).
+//
+// The light theme failed this until WL-260 darkened the accent: #FAD604 was
+// 1.43:1 on --surface and #E4C000 1.77:1, which is why spec 032 §10 carried it
+// as an open exception.
+func TestPrimaryButtonBoundaryContrastMeetsAA(t *testing.T) {
+	light, dark := themes(t)
+	surfaces := []string{"surface", "bg", "surface-2", "sunk"}
+	for _, theme := range []struct {
+		name string
+		tok  map[string]string
+	}{{"light", light}, {"dark", dark}} {
+		for _, tok := range []string{"accent", "accent-line"} {
+			c := theme.tok[tok]
+			if c == "" {
+				t.Fatalf("%s: --%s is no longer declared", theme.name, tok)
+			}
+			for _, s := range surfaces {
+				if got := contrast(t, c, theme.tok[s]); got < 3 {
+					t.Errorf("%s: .btn.primary's --%s on --%s is %.2f:1, below the 3:1 WCAG 1.4.11 needs for a control's boundary",
+						theme.name, tok, s, got)
+				}
+			}
+		}
+	}
+}
+
+// TestPrimaryButtonIsDrawnWithTheAccentTokens keeps the arithmetic above
+// pointed at the rule it is about: .btn.primary reverting to any other fill or
+// border would pass every check here while failing 1.4.11 on the page.
+func TestPrimaryButtonIsDrawnWithTheAccentTokens(t *testing.T) {
+	flat := strings.Join(strings.Fields(builtCSS(t)), "")
+	const want = ".btn.primary{background:var(--accent);border-color:var(--accent-line);color:var(--accent-ink)"
+	if !strings.Contains(flat, want) {
+		t.Errorf("the primary button is no longer drawn with the accent tokens: %q (WCAG 1.4.11)", want)
+	}
+}
+
 // TestFocusIndicatorContrastMeetsAA holds WCAG 2.4.7 with 1.4.11: the shell's
 // one :focus-visible rule draws a --link outline at outline-offset:2px, so the
 // colour it must stand out from is the surface behind the focused element, not
