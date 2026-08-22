@@ -18,6 +18,7 @@ import (
 	"errors"
 	"html/template"
 	"regexp"
+	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
@@ -80,6 +81,7 @@ var md = goldmark.New(
 	// Unsafe here means "let raw HTML through to the sanitiser", not "trust
 	// it". The bluemonday policy below is the actual boundary.
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
+	goldmark.WithParserOptions(withDocRefLinks),
 )
 
 // mdDoc is md plus goldmark's attribute syntax, which is what turns the
@@ -92,7 +94,7 @@ var md = goldmark.New(
 // allowlist, not the parser, is what keeps that harmless.
 var mdDoc = goldmark.New(
 	goldmark.WithExtensions(extension.GFM),
-	goldmark.WithParserOptions(parser.WithAttribute()),
+	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
 
@@ -335,8 +337,31 @@ func DocBody(body string) template.HTML {
 	return html
 }
 
+// stripFrontmatter drops a leading YAML frontmatter block from a document
+// body (WL-301): the doc page renders those fields structurally, and a
+// frontmatter fence rendered as markdown is a thematic break plus prose
+// noise. Applied to the doc flavour only, inside render, so the cached and
+// uncached paths agree and the cache key stays the stored body.
+func stripFrontmatter(body string) string {
+	rest, ok := strings.CutPrefix(body, "---\n")
+	if !ok {
+		return body
+	}
+	if i := strings.Index(rest, "\n---\n"); i >= 0 {
+		return rest[i+5:]
+	}
+	if trimmed, ok := strings.CutSuffix(rest, "\n---"); ok {
+		_ = trimmed
+		return ""
+	}
+	return body
+}
+
 // render is Body plus the outcome label the cache reports.
 func render(f flavour, body string) (template.HTML, string) {
+	if f.kind == kindDoc {
+		body = stripFrontmatter(body)
+	}
 	if len(body) > maxBody {
 		return template.HTML(template.HTMLEscapeString(body)), outcomeOversize
 	}
