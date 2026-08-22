@@ -404,3 +404,40 @@ func execWithBusyRetry(admin *sql.DB, stmt string) error {
 	}
 	return lastErr
 }
+
+// AwaitCommitHorizon commits a marker event and waits until it has dropped
+// below the commit horizon, which means every transaction that committed
+// before it — everything the test just did — has too.
+//
+// Tests need it because DirtyProjects reads dirtiness from every visible row
+// but only checkpoints through the horizon (WL-119): a change projects
+// immediately, while the watermark passing it waits for pg_snapshot_xmin,
+// which any unrelated transaction anywhere on the *instance* holds back for
+// as long as it stays open. So "the projector has caught up and the next run
+// is a no-op" is something a test waits for, never something one run
+// establishes. Fails the test if the horizon has not moved within 20s, on the
+// grounds that something is holding a transaction open far too long.
+func AwaitCommitHorizon(t *testing.T, s *Store) {
+	t.Helper()
+	ctx := t.Context()
+	marker, _, err := s.RecordEvent(ctx, "system",
+		fmt.Sprintf("commit-horizon-marker-%d", time.Now().UnixNano()), "test.marker", nil, nil)
+	if err != nil {
+		t.Fatalf("record commit-horizon marker: %v", err)
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		got, err := s.EventLogHorizonID(ctx)
+		if err != nil {
+			t.Fatalf("event log horizon: %v", err)
+		}
+		if got >= marker {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("commit horizon still at %d after polling, want >= %d "+
+				"(a long transaction elsewhere on the instance is holding it back)", got, marker)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}

@@ -6,31 +6,33 @@ import (
 	"time"
 )
 
-// ProjectionCheckpoint returns the state_log id through which the
-// backbone→knowledge-graph projector has already run (spec 006 §11).
+// ProjectionCheckpoint returns the transaction id through which the
+// backbone→knowledge-graph projector has already run (spec 006 §11). It is a
+// state_log.txid, not a state_log.id — see DirtyProjects for why the
+// watermark counts transactions.
 func (s *Store) ProjectionCheckpoint(ctx context.Context) (int64, error) {
 	var id int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT last_state_log_id FROM graph_projection WHERE id = 1`).Scan(&id)
+		`SELECT last_txid FROM graph_projection WHERE id = 1`).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("projection checkpoint: %w", err)
 	}
 	return id, nil
 }
 
-// SetProjectionCheckpoint advances the projector's watermark to id.
-func (s *Store) SetProjectionCheckpoint(ctx context.Context, id int64) error {
+// SetProjectionCheckpoint advances the projector's watermark to txid.
+func (s *Store) SetProjectionCheckpoint(ctx context.Context, txid int64) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE graph_projection SET last_state_log_id = $1 WHERE id = 1`, id)
+		`UPDATE graph_projection SET last_txid = $1 WHERE id = 1`, txid)
 	if err != nil {
-		return fmt.Errorf("set projection checkpoint to %d: %w", id, err)
+		return fmt.Errorf("set projection checkpoint to %d: %w", txid, err)
 	}
 	return nil
 }
 
 // ProjectionFailure is one quarantined project: the projector could not
 // render or write its graph, and the global watermark has moved on past the
-// state_log rows that made it dirty, so this row is the only remaining record
+// transaction that made it dirty, so this row is the only remaining record
 // that the project still owes a projection. Package-local rather than an
 // internal/model type (ADR 036) because it never crosses the HTTP boundary —
 // like TaskFilter and Edge, it is store↔caller plumbing.
@@ -105,35 +107,75 @@ func (s *Store) ClearProjectionFailure(ctx context.Context, projectID string) er
 	return nil
 }
 
-// DirtyProjects returns the distinct project ids whose tasks have state_log
-// activity after the given watermark, in first-touched order, and the last
-// state_log id the scan covered (== after when there was nothing). limit
-// bounds the number of log rows read, so one projection batch is bounded
-// even after a long outage.
+// stateLogHorizon is eventHorizon (internal/store/events.go) qualified with
+// DirtyProjects' alias for state_log: one predicate, two logs, because both
+// have the same problem — an id assigned at INSERT time says nothing about
+// commit order. Written as a concatenation so the horizon expression itself
+// still exists exactly once.
+const stateLogHorizon = "sl." + eventHorizon
+
+// DirtyProjects returns the distinct project ids whose tasks or docs have
+// state_log activity after the given watermark, in first-touched order, and
+// the watermark to checkpoint (== after when nothing may be checkpointed
+// yet). limit bounds the number of transactions read, so one projection batch
+// is bounded even after a long outage; a transaction is always read whole, so
+// the watermark only ever lands on a transaction boundary.
+//
+// The watermark counts *transactions*, not state_log rows, because state_log
+// ids come from a sequence assigned at INSERT time: two concurrent
+// transactions in one process — two API request handlers are enough, no
+// second replica needed — can commit out of id order, and a row-id watermark
+// that advanced to the highest id it saw would checkpoint past a lower id
+// that had not committed yet and never scan it (WL-119).
+//
+// Which is why the two bounds this returns are different bounds, and this is
+// the whole design:
+//
+//   - Dirtiness is read from every *visible* row above the watermark, so a
+//     project is re-rendered as soon as its change is committed.
+//   - The watermark only advances through transactions below the commit
+//     horizon (spec 025 §15's rule for the event log, same predicate). A
+//     transaction still above it stays above the watermark, so the row it
+//     commits late — however low its id — is scanned on a later run.
+//
+// Tying the watermark to the horizon but not the rendering is what keeps a
+// long-running transaction anywhere on the instance (the horizon's
+// characteristic hazard, visible as worklode_event_horizon_id) from stalling
+// projection: while it runs, dirty projects still project, they just project
+// again once the horizon passes them. Re-rendering a project costs nothing
+// twice — the graph is replaced whole and deterministically, so the second
+// PUT is byte-identical — which is what lets the two bounds differ at all.
 //
 // The LEFT JOIN keeps the watermark advancing even over a log row whose
 // task no longer resolves. No path *removes* a task row — delete is a
 // tombstone (044 §2), which still joins — so this is a guard, not a feature.
-// state_log ids are assigned at insert time, so two
-// concurrent transactions within one process can commit out of order: a
-// slow transaction can commit a lower id after a projector scan already read
-// past it and checkpointed, and that row is never scanned. Acceptable for
-// v1 because it self-heals: the project's next real event re-renders its
-// whole graph from scratch, and a watermark rewind heals unconditionally.
-// The tracked fix is WL-119 (read to a commit horizon, as
-// EventLogHorizonID does in internal/store/events.go).
 func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (projects []string, through int64, err error) {
 	// Documents dirty their project too (WL-289): a doc mutation logs
 	// entity_kind 'doc' with the doc id in decimal, and the projector
 	// re-renders the owning project's declared doc graphs in the same
 	// cycle as its project graph.
+	//
+	// batch picks the transactions first so limit bounds transactions and
+	// never cuts one in half; the outer query then reads all of their rows,
+	// each carrying whether its transaction is settled — below the horizon,
+	// and so safe to checkpoint. The casts are the xid8↔bigint boundary:
+	// xid8 is unsigned 64-bit, and nothing here outlives a Postgres instance
+	// that has issued enough transactions for that to matter.
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT sl.id, coalesce(t.project_id, d.project_id)
+		`WITH batch AS (
+		     SELECT DISTINCT sl.txid
+		       FROM state_log sl
+		      WHERE sl.entity_kind IN ('task', 'doc')
+		        AND sl.txid > ($1::bigint)::text::xid8
+		      ORDER BY sl.txid LIMIT $2)
+		 SELECT sl.txid::text::bigint, `+stateLogHorizon+`,
+		        coalesce(t.project_id, d.project_id)
 		   FROM state_log sl
+		   JOIN batch b ON b.txid = sl.txid
 		   LEFT JOIN tasks t ON sl.entity_kind = 'task' AND t.id = sl.entity_id
 		   LEFT JOIN docs d ON sl.entity_kind = 'doc' AND d.id::text = sl.entity_id
-		  WHERE sl.entity_kind IN ('task', 'doc') AND sl.id > $1
-		  ORDER BY sl.id LIMIT $2`,
+		  WHERE sl.entity_kind IN ('task', 'doc')
+		  ORDER BY sl.txid, sl.id`,
 		after, limit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("dirty projects after %d: %w", after, err)
@@ -141,14 +183,23 @@ func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (proj
 	defer rows.Close()
 
 	through = after
+	settledSoFar := true
 	seen := make(map[string]bool)
 	for rows.Next() {
-		var id int64
+		var txid int64
+		var settled bool
 		var projectID *string
-		if err := rows.Scan(&id, &projectID); err != nil {
+		if err := rows.Scan(&txid, &settled, &projectID); err != nil {
 			return nil, 0, fmt.Errorf("scan dirty project row: %w", err)
 		}
-		through = id
+		// Ascending txid order makes the settled rows a prefix — a later
+		// transaction id cannot be below a horizon an earlier one is above —
+		// so the watermark stops at the first unsettled transaction and the
+		// scan keeps collecting projects past it.
+		settledSoFar = settledSoFar && settled
+		if settledSoFar {
+			through = txid
+		}
 		if projectID == nil || seen[*projectID] {
 			continue
 		}
