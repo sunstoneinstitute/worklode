@@ -79,13 +79,10 @@ status: draft
 Do the thing.
 `
 
-// planAlphaBody is the earlier of the two ordered plans: one task, and a
-// document-level `blocks` edge holding plan-beta's whole set until this
-// plan's set closes (025 §5, §9.3).
+// planAlphaBody is the earlier of the two ordered plans: one task, and no
+// ordering key of its own — plan-beta declares the order (025 §5, §9.3).
 const planAlphaBody = `---
 status: draft
-blocks:
-  - plan-beta
 ---
 
 # Alpha Plan
@@ -103,9 +100,17 @@ Groundwork prose.
 `
 
 // planBetaBody is the plan under test: two task definitions, the second
-// declaring skills and an intra-plan blockedBy on the first (025 §9.1).
+// declaring skills and an intra-plan blockedBy on the first (025 §9.1), under
+// a document-level `blockedBy` holding this plan's whole set until plan-alpha's
+// closes (025 §5, §9.3).
+//
+// The two `blockedBy` keys are different subjects that happen to share a
+// spelling: the frontmatter one names another plan document, the one in a task
+// block names a task number in this file (025 §9.1).
 const planBetaBody = `---
 status: draft
+blockedBy:
+  - plan-alpha
 ---
 
 # Beta Plan
@@ -432,7 +437,7 @@ func assertNeedsExecution(t *testing.T, project string, want ...int64) {
 }
 
 // TestPlanAcceptanceMintsTasks drives 025 §9 end to end through the public
-// surfaces: two plan documents ordered by a frontmatter `blocks` edge, the
+// surfaces: two plan documents ordered by a frontmatter `blockedBy` edge, the
 // second declaring two tasks with an intra-plan blockedBy. It proves that
 // accepting a plan mints exactly its declared task set and nothing above it,
 // that both gates — plan-to-plan and task-to-task — hold before they release,
@@ -472,16 +477,11 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	t.Setenv("LODE_TOKEN", tok.Token)
 	t.Chdir(t.TempDir())
 
-	// 1. Both plans, beta first: alpha's `blocks: [plan-beta]` names a
-	// document that must already resolve to a plan in this project, so the
-	// ordering edge can only be authored once its target exists.
-	beta, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
-		Project: "plans", Kind: "plan", Slug: "plan-beta",
-		Body: planBetaBody, Assignee: "planner",
-	})
-	if err != nil {
-		t.Fatalf("create plan-beta: %v", err)
-	}
+	// 1. Both plans, in the order a numbered series is actually written:
+	// alpha, then beta declaring `blockedBy: [plan-alpha]`. Either end may
+	// state the ordering, and the later plan naming the earlier one is the
+	// direction that does not require going back to amend a plan that may
+	// already be accepted and spent (025 §5).
 	alpha, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "plans", Kind: "plan", Slug: "plan-alpha",
 		Body: planAlphaBody, Assignee: "planner",
@@ -489,9 +489,17 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create plan-alpha: %v", err)
 	}
+	beta, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
+		Project: "plans", Kind: "plan", Slug: "plan-beta",
+		Body: planBetaBody, Assignee: "planner",
+	})
+	if err != nil {
+		t.Fatalf("create plan-beta: %v", err)
+	}
 
-	// 2. The frontmatter wrote one doc_edges row, readable from both ends:
-	// blocks leaving alpha, blockedBy arriving at beta (025 §14).
+	// 2. Beta's frontmatter wrote one doc_edges row — the one alpha's
+	// `blocks: [plan-beta]` would have written — readable from both ends:
+	// blocks leaving alpha, blockedBy arriving at beta (025 §5, §14).
 	alphaDoc, _, err := planner.GetDoc(ctx, alpha.ID)
 	if err != nil {
 		t.Fatalf("get plan-alpha: %v", err)

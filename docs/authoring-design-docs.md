@@ -106,9 +106,14 @@ a name and nothing else.
 ordering edge that would otherwise need a container row above a plan's tasks.
 Both ends must be plans in the same project — the backbone refuses the edge
 otherwise — and while any task of the blocking plan is open, or its set is not
-minted yet, none of the blocked plan's tasks is pickable. Declare it on the
-blocking plan; `blockedBy` is the same edge read from the other end, so
-spelling it writes nothing.
+minted yet, none of the blocked plan's tasks is pickable.
+
+Declare it from **either** end: `blockedBy` writes the same single row with the
+ends swapped, so `blockedBy: [plan-2]` on plan 3 stores exactly what
+`blocks: [plan-3]` on plan 2 would have. It is a spelling, not a second edge —
+one row is stored either way, and both ends must already exist either way.
+Writing a numbered series, reach for `blockedBy` on the later plan: the
+alternative is going back to amend an earlier plan that may already be accepted.
 
 `task` records the lode task that implements a spec while plans still live in
 git. It is not an ontology term and goes away when plan acceptance mints the

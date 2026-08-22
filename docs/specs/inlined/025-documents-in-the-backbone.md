@@ -351,6 +351,22 @@ path, one review surface, one place `lode` talks to.
   Task→Task closure stays type-homogeneous (ADR-0004) and `?t wl:dependsOn+ ?x` never walks
   across document ordering.
 
+**`blockedBy` is an authoring convenience, not a second edge.** Plan ordering is stored as one
+`blocks` row, always from the blocking plan to the blocked one, and `blockedBy:` writes *that
+row* with its two ends swapped — `blockedBy: [plan-2]` on plan 3 stores exactly what
+`blocks: [plan-3]` on plan 2 would have. One row, one stored direction, read backward for the
+inverse the way §14 requires; the guards (both ends plans, the reference resolvable, no
+self-block, no cycle) are checked on the row, so the two spellings cannot disagree about what
+is legal.
+
+The spelling exists because a numbered plan series is authored forward. Both ends of the edge
+must already exist, so without it the ordering can only be stated on the *earlier* plan and
+only once the later one exists: part 3 knows it follows part 2, but part 2 would have to be
+amended to say so, and part 2 may already be accepted and spent. Which plan typed the key is
+therefore recorded — `doc_edges.declared_by`, distinct from the row's from end — so rewriting
+either plan clears its own declarations and leaves the other's standing. Both plans declaring
+the same ordering is the same fact twice: it stays one row.
+
 §4's canonical + versioned IRIs, `dcat:hasVersion` shape and `wl:lastRevisedIn` survive as
 the **projection** of this store; its named-graph publication transaction becomes an ordinary
 backbone transaction followed by projector catch-up. The §6 constraints (append-only
