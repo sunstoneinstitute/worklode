@@ -123,11 +123,10 @@ func New(allowedHosts []string, maxBytes int64) *Fetcher {
 // lookup failed needs no branch of its own.
 //
 // The scoping is per host, not per fetch, because the allowlist is wider than
-// the set of hosts a credential belongs to: mirroring may fetch from
-// github.com and githubusercontent.com, and only the latter is the host the
-// GitHub App token is for (021 §12). A blanket "attach to every fetch" option
-// would hand the token to whichever of them the URL named, and to any redirect
-// target that stayed inside the allowlist.
+// the set of hosts a credential belongs to: mirroring fetches from github.com
+// and githubusercontent.com, and the GitHub App token belongs to neither in
+// full (021 §12). A blanket "attach to every fetch" option would hand the
+// token to whichever host the attacker-chosen URL named.
 func (f *Fetcher) WithBearer(authHosts []string, token string) *Fetcher {
 	c := *f
 	c.authHosts, c.authValue = nil, ""
@@ -152,12 +151,8 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error
 
 	transport := f.transport()
 	defer transport.CloseIdleConnections()
-	var rt http.RoundTripper = transport
-	if f.authValue != "" {
-		rt = &authTransport{base: transport, hosts: f.authHosts, value: f.authValue}
-	}
 	client := &http.Client{
-		Transport: rt,
+		Transport: &authTransport{base: transport, hosts: f.authHosts, value: f.authValue},
 		Timeout:   fetchTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// via holds the requests already sent, so its length is the
@@ -193,18 +188,24 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string) ([]byte, string, error
 	return data, resp.Header.Get("Content-Type"), nil
 }
 
-// authTransport attaches the credential to a request only when the host being
-// requested is one the credential names, and removes any Authorization header
-// from every other request.
+// authTransport is the only thing that may put an Authorization header on a
+// request this package sends: it attaches the credential when the host being
+// contacted is one the credential names, and strips the header from every
+// other request. It is installed unconditionally, so the invariant holds on an
+// unauthenticated Fetcher too -- a URL carrying userinfo would otherwise have
+// http.Client synthesise a Basic header out of an attacker's own credential
+// and carry it across hops on net/http's terms rather than this package's.
 //
-// The decision belongs here rather than on the outgoing request because
-// net/http builds the redirect hops itself: it copies the original request's
-// headers onto each hop and drops Authorization only when the target is
-// neither the original host nor a subdomain of it. A header set once on the
-// first request would therefore ride a redirect from
-// user-images.githubusercontent.com to any sibling under
-// githubusercontent.com. A RoundTripper sees each hop as its own request, so
-// the host check is re-run against the host actually being contacted.
+// The decision belongs in a RoundTripper rather than on the outgoing request
+// because a fetch does not stay on one host. The initial URL is chosen by
+// whoever filed the issue, and can name any host the allowlist permits, which
+// is wider than any credential's scope; each redirect hop can move it again,
+// on or off scope. A RoundTripper sees every hop as its own request, so the
+// question asked is always "is *this* host one the credential names" rather
+// than "was the first one". net/http has a rule of its own here -- it drops
+// Authorization on a redirect to anything but the original host or a
+// subdomain of it -- but that rule is about a header it was handed, not about
+// which hosts a credential belongs to, and it never re-attaches.
 type authTransport struct {
 	base  http.RoundTripper
 	hosts []string
@@ -215,7 +216,7 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// A RoundTripper must not modify the request it is handed.
 	r := req.Clone(req.Context())
 	r.Header.Del("Authorization")
-	if hostMatches(normalizeHost(r.URL.Hostname()), t.hosts) {
+	if t.value != "" && hostMatches(normalizeHost(r.URL.Hostname()), t.hosts) {
 		r.Header.Set("Authorization", t.value)
 	}
 	return t.base.RoundTrip(r)

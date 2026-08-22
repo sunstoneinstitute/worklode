@@ -31,13 +31,27 @@ import (
 var mirrorHosts = []string{"githubusercontent.com", "github.com"}
 
 // mirrorTokenHosts are the hosts the installation's GitHub App token may be
-// sent to: §12 names githubusercontent.com and nothing else. It is a strict
-// subset of mirrorHosts on purpose — github.com is fetchable because a body
-// can reference an asset there, but it also serves every ordinary page an
-// issue might link to, and a token attached to those is a credential handed to
-// a URL whoever filed the issue chose. safefetch scopes the header per
-// redirect hop, so a hop off githubusercontent.com drops it.
-var mirrorTokenHosts = []string{"githubusercontent.com"}
+// sent to. §12 names githubusercontent.com; this is narrower on both sides of
+// that, deliberately.
+//
+// Narrower than mirrorHosts: github.com is fetchable because a body can
+// reference an asset there, but it also serves every ordinary page an issue
+// might link to, and a token attached to those is a credential handed to a URL
+// whoever filed the issue chose.
+//
+// Narrower than githubusercontent.com itself: objects.githubusercontent.com is
+// the S3-backed host GitHub redirects to with the signature in the query
+// string, and S3 rejects a request that carries both a query signature and an
+// Authorization header ("Only one auth mechanism allowed"). Scoping to the
+// whole parent host would turn a fetch that works today into a 400. The three
+// below are the hosts that actually serve an issue body's images, and
+// raw.githubusercontent.com on a private repo is the case that needs the token
+// at all. safefetch decides per redirect hop, so a hop onto objects. drops it.
+var mirrorTokenHosts = []string{
+	"user-images.githubusercontent.com",
+	"private-user-images.githubusercontent.com",
+	"raw.githubusercontent.com",
+}
 
 // mirrorTimeout bounds the whole pass, not one fetch. safefetch already caps
 // a single fetch at 30 seconds, but the number of image references in a body
@@ -169,6 +183,15 @@ func (s *server) mirrorRemoteImages(ctx context.Context, repo, body string) stri
 // renders it as nothing. That is strictly better than refusing the promote
 // over a credential most bodies do not need. It is minted once per pass rather
 // than per image because one promote's images are all one repo's.
+//
+// Note what the token widens: promote's body is a request field, not the
+// stored issue's text, so any caller with inbox triage can name a repo and a
+// githubusercontent URL and have the server fetch it credentialed and store
+// the bytes as a readable blob. The bound is the installation's own scope --
+// the repo must map to a project, and the token is only ever the token that
+// repo's installation would issue -- so this reaches nothing the caller's
+// project does not already cover. Widening the host scope is what would break
+// that; see mirrorTokenHosts.
 func (s *server) mirrorToken(ctx context.Context, repo string) string {
 	if s.appAuth == nil || strings.TrimSpace(repo) == "" {
 		return ""

@@ -310,6 +310,10 @@ func mirrorTokenServer(t *testing.T, app *githubauth.AppAuth) *server {
 // aimAtTestHost points the token's host scope at the httptest origin for one
 // test. Production's scope is mirrorTokenHosts' own value, which
 // TestMirrorTokenStaysOffOtherHosts exercises unchanged.
+//
+// It writes a package-level var, so a caller must not be parallel; no test in
+// this package is. Restoring it in Cleanup is what keeps the tests that assert
+// against the production value honest.
 func aimAtTestHost(t *testing.T) {
 	t.Helper()
 	saved := mirrorTokenHosts
@@ -347,6 +351,11 @@ func TestMirrorTokenStaysOffOtherHosts(t *testing.T) {
 
 	s.mirrorRemoteImages(context.Background(), "acme/widgets", "![shot]("+origin.url+"/a.png)\n")
 
+	// The mint has to have succeeded for the empty header to mean "withheld"
+	// rather than "there was never a token to send".
+	if v := testutil.ToFloat64(s.mirrorTokens.WithLabelValues(mirrorTokenMinted)); v != 1 {
+		t.Fatalf("mirrorTokens{minted} = %v, want 1", v)
+	}
 	if h := origin.headers(); len(h) != 1 || h[0] != "" {
 		t.Fatalf("unnamed host saw Authorization %q, want one empty", h)
 	}

@@ -91,8 +91,10 @@ func TestBearerNotSentToUnnamedHost(t *testing.T) {
 	}
 }
 
-// The hop, not the fetch, decides: a redirect off the credential's host drops
-// it, even though the guard still permits the target.
+// A redirect off the credential's host drops it, even though the guard still
+// permits the target. net/http would drop it here too, so this pins the
+// outcome rather than the mechanism; TestBearerReattachedOnRedirectBack is the
+// one that fails if the header stops being decided per hop.
 func TestBearerDroppedOnRedirectToOtherHost(t *testing.T) {
 	target := newAuthRecorder(t, "")
 	src := newAuthRecorder(t, target.rawURL())
@@ -110,7 +112,9 @@ func TestBearerDroppedOnRedirectToOtherHost(t *testing.T) {
 }
 
 // A redirect back onto the credential's host re-attaches it: the check is a
-// property of the host being contacted, not a one-way latch.
+// property of the host being contacted, not a one-way latch. This is what an
+// implementation that sets the header once on the outgoing request cannot do
+// -- it starts off-scope, so it would send nothing at all.
 func TestBearerReattachedOnRedirectBack(t *testing.T) {
 	target := newAuthRecorder(t, "")
 	src := newAuthRecorder(t, target.URL)
@@ -164,6 +168,22 @@ func TestBearerWithNothingToSendIsUnauthenticated(t *testing.T) {
 				t.Fatalf("Authorization headers = %q, want one empty", got)
 			}
 		})
+	}
+}
+
+// Userinfo in the URL is an Authorization header nobody in this package asked
+// for: http.Client turns it into a Basic header and then applies its own
+// forwarding rule to it. An unauthenticated Fetcher sends no Authorization at
+// all, whatever the URL says.
+func TestUserinfoDoesNotBecomeAnAuthorizationHeader(t *testing.T) {
+	origin := newAuthRecorder(t, "")
+	withUser := strings.Replace(origin.URL, "http://", "http://user:pass@", 1)
+
+	if _, _, err := loopbackFetcher(1<<20).Get(context.Background(), withUser); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got := origin.headers(); len(got) != 1 || got[0] != "" {
+		t.Fatalf("Authorization headers = %q, want one empty", got)
 	}
 }
 
