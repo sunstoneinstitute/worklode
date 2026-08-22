@@ -46,7 +46,7 @@ func normalizeSection(s string) string {
 // fallback runDocShowByOrdinal uses when the project key is unknown) never
 // run it themselves: a flag's kind must still be enforced when there is no
 // shorthand to route it through.
-func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
+func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bool) error {
 	section = normalizeSection(section)
 
 	c, cfg, err := newAPIClientWithConfig()
@@ -99,6 +99,25 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string) error {
 	if err != nil {
 		return err
 	}
+
+	if inline {
+		// The consolidated view (WL-84): every effective claim folded into
+		// the section it acts on, transitively; --section narrows to one
+		// subtree with its folds intact.
+		inliner := newDocInliner(func(id int64) (*model.DocDetail, error) {
+			d, _, err := c.GetDoc(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return &d, nil
+		})
+		out, err := inliner.consolidateDoc(&detail, section)
+		if err != nil {
+			return err
+		}
+		return writeDocShow(cmd, doc, section, []byte(out))
+	}
+
 	data := []byte(detail.Body)
 
 	if section == "" {

@@ -154,7 +154,7 @@ Flags: --admin-listen, --dsn, --listen
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
-Flags: --adr, --deliverable, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task
+Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task
 
 ## `lode skills` — Org-wide agent skills: list, recommend, install, sync
 
