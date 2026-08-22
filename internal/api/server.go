@@ -125,6 +125,8 @@ type Config struct {
 	// Blob storage (spec 021). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
 	// exactly as before, so a local docker-compose stack needs no bucket.
+	// Once they are set the access and secret keys are required too, and a
+	// missing one fails the boot rather than 502ing every blob operation.
 	BlobEndpoint  string // LODE_BLOB_ENDPOINT, e.g. https://hel1.your-objectstorage.com
 	BlobBucket    string // LODE_BLOB_BUCKET
 	BlobRegion    string // LODE_BLOB_REGION
@@ -805,6 +807,8 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// Blob storage (spec 021). The feature is off unless an endpoint and a
 	// bucket are both named; the injected store is the test path and wins, so
 	// a test never has to stand up an S3 endpoint to exercise the handlers.
+	// NewS3 then requires the credentials as well, so a half-configured
+	// deployment refuses to boot instead of serving 502s.
 	switch {
 	case cfg.BlobStoreForTest != nil:
 		s.blobs = cfg.BlobStoreForTest
