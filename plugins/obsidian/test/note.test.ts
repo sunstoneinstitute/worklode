@@ -64,6 +64,7 @@ function fixtureDoc(overrides: Partial<Doc> = {}): Doc {
     issued: "2026-06-01",
     assignee: "stig",
     created_by: "stig",
+    generated_by_task: "",
     created_at: "2026-06-01T09:00:00Z",
     updated_at: "2026-08-16T09:12:00Z",
     body: withFrontmatter(
@@ -249,6 +250,16 @@ describe("docToNote", () => {
     // exactly the doc's own frontmatter, structurally unchanged.
     expect(parsed.frontmatter).toEqual(frontmatter);
     expect(parsed.wl.aliases_added).toBe(true);
+  });
+
+  it("names the task that wrote the document, and omits the key when none did", async () => {
+    const authored = await docToNote(fixtureDoc({ generated_by_task: "WL-217" }));
+    expect(parseNote(authored.content).wl.generated_by_task).toBe("WL-217");
+
+    // Most documents have no authoring task (025 §12 is about the edge when
+    // it exists), so the key is absent rather than empty.
+    const unauthored = await docToNote(fixtureDoc());
+    expect(parseNote(unauthored.content).wl).not.toHaveProperty("generated_by_task");
   });
 
   it("does not add aliases when the doc already has them", async () => {
@@ -714,10 +725,12 @@ describe("golden note etags", () => {
     expect((await taskToNote(fixtureTask())).etag).toBe("9cf7929f46269e43");
     // Both doc-derived constants moved once, in WL-196: a doc note's etag no
     // longer hashes the body (docEtag), and a project note's no longer hashes
-    // its docs whole.
-    expect((await docToNote(fixtureDoc())).etag).toBe("d669602c18974e01");
+    // its docs whole. The doc constant moved again in WL-217, which added
+    // `generated_by_task` to the identity payload (025 §12) — one re-render
+    // of every doc note, which is the deliberate cost of the new field.
+    expect((await docToNote(fixtureDoc())).etag).toBe("29807eb8cf8c7658");
     expect((await projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()])).etag).toBe(
-      "223d037d0777dc58",
+      "982eb076affeaad0",
     );
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
     expect(

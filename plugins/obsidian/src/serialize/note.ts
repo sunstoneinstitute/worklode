@@ -412,6 +412,10 @@ export async function docToNote(d: Doc): Promise<Note> {
     version: d.version,
     issued: d.issued,
     assignee: d.assignee,
+    // The task that wrote the document (025 §12). Omitted when none did,
+    // like `number` above: most documents have no authoring task, and a key
+    // whose value is always "" is noise in every note's frontmatter.
+    ...(d.generated_by_task ? { generated_by_task: d.generated_by_task } : {}),
     etag,
   };
 
