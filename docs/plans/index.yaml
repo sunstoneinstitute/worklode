@@ -1087,3 +1087,16 @@ docs/plans/2026-08-21-worklode-prod-in-the-admin-cluster.md:
     task-4-cutover-preflight-and-runbook: "### Task 4 — Cutover preflight and runbook"
     task-5-execute-the-cutover: "### Task 5 — Execute the cutover"
     task-6-retire-the-hzprod-overlay-and-the-spent-runbook: "### Task 6 — Retire the hzprod overlay and the spent runbook"
+docs/plans/2026-08-22-project-overhead-cost.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-migration-overhead-usage-and-its-daily-rollup: "### Task 1 — Migration: overhead usage and its daily rollup"
+    task-2-transcriptbucket-carries-its-own-working-directory: "### Task 2 — `transcript.Bucket` carries its own working directory"
+    task-3-store-overhead-usage-its-rollup-and-a-combined-projectcost: "### Task 3 — Store: overhead usage, its rollup, and a combined ProjectCost"
+    task-4-wire-model-overhead-fields-and-the-report-input: "### Task 4 — Wire model: overhead fields and the report input"
+    task-5-api-the-overhead-usage-endpoint-and-mapping-overhead-onto-the-wire: "### Task 5 — API: the overhead-usage endpoint, and mapping overhead onto the wire"
+    task-6-cli-resolving-a-project-without-a-server-round-trip-and-the-client-call: "### Task 6 — CLI: resolving a project without a server round trip, and the client call"
+    task-7-hookrun-report-overhead-instead-of-dropping-it: "### Task 7 — hookrun: report overhead instead of dropping it"
+    task-8-cockpit-show-the-combined-spend-and-its-overhead-share: "### Task 8 — Cockpit: show the combined spend and its overhead share"
+    self-review: "## Self-Review"
