@@ -259,6 +259,45 @@ func (s *Store) RecordEventWithID(
 	return id, inserted, nil
 }
 
+// EventPayload marshals v as an event payload. Every payload is a JSON
+// object naming what the event is about; an event about one task names it
+// under the "task" key, so GET /api/v1/events attributes the event on its
+// own without a second read of state_log (025 §15.2).
+func EventPayload(v any) ([]byte, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("marshal event payload: %w", err)
+	}
+	return b, nil
+}
+
+// AttributeEventToTask sets "task" on the payload of the event being
+// recorded, for the events whose task id does not exist until apply runs:
+// task.created and issue.promoted mint the id from the project counter
+// inside the transaction, after RecordEvent has already marshalled the
+// payload (025 §15.2).
+//
+// It must be called from inside that same transaction — the apply callback —
+// so the event row becomes visible to any reader already carrying its task
+// id. No committed row is ever rewritten: the INSERT and this UPDATE are one
+// transaction, and events are read below the commit horizon, so the
+// intermediate payload is unobservable. That is what keeps the log
+// append-only in the sense that matters (§15.3's objection is to patching a
+// row that has already committed).
+func AttributeEventToTask(tx *sql.Tx, eventID int64, taskID string) error {
+	res, err := tx.Exec(
+		`UPDATE events
+		    SET payload = CASE WHEN jsonb_typeof(payload) = 'object' THEN payload ELSE '{}'::jsonb END
+		                  || jsonb_build_object('task', $2::text)
+		  WHERE id = $1`,
+		eventID, taskID)
+	if err != nil {
+		return fmt.Errorf("attribute event %d to task %s: %w", eventID, taskID, err)
+	}
+	return requireOneAffected(res, fmt.Sprintf("attribute event %d to task %s", eventID, taskID),
+		fmt.Errorf("event %d: %w", eventID, ErrNotFound))
+}
+
 // recordedEventID reads back the id of the event (source, externalID) already
 // names, for the ON CONFLICT DO NOTHING path both RecordEvent forms take when
 // the insert finds the event was recorded earlier.

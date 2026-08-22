@@ -410,6 +410,12 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	if got := mintPayload["rule"]; got != "plan-on-accept" {
 		t.Fatalf("mint event %d rule = %v, want plan-on-accept", mintEvent.ID, got)
 	}
+	// The minted id is allocated inside the mint transaction and completed
+	// onto the payload there (025 §15.2), so the events API alone says which
+	// task the rule created.
+	if got := mintPayload["task"]; got != design.ID {
+		t.Fatalf("mint event %d task = %v, want %q", mintEvent.ID, got, design.ID)
+	}
 	if want := "wlid:event/" + strconv.FormatInt(acceptEvent.ID, 10); mintPayload["prov:wasInformedBy"] != want {
 		t.Fatalf("mint event %d prov:wasInformedBy = %v, want %q (the wl:DocumentAccepted event)",
 			mintEvent.ID, mintPayload["prov:wasInformedBy"], want)
