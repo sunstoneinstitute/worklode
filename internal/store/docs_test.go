@@ -5048,3 +5048,62 @@ func TestDocEdgeTypesWithoutWriter(t *testing.T) {
 		t.Errorf("doc_edges types with no writer = %v, want %v", unwritten, want)
 	}
 }
+
+// seedDocsTask inserts a task in the doc tests' project, for the authoring
+// edge 025 §12 asks for. Direct SQL, like seedDocsProject: what is under test
+// is the docs row, not how the task got there.
+func seedDocsTask(t *testing.T, s *Store, id string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(context.Background(),
+		`INSERT INTO tasks (id, project_id, title, priority, kind, state, created_at, updated_at)
+		 VALUES ($1, 'p1', 'Write the spec', 'medium', 'design', 'in_progress', now(), now())`,
+		id); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestCreateDocRecordsGeneratedByTask pins 025 §12's authorship edge at the
+// store: the task that wrote a document is persisted and read back, a create
+// naming no task leaves it unset rather than failing, and a create naming a
+// task that does not exist is refused with a message pointing at the field.
+func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
+	s := openDocStore(t)
+	seedDocsTask(t, s, "P1-1")
+
+	authored := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x",
+		Body: specBody, CreatedBy: "stig", GeneratedByTask: "P1-1",
+	})
+	if authored.GeneratedByTask != "P1-1" {
+		t.Errorf("GeneratedByTask = %q, want P1-1", authored.GeneratedByTask)
+	}
+	// Read back through scanDoc, which is what every later query uses.
+	got, err := s.GetDoc(t.Context(), authored.ID)
+	if err != nil {
+		t.Fatalf("GetDoc: %v", err)
+	}
+	if got.GeneratedByTask != "P1-1" {
+		t.Errorf("GetDoc GeneratedByTask = %q, want P1-1", got.GeneratedByTask)
+	}
+
+	// Nullable by design: a document nothing claimed a task for is a normal
+	// state, the same way tasks.plan_doc and tasks.about_doc are nullable.
+	unauthored := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 51, Slug: "051-x",
+		Body: specBody, CreatedBy: "stig",
+	})
+	if unauthored.GeneratedByTask != "" {
+		t.Errorf("GeneratedByTask = %q, want empty", unauthored.GeneratedByTask)
+	}
+
+	_, err = createDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-x",
+		Body: specBody, CreatedBy: "stig", GeneratedByTask: "P1-404",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown authoring task: err = %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "P1-404") {
+		t.Errorf("err = %q, want it to name the task", err)
+	}
+}
