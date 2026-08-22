@@ -93,6 +93,15 @@ type AgentSessionInput struct {
 	Usage []SessionUsageBucket `json:"usage,omitempty"`
 }
 
+// ProjectOverheadUsageInput is the request body for
+// POST /api/v1/projects/{id}/overhead-usage: report usage with no task to
+// bill to (spec 052 §2). All three fields are required.
+type ProjectOverheadUsageInput struct {
+	Agent             string               `json:"agent"`
+	ExternalSessionID string               `json:"external_session_id"`
+	Usage             []SessionUsageBucket `json:"usage"`
+}
+
 // EndAgentSessionInput is the request body for EndAgentSession (POST
 // /api/v1/tasks/{id}/agent-session/end). Only Agent and SessionID are
 // required; the rest are optional accounting fields.
