@@ -256,9 +256,11 @@ Any other error is `error` and the pass ends; §3.4 says why that is safe.
 
 The subscriber is at-least-once (eventbus offsets); redelivery must not
 double-fire. Two independent layers make re-processing a no-op: the fired
-event's dedup identity — `source = workflow-rules`, `external_id =
-<triggering event id>/<rule name>` (§5.3) — and the guard's from-state
-check, which fails for a task the first delivery already moved. The offset
+event's dedup identity — `source = watcher`, `external_id =
+workflow-rules:<triggering event id>:<rule name>` (§5.3), the doc-lifecycle
+convention: `events.source` is a CHECK-bounded enum, so a subscriber
+namespaces `external_id` rather than minting a source — and the guard's
+from-state check, which fails for a task the first delivery already moved. The offset
 commits after the pass regardless of outcome: a failed pass is not retried
 beyond redelivery semantics, because rules are conveniences (§1.1) and a
 poison event must not wedge the log.
