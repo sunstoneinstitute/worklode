@@ -330,14 +330,16 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 	flat := strings.Join(strings.Fields(b.String()), "")
 
 	for _, c := range []struct{ want, why string }{
-		{"scroll-padding-top:64px", "an in-page jump must clear the 56px sticky topbar (WCAG 2.4.11)"},
+		{"scroll-padding-top:112px", "an in-page jump must clear both sticky header rows (WCAG 2.4.11)"},
 		{".tablewrap{overflow-x:auto", "a data table scrolls inside its own container (WCAG 1.4.10)"},
 		{"pre{overflow-x:auto", "a stored document body cannot be re-wrapped, so it scrolls inside itself (WCAG 1.4.10)"},
 		{".prose{overflow-wrap:anywhere", "an unbroken token in a task body must not widen the page (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal", "a work row's title wraps below 880px instead of truncating to nothing (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere", "a work-row title holding an unbreakable identifier must break rather than widen the page (WCAG 1.4.10)"},
 		{".dodrow.def{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere", "a deliverable's artifact address has no soft wrap opportunity in it (WCAG 1.4.10)"},
-		{"scroll-padding-bottom:calc(64px+env(safe-area-inset-bottom)+16px)", "a control focused near the fold must clear the fixed bottom tab bar (WCAG 2.4.11)"},
+		{"nav.global{position:sticky;top:56px", "the global destinations stay in the second horizontal header row"},
+		{"nav.globala.tab-secondary{display:none;order:2;flex:00100%", "narrow layouts move secondary destinations under More"},
+		{".tab-more{display:flex;cursor:pointer", "narrow layouts expose the hidden destinations through More"},
 		{".dodrow.eva{display:flex;align-items:center;min-height:24px", "a deliverable's URL is a link on its own line, so it needs a 24px box (WCAG 2.5.8)"},
 		{".fieldrow.checkinput{width:24px;height:24px", "the draft checkbox meets the minimum target size (WCAG 2.5.8)"},
 		{".homegrid{display:grid;grid-template-columns:1fr1fr", "Home's two-column grid must stay fixed, never auto-fit/auto-fill (spec 032 §10)"},
