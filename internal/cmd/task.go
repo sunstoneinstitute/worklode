@@ -521,7 +521,7 @@ func newTaskSkillsCmd() *cobra.Command {
 }
 
 func newTaskEditCmd() *cobra.Command {
-	var title, body, bodyFile, concern, priority string
+	var title, body, bodyFile, concern, priority, kindFlag string
 	var needsDecomposition, noUpload bool
 	var secretNames, artifacts []string
 	cmd := &cobra.Command{
@@ -551,6 +551,9 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("priority") {
 				in.Priority = &priority
 			}
+			if cmd.Flags().Changed("kind") {
+				in.Kind = &kindFlag
+			}
 			if cmd.Flags().Changed("needs-decomposition") {
 				in.NeedsDecomposition = &needsDecomposition
 			}
@@ -564,8 +567,8 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("artifact") {
 				in.Artifacts = &artifacts
 			}
-			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.Secrets == nil && in.Artifacts == nil {
-				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --needs-decomposition, --secrets, or --artifact")
+			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.Secrets == nil && in.Artifacts == nil && in.Kind == nil {
+				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --kind, --needs-decomposition, --secrets, or --artifact")
 			}
 
 			c, cfg, err := newAPIClientWithConfig()
@@ -601,6 +604,7 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
+	cmd.Flags().StringVar(&kindFlag, "kind", "", "retag the task's kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
 		"replace the task's declared secret names (comma-separated; 'none' clears)")

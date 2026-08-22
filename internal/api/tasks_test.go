@@ -1367,3 +1367,37 @@ func TestTaskSecretsRejectsBadNames(t *testing.T) {
 		}
 	}
 }
+
+// TestPatchTaskKind covers WL-101: kind becomes editable through PATCH, with
+// the creation gate's validation, alias normalisation, and a change-log
+// entry through the normal event path.
+func TestPatchTaskKind(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Retag me", "priority": "medium", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "design"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("retag status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["kind"] != "design" {
+		t.Fatalf("kind after patch = %v, want design", got["kind"])
+	}
+
+	// The retired alias normalises exactly as creation does.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "spec"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("alias retag status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr); got["kind"] != "design" {
+		t.Fatalf("kind after alias patch = %v, want design", got["kind"])
+	}
+
+	// An unknown kind is refused with the shared message.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "epic"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown kind status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
