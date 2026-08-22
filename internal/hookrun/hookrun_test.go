@@ -1633,6 +1633,14 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 	// harness opened in wtDir reads this task's skills without a `lode
 	// install`.
 	storeDir := filepath.Join(filepath.Dir(os.Getenv("LODE_SKILLS_DIR")), "store")
+	// Resolve after the fact: LODE_SKILLS_DIR is a t.TempDir() path, which on
+	// macOS lives under /var/folders — a symlink to /private/var/folders —
+	// while the worktree link below is resolved by EvalSymlinks and comes
+	// back with /private already in it. Normalize both sides the same way.
+	storeDir, err = filepath.EvalSymlinks(storeDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(storeDir): %v", err)
+	}
 	link := filepath.Join(wtDir, ".agents", "skills", "tdd")
 	resolved, err := filepath.EvalSymlinks(link)
 	if err != nil || !strings.HasPrefix(resolved, storeDir) {

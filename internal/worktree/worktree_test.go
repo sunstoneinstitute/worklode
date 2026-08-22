@@ -686,7 +686,17 @@ func TestExcludeFile(t *testing.T) {
 // private, but info/exclude lives in the COMMON dir, so every worktree of one
 // repo shares the same per-machine exclude file.
 func TestExcludeFileLinkedWorktreeSharesCommonDir(t *testing.T) {
-	dir := initGitRepo(t)
+	// Resolve once, right after the repo root is established: t.TempDir()
+	// on macOS lives under /var/folders, a symlink to /private/var/folders.
+	// A linked worktree's commondir file is written by `git worktree add`
+	// as an absolute, already-resolved path, so ExcludeFile(wt) comes back
+	// with /private in it; ExcludeFile(dir) on the main repo does not go
+	// through that resolution. Starting from a resolved root keeps both
+	// sides comparable.
+	dir, err := filepath.EvalSymlinks(initGitRepo(t))
+	if err != nil {
+		t.Fatalf("EvalSymlinks(dir): %v", err)
+	}
 	wt := addWorktreeUnderBase(t, dir, "WL-1-x")
 
 	mainExcl, err := worktree.ExcludeFile(dir)
