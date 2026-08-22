@@ -1143,12 +1143,17 @@ func newTaskDecomposeCmd() *cobra.Command {
 // attached only (spec 021 §3).
 func newTaskAttachCmd() *cobra.Command {
 	var noEmbed bool
+	var alt string
 	cmd := &cobra.Command{
 		Use:   "attach <task-id> <file>...",
 		Short: "Upload files and attach them to a task",
 		Long: "Images and videos are appended to the task body as markdown so they render\n" +
 			"inline; every other type is attached only. Use - to read one blob from stdin,\n" +
-			"which pairs with a clipboard tool: pngpaste - | lode task attach WL-42 -",
+			"which pairs with a clipboard tool: pngpaste - | lode task attach WL-42 -\n\n" +
+			"--alt supplies real alt text for the embedded image; without it, the\n" +
+			"reference falls back to the filename, which is not alt text (spec 021 Q021.1).\n" +
+			"It applies to one embedded image at a time -- attach images individually when\n" +
+			"supplying --alt for more than one.",
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -1166,7 +1171,7 @@ func newTaskAttachCmd() *cobra.Command {
 				return err
 			}
 			body := task.Body
-			var appended bool
+			var appended, altUsed bool
 
 			for _, path := range args[1:] {
 				var blob model.BlobResponse
@@ -1192,10 +1197,19 @@ func newTaskAttachCmd() *cobra.Command {
 				}
 
 				if !noEmbed && blobref.Embeddable(blob.MediaType) {
+					altText := name
+					if alt != "" {
+						if altUsed {
+							return fmt.Errorf(
+								"--alt applies to one embedded image; attach images individually to give each its own alt text")
+						}
+						altText = alt
+						altUsed = true
+					}
 					if body != "" && !strings.HasSuffix(body, "\n") {
 						body += "\n"
 					}
-					body += fmt.Sprintf("\n![%s](%s)\n", name, blob.URL)
+					body += fmt.Sprintf("\n![%s](%s)\n", altText, blob.URL)
 					appended = true
 					fmt.Fprintf(cmd.OutOrStdout(), "embedded %s (%s)\n", name, blob.Hash[:12])
 					continue
@@ -1216,6 +1230,8 @@ func newTaskAttachCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&noEmbed, "no-embed", false,
 		"attach images without appending them to the body")
+	cmd.Flags().StringVar(&alt, "alt", "",
+		"alt text for the embedded image (default: the filename, which is not alt text)")
 	return cmd
 }
 

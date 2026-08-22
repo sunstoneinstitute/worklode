@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 
@@ -162,6 +163,9 @@ var containerForbiddenStates = map[string]bool{
 func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.Task, error) {
 	if in.Concern != "" && !ValidConcern(in.Concern) {
 		return nil, fmt.Errorf("unknown concern %q: %w", in.Concern, ErrInvalidInput)
+	}
+	if err := lintUsabilityAlt(in.Concern, in.Body); err != nil {
+		return nil, err
 	}
 	// Before the id is allocated: a rejected input must not burn a task number.
 	skills, err := normalizePins(in.Skills)
@@ -339,6 +343,25 @@ func ValidConcern(s string) bool {
 	return validConcerns[s]
 }
 
+// lintUsabilityAlt refuses a body embedding an image with no alt text at all
+// (`![](…)`) on a task whose concern is usability -- spec 021 Q021.1. A
+// basename-derived alt (`![shot.png](…)`, `lode task attach`'s default when
+// `--alt` is not given) is a worse default than real alt text but a
+// non-empty one, and stays an acceptable fallback; only true `![]()` trips
+// this. Scoped to usability rather than every task: the check is meant to be
+// annoying on the tasks where it earns its keep, not a body-wide rule.
+func lintUsabilityAlt(concern, body string) error {
+	if concern != "usability" || body == "" {
+		return nil
+	}
+	if bad := blobref.EmptyAltImages(body); len(bad) > 0 {
+		return fmt.Errorf(
+			"body has %d image(s) with no alt text (usability tasks require it, spec 021 Q021.1): %w",
+			len(bad), ErrInvalidInput)
+	}
+	return nil
+}
+
 // secretsJSON marshals a secret-name list for the tasks.secrets jsonb column,
 // validating every name. nil marshals as [].
 func secretsJSON(names []string) ([]byte, error) {
@@ -375,6 +398,27 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if kind != nil && !validTaskKinds[*kind] {
 		return fmt.Errorf("unknown kind %q: %w", *kind, ErrInvalidInput)
+	}
+	if body != nil {
+		// The lint depends on the task's concern, and this call may be
+		// touching only the body -- concern nil means "leave unchanged", not
+		// "no concern" -- so an edit that doesn't also set concern has to
+		// read the current one to know whether it applies.
+		effConcern := ""
+		if concern != nil {
+			effConcern = *concern
+		} else {
+			if err := tx.QueryRow(`SELECT COALESCE(concern, '') FROM tasks WHERE id = $1`, id).
+				Scan(&effConcern); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("task %s: %w", id, ErrNotFound)
+				}
+				return fmt.Errorf("get task %s concern: %w", id, err)
+			}
+		}
+		if err := lintUsabilityAlt(effConcern, *body); err != nil {
+			return err
+		}
 	}
 	var sets []string
 	var args []any
