@@ -212,13 +212,16 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/participants":            guarded(permProjectRead),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
-	"POST /api/v1/projects":                             guarded(permProjectAdmin),
-	"PATCH /api/v1/projects/{id}":                       guarded(permProjectAdmin),
-	"POST /api/v1/projects/{id}/repos":                  guarded(permProjectAdmin),
-	"PATCH /api/v1/repos/{owner}/{name}":                guarded(permProjectAdmin),
-	"POST /api/v1/actors":                               guarded(permActorAdmin),
-	"POST /api/v1/actors/{id}/tokens":                   guarded(permActorAdmin),
-	"DELETE /api/v1/tokens":                             guarded(permActorAdmin),
+	// Reporting overhead usage (spec 052 §2) is not a claim on any one task,
+	// so every authenticated role may report it — see permProjectReport.
+	"POST /api/v1/projects/{id}/overhead-usage": guarded(permProjectReport),
+	"POST /api/v1/projects":                     guarded(permProjectAdmin),
+	"PATCH /api/v1/projects/{id}":               guarded(permProjectAdmin),
+	"POST /api/v1/projects/{id}/repos":          guarded(permProjectAdmin),
+	"PATCH /api/v1/repos/{owner}/{name}":        guarded(permProjectAdmin),
+	"POST /api/v1/actors":                       guarded(permActorAdmin),
+	"POST /api/v1/actors/{id}/tokens":           guarded(permActorAdmin),
+	"DELETE /api/v1/tokens":                     guarded(permActorAdmin),
 
 	// --- inbox ---------------------------------------------------------------
 	"GET /api/v1/inbox":          guarded(permInboxRead),

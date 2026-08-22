@@ -133,6 +133,11 @@ func toCostReportJSON(pc *store.CostReport) model.CostReport {
 			TokenCounts:    toTokenCountsJSON(d.Tokens),
 			CostAmount:     d.Cost,
 			UnpricedTokens: d.UnpricedTokens,
+			Overhead: model.CostOverhead{
+				TokenCounts:    toTokenCountsJSON(d.OverheadTokens),
+				CostAmount:     d.OverheadCost,
+				UnpricedTokens: d.OverheadUnpricedTokens,
+			},
 		})
 	}
 	for _, t := range pc.Totals {
@@ -141,6 +146,11 @@ func toCostReportJSON(pc *store.CostReport) model.CostReport {
 			TokenCounts:    toTokenCountsJSON(t.Tokens),
 			CostAmount:     t.Cost,
 			UnpricedTokens: t.UnpricedTokens,
+			Overhead: model.CostOverhead{
+				TokenCounts:    toTokenCountsJSON(t.OverheadTokens),
+				CostAmount:     t.OverheadCost,
+				UnpricedTokens: t.OverheadUnpricedTokens,
+			},
 		})
 	}
 	return out

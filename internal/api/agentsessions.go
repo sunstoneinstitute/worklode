@@ -71,6 +71,29 @@ func toUsageBuckets(in []model.SessionUsageBucket) ([]store.SessionUsageBucket, 
 	return out, nil
 }
 
+// reportProjectOverheadUsage handles POST /api/v1/projects/{id}/overhead-usage:
+// record usage with no task to bill to (spec 052 §2). All body fields are
+// required; toUsageBuckets does the same day/model validation the
+// task-scoped endpoints already use.
+func (s *server) reportProjectOverheadUsage(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req model.ProjectOverheadUsageInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	buckets, err := toUsageBuckets(req.Usage)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.st.ReportProjectOverheadUsage(r.Context(), id, req.Agent, req.ExternalSessionID, buckets); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // endAgentSession handles POST /api/v1/tasks/{id}/agent-session/end: close
 // the caller's open session and record whatever usage it reports. Same
 // holder policy as touchAgentSession (404 for a non-holder or an unknown
