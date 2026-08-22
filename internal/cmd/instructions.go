@@ -64,8 +64,10 @@ type instructionsResult struct {
 	ClaudeMD string `json:"claude_md,omitempty"`
 }
 
-// ensureInstructions writes the managed block into the repo root's AGENTS.md
-// and, where Worklode may, bootstraps CLAUDE.md to import it.
+// ensureInstructions writes the managed block into root's AGENTS.md and, where
+// Worklode may, bootstraps CLAUDE.md to import it. root is the *main*
+// worktree's root (worktree.MainRoot), so a run from inside a linked worktree
+// refreshes the main checkout's files rather than the worktree's own copies.
 func ensureInstructions(root string) (*instructionsResult, error) {
 	agents, err := ensureAgentsMD(root)
 	if err != nil {
