@@ -158,8 +158,9 @@ func newProjectCrewAddCmd() *cobra.Command {
 		Use:   "add <project> <actor>",
 		Short: "Add an actor to a project's Crew",
 		Long: "Add an actor to a project's Crew with a role label.\n\n" +
-			"The role is a free-form label describing what the person does on this\n" +
-			"project; one actor may hold several. A project has at most one lead.",
+			"The role is one of the fixed project-role vocabulary (member, editor,\n" +
+			"science-lead, reporter, domain-expert, data-scientist, engineer);\n" +
+			"one actor may hold several. A project has at most one lead.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
@@ -183,7 +184,7 @@ func newProjectCrewAddCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&role, "role", "", "role label for this member (default: member)")
+	cmd.Flags().StringVar(&role, "role", "", "role for this member: member, editor, science-lead, reporter, domain-expert, data-scientist, or engineer (default: member)")
 	cmd.Flags().BoolVar(&lead, "lead", false, "make this member the project lead")
 	return cmd
 }
