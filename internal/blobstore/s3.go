@@ -48,11 +48,15 @@ func NewS3(cfg S3Config) (Store, error) {
 		Region:       region,
 		BaseEndpoint: aws.String(cfg.Endpoint),
 		UsePathStyle: true,
-		// Since the Jan-2025 SDK change the default is WhenSupported, which
-		// puts x-amz-checksum-crc32 on every PutObject. Ceph RGW's support for
-		// flexible checksums is version-dependent, and this is the most common
-		// way an S3-compatible gateway rejects an otherwise valid request.
-		// Send one only where the API requires it.
+		// Pinned, not corrected: s3.New leaves this Unset, which already sends
+		// no checksum. What it guards against is the Jan-2025 SDK default of
+		// WhenSupported, which s3.NewFromConfig resolves and which puts
+		// x-amz-checksum-crc32 on every PutObject -- version-dependent in Ceph
+		// RGW, and the most common way an S3-compatible gateway rejects an
+		// otherwise valid request. Switching construction should not silently
+		// change the wire. Integrity does not depend on it: SigV4 signs
+		// x-amz-content-sha256 over the payload, and keys are the server's own
+		// SHA-256 of the bytes.
 		RequestChecksumCalculation: aws.RequestChecksumCalculationWhenRequired,
 		Credentials: credentials.NewStaticCredentialsProvider(
 			cfg.AccessKey, cfg.SecretKey, ""),

@@ -57,8 +57,11 @@ func TestS3PutAndPresign(t *testing.T) {
 				"Content-Disposition, not object metadata)", name, gotHeader.Get(name))
 		}
 	}
-	// The SDK defaults to WhenSupported, which adds x-amz-checksum-crc32; RGW
-	// support for it is version-dependent, so NewS3 pins WhenRequired.
+	// s3.New leaves RequestChecksumCalculation Unset, which already sends no
+	// checksum, so this passes with and without the pin -- deliberately. It is
+	// the regression guard for the SDK-wide WhenSupported default (which adds
+	// x-amz-checksum-crc32, version-dependent in RGW) reaching this client,
+	// whether through NewFromConfig or a future default change.
 	for name := range gotHeader {
 		if strings.HasPrefix(strings.ToLower(name), "x-amz-checksum-") {
 			t.Errorf("PutObject sent flexible checksum header %s: %q (want "+

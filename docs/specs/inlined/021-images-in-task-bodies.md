@@ -130,8 +130,9 @@ not ours:
 | `Cache-Control` | `response-cache-control: private, max-age=31536000, immutable` — safe because the URL is content-addressed |
 
 Setting `Content-Type` at PUT time *and* overriding on presign is deliberate belt-and-braces:
-the override is what actually reaches the browser, and the stored metadata keeps the object
-self-describing for anyone reading the bucket directly.
+the override is what actually reaches the browser, and the stored `Content-Type` keeps the
+object self-describing for anyone reading the bucket directly. It is a system header, not the
+user metadata §6 rules out.
 
 The redirect itself is `Cache-Control: private, max-age=60`, comfortably inside the presign
 TTL of 5 minutes, so a page with twenty images issues twenty redirects once and then serves
@@ -268,7 +269,10 @@ origin, not the app's.
 
 A blob is bytes an authenticated user uploaded. The redirect target is a different origin from
 the app, which is itself a useful boundary — a hostile SVG or HTML payload executes in the
-object store's origin, where there is no session cookie and nothing to steal.
+object store's origin, not in ours. That origin is not empty (path-style addressing shares it
+with every other bucket on the endpoint, Velero's and CNPG's included), but S3 carries no
+ambient credential: every read there needs SigV4 or a presign, so script running in it holds
+nothing it did not already have.
 
 The redirect response carries:
 
@@ -281,7 +285,7 @@ and the presigned URL carries, via `response-*` overrides:
 
 ```
 Content-Type: <sniffed media type>
-Content-Disposition: inline | attachment; filename="…"
+Content-Disposition: inline | attachment      (bare; see §2 on the filename)
 ```
 
 **`Content-Disposition` carries the security weight on its own**, and that is the whole of the
@@ -297,10 +301,11 @@ all.
 
 So the controls that do hold are the ones §5 already relies on: every non-embeddable type is
 served `attachment`, which downloads rather than executes, and the embeddable set is a fixed
-list of image and video types. SVG is the one embeddable type that can carry script and is
-embeddable deliberately (§5); it is served `inline`, and what contains it is the cross-origin
-boundary above — it executes in the object store's origin, where there is no session cookie and
-nothing to steal.
+list of image and video types. SVG is the one embeddable type that can carry script, and is
+embeddable deliberately (§5). Two things contain it, and neither is a header we set: an SVG
+loaded through `<img>` — which is how §8 renders it — cannot run script at all, so the exposure
+is a direct top-level navigation to the blob URL; and that navigation lands in the object
+store's origin, per the boundary above.
 
 The `response-*` overrides themselves are **not yet verified** against a real gateway, for the
 same reason as §2: no bucket is provisioned and no credentials are configured in this
@@ -556,11 +561,11 @@ already sets for Velero and CNPG against this endpoint.
 other surface behaves exactly as it does today, so a local `docker compose` stack keeps working
 with no bucket. Worth a `lode doctor` line rather than a silent absence.
 
-**Half-configured is a boot failure, not a degraded mode.** All four of endpoint, bucket, access
-key and secret key are required together: an empty static credential provider fails per request,
-not at construction, so naming a bucket while the ESO secret is missing would otherwise yield a
-server that reports healthy and `502`s every upload and every serve. The server refuses to start
-instead.
+**Once an endpoint and a bucket are named, the two keys are required too**, and a missing one
+fails the boot rather than degrading. An empty static credential provider fails per request, not
+at construction, so naming a bucket while the ESO secret is missing would otherwise yield a
+server that reports healthy and `502`s every upload and every serve. Endpoint and bucket remain
+the on-switch: with either unset the feature stays off and uploads `501` as above.
 
 ---
 
