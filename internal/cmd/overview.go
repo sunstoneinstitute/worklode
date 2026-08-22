@@ -36,6 +36,14 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	if err != nil {
 		return "", fmt.Errorf("parse %s: %w", manPath, err)
 	}
+	// A manifest copy-pasted from another repo would otherwise mint
+	// <this repo> dct:hasPart <other repo's component IRIs> without a
+	// complaint — a silently manufactured cross-repo edge (WL-270). The
+	// manifest states which repo it describes; hold it to that.
+	if want := host + "/" + owner + "/" + name; strings.TrimSpace(m.Repo) != want {
+		return "", fmt.Errorf("%s says repo: %s, but derive is running against %s — the manifest describes another repo",
+			manPath, m.Repo, want)
+	}
 
 	docs := map[string][]byte{} // observed source → document
 	layout, err := derive.LayoutTriples(ctx, root, host, owner, name, m)
