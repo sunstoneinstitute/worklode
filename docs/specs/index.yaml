@@ -683,3 +683,12 @@ docs/specs/051-codex-and-amp-bindings-as-built.md:
     sec-4: "## 4. The event map, corrected"
     sec-5: "## 5. Work is entered through `lode next` first"
     sec-6: "## 6. What each harness does with session-start stdout"
+docs/specs/052-project-overhead-cost.md:
+  sections:
+    sec-0: "## 0. Problem"
+    sec-1: "## 1. Schema"
+    sec-2: "## 2. Store and API"
+    sec-3: "## 3. Hook wiring"
+    sec-4: "## 4. Wire model and cockpit"
+    sec-5: "## 5. Testing"
+    sec-6: "## 6. Out of scope"
