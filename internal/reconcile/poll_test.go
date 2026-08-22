@@ -523,6 +523,48 @@ func TestPollAppendsMainCommitsInCommitDateOrder(t *testing.T) {
 	}
 }
 
+// compareBodyNoDate is the same "ahead" answer with the committer date
+// missing. GitHub always sends it, so this is the defensive case — but the
+// zero time it decodes to is the one value the sort and applyFacts could
+// disagree about.
+const compareBodyNoDate = `{"status": "ahead", "base_commit": {"commit": {"committer": {}}}}`
+
+// A commit with no date is recorded as having landed *now* (applyFacts'
+// pushed_at fallback), so it must also sort last. Sorting it first — the
+// natural reading of a zero time.Time — would give it the lowest id in the
+// batch while dating it after every commit above it, which is exactly the
+// frontier over-advance the commit-date sort exists to prevent.
+func TestPollAppendsUndatedCommitLast(t *testing.T) {
+	st := store.OpenTestStore(t)
+	seedTwoCommitTask(t, st)
+	// lateCommitSHA is the lower sha, so a sort that puts the undated commit
+	// first agrees with sha order too — the assertion below is about the
+	// date, and it fails under either wrong rule.
+	app := newFakeGitHub(t, map[string]string{
+		"/repos/acme/app": `{"default_branch": "main"}`,
+		"/repos/acme/app/compare/" + lateCommitSHA + "...main":  compareBodyNoDate,
+		"/repos/acme/app/compare/" + earlyCommitSHA + "...main": compareBody(earlyCommittedAt),
+		"/repos/acme/app/releases":                              `[]`,
+	})
+
+	if _, err := reconcile.Poll(context.Background(), st, app, reconcile.Options{RunID: "run-undated"}); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	datedID, datedPushed := mainCommit(t, st, earlyCommitSHA)
+	undatedID, undatedPushed := mainCommit(t, st, lateCommitSHA)
+	if datedID >= undatedID {
+		t.Fatalf("main_commits ids = dated %d, undated %d; want the undated commit last, "+
+			"since applyFacts records its pushed_at as now", datedID, undatedID)
+	}
+	// The id order and the recorded dates must agree: that agreement is the
+	// whole point, and asserting only the ids would pass on a now fallback
+	// that had been changed to something earlier.
+	if !undatedPushed.After(datedPushed) {
+		t.Fatalf("pushed_at = dated %v, undated %v; want the undated commit dated later (now)",
+			datedPushed, undatedPushed)
+	}
+}
+
 // RecordEvent skips apply on a duplicate (source, external_id), so a reused
 // run id would return a fully populated report describing writes that never
 // happened. Both a reused and an empty run id must be errors.
