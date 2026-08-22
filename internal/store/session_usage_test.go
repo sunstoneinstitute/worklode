@@ -824,6 +824,166 @@ func TestTaskCostUnpricedTokens(t *testing.T) {
 	}
 }
 
+// --- Project overhead usage -------------------------------------------
+
+// The load-bearing case: overhead usage is a cumulative transcript total, so
+// a second report must replace the first, never accumulate on top of it.
+func TestReportProjectOverheadUsageReplacesNotAccumulates(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
+	}); err != nil {
+		t.Fatalf("first report: %v", err)
+	}
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 5, Output: 1}},
+	}); err != nil {
+		t.Fatalf("second report: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadTokens.Input; got != 5 {
+		t.Errorf("overhead input tokens = %d, want 5 (replaced, not accumulated)", got)
+	}
+	if got := report.Days[0].Tokens.Input; got != 5 {
+		t.Errorf("combined input tokens = %d, want 5 (task-attributed side is zero)", got)
+	}
+}
+
+func TestReportProjectOverheadUsageUnknownProject(t *testing.T) {
+	s := openTaskStore(t)
+	err := s.ReportProjectOverheadUsage(t.Context(), "no-such-project", "claude-code", "sess-1",
+		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}})
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// An unknown agent or an empty external session id are rejected before any
+// project lookup or write, per spec 052 §5.
+func TestReportProjectOverheadUsageRejectsInvalidInput(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+	buckets := []SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}}
+
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "not-a-real-agent", "sess-1", buckets); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown agent: got %v, want ErrInvalidInput", err)
+	}
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "", buckets); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty external session id: got %v, want ErrInvalidInput", err)
+	}
+}
+
+func TestProjectCostCombinesTaskAndOverheadOnSameDay(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-task")
+
+	reportUsage(t, s, lease, "sess-task", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
+	})
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-overhead",
+		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 50, Output: 5}}}); err != nil {
+		t.Fatalf("overhead usage: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1 (one currency, one day): %+v", len(report.Days), report.Days)
+	}
+	d := report.Days[0]
+	if d.Tokens.Input != 150 {
+		t.Errorf("combined input = %d, want 150 (100 task + 50 overhead)", d.Tokens.Input)
+	}
+	if d.OverheadTokens.Input != 50 {
+		t.Errorf("overhead input = %d, want 50", d.OverheadTokens.Input)
+	}
+}
+
+// The FULL OUTER JOIN in ProjectCost exists for exactly this case: a day
+// with overhead usage only, and no task-attributed usage at all, must still
+// surface as a row. A plain (inner) join would drop it silently, which is
+// the common "pure orchestration day" this feature exists to stop losing.
+func TestProjectCostDayWithOverheadOnlyNoTaskUsage(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-overhead",
+		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}}); err != nil {
+		t.Fatalf("overhead usage: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1 (overhead-only day must not be dropped by the join): %+v", len(report.Days), report.Days)
+	}
+	d := report.Days[0]
+	if d.Tokens.Input != 100 || d.Tokens.Output != 10 {
+		t.Errorf("combined tokens = %+v, want the overhead-only totals (100 input, 10 output)", d.Tokens)
+	}
+	if d.OverheadTokens.Input != 100 || d.OverheadTokens.Output != 10 {
+		t.Errorf("overhead tokens = %+v, want 100 input, 10 output", d.OverheadTokens)
+	}
+	if len(report.Totals) != 1 {
+		t.Fatalf("got %d totals, want 1", len(report.Totals))
+	}
+	if report.Totals[0].Cost != report.Totals[0].OverheadCost {
+		t.Errorf("total cost %s should equal overhead cost %s (no task-side cost on this project)",
+			report.Totals[0].Cost, report.Totals[0].OverheadCost)
+	}
+}
+
+// TaskCost has no overhead concept: a project that also has overhead
+// recorded must not leak into a task's report, which must carry the zero
+// overhead shape rather than an empty string.
+func TestTaskCostUnaffectedByProjectOverhead(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-task")
+
+	reportUsage(t, s, lease, "sess-task", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
+	})
+	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-overhead",
+		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 999, Output: 999}}}); err != nil {
+		t.Fatalf("overhead usage: %v", err)
+	}
+
+	tc, err := s.TaskCost(ctx, lease.TaskID, false, time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("TaskCost: %v", err)
+	}
+	if len(tc.Days) != 1 {
+		t.Fatalf("got %d days, want 1", len(tc.Days))
+	}
+	if tc.Days[0].Tokens.Input != 100 {
+		t.Errorf("task-attributed input = %d, want 100 (overhead must not leak in)", tc.Days[0].Tokens.Input)
+	}
+	if tc.Days[0].OverheadTokens != (TokenCounts{}) || tc.Days[0].OverheadCost != "0.000000" {
+		t.Errorf("TaskCost day overhead: got tokens %+v cost %s, want zero", tc.Days[0].OverheadTokens, tc.Days[0].OverheadCost)
+	}
+	if len(tc.Totals) != 1 {
+		t.Fatalf("got %d totals, want 1", len(tc.Totals))
+	}
+	if tc.Totals[0].OverheadTokens != (TokenCounts{}) || tc.Totals[0].OverheadCost != "0.000000" {
+		t.Errorf("TaskCost total overhead: got tokens %+v cost %s, want zero", tc.Totals[0].OverheadTokens, tc.Totals[0].OverheadCost)
+	}
+}
+
 // Usage priced in two different currencies must stay two totals, never
 // summed together — CostReport's contract has no conversion rate to do that
 // with.
