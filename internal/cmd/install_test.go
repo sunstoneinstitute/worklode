@@ -1096,8 +1096,10 @@ func TestReportInstallNamesUnboundEventsAndNotes(t *testing.T) {
 	}
 }
 
-// An adapter that binds nothing — amp — must not be reported as having
-// installed hooks into a file it never opened, and need not exist.
+// An adapter that binds nothing must not be reported as having installed
+// hooks into a file it never opened. No shipped adapter is in that state — amp
+// was until it grew a Plugin API plugin — so the report is driven from a
+// synthetic result rather than from the registry.
 func TestReportInstallSaysNothingWasBoundWhenNothingWas(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := &cobra.Command{Use: "test"}
