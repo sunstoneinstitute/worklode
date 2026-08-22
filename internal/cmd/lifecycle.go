@@ -67,6 +67,30 @@ func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root st
 	return taskID, root, nil
 }
 
+// currentTaskID is resolveWorktreeTask's answer-or-nothing form: the task the
+// working directory's worktree is bound to, or "" when the caller is not in a
+// bound worktree — not inside a repo, not under the worktree base, no
+// binding. Every failure is the same answer because the caller is a command
+// for which task context is provenance it records if it has it, not a
+// precondition it enforces: `lode doc new` run from a plain checkout still
+// creates the document (025 §12, migration 0044). Commands that genuinely
+// need the binding use resolveWorktreeTask and get its diagnosis.
+func currentTaskID() string {
+	dir, err := workingDir()
+	if err != nil {
+		return ""
+	}
+	l, err := layoutFrom(dir)
+	if err != nil {
+		return ""
+	}
+	taskID, _, err := resolveWorktreeTask(l, dir, "")
+	if err != nil {
+		return ""
+	}
+	return taskID
+}
+
 // unboundHelp renders the two ways out of an unbound checkout: say which task,
 // or claim one into a worktree that carries the binding. The description
 // column is sized to the widest form so a long one (`lode task block <id>

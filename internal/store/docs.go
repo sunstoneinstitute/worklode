@@ -48,6 +48,10 @@ type DocInput struct {
 	Body      string
 	Assignee  string
 	CreatedBy string
+	// GeneratedByTask is the task that authored the document (025 §12). Empty
+	// for every caller bound to no task — a cockpit author, an agent outside a
+	// worktree, `lode doc import` — which is a normal state, not a refusal.
+	GeneratedByTask string
 	// Status is honoured only by the corpus importer; the API's create path
 	// always leaves it empty, which means draft.
 	Status string
@@ -138,11 +142,12 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	var id int64
 	err = tx.QueryRow(
 		`INSERT INTO docs (project_id, kind, number, slug, title, body, status, version,
-		                   issued, assignee, created_by, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $11)
+		                   issued, assignee, created_by, generated_by_task, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $12, $12)
 		 RETURNING id`,
 		in.Project, in.Kind, number, in.Slug, title, in.Body, status,
-		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy), ts,
+		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy),
+		nullText(in.GeneratedByTask), ts,
 	).Scan(&id)
 	if err != nil {
 		// The two unique indexes are the identity rules of 025 §5, so a
@@ -154,6 +159,16 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		if isUniqueViolationOn(err, "docs_project_kind_number") {
 			return nil, fmt.Errorf("project %s already has %s %d: %w",
 				in.Project, in.Kind, in.Number, ErrDocExists)
+		}
+		// A worktree can outlive the task it was named for, so an authoring
+		// task the backbone has never heard of is a caller mistake worth
+		// naming rather than an anonymous constraint failure. ErrInvalidInput
+		// and not ErrNotFound: the request names a document to create and a
+		// bad field on it, and mapStoreErr flattens ErrNotFound to a bare
+		// "not found" that would read as if the document were missing.
+		if pgViolation(err, "23503", "docs_generated_by_task_fkey") {
+			return nil, fmt.Errorf("generated_by_task names no task %q: %w",
+				in.GeneratedByTask, ErrInvalidInput)
 		}
 		return nil, fmt.Errorf("insert doc %s/%s: %w", in.Project, in.Slug, err)
 	}
@@ -1847,7 +1862,7 @@ func docsByNumber(tx *sql.Tx, project string, number int, liveness string) ([]in
 // docColumns is the SELECT list scanDoc expects, in order. The three
 // tombstone columns (migration 0034) are last so positional scans elsewhere
 // are unaffected by their addition; they are all-null or all-set together.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, created_at, updated_at, deleted_at, deleted_by, delete_justification`
+const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -1857,11 +1872,12 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	var d model.Doc
 	var number sql.NullInt64
 	var issued sql.NullTime
-	var assignee, createdBy sql.NullString
+	var assignee, createdBy, generatedByTask sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
-		&d.Status, &d.Version, &issued, &assignee, &createdBy, &d.CreatedAt, &d.UpdatedAt,
+		&d.Status, &d.Version, &issued, &assignee, &createdBy, &generatedByTask,
+		&d.CreatedAt, &d.UpdatedAt,
 		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
 	}
@@ -1872,6 +1888,7 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	}
 	d.Assignee = assignee.String
 	d.CreatedBy = createdBy.String
+	d.GeneratedByTask = generatedByTask.String
 	d.CreatedAt = d.CreatedAt.UTC()
 	d.UpdatedAt = d.UpdatedAt.UTC()
 	return &d, nil

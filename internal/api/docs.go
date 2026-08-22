@@ -85,6 +85,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	req.Slug = strings.TrimSpace(req.Slug)
 	req.Assignee = strings.TrimSpace(req.Assignee)
 	req.Status = strings.TrimSpace(req.Status)
+	req.GeneratedByTask = strings.TrimSpace(req.GeneratedByTask)
 	// A stated status bypasses the accept gate, so it needs the importer's
 	// authority. Without it the field stays refused exactly as before.
 	if req.Status != "" {
@@ -128,7 +129,11 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Body:      req.Body,
 				Assignee:  req.Assignee,
 				CreatedBy: actorID,
-				Status:    req.Status,
+				// The authoring task (025 §12). Left empty by every caller
+				// bound to no task, which is a document with no authoring
+				// task — a normal state, not a refusal. See migration 0044.
+				GeneratedByTask: req.GeneratedByTask,
+				Status:          req.Status,
 			}, eventID)
 			if err != nil {
 				return err

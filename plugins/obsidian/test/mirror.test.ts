@@ -52,6 +52,7 @@ function fixtureDoc(overrides: Partial<Doc> = {}): Doc {
     issued: "2026-01-01",
     assignee: "stig",
     created_by: "stig",
+    generated_by_task: "",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-08-16T09:12:00Z",
     body: "doc body",

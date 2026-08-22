@@ -75,6 +75,11 @@ templ Doc(v DocView) {
 				if v.Doc.Assignee != "" {
 					<p class="muted small">Assigned to { v.Doc.Assignee }</p>
 				}
+				if v.Doc.GeneratedByTask != "" {
+					<p class="muted small">
+						Written by task <a href={ "/tasks/" + v.Doc.GeneratedByTask }>{ v.Doc.GeneratedByTask }</a>
+					</p>
+				}
 				if v.Revision != nil {
 					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ fmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
 				}
