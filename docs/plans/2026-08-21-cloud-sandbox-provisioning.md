@@ -27,6 +27,8 @@ covers:
     coverage: none
   - spec: docs/specs/038-worklode-in-a-cloud-sandbox.md#sec-5
     coverage: none
+  - spec: docs/specs/038-worklode-in-a-cloud-sandbox.md#sec-5.1
+    coverage: none
   - spec: docs/specs/038-worklode-in-a-cloud-sandbox.md#sec-6
     coverage: full
   - spec: docs/specs/038-worklode-in-a-cloud-sandbox.md#sec-7
@@ -58,10 +60,12 @@ reads `go-version-file: go.mod`; e2e already drives the real CLI in-process
 spec's §4.4 and §7 fence both off.
 
 **Coverage notes.** `none` rows are standing rules and declared non-work,
-not gaps: §§0–1 orient; §2.1/§2.2 are declined-with-trigger decisions that
-this plan must not un-decline (no tool manager, no cross-platform package
-schema); §4.1 is the entry-point contract the `lode-worker` agent already
-follows (task 7 exercises it but builds nothing for it); §4.4 belongs to
+not gaps: §§0–1 orient; §2.1/§2.2/§5.1 are declined-with-trigger decisions
+that this plan must not un-decline (no tool manager, no cross-platform
+package schema, no external agent runtime — the §5 seam stays filled by
+worklode's own code); §4.1 is the entry-point contract the `lode-worker`
+agent already follows (task 7 exercises it but builds nothing for it);
+§4.4 belongs to
 spec 017; §5 constrains task shape (build the human path only — dispatch
 substitutes values, never code); §7 lists exclusions; §8's open questions
 stay open — task 6 deliberately builds images without publishing them
