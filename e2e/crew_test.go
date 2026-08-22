@@ -86,7 +86,7 @@ func TestCrewLifecycle(t *testing.T) {
 		t.Fatalf("create actor mo: %v", err)
 	}
 
-	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "lucy", "lead", true); err != nil {
+	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "lucy", "editor", true); err != nil {
 		t.Fatalf("add lucy as lead: %v", err)
 	}
 	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "mo", "member", false); err != nil {
@@ -106,8 +106,8 @@ func TestCrewLifecycle(t *testing.T) {
 	if !lucy.Lead {
 		t.Fatalf("lucy.Lead = %v, want true", lucy.Lead)
 	}
-	if len(lucy.Roles) != 1 || lucy.Roles[0] != "lead" {
-		t.Fatalf("lucy.Roles = %+v, want [lead]", lucy.Roles)
+	if len(lucy.Roles) != 1 || lucy.Roles[0] != "editor" {
+		t.Fatalf("lucy.Roles = %+v, want [editor]", lucy.Roles)
 	}
 	mo := findCrewMember(t, crew, "mo")
 	if mo.Lead {
