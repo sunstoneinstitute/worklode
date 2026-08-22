@@ -282,6 +282,17 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
  * (2.1.1); the markup side is layout.templ's tableWrap component. */
 .tablewrap{overflow-x:auto;max-width:100%}
 
+/* Timeline row type icon (WL-298): the type column used to be a text label
+ * ("Pull request", "CI run", ...), which was the widest column on narrow
+ * viewports. The icon replaces the text but keeps it reachable as the
+ * native title tooltip (desktop hover) and the aria-label (screen readers
+ * and touch) — see internal/ui/task.templ's timelineIcon. 20px matches this
+ * file's other small inline glyphs (.iconbtn svg is 17px inside a 34px
+ * button); this one has no hit-target requirement since it triggers no
+ * action, so it is sized for legibility, not WCAG 2.5.8. */
+.ticon{display:inline-flex;color:var(--ink-2)}
+.ticon svg{width:20px;height:20px}
+
 /* A link rendered as a flex item is blockified, so its box is exactly its text
  * — 19px tall, under the 24px WCAG 2.5.8 minimum. These are the page-level
  * "new thing" affordances; give them the minimum height explicitly. */
