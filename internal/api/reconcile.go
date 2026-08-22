@@ -216,10 +216,17 @@ func (s *server) reconcile(w http.ResponseWriter, r *http.Request) {
 			Log: s.log, Metrics: s.pollMetrics,
 		})
 		if err != nil {
-			s.mapStoreErr(w, err)
-			return
+			// Not a 500: engine 1 has already run, and outside a dry run it
+			// has already written and marked events applied. Discarding the
+			// response would leave the operator unable to tell what was
+			// repaired or whether re-running is safe — so the poll failure
+			// gets its own section, the way per-repo failures already get
+			// PollResult.Errors.
+			s.log.Error("reconcile poll failed", "run_id", runID, "repo", req.Repo, "task", req.Task, "err", err)
+			resp.PollError = err.Error()
+		} else {
+			resp.Poll = poll
 		}
-		resp.Poll = poll
 	}
 
 	writeJSON(w, http.StatusOK, resp)

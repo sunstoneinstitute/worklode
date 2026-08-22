@@ -592,11 +592,13 @@ func ReconcileRender(w io.Writer, resp model.ReconcileResponse) {
 	switch {
 	case resp.PollSkipped != "":
 		fmt.Fprintf(w, "poll: skipped (%s)\n", resp.PollSkipped)
+	case resp.PollError != "":
+		// Replay's report above still stands; only engine 2 failed.
+		fmt.Fprintf(w, "poll: failed (%s)\n", resp.PollError)
 	case resp.Poll != nil:
 		// "observed" rather than verb: a candidate line lists the facts the
-		// run found on GitHub, which for an already-current task is every
-		// fact it has. Only the dry-run wording is about intent.
-		fmt.Fprintf(w, "poll: examined %d candidate task(s)\n", resp.Poll.Candidates)
+		// run found on GitHub for that task, not the subset that was new.
+		fmt.Fprintf(w, "poll: %s %d candidate task(s)\n", pollVerb(resp.Poll.DryRun), resp.Poll.Candidates)
 		for _, rep := range resp.Poll.Repaired {
 			fmt.Fprintf(w, "  %s (%s, was %s): %d PR(s), %d landed commit(s)\n",
 				rep.TaskID, rep.Repo, rep.State, len(rep.PRsUpdated), len(rep.CommitsLanded))
@@ -605,6 +607,16 @@ func ReconcileRender(w io.Writer, resp model.ReconcileResponse) {
 			fmt.Fprintf(w, "  error: %s\n", e)
 		}
 	}
+}
+
+// pollVerb keeps the poll line's dry-run marker on the poll's own DryRun,
+// not the response's: they agree today, and a reader must not have to know
+// that to trust the line.
+func pollVerb(dryRun bool) string {
+	if dryRun {
+		return "examined (dry run)"
+	}
+	return "examined"
 }
 
 // CrewTable renders a project's Crew roster: name, roles comma-joined, and a
