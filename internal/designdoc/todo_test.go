@@ -144,6 +144,52 @@ func TestTodoBoundOnlyEmitsNothing(t *testing.T) {
 	checkItems(t, items, nil)
 }
 
+// A deferred section (026 §5.3, §2.1) emits no item, the same as a
+// bound-only one: §2.5's five types are each discharged by an act this
+// document's own plans can perform, and the next act on a deferred section
+// belongs to its named owner, not to writing a plan here. This is the WL-290
+// regression case: before defers was indexed by NewPlanIndex, this section
+// read as `unplanned` and produced a (wrong) unplanned item; it must not now
+// silently produce a mis-typed one either.
+func TestTodoDeferredEmitsNothing(t *testing.T) {
+	docs := buildTodoCorpus(t,
+		map[string]string{"001-example.md": twoSectionSpec},
+		map[string]string{
+			"a.md": "---\nstatus: accepted\ndefers:\n" +
+				"  - spec: " + todoSpecRef + "#sec-1\n" +
+				"    to: docs/specs/006-knowledge-graph.md\n" +
+				"  - spec: " + todoSpecRef + "#sec-2\n" +
+				"    to: docs/specs/006-knowledge-graph.md\n" +
+				"---\n# A\n\nBody.\n",
+		})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	if err != nil {
+		t.Fatalf("Todo: %v", err)
+	}
+	checkItems(t, items, nil)
+}
+
+// A *draft* plan's `defers` claim binds nothing yet, the same as a draft
+// plan's `none` claim (026 §2.1's not-draft rule): the section is still
+// unplanned.
+func TestTodoDraftDefersIsStillUnplanned(t *testing.T) {
+	docs := buildTodoCorpus(t,
+		map[string]string{"001-example.md": twoSectionSpec},
+		map[string]string{
+			"a.md": "---\nstatus: draft\ndefers:\n" +
+				"  - spec: " + todoSpecRef + "#sec-1\n" +
+				"    to: docs/specs/006-knowledge-graph.md\n" +
+				"  - spec: " + todoSpecRef + "#sec-2\n" +
+				"    to: docs/specs/006-knowledge-graph.md\n" +
+				"---\n# A\n\nBody.\n",
+		})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	if err != nil {
+		t.Fatalf("Todo: %v", err)
+	}
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="})
+}
+
 // A *draft* plan's `none` claim binds nothing yet: it discharges no coverage
 // (026 §2.1's not-draft rule), so the section is still unplanned — and
 // accepting the plan would discharge nothing about it, so there is no
