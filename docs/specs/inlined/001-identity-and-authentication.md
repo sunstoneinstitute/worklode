@@ -64,6 +64,18 @@ writes to GitHub as a user is a follow-up spec.
 | Actor provisioning | Auto-provision `human` actors on first login: id = `preferred_username`, display name = `name` claim. |
 | Feature flag | All of this is off unless `LODE_OIDC_ISSUER` + `LODE_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
 
+### 2.1 Task-scoped tokens
+
+A second shape of the same credential (WL-136, motivated by 038 §4.3): a `wl_` token whose row is
+bound to one task (`tokens.task_id`, nullable — NULL is today's actor-scoped token, unchanged) and
+attributed to an **agent actor** rather than the human who minted it. Its write actions must name
+the bound task; its reads are scoped to that task's project; it can mint tokens and administer
+nothing. Lifecycle is the task's lease: minting defaults expiry to the lease TTL, lease renewal
+extends it, and every lease-ending path — release, done, abandon, the expiry sweep — revokes the
+task's outstanding tokens in the same transaction. Minted by `POST /api/v1/tasks/{id}/tokens`
+(operator- or dispatcher-called); enforcement lives in the authz layer's one `grants` table, not
+in per-handler checks.
+
 ## 3. Keycloak is the only login
 
 - `/auth/choose`, GitHub web login (`/auth/github/login`), GitHub actor
