@@ -198,6 +198,21 @@ func TestAmpPluginUsesTheDocumentedAPISurface(t *testing.T) {
 	if strings.Contains(got, "logger?.debug") {
 		t.Error("PluginLogger declares only log(); debug() would silently never run")
 	}
+
+	// WL-287: the session-start hook's stdout is the task brief; the plugin
+	// must hold it per thread and return it from agent.start as the
+	// first-turn context message rather than dropping it.
+	for _, want := range []string{
+		"const briefs = new Map<string, string>()",
+		"result?.stdout",
+		"briefs.set(id, brief)",
+		"briefs.delete(id)",
+		"return { message: { content: brief } }",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("plugin does not deliver the brief (%s missing):\n%s", want, got)
+		}
+	}
 }
 
 // Uninstall removes the generated plugin and nothing else, and a second run
