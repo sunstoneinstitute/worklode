@@ -197,6 +197,56 @@ func (s *Store) CreateToken(ctx context.Context, actorID, description string, ex
 	return plaintext, nil
 }
 
+// CreateTaskToken mints a bearer token bound to one task (001 §2.1,
+// WL-306): the same wl_ shape as CreateToken, with tokens.task_id set and a
+// required expiry — a task-scoped token that never expires would outlive the
+// lease whose lifecycle it exists to follow. The lease-ending paths revoke
+// it; Renew extends it.
+func (s *Store) CreateTaskToken(ctx context.Context, actorID, taskID, description string, expiresAt time.Time) (string, error) {
+	raw := make([]byte, 20)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate token: %w", err)
+	}
+	plaintext := tokenPrefix + hex.EncodeToString(raw)
+
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO tokens (token_hash, actor_id, description, created_at, expires_at, task_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		sha256Hex(plaintext), actorID, description, s.nowFn().UTC(), expiresAt.UTC(), taskID,
+	)
+	if err != nil {
+		return "", fmt.Errorf("insert task token for %s on %s: %w", actorID, taskID, err)
+	}
+	return plaintext, nil
+}
+
+// EnsureActor creates the actor if it does not exist and is a no-op when it
+// does — the idempotent form task-token minting needs for its default agent
+// actor (WL-306). It never modifies an existing row.
+func (s *Store) EnsureActor(ctx context.Context, id, kind, displayName string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO actors (id, kind, display_name, admin)
+		 VALUES ($1, $2, $3, false)
+		 ON CONFLICT (id) DO NOTHING`,
+		id, kind, displayName)
+	if err != nil {
+		return fmt.Errorf("ensure actor %s: %w", id, err)
+	}
+	return nil
+}
+
+// revokeTaskTokens revokes every live token bound to taskID, inside the
+// caller's transaction — the lease-ending half of 001 §2.1's "expires with
+// its lease".
+func revokeTaskTokens(tx *sql.Tx, now time.Time, taskID string) error {
+	if _, err := tx.Exec(
+		`UPDATE tokens SET revoked_at = $1 WHERE task_id = $2 AND revoked_at IS NULL`,
+		now.UTC(), taskID); err != nil {
+		return fmt.Errorf("revoke task tokens for %s: %w", taskID, err)
+	}
+	return nil
+}
+
 // bootstrapTokenRe is the required shape of a bootstrap token: the same
 // "wl_" + 40 lowercase hex form CreateToken mints. Anything else (e.g. a
 // missing prefix) would be hashed differently by tokenHashOf and silently
@@ -253,32 +303,35 @@ func (s *Store) RevokeToken(ctx context.Context, plaintextOrHash string) error {
 }
 
 // Authenticate looks up the actor for a plaintext bearer token. It returns
-// ErrNotFound if the token is unknown, revoked, or expired.
-func (s *Store) Authenticate(ctx context.Context, plaintext string) (*Actor, error) {
+// ErrNotFound if the token is unknown, revoked, or expired. taskID is the
+// task the token is scoped to (001 §2.1, WL-306), "" for an ordinary
+// actor-scoped token.
+func (s *Store) Authenticate(ctx context.Context, plaintext string) (a *Actor, taskID string, err error) {
 	hash := tokenHashOf(plaintext)
 
 	// One join, not a token read followed by GetActor: this runs on every
 	// bearer-token request, and a token whose actor row is missing was
 	// ErrNotFound under either shape.
 	var revokedAt, expiresAt sql.NullTime
-	a, err := scanActor(appendScan{s.db.QueryRowContext(ctx,
-		`SELECT `+actorColumnsA+`, t.revoked_at, t.expires_at
+	var boundTask sql.NullString
+	a, err = scanActor(appendScan{s.db.QueryRowContext(ctx,
+		`SELECT `+actorColumnsA+`, t.revoked_at, t.expires_at, t.task_id
 		   FROM tokens t JOIN actors a ON a.id = t.actor_id
-		  WHERE t.token_hash = $1`, hash), []any{&revokedAt, &expiresAt}})
+		  WHERE t.token_hash = $1`, hash), []any{&revokedAt, &expiresAt, &boundTask}})
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
+		return nil, "", ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("look up token: %w", err)
+		return nil, "", fmt.Errorf("look up token: %w", err)
 	}
 
 	if revokedAt.Valid {
-		return nil, ErrNotFound
+		return nil, "", ErrNotFound
 	}
 	if expiresAt.Valid && expiresAt.Time.Before(s.nowFn()) {
-		return nil, ErrNotFound
+		return nil, "", ErrNotFound
 	}
-	return a, nil
+	return a, boundTask.String, nil
 }
 
 // tokenHashOf accepts either a plaintext token (with the "wl_" prefix) or an

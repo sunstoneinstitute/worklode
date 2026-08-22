@@ -214,6 +214,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task start` — Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.
 - `lode task stop` — Put a started task back to ready; keeps the assignment.
 - `lode task submit` — Move your in-progress task to review.
+- `lode task token` — Mint a task-scoped bearer token (printed once — save it now)
+  Flags: --actor, --ttl
 - `lode task tree` — Show tasks with children, and their children, with per-parent progress
   Flags: --project, --repo
 - `lode task unassign` — Clear a task's assignee

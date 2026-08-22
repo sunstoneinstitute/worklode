@@ -31,10 +31,36 @@ import (
 type routeGuard struct {
 	perm   Permission
 	public string
+	// taskScope is what a task-scoped token (001 §2.1, WL-306) may do with
+	// this route: nothing (the zero value — default deny), call it when the
+	// path's {id} is the bound task (taskScopeBound), or call it freely
+	// (taskScopeAny, for the worker surface that carries no task id).
+	taskScope taskScope
 }
+
+type taskScope int
+
+const (
+	taskScopeNone taskScope = iota
+	taskScopeBound
+	taskScopeAny
+)
 
 // guarded is the ordinary case: a route requiring perm.
 func guarded(perm Permission) routeGuard { return routeGuard{perm: perm} }
+
+// guardedBound is guarded plus the task-token grant: a task-scoped token may
+// call this route when the path's {id} is its bound task.
+func guardedBound(perm Permission) routeGuard {
+	return routeGuard{perm: perm, taskScope: taskScopeBound}
+}
+
+// guardedAny is guarded plus the unbound task-token grant: the worker
+// surface a task-scoped token needs that carries no task id in the path —
+// reads, follow-up filing, document authoring.
+func guardedAny(perm Permission) routeGuard {
+	return routeGuard{perm: perm, taskScope: taskScopeAny}
+}
 
 // open marks a route as deliberately unauthenticated, with the reason it can
 // be. Note this is about the *worklode* identity: the webhook routes below
@@ -105,24 +131,24 @@ var routeGuards = map[string]routeGuard{
 	"POST /auth/cli/token":        open("redeems a one-time CLI login code"),
 
 	// --- tasks ---------------------------------------------------------------
-	"POST /api/v1/tasks":              guarded(permTaskWrite),
-	"GET /api/v1/tasks":               guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}":          guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}/brief":    guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}/cost":     guarded(permTaskRead),
-	"GET /api/v1/tasks/{id}/timeline": guarded(permTaskRead),
+	"POST /api/v1/tasks":              guardedAny(permTaskWrite),
+	"GET /api/v1/tasks":               guardedAny(permTaskRead),
+	"GET /api/v1/tasks/{id}":          guardedBound(permTaskRead),
+	"GET /api/v1/tasks/{id}/brief":    guardedBound(permTaskRead),
+	"GET /api/v1/tasks/{id}/cost":     guardedBound(permTaskRead),
+	"GET /api/v1/tasks/{id}/timeline": guardedBound(permTaskRead),
 	// A task's blob references (spec 021 §3). Listing is a task read; both
 	// halves of the reference graph are task writes.
-	"GET /api/v1/tasks/{id}/blobs":           guarded(permTaskRead),
-	"POST /api/v1/tasks/{id}/blobs":          guarded(permTaskWrite),
-	"DELETE /api/v1/tasks/{id}/blobs/{hash}": guarded(permTaskWrite),
-	"PATCH /api/v1/tasks/{id}":               guarded(permTaskWrite),
-	"PUT /api/v1/tasks/{id}/skills":          guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/edges":          guarded(permTaskWrite),
-	"DELETE /api/v1/tasks/{id}/edges":        guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/decompose":      guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/done":           guarded(permTaskWrite),
-	"POST /api/v1/tasks/{id}/abandon":        guarded(permTaskWrite),
+	"GET /api/v1/tasks/{id}/blobs":           guardedBound(permTaskRead),
+	"POST /api/v1/tasks/{id}/blobs":          guardedBound(permTaskWrite),
+	"DELETE /api/v1/tasks/{id}/blobs/{hash}": guardedBound(permTaskWrite),
+	"PATCH /api/v1/tasks/{id}":               guardedBound(permTaskWrite),
+	"PUT /api/v1/tasks/{id}/skills":          guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/edges":          guardedBound(permTaskWrite),
+	"DELETE /api/v1/tasks/{id}/edges":        guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/decompose":      guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/done":           guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/abandon":        guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/reopen":         guarded(permTaskWrite),
 	// Delete and undelete are task writes like the rest (044 §5). Deliberately
 	// not admin-only: a per-role delete permission would be the first of an
@@ -132,14 +158,14 @@ var routeGuards = map[string]routeGuard{
 	"DELETE /api/v1/tasks/{id}":                 guarded(permTaskWrite),
 	"POST /api/v1/tasks/{id}/undelete":          guarded(permTaskWrite),
 	"POST /api/v1/tasks/claim-next":             guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/claim":             guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/renew":             guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/release":           guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/start":             guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/stop":              guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/lease/worktree":    guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/agent-session":     guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/agent-session/end": guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/claim":             guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/renew":             guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/release":           guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/start":             guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/stop":              guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/lease/worktree":    guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/agent-session":     guardedBound(permTaskClaim),
+	"POST /api/v1/tasks/{id}/agent-session/end": guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/assign":            guarded(permTaskAssign),
 	"POST /api/v1/tasks/{id}/unassign":          guarded(permTaskAssign),
 	"GET /api/v1/board":                         guarded(permTaskRead),
@@ -149,27 +175,27 @@ var routeGuards = map[string]routeGuard{
 	// authz.go). The accept routes are permDocWrite like the rest: whether a
 	// given actor may accept a given document is the assignee gate of 025 §7,
 	// a per-document fact the store checks, not a role.
-	"POST /api/v1/docs":                      guarded(permDocWrite),
-	"GET /api/v1/docs":                       guarded(permDocRead),
-	"GET /api/v1/docs/resolve":               guarded(permDocRead),
-	"GET /api/v1/docs/{id}":                  guarded(permDocRead),
-	"PUT /api/v1/docs/{id}/body":             guarded(permDocWrite),
+	"POST /api/v1/docs":                      guardedAny(permDocWrite),
+	"GET /api/v1/docs":                       guardedAny(permDocRead),
+	"GET /api/v1/docs/resolve":               guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}":                  guardedAny(permDocRead),
+	"PUT /api/v1/docs/{id}/body":             guardedAny(permDocWrite),
 	"PUT /api/v1/docs/{id}/edges":            guarded(permDocImport),
-	"POST /api/v1/docs/{id}/submit":          guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/submit":          guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/accept":          guarded(permDocWrite),
-	"POST /api/v1/docs/{id}/revise":          guarded(permDocWrite),
-	"PUT /api/v1/docs/{id}/revision":         guarded(permDocWrite),
-	"DELETE /api/v1/docs/{id}/revision":      guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/revise":          guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/revision":         guardedAny(permDocWrite),
+	"DELETE /api/v1/docs/{id}/revision":      guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/revision/accept": guarded(permDocWrite),
 	// The document half of 044 §5; see the task entries above.
 	"DELETE /api/v1/docs/{id}":        guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
 
 	// --- skills --------------------------------------------------------------
-	"GET /api/v1/skills":                       guarded(permSkillRead),
-	"GET /api/v1/skills/{name}":                guarded(permSkillRead),
-	"GET /api/v1/skills/{name}/archive/{hash}": guarded(permSkillRead),
-	"POST /api/v1/skills/recommend":            guarded(permSkillRead),
+	"GET /api/v1/skills":                       guardedAny(permSkillRead),
+	"GET /api/v1/skills/{name}":                guardedAny(permSkillRead),
+	"GET /api/v1/skills/{name}/archive/{hash}": guardedAny(permSkillRead),
+	"POST /api/v1/skills/recommend":            guardedAny(permSkillRead),
 	"POST /api/v1/skills/sync":                 guarded(permSkillAdmin),
 
 	// --- runtime -------------------------------------------------------------
@@ -180,32 +206,32 @@ var routeGuards = map[string]routeGuard{
 	// registered with r.asset, which takes either a bearer token or a web
 	// session, since a task page's <img> and an agent's fetch both land here
 	// (see eitherGuard in authz.go).
-	"POST /api/v1/blobs":    guarded(permBlobWrite),
-	"GET /blob/{hash}":      guarded(permBlobRead),
+	"POST /api/v1/blobs":    guardedAny(permBlobWrite),
+	"GET /blob/{hash}":      guardedAny(permBlobRead),
 	"POST /api/v1/blobs/gc": guarded(permBlobAdmin),
 
 	// --- secrets (spec 017) ---------------------------------------------------
 	// Metadata only — names, purposes and op:// references, never values —
 	// but vault and item names describe the org's secret topology, so the
 	// route is authenticated like any other.
-	"GET /api/v1/secrets/catalog": guarded(permSecretRead),
+	"GET /api/v1/secrets/catalog": guardedAny(permSecretRead),
 	// permTaskClaim, not permSecretRead: reporting which names were
 	// materialized is a step of the claim ceremony, performed by the actor
 	// taking the lease, and it writes to the task's audit trail. It belongs
 	// with claim/renew/release/start/stop; permission to read the catalog
 	// should not imply permission to write task history.
-	"POST /api/v1/tasks/{id}/secrets-materialized": guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/secrets-materialized": guardedBound(permTaskClaim),
 
 	// --- delivery ------------------------------------------------------------
 	// Reporting a merge advances tasks, so it needs the same permission the
 	// done/abandon endpoints do. The webhook reporter carries no actor and is
 	// authenticated by HMAC instead; this one is a person's CLI token.
-	"POST /api/v1/merges": guarded(permTaskWrite),
+	"POST /api/v1/merges": guardedAny(permTaskWrite),
 
 	// --- projects, actors, tokens -------------------------------------------
-	"GET /api/v1/projects":                              guarded(permProjectRead),
-	"GET /api/v1/projects/resolve":                      guarded(permProjectRead),
-	"GET /api/v1/projects/{id}":                         guarded(permProjectRead),
+	"GET /api/v1/projects":                              guardedAny(permProjectRead),
+	"GET /api/v1/projects/resolve":                      guardedAny(permProjectRead),
+	"GET /api/v1/projects/{id}":                         guardedAny(permProjectRead),
 	"GET /api/v1/projects/{id}/cockpit":                 guarded(permProjectRead),
 	"GET /api/v1/projects/{id}/deliverables":            guarded(permDeliverableRead),
 	"POST /api/v1/projects/{id}/deliverables":           guarded(permDeliverableWrite),
@@ -220,6 +246,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/projects/{id}/repos":          guarded(permProjectAdmin),
 	"PATCH /api/v1/repos/{owner}/{name}":        guarded(permProjectAdmin),
 	"POST /api/v1/actors":                       guarded(permActorAdmin),
+	"POST /api/v1/tasks/{id}/tokens":            guarded(permTaskToken),
 	"POST /api/v1/actors/{id}/tokens":           guarded(permActorAdmin),
 	"DELETE /api/v1/tokens":                     guarded(permActorAdmin),
 
@@ -241,7 +268,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/event-subscribers/{name}/seek": guarded(permEventAdmin),
 
 	// --- identity (spec 013) --------------------------------------------------
-	"GET /api/v1/whoami": guarded(permWhoAmI),
+	"GET /api/v1/whoami": guardedAny(permWhoAmI),
 
 	// --- reconciliation (spec 013) ---------------------------------------------
 	"GET /api/v1/repos/doctor": guarded(permReconcile),
@@ -302,7 +329,7 @@ func (r *router) guardFor(pattern string) routeGuard {
 // check for the permission the table declares.
 func (r *router) api(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.Handle(pattern, r.srv.auth(r.srv.requirePerm(g.perm, h)))
+	r.mux.Handle(pattern, r.srv.auth(r.srv.requirePerm(g.perm, r.srv.requireTaskScope(g, h))))
 }
 
 // web registers a web UI route behind webGuard, which resolves the session
@@ -323,7 +350,7 @@ func (r *router) web(pattern string, h http.HandlerFunc) {
 // subresource fetch into a login page.
 func (r *router) asset(pattern string, h http.HandlerFunc) {
 	g := r.guardFor(pattern)
-	r.mux.HandleFunc(pattern, r.srv.eitherGuard(g.perm, h))
+	r.mux.HandleFunc(pattern, r.srv.eitherGuard(g.perm, r.srv.requireTaskScope(g, h)))
 }
 
 // public registers a route that carries no worklode identity. It still goes

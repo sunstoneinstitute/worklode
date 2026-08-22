@@ -286,6 +286,17 @@ func (s *Store) Renew(ctx context.Context, taskID, actorID string, ttl time.Dura
 			); err != nil {
 				return fmt.Errorf("renew lease %d: %w", l.ID, err)
 			}
+			// The lease grew, so its task's scoped tokens grow with it
+			// (001 §2.1, WL-306) — extended, never shortened, so a token
+			// minted with a longer deliberate expiry keeps it.
+			if _, err := tx.Exec(
+				`UPDATE tokens SET expires_at = $1
+				  WHERE task_id = $2 AND revoked_at IS NULL
+				    AND expires_at IS NOT NULL AND expires_at < $1`,
+				expires, taskID,
+			); err != nil {
+				return fmt.Errorf("extend task tokens for %s: %w", taskID, err)
+			}
 			l.RenewedAt = now
 			l.ExpiresAt = expires
 			lease = l
@@ -397,6 +408,11 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 	if err := endOpenAgentSessionsOnLease(tx, now, leaseID); err != nil {
 		return err
 	}
+	// The lease is ending, so the task's scoped tokens end with it
+	// (001 §2.1, WL-306) — release, expiry sweep, and delete-parking alike.
+	if err := revokeTaskTokens(tx, now, taskID); err != nil {
+		return err
+	}
 	var state string
 	if err := tx.QueryRow(`SELECT state FROM tasks WHERE id = $1`, taskID).Scan(&state); err != nil {
 		return fmt.Errorf("get task %s state: %w", taskID, err)
@@ -413,6 +429,12 @@ func closeLease(tx *sql.Tx, now time.Time, leaseID int64, taskID string, eventID
 // abandon) set the task's state themselves in the same transaction. Delivery
 // is not a caller: a merge or deploy leaves the lease alone.
 func CloseActiveLease(tx *sql.Tx, now time.Time, taskID string) error {
+	// done/abandon end the lease here, so the task's scoped tokens end too
+	// (001 §2.1, WL-306) — revoked even when no lease was active, because a
+	// finished task must not keep a live credential either way.
+	if err := revokeTaskTokens(tx, now, taskID); err != nil {
+		return err
+	}
 	var leaseID int64
 	err := tx.QueryRow(
 		`UPDATE leases SET released_at = $1 WHERE task_id = $2 AND released_at IS NULL RETURNING id`,

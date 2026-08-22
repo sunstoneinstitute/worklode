@@ -74,6 +74,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
 	}, []string{"decision", "outcome"})
+	s.taskTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_task_tokens_total",
+		Help: "Task-scoped token mints (POST /tasks/{id}/tokens, 001 §2.1), by outcome (" +
+			strings.Join(taskTokenOutcomes, ", ") + ").",
+	}, []string{"outcome"})
 	s.dictations = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_dictations_total",
 		Help: "Dictation requests (POST /dictate, WL-299), by outcome (" +
@@ -210,7 +215,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.dictations, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
@@ -267,6 +272,9 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range dictationOutcomes {
 		s.dictations.WithLabelValues(outcome)
+	}
+	for _, outcome := range taskTokenOutcomes {
+		s.taskTokens.WithLabelValues(outcome)
 	}
 	// Every decision/outcome pair, so an instance where nobody has decided an
 	// approval reads as a flat zero rather than as no-data — the difference
@@ -621,6 +629,18 @@ func (s *server) observeFormSubmission(form, outcome string) {
 		return
 	}
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
+}
+
+// taskTokenOutcomes bounds worklode_task_tokens_total's one label.
+var taskTokenOutcomes = []string{"ok", "not_found", "error"}
+
+// observeTaskToken records one POST /tasks/{id}/tokens, by outcome.
+// Nil-safe like every observer here.
+func (s *server) observeTaskToken(outcome string) {
+	if s.taskTokens == nil {
+		return
+	}
+	s.taskTokens.WithLabelValues(outcome).Inc()
 }
 
 // dictationOutcomes bounds worklode_dictations_total's one label.
