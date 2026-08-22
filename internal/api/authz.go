@@ -114,6 +114,15 @@ const (
 
 	permActorAdmin Permission = "actor.admin"
 
+	// permTaskToken covers minting a task-scoped token (001 §2.1, WL-306):
+	// POST /api/v1/tasks/{id}/tokens. Not actor.admin, deliberately — the
+	// minted credential is strictly narrower than the minter's own (bound to
+	// one task, expiring with its lease, unable to mint further), so a user
+	// dispatching their own sandbox is privilege reduction, not escalation.
+	// A task-scoped token itself cannot reach the route: its guard names no
+	// task scope, and the default is deny.
+	permTaskToken Permission = "task.token"
+
 	permSkillRead  Permission = "skill.read"
 	permSkillAdmin Permission = "skill.admin"
 
@@ -246,6 +255,10 @@ var grants = map[Permission][]Role{
 	// could otherwise mint further tokens, which is privilege escalation.
 	permActorAdmin: {RoleAdmin},
 
+	// See the permission's comment: minting a task-scoped token narrows
+	// privilege, so it is every authenticated actor's.
+	permTaskToken: {RoleUser, RoleAdmin},
+
 	permSkillRead:  {RoleUser, RoleAdmin},
 	permSkillAdmin: {RoleAdmin},
 
@@ -322,6 +335,12 @@ type Subject struct {
 	Kind    string // human, agent, service ("" when there is no actor)
 	Roles   []Role
 	Via     authMethod
+	// TaskID is the task a task-scoped token is bound to (001 §2.1, WL-306),
+	// "" for every other subject. A non-empty TaskID narrows what the
+	// subject may reach: only routes whose guard names a task scope (see
+	// routeGuard.taskScope), with the {id}-bound ones additionally requiring
+	// the path's task to be this one.
+	TaskID string
 	// Groups is the actor row's stored groups claim (store.Actor.Groups),
 	// carried through unfiltered. For a token subject it is only as fresh as
 	// the actor row's last login sync; a session subject is no fresher by
@@ -449,6 +468,36 @@ func actorIDFrom(r *http.Request) string {
 
 // --- enforcement ------------------------------------------------------------
 
+// requireTaskScope enforces 001 §2.1's narrowing for task-scoped subjects
+// (WL-306). It composes ahead of the handler, after requirePerm: an
+// ordinary subject passes untouched; a task-scoped one is refused unless
+// this route's guard names a task scope, and on an {id}-bound route unless
+// the path's task is the bound one. Default-deny by construction — a route
+// nobody marked is a route no task-scoped token reaches.
+func (s *server) requireTaskScope(g routeGuard, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		sub := subjectFrom(r)
+		if sub.TaskID == "" {
+			next(w, r)
+			return
+		}
+		switch g.taskScope {
+		case taskScopeAny:
+			next(w, r)
+			return
+		case taskScopeBound:
+			if r.PathValue("id") == sub.TaskID {
+				next(w, r)
+				return
+			}
+		}
+		d := Decision{Reason: "task_scope"}
+		s.observeAuthz(g.perm, d)
+		s.logDenial(r, sub, g.perm, d)
+		writeErr(w, http.StatusForbidden, "token is scoped to task "+sub.TaskID)
+	}
+}
+
 // requirePerm is the /api/v1 policy enforcement point. It runs inside auth,
 // which authenticated the caller and put both the actor and the subject in
 // the context, so an unauthenticated request never reaches it — every denial
@@ -559,7 +608,7 @@ func (s *server) eitherGuard(perm Permission, next http.HandlerFunc) http.Handle
 	return func(w http.ResponseWriter, r *http.Request) {
 		var sub Subject
 		if token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok && token != "" {
-			actor, err := s.st.Authenticate(r.Context(), token)
+			actor, boundTask, err := s.st.Authenticate(r.Context(), token)
 			if err != nil {
 				if errors.Is(err, store.ErrNotFound) {
 					// A token that does not resolve is refused here and
@@ -583,6 +632,7 @@ func (s *server) eitherGuard(perm Permission, next http.HandlerFunc) http.Handle
 				return
 			}
 			sub = subjectFromActor(actor, authToken)
+			sub.TaskID = boundTask
 		} else {
 			sub = s.webSubject(r.Context(), r)
 		}

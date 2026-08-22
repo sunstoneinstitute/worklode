@@ -141,7 +141,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 		t.Fatalf("CreateToken: %v", err)
 	}
 
-	actor, err := s.Authenticate(ctx, plaintext)
+	actor, _, err := s.Authenticate(ctx, plaintext)
 	if err != nil {
 		t.Fatalf("Authenticate: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestAuthenticateUnknownToken(t *testing.T) {
 	s := openTestStore(t)
 	ctx := t.Context()
 
-	_, err := s.Authenticate(ctx, "wl_"+strings.Repeat("0", 40))
+	_, _, err := s.Authenticate(ctx, "wl_"+strings.Repeat("0", 40))
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Authenticate: want ErrNotFound, got %v", err)
 	}
@@ -176,7 +176,7 @@ func TestAuthenticateRevoked(t *testing.T) {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
-	_, err = s.Authenticate(ctx, plaintext)
+	_, _, err = s.Authenticate(ctx, plaintext)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Authenticate after revoke: want ErrNotFound, got %v", err)
 	}
@@ -199,14 +199,14 @@ func TestAuthenticateExpired(t *testing.T) {
 	}
 
 	// Before expiry: still valid.
-	if _, err := s.Authenticate(ctx, plaintext); err != nil {
+	if _, _, err := s.Authenticate(ctx, plaintext); err != nil {
 		t.Fatalf("Authenticate before expiry: %v", err)
 	}
 
 	// Move the clock past expiry.
 	s.SetNowFunc(func() time.Time { return base.Add(2 * time.Hour) })
 
-	_, err = s.Authenticate(ctx, plaintext)
+	_, _, err = s.Authenticate(ctx, plaintext)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Authenticate after expiry: want ErrNotFound, got %v", err)
 	}
@@ -230,7 +230,7 @@ func TestCreateTokenNoExpiry(t *testing.T) {
 	// Move the clock far into the future; token has no expiry so it stays valid.
 	s.SetNowFunc(func() time.Time { return base.Add(24 * 365 * time.Hour) })
 
-	if _, err := s.Authenticate(ctx, plaintext); err != nil {
+	if _, _, err := s.Authenticate(ctx, plaintext); err != nil {
 		t.Fatalf("Authenticate: want no expiry to still be valid, got %v", err)
 	}
 }
@@ -252,7 +252,7 @@ func TestRevokeTokenByHash(t *testing.T) {
 		t.Fatalf("RevokeToken by hash: %v", err)
 	}
 
-	_, err = s.Authenticate(ctx, plaintext)
+	_, _, err = s.Authenticate(ctx, plaintext)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Authenticate after revoke by hash: want ErrNotFound, got %v", err)
 	}
