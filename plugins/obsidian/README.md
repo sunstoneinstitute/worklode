@@ -136,12 +136,12 @@ build.
   and deliberately not from the body, so it means the same thing whether or not
   this particular sync fetched the text. Unlike a missing docs endpoint, a
   document that cannot be fetched fails the sync: rendering its note without
-  the body would write a blank note over the text already in the vault. One
-  gap, tracked as WL-285 and closable only on the server: a *draft* spec or ADR
-  keeps its `version` across a body edit and its `updated_at` is truncated to
-  the second, so two edits to one draft inside the same second look identical
-  from the list route and the note keeps the earlier text until some other
-  field moves.
+  the body would write a blank note over the text already in the vault. A
+  *draft* spec or ADR keeps its `version` across a body edit (025 §7 reserves
+  bumping it for accepted documents), so `updated_at` is its only signal of a
+  second edit; the server gives that field full sub-second precision for
+  these documents (WL-285) so two edits inside the same wall-clock second
+  still move the list row.
 - **A server with no docs endpoint costs the doc notes only.** The plugin
   ships independently of the binary, so `GET /api/v1/docs` may be absent
   (404). Projects and tasks still mirror, the sync notice says doc notes were

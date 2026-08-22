@@ -262,7 +262,16 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 		// an unedited plan should be.
 		version++
 	}
-	ts := now.UTC().Truncate(time.Second)
+	// A plan's edit bumps version above, so second precision is enough to
+	// order its history; a draft spec/ADR is edited in place with no version
+	// bump (025 §7), so updated_at is its only externally visible signal that
+	// a second edit happened, and needs full precision to carry it — two
+	// edits inside the same wall-clock second must not collapse into one
+	// (WL-285).
+	ts := now.UTC()
+	if kind == "plan" {
+		ts = ts.Truncate(time.Second)
+	}
 
 	// The frontmatter is part of the body, so title and issued are rederived
 	// from it here for the same reason CreateDoc derives them: the body is
