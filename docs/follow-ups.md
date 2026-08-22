@@ -703,3 +703,14 @@ while dogfooding it against the real corpus.
   means an `api.NewServer` built with a fake App key against a fake GitHub;
   the poll-engine plan's Task 13 explicitly declined to rebuild the server
   fixture for that, so it wants a shared test-server option, not a one-off.
+
+## From WL-289 — document projection v1 (2026-08-22)
+
+- `[P3]` **A tombstoned document keeps its last projected declared graph.**
+  `projectOne` projects the live documents of a dirty project
+  (`store.ListDocs`, which excludes tombstones by default), so deleting a
+  document (044) leaves its `declared/<slug>` graph holding the last
+  projection until something overwrites it. The fix is a delete/empty-PUT
+  pass over the project's tombstoned docs in the same cycle; it did not ride
+  along with the v1 node projection because 044's delete semantics for graph
+  artifacts deserve their own look.
