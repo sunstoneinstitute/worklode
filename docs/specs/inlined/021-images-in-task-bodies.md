@@ -525,8 +525,13 @@ would render as nothing at all.
 
 `lode inbox import` therefore **fetches every remote image reference in a body and rewrites it
 to `/blob/<hash>`**, using the same upload path as §5 and the installation's GitHub App token
-for `githubusercontent.com`. Everything becomes a blob; nothing in a rendered body ever points
-off-site.
+for `githubusercontent.com` and for `github.com/user-attachments/` — the path GitHub has since
+moved uploaded issue attachments to (WL-292). The second scope is deliberately a host *plus
+path prefix*, never the whole of `github.com`: that host also serves every ordinary page an
+issue body links to, and a token attached to those is a credential handed to a URL whoever
+filed the issue chose. The credential check judges the decoded, dot-segment-resolved path, so
+an encoded `..` cannot walk the scope back out to the rest of the host. Everything becomes a
+blob; nothing in a rendered body ever points off-site.
 
 This makes import a URL-fetching operation on attacker-influenced input, so it needs the usual
 SSRF guard:

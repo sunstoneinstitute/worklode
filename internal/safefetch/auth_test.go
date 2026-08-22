@@ -201,3 +201,32 @@ func TestWithBearerDoesNotMutateReceiver(t *testing.T) {
 		t.Fatalf("Authorization headers = %q, want one empty", got)
 	}
 }
+
+// TestBearerPathScope covers WL-292's host-plus-path-prefix scope form
+// ("localhost/user-attachments/" here, github.com/user-attachments/ in
+// production): the credential reaches the scoped subtree, no other path on
+// the same host, and a dot-segment walk — literal or percent-encoded — back
+// out of the subtree goes bare.
+func TestBearerPathScope(t *testing.T) {
+	origin := newAuthRecorder(t, "")
+	f := loopbackFetcher(1<<20).WithBearer([]string{"localhost/user-attachments/"}, "tok123")
+
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{"/user-attachments/assets/uuid.png", "Bearer tok123"},
+		{"/user-attachments-evil/assets/x", ""},
+		{"/some/other/page", ""},
+		{"/user-attachments/../private/repo", ""},
+		{"/user-attachments/%2E%2E/private/repo", ""},
+	} {
+		if _, _, err := f.Get(context.Background(), origin.URL+tc.path); err != nil {
+			t.Fatalf("Get %s: %v", tc.path, err)
+		}
+		got := origin.headers()
+		if last := got[len(got)-1]; last != tc.want {
+			t.Fatalf("path %s: Authorization = %q, want %q", tc.path, last, tc.want)
+		}
+	}
+}
