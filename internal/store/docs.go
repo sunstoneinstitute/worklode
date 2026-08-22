@@ -2501,8 +2501,11 @@ var docEdgeInverse = map[string]string{
 // authorship.
 //
 // Each resolved far end is named as well as identified: one join carries the
-// other document's slug, kind and number back with its id, so a caller can
-// render "spec 25" instead of "document 42" without a query per edge. An
+// other document's project, slug, kind and number back with its id, so a
+// caller can render "spec 25" instead of "document 42", or address the far
+// document by project and slug, without a query per edge. The project is part
+// of that because an edge can cross one — resolveDocRef matches a shorthand
+// reference on a project key — so a slug alone does not name a document. An
 // unresolved outbound edge (to_external) joins to nothing and leaves them
 // empty.
 //
@@ -2515,8 +2518,8 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	outRows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.from_anchor,''), coalesce(e.to_doc,0),
 		        coalesce(e.to_anchor,''), coalesce(e.to_external,''),
-		        coalesce(d.slug,''), coalesce(d.kind,''), coalesce(d.number,0),
-		        cw.items
+		        coalesce(d.project_id,''), coalesce(d.slug,''), coalesce(d.kind,''),
+		        coalesce(d.number,0), cw.items
 		   FROM doc_edges e
 		   LEFT JOIN docs d ON d.id = e.to_doc
 		   LEFT JOIN LATERAL (
@@ -2544,8 +2547,7 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 	// row itself (e.id), not which end docID sits at.
 	inRows, err := s.db.QueryContext(ctx,
 		`SELECT e.type, coalesce(e.to_anchor,''), e.from_doc, coalesce(e.from_anchor,''), '',
-		        d.slug, d.kind, coalesce(d.number,0),
-		        cw.items
+		        d.project_id, d.slug, d.kind, coalesce(d.number,0), cw.items
 		   FROM doc_edges e
 		   JOIN docs d ON d.id = e.from_doc
 		   LEFT JOIN LATERAL (
@@ -2576,11 +2578,11 @@ func (s *Store) ListDocEdges(ctx context.Context, docID int64) (out, in []model.
 }
 
 // scanDocEdges drains a query selecting the DocEdge columns in order: the
-// five stored ones, the joined far end's slug, kind and number, then the
-// completedWith closure as a JSON array of strings (never NULL — the caller's
-// lateral join coalesces an edge with no doc_coverage_completed_with rows to
-// "[]", following NeedsPlanning's json_agg-to-text convention rather than
-// scanning a native Postgres array).
+// five stored ones, the joined far end's project, slug, kind and number,
+// then the completedWith closure as a JSON array of strings (never NULL —
+// the caller's lateral join coalesces an edge with no
+// doc_coverage_completed_with rows to "[]", following NeedsPlanning's
+// json_agg-to-text convention rather than scanning a native Postgres array).
 func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 	defer rows.Close()
 	var out []model.DocEdge
@@ -2588,7 +2590,7 @@ func scanDocEdges(rows *sql.Rows) ([]model.DocEdge, error) {
 		var e model.DocEdge
 		var completedWithJSON string
 		if err := rows.Scan(&e.Type, &e.FromAnchor, &e.ToDoc, &e.ToAnchor, &e.ToExternal,
-			&e.ToSlug, &e.ToKind, &e.ToNumber, &completedWithJSON); err != nil {
+			&e.ToProject, &e.ToSlug, &e.ToKind, &e.ToNumber, &completedWithJSON); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(completedWithJSON), &e.CompletedWith); err != nil {

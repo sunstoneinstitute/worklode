@@ -74,11 +74,18 @@ type DocRevision struct {
 // Edges exactly one of ToDoc and ToExternal is set; in EdgesIn ToDoc always
 // is and ToExternal is always "".
 //
-// ToSlug, ToKind and ToNumber name the far end for a reader: an edge is
-// stored by id, and "document 42" tells a human nothing. Reads resolve them
-// alongside the id in the same query (store.ListDocEdges); write paths that
-// only state an edge leave them zero, as does an unresolved ToExternal edge,
-// which names no row to resolve.
+// ToProject, ToSlug, ToKind and ToNumber name the far end for a reader: an
+// edge is stored by id, and "document 42" tells a human nothing. Reads resolve
+// them alongside the id in the same query (store.ListDocEdges); write paths
+// that only state an edge leave them zero, as does an unresolved ToExternal
+// edge, which names no row to resolve.
+//
+// ToProject is what makes the far end addressable rather than merely named: a
+// slug is unique only within a project (docs_project_slug), and an edge can
+// leave one — resolveDocRef's shorthand form matches on a project key, so
+// "wl:025" from another project's document resolves across the boundary.
+// Without it a client that links by slug has to assume the far end shares the
+// near end's project, which is right until it silently is not.
 //
 // CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
 // §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
@@ -93,6 +100,7 @@ type DocEdge struct {
 	ToDoc         int64    `json:"to_doc"`
 	ToAnchor      string   `json:"to_anchor"`
 	ToExternal    string   `json:"to_external"`
+	ToProject     string   `json:"to_project"`
 	ToSlug        string   `json:"to_slug"`
 	ToKind        string   `json:"to_kind"`
 	ToNumber      int      `json:"to_number"`

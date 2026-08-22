@@ -1113,17 +1113,16 @@ func TestSubscriberLockHealthyDetectsLostSession(t *testing.T) {
 	if err := s.db.PingContext(ctx); err != nil {
 		t.Fatalf("pool ping after terminating the lock session: %v", err)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if err := l.Healthy(ctx); err != nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("Healthy still reports the lock held 5s after its session was terminated")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if got := advisoryLockHolderPID(t, ctx, s, "doc-lifecycle"); got != 0 {
-		t.Fatalf("advisory lock still held by pid %d after its session died", got)
-	}
+	waitFor(t, func() bool { return l.Healthy(ctx) != nil },
+		"Healthy still reports the lock held after its session was terminated")
+
+	// Both halves are polled because pg_terminate_backend is asynchronous
+	// server-side, and the two observations are not simultaneous: the doomed
+	// backend reports the termination to its client and only then runs
+	// proc_exit, which is what actually releases its advisory locks. So the
+	// lock can still be granted in pg_locks at the instant Healthy first
+	// fails — asserting that once, rather than polling, is a lost race under
+	// load and nothing more.
+	waitFor(t, func() bool { return advisoryLockHolderPID(t, ctx, s, "doc-lifecycle") == 0 },
+		"advisory lock still held after its session died")
 }

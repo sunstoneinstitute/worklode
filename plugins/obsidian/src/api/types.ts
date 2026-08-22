@@ -115,9 +115,15 @@ export interface DocSection {
  * to_external is set; in edges_in to_doc always is and to_external is
  * always "".
  *
- * to_slug, to_kind and to_number name the far end for a reader: an edge is
- * stored by id, and "document 42" tells a human nothing. A read resolves
- * them alongside the id; an unresolved to_external edge leaves them empty.
+ * to_project, to_slug, to_kind and to_number name the far end for a reader:
+ * an edge is stored by id, and "document 42" tells a human nothing. A read
+ * resolves them alongside the id; an unresolved to_external edge leaves them
+ * empty.
+ *
+ * to_project is what makes the far end linkable rather than merely named: a
+ * slug is unique only within a project, and an edge can leave one (the 025
+ * §14.3 shorthand resolves on a project key), so a link built from to_slug
+ * alone would quietly point at the near end's project.
  *
  * completed_with carries the doc_coverage_completed_with side-table (026
  * §5, §5.3) that only a covers or defers edge ever populates: a partial
@@ -132,6 +138,7 @@ export interface DocEdge {
   to_doc: number;
   to_anchor: string;
   to_external: string;
+  to_project: string;
   to_slug: string;
   to_kind: string;
   to_number: number;

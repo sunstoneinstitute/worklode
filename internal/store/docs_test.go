@@ -3861,8 +3861,8 @@ func TestDocListSections(t *testing.T) {
 // TestDocListEdgesBothDirections: the same row is read forward out of the
 // document that declared it and backward into the document it names, where it
 // carries its inverse spelling and points back at the other end (025 §14).
-// Every resolved far end also carries the other document's slug, kind and
-// number, so a reader can name it; an unresolved reference carries none.
+// Every resolved far end also carries the other document's project, slug, kind
+// and number, so a reader can name it; an unresolved reference carries none.
 func TestDocListEdgesBothDirections(t *testing.T) {
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
@@ -3881,7 +3881,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	// Ordered by the stored columns with NULL coalesced away, so an
 	// unresolvable reference (to_doc NULL -> 0) sorts ahead of a resolved one.
 	specFar := func(e model.DocEdge) model.DocEdge {
-		e.ToDoc, e.ToSlug, e.ToKind, e.ToNumber = spec.ID, spec.Slug, "spec", 25
+		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind, e.ToNumber = spec.ID, "p1", spec.Slug, "spec", 25
 		return e
 	}
 	wantOut := []model.DocEdge{
@@ -3913,7 +3913,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	planFar := func(e model.DocEdge) model.DocEdge {
 		// A plan carries no corpus number (025 §14.3), so its far end names
 		// its kind and slug alone.
-		e.ToDoc, e.ToSlug, e.ToKind = plan.ID, plan.Slug, "plan"
+		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind = plan.ID, "p1", plan.Slug, "plan"
 		return e
 	}
 	wantIn := []model.DocEdge{
@@ -3927,6 +3927,54 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		if !reflect.DeepEqual(in[i], wantIn[i]) {
 			t.Errorf("spec edge in %d = %+v, want %+v", i, in[i], wantIn[i])
 		}
+	}
+}
+
+// TestDocListEdgesResolvesFarProject: an edge can leave its project — the
+// 025 §14.3 shorthand resolves on a project *key*, not within the declaring
+// document's project — so the resolved far end names the project it landed in
+// and not the one it left. Both directions, since a client that addresses a
+// document by project and slug (the Obsidian mirror's doc wikilinks, WL-284)
+// would otherwise silently assume the near end's project for either.
+func TestDocListEdgesResolvesFarProject(t *testing.T) {
+	s := openDocStore(t)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
+		t.Fatal(err)
+	}
+
+	far := mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 7, Slug: "007-far-spec", Body: specBody, CreatedBy: "stig",
+	})
+	// "P2-SPEC-7" is the shorthand for spec 7 of project P2, stated from a
+	// document in p1.
+	near := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "plan-across", CreatedBy: "stig",
+		Body: "---\nstatus: draft\nwasDerivedFrom: P2-SPEC-7\n---\n\n# Plan across\n",
+	})
+
+	out, _, err := s.ListDocEdges(t.Context(), near.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(near): %v", err)
+	}
+	want := []model.DocEdge{{
+		Type: "wasDerivedFrom", ToDoc: far.ID,
+		ToProject: "p2", ToSlug: "007-far-spec", ToKind: "spec", ToNumber: 7,
+	}}
+	if !reflect.DeepEqual(out, want) {
+		t.Fatalf("edges out of the near plan = %+v, want %+v", out, want)
+	}
+
+	_, in, err := s.ListDocEdges(t.Context(), far.ID)
+	if err != nil {
+		t.Fatalf("ListDocEdges(far): %v", err)
+	}
+	wantIn := []model.DocEdge{{
+		Type: "hadDerivation", ToDoc: near.ID,
+		ToProject: "p1", ToSlug: "plan-across", ToKind: "plan",
+	}}
+	if !reflect.DeepEqual(in, wantIn) {
+		t.Fatalf("edges into the far spec = %+v, want %+v", in, wantIn)
 	}
 }
 
