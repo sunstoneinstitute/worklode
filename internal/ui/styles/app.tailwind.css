@@ -14,9 +14,20 @@
  * check). @source globs are resolved relative to this file. */
 @source "../*.templ";   /* the cockpit's components, in internal/ui/ (one level up from styles/) */
 
+/* Two palette values are fixed by WCAG rather than by taste, and the WL-233
+ * audit measured them against the built pages:
+ *  - --ink-3 is the muted text colour. On the light theme it also lands on the
+ *    page background (--bg), the least contrasty surface it reaches, so it is
+ *    set to clear 4.5:1 there (WCAG 1.4.3), not merely on a white card.
+ *  - --control-line is the border that *is* a control's boundary — a button,
+ *    a text field, a select. Those must clear 3:1 against every surface they
+ *    sit on (WCAG 1.4.11); --line/--line-2 are decorative rules and dividers
+ *    and deliberately do not. Never use --line-2 to outline a control.
+ * internal/ui/contrast_test.go recomputes both from this file. */
 :root{
   --bg:#F0F0F1; --surface:#FFFFFF; --surface-2:#F7F7F8; --sunk:#ECECEE;
-  --ink:#0E1937; --ink-2:#404963; --ink-3:#6A7189; --line:#E1E1E4; --line-2:#D2D2D6;
+  --ink:#0E1937; --ink-2:#404963; --ink-3:#62687E; --line:#E1E1E4; --line-2:#D2D2D6;
+  --control-line:#82858F;
   --link:#266680; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#E4C000;
   --ok:#1E6F63; --ok-bg:#E4F1EE; --warn:#9A5410; --warn-bg:#FBEBDA;
   --crit:#A32836; --crit-bg:#F8E3E5; --info:#266680; --info-bg:#E2EEF2;
@@ -28,6 +39,7 @@
 @media (prefers-color-scheme:dark){:root{
   --bg:#0E1937; --surface:#16213F; --surface-2:#1B274A; --sunk:#101B39;
   --ink:#F4F4F4; --ink-2:#C4CADA; --ink-3:#9096AC; --line:#293457; --line-2:#334063;
+  --control-line:#6B7AA6;
   --link:#46C5DE; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#C9AD06;
   --ok:#5FD3C0; --ok-bg:#153A38; --warn:#F58221; --warn-bg:#3A2A16;
   --crit:#E5808C; --crit-bg:#3A1E24; --info:#46C5DE; --info-bg:#123243;
@@ -38,7 +50,8 @@
 }}
 :root[data-theme="light"]{
   --bg:#F0F0F1; --surface:#FFFFFF; --surface-2:#F7F7F8; --sunk:#ECECEE;
-  --ink:#0E1937; --ink-2:#404963; --ink-3:#6A7189; --line:#E1E1E4; --line-2:#D2D2D6;
+  --ink:#0E1937; --ink-2:#404963; --ink-3:#62687E; --line:#E1E1E4; --line-2:#D2D2D6;
+  --control-line:#82858F;
   --link:#266680; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#E4C000;
   --ok:#1E6F63; --ok-bg:#E4F1EE; --warn:#9A5410; --warn-bg:#FBEBDA;
   --crit:#A32836; --crit-bg:#F8E3E5; --info:#266680; --info-bg:#E2EEF2;
@@ -50,6 +63,7 @@
 :root[data-theme="dark"]{
   --bg:#0E1937; --surface:#16213F; --surface-2:#1B274A; --sunk:#101B39;
   --ink:#F4F4F4; --ink-2:#C4CADA; --ink-3:#9096AC; --line:#293457; --line-2:#334063;
+  --control-line:#6B7AA6;
   --link:#46C5DE; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#C9AD06;
   --ok:#5FD3C0; --ok-bg:#153A38; --warn:#F58221; --warn-bg:#3A2A16;
   --crit:#E5808C; --crit-bg:#3A1E24; --info:#46C5DE; --info-bg:#123243;
@@ -125,7 +139,7 @@ nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:v
 .seg button .tag{font-size:10px;font-weight:700;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
 .seg button[aria-pressed="true"] .tag{color:var(--accent-ink);background:var(--accent);border-color:var(--accent-line)}
-.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center}
+.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--control-line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center}
 .iconbtn:hover{background:var(--surface-2)}
 .iconbtn svg{width:17px;height:17px}
 .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#266680,#0E1937);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px;flex:0 0 auto}
@@ -409,7 +423,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .rest .rl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700}
 .reason{font-size:12.5px;color:var(--ink-2)}
 .actions{display:flex;flex-direction:column;gap:8px;margin-top:2px}
-.btn{border:1px solid var(--line-2);background:var(--surface);color:var(--ink);border-radius:9px;padding:9px 12px;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
+.btn{border:1px solid var(--control-line);background:var(--surface);color:var(--ink);border-radius:9px;padding:9px 12px;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--accent);border-color:var(--accent-line);color:var(--accent-ink)}
 .btn.primary:hover{filter:brightness(.97)}
@@ -450,7 +464,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .fieldrow .hint{font-size:12px;color:var(--ink-3)}
 .fieldrow input[type="text"],.fieldrow input[type="url"],.fieldrow select,.fieldrow textarea{
   font-family:inherit;font-size:13.5px;color:var(--ink);background:var(--surface);
-  border:1px solid var(--line-2);border-radius:9px;padding:9px 11px;min-height:40px;width:100%;
+  border:1px solid var(--control-line);border-radius:9px;padding:9px 11px;min-height:40px;width:100%;
 }
 .fieldrow textarea{min-height:96px;resize:vertical;line-height:1.5}
 .fieldrow input:hover,.fieldrow select:hover,.fieldrow textarea:hover{border-color:var(--ink-3)}

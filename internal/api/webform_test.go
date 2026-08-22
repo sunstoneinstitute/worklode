@@ -187,6 +187,47 @@ func TestCreateTaskFromFormRejectsBadInput(t *testing.T) {
 	}
 }
 
+// TestRejectedSubmitTitlesThePageAsAnError holds the half of a rejected
+// submit's announcement that lives on the server. A browser reads the new
+// document's <title> before anything in it, so on a form that comes back
+// rejected the title is what tells a screen-reader user the submit failed;
+// the message itself takes focus (internal/ui/forms.templ). Neither half is
+// worth much alone, which is why both are tested.
+func TestRejectedSubmitTitlesThePageAsAnError(t *testing.T) {
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj")
+
+	for _, tt := range []struct {
+		name, path string
+		bad        url.Values
+	}{
+		{"task", "/projects/proj/tasks", url.Values{"title": {""}, "priority": {"high"}, "kind": {"bug"}}},
+		{"deliverable", "/projects/proj/deliverables", url.Values{"name": {""}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rejected := doForm(t, h, tt.path, tt.bad, nil).Body.String()
+			bodyContains(t, rejected, "<title>Error: worklode: ",
+				`<p id="form-error" class="formerr" tabindex="-1" autofocus>`)
+			if strings.Contains(rejected, "aria-live") {
+				t.Error("the rejected form still carries an aria-live region, which announces nothing across a page load")
+			}
+			if n := strings.Count(rejected, "autofocus"); n != 1 {
+				t.Errorf("%d elements carry autofocus on a rejected submit, want exactly 1 (the message)", n)
+			}
+
+			// The form's own GET is where the clean title shows: an accepted
+			// submit redirects rather than rendering.
+			first := doReq(t, h, "GET", tt.path+"/new", "", nil).Body.String()
+			if strings.Contains(first, "<title>Error:") {
+				t.Error("a first render titles itself an error")
+			}
+			if !strings.Contains(first, "autofocus") {
+				t.Error("a first render should still autofocus its first field")
+			}
+		})
+	}
+}
+
 // TestCreateFormRefusesCrossOrigin checks both creation forms refuse a
 // submission a browser marks as cross-site, and that nothing is written.
 func TestCreateFormRefusesCrossOrigin(t *testing.T) {
