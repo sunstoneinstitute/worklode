@@ -123,10 +123,16 @@ func (s *Store) ClearProjectionFailure(ctx context.Context, projectID string) er
 // The tracked fix is WL-119 (read to a commit horizon, as
 // EventLogHorizonID does in internal/store/events.go).
 func (s *Store) DirtyProjects(ctx context.Context, after int64, limit int) (projects []string, through int64, err error) {
+	// Documents dirty their project too (WL-289): a doc mutation logs
+	// entity_kind 'doc' with the doc id in decimal, and the projector
+	// re-renders the owning project's declared doc graphs in the same
+	// cycle as its project graph.
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT sl.id, t.project_id
-		   FROM state_log sl LEFT JOIN tasks t ON t.id = sl.entity_id
-		  WHERE sl.entity_kind = 'task' AND sl.id > $1
+		`SELECT sl.id, coalesce(t.project_id, d.project)
+		   FROM state_log sl
+		   LEFT JOIN tasks t ON sl.entity_kind = 'task' AND t.id = sl.entity_id
+		   LEFT JOIN docs d ON sl.entity_kind = 'doc' AND d.id::text = sl.entity_id
+		  WHERE sl.entity_kind IN ('task', 'doc') AND sl.id > $1
 		  ORDER BY sl.id LIMIT $2`,
 		after, limit)
 	if err != nil {
