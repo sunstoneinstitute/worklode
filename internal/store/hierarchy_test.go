@@ -89,6 +89,83 @@ func TestAddEdgeFollowUpTo(t *testing.T) {
 	}
 }
 
+// TestAddEdgeDuplicateOf checks the fourth edge type: it is accepted, and it
+// absorbs nothing — the canonical task gains no children and no roll-up, and
+// the duplicate gains no parent (004 §1.3, "No absorption").
+func TestAddEdgeDuplicateOf(t *testing.T) {
+	s := openTaskStore(t)
+	canonical := createTask(t, s, taskTestNow, defaultTaskInput())
+	dupe := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, dupe.ID, canonical.ID, "duplicate_of", eventID)
+		}); err != nil {
+		t.Fatalf("AddEdge duplicate_of: %v", err)
+	}
+
+	progress, err := s.ChildProgress(t.Context(), canonical.ID)
+	if err != nil {
+		t.Fatalf("ChildProgress: %v", err)
+	}
+	if progress.Total != 0 {
+		t.Fatalf("canonical progress = %+v, want zero total: a duplicate is not a child", progress)
+	}
+	parent, err := s.ParentOf(t.Context(), dupe.ID)
+	if err != nil {
+		t.Fatalf("ParentOf: %v", err)
+	}
+	if parent != nil {
+		t.Fatalf("duplicate parent = %+v, want nil", parent)
+	}
+}
+
+// TestSingleCanonicalIndex pins the partial unique index: a task is a
+// duplicate of at most one canonical task, whichever task the second edge
+// points at.
+func TestSingleCanonicalIndex(t *testing.T) {
+	s := openTaskStore(t)
+	dupe := createTask(t, s, taskTestNow, defaultTaskInput())
+	canonicalA := createTask(t, s, taskTestNow, defaultTaskInput())
+	canonicalB := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, dupe.ID, canonicalA.ID, "duplicate_of", eventID)
+		}); err != nil {
+		t.Fatalf("first canonical: %v", err)
+	}
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, taskTestNow, dupe.ID, canonicalB.ID, "duplicate_of", eventID)
+		})
+	if !errors.Is(err, ErrEdgeExists) {
+		t.Fatalf("second canonical error = %v, want ErrEdgeExists", err)
+	}
+}
+
+// TestDuplicateOfIsNotSingleOrigin pins that the two provenance edges have
+// independent uniqueness: one task may be both a follow-up to one task and a
+// duplicate of another, since the indexes are partial on distinct types.
+func TestDuplicateOfIsNotSingleOrigin(t *testing.T) {
+	s := openTaskStore(t)
+	subject := createTask(t, s, taskTestNow, defaultTaskInput())
+	origin := createTask(t, s, taskTestNow, defaultTaskInput())
+	canonical := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	for _, e := range []struct{ to, typ string }{
+		{origin.ID, "follow_up_to"},
+		{canonical.ID, "duplicate_of"},
+	} {
+		if _, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.edge_added", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return AddEdge(tx, taskTestNow, subject.ID, e.to, e.typ, eventID)
+			}); err != nil {
+			t.Fatalf("AddEdge %s: %v", e.typ, err)
+		}
+	}
+}
+
 // TestAddEdgeMissingEndpoint pins the error precedence of the endpoint
 // existence check now that both endpoints are read in one query: a missing
 // endpoint is ErrNotFound naming that endpoint, and when both are missing it

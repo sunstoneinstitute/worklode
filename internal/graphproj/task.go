@@ -70,6 +70,8 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 			triples = append(triples, Triple{S: subj, P: iri.Term("blocks"), O: IRIRef(iri.Task(e.To))})
 		case "follow_up_to":
 			triples = append(triples, Triple{S: subj, P: iri.Term("followUpTo"), O: IRIRef(iri.Task(e.To))})
+		case "duplicate_of":
+			triples = append(triples, Triple{S: subj, P: iri.Term("duplicateOf"), O: IRIRef(iri.Task(e.To))})
 		}
 	}
 
@@ -77,7 +79,7 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 		if e.Type == "blocks" {
 			triples = append(triples, Triple{S: subj, P: iri.Term("dependsOn"), O: IRIRef(iri.Task(e.From))})
 		}
-		// in child_of, in follow_up_to: belong to the other task's subject,
+		// in child_of, in follow_up_to, in duplicate_of: belong to the other task's subject,
 		// not this one — emit nothing (subject-completeness).
 	}
 
