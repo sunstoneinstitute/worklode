@@ -861,6 +861,9 @@ nav.local a .cnt {
   .main {
     padding-bottom: calc(64px + env(safe-area-inset-bottom) + 16px);
   }
+  html {
+    scroll-padding-bottom: calc(64px + env(safe-area-inset-bottom) + 16px);
+  }
 }
 .canvas {
   min-width: 0;
@@ -1197,6 +1200,7 @@ nav.local a .cnt {
   color: var(--ink-3);
   font-size: 12px;
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 .dodrow .ev {
   display: flex;
@@ -1204,6 +1208,11 @@ nav.local a .cnt {
   gap: 6px;
   margin-top: 7px;
   overflow-wrap: anywhere;
+}
+.dodrow .ev a {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
 }
 .dodrow .st {
   justify-self: end;
@@ -1291,6 +1300,7 @@ nav.local a .cnt {
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
+    overflow-wrap: anywhere;
   }
   .wlrow .rt {
     flex: 1 1 100%;

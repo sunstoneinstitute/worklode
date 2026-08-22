@@ -318,6 +318,23 @@ narrow-width audit at 320, 375 and 768 CSS px and at 200% zoom fixed them:
   lifted above it, so what a sighted keyboard user tabs through is what they
   see.
 
+That audit is re-runnable rather than historical: `./scripts/narrow-check.sh`
+renders every page component with its fixtures and measures the same four things
+in a headless browser, so a page added later is measured before it merges rather
+than after it rots. CI still does not install a browser (§12), so what runs
+unattended is the set of markup and stylesheet facts each finding was fixed by.
+Two further consequences are settled because re-running it found them:
+
+- **A fixed bar at the bottom reserves scroll room the way the sticky one at
+  the top does.** Below 880px the primary nav is a fixed bottom tab bar, and
+  reserving room at the end of the document is not the same as reserving it on
+  a scroll-into-view: without the second, tabbing to a control near the fold
+  lands it entirely under the bar (WCAG 2.4.11).
+- **An identifier is content that cannot wrap.** An artifact address, a branch
+  name or a table reference carries no soft wrap opportunity, so a box that can
+  hold one breaks anywhere rather than widening the page — wrapping alone is
+  not enough, wherever such a value can appear.
+
 A second audit measured what the first one left out — the width-independent
 criteria — against the same built pages, in both themes, and settled five more
 consequences:
