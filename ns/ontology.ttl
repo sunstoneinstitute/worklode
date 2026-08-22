@@ -326,6 +326,18 @@ wl:implements a owl:ObjectProperty ;
         range was re-pointed to Section by 025 §11. Coverage stays a count query over sections, so
         no wl:fullyImplements is minted.""" .
 
+wl:pinnedVersion a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:range wl:DesignDoc ;
+    rdfs:comment """The document version a wl:implements claim was validated against — the
+        manifest's pinned: value (025 §11.2), carried as an RDF-1.2 annotation on the asserted
+        edge's triple term: << <component> wl:implements <section> >> wl:pinnedVersion
+        <id/doc/<slug>/v<n>> (006 §3, WL-275). The range is the versioned snapshot, which carries
+        the document's own class (025 §4.1) — the same shape wl:lastRevisedIn points at, so the
+        stale-claim query compares the two through dcat:version. No rdfs:domain: the subject is a
+        triple term, which RDF 1.1 tooling cannot state; this declaration itself is plain 1.1, and
+        only emitted claim data uses the 1.2 syntax.""" .
+
 wl:produces a owl:ObjectProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Task ;
@@ -668,8 +680,10 @@ wl:layer a owl:AnnotationProperty ;
 #
 #   wl:supersededSection       retired (025 §3): sections are addressable, so
 #                              partial supersession is dct:isReplacedBy between
-#                              them. Nothing else needed RDF 1.2, so there is no
-#                              ontology.1-2.ttl companion (cf. 006 §0).
+#                              them. wl:pinnedVersion's *data* uses an RDF-1.2
+#                              triple term, but its declaration is plain 1.1,
+#                              so there is still no ontology.1-2.ttl companion
+#                              (cf. 006 §0).
 #   wl:fullyImplements,        never minted (025 §3): declared coverage is a
 #   wl:partiallyImplements     second source of truth that goes stale.
 #   wl:Release                 never minted (006 §2.1): a release is a wl:Artifact

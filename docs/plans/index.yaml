@@ -1100,3 +1100,9 @@ docs/plans/2026-08-22-project-overhead-cost.md:
     task-7-hookrun-report-overhead-instead-of-dropping-it: "### Task 7 — hookrun: report overhead instead of dropping it"
     task-8-cockpit-show-the-combined-spend-and-its-overhead-share: "### Task 8 — Cockpit: show the combined spend and its overhead share"
     self-review: "## Self-Review"
+docs/plans/2026-08-22-repo-implements-deriver.md:
+  sections:
+    tasks: "## Tasks"
+    task-1-emit-the-pin-annotation-from-implementstriples: "### Task 1 — Emit the pin annotation from implements.Triples"
+    task-2-wire-repo-implements-as-runderivelocals-third-source: "### Task 2 — Wire repo-implements as runDeriveLocal's third source"
+    task-3-standing-queries-coverage-stale-claim-orphaned-claim: "### Task 3 — Standing queries: coverage, stale claim, orphaned claim"
