@@ -495,8 +495,9 @@ func TestPatchTask(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("unknown task status = %d, want 404", rr.Code)
 	}
-	// Unknown field.
-	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"kind": "bug"})
+	// Unknown field. kind stopped being one when WL-101 made it editable,
+	// so the probe uses a field nothing accepts.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"nonsense": "x"})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("unknown field status = %d, want 400", rr.Code)
 	}
