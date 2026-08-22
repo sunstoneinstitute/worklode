@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -260,6 +261,81 @@ func TestAgentSessionTouchReportsUsage(t *testing.T) {
 	if again := projectCost(t, h, token, "/api/v1/projects/proj"); len(again.Days) != 1 ||
 		again.Days[0].CostAmount != "9.000000" {
 		t.Fatalf("cost after a rejected heartbeat = %+v, want unchanged", again)
+	}
+}
+
+// TestReportProjectOverheadUsage covers the happy path: usage reported with
+// no task to bill to lands in the project's cost report under Overhead.
+func TestReportProjectOverheadUsage(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/overhead-usage", token,
+		map[string]any{
+			"agent": "claude-code", "external_session_id": "sess-1",
+			"usage": []map[string]any{sonnetUsage},
+		})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+
+	cost, err := st.ProjectCost(context.Background(), "proj", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(cost.Days) != 1 || cost.Days[0].OverheadTokens.Input != 1_000_000 {
+		t.Fatalf("overhead not recorded: %+v", cost.Days)
+	}
+	if cost.Days[0].OverheadCost != "9.000000" {
+		t.Fatalf("overhead cost = %+v, want 9.000000", cost.Days[0])
+	}
+	if len(cost.Totals) != 1 || cost.Totals[0].OverheadCost != "9.000000" {
+		t.Fatalf("overhead totals = %+v, want 9.000000", cost.Totals)
+	}
+}
+
+// TestReportProjectOverheadUsageUnknownProject404 covers the store's
+// ErrNotFound for an unknown project mapping onto a 404.
+func TestReportProjectOverheadUsageUnknownProject404(t *testing.T) {
+	_, h, token := newTestServer(t)
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/no-such-project/overhead-usage", token,
+		map[string]any{
+			"agent": "claude-code", "external_session_id": "sess-1",
+			"usage": []map[string]any{sonnetUsage},
+		})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404, body = %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestReportProjectOverheadUsageRejectsMalformedUsage covers spec 052 §5's
+// 400 for a malformed body: reportProjectOverheadUsage routes usage through
+// the same toUsageBuckets validation the task-scoped endpoints use.
+func TestReportProjectOverheadUsageRejectsMalformedUsage(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/overhead-usage", token,
+		map[string]any{
+			"agent": "claude-code", "external_session_id": "sess-1",
+			"usage": []map[string]any{
+				{"day": "31-07-2026", "model": "claude-sonnet-5", "output_tokens": 10},
+			},
+		})
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("malformed day: got %d, want 400, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/overhead-usage", token,
+		map[string]any{
+			"agent": "claude-code", "external_session_id": "sess-1",
+			"usage": []map[string]any{
+				{"day": "2026-07-31", "output_tokens": 10},
+			},
+		})
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing model: got %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

@@ -79,6 +79,11 @@ const (
 
 	permProjectRead  Permission = "project.read"
 	permProjectAdmin Permission = "project.admin"
+	// permProjectReport covers reporting overhead usage (spec 052 §2): tokens
+	// spent with no task to bill to, from a main-checkout orchestration
+	// session or a worktree whose lease the reporting actor no longer held.
+	// Not a claim on any one task, so every authenticated role may report it.
+	permProjectReport Permission = "project.report"
 
 	permDeliverableRead  Permission = "deliverable.read"
 	permDeliverableWrite Permission = "deliverable.write"
@@ -208,8 +213,9 @@ var grants = map[Permission][]Role{
 	permTaskClaim:  {RoleUser, RoleAdmin},
 	permTaskAssign: {RoleUser, RoleAdmin},
 
-	permProjectRead:  {RoleUser, RoleAdmin},
-	permProjectAdmin: {RoleAdmin},
+	permProjectRead:   {RoleUser, RoleAdmin},
+	permProjectAdmin:  {RoleAdmin},
+	permProjectReport: {RoleUser, RoleAdmin},
 
 	// Declaring what a project ships is its own capability, not a flavour of
 	// task.write: spec 029 §3 makes a deliverable a different object, and a
