@@ -3,13 +3,16 @@
 // Amp's JSON hook actions can only send a user message or redact tool input,
 // so no hook binding in Amp's settings can reach the worklode CLI. Amp's
 // Plugin API can: it runs this file under Bun and hands each handler a shell.
-// So this plugin does exactly what a hook binding does in every other harness
-// — pipe the hook payload into `lode hook <event>` — and nothing else. There
-// is no worklode logic here; the binary is the integration.
+// So this plugin only pipes a hook payload into `lode hook <event>`. There is
+// no worklode logic here; the binary is the integration.
 //
-// The payload carries the thread id and nothing more. `lode hook` resolves the
-// worktree from its own working directory, which it inherits from Amp, so
-// sending a cwd would only restate what the subprocess already knows.
+// It sends the workspace root as `cwd` rather than letting `lode hook` fall
+// back to its own working directory. An Amp plugin is "a long-lived process
+// that may run for multiple threads concurrently", so the process cwd is fixed
+// at Amp startup and says nothing about which workspace a given thread is in.
+// Without `cwd` a hook would resolve the wrong worktree — and `lode hook`'s
+// guard turns that into a silent NOP, which is the failure that looks exactly
+// like success.
 //
 // `amp` and the handler arguments are typed `any` deliberately: Amp executes
 // this file with Bun, which strips types without resolving them, and importing
@@ -19,25 +22,51 @@
 export const description = "Worklode: binds Amp's session and turn events to `lode hook`."
 
 export default function (amp: any) {
+	// workspaceRoot is Amp's `system.workspaceRoot` as a filesystem path, or ""
+	// when Amp is running without a workspace. An empty cwd is the payload
+	// field simply being absent, which is what `lode hook` already handles.
+	const workspaceRoot = (ctx: any): string => {
+		const uri = ctx?.system?.workspaceRoot
+		if (!uri) return ""
+		try {
+			return amp?.helpers?.filePathFromURI?.(uri) ?? ""
+		} catch {
+			return ""
+		}
+	}
+
 	// bind wraps one `lode hook` invocation as an Amp event handler. It returns
-	// nothing on every path, which is how a handler tells Amp to leave the turn
-	// exactly as the agent produced it — for session.start (a fire-and-forget
-	// event) and for agent.start/agent.end (request events whose "no
-	// modification" result is an absent one) alike.
+	// nothing on every path: session.start is fire-and-forget, and agent.end's
+	// result type admits void. agent.start's does not name a void arm, but its
+	// one field is optional and Bun does not typecheck, so an absent result is
+	// the same "append no context message" an empty object would be.
+	//
+	// The payload is interpolated into the shell template rather than
+	// concatenated into it, so Bun quotes it as a single argument. That is the
+	// one behaviour of `$` this file depends on and the one the Plugin API
+	// reference does not spell out — it documents only "Bun's shell".
 	const bind = (ampEvent: string, run: (payload: string, ctx: any) => Promise<any>) =>
 		async (event: any, ctx: any): Promise<void> => {
 			const payload = JSON.stringify({
 				hook_event_name: ampEvent,
 				session_id: event?.thread?.id ?? ctx?.thread?.id ?? "",
+				cwd: workspaceRoot(ctx),
 			})
 			try {
-				await run(payload, ctx)
+				const result = await run(payload, ctx)
+				// `$` reports a failed command through exitCode rather than by
+				// throwing, so a silent non-zero would otherwise go unrecorded.
+				if (result?.exitCode) {
+					ctx?.logger?.log?.(
+						`worklode: ${ampEvent} hook exited ${result.exitCode}: ${result.stderr ?? ""}`,
+					)
+				}
 			} catch (err) {
-				// A `lode` that is not on PATH, a backbone that is down, a
-				// non-zero exit: none of them are the user's problem mid-turn.
+				// A `lode` that is not on PATH, or a shell that throws instead of
+				// reporting an exit code: neither is the user's problem mid-turn.
 				// Worklode degrades to the git pre-commit heartbeat rather than
 				// interrupting the session.
-				ctx?.logger?.debug?.(`worklode: ${ampEvent} hook failed: ${err}`)
+				ctx?.logger?.log?.(`worklode: ${ampEvent} hook failed: ${err}`)
 			}
 		}
 

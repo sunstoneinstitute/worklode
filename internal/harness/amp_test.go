@@ -87,16 +87,25 @@ func TestAmpEventsAndCeiling(t *testing.T) {
 }
 
 // Every command is pasted unquoted into the generated file's shell template,
-// so the table may hold only the shape that survives that.
+// so the table may hold only the shape that survives that — and the renderer,
+// not just this test, is what holds it to that shape.
 func TestAmpCommandsAreShellSafe(t *testing.T) {
 	for _, b := range ampBindings {
 		if !ampCommandPattern.MatchString(b.Command) {
 			t.Errorf("binding %q command %q is not %s", b.Event, b.Command, ampCommandPattern)
 		}
 	}
+
+	restore := ampBindings
+	t.Cleanup(func() { ampBindings = restore })
+	ampBindings = []hookBinding{{Event: "session.start", Command: "lode hook session-start; rm -rf /"}}
+	if _, err := ampPluginSource(); err == nil {
+		t.Fatal("ampPluginSource rendered a command carrying shell text")
+	}
 }
 
-// A second install must converge on the same bytes, not append or reorder.
+// A second install must converge on the same bytes, and must not rewrite the
+// file to get there — Amp watches it, and a no-op install is not a change.
 func TestAmpInstallIsIdempotent(t *testing.T) {
 	_, pluginPath := ampSettings(t)
 	h, _ := Get("amp")
@@ -107,6 +116,11 @@ func TestAmpInstallIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
+	before, err := os.Stat(pluginPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
 	if _, err := h.InstallHooks(t.TempDir(), ScopeLocal); err != nil {
 		t.Fatalf("reinstall: %v", err)
 	}
@@ -116,6 +130,73 @@ func TestAmpInstallIsIdempotent(t *testing.T) {
 	}
 	if string(first) != string(second) {
 		t.Fatalf("reinstall changed the plugin:\n%s\n---\n%s", first, second)
+	}
+	after, err := os.Stat(pluginPath)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if !before.ModTime().Equal(after.ModTime()) {
+		t.Fatal("reinstall rewrote a plugin whose bytes had not changed")
+	}
+}
+
+// An install whose bytes differ — an upgraded lode writing a newer plugin over
+// an older one — must overwrite rather than keep what is there.
+func TestAmpInstallOverwritesAStalePlugin(t *testing.T) {
+	_, pluginPath := ampSettings(t)
+	if err := os.MkdirAll(filepath.Dir(pluginPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	stale := "// " + ampPluginMarker + " v0 — an older lode wrote this.\n"
+	if err := os.WriteFile(pluginPath, []byte(stale), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	h, _ := Get("amp")
+	if _, err := h.InstallHooks(t.TempDir(), ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	got, err := os.ReadFile(pluginPath)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) == stale {
+		t.Fatal("install kept a stale plugin")
+	}
+	want, err := ampPluginSource()
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("plugin = %s, want the rendered source", got)
+	}
+}
+
+// The three Plugin API surfaces this file reaches for beyond amp.on(), each
+// checked against the API reference: the shell is `ctx.$`, the only logger
+// method is log(), and a thread's workspace is ctx.system.workspaceRoot, which
+// is a URI that amp.helpers.filePathFromURI turns into a path. The last one is
+// load-bearing — a plugin is a long-lived process shared across threads, so a
+// payload without cwd would let `lode hook` resolve some other worktree and
+// silently NOP.
+func TestAmpPluginUsesTheDocumentedAPISurface(t *testing.T) {
+	src, err := ampPluginSource()
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	got := string(src)
+	for _, want := range []string{
+		"ctx.$`",
+		"ctx?.logger?.log?.(",
+		"ctx?.system?.workspaceRoot",
+		"amp?.helpers?.filePathFromURI?.(",
+		"cwd: workspaceRoot(ctx)",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("plugin does not use %s:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "logger?.debug") {
+		t.Error("PluginLogger declares only log(); debug() would silently never run")
 	}
 }
 

@@ -17,23 +17,27 @@ import (
 // TypeScript file Amp runs under Bun, with a shell in hand — is the only Amp
 // surface that reaches `lode hook`.
 //
-// Heartbeat is bound to the two ends of a turn. Amp has no Stop event; a turn
-// begins at agent.start (the user submitted a prompt) and ends at agent.end,
-// and between them those cover a session that is working and one sitting idle
-// at the prompt.
+// Heartbeat is bound to both ends of a turn. Amp has no Stop event and no
+// idle or notification event, so a turn's start and end are the only signals
+// there are: a session heartbeats when the user submits a prompt and again
+// when the agent finishes, and nothing in between. That is thinner than
+// claude-code's four heartbeat sources, and thin enough to matter only for a
+// turn longer than the lease TTL.
 //
 // tool.call and tool.result are deliberately unbound even though the API
-// offers them. Both are request events on the agent's critical path — a
-// handler runs before the tool executes, and again before its result reaches
-// the model — so binding them would put a `lode hook` subprocess between the
-// agent and every tool call it makes, dozens of times a turn, to report a
-// heartbeat agent.end already reports. Claude Code declines the same trade
-// with PostToolUse for the same reason.
+// offers them and would close that gap. Both are request events on the
+// agent's critical path — a handler runs before the tool executes, and again
+// before its result reaches the model — so binding them would put a `lode
+// hook` subprocess between the agent and every tool call it makes, dozens of
+// times a turn. Claude Code declines the same trade with PostToolUse, though
+// it can afford to: it has Notification and SubagentStop to fall back on and
+// Amp has neither.
 //
-// SessionEnd and WorktreeEnter have nothing behind them: Amp's Plugin API
-// stops at session.start, agent.start/end and tool.call/result — there is no
-// session-end or subagent event at all — and EnterWorktree is a Claude Code
-// tool, not an Amp one. Both are reported unbound.
+// SessionEnd and WorktreeEnter have nothing behind them, for two different
+// reasons. Amp's Plugin API stops at session.start, agent.start/end and
+// tool.call/result — there is no session-end event at all. WorktreeEnter is
+// bound elsewhere to the EnterWorktree tool, which is Claude Code's, not
+// Amp's. Both are reported unbound.
 var ampBindings = []hookBinding{
 	{Event: "session.start", Command: "lode hook session-start --harness amp"},
 	{Event: "agent.start", Command: "lode hook heartbeat --harness amp"},
@@ -43,8 +47,9 @@ var ampBindings = []hookBinding{
 // ampCeilingNote says why two events stay unbound. The install report already
 // names them; this says the ceiling is Amp's API rather than an install that
 // fell short, so nobody goes looking for the setting that would fix it.
-const ampCeilingNote = "Amp's Plugin API has no session-end and no subagent event, so those stay unbound " +
-	"whatever is installed; the git pre-commit heartbeat still covers commit cadence"
+const ampCeilingNote = "Amp's Plugin API has no session-end event, and worktree-enter tracks a Claude Code " +
+	"tool Amp does not have, so both stay unbound whatever is installed; the git pre-commit " +
+	"heartbeat still covers commit cadence"
 
 // ampReloadNote is install-time advice: Amp loads its plugins at startup, so a
 // freshly written plugin does nothing in the session that installed it.
@@ -71,9 +76,10 @@ var ampPlugin = template.Must(template.New("ampplugin.ts").Funcs(template.FuncMa
 
 // ampCommandPattern is what a binding's command may look like before it is
 // pasted, unquoted, into the generated file's shell template. The table is
-// ours, so this is a guard against a future edit rather than against input:
+// ours, so this guards against a future edit rather than against input:
 // anything outside this shape would be shell text in a place that cannot quote
-// it. amp_test.go holds every binding to it.
+// it. ampPluginSource enforces it on the way out, so no install can write a
+// command that has not passed it.
 var ampCommandPattern = regexp.MustCompile(`^lode hook [a-z][a-z-]* --harness amp$`)
 
 // Amp is the amp adapter, and the only code-generating one: where every other
@@ -149,6 +155,11 @@ func (Amp) Events() map[Event][]string { return eventsFor(ampBindings) }
 // ampPluginSource renders the plugin file. It takes no arguments and depends
 // on nothing but ampBindings, so two installs produce identical bytes.
 func ampPluginSource() ([]byte, error) {
+	for _, b := range ampBindings {
+		if !ampCommandPattern.MatchString(b.Command) {
+			return nil, fmt.Errorf("amp binding %q: command %q is not %s", b.Event, b.Command, ampCommandPattern)
+		}
+	}
 	var buf bytes.Buffer
 	if err := ampPlugin.Execute(&buf, struct{ Bindings []hookBinding }{ampBindings}); err != nil {
 		return nil, fmt.Errorf("render amp plugin: %w", err)
@@ -156,7 +167,10 @@ func ampPluginSource() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// InstallHooks writes the plugin file, which is ours entire.
+// InstallHooks writes the plugin file, which is ours entire. A re-install that
+// would write the bytes already there writes nothing at all: the JSON adapters
+// go out of their way not to bump a file's mtime for a no-op, and a file Amp
+// watches deserves the same.
 func (a Amp) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	path, err := ampPluginPath()
 	if err != nil {
@@ -166,11 +180,13 @@ func (a Amp) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	if err != nil {
 		return HookInstall{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return HookInstall{}, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, src, 0o644); err != nil {
-		return HookInstall{}, fmt.Errorf("write %s: %w", path, err)
+	if existing, err := os.ReadFile(path); err != nil || !bytes.Equal(existing, src) {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return HookInstall{}, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, src, 0o644); err != nil {
+			return HookInstall{}, fmt.Errorf("write %s: %w", path, err)
+		}
 	}
 	return HookInstall{
 		Path:    path,
