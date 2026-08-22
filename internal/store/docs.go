@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -182,7 +183,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 			return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
 		}
 	}
-	if err := rebuildEdges(tx, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 	// The third thing AcceptDoc does, after the depth gate and the publish flag:
@@ -280,7 +281,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	if err := rebuildSections(tx, id, kind, parsed.doc, version); err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, id, kind, project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, kind, project, parsed.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 	if err := logDocChange(tx, id, eventID,
@@ -305,9 +306,9 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 // including accepted and superseded; there is no published anchor to protect
 // because no anchor is being restated.
 //
-// The clock is unused (nothing here is timestamped) and taken only so the
-// signature matches the other document writers.
-func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
+// The clock stamps only an artifact declaration the re-read frontmatter
+// carries (rebuildEdges); nothing else here is timestamped.
+func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 	d, err := lockDoc(tx, id)
 	if err != nil {
 		return err
@@ -316,7 +317,7 @@ func ReplaceDocEdges(tx *sql.Tx, _ time.Time, id, eventID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := rebuildEdges(tx, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
 		return err
 	}
 	return logDocChange(tx, id, eventID,
@@ -766,7 +767,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
-	if err := rebuildEdges(tx, id, d.kind, d.project, candidate.doc.Frontmatter); err != nil {
+	if err := rebuildEdges(tx, now, id, d.kind, d.project, candidate.doc.Frontmatter); err != nil {
 		return nil, err
 	}
 
@@ -1279,9 +1280,28 @@ func closureEqual(a, b []closureRef) bool {
 // authored twice is one edge, same as covers; the same section deferred to
 // two different owners is the contradiction covers refuses for two
 // disagreeing levels, refused here as ErrInvalidInput too.
-func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
+func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
 	if _, err := tx.Exec(`DELETE FROM doc_edges WHERE from_doc = $1`, docID); err != nil {
 		return fmt.Errorf("clear edges of doc %d: %w", docID, err)
+	}
+	// The artifact key is not an edge — it declares the catalog address(es)
+	// this document is verified by (029 §3.1), which is what routes a
+	// /hooks/catalog delivery to it (WL-255). Declarations are additive and
+	// idempotent: removing the key from a later body does not undeclare, the
+	// same as every other declaration surface.
+	if fm != nil {
+		for _, a := range fm.Artifact {
+			a = strings.TrimSpace(a)
+			if a == "" {
+				continue
+			}
+			if utf8.RuneCountInString(a) > maxArtifactURI {
+				return fmt.Errorf("doc %d artifact %q is too long: %w", docID, a[:40]+"…", ErrInvalidInput)
+			}
+			if err := DeclareArtifact(tx, now, "doc", strconv.FormatInt(docID, 10), a); err != nil {
+				return err
+			}
+		}
 	}
 	seen := map[docEdgeRow]docEdgeSeen{}
 	for _, e := range frontmatterEdges(fm) {

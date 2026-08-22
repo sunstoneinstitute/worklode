@@ -502,6 +502,70 @@ func TestPatchTask(t *testing.T) {
 	}
 }
 
+// TestPatchTaskDeclaresArtifacts covers WL-255's task surface: a PATCH with
+// "artifacts" declares each catalog address for the task (additively and
+// idempotently), an invalid list is refused, and a declaration for an
+// unknown task rolls back with the 404.
+func TestPatchTaskDeclaresArtifacts(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Dataset task", "priority": "high", "kind": "feature",
+	})
+
+	const addr = "bigquery://sunstone-prod/cow/casualties"
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"artifacts": []string{addr}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("declare status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	// Re-declaring plus a second address: both present, no duplicate.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token,
+		map[string]any{"artifacts": []string{addr, "gs://sunstone-prod/cow/exports"}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("second declare status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	countDecls := func() int {
+		var n int
+		if err := st.DBForTests().QueryRow(
+			`SELECT COUNT(*) FROM artifact_declarations WHERE entity_kind = 'task' AND entity_id = 'WL-1'`,
+		).Scan(&n); err != nil {
+			t.Fatalf("count declarations: %v", err)
+		}
+		return n
+	}
+	if n := countDecls(); n != 2 {
+		t.Fatalf("declarations = %d, want 2", n)
+	}
+
+	for name, body := range map[string]map[string]any{
+		"empty list":  {"artifacts": []string{}},
+		"blank entry": {"artifacts": []string{"  "}},
+		"over-long":   {"artifacts": []string{strings.Repeat("x", 2001)}},
+	} {
+		rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, body)
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s status = %d, want 422; body %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	if n := countDecls(); n != 2 {
+		t.Fatalf("declarations after rejected patches = %d, want 2", n)
+	}
+
+	// Unknown task: the 404 must not leave a dangling declaration behind.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-99", token, map[string]any{"artifacts": []string{addr}})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown task status = %d, want 404", rr.Code)
+	}
+	var n int
+	if err := st.DBForTests().QueryRow(
+		`SELECT COUNT(*) FROM artifact_declarations WHERE entity_id = 'WL-99'`).Scan(&n); err != nil {
+		t.Fatalf("count WL-99 declarations: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("dangling declarations for unknown task = %d, want 0", n)
+	}
+}
+
 // TestPatchTaskConcern covers the concern/needs_decomposition PATCH
 // extension, checking both the response body and the stored row.
 func TestPatchTaskConcern(t *testing.T) {
