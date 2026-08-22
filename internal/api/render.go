@@ -216,10 +216,16 @@ func docsView(docs []model.Doc) ui.DocsView {
 }
 
 // docView maps one document's detail projection into its page.
-func docView(d *model.DocDetail) ui.DocView {
+//
+// md may be nil, which renders every body afresh; see the mdcache field.
+func docView(md *mdrender.Cache, d *model.DocDetail) ui.DocView {
 	return ui.DocView{
-		Page:     ui.PageProps{Title: "worklode: " + d.Slug},
-		Doc:      d.Doc,
+		Page: ui.PageProps{Title: "worklode: " + d.Slug},
+		Doc:  d.Doc,
+		// Rendered here rather than in ui for the reason taskView gives.
+		// DocBody rather than Body: a document's {#sec-N} headings are
+		// addressable anchors, and the Sections table links at them.
+		BodyHTML: md.DocBody(d.Doc.Body),
 		Ref:      docRef(d.Doc),
 		Sections: d.Sections,
 		Edges:    docEdgeRows(d.Edges),

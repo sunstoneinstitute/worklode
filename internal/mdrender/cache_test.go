@@ -17,17 +17,21 @@ func newTestCache(t *testing.T) (*mdrender.Cache, *prometheus.Registry) {
 	return mdrender.NewCache(reg), reg
 }
 
-func lookups(t *testing.T, reg *prometheus.Registry, result string) float64 {
+// lookups and renders read one series of the cache's counters. Both carry a
+// "kind" label now that the cache serves task and document bodies, so both
+// halves have to be matched: matching on the result alone would read whichever
+// kind's series the registry happened to yield first.
+func lookups(t *testing.T, reg *prometheus.Registry, kind, result string) float64 {
 	t.Helper()
-	return counter(t, reg, "worklode_mdrender_cache_lookups_total", "result", result)
+	return counter(t, reg, "worklode_mdrender_cache_lookups_total", map[string]string{"kind": kind, "result": result})
 }
 
-func renders(t *testing.T, reg *prometheus.Registry, outcome string) float64 {
+func renders(t *testing.T, reg *prometheus.Registry, kind, outcome string) float64 {
 	t.Helper()
-	return counter(t, reg, "worklode_mdrender_renders_total", "outcome", outcome)
+	return counter(t, reg, "worklode_mdrender_renders_total", map[string]string{"kind": kind, "outcome": outcome})
 }
 
-func counter(t *testing.T, reg *prometheus.Registry, name, label, value string) float64 {
+func counter(t *testing.T, reg *prometheus.Registry, name string, labels map[string]string) float64 {
 	t.Helper()
 	families, err := reg.Gather()
 	if err != nil {
@@ -38,14 +42,18 @@ func counter(t *testing.T, reg *prometheus.Registry, name, label, value string) 
 			continue
 		}
 		for _, m := range f.GetMetric() {
+			match := 0
 			for _, l := range m.GetLabel() {
-				if l.GetName() == label && l.GetValue() == value {
-					return m.GetCounter().GetValue()
+				if labels[l.GetName()] == l.GetValue() {
+					match++
 				}
+			}
+			if match == len(labels) {
+				return m.GetCounter().GetValue()
 			}
 		}
 	}
-	t.Fatalf("no %s{%s=%q} in registry", name, label, value)
+	t.Fatalf("no %s%v in registry", name, labels)
 	return 0
 }
 
@@ -57,7 +65,7 @@ func TestCacheRendersOncePerBody(t *testing.T) {
 	const body = "# hi\n\n*there* [x](https://example.com)\n"
 
 	first := c.Body(body)
-	if got, want := renders(t, reg, "ok"), 1.0; got != want {
+	if got, want := renders(t, reg, "task", "ok"), 1.0; got != want {
 		t.Fatalf("first view performed %v renders, want %v", got, want)
 	}
 	for i := 0; i < 5; i++ {
@@ -65,13 +73,13 @@ func TestCacheRendersOncePerBody(t *testing.T) {
 			t.Fatalf("view %d differs from the first:\n%s\n%s", i+2, got, first)
 		}
 	}
-	if got := renders(t, reg, "ok"); got != 1 {
+	if got := renders(t, reg, "task", "ok"); got != 1 {
 		t.Fatalf("six views performed %v renders, want 1", got)
 	}
-	if got := lookups(t, reg, "hit"); got != 5 {
+	if got := lookups(t, reg, "task", "hit"); got != 5 {
 		t.Fatalf("got %v hits, want 5", got)
 	}
-	if got := lookups(t, reg, "miss"); got != 1 {
+	if got := lookups(t, reg, "task", "miss"); got != 1 {
 		t.Fatalf("got %v misses, want 1", got)
 	}
 }
@@ -122,6 +130,46 @@ func TestDistinctBodiesDoNotShareAnEntry(t *testing.T) {
 	}
 }
 
+// TestFlavoursDoNotShareAnEntry: the two flavours render the same body
+// differently — a document's "{#sec-1}" is an anchor, a task's is text — so
+// the cache key carries the flavour. Without that, whichever page was viewed
+// first would decide what the other served.
+func TestFlavoursDoNotShareAnEntry(t *testing.T) {
+	c, reg := newTestCache(t)
+	const body = "## Heading {#sec-1}\n"
+
+	task, doc := c.Body(body), c.DocBody(body)
+	if task == doc {
+		t.Fatalf("both flavours returned the same HTML: %q", task)
+	}
+	if got, want := string(c.Body(body)), string(task); got != want {
+		t.Fatalf("second task view returned %q, want %q", got, want)
+	}
+	if got, want := string(c.DocBody(body)), string(doc); got != want {
+		t.Fatalf("second doc view returned %q, want %q", got, want)
+	}
+	// One render each, then a hit each: the counters are labelled by kind, so
+	// a document render cannot be read as a task one.
+	for _, kind := range []string{"task", "doc"} {
+		if got := renders(t, reg, kind, "ok"); got != 1 {
+			t.Fatalf("%s renders = %v, want 1", kind, got)
+		}
+		if got := lookups(t, reg, kind, "hit"); got != 1 {
+			t.Fatalf("%s hits = %v, want 1", kind, got)
+		}
+	}
+}
+
+// TestNilCacheRendersDocs: a *server built directly in a test carries no
+// cache, and the document page must render anyway.
+func TestNilCacheRendersDocs(t *testing.T) {
+	var c *mdrender.Cache
+	const body = "## Heading {#sec-1}\n"
+	if got, want := c.DocBody(body), mdrender.DocBody(body); got != want {
+		t.Fatalf("nil cache rendered %q, want %q", got, want)
+	}
+}
+
 // TestOversizeIsNotCached pins the one deliberate hole: an oversize body
 // takes the escaping fallback every time rather than storing an entry several
 // times maxBody. Its cost is linear, not the quadratic kind the cache exists
@@ -131,10 +179,10 @@ func TestOversizeIsNotCached(t *testing.T) {
 	body := strings.Repeat("x", (64<<10)+1)
 	c.Body(body)
 	c.Body(body)
-	if got := renders(t, reg, "oversize"); got != 2 {
+	if got := renders(t, reg, "task", "oversize"); got != 2 {
 		t.Fatalf("got %v oversize renders, want 2", got)
 	}
-	if got := lookups(t, reg, "hit") + lookups(t, reg, "miss"); got != 0 {
+	if got := lookups(t, reg, "task", "hit") + lookups(t, reg, "task", "miss"); got != 0 {
 		t.Fatalf("oversize body reached the cache: %v lookups", got)
 	}
 }
@@ -150,7 +198,7 @@ func TestFallbackIsCached(t *testing.T) {
 	if first != second {
 		t.Fatal("fallback output differs between views")
 	}
-	if got := renders(t, reg, "fallback"); got != 1 {
+	if got := renders(t, reg, "task", "fallback"); got != 1 {
 		t.Fatalf("got %v fallback renders, want 1", got)
 	}
 }
@@ -193,7 +241,7 @@ func TestConcurrentMissesCoalesce(t *testing.T) {
 	// Not 1: a caller can miss, then lose the flight that was already
 	// finishing, and start the next one. Bounded is the property that
 	// matters; 32 would mean no coalescing at all.
-	if n := renders(t, reg, "fallback"); n > 4 {
+	if n := renders(t, reg, "task", "fallback"); n > 4 {
 		t.Fatalf("32 concurrent views performed %v renders; singleflight is not coalescing", n)
 	}
 }

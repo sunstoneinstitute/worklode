@@ -495,7 +495,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	view := docView(detail)
+	view := docView(s.mdcache, detail)
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
 }
 

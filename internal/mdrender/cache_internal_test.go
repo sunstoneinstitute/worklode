@@ -58,13 +58,13 @@ func TestEvictsLeastRecentlyUsed(t *testing.T) {
 	c.Body("a") // a is now the most recently used
 	c.Body("c") // evicts b
 
-	if _, ok := c.get(keyOf("a")); !ok {
+	if _, ok := c.get(keyOf(kindTask, "a")); !ok {
 		t.Fatal("a was evicted despite being the most recently used")
 	}
-	if _, ok := c.get(keyOf("c")); !ok {
+	if _, ok := c.get(keyOf(kindTask, "c")); !ok {
 		t.Fatal("c was evicted immediately after insertion")
 	}
-	if _, ok := c.get(keyOf("b")); ok {
+	if _, ok := c.get(keyOf(kindTask, "b")); ok {
 		t.Fatal("b survived; eviction is not least-recently-used")
 	}
 }
