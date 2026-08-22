@@ -1060,7 +1060,7 @@ docs/plans/2026-08-21-per-project-workflows.md:
   sections:
     tasks: "## Tasks"
     task-1-vocabulary-core-edges-entry-table-and-the-workflow-type: "### Task 1 — Vocabulary, core edges, entry table, and the workflow type"
-    task-2-migration-0038-and-the-workflow-aware-guard: "### Task 2 — Migration 0038 and the workflow-aware guard"
+    task-2-migration-0046-and-the-workflow-aware-guard: "### Task 2 — Migration 0046 and the workflow-aware guard"
     task-3-store-crud-for-workflows-and-the-task-override: "### Task 3 — Store CRUD for workflows and the task override"
     task-4-api-endpoints-guard-table-metrics: "### Task 4 — API endpoints, guard table, metrics"
     task-5-watcher-rule-review-on-workflow-change: "### Task 5 — Watcher rule: review on workflow change"
