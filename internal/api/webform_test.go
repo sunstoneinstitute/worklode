@@ -272,7 +272,8 @@ func TestDeliverablesPageEmptyState(t *testing.T) {
 }
 
 // TestCreateDeliverableFromForm checks the happy path: the deliverable lands
-// with its three descriptive fields, the response 303s back to the list, and
+// with its descriptive fields — including the artifact address the catalog
+// ingest routes reports by (WL-254) — the response 303s back to the list, and
 // the list then shows it as Declared.
 func TestCreateDeliverableFromForm(t *testing.T) {
 	st, h, _ := newTestServer(t)
@@ -282,6 +283,7 @@ func TestCreateDeliverableFromForm(t *testing.T) {
 		"name":        {"Casualty datapackage"},
 		"description": {"Frictionless datapackage of verified records."},
 		"url":         {"https://example.org/data/casualties"},
+		"artifact":    {"bigquery://proj.releases.casualties"},
 	}, nil)
 	if rr.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
@@ -297,10 +299,14 @@ func TestCreateDeliverableFromForm(t *testing.T) {
 	if len(items) != 1 || items[0].ID != "WL-DEL-1" || items[0].Name != "Casualty datapackage" {
 		t.Fatalf("stored deliverables = %+v, want one WL-DEL-1", items)
 	}
+	if items[0].Artifact != "bigquery://proj.releases.casualties" {
+		t.Fatalf("stored artifact = %q, want the declared catalog address", items[0].Artifact)
+	}
 
 	body := doReq(t, h, "GET", "/projects/proj/deliverables", "", nil).Body.String()
 	bodyContains(t, body, "WL-DEL-1", "Casualty datapackage",
-		"https://example.org/data/casualties", "Declared")
+		"https://example.org/data/casualties", "Declared",
+		"bigquery://proj.releases.casualties")
 }
 
 // TestCreateDeliverableFromFormRejectsBadInput checks the two validation
@@ -348,6 +354,9 @@ func TestDeliverableFormOffersNoStateControl(t *testing.T) {
 		if strings.Contains(main, forbidden) {
 			t.Errorf("the deliverable form offers %s, which §3.2 makes a reported fact", forbidden)
 		}
+	}
+	if !strings.Contains(main, `name="artifact"`) {
+		t.Error("the deliverable form offers no artifact input (WL-254)")
 	}
 }
 
