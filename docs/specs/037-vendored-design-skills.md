@@ -480,8 +480,10 @@ that never hits is visible:
 
 - `worklode_doc_fetch_total{result}` — `modified`, `not_modified`, `not_found`.
 
-`internal/skillsync` gains one counter for §4's rollout, because an ambiguous
-bare name is a silent degradation otherwise:
+`internal/store` gains one counter for §4's rollout, because an ambiguous
+bare name is a silent degradation otherwise: bare-name lookups happen in
+`Store.ResolveSkillRefs`, and `internal/store` cannot import `internal/skillsync`,
+so the counter lives with the lookup rather than with the registry sync.
 
 - `worklode_skill_name_ambiguous_total` — bare-name lookups matching more than
   one qualified skill.
