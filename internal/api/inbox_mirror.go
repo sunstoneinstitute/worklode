@@ -30,27 +30,31 @@ import (
 // knows exactly which hosts it expects, so the allowlist can be this narrow.
 var mirrorHosts = []string{"githubusercontent.com", "github.com"}
 
-// mirrorTokenHosts are the hosts the installation's GitHub App token may be
-// sent to. §12 names githubusercontent.com; this is narrower on both sides of
-// that, deliberately.
+// mirrorTokenScopes are the destinations the installation's GitHub App token
+// may be sent to (021 §12). Narrower than mirrorHosts on both sides,
+// deliberately.
 //
-// Narrower than mirrorHosts: github.com is fetchable because a body can
+// Narrower than github.com: the host is fetchable because a body can
 // reference an asset there, but it also serves every ordinary page an issue
-// might link to, and a token attached to those is a credential handed to a URL
-// whoever filed the issue chose.
+// might link to, and a token attached to those is a credential handed to a
+// URL whoever filed the issue chose. Only the uploaded-attachment subtree —
+// github.com/user-attachments/, where GitHub has moved issue attachments
+// (WL-292) — carries the token, judged by safefetch on the decoded,
+// dot-segment-resolved path so an encoded `..` cannot walk it back out.
 //
 // Narrower than githubusercontent.com itself: objects.githubusercontent.com is
 // the S3-backed host GitHub redirects to with the signature in the query
 // string, and S3 rejects a request that carries both a query signature and an
 // Authorization header ("Only one auth mechanism allowed"). Scoping to the
-// whole parent host would turn a fetch that works today into a 400. The three
-// below are the hosts that actually serve an issue body's images, and
+// whole parent host would turn a fetch that works today into a 400. The hosts
+// below are the ones that actually serve an issue body's images, and
 // raw.githubusercontent.com on a private repo is the case that needs the token
 // at all. safefetch decides per redirect hop, so a hop onto objects. drops it.
-var mirrorTokenHosts = []string{
+var mirrorTokenScopes = []string{
 	"user-images.githubusercontent.com",
 	"private-user-images.githubusercontent.com",
 	"raw.githubusercontent.com",
+	"github.com/user-attachments/",
 }
 
 // mirrorTimeout bounds the whole pass, not one fetch. safefetch already caps
@@ -102,7 +106,7 @@ func (s *server) mirrorRemoteImages(ctx context.Context, repo, body string) stri
 	}
 	// Under the same budget as the fetches: minting is two GitHub round trips,
 	// and an unreachable GitHub must not extend the pass past mirrorTimeout.
-	f = f.WithBearer(mirrorTokenHosts, s.mirrorToken(ctx, repo))
+	f = f.WithBearer(mirrorTokenScopes, s.mirrorToken(ctx, repo))
 
 	mapping := map[string]string{}
 	stored, deduped := 0, 0
@@ -191,7 +195,7 @@ func (s *server) mirrorRemoteImages(ctx context.Context, repo, body string) stri
 // the repo must map to a project, and the token is only ever the token that
 // repo's installation would issue -- so this reaches nothing the caller's
 // project does not already cover. Widening the host scope is what would break
-// that; see mirrorTokenHosts.
+// that; see mirrorTokenScopes.
 func (s *server) mirrorToken(ctx context.Context, repo string) string {
 	if s.appAuth == nil || strings.TrimSpace(repo) == "" {
 		return ""
