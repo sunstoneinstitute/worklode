@@ -393,6 +393,14 @@ type server struct {
 	// as nothing.
 	imageMirrors *prometheus.CounterVec
 
+	// mirrorTokens counts the installation tokens a mirroring pass minted for
+	// the images it was about to fetch, by outcome; see inbox_mirror.go and
+	// observeMirrorToken. Counted apart from imageMirrors because one token
+	// covers a whole pass, and because a failure here is silent by design:
+	// mirroring falls back to unauthenticated fetches, so a private repo's
+	// images turn into fetch_failed with nothing on that series saying why.
+	mirrorTokens *prometheus.CounterVec
+
 	// taskBlobRefs counts the explicit half of a task's blob reference graph
 	// changed by the attach/detach endpoints, by action; see blobs.go and
 	// observeTaskBlobRef. The embedded half follows the task body via

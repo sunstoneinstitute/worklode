@@ -561,7 +561,7 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 	// provenance record disagree with tasks.body, and any replay of it would
 	// undo the mirroring. Deliberately outside recordEvent: this fetches over
 	// the network, and a slow origin must never hold a database lock.
-	req.Body = s.mirrorRemoteImages(r.Context(), req.Body)
+	req.Body = s.mirrorRemoteImages(r.Context(), req.Repo, req.Body)
 
 	var created *model.Task
 	err = s.recordEvent(r.Context(), "cli", "issue.promoted", req,
