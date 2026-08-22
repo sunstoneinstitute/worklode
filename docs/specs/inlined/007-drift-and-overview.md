@@ -151,6 +151,14 @@ components:
   *(006)*.
 - **Output graph:** `observed/pr-affects`.
 - Feeds unimplemented/drifted-spec queries (a Task that touched a component the Spec governs).
+- **The component's `rdf:type` is deriver 2's to assert, never this deriver's** (settled by
+  WL-273, on ADR 049's principle: a node's description lives in its home graph, and validation
+  runs over the union). This deriver emits the edge only, so for a repo whose manifest is
+  committed but whose CI never runs `lode derive`, the union carries a `wl:affects` edge whose
+  object has no type and `wl:affectsShape`'s `sh:class` fails — deliberately. That violation is
+  the wiring gap made visible: the fix is publishing `observed/repo-layout/…` for that repo
+  (§1.1), not a type stub here (two writers asserting one node's type, and the assertion of the
+  very fact validation exists to check) and not a weakened shape.
 
 ### 2.4 deploy / runtime — existing Worklode hooks
 
