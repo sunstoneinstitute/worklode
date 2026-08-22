@@ -14,6 +14,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -407,6 +409,35 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "project section page", ui.Placeholder(view))
 }
 
+// projectKeys reads the live project-key set that mdrender's autolinker needs
+// to tell a bare task id (WL-129) from an acronym that happens to share its
+// shape (UTF-8, SHA-256) — see internal/mdrender/autolink.go for why the
+// renderer cannot decide that on its own.
+//
+// Read per render rather than cached on the server. It is one indexed SELECT
+// over a table with a row per project, on pages that already run several
+// queries, and reading it live is what makes a newly created project's tasks
+// link on the next page view instead of after a restart. mdrender's cache key
+// carries the set's fingerprint, so the render cache stays correct across a
+// change without any invalidation here.
+//
+// A failed read degrades to the empty set — no task links — rather than
+// failing the page: the body still renders, and no link is better than a
+// wrong one. Logged rather than counted, because the request it degrades is
+// already counted by the HTTP metrics and this adds no outcome of its own.
+func (s *server) projectKeys(ctx context.Context) mdrender.ProjectKeys {
+	projects, err := s.st.ListProjects(ctx)
+	if err != nil {
+		s.log.Warn("rendering without task-id links: project keys unreadable", "err", err)
+		return mdrender.ProjectKeys{}
+	}
+	keys := make([]string, 0, len(projects))
+	for _, p := range projects {
+		keys = append(keys, p.Key)
+	}
+	return mdrender.NewProjectKeys(keys)
+}
+
 // taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
 // body (rendered as sanitised markdown — see taskView), attachments, lease
 // holder (if any), edges, and the full timeline — built from the same
@@ -443,7 +474,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		refs[i].URL = blobURL(refs[i].Hash, refs[i].Filename)
 	}
 
-	view := taskView(s.mdcache, t, blocked, entries, out, in)
+	view := taskView(s.mdcache, s.projectKeys(ctx), t, blocked, entries, out, in)
 	view.Attachments = refs
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
@@ -495,7 +526,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	view := docView(s.mdcache, detail)
+	view := docView(s.mdcache, s.projectKeys(r.Context()), detail)
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
 }
 

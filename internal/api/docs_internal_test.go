@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -69,7 +70,7 @@ func TestDocSelectorFromConflicts(t *testing.T) {
 // docView is where a regression would land — and a nil cache is the shape a
 // test-built *server carries.
 func TestDocViewRendersBody(t *testing.T) {
-	v := docView(nil, &model.DocDetail{
+	v := docView(nil, mdrender.ProjectKeys{}, &model.DocDetail{
 		Doc: model.Doc{
 			ID:   25,
 			Kind: "spec",

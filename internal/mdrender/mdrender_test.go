@@ -101,7 +101,7 @@ var hostileBodies = []struct {
 func TestHostileBodies(t *testing.T) {
 	for _, tc := range hostileBodies {
 		t.Run(tc.name, func(t *testing.T) {
-			got := string(mdrender.Body(tc.body))
+			got := string(mdrender.Body(mdrender.ProjectKeys{}, tc.body))
 			for _, bad := range tc.absent {
 				if strings.Contains(got, bad) {
 					t.Fatalf("output contains %q:\n%s", bad, got)
@@ -124,7 +124,7 @@ func TestPolicyIsNotUGCPolicy(t *testing.T) {
 		`<img src="/not-a-blob/x.png">`,
 		"![](https://example.com/tracker.png)",
 	} {
-		got := string(mdrender.Body(body))
+		got := string(mdrender.Body(mdrender.ProjectKeys{}, body))
 		// The element itself may remain when markdown gave it an alt
 		// attribute; what must never remain is a source to fetch.
 		if strings.Contains(got, "src=") || strings.Contains(got, "example.com") {
@@ -141,7 +141,7 @@ func TestSafeMarkupSurvives(t *testing.T) {
 		"<b>raw bold</b>\n\n" +
 		"[link](https://example.com)\n\n" +
 		"![shot](/blob/" + validHash + ")\n"
-	got := string(mdrender.Body(body))
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, body))
 	for _, want := range []string{
 		"<h1", "<strong>", "<code>", "<table", "<b>raw bold</b>",
 		`href="https://example.com"`, `rel="nofollow"`,
@@ -157,7 +157,7 @@ func TestSafeMarkupSurvives(t *testing.T) {
 // renders the GFM checkbox with empty attribute values, which a value pattern
 // written for the attribute names would reject.
 func TestTaskListCheckboxes(t *testing.T) {
-	got := string(mdrender.Body("- [ ] todo\n- [x] done\n"))
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, "- [ ] todo\n- [x] done\n"))
 	for _, want := range []string{`<input`, `type="checkbox"`, `disabled=""`, `checked=""`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
@@ -172,7 +172,7 @@ func TestTaskListCheckboxes(t *testing.T) {
 		`<input type="hidden" name="x" value="y">`,
 		`<input type="text">`,
 	} {
-		if out := string(mdrender.Body(body)); strings.Contains(out, "<input") {
+		if out := string(mdrender.Body(mdrender.ProjectKeys{}, body)); strings.Contains(out, "<input") {
 			t.Fatalf("non-checkbox input survived %q:\n%s", body, out)
 		}
 	}
@@ -181,7 +181,7 @@ func TestTaskListCheckboxes(t *testing.T) {
 func TestVideoAllowed(t *testing.T) {
 	body := `<video src="/blob/` + validHash + `" controls poster="/blob/` + validHash + `"></video>` +
 		"\n\n" + `<video controls><source src="/blob/` + validHash + `" type="video/mp4"></video>`
-	got := string(mdrender.Body(body))
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, body))
 	for _, want := range []string{"<video", "controls", `poster="/blob/`, "<source", `type="video/mp4"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
@@ -200,7 +200,7 @@ func TestOutputIsBalanced(t *testing.T) {
 		"</td></tr></table></p>",
 		"<blockquote>",
 	} {
-		got := string(mdrender.Body(body))
+		got := string(mdrender.Body(mdrender.ProjectKeys{}, body))
 		if strings.Count(got, "<div") != strings.Count(got, "</div") {
 			t.Fatalf("unbalanced div in output for %q:\n%s", body, got)
 		}
@@ -212,7 +212,7 @@ func TestOutputIsBalanced(t *testing.T) {
 		}
 	}
 	// An unclosed anchor would otherwise make the rest of the page one link.
-	got := string(mdrender.Body(`<a href="https://evil.example">`))
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, `<a href="https://evil.example">`))
 	if !strings.Contains(got, "</a>") {
 		t.Fatalf("unclosed anchor in output:\n%s", got)
 	}
@@ -226,7 +226,7 @@ func TestRoundTripDoesNotMutate(t *testing.T) {
 		`<p title='"><img src=x onerror=alert(1)>'>x</p>`,
 		"<p title=\"\xc0\xbcscript\xc0\xbe\">x</p>",
 	} {
-		got := string(mdrender.Body(body))
+		got := string(mdrender.Body(mdrender.ProjectKeys{}, body))
 		if strings.Contains(got, "onerror") || strings.Contains(got, "<img") {
 			t.Fatalf("attribute value became markup for %q:\n%s", body, got)
 		}
@@ -249,7 +249,7 @@ func TestLinkHrefSchemes(t *testing.T) {
 		{"uppercase scheme", `<a href="HTTPS://example.com/x">t</a>`, `href="https://example.com/x"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := string(mdrender.Body(tc.body)); !strings.Contains(got, tc.want) {
+			if got := string(mdrender.Body(mdrender.ProjectKeys{}, tc.body)); !strings.Contains(got, tc.want) {
 				t.Fatalf("output missing %q:\n%s", tc.want, got)
 			}
 		})
@@ -261,7 +261,7 @@ func TestLinkHrefSchemes(t *testing.T) {
 		{"ftp", `<a href="ftp://evil.example/x">t</a>`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := string(mdrender.Body(tc.body))
+			got := string(mdrender.Body(mdrender.ProjectKeys{}, tc.body))
 			if strings.Contains(got, "href=") || strings.Contains(got, "evil.example") {
 				t.Fatalf("off-origin href survived %q:\n%s", tc.body, got)
 			}
@@ -292,7 +292,7 @@ func TestFallbackEscapes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := string(mdrender.Body(tc.body))
+			got := string(mdrender.Body(mdrender.ProjectKeys{}, tc.body))
 			if !strings.Contains(got, escaped) {
 				t.Fatalf("fallback did not escape the source:\n%.500s", got)
 			}
@@ -326,7 +326,7 @@ func TestRenderedOutputIsBounded(t *testing.T) {
 	if len(body) > 64<<10 {
 		t.Fatalf("fixture is %d bytes, over maxBody — it would take the wrong fallback", len(body))
 	}
-	if got := len(mdrender.Body(body)); got > 4<<20 {
+	if got := len(mdrender.Body(mdrender.ProjectKeys{}, body)); got > 4<<20 {
 		t.Fatalf("rendered output is %d bytes", got)
 	}
 }
