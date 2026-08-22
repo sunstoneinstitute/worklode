@@ -236,10 +236,11 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 		form url.Values
 		want string
 	}{
-		{"unknown actor", url.Values{"actor": {"nosuch"}, "role": {"reviewer"}}, "No actor with that id"},
+		{"unknown actor", url.Values{"actor": {"nosuch"}, "role": {"reporter"}}, "No actor with that id"},
 		{"duplicate role", url.Values{"actor": {"ada"}, "role": {"editor"}}, "already holds role"},
-		{"second lead", url.Values{"actor": {"ada"}, "role": {"co-lead"}, "lead": {"1"}}, "already has a lead"},
-		{"no actor", url.Values{"actor": {"  "}, "role": {"reviewer"}}, "Actor is required."},
+		{"second lead", url.Values{"actor": {"ada"}, "role": {"science-lead"}, "lead": {"1"}}, "already has a lead"},
+		{"no actor", url.Values{"actor": {"  "}, "role": {"reporter"}}, "Actor is required."},
+		{"unknown role", url.Values{"actor": {"ada"}, "role": {"astronaut"}}, "Unknown role"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,10 +250,15 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 			}
 			body := rr.Body.String()
 			bodyContains(t, body, tc.want)
-			// The typed values come back in the form, and the roster is
-			// still rendered around it.
-			bodyContains(t, body, `value="`+strings.TrimSpace(tc.form.Get("actor"))+`"`,
-				`value="`+tc.form.Get("role")+`"`, "Ada Person")
+			// The typed values come back in the form — the actor input
+			// filled in, the submitted role's option selected where it is
+			// one the dropdown offers (WL-297) — and the roster is still
+			// rendered around it.
+			bodyContains(t, body, `value="`+strings.TrimSpace(tc.form.Get("actor"))+`"`, "Ada Person")
+			if role := tc.form.Get("role"); validCrewRole(role) &&
+				!strings.Contains(body, `<option value="`+role+`" selected`) {
+				t.Errorf("submitted role %q did not come back selected:\n%s", role, body)
+			}
 			if tc.form.Get("lead") != "" && !strings.Contains(body, `id="lead" name="lead" type="checkbox" value="1" checked`) {
 				t.Errorf("the lead checkbox did not come back checked:\n%s", body)
 			}
@@ -619,4 +625,15 @@ func TestRemoveCrewMemberFormCrossOrigin(t *testing.T) {
 	if len(crew) != 1 {
 		t.Fatalf("crew = %+v, want the member untouched", crew)
 	}
+}
+
+// validCrewRole mirrors the store vocabulary for the selection assertion
+// above; an out-of-vocabulary submission has no option to re-select.
+func validCrewRole(role string) bool {
+	for _, r := range store.ParticipantRoles() {
+		if r == role {
+			return true
+		}
+	}
+	return false
 }
