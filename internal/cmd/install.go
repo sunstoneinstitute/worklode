@@ -361,10 +361,14 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 	}
 
 	// The managed block is repo-level, not per-harness, so it is written once
-	// whatever the agent selection was (spec 008 §17.7). Outside a git repo
-	// there is no root to anchor it to; warn and carry on, the same posture
-	// the worktree config extension takes.
-	if root, ok := worktree.Root(dir); ok {
+	// whatever the agent selection was (spec 008 §17.7). It anchors at the
+	// *main* worktree, not dir's own root: AGENTS.md/CLAUDE.md are tracked
+	// files, so installing from a task worktree would otherwise dirty that
+	// task's branch with an unrelated change — a linked worktree inherits the
+	// main checkout's instruction files (WL-219). Outside a git repo there is
+	// no root to anchor to; warn and carry on, the same posture the worktree
+	// config extension takes.
+	if root, ok := worktree.MainRoot(dir); ok {
 		instr, err := ensureInstructions(root)
 		if err != nil {
 			return res, err
@@ -488,10 +492,12 @@ func uninstallHooks(dir string, targets hookTargets, scope string) (uninstallRes
 		}
 	}
 
-	// Mirrors installHooks. It has no *cobra.Command to warn on, and a repo
-	// root that has vanished has nothing to remove anyway, so this side skips
-	// silently: installing is where the user needs to hear about it.
-	if root, ok := worktree.Root(dir); ok {
+	// Mirrors installHooks, main worktree included: the block was written
+	// there, so that is where it has to be stripped from. It has no
+	// *cobra.Command to warn on, and a repo root that has vanished has nothing
+	// to remove anyway, so this side skips silently: installing is where the
+	// user needs to hear about it.
+	if root, ok := worktree.MainRoot(dir); ok {
 		instr, err := removeInstructions(root)
 		if err != nil {
 			return res, err

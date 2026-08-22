@@ -137,6 +137,53 @@ func Root(dir string) (string, bool) {
 	return gitexec.Line(dir, "rev-parse", "--show-toplevel")
 }
 
+// MainRoot walks up from dir to the root of the *main* worktree — the
+// checkout that owns the shared git directory — rather than to dir's own
+// worktree root. In the main checkout the two are the same; inside a linked
+// worktree (`.worktrees/<id>-<slug>/`) they differ, and it is the main
+// checkout that answers for anything repo-wide rather than workspace-local.
+//
+// This is the instruction-file analogue of what githooks.Dir already does for
+// hooks: `rev-parse --git-path hooks` resolves to the shared hooks directory
+// common to every worktree, so hooks installed from a task worktree land once,
+// for the whole repo. Repo-root files (AGENTS.md, CLAUDE.md) are tracked
+// content, so anchoring them at a linked worktree's own root would dirty that
+// worktree's branch with a change the task never asked for (WL-219).
+//
+// The main root is derived from the common git dir — <main>/.git — one level
+// up, and then verified: the candidate must itself be a worktree root whose
+// own git dir *is* that common dir. A layout where that does not hold (a bare
+// clone, `--separate-git-dir`) falls back to dir's own root, which is the
+// conservative answer rather than a path outside the repo. ok=false only
+// outside a repo, matching Root.
+func MainRoot(dir string) (string, bool) {
+	root, ok := Root(dir)
+	if !ok {
+		return "", false
+	}
+	common, ok := gitexec.Line(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if !ok {
+		return root, true
+	}
+	gitDir, ok := gitexec.Line(dir, "rev-parse", "--absolute-git-dir")
+	if !ok {
+		return root, true
+	}
+	if filepath.Clean(common) == filepath.Clean(gitDir) {
+		return root, true // dir is the main worktree
+	}
+	candidate := filepath.Dir(filepath.Clean(common))
+	mainRoot, ok := Root(candidate)
+	if !ok {
+		return root, true
+	}
+	mainGitDir, ok := gitexec.Line(mainRoot, "rev-parse", "--absolute-git-dir")
+	if !ok || filepath.Clean(mainGitDir) != filepath.Clean(common) {
+		return root, true
+	}
+	return mainRoot, true
+}
+
 // Identity returns "<hostname>:<abs path>" — the lease worktree identity.
 // It resolves path to its git worktree root first, so any directory inside a
 // worktree yields the same stable identity. Fails outside a git worktree.
