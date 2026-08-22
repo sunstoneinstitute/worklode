@@ -61,7 +61,11 @@ templ NewTask(v NewTaskView) {
 			</p>
 			<p class="fieldrow">
 				<label for="body">Body</label>
-				<textarea id="body" name="body" rows="8" placeholder="What has to be true when this is done?">{ v.Body }</textarea>
+				@MarkdownInput(MarkdownInputView{
+					ID: "body", Name: "body", Rows: 8,
+					Placeholder: "What has to be true when this is done?",
+					Value:       v.Body, Dictation: v.Form.Dictation,
+				})
 			</p>
 			@selectField("priority", "Priority", v.Priorities)
 			@selectField("kind", "Kind", v.Kinds)
@@ -89,7 +93,11 @@ templ NewDeliverable(v NewDeliverableView) {
 			</p>
 			<p class="fieldrow">
 				<label for="description">Description</label>
-				<textarea id="description" name="description" rows="6" placeholder="What is shipped, and how would someone recognise it?">{ v.Description }</textarea>
+				@MarkdownInput(MarkdownInputView{
+					ID: "description", Name: "description", Rows: 6,
+					Placeholder: "What is shipped, and how would someone recognise it?",
+					Value:       v.Description, Dictation: v.Form.Dictation,
+				})
 			</p>
 			<p class="fieldrow">
 				<label for="url">URL <span class="muted">(optional)</span></label>

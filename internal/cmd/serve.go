@@ -220,6 +220,8 @@ func runServe(cmd *cobra.Command, dsn, listen, adminListen string) error {
 		EmbeddingURL:         os.Getenv("LODE_EMBEDDING_URL"),
 		EmbeddingModel:       os.Getenv("LODE_EMBEDDING_MODEL"),
 		EmbeddingAPIKey:      os.Getenv("LODE_EMBEDDING_API_KEY"),
+		SpeechToTextAPIKey:   os.Getenv("LODE_ELEVENLABS_API_KEY"),
+		SpeechToTextURL:      os.Getenv("LODE_ELEVENLABS_URL"),
 		SkillScoreFloor:      os.Getenv("LODE_SKILL_SCORE_FLOOR"),
 		BlobEndpoint:         os.Getenv("LODE_BLOB_ENDPOINT"),
 		BlobBucket:           os.Getenv("LODE_BLOB_BUCKET"),

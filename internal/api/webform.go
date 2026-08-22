@@ -182,7 +182,7 @@ func (s *server) newTaskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	values := taskFormValues{Priority: "medium", Kind: "feature"}
-	s.renderWeb(w, r, http.StatusOK, "new task page", ui.NewTask(newTaskView(project, values, "")))
+	s.renderWeb(w, r, http.StatusOK, "new task page", ui.NewTask(newTaskView(project, values, "", s.dictationEnabled())))
 }
 
 // createTaskFromForm handles POST /projects/{id}/tasks: create the task and
@@ -206,7 +206,7 @@ func (s *server) createTaskFromForm(w http.ResponseWriter, r *http.Request) {
 	if msg := validateTaskForm(&values); msg != "" {
 		s.observeFormSubmission("task", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new task page",
-			ui.NewTask(newTaskView(project, values, msg)))
+			ui.NewTask(newTaskView(project, values, msg, s.dictationEnabled())))
 		return
 	}
 
@@ -320,7 +320,7 @@ func (s *server) newDeliverablePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderWeb(w, r, http.StatusOK, "new deliverable page",
-		ui.NewDeliverable(newDeliverableView(project, deliverableFormValues{}, "")))
+		ui.NewDeliverable(newDeliverableView(project, deliverableFormValues{}, "", s.dictationEnabled())))
 }
 
 // createDeliverableFromForm handles POST /projects/{id}/deliverables: declare
@@ -342,7 +342,7 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",
-			ui.NewDeliverable(newDeliverableView(project, values, formMessage(msg))))
+			ui.NewDeliverable(newDeliverableView(project, values, formMessage(msg), s.dictationEnabled())))
 		return
 	}
 
