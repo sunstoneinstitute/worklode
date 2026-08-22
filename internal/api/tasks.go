@@ -238,7 +238,7 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 	}
 	resp.Blobs = make([]model.TaskBlob, 0, len(blobs))
 	for _, b := range blobs {
-		b.URL = "/blob/" + b.Hash
+		b.URL = blobURL(b.Hash, b.Filename)
 		resp.Blobs = append(resp.Blobs, b)
 	}
 

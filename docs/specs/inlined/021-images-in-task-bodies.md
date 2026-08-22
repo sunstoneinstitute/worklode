@@ -126,8 +126,31 @@ not ours:
 |---|---|
 | `Content-Type` | Set as object metadata at upload, and overridden per-request via `response-content-type` from `blobs.media_type` |
 | `Content-Length` | The object store's own, always correct |
-| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, bare `attachment` for everything else. The `filename="…"` half is not implemented: `task_blobs.filename` is per-reference and `/blob/{hash}` is per-blob, so the route has no single name to serve a shared blob under |
+| `Content-Disposition` | `response-content-disposition` — `inline` for embeddable types, `attachment` for everything else, plus `filename="…"` when the reference names one (below) |
 | `Cache-Control` | `response-cache-control: private, max-age=31536000, immutable` — safe because the URL is content-addressed |
+
+**The name travels with the reference, not with the blob.** `task_blobs.filename` is
+per-reference and `/blob/{hash}` is per-blob, so one blob two tasks attached under different
+names has no single name the route could look up. Every surface that mints a reference — the
+task detail response, the task blob list, the brief, the cockpit's attachments card — therefore
+appends the reference's own name as a query parameter, `/blob/{hash}?filename=crash.log`, and
+the route echoes it into `response-content-disposition`. A reference with no name (every
+embedded image) keeps the bare URL and the bare token. Body text is never rewritten this way:
+an embedded `](/blob/<hash>)` must keep matching the anchored grammar that pins its blob
+against GC (§11).
+
+The name is caller-controlled — it arrives on a URL anyone may craft — so it is encoded per RFC
+6266 (`filename="…"` plus the percent-encoded `filename*` for anything non-ASCII) and reduced
+first: control characters stripped, last path segment only, invalid UTF-8 and anything over 200
+bytes refused. The parameter is deliberately **not** part of anything signed. On the
+object-storage leg it cannot be tampered with anyway — SigV4 signs the presigned URL's whole
+query string, `response-content-disposition` included. On our own leg it is unsigned, so a
+caller who may already read a blob may choose what their own browser saves it as; that grants
+no access, since the bytes, the media type and the inline/attachment token are all decided
+server-side from `blobs`, and only the token carries §6's weight. The residual risk — a
+hand-crafted link that saves a known blob under a misleading name — is strictly weaker than the
+same actor hosting the file themselves, and signing would not remove it: whoever can mint a
+link can mint one under the name they wanted.
 
 Setting `Content-Type` at PUT time *and* overriding on presign is deliberate belt-and-braces:
 the override is what actually reaches the browser, and the stored `Content-Type` keeps the
@@ -285,7 +308,7 @@ and the presigned URL carries, via `response-*` overrides:
 
 ```
 Content-Type: <sniffed media type>
-Content-Disposition: inline | attachment      (bare; see §2 on the filename)
+Content-Disposition: inline | attachment      (plus filename="…"; see §2)
 ```
 
 **`Content-Disposition` carries the security weight on its own**, and that is the whole of the
@@ -298,6 +321,10 @@ a real response header takes a gateway-side `rgw_extended_http_attrs` mapping th
 this deployment configures. An earlier draft of this section proposed setting both headers as
 object metadata; it could not have worked against RGW, and uploads now send no user metadata at
 all.
+
+The `filename` half §2 adds changes none of that: it is cosmetic, it never moves the
+inline/attachment token, and a name a caller invents cannot make bytes executable that the
+token already downloads rather than renders.
 
 So the controls that do hold are the ones §5 already relies on: every non-embeddable type is
 served `attachment`, which downloads rather than executes, and the embeddable set is a fixed

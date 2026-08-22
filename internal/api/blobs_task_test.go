@@ -121,7 +121,9 @@ func TestTaskBlobAttachDetach(t *testing.T) {
 	if len(got.Blobs) != 1 || !got.Blobs[0].Attached || got.Blobs[0].Filename != "crash.log" {
 		t.Fatalf("blobs = %+v", got.Blobs)
 	}
-	if got.Blobs[0].URL != "/blob/"+blob.Hash {
+	// The reference addresses the blob by hash and carries its own name, so
+	// the download lands as crash.log rather than as 64 hex digits (021 §2).
+	if got.Blobs[0].URL != "/blob/"+blob.Hash+"?filename=crash.log" {
 		t.Fatalf("url = %q", got.Blobs[0].URL)
 	}
 

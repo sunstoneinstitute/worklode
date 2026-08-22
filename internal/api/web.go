@@ -440,7 +440,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for i := range refs {
-		refs[i].URL = "/blob/" + refs[i].Hash
+		refs[i].URL = blobURL(refs[i].Hash, refs[i].Filename)
 	}
 
 	view := taskView(s.mdcache, t, blocked, entries, out, in)
