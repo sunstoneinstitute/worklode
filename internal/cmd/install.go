@@ -59,8 +59,10 @@ func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().String("scope", harness.ScopeLocal,
 		"whether to write each harness's personal config or its committed one: local or "+
 			"project (Claude Code settings.local.json vs settings.json, Copilot "+
-			"~/.copilot/hooks vs .github/hooks); codex and amp have only a user-level "+
-			"config and ignore this")
+			"~/.copilot/hooks vs .github/hooks); amp has only a user-level config and "+
+			"ignores this; codex also ignores it, deliberately — its project-level "+
+			"hooks.json is silently ignored inside a git worktree (openai/codex#27133), "+
+			"where every Worklode task runs")
 }
 
 // resolveHookTargets turns the parsed flags into the set of integrations to act
