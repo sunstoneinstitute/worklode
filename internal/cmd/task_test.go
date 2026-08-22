@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -61,6 +63,31 @@ func taskBody(t *testing.T, id string) string {
 	t.Helper()
 	_, body := taskTitleBody(t, id)
 	return body
+}
+
+func TestTaskShowCompletionListsCurrentProjectTaskIDs(t *testing.T) {
+	setupRepoConfig(t, "proj")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("project"); got != "proj" {
+			http.Error(w, "project = "+got, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"tasks":[{"id":"PROJ-1"},{"id":"PROJ-2"}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_0000000000000000000000000000000000000000")
+
+	out, err := runLode(t, cobra.ShellCompRequestCmd, "task", "show", "")
+	if err != nil {
+		t.Fatalf("complete task show: %v\noutput: %s", err, out)
+	}
+	for _, id := range []string{"PROJ-1", "PROJ-2"} {
+		if !strings.Contains(out, id+"\n") {
+			t.Errorf("completion output %q does not contain %s", out, id)
+		}
+	}
 }
 
 func TestTaskEditTitle(t *testing.T) {
