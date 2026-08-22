@@ -126,11 +126,6 @@ func lastIndexOf(segs, sub []string) int {
 	return -1
 }
 
-// BranchName is the client-side fallback branch for a task, used only when a
-// server response carries no branch. The server is the authority: it renders
-// LODE_BRANCH_TEMPLATE and every response carries the result (spec 008 §3).
-func BranchName(taskID, slug string) string { return taskID + "-" + slug }
-
 // Root walks up from dir to the enclosing git worktree root
 // (git -C dir rev-parse --show-toplevel); ok=false outside a repo.
 func Root(dir string) (string, bool) {

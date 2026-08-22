@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -158,23 +159,6 @@ func setupProject(t *testing.T, c *cli.Client) {
 
 // --- lode next --------------------------------------------------------
 
-func TestSlugFromBranch(t *testing.T) {
-	cases := []struct{ branch, id, want string }{
-		{"lode/WL-7-fix-thing", "WL-7", "fix-thing"},
-		{"team/WL-7-fix-thing", "WL-7", "fix-thing"},
-		{"wl/WL-7-fix-thing", "WL-7", "fix-thing"},
-		// A slug repeating the task id must stay intact: the prefix-adjacent
-		// occurrence is the separator, not the last one.
-		{"lode/WL-7-fix-WL-7-bug", "WL-7", "fix-WL-7-bug"},
-		{"main", "WL-7", "main"}, // no id: caller keeps the branch as-is
-	}
-	for _, c := range cases {
-		if got := slugFromBranch(c.branch, c.id); got != c.want {
-			t.Errorf("slugFromBranch(%q, %q) = %q, want %q", c.branch, c.id, got, c.want)
-		}
-	}
-}
-
 // testLayout is the default (.worktrees) layout, for tests that need to
 // resolve a worktree path the way the commands under test do.
 func testLayout(t *testing.T) worktree.Layout {
@@ -277,6 +261,97 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	}
 	if _, statErr := os.Stat(detail.Lease.Worktree); statErr == nil {
 		t.Fatalf("lease.Worktree = %q looks like a bare filesystem path, want <hostname>:<path>", detail.Lease.Worktree)
+	}
+}
+
+// emptyBranchServer wraps a test server's handler so the claim endpoint's
+// response always reports an empty branch, regardless of what the store
+// actually rendered — the only way to exercise the "the server returned no
+// branch" guard without a server that can genuinely misbehave that way.
+func emptyBranchServer(t *testing.T) (*store.Store, *cli.Client) {
+	t.Helper()
+	return testServer(t, api.Config{}, func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.HasSuffix(r.URL.Path, "/claim") && !strings.HasSuffix(r.URL.Path, "/claim-next") {
+				h.ServeHTTP(w, r)
+				return
+			}
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, r)
+			body := rec.Body.Bytes()
+			var generic map[string]json.RawMessage
+			if err := json.Unmarshal(body, &generic); err == nil {
+				if _, ok := generic["branch"]; ok {
+					generic["branch"] = json.RawMessage(`""`)
+				}
+				if raw, ok := generic["task"]; ok {
+					var task map[string]json.RawMessage
+					if err := json.Unmarshal(raw, &task); err == nil {
+						if _, ok := task["branch"]; ok {
+							task["branch"] = json.RawMessage(`""`)
+							if patched, err := json.Marshal(task); err == nil {
+								generic["task"] = patched
+							}
+						}
+					}
+				}
+				if patched, err := json.Marshal(generic); err == nil {
+					body = patched
+				}
+			}
+			for k, v := range rec.Header() {
+				if k == "Content-Length" {
+					continue
+				}
+				w.Header()[k] = v
+			}
+			w.Header().Set("Content-Length", fmt.Sprint(len(body)))
+			w.WriteHeader(rec.Code)
+			w.Write(body) //nolint:errcheck
+		})
+	})
+}
+
+// TestNextErrorsWhenServerReturnsEmptyBranch pins the fix for WL-179: `lode
+// next` must trust resp.Branch unconditionally and fail loudly when it is
+// empty, rather than deriving a branch client-side that the server (with a
+// different LODE_BRANCH_TEMPLATE) might disagree with. Exercises both the
+// by-id claim path and the claim-next path.
+func TestNextErrorsWhenServerReturnsEmptyBranch(t *testing.T) {
+	for _, mode := range []string{"by-id", "claim-next"} {
+		t.Run(mode, func(t *testing.T) {
+			_, c := emptyBranchServer(t)
+			setupProject(t, c)
+			task := createTestTask(t, c, "Empty branch "+mode)
+
+			root := initGitRepo(t)
+			t.Chdir(root)
+
+			var out string
+			var err error
+			if mode == "by-id" {
+				out, err = runLode(t, "next", task.ID)
+			} else {
+				out, err = runLode(t, "next")
+			}
+			if err == nil {
+				t.Fatalf("lode next: err = nil, want error (output: %s)", out)
+			}
+			if !strings.Contains(err.Error(), "no branch") {
+				t.Fatalf("error = %q, want it to mention the missing branch", err)
+			}
+			if dirExists(filepath.Join(root, worktree.DefaultBase)) {
+				t.Fatalf("worktree base created despite the empty-branch error")
+			}
+
+			detail, _, getErr := c.GetTask(context.Background(), task.ID)
+			if getErr != nil {
+				t.Fatalf("get task: %v", getErr)
+			}
+			if detail.Lease != nil {
+				t.Fatalf("task lease = %+v, want the claim rolled back", detail.Lease)
+			}
+		})
 	}
 }
 
