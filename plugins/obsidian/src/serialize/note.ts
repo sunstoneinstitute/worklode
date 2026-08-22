@@ -21,8 +21,9 @@ export interface Note {
  *  covers the backbone source, not how it was laid out — so applyMirror can
  *  tell a note an older plugin wrote from one that is already current.
  *
- *  2: a body that already opens with its own H1 no longer gets one injected. */
-export const SERIALIZER_VERSION = 2;
+ *  2: a body that already opens with its own H1 no longer gets one injected.
+ *  3: a doc note's wl block carries the document's outgoing `edges`. */
+export const SERIALIZER_VERSION = 3;
 
 /** The reserved frontmatter block. Everything the backbone owns lives here. */
 export interface WlBlock {
@@ -380,6 +381,65 @@ export function docEtag(d: Doc): Promise<string> {
   return computeEtag(docIdentity(d));
 }
 
+/** The document's *outgoing* edges (025 §14), grouped by relation and spelled
+ *  as links -- the doc note's counterpart to a task note's `blocks` /
+ *  `blocked_by`, so Obsidian's graph and backlinks see the corpus the backbone
+ *  actually stores rather than only what the body's prose links to. Returns
+ *  undefined when there are none, the way `number` and `generated_by_task` are
+ *  omitted rather than emitted empty.
+ *
+ *  A resolved far end is a project-qualified `docWikilink`. That is what
+ *  `to_project` is for: a slug is unique only within a project and an edge can
+ *  cross one (the 025 §14.3 shorthand resolves on a project key), so assuming
+ *  the near end's project would render a plausible link to the wrong document.
+ *  An unresolved reference (`to_external`, no row to point at) is emitted as
+ *  its verbatim text, not as a link that would resolve to nothing.
+ *
+ *  Anchors are dropped: `#sec-5` is a `{#sec-N}` attribute, not a heading
+ *  Obsidian can jump to, so linking the document is the honest target and two
+ *  edges of one type into one document collapse to a single entry.
+ *
+ *  Only outgoing. `edges_in` is deliberately not rendered: an inbound edge is
+ *  created by *another* document's write and moves neither this document's
+ *  `version` nor its `updated_at`, so `docEtag` -- computed from the list row,
+ *  which is all a sync holds before it decides to fetch -- cannot see it
+ *  change, and a rendered `edges_in` would sit stale until something else
+ *  about this document moved -- which for a settled document is never.
+ *  Outgoing edges are rebuilt from this document's own frontmatter when its
+ *  body changes, which is exactly when the etag moves, so they refresh with
+ *  the note that carries them. (One narrow exception: creating a document
+ *  re-points references that were stored unresolved because it did not exist
+ *  yet, which turns a `to_external` entry here into a link without touching
+ *  this document's row. That resolves on the document's next write, and costs
+ *  a stale line of frontmatter rather than a whole missing relation.)
+ *  Surfacing `edges_in` needs an inbound-edge revision on the list route
+ *  first (docs/follow-ups.md). */
+function docEdgeLinks(d: Doc): Record<string, string[]> | undefined {
+  const edges = (d as Doc & Partial<DocDetail>).edges;
+  if (!edges || edges.length === 0) return undefined;
+
+  const byType = new Map<string, Set<string>>();
+  for (const e of edges) {
+    const target =
+      e.to_doc !== 0 && e.to_project !== "" && e.to_slug !== ""
+        ? docWikilink(e.to_project, e.to_slug)
+        : e.to_external;
+    if (target === "") continue;
+    const links = byType.get(e.type) ?? new Set<string>();
+    links.add(target);
+    byType.set(e.type, links);
+  }
+  if (byType.size === 0) return undefined;
+
+  // Sorted both ways, so one document's edges render identically on every
+  // sync and a note is rewritten only when the backbone moved.
+  const out: Record<string, string[]> = {};
+  for (const type of sortIds([...byType.keys()])) {
+    out[type] = sortIds([...byType.get(type)!]);
+  }
+  return out;
+}
+
 /** Renders a stored document: its own frontmatter (lifted out of the body,
  *  see splitDocFrontmatter) verbatim, plus the reserved `wl` block beside it.
  *  The document's own frontmatter is never edited, only accompanied — see
@@ -391,6 +451,7 @@ export async function docToNote(d: Doc): Promise<Note> {
   const hasWlCollision = Object.prototype.hasOwnProperty.call(source, "wl");
 
   const etag = await docEtag(d);
+  const edges = docEdgeLinks(d);
   const body = split.body;
   // The one case this bit exists for: a spec, ADR or plan body opens with its
   // own "# <Title>", so injecting one would render the note with two.
@@ -415,6 +476,11 @@ export async function docToNote(d: Doc): Promise<Note> {
     // like `number` above: most documents have no authoring task, and a key
     // whose value is always "" is noise in every note's frontmatter.
     ...(d.generated_by_task ? { generated_by_task: d.generated_by_task } : {}),
+    // Outgoing edges only, and only when a fetched DocDetail brought them --
+    // see docEdgeLinks. A list row carries none, and the notes rendered from
+    // one are never written (hydrateDocBodies), so no note loses its edges to
+    // a blank-bodied render.
+    ...(edges ? { edges } : {}),
     etag,
   };
 

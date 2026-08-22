@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { stringify as stringifyYaml } from "yaml";
 import {
+  SERIALIZER_VERSION,
   computeEtag,
   conflictToNote,
   docEtag,
@@ -10,7 +11,7 @@ import {
   projectToNote,
   taskToNote,
 } from "../src/serialize/note";
-import type { Doc, DocDetail, Project, TaskListDetail } from "../src/api/types";
+import type { Doc, DocDetail, DocEdge, Project, TaskListDetail } from "../src/api/types";
 
 function fixtureTask(overrides: Partial<TaskListDetail> = {}): TaskListDetail {
   return {
@@ -75,6 +76,30 @@ function fixtureDoc(overrides: Partial<Doc> = {}): Doc {
   };
 }
 
+/** One outgoing edge with every field the wire carries, so a test states only
+ *  the part it is about. Defaults to an unresolved reference — every `to_*`
+ *  field empty is exactly what a `to_external` row looks like. */
+function fixtureEdge(overrides: Partial<DocEdge> = {}): DocEdge {
+  return {
+    type: "covers",
+    from_anchor: "",
+    to_doc: 0,
+    to_anchor: "",
+    to_external: "",
+    to_project: "",
+    to_slug: "",
+    to_kind: "",
+    to_number: 0,
+    ...overrides,
+  };
+}
+
+/** A fetched document: the list row plus the rows only GET
+ *  /api/v1/docs/{id} serves. */
+function fixtureDetail(overrides: Partial<DocDetail> = {}): DocDetail {
+  return { ...fixtureDoc(), sections: [], edges: [], edges_in: [], revision: null, ...overrides };
+}
+
 function fixtureProject(overrides: Partial<Project> = {}): Project {
   return {
     id: "worklode",
@@ -99,7 +124,7 @@ aliases:
   - Fix the thing
 wl:
   type: task
-  serializer: 2
+  serializer: ${SERIALIZER_VERSION}
   aliases_added: true
   heading_added: true
   id: WL-42
@@ -163,7 +188,7 @@ body markdown verbatim`;
 
     expect(parsed.wl).toEqual({
       type: "task",
-      serializer: 2,
+      serializer: SERIALIZER_VERSION,
       aliases_added: true,
       heading_added: true,
       id: "WL-42",
@@ -358,26 +383,20 @@ describe("docToNote", () => {
   // ... and the extra rows a fetched DocDetail carries stay out of it for the
   // same reason: a list row can never produce them.
   it("ignores the rows only a fetched DocDetail carries", async () => {
-    const detail: DocDetail = {
-      ...fixtureDoc(),
+    const detail = fixtureDetail({
       sections: [
         { anchor: "sec-1", number: "1", heading: "Purpose", depth: 2, position: 0, last_revised_in: 3, published: true },
       ],
       edges: [
-        {
-          type: "covers",
-          from_anchor: "",
+        fixtureEdge({
           to_doc: 4,
-          to_anchor: "",
-          to_external: "",
+          to_project: "worklode",
           to_slug: "execution-backbone",
           to_kind: "spec",
           to_number: 4,
-        },
+        }),
       ],
-      edges_in: [],
-      revision: null,
-    };
+    });
 
     expect(await docEtag(detail)).toBe(await docEtag(fixtureDoc()));
   });
@@ -423,6 +442,121 @@ describe("docToNote", () => {
     expect(parseNote((await docToNote(spec)).content).wl.number).toBe(25);
     expect(parseNote((await docToNote(plan)).content).wl.number).toBeUndefined();
     expect((await docToNote(plan)).content).not.toMatch(/^\s*number:/m);
+  });
+});
+
+// The doc note's counterpart to a task note's blocks/blocked_by: the typed
+// links 025 §14 stores, rendered where Obsidian's graph and backlinks can see
+// them.
+describe("a doc note's edges", () => {
+  const edgesOf = async (d: Doc): Promise<Record<string, string[]> | undefined> =>
+    parseNote((await docToNote(d)).content).wl.edges as Record<string, string[]> | undefined;
+
+  it("groups outgoing edges by relation and links each far end", async () => {
+    const d = fixtureDetail({
+      edges: [
+        fixtureEdge({ type: "covers", to_doc: 4, to_project: "worklode", to_slug: "004-execution-backbone" }),
+        fixtureEdge({ type: "amends", to_doc: 9, to_project: "worklode", to_slug: "009-amender" }),
+      ],
+    });
+
+    expect(await edgesOf(d)).toEqual({
+      amends: ["[[worklode/docs/009-amender|009-amender]]"],
+      covers: ["[[worklode/docs/004-execution-backbone|004-execution-backbone]]"],
+    });
+  });
+
+  // The reason to_project exists (WL-284): the 025 §14.3 shorthand resolves on
+  // a project key, so an edge can leave its project. Building the link from
+  // the near end's project would point at a document that may not exist, and
+  // when it does exist is the wrong one.
+  it("qualifies a cross-project edge with the far end's own project", async () => {
+    const d = fixtureDetail({
+      project: "worklode",
+      edges: [fixtureEdge({ type: "requires", to_doc: 7, to_project: "otherproj", to_slug: "007-far-spec" })],
+    });
+
+    expect(await edgesOf(d)).toEqual({ requires: ["[[otherproj/docs/007-far-spec|007-far-spec]]"] });
+  });
+
+  // An unresolved reference names no row, so there is nothing to link to; the
+  // verbatim text is still the most a reader can be told.
+  it("emits an unresolved reference as its own text, not as a broken link", async () => {
+    const d = fixtureDetail({
+      edges: [fixtureEdge({ type: "requires", to_external: "999-nowhere.md#sec-1" })],
+    });
+
+    expect(await edgesOf(d)).toEqual({ requires: ["999-nowhere.md#sec-1"] });
+  });
+
+  // Two covers edges into one document differ only by the anchor they land on,
+  // and `#sec-5` is a {#sec-N} attribute rather than a heading Obsidian can
+  // jump to -- so both render as one link to the document.
+  it("collapses edges that differ only by anchor", async () => {
+    const far = { to_doc: 4, to_project: "worklode", to_slug: "004-execution-backbone" };
+    const d = fixtureDetail({
+      edges: [
+        fixtureEdge({ type: "covers", to_anchor: "sec-5", ...far }),
+        fixtureEdge({ type: "covers", to_anchor: "sec-6", ...far }),
+      ],
+    });
+
+    expect(await edgesOf(d)).toEqual({
+      covers: ["[[worklode/docs/004-execution-backbone|004-execution-backbone]]"],
+    });
+  });
+
+  // Stable output, so an unchanged document renders byte-identically and the
+  // note is rewritten only when the backbone moved.
+  it("orders relations and their targets deterministically", async () => {
+    const edges = [
+      fixtureEdge({ type: "requires", to_doc: 9, to_project: "worklode", to_slug: "zeta" }),
+      fixtureEdge({ type: "requires", to_doc: 8, to_project: "worklode", to_slug: "alpha" }),
+      fixtureEdge({ type: "covers", to_doc: 4, to_project: "worklode", to_slug: "004-spec" }),
+    ];
+    const forward = await docToNote(fixtureDetail({ edges }));
+    const reversed = await docToNote(fixtureDetail({ edges: [...edges].reverse() }));
+
+    expect(forward.content).toBe(reversed.content);
+    expect(Object.keys((await edgesOf(fixtureDetail({ edges })))!)).toEqual(["covers", "requires"]);
+    expect((await edgesOf(fixtureDetail({ edges })))!.requires).toEqual([
+      "[[worklode/docs/alpha|alpha]]",
+      "[[worklode/docs/zeta|zeta]]",
+    ]);
+  });
+
+  // Like `number` and `generated_by_task`: a key whose value is always empty
+  // is noise in every note's frontmatter.
+  it("omits the key entirely when the document has no outgoing edges", async () => {
+    const note = await docToNote(fixtureDetail({ edges: [] }));
+
+    expect(parseNote(note.content).wl.edges).toBeUndefined();
+    expect(note.content).not.toMatch(/^\s*edges:/m);
+  });
+
+  // A list row carries no edges at all, and the notes rendered from one are
+  // never written (hydrateDocBodies) -- so a blank-bodied render must not look
+  // like a document that lost its edges.
+  it("omits the key for a list row, which carries no edges", async () => {
+    expect(parseNote((await docToNote(fixtureDoc())).content).wl.edges).toBeUndefined();
+  });
+
+  // Deliberate, and the one thing this pass does not do: an inbound edge is
+  // written by another document and moves neither this document's version nor
+  // its updated_at, so docEtag cannot see it change and a rendered edges_in
+  // would sit stale indefinitely.
+  it("never renders edges_in", async () => {
+    const note = await docToNote(
+      fixtureDetail({
+        edges_in: [
+          fixtureEdge({ type: "isCoveredBy", to_doc: 26, to_project: "worklode", to_slug: "025-plan-1" }),
+        ],
+      }),
+    );
+
+    expect(parseNote(note.content).wl.edges).toBeUndefined();
+    expect(note.content).not.toContain("edges_in");
+    expect(note.content).not.toContain("025-plan-1");
   });
 });
 
