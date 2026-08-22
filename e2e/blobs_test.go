@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -270,7 +271,8 @@ func TestBlobLifecycle(t *testing.T) {
 	}
 
 	// 5. The rendered page: images become real <img> elements pointing at the
-	// permanent /blob/ reference, and the attachment is listed for download.
+	// permanent /blob/ reference, and the attachment is listed for download
+	// under the name it was attached with (021 §2).
 	code, page := getPage(t, srv.URL+"/tasks/"+task.ID)
 	if code != http.StatusOK {
 		t.Fatalf("task page: %d", code)
@@ -279,7 +281,7 @@ func TestBlobLifecycle(t *testing.T) {
 		`<img src="/blob/` + upA.Hash + `"`,
 		`<img src="/blob/` + upB.Hash + `"`,
 		">Attachments<",
-		`href="/blob/` + upLog.Hash + `"`,
+		`href="/blob/` + upLog.Hash + `?filename=crash.log"`,
 		"crash.log",
 	} {
 		if !strings.Contains(page, want) {
@@ -297,8 +299,14 @@ func TestBlobLifecycle(t *testing.T) {
 		t.Fatalf("brief lists %d blobs, want 3: %+v", len(brief.Blobs), brief.Blobs)
 	}
 	for _, b := range brief.Blobs {
-		if b.URL != blobPublicURL+"/blob/"+b.Hash {
-			t.Errorf("brief blob %s: url = %q, want absolute", b.Hash, b.URL)
+		// Absolute, and — for the attachment, which is the only reference
+		// with a name — carrying the name it downloads under (021 §2).
+		wantURL := blobPublicURL + "/blob/" + b.Hash
+		if b.Filename != "" {
+			wantURL += "?filename=" + url.QueryEscape(b.Filename)
+		}
+		if b.URL != wantURL {
+			t.Errorf("brief blob %s: url = %q, want %q", b.Hash, b.URL, wantURL)
 		}
 		switch b.Hash {
 		case upA.Hash, upB.Hash:
