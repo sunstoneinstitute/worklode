@@ -103,12 +103,46 @@ of record is:
 |---|---|---|
 | Claude Code | injected via the documented `hookSpecificOutput.additionalContext` envelope | the envelope |
 | Amp | the generated plugin captures the shell result's `stdout` and returns it from the thread's first `agent.start` as a context message — the one Plugin API slot that reaches the agent; held per thread id, delivered once (a restarted plugin process re-delivers once, harmless) | plain text |
-| Codex | **no verified consumer.** The hook schema is Claude-Code-shaped, but stdout-as-context is unverified for the installed versions, per §0's re-verification posture | nothing |
-| Copilot | **no verified consumer**, same posture | nothing |
+| Codex | injected via `hookSpecificOutput.additionalContext` — the same envelope, verified against codex-cli 0.147.0 (WL-303) | the envelope |
+| Copilot | **contract documented but unverified**, and a *different* shape — see below | nothing |
 
-Codex and Copilot sessions consequently still open without the brief; their
-session-start binding renews the lease and opens the session, which is what
-it is bound for. Closing that gap is deliberate follow-up work gated on
-verifying each harness's stdout contract — an unverified envelope would be
-dead bytes at best and payload confusion at worst, the exact failure class
-§0 records.
+**Codex was verified, not assumed (WL-303).** Codex's hooks are `Stage::Stable`
+and default-enabled at 0.147.0, and its `session-start.command.output` schema —
+shipped inside the installed binary and checked in at the release tag — declares
+`hookSpecificOutput.{hookEventName,additionalContext}`, identical to Claude
+Code's. Verification was end to end, not schema reading alone: a `SessionStart`
+hook emitting the envelope with a distinctive marker, run through a real
+`codex exec` session, and the model asked to repeat the marker — it did. So
+`emitSessionContext` now falls through to the same envelope for Codex, and
+Codex sessions open with the brief.
+
+Two properties of that schema are load-bearing and constrain the envelope
+permanently:
+
+- `additionalProperties: false` at both levels, and stdout that *looks* like
+  JSON but fails the schema is a hard error that **drops the context
+  entirely** — there is no fallback to plain text. An extra key is therefore
+  not a cosmetic diff; it silently costs Codex the whole brief. The
+  `internal/hookrun` test asserts the exact key set for this reason.
+- Non-JSON stdout is injected verbatim as developer context, so plain text is
+  the safer wire if the schema ever drifts. The envelope is kept only because
+  it is verified against this version.
+
+Codex's trust gate applies as §1 notes: hooks stay skipped until reviewed with
+`/hooks`, so the brief arrives only once the binding is trusted.
+
+**Copilot's ceiling is evidentiary, not technical.** GitHub Copilot CLI does
+document a `sessionStart` hook that injects context, but Worklode does not emit
+it, for two independent reasons. First, the envelope is *not* the Claude/Codex
+one — it is flat, `{"additionalContext": "..."}` with no `hookSpecificOutput`
+wrapper, and non-JSON stdout is discarded rather than injected, so no single
+emission can serve both Copilot and Codex. Second, and decisively, no Copilot
+CLI was installed to verify against, and the vendor's own documentation
+contradicts itself — the hooks reference says `additionalContext` is injected
+while the CLI tutorial says output is ignored — over a feature that has already
+regressed once after being fixed. Shipping on documentation alone here is
+exactly the unverified envelope §0 forbids. Copilot sessions consequently still
+open without the brief; the binding renews the lease and opens the session,
+which is what it is bound for. Wiring it is a small change once a Copilot CLI
+exists to run the same marker test against: add a `copilot` arm emitting the
+flat shape, and assert it the way the Codex arm is asserted.
