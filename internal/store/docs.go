@@ -307,7 +307,14 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 // because no anchor is being restated.
 //
 // The clock stamps only an artifact declaration the re-read frontmatter
-// carries (rebuildEdges); nothing else here is timestamped.
+// carries (rebuildEdges), plus the supersession cascade below when it fires.
+//
+// A repaired document-level `replaces` edge can newly resolve here exactly as
+// it can in repointExternalEdges (WL-133): rebuildEdges re-reads the same
+// frontmatter against a corpus that may now hold the target. The same two
+// guards apply — supersedeReplacedFrom's (a plan replacer cascades nothing,
+// a draft replacer's own accept will run the cascade) and
+// supersedeReplacedDocs' own (only an accepted target moves).
 func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 	d, err := lockDoc(tx, id)
 	if err != nil {
@@ -320,8 +327,17 @@ func ReplaceDocEdges(tx *sql.Tx, now time.Time, id, eventID int64) error {
 	if err := rebuildEdges(tx, now, id, d.kind, d.project, parsed.doc.Frontmatter); err != nil {
 		return err
 	}
-	return logDocChange(tx, id, eventID,
-		map[string]string{"field": "edges"})
+	if err := logDocChange(tx, id, eventID,
+		map[string]string{"field": "edges"}); err != nil {
+		return err
+	}
+	if d.kind != "plan" && d.status != "draft" {
+		ts := now.UTC().Truncate(time.Second)
+		if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
