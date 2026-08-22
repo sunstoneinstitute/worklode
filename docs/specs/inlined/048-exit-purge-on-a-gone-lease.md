@@ -120,7 +120,7 @@ again* fires no hook, so its items persist until removal. This ADR narrows
 the abandoned-worktree window to "until the next visit"; it cannot close a
 window no hook can see. Whether a machine-wide sweep — under `lode doctor`,
 which 017 §3 already names — should close that residual is left open,
-tracked as a follow-up task rather than promised here.
+tracked as WL-300 rather than promised here.
 
 ## 5. Rejected alternatives
 
