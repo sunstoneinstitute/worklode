@@ -10,7 +10,15 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
+
+// posterHash is what the fake server hands back as a video's extracted first
+// frame. Distinct from the letter-keyed upload hashes so a body citing it
+// cannot be citing the video by accident.
+var posterHash = strings.Repeat("9", 64)
 
 // blobSrv records what the CLI sent: uploads, task patches, and attaches.
 type blobSrv struct {
@@ -35,11 +43,18 @@ func startBlobSrv(t *testing.T, mediaFor func(body []byte) string) *blobSrv {
 		n := len(s.uploads)
 		s.mu.Unlock()
 		hash := strings.Repeat(string(rune('a'+n-1)), 64)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"hash": hash, "media_type": mediaFor(b),
+		media := mediaFor(b)
+		resp := map[string]any{
+			"hash": hash, "media_type": media,
 			"size": len(b), "url": "/blob/" + hash,
-		})
+		}
+		// What a server with ffmpeg answers a video upload with: the first
+		// frame, stored as a blob of its own (spec 021 §5).
+		if strings.HasPrefix(media, "video/") {
+			resp["poster_url"] = "/blob/" + posterHash
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
 	})
 	mux.HandleFunc("GET /api/v1/tasks/{id}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -190,6 +205,68 @@ func TestAttachAltRejectsMultipleImages(t *testing.T) {
 	defer srv.mu.Unlock()
 	if len(srv.patched) != 0 {
 		t.Fatalf("body was patched despite the rejected --alt reuse: %v", srv.patched)
+	}
+}
+
+// TestAttachEmbedsVideoWithPoster: a video embeds as <video>, not as an
+// image, and carries the poster frame the upload extracted — without it the
+// element is a black rectangle until someone presses play (spec 021 Q021.2).
+func TestAttachEmbedsVideoWithPoster(t *testing.T) {
+	dir := t.TempDir()
+	mp4 := writeFile(t, dir, "flash.mp4", "fake video bytes")
+	srv := startBlobSrv(t, func([]byte) string { return "video/mp4" })
+
+	if out, err := runLode(t, "task", "attach", "WL-1", mp4); err != nil {
+		t.Fatalf("attach: %v\n%s", err, out)
+	}
+
+	srv.mu.Lock()
+	defer srv.mu.Unlock()
+	if len(srv.patched) != 1 {
+		t.Fatalf("patches = %d, want 1", len(srv.patched))
+	}
+	body := srv.patched[0]
+	want := `<video src="/blob/` + strings.Repeat("a", 64) + `" poster="/blob/` + posterHash + `" controls preload="metadata"></video>`
+	if !strings.Contains(body, want) {
+		t.Fatalf("body:\n%s\nwant it to contain:\n%s", body, want)
+	}
+	if strings.Contains(body, "![") {
+		t.Fatalf("video embedded as an image, which renders as a broken image:\n%s", body)
+	}
+}
+
+// TestEmbedMarkupWithoutPoster: an instance whose image has no ffmpeg answers
+// with no poster, and that must still produce a playable element rather than
+// a poster="" the sanitiser drops and a reader is left wondering about.
+func TestEmbedMarkupWithoutPoster(t *testing.T) {
+	hash := strings.Repeat("b", 64)
+	got := embedMarkup("flash.webm", model.BlobResponse{
+		Hash: hash, MediaType: "video/webm", URL: "/blob/" + hash,
+	})
+	want := `<video src="/blob/` + hash + `" controls preload="metadata"></video>`
+	if got != want {
+		t.Fatalf("embedMarkup = %q, want %q", got, want)
+	}
+}
+
+// TestEmbedMarkupSurvivesTheSanitiser ties the two halves together: what
+// attach writes into a body is only useful if what renders bodies keeps it.
+// The allowlist in internal/mdrender is deliberately narrow — a stray
+// attribute, or a src the /blob/<hash> pattern does not match, is dropped in
+// silence — so the element is asserted after a render, not before.
+func TestEmbedMarkupSurvivesTheSanitiser(t *testing.T) {
+	video := strings.Repeat("a", 64)
+	got := string(mdrender.Body("a body\n\n" + embedMarkup("flash.mp4", model.BlobResponse{
+		Hash: video, MediaType: "video/mp4", URL: "/blob/" + video,
+		PosterURL: "/blob/" + posterHash,
+	}) + "\n"))
+	for _, want := range []string{
+		`<video`, `src="/blob/` + video + `"`, `poster="/blob/` + posterHash + `"`,
+		`controls`, `preload="metadata"`, `</video>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("rendered body lost %s:\n%s", want, got)
+		}
 	}
 }
 
