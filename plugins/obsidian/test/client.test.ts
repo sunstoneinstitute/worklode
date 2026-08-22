@@ -72,6 +72,53 @@ describe("WorklodeClient", () => {
     expect(requests[0].headers.Accept).toBe("application/json");
   });
 
+  // The one route that serves a document's markdown. The list route above
+  // blanks it on every row, so without this the mirror has no text to render
+  // a doc note from at all.
+  it("fetches one document by id, with its body", async () => {
+    const detail = {
+      id: 25,
+      project: "worklode",
+      kind: "spec",
+      number: 25,
+      slug: "documents-in-the-backbone",
+      title: "Documents in the backbone",
+      body: "---\nstatus: draft\n---\n# Documents in the backbone\n",
+      status: "draft",
+      version: 3,
+      issued: "2026-06-01",
+      assignee: "stig",
+      created_by: "stig",
+      created_at: "2026-06-01T09:00:00Z",
+      updated_at: "2026-08-16T09:12:00Z",
+      sections: [],
+      edges: [],
+      edges_in: [],
+      revision: null,
+    };
+    const { transport, requests } = fakeTransport(200, JSON.stringify(detail));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    // Unwrapped: getDoc answers with the DocDetail itself, not a { doc: ... }
+    // envelope the way the list routes wrap their arrays.
+    expect(await client.getDoc(25)).toEqual(detail);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].method).toBe("GET");
+    expect(requests[0].url).toBe("https://lode.example.com/api/v1/docs/25");
+    expect(requests[0].headers.Authorization).toBe("Bearer wl_abc123");
+    expect(requests[0].body).toBeUndefined();
+  });
+
+  it("surfaces a refused document fetch as a WorklodeApiError", async () => {
+    const { transport } = fakeTransport(404, JSON.stringify({ error: "not found" }));
+    const client = new WorklodeClient("https://lode.example.com", "wl_abc123", transport);
+
+    // Deliberately not degraded the way listDocsIfPresent degrades a missing
+    // route: a document the list just named must exist, and rendering its note
+    // from the blank list row would overwrite the text already in the vault.
+    await expect(client.getDoc(25)).rejects.toBeInstanceOf(WorklodeApiError);
+  });
+
   it("normalizes a base URL with a trailing slash", async () => {
     const { transport, requests } = fakeTransport(200, JSON.stringify({ projects: [] }));
     const client = new WorklodeClient("https://lode.example.com/", "wl_abc123", transport);

@@ -5,6 +5,7 @@
 
 import {
   CONFLICT_FOLDER,
+  docEtag,
   docToNote,
   indexToNote,
   parseNote,
@@ -15,7 +16,7 @@ import {
   type ProjectMembers,
   type WlBlock,
 } from "../serialize/note";
-import type { Project } from "../api/types";
+import type { Doc, Project } from "../api/types";
 
 /** The file operations the mirror needs. Implemented against Obsidian's
  *  vault in src/vault/writer.ts, and against a map in the tests.
@@ -437,16 +438,9 @@ export async function applyMirror(
   const desiredPaths = new Set(desired.notes.map((n) => n.path));
 
   for (const note of desired.notes) {
-    if (existing.has(note.path)) {
-      const current = await readWl(writer, root, note.path);
-      // Current data *and* current rendering. The etag covers the backbone
-      // source, not the layout it was rendered into, so a note an older
-      // serializer wrote is stale even when its etag still matches — without
-      // the version check it would never be re-rendered.
-      if (current?.etag === note.etag && current.serializer === SERIALIZER_VERSION) {
-        stats.skipped++;
-        continue;
-      }
+    if (existing.has(note.path) && (await isNoteCurrent(writer, root, note.path, note.etag))) {
+      stats.skipped++;
+      continue;
     }
     await writer.write(root, note.path, note.content);
     stats.written++;
@@ -490,14 +484,113 @@ async function isMirrorNote(writer: VaultWriter, root: string, path: string): Pr
   }
 }
 
-/** The stored note's wl block, or undefined if the file isn't a mirror note
- *  at all (malformed content, missing wl block) -- tolerated as "rewrite
- *  it" rather than a fatal error. */
+/** The stored note's wl block, or undefined if there is no readable mirror
+ *  note at `path` -- absent file, malformed content, missing wl block -- all
+ *  tolerated as "rewrite it" rather than a fatal error. */
 async function readWl(writer: VaultWriter, root: string, path: string): Promise<WlBlock | undefined> {
-  const content = await writer.read(root, path);
   try {
-    return parseNote(content).wl;
+    return parseNote(await writer.read(root, path)).wl;
   } catch {
     return undefined;
   }
+}
+
+/** Whether the vault already holds a note at `path` rendered from exactly this
+ *  source, by exactly this serializer -- the one question that decides whether
+ *  applyMirror writes or skips.
+ *
+ *  Current data *and* current rendering. The etag covers the backbone source,
+ *  not the layout it was rendered into, so a note an older serializer wrote is
+ *  stale even when its etag still matches — without the version check it would
+ *  never be re-rendered.
+ *
+ *  Its own function because hydrateDocBodies has to ask the identical question
+ *  one step earlier, before a body has been fetched to render with. If the two
+ *  ever disagreed, a document applyMirror decided to rewrite could reach it
+ *  with no body. */
+async function isNoteCurrent(writer: VaultWriter, root: string, path: string, etag: string): Promise<boolean> {
+  const wl = await readWl(writer, root, path);
+  return wl?.etag === etag && wl.serializer === SERIALIZER_VERSION;
+}
+
+/** How many document bodies are fetched at once. GET /api/v1/docs/{id} serves
+ *  one document, so the first sync of a corpus is one request per document; a
+ *  few in flight keeps that from being a serial wait without turning a sync
+ *  into a burst of dozens of simultaneous requests. */
+const DOC_FETCH_CONCURRENCY = 4;
+
+/** Fills in the document bodies this sync is actually going to write, and no
+ *  others.
+ *
+ *  GET /api/v1/docs never serves a body -- withoutDocBodies blanks it, because
+ *  a corpus listing would otherwise be the largest response the server sends --
+ *  so a doc note rendered from a list row alone is a `wl` block and nothing
+ *  else. GET /api/v1/docs/{id} serves the markdown, one document per request,
+ *  which a whole-corpus sync must not pay on every tick.
+ *
+ *  A body is therefore fetched exactly when the vault does not already hold a
+ *  current note for that document -- `isNoteCurrent`, the same predicate
+ *  applyMirror's skip uses, asked here before rendering instead of there after
+ *  it. That equivalence is what makes the whole scheme safe: every document
+ *  applyMirror would write has been fetched here first, and every document it
+ *  will skip is left with its blank body, rendered into a note that is then
+ *  never written. A new document has no note and so always fetches; a version
+ *  bump (or any other change to the list row) moves the etag and fetches again;
+ *  an untouched document costs one vault read and no request at all.
+ *
+ *  The staleness answer lives in the note's own `wl` block rather than in
+ *  plugin state, mirroring how the incremental task sync stores its watermark
+ *  against a syncOrigin: what the vault holds is the thing being decided about,
+ *  so reading it needs no invalidation rules for a changed server, token or
+ *  mount root.
+ *
+ *  A fetch that fails rejects, failing the sync -- the same treatment every
+ *  doc error but a missing endpoint already gets (see listDocsIfPresent).
+ *  Swallowing it would render that document's note from the blank body the
+ *  list row carries, which applyMirror would then write over the text it
+ *  already had.
+ *
+ *  Returns a new map; the input is left alone. The fetched document replaces
+ *  the list row wholesale rather than donating just its body, so the note's
+ *  metadata and its text come from the same read of the same version. */
+export async function hydrateDocBodies(
+  writer: VaultWriter,
+  root: string,
+  byProject: Map<string, ProjectMembers>,
+  fetchDoc: (id: number) => Promise<Doc>,
+): Promise<{ byProject: Map<string, ProjectMembers>; fetched: number }> {
+  const hydrated = new Map<string, ProjectMembers>();
+  const stale: { projectId: string; index: number; id: number }[] = [];
+
+  for (const [projectId, members] of byProject) {
+    hydrated.set(projectId, { docs: [...members.docs], tasks: members.tasks });
+    for (const [index, doc] of members.docs.entries()) {
+      // An unsafe path is a note desiredNotes drops and reports; there is
+      // nothing for a fetched body to be rendered into.
+      const path = desiredPath("doc", doc.project, doc.slug);
+      if (path === undefined) continue;
+      if (await isNoteCurrent(writer, root, path, await docEtag(doc))) continue;
+      stale.push({ projectId, index, id: doc.id });
+    }
+  }
+
+  await mapWithLimit(stale, DOC_FETCH_CONCURRENCY, async (entry) => {
+    hydrated.get(entry.projectId)!.docs[entry.index] = await fetchDoc(entry.id);
+  });
+
+  return { byProject: hydrated, fetched: stale.length };
+}
+
+/** Runs `fn` over every item with at most `limit` of them in flight. Rejects
+ *  with the first failure like Promise.all does, and like Promise.all leaves
+ *  the already-started work to finish; nothing here reads a result, so the
+ *  completion order does not matter. */
+async function mapWithLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
 }

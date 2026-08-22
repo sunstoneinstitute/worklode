@@ -19,6 +19,7 @@ import {
   desiredNotes,
   desiredTaskNotes,
   foreignNotes,
+  hydrateDocBodies,
   isSafeMountRoot,
   mountRootParent,
   mountRootParentMissing,
@@ -293,17 +294,26 @@ export default class WorklodePlugin extends Plugin {
         byProject.set(project.id, { docs: docs ?? [], tasks });
       }
 
+      // The doc list carries no bodies at all, so the text every doc note
+      // shows comes from a second request per document -- spent only on the
+      // documents whose vault note is out of date. An incremental run renders
+      // no doc note and fetched no doc list, so it has nothing to hydrate.
+      let members = byProject;
+      if (!incremental) {
+        members = (await hydrateDocBodies(this.writer, mountRoot, byProject, (id) => client.getDoc(id))).byProject;
+      }
+
       // Write-back runs before the notes are rendered, so the render sees the
       // bodies the backbone just accepted rather than the ones it was fetched
       // with. Full syncs only: an incremental run holds only the tasks that
       // changed, and a note it did not fetch cannot be classified.
-      let toRender = byProject;
+      let toRender = members;
       let writeBack: WriteBackStats | undefined;
       if (this.settings.writeBack && !incremental) {
         const pushed = await writeBackTaskNotes(
           this.writer,
           mountRoot,
-          byProject,
+          members,
           (id, body) => client.patchTaskBody(id, body),
           new Date().toISOString(),
         );

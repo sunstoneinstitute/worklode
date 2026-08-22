@@ -5,6 +5,7 @@ import {
   desiredPath,
   desiredTaskNotes,
   foreignNotes,
+  hydrateDocBodies,
   isConflictNotePath,
   isDocNotePath,
   isSafeMountRoot,
@@ -967,6 +968,191 @@ describe("desiredNotes conflicts", () => {
     expect(desired.notes.some((n) => n.path.includes(".."))).toBe(false);
     // The rest of the sync is unaffected.
     expect(desired.notes.some((n) => n.path === "worklode/worklode.md")).toBe(true);
+  });
+});
+
+// GET /api/v1/docs blanks every body, so a doc note rendered from a list row
+// alone is a `wl` block and no text -- the bug WL-196 fixes. The fix is one
+// extra request per document, spent only where the vault's note is out of
+// date, so these tests are as much about the requests *not* made.
+describe("hydrateDocBodies", () => {
+  /** A list row: the shape GET /api/v1/docs actually answers with. */
+  function listRow(overrides: Partial<Doc> = {}): Doc {
+    return fixtureDoc({ body: "", ...overrides });
+  }
+
+  /** The same document as GET /api/v1/docs/{id} serves it, body and all. */
+  function fetchedFor(row: Doc): Doc {
+    return { ...row, body: withFrontmatter({ status: row.status }, `# ${row.title}\n\ntext of ${row.slug}\n`) };
+  }
+
+  /** A fetchDoc that records what it was asked for and answers from `rows`. */
+  function recordingFetch(rows: Doc[]): { fetch: (id: number) => Promise<Doc>; asked: number[] } {
+    const asked: number[] = [];
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return {
+      asked,
+      fetch: async (id) => {
+        asked.push(id);
+        const row = byId.get(id);
+        if (row === undefined) throw new Error(`no such doc: ${id}`);
+        return fetchedFor(row);
+      },
+    };
+  }
+
+  /** Renders and applies one full sync over `rows`, hydrating first, exactly
+   *  as src/main.ts does. Returns the writer so a caller can read the notes
+   *  the sync left behind, and the ids the sync fetched. */
+  async function syncOnce(
+    writer: MapVaultWriter,
+    rows: Doc[],
+  ): Promise<{ asked: number[]; fetched: number; written: number; skipped: number }> {
+    const { fetch, asked } = recordingFetch(rows);
+    const byProject = new Map([["worklode", { docs: rows, tasks: [fixtureTask()] }]]);
+    const hydrated = await hydrateDocBodies(writer, ROOT, byProject, fetch);
+    const desired = await desiredNotes([fixtureProject()], hydrated.byProject, ROOT_NAME, SYNCED_AT);
+    expect(desired.conflicts).toEqual([]);
+    const stats = await applyMirror(writer, ROOT, desired);
+    return { asked, fetched: hydrated.fetched, written: stats.written, skipped: stats.skipped };
+  }
+
+  it("fetches every document on a first sync, and renders its body", async () => {
+    const writer = new MapVaultWriter();
+    const rows = [listRow({ id: 25, slug: "documents" }), listRow({ id: 4, slug: "backbone" })];
+
+    const first = await syncOnce(writer, rows);
+
+    expect(first.asked.sort((a, b) => a - b)).toEqual([4, 25]);
+    expect(first.fetched).toBe(2);
+
+    // The whole point: text in the note, and the document's own frontmatter
+    // lifted out of the body into the note's -- splitDocFrontmatter's path,
+    // which no production sync could reach before.
+    const note = await writer.read(ROOT, "worklode/docs/documents.md");
+    const parsed = parseNote(note);
+    expect(parsed.body).toBe("# A doc\n\ntext of documents\n");
+    expect(parsed.frontmatter).toEqual({ status: "draft" });
+    // The document brought its own H1, so no second one was injected -- a
+    // decision docToNote could only ever get right once it had a body.
+    expect(parsed.wl.heading_added).toBe(false);
+    expect(note.match(/^# /gm)).toHaveLength(1);
+  });
+
+  it("fetches nothing on a second sync of unchanged documents", async () => {
+    const writer = new MapVaultWriter();
+    const rows = [listRow({ id: 25, slug: "documents" })];
+    await syncOnce(writer, rows);
+    const before = await writer.read(ROOT, "worklode/docs/documents.md");
+
+    const second = await syncOnce(writer, rows);
+
+    expect(second.asked).toEqual([]);
+    expect(second.fetched).toBe(0);
+    // And the blank-bodied render the sync produced for the doc it did not
+    // fetch never reaches disk: applyMirror skips it, because it asks the
+    // same question hydrateDocBodies asked.
+    expect(second.written).toBe(0);
+    expect(await writer.read(ROOT, "worklode/docs/documents.md")).toBe(before);
+  });
+
+  it("re-fetches a document whose version bumped", async () => {
+    const writer = new MapVaultWriter();
+    await syncOnce(writer, [listRow({ id: 25, slug: "documents", version: 3 })]);
+
+    const bumped = await syncOnce(writer, [
+      listRow({ id: 25, slug: "documents", version: 4, title: "Documents, revised" }),
+    ]);
+
+    expect(bumped.asked).toEqual([25]);
+    const parsed = parseNote(await writer.read(ROOT, "worklode/docs/documents.md"));
+    expect(parsed.wl.version).toBe(4);
+    expect(parsed.body).toContain("text of documents");
+  });
+
+  it("re-fetches only the document that changed", async () => {
+    const writer = new MapVaultWriter();
+    const stable = listRow({ id: 4, slug: "backbone" });
+    await syncOnce(writer, [listRow({ id: 25, slug: "documents", version: 3 }), stable]);
+
+    const second = await syncOnce(writer, [listRow({ id: 25, slug: "documents", version: 4 }), stable]);
+
+    expect(second.asked).toEqual([25]);
+  });
+
+  it("re-fetches a document whose note was deleted or corrupted", async () => {
+    const writer = new MapVaultWriter();
+    const rows = [listRow({ id: 25, slug: "documents" })];
+    await syncOnce(writer, rows);
+
+    writer.files.delete(`${ROOT}/worklode/docs/documents.md`);
+    expect((await syncOnce(writer, rows)).asked).toEqual([25]);
+
+    await writer.write(ROOT, "worklode/docs/documents.md", "a hand-written note, no wl block");
+    expect((await syncOnce(writer, rows)).asked).toEqual([25]);
+  });
+
+  it("re-fetches every document when the serializer version moves", async () => {
+    const writer = new MapVaultWriter();
+    const rows = [listRow({ id: 25, slug: "documents" })];
+    await syncOnce(writer, rows);
+
+    // A note an older plugin wrote: current etag, stale layout. applyMirror
+    // rewrites it, so hydrateDocBodies has to have fetched it -- the two
+    // predicates being one function is what guarantees that.
+    const path = `${ROOT}/worklode/docs/documents.md`;
+    writer.files.set(path, writer.files.get(path)!.replace(`serializer: ${SERIALIZER_VERSION}`, "serializer: 1"));
+
+    expect((await syncOnce(writer, rows)).asked).toEqual([25]);
+  });
+
+  it("spends no request on a document whose note path is unsafe", async () => {
+    const writer = new MapVaultWriter();
+    const { fetch, asked } = recordingFetch([]);
+    const byProject = new Map([["worklode", { docs: [listRow({ id: 25, slug: "../evil" })], tasks: [] }]]);
+
+    const hydrated = await hydrateDocBodies(writer, ROOT, byProject, fetch);
+
+    expect(asked).toEqual([]);
+    expect(hydrated.fetched).toBe(0);
+  });
+
+  it("leaves the input map alone and keeps the tasks beside the docs", async () => {
+    const writer = new MapVaultWriter();
+    const row = listRow({ id: 25, slug: "documents" });
+    const task = fixtureTask();
+    const byProject = new Map([["worklode", { docs: [row], tasks: [task] }]]);
+    const { fetch } = recordingFetch([row]);
+
+    const hydrated = await hydrateDocBodies(writer, ROOT, byProject, fetch);
+
+    expect(byProject.get("worklode")!.docs[0].body).toBe("");
+    expect(hydrated.byProject.get("worklode")!.docs[0].body).not.toBe("");
+    expect(hydrated.byProject.get("worklode")!.tasks).toEqual([task]);
+  });
+
+  // A document the list just named must be fetchable; degrading here would
+  // render its note from the blank list row, and applyMirror would then write
+  // that over the text already in the vault.
+  it("fails the sync when a document's body cannot be fetched", async () => {
+    const writer = new MapVaultWriter();
+    const byProject = new Map([["worklode", { docs: [listRow({ id: 25 })], tasks: [] }]]);
+
+    await expect(
+      hydrateDocBodies(writer, ROOT, byProject, () => Promise.reject(new Error("boom"))),
+    ).rejects.toThrow("boom");
+  });
+
+  it("fetches more documents than it runs in parallel, without losing any", async () => {
+    const writer = new MapVaultWriter();
+    const rows = Array.from({ length: 11 }, (_, i) => listRow({ id: i + 1, slug: `doc-${i + 1}` }));
+
+    const first = await syncOnce(writer, rows);
+
+    expect(first.asked.sort((a, b) => a - b)).toEqual(rows.map((r) => r.id));
+    for (const row of rows) {
+      expect(await writer.read(ROOT, `worklode/docs/${row.slug}.md`)).toContain(`text of ${row.slug}`);
+    }
   });
 });
 

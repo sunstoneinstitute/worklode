@@ -1,4 +1,4 @@
-import type { Doc, Project, Task, TaskListDetail } from "./types";
+import type { Doc, DocDetail, Project, Task, TaskListDetail } from "./types";
 
 /** The subset of Obsidian's requestUrl that this client needs. `body` is the
  *  serialized request body, absent on a GET -- requestUrl takes it under the
@@ -66,6 +66,19 @@ export class WorklodeClient {
   listDocs(project: string): Promise<Doc[]> {
     const path = `/api/v1/docs?project=${encodeURIComponent(project)}`;
     return this.get<{ docs: Doc[] }>(path).then((r) => r.docs);
+  }
+
+  /**
+   * GET /api/v1/docs/{id} -- one document, with the markdown body the list
+   * route blanks, plus the rows derived from it (sections, edges both ways,
+   * the open revision). This is the only way the mirror can obtain a doc's
+   * text, so it is what makes a doc note more than its `wl` block.
+   *
+   * One request per document, which is why the sync fetches it only for the
+   * documents whose vault note is out of date -- see hydrateDocBodies.
+   */
+  getDoc(id: number): Promise<DocDetail> {
+    return this.get<DocDetail>(`/api/v1/docs/${encodeURIComponent(String(id))}`);
   }
 
   /**
