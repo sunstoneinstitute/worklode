@@ -138,6 +138,12 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			created = t
+			// The id is minted from the project counter here, after the
+			// payload was marshalled, so the event names the task it created
+			// from inside the same transaction (025 §15.2).
+			if err := store.AttributeEventToTask(tx, eventID, t.ID); err != nil {
+				return err
+			}
 			if req.Parent != "" {
 				// Same transaction as the insert: there is no window where
 				// the child exists unparented.
@@ -532,7 +538,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err := s.recordEvent(r.Context(), "cli", "task.updated", req,
+	err := s.recordTaskEvent(r.Context(), "cli", "task.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.Kind); err != nil {
 				return err
@@ -684,7 +690,7 @@ func (s *server) setTaskSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.recordEvent(r.Context(), "cli", "task.skills_set", req,
+	err := s.recordTaskEvent(r.Context(), "cli", "task.skills_set", id, req,
 		func(tx *sql.Tx, _ int64) error {
 			return store.SetTaskSkills(tx, s.st.Now(), id, req.Skills)
 		})

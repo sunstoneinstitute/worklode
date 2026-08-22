@@ -587,6 +587,12 @@ func (s *server) promoteInbox(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			created = t
+			// The promoted task's id is minted here, after the payload was
+			// marshalled, so the event names it from inside the same
+			// transaction (025 §15.2).
+			if err := store.AttributeEventToTask(tx, eventID, t.ID); err != nil {
+				return err
+			}
 			if req.Parent != "" {
 				// Same transaction as the promotion: there is no window
 				// where the child exists unparented.
@@ -650,7 +656,7 @@ func (s *server) linkInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := s.recordEvent(r.Context(), "cli", "issue.linked", req,
+	err := s.recordTaskEvent(r.Context(), "cli", "issue.linked", req.TaskID, req,
 		func(tx *sql.Tx, _ int64) error {
 			return store.LinkIssue(tx, req.Repo, req.Number, req.TaskID)
 		})

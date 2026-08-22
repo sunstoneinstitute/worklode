@@ -1501,6 +1501,46 @@ Go at emit time instead. Keeping them in one table keeps one offset space and pr
 provenance chain from a webhook to what it caused, which two logs and a projection between
 them would break for no gain.
 
+**Every payload names its subject.** Until the JSON-LD shape above lands, backbone events carry
+plain JSON objects — and the rule `wl:subject` makes explicit binds them already: an event about
+a task names that task under `"task"`, an event about a document names the document. Attribution
+belongs in the payload and not only in `state_log.entity_id`, because otherwise `GET
+/api/v1/events` cannot say what an event was about without a join against a second table behind
+a second API, and the log is not self-describing. `"task"` is the pre-RDF spelling of
+`wl:subject`; §17's codegen turns it into `wl:subject: wlid:task/<id>` without changing which
+fact the payload carries.
+
+The contract, per emitted type:
+
+| Event type | Source | Payload |
+|---|---|---|
+| `task.created` | `cli`, `web`, `watcher` (the `doc-lifecycle` mint) | the creation input, plus `task` — the minted id |
+| `task.updated` | `cli`, `watcher` (an absorbed acceptance, §15.4) | the changed fields, plus `task` |
+| `task.skills_set` | `cli` | the pinned skills, plus `task` |
+| `task.decomposed` | `cli` | the child titles, plus `task` — the parent |
+| `task.assigned`, `task.unassigned`, `task.started`, `task.stopped` | `cli` | `task`, plus the assignee or actor where the act names one |
+| `task.done`, `task.abandoned`, `task.reopened` | `cli` | `task` |
+| `task.deleted`, `task.undeleted` | `cli` | `task`, `actor`, and the delete's `justification` |
+| `task.edge_added`, `task.edge_removed` | `cli` | `from`, `to`, `type` — an edge names both its tasks |
+| `lease.claimed`, `lease.rebound` | `cli` | `task`, `actor`, `worktree` |
+| `lease.renewed`, `lease.released` | `cli` | `task`, `actor` |
+| `lease.expired` | `system` | `task`, `lease` — the sweep is per lease, and a task can have had several |
+| `agent_session.started`, `agent_session.ended` | `cli` | `task`, `actor`, `agent`, `session` |
+| `secrets_materialized` | `cli` | `task`, `actor`, `names` |
+| `issue.promoted` | `cli` | the promotion request, plus `task` — the minted id |
+| `issue.linked` | `cli` | the link request, plus `task` |
+| `merge.local` | `cli` | `repo`, `sha`, `tasks` — one report can land several, hence the plural |
+
+**A minted id is completed inside the recording transaction.** `task.created` and
+`issue.promoted` allocate the task id from the project counter (`UPDATE projects … RETURNING`)
+inside `apply`, after `RecordEvent` has already marshalled the payload, so the payload cannot
+name it up front and the id cannot be reserved ahead of the insert the way the event's own `@id`
+is (§15.3) — that counter is a write that has to stay in the transaction it belongs to. The
+apply callback therefore sets `task` on the row it has just inserted, in the same transaction as
+the `INSERT`. That is not the patch §15.3 rejects: that one rewrites a row that has already
+committed, whereas here insert and completion commit together and subscribers read below the
+commit horizon, so no reader ever observes the payload without its task.
+
 ### 15.3 Emitting
 
 A domain event is emitted **in the transaction that makes the change it describes**, through
