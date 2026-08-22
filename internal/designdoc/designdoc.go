@@ -186,6 +186,14 @@ func (s *Section) Source() string {
 	return b.String()
 }
 
+// HeadingAndBody is the section's heading line plus its own body, excluding
+// nested subsections — the per-section unit a walk over Document.Sections
+// emits without duplicating what deeper iterations will emit themselves
+// (WL-84's consolidated rendering).
+func (s *Section) HeadingAndBody() string {
+	return s.headingSource() + s.Body
+}
+
 func (s *Section) writeSource(b *strings.Builder) {
 	b.WriteString(s.headingSource())
 	b.WriteString(s.Body)

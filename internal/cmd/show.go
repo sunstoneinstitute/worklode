@@ -127,7 +127,7 @@ var showOrdinalShape = map[string]*regexp.Regexp{
 
 func newShowCmd() *cobra.Command {
 	var kind, taskFlag, specFlag, adrFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
-	var pager bool
+	var pager, inline bool
 	cmd := &cobra.Command{
 		Use:   "show [id]",
 		Short: "Show any entity by id or kind flag: a task, a design doc, a project",
@@ -187,17 +187,17 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				if len(args) != 1 {
 					return fmt.Errorf("--kind %s requires exactly one positional argument (the ordinal or slug)", kind)
 				}
-				return dispatchShowKind(cmd, kind, args[0], section, sectionSet)
+				return dispatchShowKind(cmd, kind, args[0], section, sectionSet, inline)
 			case changedKind != "":
 				if len(args) != 0 {
 					return fmt.Errorf("--%s and a positional id are mutually exclusive: the flag's value is the id", changedKind)
 				}
-				return dispatchShowKind(cmd, changedKind, changedValue, section, sectionSet)
+				return dispatchShowKind(cmd, changedKind, changedValue, section, sectionSet, inline)
 			default:
 				if len(args) != 1 {
 					return errors.New("show requires exactly one argument: a task id, a document id, or a kind flag (--task, --spec, --adr, --plan, --milestone, --project, --deliverable, --kind)")
 				}
-				return dispatchShowPositional(cmd, args[0], section, sectionSet)
+				return dispatchShowPositional(cmd, args[0], section, sectionSet, inline)
 			}
 		},
 	}
@@ -211,6 +211,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
+	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
 	return cmd
 }
 
@@ -246,7 +247,7 @@ func exampleOrdinal(value string) string {
 // dispatchShowKind routes a resolved (kind, value) pair — from a --<kind>
 // flag or from --kind <K> plus its positional — to the same routines the
 // typed-id path (dispatchShowPositional) uses.
-func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet bool) error {
+func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet, inline bool) error {
 	if sectionSet && kind != "spec" && kind != "adr" {
 		return errors.New("--section applies only to specs and ADRs")
 	}
@@ -259,7 +260,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 	case "task":
 		return runTaskShow(cmd, value)
 	case "spec", "adr":
-		return runDocShowByOrdinal(cmd, kind, value, section)
+		return runDocShowByOrdinal(cmd, kind, value, section, inline)
 	case "plan", "milestone", "deliverable":
 		return fmt.Errorf("%s %s is not showable yet (%s)", kind, value, unshowableReason[kind])
 	case "project":
@@ -285,7 +286,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 // runDocShow, which verifies it against the resolved document's kind — so a
 // keyless --adr on a spec (or vice versa) still gets the KindMismatchError,
 // not a silent wrong-kind render.
-func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string) error {
+func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline bool) error {
 	cfg, err := cli.LoadConfig()
 	if err != nil {
 		return err
@@ -298,14 +299,14 @@ func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string) error 
 	if cfg.ProjectKey != "" {
 		ref = fmt.Sprintf("%s-%s-%s", cfg.ProjectKey, typ, value)
 	}
-	return runDocShow(cmd, ref, section, typ)
+	return runDocShow(cmd, ref, section, typ, inline)
 }
 
 // dispatchShowPositional is the classify-and-dispatch path for a plain `lode
 // show <id>` (no kind flags): unchanged from the original show.go behavior,
 // plus the --section-applies-only-to-docs check the flag-routed path also
 // enforces.
-func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet bool) error {
+func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet, inline bool) error {
 	t := classify(arg)
 	if sectionSet && t.Kind != targetDoc {
 		return errors.New("--section applies only to specs and ADRs")
@@ -314,7 +315,7 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet 
 	case targetTask:
 		return runTaskShow(cmd, arg)
 	case targetDoc:
-		return runDocShow(cmd, arg, section, "")
+		return runDocShow(cmd, arg, section, "", inline)
 	case targetUnshowable:
 		word := unshowableKindWords[t.Type]
 		return fmt.Errorf("%s is a %s id; %ss are not showable yet (%s)", arg, word, word, unshowableReason[word])
