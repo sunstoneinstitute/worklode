@@ -39,16 +39,19 @@ package hooks
 //
 // A delivery no declaration matches still lands in events, with no evidence
 // rows and an "unrouted" ack, the way the GitHub hook records an unmapped
-// repo's delivery. The payload is kept so a declaration added later can be
-// filed from it, but nothing files it yet: reconcile's replayer is scoped to
-// source = 'github' (store.ReplayCandidates), so an unrouted catalog delivery
-// stays unrouted. WL-256.
+// repo's delivery. Its applied_at stays NULL, which is what puts it in
+// reconcile engine 1's candidate set (store.UnappliedEvents): once the
+// declaration exists, the next replay files the stored payload as evidence
+// and marks the delivery applied. A routed delivery is marked applied at
+// record time, so only genuinely unfiled deliveries stay candidates (WL-256).
 
 import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
@@ -69,7 +72,7 @@ const maxCatalogBody = 5 << 20
 var catalogStates = []string{"published", "updated", "deprecated", "removed", "failed"}
 
 type catalogHandler struct {
-	st      *store.Store
+	ap      *catalogApplier
 	secret  string
 	log     *slog.Logger
 	metrics *Metrics
@@ -81,7 +84,7 @@ func NewCatalogHandler(st *store.Store, secret string, log *slog.Logger, m *Metr
 	if log == nil {
 		log = slog.Default()
 	}
-	return &catalogHandler{st: st, secret: secret, log: log, metrics: m}
+	return &catalogHandler{ap: &catalogApplier{st: st, log: log}, secret: secret, log: log, metrics: m}
 }
 
 // catalogEvent is the payload a catalog emitter posts. Catalog is parsed but
@@ -152,12 +155,10 @@ func (h *catalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		typ = "catalog." + ev.State
 	}
 
-	var written []store.DeclaredEntity
-	_, inserted, err := h.st.RecordEvent(r.Context(), "catalog", externalID, typ, body,
+	var applied catalogResult
+	_, inserted, err := h.ap.st.RecordEvent(r.Context(), "catalog", externalID, typ, body,
 		func(tx *sql.Tx, eventID int64) error {
-			var err error
-			written, err = h.apply(tx, eventID, ev)
-			return err
+			return h.ap.applyThenMark(tx, eventID, ev, &applied)
 		})
 	if err != nil {
 		h.log.Error("catalog webhook: apply", "artifact", ev.Artifact, "state", ev.State, "err", err)
@@ -166,9 +167,7 @@ func (h *catalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Counted after the transaction committed, so a rolled-back delivery
 	// leaves no evidence and no count of it.
-	for _, e := range written {
-		h.metrics.catalogEvidenceWritten(ev.State, e.Kind)
-	}
+	h.metrics.catalogEvidenceFiled(applied)
 
 	// A redelivery acks "duplicate" whatever it would otherwise have been.
 	status := "ok"
@@ -176,41 +175,105 @@ func (h *catalogHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case !inserted:
 		status = "duplicate"
-	case len(written) == 0:
+	case !applied.Routed():
 		result, status = "unrouted", "unrouted"
 	}
 	writeJSON(w, http.StatusOK, model.WebhookAck{Status: status})
 }
 
+// catalogApplier files a reported catalog fact against the entities that
+// declared the artifact, independent of how the delivery arrived — the
+// catalog counterpart of applier (apply.go). The webhook handler owns one;
+// Replay builds one for stored deliveries.
+type catalogApplier struct {
+	st  *store.Store
+	log *slog.Logger
+}
+
+// catalogResult is what one catalog apply did. Targets is every open
+// declaration of the artifact; Written is the subset this event filed new
+// evidence for (a redelivery of an already-filed event writes none).
+type catalogResult struct {
+	State   string
+	Targets []store.DeclaredEntity
+	Written []store.DeclaredEntity
+}
+
+// Routed reports whether any open declaration claimed the artifact. Routing
+// is the completion test, not the write: a delivery whose evidence rows all
+// already exist is filed, while an unrouted one has an apply still to run and
+// stays a replay candidate.
+func (r catalogResult) Routed() bool { return len(r.Targets) > 0 }
+
+// applyThenMark runs the apply and, when it routed, sets applied_at in the
+// same transaction, so a filed delivery leaves the replay candidate set. An
+// unrouted delivery stays in it: the declaration it needs may arrive later.
+// out receives the result whether or not it routed.
+func (a *catalogApplier) applyThenMark(tx *sql.Tx, eventID int64, ev catalogEvent, out *catalogResult) error {
+	res, err := a.apply(tx, eventID, ev)
+	if err != nil {
+		return err
+	}
+	*out = res
+	if !res.Routed() {
+		return nil
+	}
+	return store.MarkEventApplied(tx, eventID, a.st.Now())
+}
+
+// applyStored routes a *stored* catalog delivery the way applier.applyForType
+// routes a stored GitHub one: it parses the recorded payload back into the
+// event the live handler validated and returns the same apply the webhook
+// path runs. A payload that does not parse, or that predates a validation
+// rule, is an error the replayer reports and skips rather than a candidate it
+// retries forever.
+func (a *catalogApplier) applyStored(payload []byte, out *catalogResult) (func(tx *sql.Tx, eventID int64) error, error) {
+	var ev catalogEvent
+	if err := json.Unmarshal(payload, &ev); err != nil {
+		return nil, fmt.Errorf("parse catalog payload: %w", err)
+	}
+	ev.Artifact = strings.TrimSpace(ev.Artifact)
+	if ev.Artifact == "" {
+		return nil, errors.New("catalog payload has no artifact")
+	}
+	if !slices.Contains(catalogStates, ev.State) {
+		return nil, fmt.Errorf("catalog payload has unknown state %q", ev.State)
+	}
+	return func(tx *sql.Tx, eventID int64) error {
+		return a.applyThenMark(tx, eventID, ev, out)
+	}, nil
+}
+
 // apply files the reported fact against every open entity that declared the
-// artifact, returning the ones it wrote. It must run inside the same
-// transaction as the event insert (via RecordEvent) so a delivery is
-// all-or-nothing.
+// artifact, reporting both the entities it matched and the ones it wrote. It
+// must run inside the same transaction as the event insert (via RecordEvent)
+// so a delivery is all-or-nothing.
 //
 // Provenance is always "observed": the catalog is an emitter, not a person
 // (029 §3.2). An entity that already has evidence from this event is skipped
 // by the insert's conflict clause, so a replay writes nothing twice.
-func (h *catalogHandler) apply(tx *sql.Tx, eventID int64, ev catalogEvent) ([]store.DeclaredEntity, error) {
+func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (catalogResult, error) {
+	res := catalogResult{State: ev.State}
 	targets, err := store.OpenDeclarationsForArtifact(tx, ev.Artifact)
 	if err != nil {
-		return nil, err
+		return catalogResult{}, err
 	}
+	res.Targets = targets
 
 	// An unparseable timestamp falls back to the store clock, but it is worth
 	// a warning: occurred_at is what the deliverable projection orders on, so
 	// a substituted clock can let a stale report win over a newer one.
-	occurredAt := h.st.Now()
+	occurredAt := a.st.Now()
 	if ev.OccurredAt != "" {
 		t, parseErr := time.Parse(time.RFC3339, ev.OccurredAt)
 		if parseErr != nil {
-			h.log.Warn("catalog webhook: unparseable occurred_at, using the store clock",
+			a.log.Warn("catalog webhook: unparseable occurred_at, using the store clock",
 				"artifact", ev.Artifact, "occurred_at", ev.OccurredAt, "err", parseErr)
 		} else {
 			occurredAt = t
 		}
 	}
 
-	var written []store.DeclaredEntity
 	for _, target := range targets {
 		inserted, err := store.InsertArtifactEvidence(tx, eventID, model.ArtifactEvidence{
 			EntityKind: target.Kind,
@@ -225,11 +288,11 @@ func (h *catalogHandler) apply(tx *sql.Tx, eventID int64, ev catalogEvent) ([]st
 			OccurredAt: occurredAt,
 		})
 		if err != nil {
-			return nil, err
+			return catalogResult{}, err
 		}
 		if inserted {
-			written = append(written, target)
+			res.Written = append(res.Written, target)
 		}
 	}
-	return written, nil
+	return res, nil
 }
