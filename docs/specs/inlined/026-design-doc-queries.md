@@ -1216,6 +1216,7 @@ For `defers` (§5.3) it reports:
 
 - an entry missing `spec` or `to`, or carrying an unknown key;
 - a `spec` reference without a `#sec-N` fragment;
+- a `to` carrying a fragment — the owner is a document, never a section;
 - `defers` on a spec or ADR — the key is plan-only;
 - one section deferred to two different owners.
 

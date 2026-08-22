@@ -1270,7 +1270,9 @@ func closureEqual(a, b []closureRef) bool {
 // be a plan, the `spec` reference must carry a `#sec-N` fragment (unlike
 // covers, which tolerates a whole-document claim — a whole-document deferral
 // would silently defer sections not yet written), the owner must be named,
-// and the owner must not resolve to the deferring plan itself. The owner is
+// must carry no fragment (an owner is a document, 026 §5.3 — secmeta.py
+// refuses the same), and must not resolve to the deferring plan itself. The
+// owner is
 // then resolved exactly as a fullCoverageWith target and stored as the
 // edge's sole doc_coverage_completed_with row, at position 0. coverage stays
 // NULL for a defers edge — a deferral is not a level. The same entry
@@ -1306,6 +1308,11 @@ func rebuildEdges(tx *sql.Tx, docID int64, kind, project string, fm *designdoc.F
 			if strings.TrimSpace(e.owner) == "" {
 				return fmt.Errorf("doc %d defers %q with no owner: a deferral names its owner (026 §5.3): %w",
 					docID, e.ref, ErrInvalidInput)
+			}
+			if _, ownerFragment := designdoc.SplitFragment(e.owner); ownerFragment != "" {
+				return fmt.Errorf(
+					"doc %d defers %q to %q: the owner is a document, no fragment (026 §5.3): %w",
+					docID, e.ref, e.owner, ErrInvalidInput)
 			}
 		}
 
@@ -2131,7 +2138,9 @@ func (s *Store) NeedsPlanning(ctx context.Context, project string) ([]model.Doc,
 		 ),
 		 def AS (
 		     SELECT doc_id, anchor,
-		            string_agg(DISTINCT owner, ', ' ORDER BY owner) AS owner
+		            -- Comma without a space: the CLI joins anchors with spaces,
+		            -- so a spaced separator would split one gap across tokens.
+		            string_agg(DISTINCT owner, ',' ORDER BY owner) AS owner
 		       FROM def_raw
 		      GROUP BY doc_id, anchor
 		 ),

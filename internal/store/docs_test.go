@@ -1701,6 +1701,33 @@ defers:
 	}
 }
 
+// TestDocDefersOwnerWithFragmentRejected: the owner is a document, never a
+// section — a `to` carrying a #sec-N fragment is refused, matching
+// secmeta.py's check rather than silently stripping the fragment (026 §5.3).
+func TestDocDefersOwnerWithFragmentRejected(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: specBody, CreatedBy: "stig",
+	})
+
+	body := `---
+status: draft
+defers:
+  - spec: 025-documents-in-the-backbone.md#sec-1
+    to: 025-documents-in-the-backbone.md#sec-2
+---
+
+# Plan
+`
+	_, err := createDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "main-plan", Body: body, CreatedBy: "stig",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
 // TestDocDefersToItselfRejected: a plan deferring a section to itself has
 // confused deferral with coverage; refused (026 §5.3).
 func TestDocDefersToItselfRejected(t *testing.T) {
@@ -4640,6 +4667,49 @@ func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
 	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
 		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
 		t.Fatalf("gaps = %v, want sec-1 deferred to owner-spec", gaps)
+	}
+}
+
+// TestDocNeedsPlanningDeferredOutranksBoundOnly: with one plan bound by a
+// section (`none`) and another deferring it, the section reports deferred —
+// a deferral says who is owed the rest, not merely that the section was read
+// (026 §2.1's precedence: partial > deferred > bound-only > unplanned).
+func TestDocNeedsPlanningDeferredOutranksBoundOnly(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-spec", Body: specBody, CreatedBy: "stig",
+	})
+	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
+	deferringPlan(t, s, "plan-b", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-spec"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-spec)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred: deferred outranks bound-only", gaps)
+	}
+}
+
+// TestDocNeedsPlanningTwoDeferralOwnersAggregated: §5.3's one-owner rule is
+// per plan, so two plans may defer one section to two owners. The report
+// aggregates them deterministically, comma-joined without a space — the CLI
+// joins anchors with spaces, so a spaced separator would split the token.
+func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
+	s := openDocStore(t)
+	mustAcceptedSpec(t, s, "025-x")
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 6, Slug: "owner-a", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 7, Slug: "owner-b", Body: specBody, CreatedBy: "stig",
+	})
+	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-a"}})
+	deferringPlan(t, s, "plan-b", true, []deferralRef{{spec: "025-x#sec-1", to: "owner-b"}})
+
+	_, gaps := needsPlanningSlugs(t, s, "p1")
+	if len(gaps) != 1 || !slices.Equal(gapAnchors(gaps[0]),
+		[]string{"sec-1(deferred:owner-a,owner-b)", "sec-2(unplanned)", "sec-2.1(unplanned)"}) {
+		t.Fatalf("gaps = %v, want sec-1 deferred to owner-a,owner-b", gaps)
 	}
 }
 

@@ -41,14 +41,15 @@ back with `lode show <ref>` (see shorthand below) or `lode doc get
 ## Frontmatter
 
 Mandatory, no exceptions. Keys are ontology property names (`ns/ontology.ttl`,
-`ns/concept.ttl`), ordered lifecycle → `covers` → dependency → amendment →
-supersession:
+`ns/concept.ttl`), ordered lifecycle → `covers` → `defers` → dependency →
+amendment → supersession:
 
 | Key | Shape | On |
 |---|---|---|
 | `status` | `draft` \| `accepted` \| `superseded` | all |
 | `issued` | `YYYY-MM-DD` | specs, ADRs |
 | `covers` | spec section reference(s), optionally `coverage: full\|partial\|none` (with `fullCoverageWith` for partial) — or `NO-SPEC` | **plans**, mandatory |
+| `defers` | list of `{spec, to}`: a section this plan hands off (`spec`, with `#sec-N`) and the document that owns it (`to`, no fragment) — reported `deferred` with its owner by `--needs-planning` until some plan covers it (026 §5.3) | **plans** |
 | `requires` / `isRequiredBy` | reference list | all |
 | `blocks` / `blockedBy` | plan references — orders whole-plan execution; both ends must be plans in the same project | **plans** |
 | `wasDerivedFrom` | scalar reference | specs |

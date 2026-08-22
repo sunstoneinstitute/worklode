@@ -18,7 +18,10 @@ The response is `{"docs":[…], "planning_gaps":[…]}`: one `docs` entry per
 **accepted spec** with at least one section no accepted plan discharges, and a
 matching `planning_gaps` entry keyed by document id — `{"doc":…,
 "sections":<the spec's section count>, "gaps":[{"anchor":"sec-3",
-"coverage":"unplanned|partial|bound-only"}]}`.
+"coverage":"unplanned|partial|bound-only|deferred"}]}`. A `deferred` gap also
+carries `"owner"`: the document a plan explicitly handed the section to
+(026 §5.3) — someone was named, nothing is scheduled, so it is the first kind
+of gap to chase.
 
 **What this reports, and why.** The whole `--needs-planning` result, coverage
 classification included — that selector *is* the backbone's definition of a
