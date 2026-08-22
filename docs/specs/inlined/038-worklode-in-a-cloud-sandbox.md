@@ -123,6 +123,39 @@ yields a different tag by construction. A starting worker requests the tag its c
 either finds it, which is the fast path, or does not, which *is* the build trigger. Staleness is not
 possible: an image that exists under a tag is, by definition, built from those inputs.
 
+### 3.3 Egress is default-deny, with a named baseline
+
+A worker's outbound network access is **deny by default** (WL-135). The spec had no egress story,
+which in practice granted everything the pod network grants — a policy made by omission, and the
+cheap channel for a prompt-injected or compromised agent to exfiltrate repository content or
+credentials. Specifying the posture now costs a paragraph; retrofitting it after images and CI
+depend on open egress would not.
+
+The baseline allowlist is what every worker demonstrably needs and nothing else:
+
+- the worklode API ingress (`LODE_SERVER`) — claiming, hooks, the brief;
+- the model provider endpoint the harness talks to;
+- the git host(s) of the project's mapped repos;
+- the language-ecosystem registries the bootstrap toolchains resolve dependencies from
+  (`proxy.golang.org`/`sum.golang.org`, `registry.npmjs.org`, `pypi.org`/`files.pythonhosted.org`)
+  — needed at run time despite §3.1's baked toolchains, because a checkout's dependencies move
+  faster than its image;
+- the worker-image registry (§8's open question 1 decides which; its reachability rides this list).
+
+A project needing more names it in `.worklode/egress.txt` — one host per line, versioned with the
+project and reviewed in the same diff as the code that needs it, exactly as `.worklode/Dockerfile`
+extends the image. A new dependency host is therefore a one-line reviewed change, never a broken
+build waiting on an operator.
+
+Two honest limits. First, with the git host allowed, exfiltration through an authorized push
+remains possible: this posture narrows exfiltration from "any host on the internet" to "a channel
+that is authenticated, logged and attributable", it does not close it — credential scoping (017,
+§4.4) stays the primary control. Second, the **mechanism is deliberately unspecified**: a
+NetworkPolicy, an egress proxy, or the provider's own allowlist (kagent's `allowedDomains`
+defaults to exactly this posture) all satisfy it, and which one applies belongs to the deployment
+that holds the cloud credentials (§7), not here. The spec fixes the posture and the baseline; the
+deployment supplies the enforcement.
+
 ## 4. The sandbox session
 
 ### 4.1 The entry point is the CLI, not the plugin
