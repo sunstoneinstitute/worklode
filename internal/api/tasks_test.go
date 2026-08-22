@@ -1016,6 +1016,78 @@ func TestEdgeEndpointAcceptsFollowUpTo(t *testing.T) {
 	}
 }
 
+// TestEdgeEndpointAcceptsDuplicateOf checks the generic edge endpoint carries
+// the fourth type — there is no dedicated duplicate route — and that the
+// second canonical is refused by the partial unique index.
+func TestEdgeEndpointAcceptsDuplicateOf(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	for _, title := range []string{"Canonical", "Duplicate", "Other canonical"} {
+		createTaskViaAPI(t, h, token, map[string]any{
+			"project": "proj", "title": title, "priority": "medium", "kind": "bug",
+		})
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "duplicate_of"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	// A duplicate names exactly one canonical task (004 §1.3).
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-3", "type": "duplicate_of"})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("second canonical status = %d, want 409; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-2", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Edges struct {
+			Out []struct{ To, Type string } `json:"out"`
+		} `json:"edges"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode task: %v", err)
+	}
+	if len(got.Edges.Out) != 1 ||
+		got.Edges.Out[0].Type != "duplicate_of" || got.Edges.Out[0].To != "WL-1" {
+		t.Fatalf("out edges = %+v, want one duplicate_of WL-1", got.Edges.Out)
+	}
+
+	rr = doReq(t, h, "DELETE", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "duplicate_of"})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("remove edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestEdgeEndpointRejectsUnknownType pins that the guard is a closed set and
+// that its message names every accepted type, so the four spellings cannot
+// drift apart.
+func TestEdgeEndpointRejectsUnknownType(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	for _, title := range []string{"One", "Two"} {
+		createTaskViaAPI(t, h, token, map[string]any{
+			"project": "proj", "title": title, "priority": "medium", "kind": "bug",
+		})
+	}
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "duplicates"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	for _, typ := range []string{"blocks", "child_of", "follow_up_to", "duplicate_of"} {
+		if !strings.Contains(rr.Body.String(), typ) {
+			t.Fatalf("body %s, want it to name %q", rr.Body.String(), typ)
+		}
+	}
+}
+
 // TestListTasksByRepoAndBranch covers what the local merge reporter needs
 // from the list endpoint: narrow to the repo the client is sitting in, and
 // read back the server-authoritative branch name so the client never has to

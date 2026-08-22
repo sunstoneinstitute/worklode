@@ -17,8 +17,8 @@
 
 The execution backbone is the ACID core Worklode's pickup loop turns on: task state,
 worktree-bound leases, the append-only event log, and the edge types (`blocks`,
-`child_of`, `follow_up_to`) that decide what is claimable, what a task is made of,
-and where it came from. It runs on **Postgres**, with the lease bound to
+`child_of`, `follow_up_to`, `duplicate_of`) that decide what is claimable, what a task
+is made of, and where it came from. It runs on **Postgres**, with the lease bound to
 **git-worktree identity**.
 
 **Concurrency.** Postgres lets N `claim --next` calls proceed concurrently, serializing
@@ -28,7 +28,7 @@ only on the specific task row(s) they actually contend for — the write through
 **In scope:** the Postgres schema baseline, row-lock transaction semantics, the task
 state machine (incl. reopen and delivery), worktree-bound lease lifecycle, the atomic
 `claim` transaction (the transaction only — not the ranking), the event log +
-provenance, per-project task keys, task hierarchy, and the three edge types with cycle
+provenance, per-project task keys, task hierarchy, and the four edge types with cycle
 detection on the two that need it.
 
 **Out of scope (reference by title, do not duplicate):**
@@ -122,7 +122,8 @@ lease lapse; the sweeper reclaims it.
 CREATE TABLE task_edges (
     from_task  text NOT NULL REFERENCES tasks(id) ON DELETE RESTRICT,
     to_task    text NOT NULL REFERENCES tasks(id) ON DELETE RESTRICT,
-    type       text NOT NULL CHECK (type IN ('child_of','blocks','follow_up_to')),
+    type       text NOT NULL CHECK (type IN
+                 ('child_of','blocks','follow_up_to','duplicate_of')),
     created_at timestamptz NOT NULL,
     UNIQUE (from_task, to_task, type)
 );
@@ -164,21 +165,48 @@ CREATE TABLE task_edges (
   and unlike `child_of`, because a loose end is routinely found in one project and
   belongs to another. Self-edges rejected → `ErrInvalidInput`. Duplicate, or a second
   origin → `ErrEdgeExists`.
+- **`duplicate_of`**: "A duplicate_of B" records that A and B are the same request and
+  B is the canonical one — the pointer that today gets written as prose into the closed
+  duplicate's body, where nothing can query it and nothing stops the same issue being
+  filed a third time. Like `follow_up_to` it is **provenance, not scheduling**: it gates
+  nothing (a duplicate stays claimable, so marking one costs nothing and closing it is a
+  separate, deliberate act) and confers no parent-hood. A duplicate names **at most one
+  canonical task**, enforced by a partial unique index on `from_task`
+  (`task_edges_single_canonical`) exactly as `follow_up_to`'s single-origin index is; the
+  canonical side is unbounded, so one task absorbs any number of duplicates. No cycle
+  detection, for `follow_up_to`'s reason: nothing walks the edge transitively, so a cycle
+  costs nothing to hold. Cross-project, because the same request is routinely filed
+  against two projects. Self-edges rejected → `ErrInvalidInput`. Duplicate edge, or a
+  second canonical → `ErrEdgeExists`.
 
-The three types split cleanly by what they decide: `blocks` decides *when* a task may
-be claimed, `child_of` decides *what a task is made of*, `follow_up_to` decides
-*nothing* and only records where the task came from. Modelling a follow-up as a child
-would be the tempting shortcut and is wrong on both counts — it would make the origin a
-container that cannot advance past `merged`, and its roll-up would report the origin
-unfinished for work discovered after it was done.
+  **No absorption.** Marking A a duplicate of B changes nothing about B: B does not
+  inherit A's skills, edges, body, attachments or priority, and A is neither closed nor
+  reprioritized by the marking. The edge is a pointer and only a pointer. Absorption
+  would make a one-word triage action rewrite two tasks — surprising, hard to undo, and
+  a decision the triager should make explicitly with the existing verbs — so the
+  duplicate's content, if it is worth keeping, is moved by hand and the duplicate is
+  closed by hand.
 
-**Surface.** `POST`/`DELETE /api/v1/tasks/{id}/edges` carry `follow_up_to` like any
-other type, and `POST /api/v1/tasks` accepts a `follow_up_to` field beside `parent` so
-filing a follow-up costs one round trip — the case that matters, since an agent files
-these mid-task and a second call is a second chance to skip it. On the CLI that is
-`lode task add --follow-up-to <id>`, with `lode task follow-up <id> --of <id>` and
-`lode task unfollow-up <id>` for an existing task. The task page lists both directions
-("Follow-up to", "Follow-ups") beside Parent and Children.
+The four types split cleanly by what they decide: `blocks` decides *when* a task may
+be claimed, `child_of` decides *what a task is made of*, and `follow_up_to` and
+`duplicate_of` decide *nothing* — they record where a task came from and whether it is
+the one to work. Modelling a follow-up as a child would be the tempting shortcut and is
+wrong on both counts — it would make the origin a container that cannot advance past
+`merged`, and its roll-up would report the origin unfinished for work discovered after
+it was done. The same shortcut is equally wrong for a duplicate, which is not a piece
+of the canonical task's work but the whole of it, filed twice.
+
+**Surface.** `POST`/`DELETE /api/v1/tasks/{id}/edges` carry `follow_up_to` and
+`duplicate_of` like any other type, and `POST /api/v1/tasks` accepts a `follow_up_to`
+field beside `parent` so filing a follow-up costs one round trip — the case that
+matters, since an agent files these mid-task and a second call is a second chance to
+skip it. There is no matching create-time field for `duplicate_of`: a duplicate is
+recognized while triaging tasks that already exist, never while filing one. On the CLI
+that is `lode task add --follow-up-to <id>`, with `lode task follow-up <id> --of <id>`
+/ `lode task unfollow-up <id>` and `lode task duplicate <id> --of <id>` /
+`lode task unduplicate <id>` (aliases `dupe`/`undupe`) for an existing task. The task
+page lists both directions of both edges ("Follow-up to", "Follow-ups", "Duplicate of",
+"Duplicates") beside Parent and Children.
 
 ### 1.4 events + state_log — append-only log, provenance
 

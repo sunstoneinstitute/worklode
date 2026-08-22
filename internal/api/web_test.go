@@ -1025,6 +1025,37 @@ func TestTaskPageShowsFollowUps(t *testing.T) {
 	bodyContains(t, rr.Body.String(), "Follow-ups", `/tasks/WL-2`)
 }
 
+// TestTaskPageShowsDuplicates checks both directions of the duplicate edge
+// render on the task page: the canonical task lists its duplicates, the
+// duplicate names its canonical task.
+func TestTaskPageShowsDuplicates(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Canonical", "priority": "medium", "kind": "bug",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Filed twice", "priority": "medium", "kind": "bug",
+	})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/edges", token,
+		map[string]any{"to": "WL-1", "type": "duplicate_of"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/tasks/WL-2", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("duplicate page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "Duplicate of", `/tasks/WL-1`)
+
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("canonical page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, rr.Body.String(), "Duplicates", `/tasks/WL-2`)
+}
+
 // TestTaskPageRendersEdgeChangeSummary pins summarizeStateChange's "edge"
 // case: store.AddEdge/RemoveEdge log {"field":"edge","op",...}, not the
 // {"field","old","new"} shape every other state_log row uses, so a naive

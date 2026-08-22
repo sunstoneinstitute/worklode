@@ -483,6 +483,8 @@ func taskView(md *mdrender.Cache, t *model.Task, blocked bool, entries []model.T
 			view.Parent = e.ToTask
 		case "follow_up_to":
 			view.FollowUpTo = e.ToTask
+		case "duplicate_of":
+			view.DuplicateOf = e.ToTask
 		}
 	}
 	for _, e := range in {
@@ -493,6 +495,8 @@ func taskView(md *mdrender.Cache, t *model.Task, blocked bool, entries []model.T
 			view.Children = append(view.Children, e.FromTask)
 		case "follow_up_to":
 			view.FollowUps = append(view.FollowUps, e.FromTask)
+		case "duplicate_of":
+			view.Duplicates = append(view.Duplicates, e.FromTask)
 		}
 	}
 	return view

@@ -150,6 +150,8 @@ type TaskView struct {
 	Children    []string
 	FollowUpTo  string
 	FollowUps   []string
+	DuplicateOf string
+	Duplicates  []string
 	Progress    model.TaskProgress
 	Timeline    []TimelineRow
 }

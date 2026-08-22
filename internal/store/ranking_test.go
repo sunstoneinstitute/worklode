@@ -461,6 +461,40 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 	}
 }
 
+// TestClaimNextIgnoresDuplicateOf pins 004 §1.3: duplicate_of is provenance,
+// not scheduling. Marking a task a duplicate neither blocks nor closes it —
+// closing it is a separate, deliberate act.
+func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
+	s := openClaimNextStore(t)
+	ctx := t.Context()
+	canonical := createTask(t, s, claimNextTestNow, defaultTaskInput())
+	dupe := createTask(t, s, claimNextTestNow, defaultTaskInput())
+
+	if _, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "task.edge_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddEdge(tx, claimNextTestNow, dupe.ID, canonical.ID, "duplicate_of", eventID)
+		}); err != nil {
+		t.Fatalf("AddEdge duplicate_of: %v", err)
+	}
+
+	blocked, err := s.BlockedTaskIDs(ctx)
+	if err != nil {
+		t.Fatalf("BlockedTaskIDs: %v", err)
+	}
+	if blocked[dupe.ID] {
+		t.Fatal("duplicate reports blocked, want claimable: duplicate_of gates nothing")
+	}
+
+	got, err := s.GetTask(ctx, dupe.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.State != dupe.State {
+		t.Fatalf("duplicate state = %q, want %q unchanged: marking absorbs nothing",
+			got.State, dupe.State)
+	}
+}
+
 // TestClaimNextDryRun pins spec acceptance: --dry-run returns the top
 // candidate without leasing it or touching task state.
 func TestClaimNextDryRun(t *testing.T) {
