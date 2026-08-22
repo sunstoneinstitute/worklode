@@ -316,8 +316,38 @@ narrow-width audit at 320, 375 and 768 CSS px and at 200% zoom fixed them:
   lifted above it, so what a sighted keyboard user tabs through is what they
   see.
 
-The rest of this section remains the target it says it is. Only 1.3.2, 1.4.4,
-1.4.10, 2.4.11 and 2.5.8 have been verified against the built pages so far.
+A second audit measured what the first one left out — the width-independent
+criteria — against the same built pages, in both themes, and settled four more
+consequences:
+
+- **Muted text is measured against the page, not against a card.** `--ink-3` is
+  the muted colour, and on the light theme it also lands directly on the page
+  background above the first card, which is the least contrasty surface it
+  reaches. It is set to clear 4.5:1 there rather than only on white.
+- **A border that is a control's boundary is not the same token as a rule.**
+  A button, a text field or a select whose fill matches the surface behind it
+  is identifiable only by its outline, so that outline carries its own token at
+  3:1 (WCAG 1.4.11). The divider and card-edge tokens are decorative and are
+  deliberately not held to it.
+- **The focus indicator is one rule, offset from the element.** A single
+  `:focus-visible` outline, drawn 2px clear of the focused box, so the colour
+  it must stand out from is the surface behind the control rather than the
+  control's own fill — which is what lets one indicator serve every surface.
+- **A rejected form submit is announced by moving focus, not by a live
+  region.** A live region fires for a change to a document already on screen;
+  a rejected submit arrives as a whole new document, so the region announced
+  nothing. The validation message takes focus on load and the page title is
+  prefixed `Error:`.
+
+1.3.1, 1.3.2, 1.4.3, 1.4.4, 1.4.10, 1.4.12, 2.4.7, 2.4.11, 2.5.8 and 4.1.2 have
+now been verified against the built pages; 1.4.13 has no subject, because
+nothing in the cockpit appears on hover or focus. 1.4.11 holds for control
+boundaries and the focus indicator, with one exception: on the light theme the
+primary button's accent fill and its border both sit under 3:1 against the card
+behind them. That is a decision about the brand accent rather than about this
+page, so it is filed rather than fixed here.
+
+The rest of this section remains the target it says it is.
 
 The UI follows Sunstone's approved contrast-safe palette and typography. Visual
 style is not a source of domain meaning; icons, text, and state labels accompany
