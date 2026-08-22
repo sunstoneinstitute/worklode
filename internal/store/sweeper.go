@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 )
@@ -26,6 +25,13 @@ func (s *Store) StartLeaseSweeper(ctx context.Context) {
 // cancelled (shutdown) ends the loop and records nothing — neither ok nor
 // error — so shutdown does not spike the error rate; every other outcome is
 // counted and the loop continues.
+//
+// Whether a failure was shutdown is decided by the context, not by the shape
+// of the error. Cancelling mid-round-trip tears the pooled connection down
+// under the driver, which surfaces whatever the aborted syscall returned
+// ("write tcp ...: i/o timeout", "database is closed") rather than a wrapped
+// context.Canceled — so matching on the error alone would count shutdown as a
+// failed sweep.
 func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
@@ -35,7 +41,7 @@ func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 			return
 		case <-ticker.C:
 			n, err := s.ExpireLeases(ctx, s.nowFn().UTC())
-			if errors.Is(err, context.Canceled) {
+			if err != nil && ctx.Err() != nil {
 				return
 			}
 			s.metrics.sweeperRun(err)
