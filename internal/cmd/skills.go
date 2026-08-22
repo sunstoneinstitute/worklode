@@ -230,11 +230,15 @@ func newSkillsSyncCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			raw, err := c.SyncSkills(cmd.Context())
+			report, raw, err := c.SyncSkills(cmd.Context())
 			if err != nil {
 				return err
 			}
-			printRaw(cmd, raw)
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.SkillSyncRender(cmd.OutOrStdout(), report)
 			return nil
 		},
 	}

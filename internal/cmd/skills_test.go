@@ -439,6 +439,62 @@ func TestSkillsInstallLink(t *testing.T) {
 // command must still succeed and still publish to claude-code's target —
 // one bad target must not stop --link all from reaching the rest. Needs
 // Postgres via skillsTestServer; skips locally, runs in CI.
+// TestSkillsSyncHumanAndJSON drives `lode skills sync` against a wrapper that
+// intercepts POST /api/v1/skills/sync and returns a canned report, rather
+// than configuring a real skill source (LODE_SKILL_SOURCES needs a live
+// GitHub-shaped server) — this test is only about the command's own
+// default-vs---json branch, which WL-175 fixed: it used to print the raw
+// body unconditionally.
+func TestSkillsSyncHumanAndJSON(t *testing.T) {
+	const body = `{"synced":12,"changed":3,"deleted":1,"embedded":3}`
+	_, _, _, _ = skillsTestServerWithSync(t, body)
+
+	out, err := runLode(t, "skills", "sync")
+	if err != nil {
+		t.Fatalf("skills sync: %v\noutput: %s", err, out)
+	}
+	want := "synced 12 skill(s): 3 changed, 1 deleted, 3 embedded\n"
+	if out != want {
+		t.Fatalf("skills sync output = %q, want %q", out, want)
+	}
+
+	out, err = runLode(t, "skills", "sync", "--json")
+	if err != nil {
+		t.Fatalf("skills sync --json: %v\noutput: %s", err, out)
+	}
+	if strings.TrimSpace(out) != body {
+		t.Fatalf("skills sync --json output = %q, want the raw body %q", out, body)
+	}
+}
+
+// skillsTestServerWithSync is skillsTestServer plus a handler wrapper that
+// short-circuits POST /api/v1/skills/sync with the given raw JSON body,
+// never reaching the real syncSkills handler (which 422s without configured
+// skill sources).
+func skillsTestServerWithSync(t *testing.T, body string) (*store.Store, *cli.Client, *int32, string) {
+	t.Helper()
+	var archiveHits int32
+	st, c := testServer(t, api.Config{}, func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost && r.URL.Path == "/api/v1/skills/sync" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(body))
+				return
+			}
+			if strings.Contains(r.URL.Path, "/archive/") {
+				atomic.AddInt32(&archiveHits, 1)
+			}
+			h.ServeHTTP(w, r)
+		})
+	})
+
+	root := t.TempDir()
+	t.Setenv("LODE_SKILLS_DIR", root)
+
+	return st, c, &archiveHits, root
+}
+
 func TestSkillsInstallLinkContinuesAfterOneTargetFails(t *testing.T) {
 	st, _, _, _ := skillsTestServer(t)
 	homeDir := t.TempDir()
