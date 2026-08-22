@@ -317,6 +317,10 @@ const (
 
 // Body renders an untrusted markdown task body to sanitised HTML.
 //
+// keys is the live project-key set, which decides which bare <KEY>-<n> tokens
+// in the body are task ids worth linking; the zero ProjectKeys links none.
+// See autolink.go for why the caller supplies it.
+//
 // Callers pass the result to templ.Raw, which takes a string, so the
 // template.HTML type is erased at that boundary: the safety contract is this
 // function, not the return type.
@@ -324,16 +328,16 @@ const (
 // Body renders on every call. A cockpit serving the same body to many readers
 // wants (*Cache).Body instead — see cache.go for why paying this per view is
 // not affordable.
-func Body(body string) template.HTML {
-	html, _ := render(taskFlavour, body)
+func Body(keys ProjectKeys, body string) template.HTML {
+	html, _ := render(taskFlavour, keys, body)
 	return html
 }
 
 // DocBody renders a design-document body to sanitised HTML. It is Body with
 // section anchors kept: same caps, same balance pass, same allowlist but for
 // an id on a heading. (*Cache).DocBody is the cached form.
-func DocBody(body string) template.HTML {
-	html, _ := render(docFlavour, body)
+func DocBody(keys ProjectKeys, body string) template.HTML {
+	html, _ := render(docFlavour, keys, body)
 	return html
 }
 
@@ -358,7 +362,7 @@ func stripFrontmatter(body string) string {
 }
 
 // render is Body plus the outcome label the cache reports.
-func render(f flavour, body string) (template.HTML, string) {
+func render(f flavour, keys ProjectKeys, body string) (template.HTML, string) {
 	if f.kind == kindDoc {
 		body = stripFrontmatter(body)
 	}
@@ -366,7 +370,10 @@ func render(f flavour, body string) (template.HTML, string) {
 		return template.HTML(template.HTMLEscapeString(body)), outcomeOversize
 	}
 	var buf bytes.Buffer
-	if err := f.md.Convert([]byte(body), &buf); err != nil {
+	// A fresh parse context per Convert: the two goldmark values are
+	// package-level and shared by concurrent renders, so the key set cannot
+	// ride the parser.
+	if err := f.md.Convert([]byte(body), &buf, withProjectKeys(keys)); err != nil {
 		// Defensive: goldmark cannot fail writing into a bytes.Buffer. Kept so
 		// that a future sink which can fail does not lose the body.
 		return template.HTML(template.HTMLEscapeString(body)), outcomeFallback
