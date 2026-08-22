@@ -308,7 +308,7 @@ func mirrorTokenServer(t *testing.T, app *githubauth.AppAuth) *server {
 }
 
 // aimAtTestHost points the token's host scope at the httptest origin for one
-// test. Production's scope is mirrorTokenHosts' own value, which
+// test. Production's scope is mirrorTokenScopes' own value, which
 // TestMirrorTokenStaysOffOtherHosts exercises unchanged.
 //
 // It writes a package-level var, so a caller must not be parallel; no test in
@@ -316,9 +316,9 @@ func mirrorTokenServer(t *testing.T, app *githubauth.AppAuth) *server {
 // against the production value honest.
 func aimAtTestHost(t *testing.T) {
 	t.Helper()
-	saved := mirrorTokenHosts
-	mirrorTokenHosts = []string{"localhost"}
-	t.Cleanup(func() { mirrorTokenHosts = saved })
+	saved := mirrorTokenScopes
+	mirrorTokenScopes = []string{"localhost"}
+	t.Cleanup(func() { mirrorTokenScopes = saved })
 }
 
 // A private repo's image is exactly a fetch that 404s without the token, so
@@ -344,7 +344,7 @@ func TestMirrorSendsInstallationToken(t *testing.T) {
 // The token's host scope is githubusercontent.com, not the whole fetch
 // allowlist: an image on any other host mirroring will fetch gets no
 // credential. Deliberately runs against the production value of
-// mirrorTokenHosts.
+// mirrorTokenScopes.
 func TestMirrorTokenStaysOffOtherHosts(t *testing.T) {
 	s := mirrorTokenServer(t, mirrorTokenApp(t, false))
 	origin := newMirrorAuthOrigin(t)
