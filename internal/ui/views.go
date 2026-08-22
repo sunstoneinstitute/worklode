@@ -20,7 +20,7 @@ import (
 
 // PageProps carries the fields the Page shell needs on every page: the
 // document title and which primary-nav destination to mark aria-current.
-// ActiveGlobal drives globalShell's sidebar marking: one of "home", "intake",
+// ActiveGlobal drives the global navigation row's marking: one of "home", "intake",
 // "projects", "work", "reviews", "deliveries", "knowledge". It is left empty
 // on project-scoped pages, whose project-local nav carries the current-page
 // marker instead, and on pages with no current destination (the task page),

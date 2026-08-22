@@ -1,10 +1,9 @@
-// nav.js wires the two mobile-only sheet toggles added for the GitHub-app
-// style bottom navigation (layout.templ's header comment): the global nav's
-// "More" tab and the project drawer's menu button. Both panels are the same
-// landmark elements the desktop sidebar renders — never a duplicate copy —
+// nav.js wires the two narrow-width menu toggles: the global navigation row's
+// "More" button and the project drawer's menu button. Both panels are the same
+// landmark elements the wide layout renders — never a duplicate copy —
 // so all this script does is flip one attribute, body[data-open-panel], that
 // the mobile media query in styles/app.tailwind.css reads to show/hide them,
-// plus keep aria-expanded and focus in sync. Desktop never shows either
+// plus keep aria-expanded and focus in sync. Wide layouts never show either
 // trigger button, so this script is inert above 880px.
 // Served at /assets/nav.js by internal/api's assetHandler; a static asset,
 // not a generated artifact, so it carries no drift-check surface.
