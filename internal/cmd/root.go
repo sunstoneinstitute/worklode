@@ -8,19 +8,14 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/buildinfo"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
-
-// version is stamped at build time with
-// -ldflags "-X github.com/sunstoneinstitute/worklode/internal/cmd.version=X.Y.Z"
-// (see the Homebrew formula). It must stay a package-level var: the linker can
-// only rewrite a symbol, not a struct literal field.
-var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:     "lode",
 	Short:   "lode is the Sunstone Institute work tracker",
-	Version: version,
+	Version: buildinfo.Version,
 	// SilenceUsage/SilenceErrors: main.go already prints the error returned
 	// by Execute() and exits 1. Without these, cobra additionally prints
 	// "Error: ..." itself and dumps a full usage block for every runtime

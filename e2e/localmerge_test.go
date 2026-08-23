@@ -5,6 +5,9 @@ package e2e
 import (
 	"context"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -65,6 +68,13 @@ func TestLocalMergeReportEndToEnd(t *testing.T) {
 	// installed git hook does on a developer's machine.
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", tok.Token)
+	dist := t.TempDir()
+	build := exec.Command("go", "build", "-trimpath", "-o", filepath.Join(dist, "lode-hook"), "./cmd/lode-hook")
+	build.Dir = store.ModuleRootForTests()
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build lode-hook: %v\n%s", err, out)
+	}
+	t.Setenv("PATH", dist+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	// Two claimed tasks, one of whose branches will land in the clone.
 	landedID, landedBranch := claimForMerge(t, ctx, agent, "Land the widget", "e2e-merge-wt-1")
