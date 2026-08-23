@@ -11,7 +11,8 @@ func TestRunValidatesRequiredOptions(t *testing.T) {
 	for _, tc := range []struct {
 		name, dsn, path, want string
 	}{
-		{name: "dsn", want: "no DSN"},
+		{name: "migrations path precedes dsn", want: "migrations-path"},
+		{name: "dsn", path: "migrations", want: "no DSN"},
 		{name: "migrations path", dsn: "postgres://example.test/db", want: "migrations-path"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

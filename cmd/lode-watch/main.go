@@ -14,11 +14,11 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/watchapp"
 )
 
-func main() { os.Exit(run(context.Background(), os.Args[1:], os.Stdout)) }
+func main() { os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr)) }
 
-func run(ctx context.Context, args []string, stdout io.Writer) int {
+func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("lode-watch", flag.ContinueOnError)
-	fs.SetOutput(stdout)
+	fs.SetOutput(stderr)
 	kubeconfig := fs.String("kubeconfig", "", "path to a kubeconfig file (empty: in-cluster config)")
 	cluster := fs.String("cluster", "", "cluster name reported with every event")
 	server := fs.String("server", os.Getenv("LODE_SERVER"), "worklode server URL (default $LODE_SERVER)")
@@ -35,13 +35,13 @@ func run(ctx context.Context, args []string, stdout io.Writer) int {
 		return 0
 	}
 	if *cluster == "" {
-		fmt.Fprintln(stdout, "--cluster is required")
+		fmt.Fprintln(stderr, "--cluster is required")
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := watchapp.Run(ctx, watchapp.Options{Kubeconfig: *kubeconfig, Cluster: *cluster, Server: *server, Token: *token}); err != nil {
-		fmt.Fprintln(stdout, err)
+		fmt.Fprintln(stderr, err)
 		return 1
 	}
 	return 0

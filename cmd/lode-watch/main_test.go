@@ -8,8 +8,11 @@ import (
 )
 
 func TestRunRequiresCluster(t *testing.T) {
-	var out bytes.Buffer
-	if code := run(context.Background(), nil, &out); code == 0 || !strings.Contains(out.String(), "cluster") {
-		t.Fatalf("run without --cluster = %d, %q; want cluster error", code, out.String())
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), nil, &stdout, &stderr); code == 0 {
+		t.Fatal("run without --cluster succeeded")
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "cluster") {
+		t.Fatalf("stdout=%q stderr=%q, want cluster diagnostic on stderr", stdout.String(), stderr.String())
 	}
 }

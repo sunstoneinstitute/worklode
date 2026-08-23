@@ -11,11 +11,11 @@ import (
 )
 
 func Run(_ context.Context, dsn, migrationsPath string, stdout io.Writer) error {
-	if dsn == "" {
-		return errors.New("no DSN: set --dsn or LODE_DSN")
-	}
 	if migrationsPath == "" {
 		return errors.New("--migrations-path is required")
+	}
+	if dsn == "" {
+		return errors.New("no DSN: set --dsn or LODE_DSN")
 	}
 	s, err := store.Open(dsn)
 	if err != nil {
