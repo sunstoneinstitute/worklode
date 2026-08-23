@@ -55,11 +55,18 @@ jobs:
               echo "${{ steps.image.outputs.path }}:${{ steps.image.outputs.tag }}"
               echo "${{ steps.image.outputs.path }}:latest"
               echo "EOF"
+              echo "watcher-list<<EOF"
+              echo "${{ steps.image.outputs.path }}-watch:${{ steps.image.outputs.tag }}"
+              echo "${{ steps.image.outputs.path }}-watch:latest"
+              echo "EOF"
             } >> "$GITHUB_OUTPUT"
           else
             {
               echo "list<<EOF"
               echo "worklode:ci"
+              echo "EOF"
+              echo "watcher-list<<EOF"
+              echo "worklode-watch:ci"
               echo "EOF"
             } >> "$GITHUB_OUTPUT"
           fi
@@ -117,7 +124,19 @@ jobs:
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
+          target: server
           push: ${{ inputs.push }}
           tags: ${{ steps.tags.outputs.list }}
-          cache-from: type=gha,scope=docker
-          cache-to: ${{ inputs.push && 'type=gha,mode=max,scope=docker' || '' }}
+          cache-from: type=gha,scope=docker-server
+          cache-to: ${{ inputs.push && 'type=gha,mode=max,scope=docker-server' || '' }}
+
+      - name: Build and push watcher Docker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          target: watcher
+          push: ${{ inputs.push }}
+          tags: ${{ steps.tags.outputs.watcher-list }}
+          cache-from: type=gha,scope=docker-watcher
+          cache-to: ${{ inputs.push && 'type=gha,mode=max,scope=docker-watcher' || '' }}
+
