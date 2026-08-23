@@ -24,7 +24,7 @@ func mintTaskToken(t *testing.T, h http.Handler, token, taskID string, body any)
 func TestMintTaskTokenDefaults(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T"})
+	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T", "priority": "high", "kind": "feature"})
 	id := task["id"].(string)
 
 	resp := mintTaskToken(t, h, token, id, nil)
@@ -54,7 +54,7 @@ func TestMintTaskTokenDefaults(t *testing.T) {
 func TestMintTaskTokenRefusals(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T"})
+	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T", "priority": "high", "kind": "feature"})
 	id := task["id"].(string)
 
 	// Unknown task.
@@ -78,8 +78,8 @@ func TestMintTaskTokenRefusals(t *testing.T) {
 func TestTaskTokenScope(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	mine := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Mine"})["id"].(string)
-	other := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Other"})["id"].(string)
+	mine := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Mine", "priority": "high", "kind": "feature"})["id"].(string)
+	other := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Other", "priority": "high", "kind": "feature"})["id"].(string)
 	scoped := mintTaskToken(t, h, token, mine, nil).Token
 
 	// Bound route, matching task: allowed.
@@ -115,7 +115,7 @@ func TestTaskTokenScope(t *testing.T) {
 func TestTaskTokenMetric(t *testing.T) {
 	st, main, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
-	id := createTaskViaAPI(t, main, token, map[string]any{"project": "proj", "title": "T"})["id"].(string)
+	id := createTaskViaAPI(t, main, token, map[string]any{"project": "proj", "title": "T", "priority": "high", "kind": "feature"})["id"].(string)
 	mintTaskToken(t, main, token, id, nil)
 
 	rr := doReq(t, admin, "GET", "/metrics", "", nil)
