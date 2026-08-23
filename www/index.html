@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Worklode — a work tracker for running several coding agents at once</title>
+<title>Worklode: a work tracker for running several coding agents at once</title>
 <meta name="description" content="Worklode is an open-source work tracker for multi-agent, multi-repo development. Task state, worktree-bound leases and design documents live in Postgres, pickup is a single transaction, and accepting a plan creates the tasks it describes.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="48x48">
@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="styles.css">
 <script defer src="https://sunstone.institute/umami/script.js" data-website-id="481d4ace-b6ae-4e27-94c0-1431d7358edf"></script>
 <meta property="og:type" content="website">
-<meta property="og:title" content="Worklode — a work tracker for running several coding agents at once">
+<meta property="og:title" content="Worklode: a work tracker for running several coding agents at once">
 <meta property="og:description" content="Task state, worktree-bound leases and design documents in Postgres. Pickup is a single transaction, and accepting a plan creates the tasks it describes.">
 <meta property="og:url" content="https://worklode.io/">
 </head>
@@ -68,10 +68,10 @@
       <p class="eyebrow">Open source · Sunstone Institute</p>
       <h1>A work tracker for running <em>several coding agents</em> at once</h1>
       <p class="lede">
-        Worklode keeps task state, leases and design documents in Postgres, so that every agent
-        and every person working on a project reads and writes the same state. Pickup is a single
-        transaction, leases are bound to git worktrees rather than to sessions, and accepting a
-        plan creates the tasks it describes.
+        Worklode keeps task state, leases and design documents in Postgres, so every agent and
+        every person working on a project reads and writes the same state. Pickup is a single
+        transaction, leases bind to git worktrees, and accepting a plan creates the tasks it
+        describes.
       </p>
       <p class="cta-row">
         <a class="btn btn-primary" href="https://github.com/sunstoneinstitute/worklode">View on GitHub</a>
@@ -101,9 +101,9 @@
           <span class="beat-n">01</span>
           <h3>Specify</h3>
           <p>
-            Specifications and plans are records in the tracker rather than files on a branch
-            that was never merged. A plan is reviewed like anything else, and accepting it
-            creates one task per item it describes, with dependencies wired and context attached.
+            Specifications and plans live as records in the tracker. A plan is reviewed like
+            anything else, and accepting it creates one task per item it describes, with
+            dependencies wired and context attached.
           </p>
         </li>
         <li class="beat reveal">
@@ -119,9 +119,9 @@
           <span class="beat-n">03</span>
           <h3>Reconcile</h3>
           <p>
-            Execution reports back. A gap in a plan is escalated, a defect in a specification is
-            recorded against the section it affects, and accepted design that nobody has acted on
-            is reviewed again or closed.
+            Execution reports back. Submitting or accepting a document mints the review or
+            planning task its lifecycle calls for, and revising an accepted document publishes a
+            fix as a new version.
           </p>
         </li>
       </ol>
@@ -134,11 +134,10 @@
       <p class="kicker">Design documents</p>
       <h2>The artifacts people actually review</h2>
       <p class="section-lede">
-        Design documents are first-class objects in Worklode rather than files that happen to sit
-        in a repository. They have kinds, a lifecycle, review policies that differ by kind, stable
-        identifiers, and commands for amending and retiring them. They are also the part of the
-        system where human attention is the point: agents draft, execute and report, and people
-        decide what the design should say.
+        Design documents are first-class objects in Worklode, with kinds, a lifecycle, review
+        policies that differ by kind, stable identifiers, and commands for amending and retiring
+        them. They're also the part of the system where human attention is the point: agents
+        draft, execute and report, and people decide what the design should say.
       </p>
 
       <div class="grid-2">
@@ -153,41 +152,40 @@
         <div class="card reveal">
           <h3>Plans</h3>
           <p>
-            Executable and disposable. A plan is reviewed as a whole rather than line by line,
-            and when the design underneath it changes the plan is regenerated rather than
-            patched.
+            Executable and disposable. A plan is reviewed as a whole, and regenerates whenever the
+            design underneath it changes.
           </p>
         </div>
         <div class="card reveal">
           <h3>Stable identifiers</h3>
           <p>
-            An accepted document has a URI, and each of its sections has a fragment that never
-            moves. A reference can therefore name one section of one document, which is what
-            makes amendment, supersession and coverage queries expressible at all.
+            An accepted document has a URI, and each of its sections keeps a fragment for good. A
+            reference can therefore name one section of one document, which is what makes
+            amendment, supersession and coverage queries expressible at all.
           </p>
         </div>
         <div class="card reveal">
-          <h3>Kept out of the repositories</h3>
+          <h3>One global view of drafts</h3>
           <p>
-            A design document usually describes work that does not exist in version control yet,
-            so a branch is the wrong home for it. One global view keeps drafts findable across
-            every project, and stable identifiers require it.
+            A design document usually describes work still ahead of any repository. Worklode
+            keeps one global view of drafts, findable across every project, which is what stable
+            identifiers need.
           </p>
         </div>
         <div class="card reveal">
-          <h3>Acceptance is not the end</h3>
+          <h3>Documents keep evolving</h3>
           <p>
-            An accepted document is not static. <code>lode doc revise</code> opens a candidate
-            revision, and landing it — reserved to the assignee, like acceptance itself —
-            publishes the edit as a new version rather than rewriting the accepted text in place.
+            <code>lode doc revise</code> opens a candidate revision of an accepted document, and
+            landing it, reserved to the assignee like acceptance itself, publishes the edit as a
+            new version.
           </p>
         </div>
         <div class="card reveal">
           <h3>Follow-up work mints itself</h3>
           <p>
-            Submitting a document mints its review task automatically, and accepting a spec with
-            no plan yet mints a task to write one. Both are deduplicated, so a resubmission or a
-            second draft never queues the same follow-up twice.
+            Submitting a document mints its review task automatically, and accepting a spec mints
+            a task to write its plan, unless one is already open. Either way, a resubmission or a
+            second draft joins the follow-up already queued.
           </p>
         </div>
       </div>
@@ -200,10 +198,10 @@
       <p class="kicker">The model</p>
       <h2>Three layers on one graph</h2>
       <p class="section-lede">
-        Intent is declared by people. Execution and runtime are derived from what the repositories
-        and clusters actually did — commits, pull requests, CI runs, artifacts, deployments — so
-        neither layer is hand-maintained. Deliverable is the vertical join, where a declared
-        definition of done meets what is running in production.
+        Intent is declared by people. Execution and runtime are derived automatically from what
+        the repositories and clusters actually did: commits, pull requests, CI runs, artifacts,
+        deployments. Deliverable is the vertical join, where a declared definition of done meets
+        what is running in production.
       </p>
 
       <figure class="diagram reveal">
@@ -212,7 +210,7 @@
         <figcaption>
           People declare intent at the top. Agents take exclusive claims from the centre and turn
           them into commits. Deployments settle at the bottom, and every tier reports back to the
-          same store — including the line that runs from an executing agent back up to review.
+          same store, including the line that runs from an executing agent back up to review.
         </figcaption>
       </figure>
 
@@ -270,7 +268,7 @@
   <section id="coordination" class="band band-mist">
     <div class="wrap">
       <p class="kicker">More than one worker</p>
-      <h2>Coordination that does not spend tokens</h2>
+      <h2>Deterministic coordination</h2>
       <p class="section-lede">
         The features below exist because more than one worker is in the repository at the same
         time. Atomic pickup matters when two agents start together. Leases matter when a person
@@ -307,24 +305,22 @@
           <p>
             Mechanical tasks go to cheap models and design work to stronger ones. A
             <code>concern</code> dimension and a per-project <code>focus</code> steer what comes
-            next. There are no story points and no estimates.
+            next.
           </p>
         </div>
         <div class="card reveal">
-          <h3>Skills delivered, not registered</h3>
+          <h3>Skills delivered on demand</h3>
           <p>
-            Org-wide agent skills live in the backbone. The server selects the relevant ones for
-            a task using embeddings and explicit pins, then delivers them as files the agent
-            reads. Nothing is registered with any harness, so no skill costs context until it is
-            actually chosen.
+            Org-wide agent skills live in the backbone. The server matches the relevant ones to a
+            task with embeddings and explicit pins, then delivers them as files the agent reads,
+            so a skill only costs context once it's actually chosen.
           </p>
         </div>
         <div class="card reveal">
           <h3>Cost attributed to work</h3>
           <p>
             Each session is priced from the agent's own transcript against effective-dated rate
-            rows, so spend is attributed to a task, a session and a project rather than estimated
-            after the fact.
+            rows, so spend lands on a task, a session and a project as it happens.
           </p>
         </div>
       </div>
@@ -340,7 +336,7 @@
 <span class="p">/lode:next</span>
 <span class="c">// re-acquire the task already bound to this worktree</span>
 <span class="p">/lode:resume</span>
-<span class="c">// a real blocker outside this task's scope — record it, release the lease</span>
+<span class="c">// a real blocker outside this task's scope: record it, release the lease</span>
 <span class="p">/lode:block</span> --on WL-118
 <span class="c">// verify the deliverable, push, open the PR, submit for review</span>
 <span class="p">/lode:done</span></code></pre>
@@ -351,48 +347,46 @@
   <!-- ── Escalation ───────────────────────────────────────────────────── -->
   <section id="ladder" class="band">
     <div class="wrap">
-      <p class="kicker">Designed, not yet built</p>
+      <p class="kicker">Roadmap</p>
       <h2>When the plan turns out to be wrong</h2>
       <p class="section-lede">
         Plans are written by the strongest model available so that cheaper models can execute
-        them mechanically. That arrangement only works if the executor has somewhere to go when
-        the plan does not cover the case in front of it, because the fix is a change to the plan,
-        and changing the plan is not the executor's decision to make. This escalation ladder is
-        fully specified and is the next major piece of the execution backbone; today an executor
-        that hits a gap still stops and hands the task back by hand.
+        them mechanically. That only works if the executor has somewhere to go when it hits a
+        case the plan missed, since fixing the plan is a call for whoever wrote it. This
+        escalation ladder is fully specified and is the next major piece of the execution
+        backbone. Today an executor that hits a gap stops and hands the task back by hand.
       </p>
 
       <div class="grid-2">
         <div class="card reveal">
           <h3>Gaps get recorded</h3>
           <p>
-            An executor that meets something the plan does not cover will record it and stop
-            rather than guess. The discovery becomes an event in the backbone instead of a line in
-            a session transcript.
+            An executor that meets a gap the plan does not cover will record it and stop. The
+            discovery becomes an event in the backbone, not a line in a session transcript.
           </p>
         </div>
         <div class="card reveal">
           <h3>A stronger model fixes it</h3>
           <p>
             A subagent running at the tier the fix requires will amend the plan, or the
-            specification above it, and hand control back — so the executor waits on a subagent
-            rather than on someone to pick up a ticket, and the delay stays bounded.
+            specification above it, and hand control back to the executor, keeping the delay
+            bounded.
           </p>
         </div>
         <div class="card reveal">
           <h3>Substantive changes go back for review</h3>
           <p>
             A patch that adds a dependency, changes an interface, touches the ontology or alters
-            a definition of done will count as substantive by rule, so the server applies that
-            rule rather than leaving it to the agent that would like to carry on.
+            a definition of done will count as substantive by rule, and the server will apply
+            that rule automatically.
           </p>
         </div>
         <div class="card reveal">
           <h3>Judgement gets requested explicitly</h3>
           <p>
-            When the fix needs a decision rather than a stronger model, <code>lode task
-            escalate</code> will create a design task assigned to whoever wrote the plan, and
-            block the original work until it is resolved.
+            When a fix needs a person's judgement, <code>lode task escalate</code> will create a
+            design task assigned to whoever wrote the plan, and block the original work until
+            it's resolved.
           </p>
         </div>
       </div>
@@ -413,7 +407,7 @@
       <p class="section-lede">
         Each architectural relationship exists as an edge someone declared alongside a design
         document, and as an edge derived from code, pull requests and deployments. The difference
-        between the two sets is drift, and it is a query rather than a meeting.
+        between the two sets is drift, and finding it is one query.
       </p>
 
       <div class="formula reveal">
@@ -446,7 +440,7 @@
         </div>
         <div class="card reveal">
           <h3>Ready frontier</h3>
-          <p>What is genuinely unblocked right now, computed from the graph rather than cached.</p>
+          <p>What is genuinely unblocked right now, computed live from the graph.</p>
         </div>
       </div>
     </div>
