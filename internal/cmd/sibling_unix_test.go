@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 func TestRunSiblingForwardsStreamsEnvironmentAndExitCode(t *testing.T) {
@@ -49,6 +51,71 @@ func TestLegacyStatuslineForwardsArgumentsAndStderr(t *testing.T) {
 	}
 	if stdout.String() != "first second" || !strings.Contains(stderr.String(), "child-stderr") {
 		t.Fatalf("stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestOperatorShimsForwardArgumentsStreamsAndExitCode(t *testing.T) {
+	commands := []struct {
+		name, sibling string
+		new           func() *cobra.Command
+	}{
+		{name: "serve", sibling: "lode-server", new: newServeCmd},
+		{name: "watch", sibling: "lode-watch", new: newWatchCmd},
+		{name: "migrate", sibling: "lode-migrate", new: newMigrateCmd},
+	}
+	for _, tc := range commands {
+		subcommand := tc.name
+		t.Run(subcommand, func(t *testing.T) {
+			dir := t.TempDir()
+			child := filepath.Join(dir, tc.sibling)
+			script := "#!/bin/sh\nprintf 'args:%s\\n' \"$*\"\n/bin/cat\nprintf 'child diagnostic\\n' >&2\nexit 7\n"
+			if err := os.WriteFile(child, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", dir)
+			command := tc.new()
+			command.SetContext(t.Context())
+			command.SetIn(strings.NewReader("stdin-data\n"))
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			err := command.RunE(command, []string{"--probe", "value"})
+			if code := exitStatus(err); code != 7 {
+				t.Fatalf("exit code = %d, want 7 (%v); stdout=%q stderr=%q", code, err, stdout.String(), stderr.String())
+			}
+			if got := stdout.String(); got != "args:--probe value\nstdin-data\n" {
+				t.Fatalf("stdout = %q", got)
+			}
+			if got := stderr.String(); got != "child diagnostic\n" {
+				t.Fatalf("stderr = %q", got)
+			}
+		})
+	}
+}
+
+func TestOperatorShimsNameMissingServerSibling(t *testing.T) {
+	commands := []struct {
+		name, sibling string
+		new           func() *cobra.Command
+	}{
+		{name: "serve", sibling: "lode-server", new: newServeCmd},
+		{name: "watch", sibling: "lode-watch", new: newWatchCmd},
+		{name: "migrate", sibling: "lode-migrate", new: newMigrateCmd},
+	}
+	for _, tc := range commands {
+		subcommand := tc.name
+		t.Run(subcommand, func(t *testing.T) {
+			t.Setenv("PATH", t.TempDir())
+			command := tc.new()
+			command.SetContext(t.Context())
+			var stdout, stderr bytes.Buffer
+			command.SetOut(&stdout)
+			command.SetErr(&stderr)
+			err := command.RunE(command, nil)
+			if err == nil || !strings.Contains(err.Error(), tc.sibling) || !strings.Contains(err.Error(), "server distribution") {
+				t.Fatalf("error=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+			}
+		})
 	}
 }
 
