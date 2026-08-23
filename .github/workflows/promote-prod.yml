@@ -68,6 +68,41 @@ jobs:
           from-overlay-path: deploy/overlays/hzdev/kustomization.yaml
           overlay-path: deploy/overlays/hzprod/kustomization.yaml
 
+      # promote-images is the only place a new version number gets computed
+      # (bump: patch/minor/major from existing tags), so it's the only place
+      # that can keep the plugin manifests' own "version" fields in sync with
+      # the release. A hand-pushed v* tag (release.yml) implies the bump was
+      # already made by hand before the tag existed.
+      - name: Bump plugin version files
+        id: bump-versions
+        run: |
+          set -euo pipefail
+          VERSION="${TO_TAG#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          jq --arg v "$VERSION" '.version = $v' plugins/claude/lode/.claude-plugin/plugin.json > /tmp/plugin.json
+          mv /tmp/plugin.json plugins/claude/lode/.claude-plugin/plugin.json
+          jq --arg v "$VERSION" '.version = $v' plugins/obsidian/package.json > /tmp/package.json
+          mv /tmp/package.json plugins/obsidian/package.json
+        env:
+          TO_TAG: ${{ steps.promote.outputs.to-tag }}
+
+      # Pushed with GITHUB_TOKEN, same as promote-images' own tag push above,
+      # so this commit does not re-trigger any workflow.
+      - name: Commit plugin version bumps
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- plugins/claude/lode/.claude-plugin/plugin.json plugins/obsidian/package.json; then
+            echo "Plugin manifests already at ${VERSION}; nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugins/claude/lode/.claude-plugin/plugin.json plugins/obsidian/package.json
+          git commit -m "Bump plugin manifest versions to ${VERSION}"
+          git push origin HEAD:main
+        env:
+          VERSION: ${{ steps.bump-versions.outputs.version }}
+
       - name: Output summary
         run: |
           {
