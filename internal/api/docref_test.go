@@ -5,7 +5,6 @@ package api_test
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -18,7 +17,7 @@ import (
 func TestDocRefRedirect(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	d := createDocViaAPI(t, h, token, model.CreateDocInput{
+	createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 45, Slug: "per-project-workflows",
 		Body: "---\nstatus: draft\n---\n# Spec 45 — Workflows\n\n## 1. One {#sec-1}\n\nText.\n",
 	})
@@ -34,8 +33,8 @@ func TestDocRefRedirect(t *testing.T) {
 		if rr.Code != http.StatusFound {
 			t.Fatalf("ref %q status = %d, want 302; body %s", ref, rr.Code, rr.Body.String())
 		}
-		if got := rr.Header().Get("Location"); got != docPageURLForTest(d.ID) {
-			t.Fatalf("ref %q Location = %q, want %q", ref, got, docPageURLForTest(d.ID))
+		if got := rr.Header().Get("Location"); got != "/docs/WL-SPEC-45" {
+			t.Fatalf("ref %q Location = %q, want %q", ref, got, "/docs/WL-SPEC-45")
 		}
 	}
 
@@ -52,29 +51,23 @@ func TestDocRefRedirect(t *testing.T) {
 func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	base := createDocViaAPI(t, h, token, model.CreateDocInput{
+	createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 4, Slug: "004-backbone",
 		Body: "---\nstatus: draft\n---\n# Spec 4 — Backbone\n\n## 2. Two {#sec-2}\n\nText.\n",
 	})
-	amending := createDocViaAPI(t, h, token, model.CreateDocInput{
+	createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "spec", Number: 9, Slug: "009-amender",
 		Body: "---\nstatus: draft\nrequires:\n- 004-backbone\namends:\n  \"#sec-1\":\n  - 004-backbone#sec-2\n---\n# Spec 9 — Amender\n\n## 1. One {#sec-1}\n\nPer 004 §2, and spec 004 §2 again.\n",
 	})
 
-	page := doReq(t, h, "GET", docPageURLForTest(amending.ID), "", nil).Body.String()
+	page := doReq(t, h, "GET", "/docs/WL-SPEC-9", "", nil).Body.String()
 	if strings.Contains(page, "status: draft") {
 		t.Errorf("frontmatter leaked into the rendered body:\n%s", page)
 	}
 	if !strings.Contains(page, `href="/docs/ref/004#sec-2"`) {
 		t.Errorf("body reference not autolinked:\n%s", page)
 	}
-	if !strings.Contains(page, docPageURLForTest(base.ID)+"#sec-2") {
+	if !strings.Contains(page, "/docs/ref/004-backbone#sec-2") {
 		t.Errorf("relation link carries no #fragment:\n%s", page)
 	}
-}
-
-// docPageURLForTest mirrors api's docPageURL for assertions from the test
-// package.
-func docPageURLForTest(id int64) string {
-	return "/docs/" + strconv.FormatInt(id, 10)
 }

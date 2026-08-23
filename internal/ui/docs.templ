@@ -41,7 +41,7 @@ templ Docs(v DocsView) {
 											<a href={ d.URL }>{ d.Ref }</a>
 											<div class="muted small mono">{ d.Doc.Slug }</div>
 										</td>
-										<td>{ d.Doc.Title }</td>
+										<td><a href={ d.URL }>{ d.Doc.Title }</a></td>
 										<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
 										<td><span class={ "chip " + docStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
 										<td class="mono">{ d.Doc.Version }</td>

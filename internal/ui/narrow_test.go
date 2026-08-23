@@ -332,6 +332,7 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 	for _, c := range []struct{ want, why string }{
 		{"scroll-padding-top:112px", "an in-page jump must clear both sticky header rows (WCAG 2.4.11)"},
 		{".tablewrap{overflow-x:auto", "a data table scrolls inside its own container (WCAG 1.4.10)"},
+		{".tablewrapth,.tablewraptd{padding:8px12px", "data-table cells need readable separation"},
 		{"pre{overflow-x:auto", "a stored document body cannot be re-wrapped, so it scrolls inside itself (WCAG 1.4.10)"},
 		{".prose{overflow-wrap:anywhere", "an unbroken token in a task body must not widen the page (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal", "a work row's title wraps below 880px instead of truncating to nothing (WCAG 1.4.10)"},

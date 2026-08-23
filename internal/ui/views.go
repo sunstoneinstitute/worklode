@@ -477,8 +477,8 @@ type DocsView struct {
 }
 
 // DocRow is one document in the index: the stored row, its page URL, and the
-// corpus reference pre-formatted for display ("spec 25"; a plan carries no
-// number, so its reference is its kind alone).
+// direct web reference pre-formatted for display ("WL-SPEC-25"; a plan carries
+// no shorthand and keeps its kind label).
 type DocRow struct {
 	Doc model.Doc
 	URL string

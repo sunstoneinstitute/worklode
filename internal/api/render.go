@@ -201,7 +201,7 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.D
 }
 
 // docsView maps the document corpus into the /docs index.
-func docsView(docs []model.Doc) ui.DocsView {
+func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 	v := ui.DocsView{
 		Page: ui.PageProps{Title: "worklode: documents"},
 		Docs: make([]ui.DocRow, 0, len(docs)),
@@ -211,7 +211,12 @@ func docsView(docs []model.Doc) ui.DocsView {
 	// source into the page would make it the heaviest response the cockpit
 	// serves.
 	for _, d := range withoutDocBodies(docs) {
-		v.Docs = append(v.Docs, ui.DocRow{Doc: d, URL: docPageURL(d.ID), Ref: docRef(d)})
+		ref, url := docRef(d), docPageURL(d.ID)
+		if d.Number != 0 {
+			ref = docWebRef(d, projectKeys[d.Project])
+			url = "/docs/" + ref
+		}
+		v.Docs = append(v.Docs, ui.DocRow{Doc: d, URL: url, Ref: ref})
 	}
 	return v
 }
@@ -246,10 +251,13 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 		row := ui.DocEdgeRow{Type: e.Type, Anchor: e.FromAnchor, Label: e.ToExternal}
 		switch {
 		case e.ToDoc != 0:
-			row.URL = docPageURL(e.ToDoc)
 			row.Label = e.ToSlug
 			if row.Label == "" {
 				row.Label = "document " + strconv.FormatInt(e.ToDoc, 10)
+			} else if e.ToNumber == 0 {
+				row.URL = docPageURL(e.ToDoc)
+			} else {
+				row.URL = "/docs/ref/" + e.ToSlug
 			}
 			row.Ref = docEdgeRef(e)
 			if e.ToAnchor != "" {
@@ -294,7 +302,14 @@ func docRef(d model.Doc) string {
 	return d.Kind + " " + strconv.Itoa(d.Number)
 }
 
-// docPageURL is a document's cockpit page path.
+// docWebRef is a document's direct cockpit reference. Specs and ADRs use the
+// cross-corpus shorthand; plans have no shorthand, so their slug is canonical.
+func docWebRef(d model.Doc, projectKey string) string {
+	return projectKey + "-" + strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
+}
+
+// docPageURL is the fallback cockpit page path for plans, which deliberately
+// have no cross-corpus shorthand, and tombstones whose slug may be reused.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
 // formTitle is a creation form's document title, prefixed "Error: " when the
