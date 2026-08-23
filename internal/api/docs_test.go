@@ -1100,8 +1100,8 @@ func TestDocRevisionRefusals(t *testing.T) {
 func TestDocsPage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
-	createDocViaAPI(t, h, token, model.CreateDocInput{
+	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
 	})
 
@@ -1112,9 +1112,9 @@ func TestDocsPage(t *testing.T) {
 	body := rr.Body.String()
 	assertShell(t, body)
 	bodyContains(t, body,
-		"Documents in the backbone",
-		"025-part-2",
-		docPageURL(spec.ID),
+		`href="/docs/WL-SPEC-25">WL-SPEC-25</a>`,
+		`href="/docs/WL-SPEC-25">Documents in the backbone</a>`,
+		`href="`+docPageURL(plan.ID)+`">Documents in the backbone, part 2</a>`,
 		"accepted",
 		"draft",
 	)
@@ -1128,7 +1128,7 @@ func TestDocPage(t *testing.T) {
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
 	})
 
-	rr := doReq(t, h, "GET", docPageURL(spec.ID), "", nil)
+	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -1140,7 +1140,7 @@ func TestDocPage(t *testing.T) {
 		"sec-1",                     // section table
 		"Scope",
 		"isCoveredBy",       // the plan's covers, read backward
-		docPageURL(plan.ID), // linked to the other end
+		docPageURL(plan.ID), // plans have no shorthand
 		"025-part-2",        // named by slug, not as "document 42"
 		"Model body.",       // the body, rendered verbatim in a <pre>
 	)
@@ -1158,15 +1158,16 @@ func TestDocPage(t *testing.T) {
 		">spec 25<",                           // and what kind of document that is
 	)
 
-	if rr := doReq(t, h, "GET", "/docs/4711", "", nil); rr.Code != http.StatusNotFound {
-		t.Errorf("unknown id status = %d, want 404", rr.Code)
+	if rr := doReq(t, h, "GET", "/docs/"+strconv.FormatInt(spec.ID, 10), "", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("numeric URL status = %d, want 404", rr.Code)
 	}
 	if rr := doReq(t, h, "GET", "/docs/025-x", "", nil); rr.Code != http.StatusNotFound {
 		t.Errorf("non-numeric id status = %d, want 404", rr.Code)
 	}
 }
 
-// docPageURL is the cockpit page path for a document id.
+// docPageURL is the cockpit page path retained for plans, which have no
+// cross-corpus shorthand.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
 // --- list selectors (026 §2) --------------------------------------------
