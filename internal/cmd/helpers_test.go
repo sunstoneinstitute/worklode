@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -33,12 +34,16 @@ func buildLodeBinary(t *testing.T) string {
 			lodeBinary.err = err
 			return
 		}
-		bin := filepath.Join(dir, "lode")
+		suffix := ""
+		if runtime.GOOS == "windows" {
+			suffix = ".exe"
+		}
+		bin := filepath.Join(dir, "lode"+suffix)
 		build := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", bin, "./cmd/lode")
 		build.Dir = store.ModuleRootForTests()
 		lodeBinary.out, lodeBinary.err = build.CombinedOutput()
 		if lodeBinary.err == nil {
-			build = exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(dir, "lode-hook"), "./cmd/lode-hook")
+			build = exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(dir, "lode-hook"+suffix), "./cmd/lode-hook")
 			build.Dir = store.ModuleRootForTests()
 			lodeBinary.out, lodeBinary.err = build.CombinedOutput()
 		}

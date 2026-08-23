@@ -8,10 +8,5 @@ func ExitCode(err error) (int, bool) {
 	if !ok {
 		return 0, false
 	}
-	if code := exitErr.ExitCode(); code >= 0 {
-		return code, true
-	}
-	// os/exec reports a signal-terminated child as -1 on Unix. 130 is the
-	// portable shell status for an interrupt, including CommandContext cancel.
-	return 130, true
+	return childExitCode(exitErr), true
 }
