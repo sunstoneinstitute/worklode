@@ -14,7 +14,7 @@ templ CLICode(v CLICodeView) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ v.Title }</title>
-			<link rel="stylesheet" href="/assets/app.css"/>
+			<link rel="stylesheet" href={ assetURL("app.css") }/>
 		</head>
 		<body>
 			<main id="main-content">
@@ -34,7 +34,7 @@ templ CLICode(v CLICodeView) {
 					</section>
 				</div>
 			</main>
-			<script src="/assets/copy.js" defer></script>
+			<script src={ assetURL("copy.js") } defer></script>
 		</body>
 	</html>
 }

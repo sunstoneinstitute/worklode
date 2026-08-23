@@ -2,7 +2,9 @@ package api_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"net/http"
 	"strings"
 	"testing"
@@ -34,7 +36,7 @@ func assertShell(t *testing.T, body string) {
 		`href="#main-content"`,
 		`class="shell"`,
 		`<main id="main-content"`,
-		`href="/assets/app.css"`,
+		`href="/assets/app.css?v=`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page is missing shell marker %q", want)
@@ -250,7 +252,7 @@ func TestReviewsPageEmptyIsHonest(t *testing.T) {
 func TestShellReferencesHTMX(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
-	if !strings.Contains(body, `src="/assets/htmx.min.js"`) {
+	if !strings.Contains(body, `src="/assets/htmx.min.js?v=`) {
 		t.Error("shell does not reference self-hosted HTMX")
 	}
 	rr := doReq(t, h, "GET", "/assets/htmx.min.js", "", nil)
@@ -268,7 +270,7 @@ func TestShellReferencesThemeToggle(t *testing.T) {
 	if !strings.Contains(body, `id="theme"`) {
 		t.Error("shell does not render the theme-toggle button")
 	}
-	if !strings.Contains(body, `src="/assets/theme.js"`) {
+	if !strings.Contains(body, `src="/assets/theme.js?v=`) {
 		t.Error("shell does not reference the self-hosted theme-toggle script")
 	}
 	rr := doReq(t, h, "GET", "/assets/theme.js", "", nil)
@@ -288,6 +290,24 @@ func TestAssetsServedWithoutAuth(t *testing.T) {
 		if cc := rr.Header().Get("Cache-Control"); cc != "public, max-age=3600" {
 			t.Errorf("%s Cache-Control = %q, want bounded public cache", path, cc)
 		}
+	}
+}
+
+func TestShellFingerprintsStylesheet(t *testing.T) {
+	_, h, _ := newTestServer(t)
+	body := doReq(t, h, "GET", "/", "", nil).Body.String()
+	const prefix = `href="/assets/app.css?v=`
+	start := strings.Index(body, prefix)
+	if start < 0 {
+		t.Fatalf("shell has no fingerprinted stylesheet URL: %s", body)
+	}
+	version := body[start+len(prefix):]
+	version = version[:strings.IndexByte(version, '"')]
+
+	rr := doReq(t, h, "GET", "/assets/app.css?v="+version, "", nil)
+	sum := sha256.Sum256(rr.Body.Bytes())
+	if want := hex.EncodeToString(sum[:6]); version != want {
+		t.Fatalf("stylesheet version = %q, want content fingerprint %q", version, want)
 	}
 }
 
