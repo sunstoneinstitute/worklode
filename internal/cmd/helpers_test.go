@@ -38,6 +38,11 @@ func buildLodeBinary(t *testing.T) string {
 		build.Dir = store.ModuleRootForTests()
 		lodeBinary.out, lodeBinary.err = build.CombinedOutput()
 		if lodeBinary.err == nil {
+			build = exec.Command("go", "build", "-ldflags=-s -w", "-o", filepath.Join(dir, "lode-hook"), "./cmd/lode-hook")
+			build.Dir = store.ModuleRootForTests()
+			lodeBinary.out, lodeBinary.err = build.CombinedOutput()
+		}
+		if lodeBinary.err == nil {
 			lodeBinary.path = bin
 		}
 	})

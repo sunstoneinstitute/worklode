@@ -53,7 +53,7 @@ jobs:
           # channels.
           VERSION="${TAG#v}"
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
-            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/cmd.version=${VERSION}" \
+            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
             -o lode.exe ./cmd/lode
 
           ZIP="lode_${VERSION}_windows_amd64.zip"
