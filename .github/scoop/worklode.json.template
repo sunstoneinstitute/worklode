@@ -7,7 +7,7 @@
         "64bit": {
             "url": "__URL__",
             "hash": "__SHA256__",
-            "bin": "lode.exe"
+            "bin": ["lode.exe", "lode-hook.exe", "lode-statusline.exe"]
         }
     },
     "checkver": "github",

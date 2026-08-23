@@ -1,7 +1,7 @@
 name: build-windows
 
-# Reusable workflow: cross-compiles the Windows lode.exe, zips it, and attaches
-# the zip to the tag's GitHub Release. Called by release.yml (hand-pushed v*
+# Reusable workflow: cross-compiles the three Windows user binaries, zips them,
+# and attaches the zip to the tag's GitHub Release. Called by release.yml (hand-pushed v*
 # tag) and promote-prod.yml (after promotion pushes its own v* tag). Both
 # callers feed the resulting sha256 into update-scoop-bucket.
 #
@@ -14,7 +14,7 @@ on:
   workflow_call:
     inputs:
       tag:
-        description: v* tag to build the Windows binary for (must already exist on the remote)
+        description: v* tag to build the Windows user binaries for (must already exist on the remote)
         required: true
         type: string
     outputs:
@@ -42,7 +42,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build and zip lode.exe
+      - name: Build and zip Windows user binaries
         id: build
         env:
           TAG: ${{ inputs.tag }}
@@ -55,9 +55,15 @@ jobs:
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
             -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
             -o lode.exe ./cmd/lode
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
+            -o lode-hook.exe ./cmd/lode-hook
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
+            -o lode-statusline.exe ./cmd/lode-statusline
 
           ZIP="lode_${VERSION}_windows_amd64.zip"
-          zip -q "$ZIP" lode.exe
+          zip -q "$ZIP" lode.exe lode-hook.exe lode-statusline.exe
           sha256=$(sha256sum "$ZIP" | awk '{print $1}')
           {
             echo "zip=${ZIP}"
