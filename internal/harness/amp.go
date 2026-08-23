@@ -15,7 +15,7 @@ import (
 // Amp's Plugin API rather than its settings hooks. Amp's JSON hook actions can
 // only send a user message or redact tool input, so the Plugin API — a
 // TypeScript file Amp runs under Bun, with a shell in hand — is the only Amp
-// surface that reaches `lode hook`.
+// surface that reaches the managed `lode-hook` binary.
 //
 // Heartbeat is bound to both ends of a turn. Amp has no Stop event and no
 // idle or notification event, so a turn's start and end are the only signals
@@ -39,9 +39,9 @@ import (
 // bound elsewhere to the EnterWorktree tool, which is Claude Code's, not
 // Amp's. Both are reported unbound.
 var ampBindings = []hookBinding{
-	{Event: "session.start", Command: "lode hook session-start --harness amp"},
-	{Event: "agent.start", Command: "lode hook heartbeat --harness amp"},
-	{Event: "agent.end", Command: "lode hook heartbeat --harness amp"},
+	{Event: "session.start", Command: "lode-hook session-start --harness amp"},
+	{Event: "agent.start", Command: "lode-hook heartbeat --harness amp"},
+	{Event: "agent.end", Command: "lode-hook heartbeat --harness amp"},
 }
 
 // ampCeilingNote says why two events stay unbound. The install report already
@@ -80,7 +80,7 @@ var ampPlugin = template.Must(template.New("ampplugin.ts").Funcs(template.FuncMa
 // anything outside this shape would be shell text in a place that cannot quote
 // it. ampPluginSource enforces it on the way out, so no install can write a
 // command that has not passed it.
-var ampCommandPattern = regexp.MustCompile(`^lode hook [a-z][a-z-]* --harness amp$`)
+var ampCommandPattern = regexp.MustCompile(`^lode-hook [a-z][a-z-]* --harness amp$`)
 
 // Amp is the amp adapter, and the only code-generating one: where every other
 // harness reads a config file Worklode merges into, Amp reads a TypeScript
@@ -113,10 +113,10 @@ func ampSettingsPath() (string, error) {
 //
 // Amp also reads a project-local `.amp/plugins/`, and this adapter
 // deliberately does not write there for project scope. The file is executable
-// code that shells out on every turn; committing it would run `lode hook` in
+// code that shells out on every turn; committing it would run `lode-hook` in
 // the checkout of every contributor, including those with no `lode` installed
 // and no interest in Worklode. As with codex, both scopes write the user-level
-// file and the `lode hook` guard is what scopes behaviour to Worklode
+// file and the `lode-hook` guard is what scopes behaviour to Worklode
 // worktrees.
 func ampPluginPath() (string, error) {
 	settings, err := ampSettingsPath()

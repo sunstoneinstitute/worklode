@@ -143,7 +143,7 @@ func TestReportInstallStatusLineLines(t *testing.T) {
 		action string
 		want   string
 	}{
-		{harness.ActionInstalled, "status line set to `lode statusline`"},
+		{harness.ActionInstalled, "status line set to `lode-statusline`"},
 		{harness.ActionKept, "kept the status line already configured"},
 		{"weird", `unexpected status line result "weird"`},
 	}

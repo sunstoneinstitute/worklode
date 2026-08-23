@@ -11,15 +11,15 @@ import (
 func TestHookCommandsMirrorsApply(t *testing.T) {
 	settings := map[string]any{}
 	applyGroupedHooks(settings, []hookBinding{
-		{Event: "SessionStart", Command: "lode hook session-start"},
-		{Event: "PostToolUse", Matcher: "Edit", Command: "lode hook post-tool"},
-		{Event: "PostToolUse", Matcher: "Write", Command: "lode hook post-tool"},
+		{Event: "SessionStart", Command: "lode-hook session-start"},
+		{Event: "PostToolUse", Matcher: "Edit", Command: "lode-hook post-tool"},
+		{Event: "PostToolUse", Matcher: "Write", Command: "lode-hook post-tool"},
 	})
 
-	if got := HookCommands(settings, "SessionStart"); !reflect.DeepEqual(got, []string{"lode hook session-start"}) {
+	if got := HookCommands(settings, "SessionStart"); !reflect.DeepEqual(got, []string{"lode-hook session-start"}) {
 		t.Errorf("SessionStart = %#v", got)
 	}
-	want := []string{"lode hook post-tool", "lode hook post-tool"}
+	want := []string{"lode-hook post-tool", "lode-hook post-tool"}
 	if got := HookCommands(settings, "PostToolUse"); !reflect.DeepEqual(got, want) {
 		t.Errorf("PostToolUse = %#v, want %#v", got, want)
 	}
@@ -68,10 +68,27 @@ func TestHookCommandsKeepsForeignCommands(t *testing.T) {
 			"hooks": []any{map[string]any{"type": "command", "command": "their-hook"}},
 		}},
 	}}
-	applyGroupedHooks(settings, []hookBinding{{Event: "Stop", Command: "lode hook heartbeat"}})
+	applyGroupedHooks(settings, []hookBinding{{Event: "Stop", Command: "lode-hook heartbeat"}})
 
-	want := []string{"their-hook", "lode hook heartbeat"}
+	want := []string{"their-hook", "lode-hook heartbeat"}
 	if got := HookCommands(settings, "Stop"); !reflect.DeepEqual(got, want) {
 		t.Errorf("HookCommands = %#v, want %#v", got, want)
+	}
+}
+
+func TestStripLodeHooksRemovesLegacyAndNewBindings(t *testing.T) {
+	settings := map[string]any{"hooks": map[string]any{
+		"Stop": []any{map[string]any{"hooks": []any{
+			map[string]any{"type": "command", "command": "lode hook heartbeat"},
+			map[string]any{"type": "command", "command": "lode-hook heartbeat"},
+			map[string]any{"type": "command", "command": "their-hook"},
+		}}},
+	}}
+
+	if got := stripGroupedHooks(settings); got != ActionRemoved {
+		t.Fatalf("stripGroupedHooks = %q, want %q", got, ActionRemoved)
+	}
+	if got := HookCommands(settings, "Stop"); !reflect.DeepEqual(got, []string{"their-hook"}) {
+		t.Fatalf("Stop after uninstall = %#v, want only the unrelated hook", got)
 	}
 }

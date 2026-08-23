@@ -10,7 +10,7 @@ import (
 // The CLI's only markdown consumer is a human reading a task or document body
 // on a TTY (see Markdown), yet a library that renders it pulls a syntax
 // highlighter's lexer and style registries into the binary, and Go runs every
-// linked package's init before main. `lode statusline`, which a coding-agent
+// linked package's init before main. `lode-statusline`, which a coding-agent
 // harness re-runs on every assistant message and which renders no markdown at
 // all, paid ~11 ms of that on every invocation. The subset below covers what
 // the corpus actually contains — headings, lists, block quotes, fenced code,

@@ -69,16 +69,16 @@ func TestClaudeInstallWritesBindings(t *testing.T) {
 	}
 
 	settings := readSettings(t, path)
-	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode-hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
-	if got := HookCommands(settings, "Stop"); len(got) != 1 || got[0] != "lode hook heartbeat" {
+	if got := HookCommands(settings, "Stop"); len(got) != 1 || got[0] != "lode-hook heartbeat" {
 		t.Fatalf("Stop commands: %v", got)
 	}
 	// PostToolUse is matched on a tool name, so it costs nothing per
 	// ordinary tool call.
 	got := HookCommands(settings, "PostToolUse")
-	if len(got) != 1 || got[0] != "lode hook worktree-enter" {
+	if len(got) != 1 || got[0] != "lode-hook worktree-enter" {
 		t.Fatalf("PostToolUse commands: %v", got)
 	}
 	hooks := settings["hooks"].(map[string]any)
@@ -205,7 +205,7 @@ func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 
 	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
 	settings := readSettings(t, dirPath)
-	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode-hook session-start" {
 		t.Fatalf("SessionStart in worktree = %v, want the mirrored binding", got)
 	}
 	sl, ok := settings["statusLine"]
@@ -349,7 +349,7 @@ func TestClaudeInstallWithStatusLineWritesTheFileOnce(t *testing.T) {
 		t.Fatalf("status line path = %s, want the settings path %s", hi.StatusLine.Path, hi.Path)
 	}
 	settings := readSettings(t, hi.Path)
-	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode-hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
 	if got := statusLineCommand(t, hi.Path); got != StatusLineCommand {
@@ -415,6 +415,30 @@ func TestClaudeUninstallWithStatusLineWritesTheFileOnce(t *testing.T) {
 		t.Fatalf("hooks left behind: %v", settings["hooks"])
 	}
 	if got := statusLineCommand(t, hu.Path); got != "" {
+		t.Fatalf("statusLine command = %q, want it gone", got)
+	}
+}
+
+func TestClaudeUninstallWithStatusLineRemovesLegacyStatusLine(t *testing.T) {
+	root := initGitRepo(t)
+	path, err := claudeSettingsPath(root, ScopeLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(path, map[string]any{
+		"statusLine": map[string]any{"type": "command", "command": "/usr/local/bin/lode statusline"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	hu, err := (ClaudeCode{}).UninstallWithStatusLine(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("UninstallWithStatusLine: %v", err)
+	}
+	if hu.StatusLine == nil || hu.StatusLine.Action != ActionRemoved {
+		t.Fatalf("status line = %+v, want %q", hu.StatusLine, ActionRemoved)
+	}
+	if got := statusLineCommand(t, path); got != "" {
 		t.Fatalf("statusLine command = %q, want it gone", got)
 	}
 }
@@ -653,10 +677,12 @@ func TestIsLodeStatusLine(t *testing.T) {
 		command string
 		want    bool
 	}{
+		{"lode-statusline", true},
 		{"lode statusline", true},
 		{"/usr/local/bin/lode statusline", true},
 		{"  lode   statusline  ", true},
 		{"lode hook heartbeat", false},
+		{"echo lode statusline", false},
 		{"lode", false},
 		{"my-lode statusline", false},
 		{"starship prompt", false},
@@ -675,6 +701,34 @@ func TestIsLodeStatusLine(t *testing.T) {
 	}
 	if isLodeStatusLine(map[string]any{"type": "command"}) {
 		t.Fatal("a statusLine with no command is not ours")
+	}
+}
+
+func TestClaudeReinstallUpgradesLegacyBindingsWithoutTouchingForeignOnes(t *testing.T) {
+	root := initGitRepo(t)
+	path, err := claudeSettingsPath(root, ScopeLocal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(path, map[string]any{
+		"hooks": map[string]any{"SessionStart": []any{map[string]any{"hooks": []any{
+			map[string]any{"type": "command", "command": "lode hook session-start"},
+			map[string]any{"type": "command", "command": "their-hook"},
+		}}}},
+		"statusLine": map[string]any{"type": "command", "command": "lode statusline"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal); err != nil {
+		t.Fatalf("InstallWithStatusLine: %v", err)
+	}
+	settings := readSettings(t, path)
+	if got := HookCommands(settings, "SessionStart"); !slices.Equal(got, []string{"their-hook", "lode-hook session-start"}) {
+		t.Fatalf("SessionStart = %v, want foreign and one direct binding", got)
+	}
+	if got := statusLineIn(settings); got != StatusLineCommand {
+		t.Fatalf("statusLine = %q, want %q", got, StatusLineCommand)
 	}
 }
 

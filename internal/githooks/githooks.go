@@ -40,7 +40,7 @@ type Hook struct {
 }
 
 // Managed is the managed set, in lifecycle order. post-merge and post-commit
-// are both bound to the same `lode hook` handler because git splits the cases
+// are both bound to the same `lode-hook` handler because git splits the cases
 // between them: `git merge` fires post-merge, while a squash merge and a
 // commit that resolves a merge fire only post-commit.
 //
@@ -253,7 +253,7 @@ func fileExists(path string) bool {
 // containing spaces (common on macOS) is not word-split by /bin/sh before lode
 // runs, which would silently drop the chained hook.
 //
-// Where "$@" lands decides who sees git's arguments. `lode hook` reads the
+// Where "$@" lands decides who sees git's arguments. `lode-hook` reads the
 // words between the event and --next as its own and passes everything after
 // --next to the chained hook verbatim, so an unchained script's trailing "$@"
 // already reaches the handler. A chained script has to name it twice for both
@@ -261,13 +261,13 @@ func fileExists(path string) bool {
 func renderScript(h Hook, chainedTo string) string {
 	const header = "#!/bin/sh\n" + Marker + " v1 — installed by `lode install`; do not edit.\n"
 	if chainedTo == "" {
-		return header + fmt.Sprintf(`exec lode hook %s "$@"`, h.Name) + "\n"
+		return header + fmt.Sprintf(`exec lode-hook %s "$@"`, h.Name) + "\n"
 	}
 	own := ""
 	if h.Args {
 		own = ` "$@"`
 	}
-	return header + fmt.Sprintf(`exec lode hook %s%s --next %s "$@"`,
+	return header + fmt.Sprintf(`exec lode-hook %s%s --next %s "$@"`,
 		h.Name, own, shellSingleQuote(chainedTo)) + "\n"
 }
 
