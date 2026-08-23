@@ -180,7 +180,7 @@ outright once it is fixed over annotating it as resolved.
   specs, ADRs, and plans their own per-project ordinals from the same counter
   table. Its `kind` CHECK admits `'DEL'` alone, so each of those arrives with a
   one-line CHECK widening, the same way the `tasks.kind` CHECK grows.
-- `[P3]` **k8s deployment manifests for the watcher**; RBAC for `lode watch`
+- `[P3]` **k8s deployment manifests for the watcher**; RBAC for the `worklode-watch` image
   in-cluster. The server's own manifests landed in `deploy/base/`.
 - `[P4]` **Watcher test timing**: `TestBelowRestartThresholdNotReported` uses a 5s
   `eventually` timeout and flaked once under heavy host load; bump the fence
