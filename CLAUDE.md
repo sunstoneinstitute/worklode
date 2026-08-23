@@ -43,8 +43,8 @@ itself, but load it by name if it has not:
 - **Changing CI, workflows, or `www/`** — the docs-only skip, the
   `can-be-tested` label, the subtree-scoped `obsidian` job. See
   the `worklode-ci` skill. Editing the site's own copy is a separate
-  concern from its CI: see `www/CLAUDE.md` for the language style and the
-  accuracy bar its content is held to.
+  concern from its CI: see "`www/` copy style" below for the language
+  rules, and `www/CLAUDE.md` for the accuracy bar its content is held to.
 - **Changing the CLI in `internal/cmd`** — every skill above, both plugin
   marketplaces, and the org onboarding skill in another repo hardcode `lode`
   invocations. `docs/agent-surfaces.md` is the register of those surfaces and
@@ -192,6 +192,28 @@ keep new state on the right side of that split.
   reasoning effort each agent role uses when working this repo with subagents.
 - `e2e/` drives the stack through public surfaces only (HTTP API, signed
   webhooks, web pages) — never direct store writes. Keep it that way.
+
+## `www/` copy style
+
+Copy in `www/` (the marketing site) follows stricter rules than the rest of
+this repo's prose, which stays free to use em dashes and contrastive framing
+the way this file already does. `www/index.html` copy must:
+
+- **State what Worklode does and is, never what it isn't or replaced.**
+  No antithesis: don't write "X, not Y", "X rather than Y", or "X instead
+  of Y" to define a feature by contrast. ("Skills delivered on demand,"
+  not "Skills delivered, not registered.") A contrast is fine only when it
+  carries information the reader needs to tell two real cases apart, not
+  as a rhetorical device.
+- **No em dashes.** Use a period, comma, or colon instead. (Box-drawing
+  section dividers in HTML comments, `<!-- ── Hero ── -->`, aren't visible
+  copy and are exempt.)
+- Prefer short, direct sentences; cut filler that only pads a sentence to
+  sound more confident.
+
+Before landing a copy change, check the diff for `—`, `rather than`, and
+`instead of`, and fix any hit that isn't load-bearing. See `www/CLAUDE.md`
+for the accuracy bar that copy is also held to.
 
 ## Metrics
 

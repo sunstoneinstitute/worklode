@@ -14,7 +14,7 @@ and the rules for adding and retiring skills.
 |---|---|---|---|
 | Root instructions | `CLAUDE.md` (`AGENTS.md` is a symlink to it) | every agent working in this repo | no |
 | Command-package pointer | `internal/cmd/CLAUDE.md` | agents editing the CLI | no |
-| Marketing site style guide | `www/CLAUDE.md` (`www/AGENTS.md` is a symlink to it) | agents editing `www/` | no |
+| Marketing site accuracy guide | `www/CLAUDE.md` (`www/AGENTS.md` is a symlink to it) | agents editing `www/` | no |
 | Repo-development skills | `.claude/skills/*/SKILL.md` | agents changing this repo | no |
 | Shipped plugin, Claude | `plugins/claude/lode/skills/*/SKILL.md`, `plugins/claude/lode/agents/`, `.claude-plugin/marketplace.json` | `lode` users on Claude Code | no — **source of truth** |
 | Shipped plugin, Codex | `.agents/plugins/marketplace.json`, `plugins/claude/lode/.codex-plugin/plugin.json` | `lode` users on Codex | yes — `scripts/sync-codex-marketplace.py` |

@@ -3,24 +3,8 @@
 The marketing site. `AGENTS.md` in this directory symlinks here, so both
 names load the same instructions when working on anything under `www/`.
 
-## Language style
-
-Copy on this site states what Worklode does and is. It never defines a
-feature by what it isn't or what it replaced.
-
-- **No antithesis.** Don't write "X, not Y", "X rather than Y", or "X
-  instead of Y" to describe a feature by contrast with an alternative. Say
-  what it does. ("Skills delivered on demand," not "Skills delivered, not
-  registered.") A contrast is fine only when it carries information the
-  reader needs to tell two real cases apart, not as a rhetorical device.
-- **No em dashes.** Use a period, comma, or colon instead. (The
-  box-drawing section dividers in HTML comments, `<!-- ── Hero ── -->`,
-  aren't visible copy and are exempt.)
-- Prefer short, direct sentences. Cut filler that only pads a sentence to
-  sound more confident.
-
-Before landing a copy change, check the diff for `—`, `rather than`, and
-`instead of`, and fix any hit that isn't load-bearing.
+For the language style this copy follows (no antithesis, no em dashes),
+see the root `CLAUDE.md`'s "`www/` copy style" section.
 
 ## Accuracy
 
