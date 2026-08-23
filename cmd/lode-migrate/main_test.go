@@ -8,8 +8,8 @@ import (
 )
 
 func TestRunRequiresMigrationsPath(t *testing.T) {
-	err := run(context.Background(), nil, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "migrations-path") {
-		t.Fatalf("run without --migrations-path = %v, want migrations-path error", err)
+	var out bytes.Buffer
+	if code := run(context.Background(), []string{"--dsn", "postgres://example.test/db"}, &out); code == 0 || !strings.Contains(out.String(), "migrations-path") {
+		t.Fatalf("run without --migrations-path = %d, %q; want migrations-path error", code, out.String())
 	}
 }

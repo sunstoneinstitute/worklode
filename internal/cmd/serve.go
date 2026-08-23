@@ -122,18 +122,9 @@ func shutdownServers(cancelRequests context.CancelFunc, timeout time.Duration, s
 }
 
 func newServeCmd() *cobra.Command {
-	var dsn, listen, adminListen string
-	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Run the worklode HTTP server",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runServe(cmd, dsn, listen, adminListen)
-		},
-	}
-	cmd.Flags().StringVar(&dsn, "dsn", os.Getenv("LODE_DSN"), "Postgres DSN (postgres://...); defaults to $LODE_DSN")
-	cmd.Flags().StringVar(&listen, "listen", ":8080", "address for the public app server (web UI, API, webhooks)")
-	cmd.Flags().StringVar(&adminListen, "admin-listen", ":9090", "address for the admin server (/healthz, /metrics)")
-	return cmd
+	return &cobra.Command{Use: "serve", Short: "Run the worklode HTTP server", DisableFlagParsing: true, RunE: func(cmd *cobra.Command, args []string) error {
+		return runSibling(cmd.Context(), "lode-server", "server", args, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+	}}
 }
 
 // runServe boots the store, the API server and the background loops, then

@@ -99,8 +99,6 @@ Flags: --server
 
 ## `lode migrate` — Apply database migrations
 
-Flags: --dsn, --migrations-path
-
 ## `lode next` — Claim a task (or the top-ranked ready one), set up its worktree, and print its brief
 
 Flags: --kind, --project, --repo, --strict-focus
@@ -149,8 +147,6 @@ Flags: --dry-run, --repo, --since, --task
 - `lode secrets status` — Show declared vs materialized secret names for the bound task (names only)
 
 ## `lode serve` — Run the worklode HTTP server
-
-Flags: --admin-listen, --dsn, --listen
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
@@ -239,5 +235,3 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 Flags: --agent, --no-agent, --no-statusline, --no-vcs, --scope, --skills, --statusline, --vcs
 
 ## `lode watch` — Watch Kubernetes pods and report crash loops and OOM kills
-
-Flags: --cluster, --kubeconfig, --server, --token
