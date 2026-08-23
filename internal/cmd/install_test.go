@@ -383,7 +383,7 @@ func TestInstallHooksBothIntegrations(t *testing.T) {
 		t.Fatalf("unbound events = %v, want none for claude-code", got)
 	}
 	settings := readSettings(t, res.Agents[0].Path)
-	if got := harness.HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode hook session-start" {
+	if got := harness.HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode-hook session-start" {
 		t.Fatalf("SessionStart commands: %v", got)
 	}
 }

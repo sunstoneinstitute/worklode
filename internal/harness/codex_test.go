@@ -125,7 +125,7 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 				ours = append(ours, c)
 			}
 		}
-		want := "lode hook " + string(wantEvent) + " --harness codex"
+		want := "lode-hook " + string(wantEvent) + " --harness codex"
 		if len(ours) != 1 || ours[0] != want {
 			t.Fatalf("%s commands = %v; want exactly [%q]", event, ours, want)
 		}
@@ -203,7 +203,7 @@ func TestCodexRefusesUnroundtrippableFile(t *testing.T) {
 
 // Both scopes write the user-level file: project-level .codex/hooks.json is
 // silently ignored inside a git worktree (openai/codex#27133), so writing
-// there would never fire for a Worklode task; the `lode hook` guard, not the
+// there would never fire for a Worklode task; the `lode-hook` guard, not the
 // config layer, is what scopes behaviour to Worklode worktrees.
 func TestCodexScopesShareOneFile(t *testing.T) {
 	home := t.TempDir()

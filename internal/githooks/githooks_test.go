@@ -70,7 +70,7 @@ func TestInstallFreshInstall(t *testing.T) {
 	if !strings.Contains(content, Marker) {
 		t.Fatalf("pre-commit missing marker %q: %q", Marker, content)
 	}
-	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
+	want := "#!/bin/sh\n# worklode-hook v1 — installed by `lode install`; do not edit.\nexec lode-hook pre-commit \"$@\"\n"
 	if content != want {
 		t.Fatalf("pre-commit content = %q, want %q", content, want)
 	}
@@ -111,6 +111,29 @@ func TestInstallIdempotent(t *testing.T) {
 	}
 	if fileExists(filepath.Join(hooksDir, "pre-commit.pre-lode")) {
 		t.Fatalf("re-running a fresh install must not create pre-commit.pre-lode")
+	}
+}
+
+func TestInstallUpgradesMarkerOwnedLegacyHook(t *testing.T) {
+	root := initGitRepo(t)
+	hooksDir, err := Dir(root)
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+	path := filepath.Join(hooksDir, "pre-commit")
+	legacy := "#!/bin/sh\n" + Marker + " v1 — installed by `lode install`; do not edit.\nexec lode hook pre-commit \"$@\"\n"
+	if err := os.WriteFile(path, []byte(legacy), 0o755); err != nil {
+		t.Fatalf("write legacy hook: %v", err)
+	}
+
+	if _, _, err := Install(root); err != nil {
+		t.Fatalf("Install: %v", err)
+	}
+	if got := readFile(t, path); !strings.Contains(got, "exec lode-hook pre-commit \"$@\"") || strings.Contains(got, "exec lode hook") {
+		t.Fatalf("pre-commit = %q, want exactly the direct lode-hook form", got)
 	}
 }
 
@@ -452,8 +475,8 @@ func TestInstallInstallsEveryManagedHook(t *testing.T) {
 		hook := h.Name
 		path := filepath.Join(hooksDir, hook)
 		content := readFile(t, path)
-		if !strings.Contains(content, "exec lode hook "+hook+" \"$@\"") {
-			t.Fatalf("%s = %q, want it to invoke `lode hook %s`", hook, content, hook)
+		if !strings.Contains(content, "exec lode-hook "+hook+" \"$@\"") {
+			t.Fatalf("%s = %q, want it to invoke `lode-hook %s`", hook, content, hook)
 		}
 		if mode := fileMode(t, path); mode.Perm() != 0o755 {
 			t.Fatalf("%s mode = %v, want 0755", hook, mode.Perm())
@@ -543,7 +566,7 @@ func TestInstallPreservesThirdPartyPostMerge(t *testing.T) {
 	}
 }
 
-// TestChainedArgsHookForwardsGitArgsBothWays: `lode hook` reads the words
+// TestChainedArgsHookForwardsGitArgsBothWays: `lode-hook` reads the words
 // between the event and --next as its own and hands everything after --next to
 // the chained hook verbatim. An args hook chained to a third-party hook has to
 // name "$@" twice, or exactly one of the two sees git's arguments — and for

@@ -5,11 +5,13 @@ import (
 	"strings"
 )
 
-// lodeHookPrefix marks a settings entry as Worklode's. JSON has no comments,
-// so the command itself is the marker: install strips every entry with this
-// prefix before writing the current set, which makes a re-run converge rather
-// than duplicate.
-const lodeHookPrefix = "lode hook "
+// lodeHookPrefix is the command every new binding writes. JSON has no
+// comments, so the command itself is the marker. legacyLodeHookPrefix stays
+// recognized so upgrades and uninstall remove bindings from older releases.
+const (
+	lodeHookPrefix       = "lode-hook "
+	legacyLodeHookPrefix = "lode hook "
+)
 
 // hookBinding is one harness event Worklode listens to. An empty Matcher means
 // the binding applies to every occurrence of the event. Claude Code and Codex
@@ -39,7 +41,7 @@ func boundNames(bindings []hookBinding) []string {
 }
 
 // bindingEvent reads the Worklode event out of a binding's command, which is
-// always `lode hook <event>` plus optional flags.
+// always `lode-hook <event>` plus optional flags.
 func bindingEvent(b hookBinding) Event {
 	rest := strings.TrimPrefix(b.Command, lodeHookPrefix)
 	if i := strings.IndexByte(rest, ' '); i >= 0 {
@@ -105,7 +107,7 @@ func installGroupedHooks(path string, bindings []hookBinding) error {
 }
 
 // uninstallGroupedHooks removes Worklode's bindings from the JSON config at
-// path. A missing file, or one with no `lode hook` entries to strip, is
+// path. A missing file, or one with no Worklode bindings to strip, is
 // ActionNone and leaves the file untouched.
 func uninstallGroupedHooks(path string) (action string, err error) {
 	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
@@ -183,7 +185,7 @@ func HookCommands(settings map[string]any, event string) []string {
 	return out
 }
 
-// stripLodeHooks removes every `lode hook` entry from a hooks object, dropping
+// stripLodeHooks removes every legacy or current Worklode entry from a hooks object, dropping
 // groups and events that end up empty so an uninstall leaves no residue. Any
 // third-party hook sharing an event is preserved. changed reports whether any
 // entry was actually removed, so a caller can tell a genuine removal from a
@@ -231,7 +233,7 @@ func stripLodeHooks(hooks map[string]any) (out map[string]any, changed bool) {
 	return out, changed
 }
 
-// isLodeHookEntry reports whether one hook entry runs a `lode hook` command.
+// isLodeHookEntry reports whether one hook entry runs a Worklode hook command.
 func isLodeHookEntry(e any) bool {
 	entry, ok := e.(map[string]any)
 	if !ok {
@@ -241,5 +243,6 @@ func isLodeHookEntry(e any) bool {
 	if !ok {
 		return false
 	}
-	return strings.HasPrefix(strings.TrimSpace(command), lodeHookPrefix)
+	command = strings.TrimSpace(command)
+	return strings.HasPrefix(command, lodeHookPrefix) || strings.HasPrefix(command, legacyLodeHookPrefix)
 }

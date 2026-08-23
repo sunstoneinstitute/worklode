@@ -640,11 +640,11 @@ lode install --scope project           # .claude/settings.json
 ```
 
 `lode uninstall` (same flags) removes both integrations again: it restores
-whatever git hooks Worklode preserved and strips every `lode hook` entry
-from the settings file. Both commands are idempotent, the VCS side never touches
-a hook it does not recognize as its own, and the agent side only
-touches entries whose command starts with `lode hook`, so third-party hooks on
-the same events are left alone.
+whatever git hooks Worklode preserved and strips every managed `lode-hook`
+binding (including legacy `lode hook` bindings) from the settings file. Both
+commands are idempotent, the VCS side never touches a hook it does not
+recognize as its own, and the agent side only touches those managed command
+forms, so third-party hooks on the same events are left alone.
 
 `.claude/settings.local.json` is gitignored, so a linked worktree's own
 checkout never receives it via git the way it would a committed file. `lode
