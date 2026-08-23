@@ -1,6 +1,6 @@
 // Package harness holds one adapter per coding-agent harness plus a registry
 // (spec 008 §17.1). An adapter is a table of locations and event names; the
-// behaviour behind them is always `lode hook <event>`, so no adapter ever
+// behaviour behind them is always `lode-hook <event>`, so no adapter ever
 // introduces a second coordination model.
 package harness
 

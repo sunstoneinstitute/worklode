@@ -3,14 +3,14 @@
 // Amp's JSON hook actions can only send a user message or redact tool input,
 // so no hook binding in Amp's settings can reach the worklode CLI. Amp's
 // Plugin API can: it runs this file under Bun and hands each handler a shell.
-// So this plugin only pipes a hook payload into `lode hook <event>`. There is
+// So this plugin only pipes a hook payload into `lode-hook <event>`. There is
 // no worklode logic here; the binary is the integration.
 //
-// It sends the workspace root as `cwd` rather than letting `lode hook` fall
+// It sends the workspace root as `cwd` rather than letting `lode-hook` fall
 // back to its own working directory. An Amp plugin is "a long-lived process
 // that may run for multiple threads concurrently", so the process cwd is fixed
 // at Amp startup and says nothing about which workspace a given thread is in.
-// Without `cwd` a hook would resolve the wrong worktree — and `lode hook`'s
+// Without `cwd` a hook would resolve the wrong worktree — and `lode-hook`'s
 // guard turns that into a silent NOP, which is the failure that looks exactly
 // like success.
 //
@@ -19,12 +19,12 @@
 // `@ampcode/plugin` would make a generated file depend on a package the user
 // may not have installed.
 
-export const description = "Worklode: binds Amp's session and turn events to `lode hook`."
+export const description = "Worklode: binds Amp's session and turn events to `lode-hook`."
 
 export default function (amp: any) {
 	// workspaceRoot is Amp's `system.workspaceRoot` as a filesystem path, or ""
 	// when Amp is running without a workspace. An empty cwd is the payload
-	// field simply being absent, which is what `lode hook` already handles.
+	// field simply being absent, which is what `lode-hook` already handles.
 	const workspaceRoot = (ctx: any): string => {
 		const uri = ctx?.system?.workspaceRoot
 		if (!uri) return ""
@@ -38,7 +38,7 @@ export default function (amp: any) {
 	const threadID = (event: any, ctx: any): string =>
 		event?.thread?.id ?? ctx?.thread?.id ?? ""
 
-	// runHook pipes one payload into `lode hook` and returns the shell
+	// runHook pipes one payload into `lode-hook` and returns the shell
 	// result (null on a thrown failure), logging every failure path so a
 	// silent non-zero or a missing binary is recorded without interrupting
 	// the session — Worklode degrades to the git pre-commit heartbeat.
@@ -74,14 +74,14 @@ export default function (amp: any) {
 		}
 	}
 
-	// bind wraps one `lode hook` invocation as a fire-and-forget Amp event
+	// bind wraps one `lode-hook` invocation as a fire-and-forget Amp event
 	// handler; agent.end's result type admits void.
 	const bind = (ampEvent: string, run: (payload: string, ctx: any) => Promise<any>) =>
 		async (event: any, ctx: any): Promise<void> => {
 			await runHook(ampEvent, run, event, ctx)
 		}
 
-	// briefs holds, per thread, the brief `lode hook session-start` printed
+	// briefs holds, per thread, the brief `lode-hook session-start` printed
 	// to stdout, until the thread's first agent.start returns it as a
 	// context message — the one Plugin API slot that reaches the agent
 	// (WL-287). Delivered at most once per thread id; a restarted plugin

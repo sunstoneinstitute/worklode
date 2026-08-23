@@ -11,7 +11,7 @@ import (
 
 // StatusLineCommand is what the status-line install binds, and — by the
 // same command-as-marker trick — how uninstall recognizes its own entry.
-const StatusLineCommand = "lode statusline"
+const StatusLineCommand = "lode-statusline"
 
 // claudeBindings is every Claude Code event Worklode listens to. Heartbeat is
 // bound to four events because Stop alone leaves a live session looking dead:
@@ -23,20 +23,21 @@ const StatusLineCommand = "lode statusline"
 // delegation hooks, so binding one makes Worklode *the* worktree creator in
 // place of Claude Code's own. Worklode observes rather than creates. Its
 // worktrees are covered by session-start and the worktree-enter binding
-// below; `lode hook worktree-create`/`worktree-remove` stay callable from
+// below; the compatibility `lode hook worktree-create`/`worktree-remove`
+// commands stay callable from
 // scripts.
 var claudeBindings = []hookBinding{
-	{Event: "SessionStart", Command: "lode hook session-start"},
-	{Event: "SessionEnd", Command: "lode hook session-end"},
-	{Event: "Stop", Command: "lode hook heartbeat"},
-	{Event: "StopFailure", Command: "lode hook heartbeat"},
-	{Event: "SubagentStop", Command: "lode hook heartbeat"},
-	{Event: "Notification", Command: "lode hook heartbeat"},
-	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode hook worktree-enter"},
+	{Event: "SessionStart", Command: "lode-hook session-start"},
+	{Event: "SessionEnd", Command: "lode-hook session-end"},
+	{Event: "Stop", Command: "lode-hook heartbeat"},
+	{Event: "StopFailure", Command: "lode-hook heartbeat"},
+	{Event: "SubagentStop", Command: "lode-hook heartbeat"},
+	{Event: "Notification", Command: "lode-hook heartbeat"},
+	{Event: "PostToolUse", Matcher: "EnterWorktree", Command: "lode-hook worktree-enter"},
 }
 
 // ClaudeCode is the claude-code adapter: JSON hook bindings in
-// .claude/settings*.json. Its command strings stay `lode hook <event>` with
+// .claude/settings*.json. Its command strings use `lode-hook <event>` with
 // no --harness flag: claude-code is the default harness, and the bare
 // prefix is what makes uninstall recognize bindings from installs that
 // predate this package.
@@ -231,7 +232,7 @@ func uninstallClaudeHooks(path string) (action string, err error) {
 	return uninstallGroupedHooks(path)
 }
 
-// applyStatusLine points an already-read settings object at `lode statusline`,
+// applyStatusLine points an already-read settings object at `lode-statusline`,
 // but only when no status line is configured. A status line is a personal
 // choice and a slot that holds exactly one command, so replacing one the user
 // chose would be a silent theft rather than an install; that case reports
@@ -264,9 +265,9 @@ func stripStatusLine(settings map[string]any) (action string) {
 	return ActionRemoved
 }
 
-// isLodeStatusLine reports whether a statusLine setting runs `lode statusline`.
-// The command may carry flags or an absolute path to the binary, so the match
-// is on the command word rather than on equality.
+// isLodeStatusLine reports whether a statusLine setting runs the current
+// `lode-statusline` binary or the legacy `lode statusline` command. The latter
+// may carry flags or an absolute lode path, so upgrades can still remove it.
 func isLodeStatusLine(v any) bool {
 	entry, ok := v.(map[string]any)
 	if !ok {
@@ -277,10 +278,8 @@ func isLodeStatusLine(v any) bool {
 		return false
 	}
 	fields := strings.Fields(command)
-	for i, f := range fields {
-		if filepath.Base(f) == "lode" {
-			return i+1 < len(fields) && fields[i+1] == "statusline"
-		}
+	if len(fields) > 0 && filepath.Base(fields[0]) == "lode-statusline" {
+		return true
 	}
-	return false
+	return len(fields) > 1 && filepath.Base(fields[0]) == "lode" && fields[1] == "statusline"
 }

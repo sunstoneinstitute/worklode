@@ -11,13 +11,13 @@ import (
 // and is reported unbound.
 //
 // Each command carries --harness codex so the handler knows which transcript
-// shape to expect; the `lode hook ` prefix stays first because that prefix is
+// shape to expect; the `lode-hook ` prefix stays first because that prefix is
 // the marker install and uninstall strip on.
 var codexBindings = []hookBinding{
-	{Event: "SessionStart", Command: "lode hook session-start --harness codex"},
-	{Event: "SessionEnd", Command: "lode hook session-end --harness codex"},
-	{Event: "Stop", Command: "lode hook heartbeat --harness codex"},
-	{Event: "SubagentStop", Command: "lode hook heartbeat --harness codex"},
+	{Event: "SessionStart", Command: "lode-hook session-start --harness codex"},
+	{Event: "SessionEnd", Command: "lode-hook session-end --harness codex"},
+	{Event: "Stop", Command: "lode-hook heartbeat --harness codex"},
+	{Event: "SubagentStop", Command: "lode-hook heartbeat --harness codex"},
 }
 
 // codexTrustNote is install-time advice, not a warning: Codex records trust
@@ -28,7 +28,7 @@ const codexTrustNote = "hooks are written but stay inactive until you review the
 
 // Codex is the codex adapter: hook bindings in $CODEX_HOME/hooks.json
 // (default ~/.codex/hooks.json). Both scopes write that user-level file —
-// the `lode hook` guard is what scopes behaviour to Worklode worktrees.
+// the `lode-hook` guard is what scopes behaviour to Worklode worktrees.
 //
 // Codex also supports a project-level .codex/hooks.json, but it is silently
 // ignored while Codex runs inside a git worktree (openai/codex#27133), which
