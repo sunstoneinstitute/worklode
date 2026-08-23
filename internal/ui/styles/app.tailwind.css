@@ -275,6 +275,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
  * tabindex="0" in the markup, which is what makes it scrollable by keyboard
  * (2.1.1); the markup side is layout.templ's tableWrap component. */
 .tablewrap{overflow-x:auto;max-width:100%}
+.tablewrap th,.tablewrap td{padding:8px 12px;text-align:left;vertical-align:top}
 
 /* Timeline row type icon (WL-298): the type column used to be a text label
  * ("Pull request", "CI run", ...), which was the widest column on narrow

@@ -507,24 +507,56 @@ func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	view := docsView(docs)
-	s.renderWeb(w, r, http.StatusOK, "docs page", ui.Docs(view))
-}
-
-// docPage handles GET /docs/{id}: one document's identity, sections, relations
-// and body — built from the same docDetail the JSON API serves. A non-numeric
-// id 404s here rather than 400ing as the API does: a browser following a bad
-// link is asking for a page that does not exist.
-func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil || id <= 0 {
-		webErr(w, http.StatusNotFound, "not found")
-		return
-	}
-	detail, err := s.docDetail(r, id)
+	projects, err := s.st.ListProjects(r.Context())
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
+	}
+	keys := make(map[string]string, len(projects))
+	for _, p := range projects {
+		keys[p.ID] = p.Key
+	}
+	view := docsView(docs, keys)
+	s.renderWeb(w, r, http.StatusOK, "docs page", ui.Docs(view))
+}
+
+// docPage handles GET /docs/{ref}: numbered documents use their shorthand;
+// plans retain their database id because the corpus defines no plan shorthand.
+func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
+	ref := strings.TrimSpace(r.PathValue("id"))
+	if ref == "" {
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	var d model.Doc
+	var detail *model.DocDetail
+	var err error
+	if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
+		detail, err = s.docDetail(r, id)
+		if err != nil || detail.Number != 0 && detail.Tombstone == nil {
+			webErr(w, http.StatusNotFound, "not found")
+			return
+		}
+		d = detail.Doc
+	} else {
+		resolved, err := s.resolveDocRefWeb(r.Context(), ref)
+		if err != nil {
+			webErr(w, http.StatusNotFound, "not found")
+			return
+		}
+		p, err := s.st.GetProject(r.Context(), resolved.Project)
+		if err != nil || resolved.Number != 0 && ref != docWebRef(resolved, p.Key) {
+			webErr(w, http.StatusNotFound, "not found")
+			return
+		}
+		d = resolved
+	}
+	if detail == nil {
+		detail, err = s.docDetail(r, d.ID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
 	}
 	view := docView(s.mdcache, s.projectKeys(r.Context()), detail)
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))

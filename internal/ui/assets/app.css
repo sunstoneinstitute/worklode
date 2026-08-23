@@ -994,6 +994,11 @@ nav.local a .cnt {
   overflow-x: auto;
   max-width: 100%;
 }
+.tablewrap th,.tablewrap td {
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
 .ticon {
   display: inline-flex;
   color: var(--ink-2);
