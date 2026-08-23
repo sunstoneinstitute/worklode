@@ -60,6 +60,12 @@ writes to GitHub as a user is a follow-up spec.
 
 ### 2.1 Task-scoped tokens {#sec-2.1}
 
+> **Amended by spec 054 §4.** The minting actor is recorded in
+> `tokens.minted_by` rather than in the token's description prose. Spec 054
+> also defines which agent actor a task token acts as: one shared `sandbox`
+> for all human-dispatched work, a distinct actor only where the permissions
+> differ.
+
 A second shape of the same credential (WL-136, motivated by 038 §4.3): a `wl_` token whose row is
 bound to one task (`tokens.task_id`, nullable — NULL is today's actor-scoped token, unchanged) and
 attributed to an **agent actor** rather than the human who minted it. Its write actions must name
