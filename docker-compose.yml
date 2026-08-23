@@ -20,7 +20,8 @@ services:
 
   migrate:
     build: .
-    command: ["migrate", "--dsn", "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable", "--migrations-path", "/migrations"]
+    entrypoint: ["/lode-migrate"]
+    command: ["--dsn", "postgres://postgres:postgres@postgres:5432/postgres?sslmode=disable", "--migrations-path", "/migrations"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -29,6 +30,7 @@ services:
 
   worklode:
     build: .
+    entrypoint: ["/lode-server"]
     depends_on:
       postgres:
         condition: service_healthy
