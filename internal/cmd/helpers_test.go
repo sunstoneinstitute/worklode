@@ -34,11 +34,11 @@ func buildLodeBinary(t *testing.T) string {
 			return
 		}
 		bin := filepath.Join(dir, "lode")
-		build := exec.Command("go", "build", "-ldflags=-s -w", "-o", bin, "./cmd/lode")
+		build := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", bin, "./cmd/lode")
 		build.Dir = store.ModuleRootForTests()
 		lodeBinary.out, lodeBinary.err = build.CombinedOutput()
 		if lodeBinary.err == nil {
-			build = exec.Command("go", "build", "-ldflags=-s -w", "-o", filepath.Join(dir, "lode-hook"), "./cmd/lode-hook")
+			build = exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", filepath.Join(dir, "lode-hook"), "./cmd/lode-hook")
 			build.Dir = store.ModuleRootForTests()
 			lodeBinary.out, lodeBinary.err = build.CombinedOutput()
 		}

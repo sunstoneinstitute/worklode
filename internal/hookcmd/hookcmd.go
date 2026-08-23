@@ -15,6 +15,10 @@ import (
 
 // Run executes a lifecycle hook and returns its exit status.
 func Run(ctx context.Context, argv []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(argv) > 0 && (argv[0] == "-h" || argv[0] == "--help") {
+		fmt.Fprintln(stdout, "usage: lode-hook <event> [--harness <id>] [--next <cmd> [arg...]] | lode-hook --list")
+		return 0
+	}
 	if len(argv) > 0 && argv[0] == "--list" {
 		printEvents(stdout)
 		return 0

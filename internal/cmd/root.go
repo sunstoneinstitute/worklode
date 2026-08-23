@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +36,12 @@ func init() {
 // Execute runs the root command.
 func Execute() error {
 	return rootCmd.Execute()
+}
+
+// ExecuteContext runs the root command and cancels child compatibility shims
+// when the caller's process context is interrupted.
+func ExecuteContext(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
 
 // jsonOut reports whether --json was passed to cmd (or an ancestor of it).

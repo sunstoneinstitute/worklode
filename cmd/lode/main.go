@@ -2,14 +2,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 
 	"github.com/sunstoneinstitute/worklode/internal/cmd"
 )
 
 func main() {
-	if err := cmd.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	if err := cmd.ExecuteContext(ctx); err != nil {
 		if code, ok := cmd.ExitCode(err); ok {
 			os.Exit(code)
 		}

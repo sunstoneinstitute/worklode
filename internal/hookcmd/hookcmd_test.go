@@ -25,6 +25,7 @@ func TestParseArgs(t *testing.T) {
 		{name: "positional args", args: []string{"commit-msg", ".git/COMMIT_EDITMSG", "--harness", "codex"}, event: "commit-msg", harness: "codex", hookArgs: []string{".git/COMMIT_EDITMSG"}},
 		{name: "missing event", wantErr: true},
 		{name: "missing harness", args: []string{"heartbeat", "--harness"}, wantErr: true},
+		{name: "harness cannot swallow next", args: []string{"heartbeat", "--harness", "--next", "other"}, wantErr: true},
 		{name: "missing next", args: []string{"heartbeat", "--next"}, wantErr: true},
 	}
 	for _, tc := range cases {
@@ -58,6 +59,18 @@ func TestRunListNamesEveryEvent(t *testing.T) {
 	}
 }
 
+func TestRunHelpDoesNotReadStdin(t *testing.T) {
+	for _, arg := range []string{"-h", "--help"} {
+		var out bytes.Buffer
+		if code := Run(t.Context(), []string{arg}, strings.NewReader("not a hook payload"), &out, &bytes.Buffer{}); code != 0 {
+			t.Fatalf("Run(%q) = %d", arg, code)
+		}
+		if !strings.Contains(out.String(), "lode-hook") {
+			t.Fatalf("Run(%q) output = %q", arg, out.String())
+		}
+	}
+}
+
 func TestHookTriggersCoverEveryAdapterBinding(t *testing.T) {
 	triggers := hookTriggers()
 	for _, id := range harness.IDs() {
@@ -76,5 +89,8 @@ func TestHookTriggersCoverEveryAdapterBinding(t *testing.T) {
 				}
 			}
 		}
+	}
+	if trigger := triggers["pre-commit"]; !strings.Contains(trigger, "git") {
+		t.Fatalf("pre-commit trigger = %q", trigger)
 	}
 }
