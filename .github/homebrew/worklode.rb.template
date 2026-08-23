@@ -11,7 +11,7 @@ __BOTTLE_BLOCK__
   def install
     ldflags = %W[
       -s -w
-      -X github.com/sunstoneinstitute/worklode/internal/cmd.version=#{version}
+      -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=#{version}
     ]
     system "go", "build", *std_go_args(ldflags:, output: bin/"lode"), "./cmd/lode"
 

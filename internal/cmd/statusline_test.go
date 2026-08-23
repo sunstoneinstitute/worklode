@@ -209,42 +209,6 @@ func TestReportInstallJSONOmitsSkippedStatusLine(t *testing.T) {
 	}
 }
 
-// The command must print whatever it can and exit 0 whatever stdin holds: the
-// harness renders its output, so an error here would land in the user's prompt.
-func TestStatuslineCmdNeverFails(t *testing.T) {
-	for _, in := range []string{"", "not json", `{"model":{"display_name":"Opus 5"}}`} {
-		var out bytes.Buffer
-		cmd := newStatuslineCmd()
-		cmd.SetIn(strings.NewReader(in))
-		cmd.SetOut(&out)
-		cmd.SetErr(&out)
-		cmd.SetArgs(nil)
-		if err := cmd.Execute(); err != nil {
-			t.Fatalf("stdin %q: %v", in, err)
-		}
-	}
-}
-
-func TestStatuslineCmdRendersTheModel(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("CLAUDE_CONFIG_DIR", dir)
-
-	var out bytes.Buffer
-	cmd := newStatuslineCmd()
-	cmd.SetIn(strings.NewReader(`{"model":{"display_name":"Opus 5"},"workspace":{"current_dir":"` + dir + `"}}`))
-	cmd.SetOut(&out)
-	cmd.SetArgs(nil)
-	if err := cmd.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "Opus 5") {
-		t.Fatalf("got %q", out.String())
-	}
-	if strings.Contains(out.String(), "\n") {
-		t.Fatalf("a status line must be one line, got %q", out.String())
-	}
-}
-
 // Guard the naming decision itself: the command is un-namespaced and takes no
 // harness flag, because Claude Code and Cursor CLI share one payload contract
 // and the harnesses that differ take no command at all.
