@@ -42,7 +42,9 @@ itself, but load it by name if it has not:
   Tailwind build, the `go generate` loop. See the `worklode-cockpit-ui` skill.
 - **Changing CI, workflows, or `www/`** — the docs-only skip, the
   `can-be-tested` label, the subtree-scoped `obsidian` job. See
-  the `worklode-ci` skill.
+  the `worklode-ci` skill. Editing the site's own copy is a separate
+  concern from its CI: see `www/CLAUDE.md` for the language style and the
+  accuracy bar its content is held to.
 - **Changing the CLI in `internal/cmd`** — every skill above, both plugin
   marketplaces, and the org onboarding skill in another repo hardcode `lode`
   invocations. `docs/agent-surfaces.md` is the register of those surfaces and

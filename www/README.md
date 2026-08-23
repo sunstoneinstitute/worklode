@@ -13,6 +13,7 @@ dependencies. The directory is published as-is.
 | `favicon.ico` | Tab-icon fallback for browsers that ignore SVG icons — 48/32/16 |
 | `apple-touch-icon.png` | 180×180 home-screen icon for iOS, white background |
 | `CNAME` | Custom domain for GitHub Pages — do not delete |
+| `CLAUDE.md` (`AGENTS.md` symlinks to it) | Language style and accuracy rules for agents editing this directory's copy |
 
 The one external dependency is the analytics tag in `index.html`, pointing at
 Sunstone's self-hosted Umami instance at `sunstone.institute/umami`. It is
