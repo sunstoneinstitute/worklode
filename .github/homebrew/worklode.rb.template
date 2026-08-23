@@ -14,11 +14,15 @@ __BOTTLE_BLOCK__
       -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=#{version}
     ]
     system "go", "build", *std_go_args(ldflags:, output: bin/"lode"), "./cmd/lode"
+    system "go", "build", *std_go_args(ldflags:, output: bin/"lode-hook"), "./cmd/lode-hook"
+    system "go", "build", *std_go_args(ldflags:, output: bin/"lode-statusline"), "./cmd/lode-statusline"
 
     generate_completions_from_executable(bin/"lode", "completion")
   end
 
   test do
     assert_match "lode version", shell_output("#{bin}/lode --version")
+    assert_match version.to_s, shell_output("#{bin}/lode-hook --version")
+    assert_match version.to_s, shell_output("#{bin}/lode-statusline --version")
   end
 end
