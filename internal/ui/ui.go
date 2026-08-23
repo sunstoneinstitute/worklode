@@ -9,6 +9,7 @@ package ui
 //go:generate ../../scripts/gen-web.sh
 
 import (
+	"crypto/sha256"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -27,6 +28,17 @@ func Assets() fs.FS {
 		panic(err)
 	}
 	return assets
+}
+
+// assetURL ties each browser-cached asset URL to the embedded bytes served by
+// this binary, so new markup cannot load an older stylesheet or script.
+func assetURL(name string) string {
+	b, err := fs.ReadFile(uiFS, "assets/"+name)
+	if err != nil {
+		panic(err)
+	}
+	sum := sha256.Sum256(b)
+	return fmt.Sprintf("/assets/%s?v=%x", name, sum[:6])
 }
 
 // fmtTime renders every timestamp the same way across the web UI: UTC,

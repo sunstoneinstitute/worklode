@@ -42,15 +42,15 @@ templ Page(p PageProps) {
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<title>{ p.Title }</title>
 			<meta name="htmx-config" content={ htmxConfig }/>
-			<link rel="icon" type="image/svg+xml" href="/assets/logo.svg"/>
-			<link rel="stylesheet" href="/assets/app.css"/>
+			<link rel="icon" type="image/svg+xml" href={ assetURL("logo.svg") }/>
+			<link rel="stylesheet" href={ assetURL("app.css") }/>
 		</head>
 		<body>
 			<a class="skip-link" href="#main-content">Skip to content</a>
 			<header class="topbar">
 				<div class="brand">
 					<span class="mark">
-						<img src="/assets/logo.svg" alt=""/>
+						<img src={ assetURL("logo.svg") } alt=""/>
 					</span>
 					worklode
 				</div>
@@ -63,10 +63,10 @@ templ Page(p PageProps) {
 			</header>
 			{ children... }
 			<div class="sheet-backdrop" aria-hidden="true"></div>
-			<script src="/assets/theme.js" defer></script>
-			<script src="/assets/nav.js" defer></script>
-			<script src="/assets/mdinput.js" defer></script>
-			<script src="/assets/htmx.min.js" defer></script>
+			<script src={ assetURL("theme.js") } defer></script>
+			<script src={ assetURL("nav.js") } defer></script>
+			<script src={ assetURL("mdinput.js") } defer></script>
+			<script src={ assetURL("htmx.min.js") } defer></script>
 		</body>
 	</html>
 }
