@@ -13,10 +13,10 @@ import (
 // bindings carry no matcher. WorktreeEnter has no Copilot event behind it and
 // is reported unbound.
 var copilotBindings = []hookBinding{
-	{Event: "sessionStart", Command: "lode hook session-start --harness copilot"},
-	{Event: "sessionEnd", Command: "lode hook session-end --harness copilot"},
-	{Event: "agentStop", Command: "lode hook heartbeat --harness copilot"},
-	{Event: "subagentStop", Command: "lode hook heartbeat --harness copilot"},
+	{Event: "sessionStart", Command: "lode-hook session-start --harness copilot"},
+	{Event: "sessionEnd", Command: "lode-hook session-end --harness copilot"},
+	{Event: "agentStop", Command: "lode-hook heartbeat --harness copilot"},
+	{Event: "subagentStop", Command: "lode-hook heartbeat --harness copilot"},
 }
 
 // Copilot is the copilot adapter. Copilot reads every *.json in its hooks

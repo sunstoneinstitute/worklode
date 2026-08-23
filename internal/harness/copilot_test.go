@@ -80,7 +80,7 @@ func TestCopilotInstallWritesOwnedFile(t *testing.T) {
 		if got := handlers[0]["type"]; got != "command" {
 			t.Fatalf("%s type = %v, want command", event, got)
 		}
-		wantCmd := "lode hook " + string(want) + " --harness copilot"
+		wantCmd := "lode-hook " + string(want) + " --harness copilot"
 		if got := handlers[0]["command"]; got != wantCmd {
 			t.Fatalf("%s command = %v, want %q", event, got, wantCmd)
 		}

@@ -41,6 +41,11 @@ breaks on exactly the changes this repo makes and nothing here can see it. Its
 frontmatter carries a `lode-cli-version:` stamp naming the CLI release it was
 last checked against; bump the stamp whenever you touch it.
 
+`lode install` writes lifecycle bindings with the sibling binaries
+`lode-hook <event>` and `lode-statusline`. The `lode hook` and `lode statusline`
+commands remain compatibility entry points, so command references may continue
+to document them; do not use those aliases in newly written managed bindings.
+
 ## When the CLI changes
 
 Adding, renaming or removing a command; changing a flag; changing a `--json`

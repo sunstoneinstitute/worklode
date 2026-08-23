@@ -50,9 +50,9 @@ func addHookFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("no-vcs", false, "skip the version control system hooks")
 	cmd.Flags().Bool("no-agent", false, "skip the coding agent hooks")
 	// No backticks in these descriptions: cobra reads them as the argument-name
-	// placeholder, which turns a bool flag into "--statusline lode statusline".
+	// placeholder, which turns a bool flag into "--statusline lode-statusline".
 	cmd.Flags().Bool("statusline", true,
-		"manage the agent's status line, pointing it at 'lode statusline'")
+		"manage the agent's status line, pointing it at 'lode-statusline'")
 	cmd.Flags().Bool("no-statusline", false, "skip the agent's status line")
 	cmd.Flags().Bool("skills", false,
 		"publish the Worklode skill store into every harness's skill directories")
@@ -515,7 +515,7 @@ func newInstallCmd() *cobra.Command {
 		Short: "Install Worklode's hooks for this repo's VCS and coding agent",
 		Long: "Installs two integrations. The VCS side writes pre-commit, commit-msg, post-merge and " +
 			"post-commit hooks (into the repo's shared hooks directory, honoring core.hooksPath) " +
-			"that invoke `lode hook <event>`, chaining any hook already present on the same event, " +
+			"that invoke `lode-hook <event>`, chaining any hook already present on the same event, " +
 			"or — for pre-commit — the pre-commit framework. pre-commit keeps a working session's " +
 			"lease alive; commit-msg stamps a Worklode-Task trailer into commits made in a task " +
 			"worktree, so the commit says which task it belongs to even after a rebase or squash; " +
@@ -528,7 +528,7 @@ func newInstallCmd() *cobra.Command {
 			"--agent is repeatable and defaults to auto, which installs into every harness detected " +
 			"for this repo or user; all installs into every supported harness. Naming a harness " +
 			"explicitly installs it even when undetected — asking for it is the detection signal.\n\n" +
-			"The agent side also points the status line at `lode statusline`, and enables the git " +
+			"The agent side also points the status line at `lode-statusline`, and enables the git " +
 			"worktree config extension that lets it read a workspace's own worklode.task-id. That " +
 			"is safe to have on by default because it never takes a slot it does not already own: " +
 			"the slot holds exactly one command, so a status line someone else configured is " +
@@ -574,7 +574,7 @@ func newUninstallCmd() *cobra.Command {
 		Long: "Removes what `lode install` added. The VCS side removes Worklode's pre-commit, " +
 			"commit-msg, post-merge and post-commit hooks and restores whatever it preserved, leaving a " +
 			"third-party hook it does not " +
-			"recognize untouched. The agent side removes every `lode hook` binding from each " +
+			"recognize untouched. The agent side removes every current or legacy Worklode binding from each " +
 			"targeted coding agent's configuration, leaving all other settings — including " +
 			"third-party hooks on the same events — in place. Use --no-vcs or --no-agent to skip " +
 			"either. A repo with nothing installed is not an error.\n\n" +
