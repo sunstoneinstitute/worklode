@@ -15,7 +15,7 @@ dependencies. The directory is published as-is.
 | `CNAME` | Custom domain for GitHub Pages — do not delete |
 
 The one external dependency is the analytics tag in `index.html`, pointing at
-Sunstone's self-hosted instance at `analytics.prod.sunstoneinstitute.ai`. It is
+Sunstone's self-hosted Umami instance at `sunstone.institute/umami`. It is
 deferred, so it never blocks rendering, and the page works with it blocked.
 
 ## Preview locally
@@ -50,10 +50,16 @@ Apply the `can-be-tested` label to force a full run.
 
 The copy was derived from the umbrella spec, which has since been removed
 (the corpus is its own map — `docs/specs/index.yaml`). The two-store split and
-the ambition-reconciliation thesis are stated in `docs/specs/006-knowledge-graph.md`
-and `docs/specs/006-knowledge-graph.md`; the layer model in
-`docs/specs/007-drift-and-overview.md`. When the architecture changes materially,
-update this copy too — nothing derives it automatically.
+the ambition-reconciliation thesis are stated in `docs/specs/006-knowledge-graph.md`;
+the layer model in `docs/specs/007-drift-and-overview.md`; the document lifecycle
+in `docs/specs/025-documents-in-the-backbone.md`. When the architecture changes
+materially, update this copy too — nothing derives it automatically.
+
+The Escalation section (`#ladder`) describes 025 §8, which is fully specified
+but not yet implemented — no `lode task escalate`, no fixer subagent, no
+gap-tracking events exist in code today. Its copy is deliberately future-tense
+("will record", "will amend") to say so; when §8 ships, update the tense along
+with whatever the shipped behaviour actually does.
 
 ## Logo
 
