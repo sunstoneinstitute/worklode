@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # giving up the distroless base — no shell, no package manager, nothing else
 # with a CVE feed — for a garnish. The server treats it as optional at
 # runtime, so an image without it still serves videos, just without posters.
-FROM mwader/static-ffmpeg:7.1 AS ffmpeg
+FROM mwader/static-ffmpeg:9.0 AS ffmpeg
 
 FROM gcr.io/distroless/static-debian12:nonroot AS watcher
 COPY --from=build /lode-watch /lode-watch
