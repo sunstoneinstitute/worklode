@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"slices"
 	"time"
 
@@ -51,6 +52,7 @@ type Projector struct {
 	m     *Metrics // nil-safe; Task 4
 	batch int
 	clock func() time.Time // nil means time.Now; see now()
+	rand  func() float64   // nil means rand.Float64; see jitter()
 }
 
 // New returns a projector reading at most batch transactions' worth of
@@ -139,7 +141,7 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 		}
 
 		errs = append(errs, perr)
-		next := failure(prior[id], id, now, perr)
+		next := failure(prior[id], id, now, perr, p.jitter())
 		if rerr := p.st.RecordProjectionFailure(ctx, next); rerr != nil {
 			errs = append(errs, fmt.Errorf("projector: %w", rerr))
 			// Only a *first* failure needs the checkpoint held back: a
@@ -181,8 +183,9 @@ const (
 	retryCap  = 30 * time.Minute
 )
 
-// retryDelay returns how long after the attempts'th consecutive failure the
-// project may be re-attempted: 0, 1m, 2m, 4m … capped at retryCap.
+// retryDelay returns the *ceiling* on how long after the attempts'th
+// consecutive failure the project may be re-attempted: 0, 1m, 2m, 4m … capped
+// at retryCap. jitteredDelay draws the delay actually used from below it.
 func retryDelay(attempts int) time.Duration {
 	if attempts <= 1 {
 		return 0
@@ -197,10 +200,33 @@ func retryDelay(attempts int) time.Duration {
 	return min(d, retryCap)
 }
 
+// jitteredDelay spreads the retry across the second half of its backoff
+// window: half of retryDelay, plus r (in [0,1)) of the other half.
+//
+// Without it, a global graph-server outage fails every project at roughly the
+// same instant, so their next_attempt_at values cluster and each cap boundary
+// fires a full render and PUT for every project at once — a thundering herd
+// against the service that just came back. Spreading the due times is the fix
+// for the clustering; a per-run cap on retries is deliberately not, because
+// ProjectionFailures orders by first_failed_at, so a cap would let a few
+// persistently-failing old projects crowd out newer ones indefinitely.
+//
+// Half the window is kept un-jittered so the backoff curve still has a floor:
+// a project that keeps failing is never re-attempted sooner than half its
+// current delay, and retryDelay stays the ceiling every caller can reason
+// about.
+func jitteredDelay(attempts int, r float64) time.Duration {
+	d := retryDelay(attempts)
+	if d == 0 {
+		return 0
+	}
+	return d/2 + time.Duration(r*float64(d/2))
+}
+
 // failure builds the quarantine row for a project that just failed. prior is
 // its existing row, zero when there is none, so a first failure starts the
-// clock and a repeat one only advances it.
-func failure(prior store.ProjectionFailure, id string, now time.Time, err error) store.ProjectionFailure {
+// clock and a repeat one only advances it. r is the jitter draw, in [0,1).
+func failure(prior store.ProjectionFailure, id string, now time.Time, err error, r float64) store.ProjectionFailure {
 	f := store.ProjectionFailure{
 		ProjectID:     id,
 		Attempts:      1,
@@ -212,8 +238,17 @@ func failure(prior store.ProjectionFailure, id string, now time.Time, err error)
 		f.Attempts = prior.Attempts + 1
 		f.FirstFailedAt = prior.FirstFailedAt
 	}
-	f.NextAttemptAt = now.Add(retryDelay(f.Attempts))
+	f.NextAttemptAt = now.Add(jitteredDelay(f.Attempts, r))
 	return f
+}
+
+// jitter draws the retry spread for one failure, overridable in tests that
+// need a deterministic next_attempt_at.
+func (p *Projector) jitter() float64 {
+	if p.rand != nil {
+		return p.rand()
+	}
+	return rand.Float64()
 }
 
 // now is the projector's clock, overridable in tests that need to reach past
