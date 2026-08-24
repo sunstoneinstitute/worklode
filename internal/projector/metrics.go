@@ -15,6 +15,7 @@ type Metrics struct {
 	duration    prometheus.Histogram   // worklode_graph_projection_duration_seconds
 	failures    prometheus.Counter     // worklode_graph_projection_project_failures_total
 	quarantined prometheus.Gauge       // worklode_graph_projection_quarantined_projects
+	deleted     prometheus.Counter     // worklode_graph_projection_graphs_deleted_total
 }
 
 // NewMetrics registers the projector's instruments on reg.
@@ -41,8 +42,12 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_graph_projection_quarantined_projects",
 			Help: "Projects currently owing a projection after a failure, as of the last run.",
 		}),
+		deleted: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_graph_projection_graphs_deleted_total",
+			Help: "Declared graphs removed from graph-server because their document was tombstoned.",
+		}),
 	}
-	reg.MustRegister(m.runs, m.projects, m.duration, m.failures, m.quarantined)
+	reg.MustRegister(m.runs, m.projects, m.duration, m.failures, m.quarantined, m.deleted)
 
 	// Pre-initialise both series so alert expressions see 0, not no-data.
 	m.runs.WithLabelValues("ok")
@@ -67,6 +72,17 @@ func (m *Metrics) recordProject() {
 		return
 	}
 	m.projects.Inc()
+}
+
+// recordGraphDeleted records one declared graph removed because its document
+// was tombstoned (044 §4). Only an actual removal counts: a delete that finds
+// the graph already gone is the steady state of a reconciler re-issuing it,
+// not an event, and counting it would turn one deletion into a rate.
+func (m *Metrics) recordGraphDeleted() {
+	if m == nil {
+		return
+	}
+	m.deleted.Inc()
 }
 
 // recordProjectFailure records one project that failed to project and was
