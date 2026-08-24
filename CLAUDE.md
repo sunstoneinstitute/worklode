@@ -3,10 +3,13 @@
 ## What this is
 
 Worklode is Sunstone's org-wide work tracker and coordination layer for
-multi-agent, multi-repo work. It ships as a single Go binary, `lode`, that is
-server (`lode serve`), CLI client, Kubernetes pod watcher (`lode watch`), and
-migrator (`lode migrate`) in one, backed by Postgres with an append-only event
-log for provenance. Design lives in `docs/specs/` (numbered, flat); start with
+multi-agent, multi-repo work. It ships as six Go executables from one module
+(053 §1): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
+hot paths), and `lode-server`, `lode-watch`, `lode-migrate` (operator side),
+backed by Postgres with an append-only event log for provenance. `lode hook`,
+`lode statusline`, `lode serve`, `lode watch`, and `lode migrate` survive as
+compatibility shims that exec the sibling binary, for one release only
+(WL-319). Design lives in `docs/specs/` (numbered, flat); start with
 `004-execution-backbone.md`; `docs/specs/index.yaml` is the generated map of
 every document's sections.
 
@@ -61,11 +64,19 @@ shares one build cache instead of recompiling the world per worktree:
 
 ```bash
 make build      # go build -trimpath -o bin/lode ./cmd/lode
-make install    # build and install lode to /usr/local/bin
+make build-user # the three end-user binaries: lode, lode-hook, lode-statusline
+make build-all  # all six executables
+make bin/lode-server   # one executable, by name: bin/<any of the six>
+make install    # build and install the three end-user binaries to /usr/local/bin
 make test       # go test -trimpath -race -count=1 ./...
 make test-e2e   # e2e suite (build tag required, TEST_POSTGRES_DSN reachable)
 make vet        # go vet ./...
 ```
+
+`lode-hook` and `lode-statusline` run on every agent lifecycle event, so their
+transitive imports are a guarded boundary: no Cobra, Goldmark, `internal/api`,
+`internal/store`, `internal/watch`, Prometheus, or Kubernetes.
+`internal/disttest/deps_test.go` fails the build when one creeps back.
 
 For anything a Makefile target doesn't cover — a single test, one package —
 fall back to `go build`/`go test` directly and add `-trimpath` yourself — **never
