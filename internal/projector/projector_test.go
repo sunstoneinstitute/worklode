@@ -24,6 +24,7 @@ type fakeGraphServer struct {
 	failGraph map[string]bool // graph IRI → reject only that graph
 	puts      map[string][]string
 	attempts  map[string]int // graph IRI → PUTs seen, rejected ones included
+	deletes   map[string]int // graph IRI → DELETEs that actually removed a graph
 }
 
 // setFail is used instead of a bare field write because the test goroutine
@@ -48,7 +49,15 @@ func (f *fakeGraphServer) setFailGraph(graph string, v bool) {
 
 func (f *fakeGraphServer) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut || r.URL.Path != "/branches/main/graphs" {
+		if r.URL.Path != "/branches/main/graphs" {
+			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			f.deleteGraph(w, r.URL.Query().Get("graph"))
+			return
+		}
+		if r.Method != http.MethodPut {
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 			return
 		}
@@ -74,6 +83,34 @@ func (f *fakeGraphServer) handler() http.Handler {
 		f.puts[g] = append(f.puts[g], string(body))
 		w.WriteHeader(status)
 	})
+}
+
+// deleteGraph mirrors graph-server: 204 when the graph was there, 404 when it
+// was not, which is what makes a re-issued delete distinguishable from the
+// first one. deletes counts only the 204s.
+func (f *fakeGraphServer) deleteGraph(w http.ResponseWriter, g string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail || f.failGraph[g] {
+		http.Error(w, "boom", http.StatusInternalServerError)
+		return
+	}
+	if len(f.puts[g]) == 0 {
+		http.Error(w, "no such graph", http.StatusNotFound)
+		return
+	}
+	delete(f.puts, g)
+	if f.deletes == nil {
+		f.deletes = map[string]int{}
+	}
+	f.deletes[g]++
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (f *fakeGraphServer) deleteCount(graph string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.deletes[graph]
 }
 
 func (f *fakeGraphServer) last(graph string) string {
@@ -267,6 +304,87 @@ func TestRunOnceProjectsSections(t *testing.T) {
 		if !strings.Contains(declared, want) {
 			t.Errorf("declared graph missing %q\n%s", want, declared)
 		}
+	}
+}
+
+// TestDeletedDocumentGraphIsRemoved covers 044 §4's "the graph shows live rows
+// only" for the one entity that does not get it for free. A task leaves the
+// graph by not being written into the project graph the next pass replaces; a
+// document owns a graph of its own, so the projector has to remove it.
+func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	// DeleteDoc records who deleted the document, so the actor must exist.
+	if err := s.EnsureActor(ctx, "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
+
+	var docID int64
+	_, _, err := s.RecordEvent(ctx, "cli", "doc-del1", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, cerr := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 3, Slug: "003-doomed",
+				Body:      "---\nstatus: draft\n---\n# Spec 3 — Doomed\n",
+				CreatedBy: "author",
+			}, eventID)
+			if cerr != nil {
+				return cerr
+			}
+			docID = d.ID
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project the live doc: %v", err)
+	}
+	graph := iri.DeclaredGraph("003-doomed")
+	if f.last(graph) == "" {
+		t.Fatalf("live document was not projected into %s", graph)
+	}
+
+	_, _, err = s.RecordEvent(ctx, "cli", "doc-del1-delete", "doc.deleted", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.DeleteDoc(tx, time.Now().UTC(), docID, "author", "created by mistake", eventID)
+		})
+	if err != nil {
+		t.Fatalf("delete doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project after the delete: %v", err)
+	}
+	if got := f.deleteCount(graph); got != 1 {
+		t.Fatalf("graph deletions after the delete = %d, want 1", got)
+	}
+	if f.last(graph) != "" {
+		t.Errorf("tombstoned document still has a declared graph:\n%s", f.last(graph))
+	}
+
+	// The delete is re-issued every pass and the graph is already gone, so a
+	// later projection must tolerate the 404 rather than quarantine the
+	// project.
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("re-projection over an already-deleted graph: %v", err)
+	}
+	if got := f.deleteCount(graph); got != 1 {
+		t.Errorf("graph deletions after an idempotent rerun = %d, want 1", got)
+	}
+
+	// Undelete puts the document back in the live list, which writes its
+	// graph again.
+	_, _, err = s.RecordEvent(ctx, "cli", "doc-del1-undelete", "doc.undeleted", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UndeleteDoc(tx, time.Now().UTC(), docID, eventID)
+		})
+	if err != nil {
+		t.Fatalf("undelete doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project after the undelete: %v", err)
+	}
+	if f.last(graph) == "" {
+		t.Errorf("undeleted document was not re-projected into %s", graph)
 	}
 }
 

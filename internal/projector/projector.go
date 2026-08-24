@@ -266,9 +266,11 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 	// The project's documents render into their own declared graphs
 	// (WL-289): one graph per document, replaced whole, in the same attempt
 	// — a failure quarantines the project as a unit, documents included.
-	// Live documents only; a tombstoned document (044) keeps its last
-	// projected graph until a delete path exists, noted in
-	// docs/follow-ups.md.
+	// Live documents are written and tombstoned ones have their graph
+	// removed, which is 044 §4's "the graph shows live rows only" for the
+	// one entity that does not get it for free: a task leaves the graph by
+	// not being written into the project graph the next pass replaces, while
+	// a document owns a graph of its own that nothing else overwrites.
 	docs, err := p.st.ListDocs(ctx, store.DocFilter{Project: id})
 	if err != nil {
 		return fmt.Errorf("list docs for project %s: %w", id, err)
@@ -288,6 +290,27 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		triples := append(graphproj.DocTriples(d), graphproj.SectionTriples(d, sections, in)...)
 		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), graphproj.Document(triples)); err != nil {
 			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
+		}
+	}
+
+	// The delete is re-issued on every pass, not once at the moment of
+	// deletion, because the projector is a reconciler that remembers nothing
+	// about what it wrote: ErrNotFound is the ordinary answer from the second
+	// pass onward, and from a document deleted before it was ever projected.
+	// An undelete puts the document back in the live list above, which writes
+	// its graph again.
+	tombstoned, err := p.st.ListDocs(ctx, store.DocFilter{Project: id, Deleted: true})
+	if err != nil {
+		return fmt.Errorf("list deleted docs for project %s: %w", id, err)
+	}
+	for _, d := range tombstoned {
+		switch err := p.gc.DeleteGraph(ctx, Branch, iri.DeclaredGraph(d.Slug)); {
+		case err == nil:
+			p.m.recordGraphDeleted()
+		case errors.Is(err, graphserver.ErrNotFound):
+			// Already absent, which is the state this loop wants.
+		default:
+			return fmt.Errorf("delete declared graph for doc %s: %w", d.Slug, err)
 		}
 	}
 	p.m.recordProject()
