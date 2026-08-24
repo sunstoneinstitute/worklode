@@ -114,6 +114,28 @@ func (l Layout) segmentBelowBase(path string) (string, bool) {
 	return below[0], true
 }
 
+// WorktreeRootOf returns the worktree root a path sits at or below: the base
+// plus the one segment under it, with anything deeper trimmed off. Where
+// segmentBelowBase is the hook *guard* — exactly one segment, so a path inside
+// a worktree is rejected — this is for classifying a recorded working
+// directory, which is routinely a subdirectory of the worktree it belongs to.
+// Pure string work, like its sibling.
+func (l Layout) WorktreeRootOf(path string) (string, bool) {
+	if len(l.parts) == 0 || path == "" {
+		return "", false
+	}
+	segs := strings.Split(filepath.ToSlash(filepath.Clean(path)), "/")
+	idx := lastIndexOf(segs, l.parts)
+	if idx < 0 {
+		return "", false
+	}
+	end := idx + len(l.parts) + 1
+	if end > len(segs) {
+		return "", false
+	}
+	return filepath.FromSlash(strings.Join(segs[:end], "/")), true
+}
+
 // lastIndexOf returns the starting index of the last occurrence of sub in
 // segs, or -1. The *last* occurrence wins so a repository that itself sits
 // inside someone's worktree base still resolves against its own.
