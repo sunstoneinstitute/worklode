@@ -918,6 +918,12 @@ force.
 
 ### 6.3 Never claimable
 
+> Pending `025-documents-in-the-backbone.md#sec-10` (not yet effective)
+
+> **Amended by spec 025 §10.** A second predicate excludes `kind = 'decision'`
+> for the same reason, and those tasks are worked through the lease-free
+> assign/start/submit path instead.
+
 One predicate in the `readyCandidates` query (`ranking.go:62-72`) keeps a task
 that has children out of the ready set:
 
@@ -929,6 +935,16 @@ AND NOT EXISTS (SELECT 1 FROM task_edges c
 The worktree is the unit of Worklode work (spec 008) and a container has nothing
 to check out, so `lode next` must never hand an agent one. Decomposition work
 that genuinely needs a worktree becomes a child task.
+
+A `decision`-kind task (025 §10) is excluded by the same query for the same
+reason: its deliverable is a recorded answer, so it has no code, no branch and
+no PR, and nothing to check out. The exclusion is a predicate on the kind rather
+than on the edges — `AND t.kind <> 'decision'` — because there is no child edge
+to detect it by. It keeps a decision out of `lode next`'s candidate set and out
+of §4's claim transaction entirely: a decision is never leased, and `lode task
+claim` on one is an error rather than a worktree. It is assigned instead (029
+§6.1, the lease-free start/stop/submit lifecycle), and the assignee closes it by
+recording the answer.
 
 ### 6.4 State machine of a task with children
 

@@ -143,9 +143,20 @@ it, each revision, each review. A task produces at most one document. When a new
 ask which side of that asymmetry it falls on — what many undertakings act on over time is a
 document, what is undertaken once is a task.
 
-None of this needs a third category. A **decision** is a task whose deliverable is a recorded
-decision, and the record is an ADR, which is a document. The task closes when the record exists; the
-record never closes.
+**A decision is the third category, and the test does not reach it.** §10's `decision` kind is an
+undertaking that produces no artifact at all: its deliverable is a recorded answer held on the task
+itself (§10.1), neither a document nor a diff. So it never faces the cardinality above — there is no
+document to count on either side of it — and the binary this section argues for holds unbroken over
+the artifacts it is a binary about. A decision closes when the answer is recorded, which is the
+ordinary closure this section reserves for undertakings, and the answer then stands as of its
+recording the way a superseded document stands as of its issue: deciding the same question again is
+another decision, not a revision of this one.
+
+A decision that earns a durable rationale still becomes a document by the ordinary route — an ADR,
+authored by a `design`-kind task, which the decision **blocks** (004 §1.3). The two are separate
+undertakings held in order, not one task wearing both jobs. An earlier draft of this section fused
+them, calling a decision a task whose record is an ADR, which made every go/no-go call owe a
+document before it could close and left the calls nobody writes up with no representation at all.
 
 **Consequence for the authoring task.** §10 closes a `design`-kind task "when its document is
 accepted", which fuses two acts on two objects: the authoring work, and the acceptance §7 requires
@@ -892,6 +903,7 @@ receives them; an unknown key is an accept error, never silently dropped:
 | `priority` | no | `medium` | one of `critical`, `high`, `medium`, `low` → `tasks.priority` (ranking input, spec 005; backbone-only, not projected) |
 | `skills` | no | none | list of skill identifiers → the task pin of 016 §3, projected as `wl:requiresSkill` (below) |
 | `blockedBy` | no | none | list of task numbers in this file → `blocks` edges between the minted tasks |
+| `implements` | no | none | list of spec section references (025 §14.1) this task implements → `implements` edges from the minted task |
 
 `kind` takes the subset of `wlc:TaskKind` (§10) a plan may mint: `review` tasks are created by
 the review lifecycle (§7), and a spike's outcome is an input to planning, so both are
@@ -902,6 +914,44 @@ and becomes `tasks.title`. Everything between the metadata block and the next ta
 or the section's end — becomes `tasks.body` verbatim. The step list is part of that body:
 executor guidance, never execution state — nothing reads the boxes, and the task's state
 remains the only execution state (§9.2).
+
+**After minting, the detail belongs to the task.** Once `tasks.body` holds it,
+the same prose sitting in the plan is a second copy that can drift. The plan
+keeps the declaration — the heading, the metadata block, and now the minted id —
+and folds the prose into a collapsed `<details>` element so the plan stays a
+complete record without re-reading as the working instruction:
+
+````markdown
+### Task 3 — Wire the guard
+
+```yaml
+kind: feature
+implements: [ WL-SPEC-29#sec-7 ]
+```
+Minted as WL-412
+
+<details>
+<summary>Original detail</summary>
+
+Prose: files to touch, the test that proves it.
+
+</details>
+````
+
+The bare `WL-412` renders as a link to the task with no markup: reference
+autolinking already matches `[A-Z][A-Z0-9]{1,9}-\d+` in document bodies and
+points it at the task's cockpit page. Keeping the declaration in place is also
+what lets a plan be accepted again to mint tasks added later (§9.2) — stripping
+the `## Tasks` subsections outright would leave that re-accept with nothing to
+read.
+
+**`implements` names the sections the task discharges.** A plan `covers` a
+section — an undertaking — and the work `implements` it, the split 026 §5 and
+§6.2 draw. A task may list sections from more than one governing spec, and it may
+list none where the plan carries `covers: NO-SPEC`. The edges let section closure
+walk from a section to its tasks directly, instead of inferring the path through
+whichever plan happened to mint them, and they are what 026 §5.4's decomposition
+check reads at the plan→task level.
 
 **`blockedBy` becomes edges at mint.** For each number `m` it lists, the accept transaction
 (§9.2) wires a `blocks` edge from this plan's task `m` to the declaring task — `task_edges`
@@ -1053,7 +1103,7 @@ decomposed subtask alone; a plan- or spec-level parent would spend it again for 
 
 ```sql
 -- target CHECK; ships with the concept.ttl edit and regenerated code, atomically
-CHECK (kind IN ('feature','bug','chore','design','review','spike'))
+CHECK (kind IN ('feature','bug','chore','design','review','spike','decision'))
 ```
 
 - **`spec` is renamed `design` and widened to every document kind:** *author or revise a
@@ -1066,18 +1116,74 @@ CHECK (kind IN ('feature','bug','chore','design','review','spike'))
   is accepted, which is a status transition on the document and not a state the task can reach
   (§2.2). It is never an umbrella held open against coverage: "is the spec implemented?" is
   `lode doc coverage`, not a task state.
+- **`decision` is a call someone has to make:** *answer a posed question and record the
+  answer on the task*. It starts from the question rather than from a problem statement —
+  a decision task's title **is** the question, and its body is the context the decider
+  needs — and its deliverable is the recorded answer held in `task_decisions` (§10.1),
+  never a document, so it accrues no `prov:wasGeneratedBy` edge and produces nothing for
+  §2.2's cardinality test to count. It closes when the answer is recorded, and the
+  recording is terminal: an answer is not revised in place, and deciding again is another
+  decision task. It has no code, no branch and no PR, so 004 §6.3 excludes it from
+  `readyCandidates` for exactly the reason it excludes a container — the worktree is the
+  unit of Worklode work and there is nothing here to check out — and the worktree-bound
+  claim transaction (004 §4) never sees one. A decision is worked through the lease-free
+  path instead (029 §6.1): `lode task assign` names the accountable decider, who then
+  starts and closes it, never `lode task claim`. Where the answer wants a durable
+  rationale, the decision **blocks** the `design`-kind task that authors the ADR (004
+  §1.3) — one ordering edge between two undertakings, not one fused task (§2.2).
 - **No kind is structural.** With no container row minted for a plan (§9.2), the only
   container is a decomposed parent, and its container-ness follows from having children rather
   than from a column. Task kinds therefore describe the nature of work throughout, and none is
   added for plans, planning, speccing or reconciliation: which document came out is carried by
   the document, which has its own class; a *speccing* task versus an *implementing* task is
   distinguished by the predicate, not the kind (§12); and `reconcile` is an activity, not a
-  kind of work, so such tasks are `chore`. The scheme holds six kinds that all mean the same
-  sort of thing.
+  kind of work, so such tasks are `chore`. The scheme holds seven kinds: six of them mean the
+  same sort of thing — claimable, worktree-bound work that lands a diff — and `decision` is the
+  single exception, claimable only through the lease-free path and delivering data on the task
+  rather than a document or a diff.
 
-Migration: narrow the CHECK to the six kinds, and regenerate `validKinds` and `wlc:TaskKind`
-from `ns/` (§17) in the same commit so `TestTaskKindsAgreeAcrossSources` never sees the sources
-disagree.
+Migration: restate the CHECK as the seven kinds above, and regenerate `validKinds` and
+`wlc:TaskKind` from `ns/` (§17) in the same commit so `TestTaskKindsAgreeAcrossSources` never
+sees the sources disagree.
+
+### 10.1 A decision's data
+
+The question and its context are the task's own `title` and `body` — a decision task's title is
+always phrased as a question, and no column restates it. Everything else a decision needs lives
+in a side table keyed one-to-one to `tasks`, the way `leases`, `task_edges` and 029 §3's
+deliverables do, so the core table stays generic and no kind of task carries columns another
+kind leaves null:
+
+```sql
+CREATE TABLE task_decisions (
+    task_id          text PRIMARY KEY REFERENCES tasks(id),
+    response_type    text NOT NULL CHECK (response_type IN (
+                         'single_select', 'multi_select', 'single_select_notes',
+                         'pick_or_freetext', 'yes_no', 'freetext')),
+    options          jsonb,      -- [{label, description}], null for yes_no/freetext
+    min_picks        int,        -- multi_select only
+    max_picks        int,        -- multi_select only
+    answer           jsonb,      -- {picked: [...], notes, freetext}; null until recorded
+    decided_at       timestamptz
+);
+```
+
+`response_type` says what a valid answer looks like, and it is fixed when the decision is posed
+rather than when it is answered: whoever writes the question decides whether the decider picks
+one option, picks several within `min_picks`/`max_picks`, picks one and explains, picks one or
+writes their own, answers yes/no, or writes free text. `options` carries the offered choices as
+`[{label, description}]` and is null for the two types that offer none. A `yes_no` answer takes a
+third value — `{"value": "yes" | "no" | "unsure"}` — so a decider with no view records that as
+the answer instead of leaving the task open; "nobody minds" is a decision the project can act on,
+and an unanswered question is not.
+
+`answer` is null until the decision is made. Writing it, stamping `decided_at`, and closing the
+task are one transaction: the record and the closure are the same act, and there is no state in
+which a decision is answered but still open.
+
+Deferred: the ephemeral question an agent asks mid-task and needs answered within the session —
+same response types, no durable row, no place on the board. It is a different object with a
+different lifetime, and nothing here is designed for it; specify it when something needs it.
 
 ## 11. Implementation coverage
 
@@ -2068,9 +2174,11 @@ Two further pieces of work follow from this spec without belonging to it:
 
 ## 24. Acceptance criteria
 
-1. `tasks.kind`, `validKinds` and `wlc:TaskKind` agree on exactly the six kinds of §10 —
-   `feature, bug, chore, spec, review, spike` — and none of them is structural. The sources are
-   generated from `ns/`, CI fails on drift, and the migration round-trips up and down.
+1. `tasks.kind`, `validKinds` and `wlc:TaskKind` agree on exactly the seven kinds of §10 —
+   `feature, bug, chore, design, review, spike, decision` — and none of them is structural. The
+   sources are generated from `ns/`, CI fails on drift, and the migration round-trips up and down.
+   A `decision`-kind task never appears in `readyCandidates` and is never claimable into a
+   worktree; recording its answer closes it in one transaction.
 2. `wl:Plan` is present as a sibling of `wl:DesignDoc`, never its subclass; plan documents carry
    no section anchors and accept mid-execution edits; no acceptance criterion anywhere still
    refers to `Spec ⊃ Plan ⊃ Task`.
