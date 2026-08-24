@@ -333,6 +333,7 @@ docs/specs/025-documents-in-the-backbone.md:
     sec-9.2: "### 9.2 Acceptance mints the plan's tasks"
     sec-9.3: "### 9.3 Spec fan-out is a query"
     sec-10: "## 10. Task kinds"
+    sec-10.1: "### 10.1 A decision's data"
     sec-11: "## 11. Implementation coverage"
     sec-11.1: "### 11.1 Three objects, previously conflated"
     sec-11.2: "### 11.2 `.worklode/implements.yaml`"
