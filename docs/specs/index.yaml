@@ -390,6 +390,7 @@ docs/specs/026-design-doc-queries.md:
     sec-5.1: "### 5.1 Frontmatter shape"
     sec-5.2: "### 5.2 Plans carry `status` and `task`"
     sec-5.3: "### 5.3 `defers` hands a section to a named owner"
+    sec-5.4: "### 5.4 Decomposition is complete, or it is not"
     sec-6: "## 6. Ontology"
     sec-6.1: "### 6.1 Two terms this displaces"
     sec-6.2: "### 6.2 `wl:implements` splits, and states its domain"
