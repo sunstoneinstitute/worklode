@@ -209,6 +209,67 @@ func TestRunOnceProjectsDocuments(t *testing.T) {
 	}
 }
 
+// TestRunOnceProjectsSections covers 025 §3.3: once a document is accepted,
+// its sections are frozen and project as wl:Section nodes in the same declared
+// graph. A draft's sections stay out, because their anchors can still change.
+func TestRunOnceProjectsSections(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	// CreateDoc defaults the assignee to CreatedBy, and docs.assignee is a
+	// foreign key into actors, so the author has to exist first.
+	if err := s.EnsureActor(ctx, "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
+
+	var docID int64
+	_, _, err := s.RecordEvent(ctx, "cli", "doc-sec1", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, cerr := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 2, Slug: "002-sections",
+				Body: "---\nstatus: draft\n---\n# Spec 2 — Sections\n\n" +
+					"## 1. Scope {#sec-1}\n\nBody.\n",
+				CreatedBy: "author",
+			}, eventID)
+			if cerr != nil {
+				return cerr
+			}
+			docID = d.ID
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project the draft: %v", err)
+	}
+	section := "<" + iri.Section("002-sections", "sec-1") + ">"
+	if got := f.last(iri.DeclaredGraph("002-sections")); strings.Contains(got, section) {
+		t.Errorf("draft section projected before its anchor was frozen:\n%s", got)
+	}
+
+	_, _, err = s.RecordDocEvent(ctx, "accept", "cli", "doc-sec1-accept", "doc.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, _, aerr := store.AcceptDoc(tx, s.Now(), docID, "author", eventID)
+			return aerr
+		})
+	if err != nil {
+		t.Fatalf("accept doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project the accepted doc: %v", err)
+	}
+	declared := f.last(iri.DeclaredGraph("002-sections"))
+	for _, want := range []string{
+		section + " <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <" + iri.Term("Section") + ">",
+		section + " <" + graphproj.DCTIsPartOf + "> <" + iri.Doc("002-sections") + ">",
+		section + " <" + iri.Term("status") + "> <" + iri.Concept("accepted") + ">",
+	} {
+		if !strings.Contains(declared, want) {
+			t.Errorf("declared graph missing %q\n%s", want, declared)
+		}
+	}
+}
+
 func TestCrossProjectEdgeProjectsBothGraphs(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
