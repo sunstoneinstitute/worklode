@@ -689,9 +689,18 @@ func TestTaskDuplicateCommands(t *testing.T) {
 	dupe := createTestTask(t, c, "Filed twice")
 
 	// duplicate --of records the edge; the dupe alias reaches the same command.
-	if out, err := runLode(t, "task", "dupe", dupe.ID, "--of", canonical.ID); err != nil {
+	out, err := runLode(t, "task", "dupe", dupe.ID, "--of", canonical.ID)
+	if err != nil {
 		t.Fatalf("task dupe --of: %v\noutput: %s", err, out)
 	}
+	// The edge is provenance, not scheduling (004): the duplicate stays
+	// claimable, so the confirmation has to say that closing is a second act.
+	// Without it the message reads as if triage were finished while lode next
+	// is still handing the duplicate out.
+	if !strings.Contains(out, "stays claimable") {
+		t.Errorf("duplicate confirmation = %q, want it to say the task stays claimable", out)
+	}
+
 	detail, _, err := c.GetTask(context.Background(), dupe.ID)
 	if err != nil {
 		t.Fatalf("get task: %v", err)
