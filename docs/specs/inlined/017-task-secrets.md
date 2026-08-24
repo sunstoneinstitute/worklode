@@ -208,6 +208,16 @@ Supporting commands:
 `/lode-block` all purge the task's items. Materialized lifetime therefore equals worktree
 lifetime, matching the lease.
 
+Every one of those triggers rides an action, so a worktree that is *abandoned* rather than
+removed keeps live credentials on the laptop until someone touches it again. `lode doctor` (013)
+closes that: its sweep walks the local manifests, which are the machine's only inventory of
+materialized secrets, asks the backbone about each task's lease, and purges the ones it gets a
+definite answer for — no lease, or no such task (044). **Uncertainty never purges**: an
+unreachable server skips the sweep and an unanswered task is left alone, because a secret reaped
+by mistake costs a whole consent ceremony to restore while one reaped a run later costs nothing.
+It is the one trigger a human runs without the worktree needing to be entered, left, or removed,
+which is why ADR 048 §4 could leave the never-revisited worktree to it.
+
 ## 5. The `lode-secrets` skill
 
 The convention travels as a skill loaded in **both** contexts the feature touches:
