@@ -2,5 +2,10 @@
 # normally a command documented before it ships. One normalized invocation per
 # line, exactly as written in the markdown. Every entry needs a comment saying
 # why it is here and what removes it.
-#
-# Empty on purpose: nothing is currently exempt.
+
+# Draft spec 026 5.4's decomposition stamp. lode:splitting-specs-into-plans
+# names the command while telling authors it does not exist yet and to keep
+# writing fullCoverageWith. Remove both entries when 026 5.4 ships and the
+# skill stops hedging.
+lode decompose <ref>
+lode decompose

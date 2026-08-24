@@ -49,7 +49,7 @@ Otherwise, for every untracked gap, run:
 ```
 lode task add --kind design \
   --title "Plan spec <N> — <title>" \
-  --body "Write an implementation plan covering <KEY>-SPEC-<N> (<slug>), sections <anchors>. Read it with 'lode show <KEY>-SPEC-<N>'. See the splitting-specs-into-plans skill." \
+  --body "Write an implementation plan covering <KEY>-SPEC-<N> (<slug>), sections <anchors>. Read it with 'lode show <KEY>-SPEC-<N>'. See the lode:splitting-specs-into-plans skill." \
   --project <P> --json
 ```
 
