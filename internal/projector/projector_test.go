@@ -215,6 +215,11 @@ func TestRunOnceProjectsDocuments(t *testing.T) {
 func TestRunOnceProjectsSections(t *testing.T) {
 	s, p, f := newProjector(t)
 	ctx := t.Context()
+	// CreateDoc defaults the assignee to CreatedBy, and docs.assignee is a
+	// foreign key into actors, so the author has to exist first.
+	if err := s.EnsureActor(ctx, "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
 
 	var docID int64
 	_, _, err := s.RecordEvent(ctx, "cli", "doc-sec1", "doc.created", nil,
