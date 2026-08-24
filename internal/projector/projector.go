@@ -274,8 +274,19 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		return fmt.Errorf("list docs for project %s: %w", id, err)
 	}
 	for _, d := range docs {
-		body := graphproj.Document(graphproj.DocTriples(d))
-		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), body); err != nil {
+		sections, err := p.st.ListDocSections(ctx, d.ID)
+		if err != nil {
+			return fmt.Errorf("list sections of doc %s: %w", d.Slug, err)
+		}
+		// Only the inbound edges are read: a section's supersession is stated
+		// by the document that replaced it, so it reaches this document as an
+		// inbound isReplacedBy (025 §6.2).
+		_, in, err := p.st.ListDocEdges(ctx, d.ID)
+		if err != nil {
+			return fmt.Errorf("list edges of doc %s: %w", d.Slug, err)
+		}
+		triples := append(graphproj.DocTriples(d), graphproj.SectionTriples(d, sections, in)...)
+		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), graphproj.Document(triples)); err != nil {
 			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
 		}
 	}
