@@ -119,9 +119,15 @@ event always wins.
 session leaves; a worktree that is abandoned *and never entered or exited
 again* fires no hook, so its items persist until removal. This ADR narrows
 the abandoned-worktree window to "until the next visit"; it cannot close a
-window no hook can see. Whether a machine-wide sweep — under `lode doctor`,
-which 017 §3 already names — should close that residual is left open,
-tracked as WL-300 rather than promised here.
+window no hook can see.
+
+**The residual is closed by a sweep, decided in WL-257.** `lode doctor` walks
+the machine's local manifests, asks the backbone about each task's lease, and
+purges on the same definite answers §2 defines, with the same rule that
+uncertainty never purges. It needs no hook to fire, which is what makes it
+reach a worktree nobody enters, exits, or removes. 017 §4 states it; this ADR
+keeps the exit-time half, which reaps at the natural trigger without waiting
+for a human to run a diagnostic.
 
 ## 5. Rejected alternatives {#sec-5}
 
