@@ -55,6 +55,14 @@ views of the same facts, not separate products or permission boundaries.
 
 ## 2. Application and project navigation
 
+> Pending `056-nav-shell-and-cross-project-inbox.md#sec-1` (not yet effective)
+
+> **Amended by spec 056 §1.** The global navigation region is the top bar
+> itself rather than a second row below it, the brand links to `/`, and the
+> destination list is five: Ideas, Intake, Projects, Work, Knowledge. Home,
+> Reviews and Deliveries keep their routes, pages and permissions and leave
+> only the navigation list. Project-local navigation is unchanged.
+
 The application presents a persistent global navigation region with these
 primary destinations:
 
