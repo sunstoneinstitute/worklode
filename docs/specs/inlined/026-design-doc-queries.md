@@ -145,20 +145,21 @@ superseded** naming that exact `#sec-N` anchor in `covers` — or handing it off
 
 | Outcome | Rule |
 |---|---|
-| **fully planned** | some such plan claims `coverage: full`; **or** one claims `partial` with a non-empty `fullCoverageWith: [P…]` where every `P` is itself accepted or superseded, is not the claiming plan, and contributes `full` or `partial` to `S` |
-| **partially planned** | `S` is claimed only `partial`, and no `fullCoverageWith` closes it |
+| **fully planned** | the governing spec is **decomposed** (§5.4) and some such plan covers `S` at `full` or `partial` |
+| **partially planned** | some such plan covers `S`, but the governing spec is not decomposed |
 | **bound only** | `S` is claimed only `none` |
 | **deferred** | no such plan claims `partial` on `S`, and some such plan `defers` `S` to a named owner (§5.3) |
 | **unplanned** | no such plan covers `S` |
 
-`fullCoverageWith` is checked, never taken on trust: an empty list, a draft
-target, a `none` target, the claiming plan itself, or a target that does not
-itself cover `S` leaves the section `partially planned` and is reported. A plan may otherwise assert closure
-against a sibling that never undertook usable work on the section, which is the
-same defect in a new place.
+Closure is not read off a single claim. It is the decomposition stamp of §5.4:
+a spec is decomposed when every one of its sections carries a claim, and a
+`partial` claim may exist only inside such a complete set. So a covered section
+in a decomposed spec is planned, whether the covering plan says `full` or
+`partial` — the level says how much *this* plan does, not whether the section is
+closed.
 
-Only `full` and a closed `partial` set discharge the section. `none` contributes
-nothing to coverage by construction — it records that the section was read.
+`none` contributes nothing to coverage by construction — it records that the
+section was read.
 
 A deferral (§5.3) discharges nothing either: it is the explicit zero, the plan
 that looked at `S`, will not build it, and names the document whose plans
@@ -328,7 +329,7 @@ discharges it**, because the act decides who can perform it:
 | Type | Condition | Discharged by |
 |---|---|---|
 | `unplanned` | no plan covers the section | writing a plan |
-| `partial` | covered only `partial`, no `fullCoverageWith` closes it | writing a plan |
+| `partial` | covered only `partial`, and the governing spec is not decomposed (§5.4) | running `lode decompose` |
 | `plan-draft` | a plan covers it at `full` or `partial`, `status: draft` | a human accepting the plan (025 §7) |
 | `unexecuted` | covering plan accepted, task absent or open | executing the plan |
 | `blocked` | covering plan accepted, a plan it `requires` is not discharged | the blocking plan |
@@ -857,10 +858,13 @@ reader cannot distinguish a constraint a plan obeys from a section its author
 overlooked — and an author cannot record having considered a section and
 concluded it was someone else's.
 
-A `partial` entry may name the plans that finish the section under
-`fullCoverageWith`. That list is what makes closure decidable: without it,
-`partial` is an open declaration that some of the section remains unplanned,
-which is a legitimate and useful state to be in.
+A `partial` entry names no completing sibling. Pointing forward from the
+covered section to the plans that finish it runs the reference the wrong way: a
+plan is less permanent than the spec it covers, so a disappearing plan would
+oblige the spec to be edited. The gap should simply be rediscovered the next
+time the question is asked. What bounds `partial` instead is the invariant of
+§5.4 — a partial claim is legal only inside a complete sibling set — which also
+lets a reader be shown that set without any plan naming it.
 
 **This mints a sibling property, not a second spelling of one.** 025 §11 declined
 to mint `wl:fullyImplements` on the grounds that coverage is a query over
@@ -878,8 +882,6 @@ covers:
     coverage: full
   - spec: docs/specs/032-project-cockpit.md#sec-3
     coverage: partial
-    fullCoverageWith:
-      - docs/plans/2026-08-10-project-cockpit-2-intake-and-launch.md
   - spec: docs/specs/032-project-cockpit.md#sec-11
     coverage: none
 ```
@@ -888,7 +890,6 @@ covers:
 |---|---|---|
 | `spec` | yes | A reference (025 §14.1) with a `#sec-N` fragment. Section-scoped: a plan claiming a whole document says nothing a coverage query can use. |
 | `coverage` | yes | `full`, `partial`, or `none` |
-| `fullCoverageWith` | no | A non-empty list of accepted plans contributing `full` or `partial` to the same section. Canonical repo-relative paths — plans carry no shorthand and no number. Invalid beside `full` or `none`. |
 
 `covers` is plan-only, as `implements` was, and takes the position `implements`
 held in the key order (025 §14): lifecycle, then `covers`, then dependency, then
@@ -990,11 +991,66 @@ lifecycle, `covers`, `defers`, dependency, amendment, supersession.
 **Projection.** Each entry becomes one `doc_edges` row of type `defers` from
 the plan to the section, resolved exactly as a `covers` reference is — an
 unresolvable `spec` is kept verbatim as an external reference and, like a
-`covers` typo, reads as an unplanned section rather than an error. The owner
-rides in the same completion side-table a `partial` entry uses for
-`fullCoverageWith`, because it is the same assertion read at level zero: full
-coverage of this section arrives with the named document. Re-pointing on late
+`covers` typo, reads as an unplanned section rather than an error. The owner is a
+column on the edge, not a side table: a deferral names exactly one document
+(§5.3's fifth rule), so there is nothing ordered or multi-valued to hold. Re-pointing on late
 corpus import reaches it for free.
+
+### 5.4 Decomposition is complete, or it is not
+
+**A `partial` claim is legal only inside a complete sibling set.** A plan may
+cover a spec section partially, and a task may implement part of a plan, only
+when every other plan or task needed to cover the parent in full exists at the
+same time. A stub — a plan or task whose body is "TODO, figure this out" —
+satisfies the rule: what is forbidden is not an unfinished plan but an *unbounded*
+one, where nobody knows what else is owed. The shape of the remainder must be
+written down even when its content is not.
+
+The alternative was a forward pointer from each `partial` claim to the plans
+completing it (§5). That makes closure decidable per-claim at the cost of
+pointing the wrong way down the permanence gradient. The invariant gets the same
+decidability from the set instead of from the claim, and costs no edge.
+
+**The stamp.** A document is **decomposed** when every section of it carries a
+claim. `wl:decomposedAt` (§6) records when that was last established, and
+`lode decompose <ref>` is the act that establishes it — overloaded across both
+levels, because it is the same question asked twice:
+
+```
+lode decompose WL-SPEC-29      # do the plans cover every section of the spec?
+lode decompose WL-PLAN-29-1    # do the tasks implement every part of the plan?
+```
+
+It validates and stamps, or refuses and names the sections nobody claimed.
+Creating a further `partial` claim afterwards clears the stamp until
+`decompose` is run again, so the invariant cannot rot by addition.
+
+**Incremental authoring stays possible**, which is why the stamp exists rather
+than a single atomic transaction. A six-part plan series is written over days;
+requiring all six to appear in one write would mean finishing the whole
+decomposition before recording any of it. Instead the parent reads as
+*decomposing* until the stamp lands, and the gate sits where execution begins:
+accepting a plan whose governing spec is not decomposed is refused. Drafting is
+unrestricted; starting work on an incomplete decomposition is not.
+
+**Closure is a different question from planning.** A section is *planned* when
+it is claimed inside a decomposed spec. A section is *closed* when every
+downstream plan and task referring to it is closed — `taskClosed`'s existing
+predicate, the delivered states plus `abandoned`, so one definition serves
+blocking, roll-up, plan gating and this. Planning asks whether the work is
+known; closure asks whether it is done.
+
+**Tasks name what they implement.** A task declares the plan or plans it belongs
+to and the spec sections it implements, so closure walks from section to task
+directly instead of inferring the path through a plan. `covers` stays the plan's
+word and `implements` the work's, exactly as §5 and §6.2 divide them.
+
+**`full` and `partial` become a read optimisation.** With the set complete by
+construction, the level no longer decides closure — it tells a reader whether to
+keep looking. `full` means this one document answers the section; `partial` means
+others contribute, and because the invariant guarantees they exist, the CLI and
+cockpit can render that sibling list beside the claim without any plan having
+named it.
 
 ## 6. Ontology
 
@@ -1041,15 +1097,17 @@ wl:coveredSection a owl:ObjectProperty, owl:FunctionalProperty ;
 wl:coverageLevel a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:domain wl:Coverage ; rdfs:range skos:Concept .
 
-wl:completedWith a owl:ObjectProperty ;
-    rdfs:domain wl:Coverage ; rdfs:range wl:Plan .
+wl:decomposedAt a owl:DatatypeProperty, owl:FunctionalProperty ;
+    rdfs:domain wl:DesignDoc ; rdfs:range xsd:dateTime .
 ```
 
 `wlc:CoverageLevel` is a SKOS concept scheme in `ns/concept.ttl` with exactly
-`wlc:full`, `wlc:partial`, and `wlc:none`. SHACL enforces that a `wl:Coverage`
-whose level is `wlc:full` or `wlc:none` carries no `wl:completedWith`, and that
-its `wl:coveringPlan` also asserts a direct `wl:covers` to its
-`wl:coveredSection`.
+`wlc:full`, `wlc:partial`, and `wlc:none`. SHACL enforces that a `wl:Coverage`'s
+`wl:coveringPlan` also asserts a direct `wl:covers` to its `wl:coveredSection`.
+
+`wl:completedWith` is **not** minted. The forward pointer it would carry is what
+§5 rejects, and the sibling set a reader wants is derivable from the other plans
+covering the same section.
 
 The range is `skos:Concept`, not `wlc:CoverageLevel`: the latter is a
 `skos:ConceptScheme`, not an RDFS class. The exact three members and their
@@ -1163,7 +1221,7 @@ projector 025 §5 anticipates. 006 §11.1 declined to mint a per-environment fro
 node on the grounds that neither shape was "worth minting before a query wants
 it", and the same restraint would justify deferring this whole subsection. It is
 specified now because 025 §14 requires a term behind every frontmatter key, and
-§5.1's `coverage` and `fullCoverageWith` are frontmatter that `secmeta.py` already
+§5.1's `coverage` is frontmatter that `secmeta.py` already
 enforces — a validated key with no term is exactly the private extension that
 rule exists to prevent.
 
@@ -1212,10 +1270,6 @@ reports:
 
 - an entry missing `spec` or `coverage`, or carrying an unknown key;
 - a `coverage` value outside the three;
-- `fullCoverageWith` beside `full` or `none`;
-- a `fullCoverageWith` target that resolves to no file, lacks `accepted`
-  status, or does not contribute `full` or `partial` to the same section;
-- an empty `fullCoverageWith`, or a non-canonical plan path;
 - a `spec` reference without a `#sec-N` fragment;
 - the bare form on a section another accepted plan also covers;
 - `implements` on a plan — deprecated, write `covers`;
@@ -1310,11 +1364,9 @@ a test failure rather than a corpus that means two things.
   the exit code at 0, and becomes a defect under `--strict-refs`.
 - Canonical form: `secfmt.py` rewrites a within-project shorthand to the target's filename and
   leaves a foreign one alone; running it twice changes nothing the second time.
-- `NeedsPlanning`: only accepted plans contribute; accepted `full` discharges its exact
-  section; an unclosed `partial` is reported as partial; a non-empty `fullCoverageWith`
-  closes its source only when every target is accepted and contributes `full` or `partial`
-  to that same section; draft, `none`, wrong-section, or missing targets and an empty
-  completion set leave the source partial; `none` alone is bound-only; a section with no
+- `NeedsPlanning`: only accepted plans contribute; a covered section in a decomposed
+  spec is fully planned whether the claim is `full` or `partial`; the same section in an
+  undecomposed spec is partially planned; `none` alone is bound-only; a section with no
   accepted plan is unplanned; a whole-document claim contributes nothing and is reported
   because the query requires a `#sec-N` section; a draft spec never appears.
 - `NeedsExecution`: `accepted` with no `task` → listed; `accepted` with an open task →
