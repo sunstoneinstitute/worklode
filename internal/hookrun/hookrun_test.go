@@ -2336,6 +2336,44 @@ func TestHeartbeatBillsSubdirAndCwdlessTurnsToItsOwnTask(t *testing.T) {
 	}
 }
 
+// TestHeartbeatDropsAnotherRepositorysWorktree pins the containment rule.
+// The worktree layout is matched on path segments alone, so a cwd under any
+// directory named `.worktrees` resolves to a task id — including one in a
+// completely different repository. Those tokens belong to that repo's project
+// and must not land on this one's overhead, where nothing would ever remove
+// them (WL-329).
+func TestHeartbeatDropsAnotherRepositorysWorktree(t *testing.T) {
+	st, c, _ := newRealServer(t)
+	root := initGitRepo(t)
+	_, wtDir, _ := setupLeasedWorktree(t, c, root, "Own task")
+	writeProjectConfig(t, wtDir, "proj")
+
+	// A second repository, with a worktree of its own. Its task id (TH-9)
+	// matches the same pattern this repo's does.
+	foreign := addWorktree(t, initGitRepo(t), "TH-9", "someone-elses-task")
+
+	transcriptPath := writeTranscript(t,
+		transcriptLine(wtDir, "msg_1", "claude-sonnet-5", 100, 0, 0, 0, 10),
+		transcriptLine(foreign, "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
+	)
+
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: transcriptPath})
+
+	report, err := st.ProjectCost(t.Context(), "proj", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d cost days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadTokens.Input; got != 0 {
+		t.Errorf("overhead input = %d, want 0 — another repo's worktree is not this project's overhead", got)
+	}
+	if got := report.Days[0].Tokens.Input; got != 100 {
+		t.Errorf("combined input = %d, want 100 (this task's turn only)", got)
+	}
+}
+
 // TestHeartbeatOtherTaskWithoutLeaseFallsBackToOverhead is the trap this
 // plan warns about most: a transcript names a task this actor no longer
 // holds the lease on (released, swept, or claimed by someone else), so
