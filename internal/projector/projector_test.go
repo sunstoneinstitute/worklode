@@ -445,7 +445,7 @@ func TestFailedProjectQuarantinedAndRetried(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read quarantine: %v", err)
 	}
-	if len(fails) != 1 || fails[0].ProjectID != "alpha" || fails[0].Attempts != 1 {
+	if len(fails) != 1 || fails[0].Project != "alpha" || fails[0].Attempts != 1 {
 		t.Fatalf("quarantine = %+v; want one alpha row at attempt 1", fails)
 	}
 	if fails[0].LastError == "" {

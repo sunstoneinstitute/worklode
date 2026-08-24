@@ -1012,6 +1012,25 @@ func EventSubscriberTable(w io.Writer, subs []model.EventSubscriberStatus) {
 	tw.Flush()
 }
 
+// ProjectionFailureTable lists the projects the knowledge-graph projector has
+// quarantined. RETRY is the floor on the next attempt, not a schedule: fresh
+// activity in the project makes it dirty and re-attempts it immediately, so a
+// time in the past means "due, and the projector has not run since".
+func ProjectionFailureTable(w io.Writer, failures []model.ProjectionFailure) {
+	if len(failures) == 0 {
+		fmt.Fprintln(w, "no projects are quarantined")
+		return
+	}
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "PROJECT\tATTEMPTS\tSTUCK SINCE\tLAST FAILED\tRETRY\tERROR")
+	for _, f := range failures {
+		fmt.Fprintf(tw, "%s\t%d\t%s\t%s\t%s\t%s\n",
+			f.Project, f.Attempts, LocalTime(f.FirstFailedAt), LocalTime(f.LastFailedAt),
+			LocalTime(f.NextAttemptAt), strings.Join(strings.Fields(f.LastError), " "))
+	}
+	tw.Flush()
+}
+
 // TreeRender prints each parent with its progress, then its children indented
 // one level. Subtasks — the third tier the depth cap allows — are not
 // expanded. The nodes come from the server as model.TaskTreeNode: the tree is
