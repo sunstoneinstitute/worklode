@@ -4,8 +4,9 @@
 FROM golang:1.26 AS build
 WORKDIR /src
 
-# Cache mounts persist module downloads and build cache across runs;
-# in CI they are synced to actions/cache via buildkit-cache-dance.
+# Cache mounts persist module downloads and build cache across runs. A
+# self-hosted CI runner keeps them in a builder whose state volume survives the
+# job; a hosted one syncs them to actions/cache via buildkit-cache-dance.
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
