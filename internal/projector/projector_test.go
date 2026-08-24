@@ -605,3 +605,72 @@ func TestRetryDelayCurve(t *testing.T) {
 		}
 	}
 }
+
+// TestJitteredDelaySpreadsTheHerd covers the retry spread: a global
+// graph-server outage fails every project at the same instant, so without
+// jitter their next_attempt_at values cluster and each cap boundary fires a
+// full render and PUT for every project at once.
+func TestJitteredDelaySpreadsTheHerd(t *testing.T) {
+	// The floor holds: half the window is never jittered away, so a project
+	// that keeps failing is not re-attempted sooner than half its delay.
+	for _, attempts := range []int{2, 3, 4, 7, 50} {
+		ceiling := projector.RetryDelay(attempts)
+		for _, r := range []float64{0, 0.5, 0.999999} {
+			got := projector.JitteredDelay(attempts, r)
+			if got < ceiling/2 || got > ceiling {
+				t.Errorf("JitteredDelay(%d, %v) = %v; want within [%v, %v]",
+					attempts, r, got, ceiling/2, ceiling)
+			}
+		}
+	}
+
+	// The immediate first re-attempt stays immediate: there is nothing to
+	// spread, and delaying it would cost the transient-failure recovery the
+	// zero delay exists for.
+	for _, attempts := range []int{0, 1} {
+		if got := projector.JitteredDelay(attempts, 0.9); got != 0 {
+			t.Errorf("JitteredDelay(%d, 0.9) = %v; want 0", attempts, got)
+		}
+	}
+
+	// Distinct draws land on distinct times, which is the whole point.
+	if a, b := projector.JitteredDelay(7, 0.1), projector.JitteredDelay(7, 0.9); a == b {
+		t.Errorf("two jitter draws produced the same delay %v; the herd is not spread", a)
+	}
+}
+
+// TestQuarantineRetryIsJittered covers the wiring: the row the projector
+// writes carries the jittered delay, not the ceiling.
+func TestQuarantineRetryIsJittered(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	base := time.Now().UTC()
+	p.SetClock(func() time.Time { return base })
+	p.SetJitter(func() float64 { return 0 })
+	createTask(t, s, "j1", "alpha", "fail me")
+
+	// Two failures: the first schedules an immediate retry, the second the
+	// first real backoff.
+	f.setFail(true)
+	for range 2 {
+		if _, err := p.RunOnce(ctx); err == nil {
+			t.Fatal("RunOnce succeeded against a failing graph server")
+		}
+	}
+
+	rows, err := s.ProjectionFailures(ctx)
+	if err != nil {
+		t.Fatalf("ProjectionFailures: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("quarantined projects = %d, want 1", len(rows))
+	}
+	// Compared with a tolerance because the column's resolution is coarser
+	// than the clock's; the assertion still separates the floor from the
+	// ceiling, which are 30s apart at this attempt count.
+	want := base.Add(projector.JitteredDelay(rows[0].Attempts, 0))
+	if drift := rows[0].NextAttemptAt.UTC().Sub(want.UTC()); drift > time.Second || drift < -time.Second {
+		t.Errorf("next_attempt_at = %v, want %v (jitter 0 is the floor, half of the %v ceiling)",
+			rows[0].NextAttemptAt.UTC(), want, projector.RetryDelay(rows[0].Attempts))
+	}
+}
