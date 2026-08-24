@@ -902,3 +902,31 @@ func TestReconcileRenderNamesCaps(t *testing.T) {
 		}
 	}
 }
+
+// TestProjectionFailureTable covers the quarantine view: the empty case says
+// so in words rather than printing a bare header, and a multi-line error is
+// collapsed so it cannot break the row it belongs to.
+func TestProjectionFailureTable(t *testing.T) {
+	var empty bytes.Buffer
+	ProjectionFailureTable(&empty, nil)
+	if got := empty.String(); !strings.Contains(got, "no projects are quarantined") {
+		t.Errorf("empty quarantine rendered %q", got)
+	}
+
+	at := time.Date(2026, 8, 24, 9, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	ProjectionFailureTable(&buf, []model.ProjectionFailure{{
+		Project: "alpha", Attempts: 3,
+		FirstFailedAt: at, LastFailedAt: at, NextAttemptAt: at,
+		LastError: "put graph:\n  503 Service Unavailable",
+	}})
+	out := buf.String()
+	if lines := strings.Count(strings.TrimSpace(out), "\n"); lines != 1 {
+		t.Errorf("one failure rendered %d extra lines; a multi-line error broke the row:\n%s", lines, out)
+	}
+	for _, want := range []string{"alpha", "put graph: 503 Service Unavailable"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("quarantine row missing %q:\n%s", want, out)
+		}
+	}
+}

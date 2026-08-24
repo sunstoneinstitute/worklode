@@ -98,9 +98,9 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 	}
 
 	now := p.now()
-	prior := make(map[string]store.ProjectionFailure, len(quarantined))
+	prior := make(map[string]model.ProjectionFailure, len(quarantined))
 	for _, f := range quarantined {
-		prior[f.ProjectID] = f
+		prior[f.Project] = f
 	}
 	still := len(quarantined)
 
@@ -115,8 +115,8 @@ func (p *Projector) RunOnce(ctx context.Context) (n int, err error) {
 	}
 	targets := slices.Clone(projects)
 	for _, f := range quarantined {
-		if !dirty[f.ProjectID] && !f.NextAttemptAt.After(now) {
-			targets = append(targets, f.ProjectID)
+		if !dirty[f.Project] && !f.NextAttemptAt.After(now) {
+			targets = append(targets, f.Project)
 		}
 	}
 
@@ -226,9 +226,9 @@ func jitteredDelay(attempts int, r float64) time.Duration {
 // failure builds the quarantine row for a project that just failed. prior is
 // its existing row, zero when there is none, so a first failure starts the
 // clock and a repeat one only advances it. r is the jitter draw, in [0,1).
-func failure(prior store.ProjectionFailure, id string, now time.Time, err error, r float64) store.ProjectionFailure {
-	f := store.ProjectionFailure{
-		ProjectID:     id,
+func failure(prior model.ProjectionFailure, id string, now time.Time, err error, r float64) model.ProjectionFailure {
+	f := model.ProjectionFailure{
+		Project:       id,
 		Attempts:      1,
 		FirstFailedAt: now,
 		LastFailedAt:  now,

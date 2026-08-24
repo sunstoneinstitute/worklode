@@ -3,7 +3,8 @@ package store
 import (
 	"context"
 	"fmt"
-	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // ProjectionCheckpoint returns the transaction id through which the
@@ -30,27 +31,12 @@ func (s *Store) SetProjectionCheckpoint(ctx context.Context, txid int64) error {
 	return nil
 }
 
-// ProjectionFailure is one quarantined project: the projector could not
-// render or write its graph, and the global watermark has moved on past the
-// transaction that made it dirty, so this row is the only remaining record
-// that the project still owes a projection. Package-local rather than an
-// internal/model type (ADR 036) because it never crosses the HTTP boundary —
-// like TaskFilter and Edge, it is store↔caller plumbing.
-type ProjectionFailure struct {
-	ProjectID     string
-	Attempts      int // consecutive failed attempts, including the latest
-	FirstFailedAt time.Time
-	LastFailedAt  time.Time
-	NextAttemptAt time.Time // no earlier re-attempt unless the project goes dirty again
-	LastError     string
-}
-
 // ProjectionFailures returns every quarantined project, oldest failure first.
 // The whole table is read each run rather than only the due rows: it is
 // bounded by the number of projects, and the projector needs the attempt
 // count of a not-yet-due project too, in case fresh state_log activity makes
 // it dirty and it fails again.
-func (s *Store) ProjectionFailures(ctx context.Context) ([]ProjectionFailure, error) {
+func (s *Store) ProjectionFailures(ctx context.Context) ([]model.ProjectionFailure, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT project_id, attempts, first_failed_at, last_failed_at, next_attempt_at, last_error
 		   FROM graph_projection_failures ORDER BY first_failed_at, project_id`)
@@ -59,10 +45,10 @@ func (s *Store) ProjectionFailures(ctx context.Context) ([]ProjectionFailure, er
 	}
 	defer rows.Close()
 
-	var out []ProjectionFailure
+	var out []model.ProjectionFailure
 	for rows.Next() {
-		var f ProjectionFailure
-		if err := rows.Scan(&f.ProjectID, &f.Attempts, &f.FirstFailedAt,
+		var f model.ProjectionFailure
+		if err := rows.Scan(&f.Project, &f.Attempts, &f.FirstFailedAt,
 			&f.LastFailedAt, &f.NextAttemptAt, &f.LastError); err != nil {
 			return nil, fmt.Errorf("scan projection failure: %w", err)
 		}
@@ -79,7 +65,7 @@ func (s *Store) ProjectionFailures(ctx context.Context) ([]ProjectionFailure, er
 // backoff curve stays a pure function in Go rather than an expression in SQL.
 // FirstFailedAt is preserved across updates — it is how long the project has
 // been stuck, which the attempt count alone does not say.
-func (s *Store) RecordProjectionFailure(ctx context.Context, f ProjectionFailure) error {
+func (s *Store) RecordProjectionFailure(ctx context.Context, f model.ProjectionFailure) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO graph_projection_failures
 		     (project_id, attempts, first_failed_at, last_failed_at, next_attempt_at, last_error)
@@ -89,9 +75,9 @@ func (s *Store) RecordProjectionFailure(ctx context.Context, f ProjectionFailure
 		     last_failed_at  = EXCLUDED.last_failed_at,
 		     next_attempt_at = EXCLUDED.next_attempt_at,
 		     last_error      = EXCLUDED.last_error`,
-		f.ProjectID, f.Attempts, f.FirstFailedAt, f.LastFailedAt, f.NextAttemptAt, f.LastError)
+		f.Project, f.Attempts, f.FirstFailedAt, f.LastFailedAt, f.NextAttemptAt, f.LastError)
 	if err != nil {
-		return fmt.Errorf("record projection failure for %s: %w", f.ProjectID, err)
+		return fmt.Errorf("record projection failure for %s: %w", f.Project, err)
 	}
 	return nil
 }
