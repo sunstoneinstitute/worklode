@@ -212,14 +212,21 @@ task, so a task's cost report has nothing to combine — its
 **`transcript.Bucket` gains a `Cwd string` field**, and the bucketing key
 (`day, model, speed`) gains `cwd` as a fourth component, unconditionally —
 `Options.Root`'s filtering behavior is unchanged (it still drops entries
-outside `Root`; kept entries now also carry their own `Cwd`). This is
-backward compatible: a caller using `Options{Root: root}` for a single
-worktree, as every existing call site does, gets the same tokens split into
+outside `Root`; kept entries now also carry their own `Cwd`). A caller
+passing `Options{Root: root}` therefore gets the same tokens split into
 finer-grained rows sharing one `Cwd`, which the server's own
-`mergeUsageBuckets` already re-merges by `(day, model, speed)` — no existing
+`mergeUsageBuckets` already re-merges by `(day, model, speed)` — no such
 caller's totals change.
 
-**`classifyTranscriptUsage(opts, l, ownTaskID, transcriptPath) map[string][]model.SessionUsageBucket`**
+`Options.Root` keeps that behavior and its tests, but **`internal/hookrun` no
+longer uses it.** `classifyTranscriptUsage` replaced the single-worktree
+`sessionUsage` outright rather than supplementing it, so `sessionUsage` is
+deleted and no production code passes a `Root` any more: filtering by one
+directory is what this spec exists to stop doing. The field survives as the
+parser's own documented seam, exercised only by
+`internal/transcript`'s tests (WL-330).
+
+**`classifyTranscriptUsage(opts, l, ownTaskID, root, transcriptPath) map[string][]model.SessionUsageBucket`**
 is a new `internal/hookrun` function: it parses `transcriptPath` with no
 `Root` filter (every `cwd` the session touched, not just the calling
 handler's own worktree) and groups the buckets by task id, resolved **per

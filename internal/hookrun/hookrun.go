@@ -499,50 +499,12 @@ func purgeSecrets(opts Options, taskID string) {
 	}
 }
 
-// sessionUsage reads the session's transcript and returns the buckets that
-// billed against root.
-//
-// Root is load-bearing: one session can work several worktrees in sequence
-// against a single cumulative transcript, so filtering by the directory each
-// turn ran in is what stops the same tokens being billed to two leases.
-//
-// No failure here is fatal — a missing path, an unreadable file, or an empty
-// result all yield nil, which leaves the backbone's stored usage untouched and
-// still lets the session end.
-func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsageBucket {
-	if transcriptPath == "" {
-		return nil
-	}
-	buckets, err := transcript.ParseFile(transcriptPath, transcript.Options{Root: root})
-	if err != nil {
-		warn(opts, "parse transcript %s: %v", transcriptPath, err)
-		return nil
-	}
-	out := make([]model.SessionUsageBucket, 0, len(buckets))
-	for _, b := range buckets {
-		out = append(out, model.SessionUsageBucket{
-			Day:                b.Day.Format(time.DateOnly),
-			Model:              b.Model,
-			Speed:              b.Speed,
-			InputTokens:        b.Usage.Input,
-			CacheWrite5mTokens: b.Usage.CacheWrite5m,
-			CacheWrite1hTokens: b.Usage.CacheWrite1h,
-			CacheReadTokens:    b.Usage.CacheRead,
-			OutputTokens:       b.Usage.Output,
-		})
-	}
-	if len(out) == 0 {
-		return nil // an empty slice would clear stored usage; nothing was read
-	}
-	return out
-}
-
 // classifyTranscriptUsage parses transcriptPath's FULL usage -- every cwd the
 // session touched, not just one worktree -- and groups it by task id.
 // A cwd outside the configured worktree base, or one whose directory
 // name/stamp carries no task id, groups under the empty string key
-// (overhead). Same no-failure contract as sessionUsage: a missing transcript,
-// an unreadable file, or an empty result all yield nil.
+// (overhead). Same no-failure contract as every other hook call: a missing
+// transcript, an unreadable file, or an empty result all yield nil.
 //
 // Two details decide where real money lands. A recorded cwd is usually a
 // directory *inside* a worktree, not its root, so it is trimmed back to the
