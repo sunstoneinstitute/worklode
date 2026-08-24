@@ -12,7 +12,7 @@ func TestAnalyzeKnownDAG(t *testing.T) {
 	//   A → B → C
 	//        ↘  D
 	//   E (isolated)
-	a := Analyze([][2]string{{"A", "B"}, {"B", "C"}, {"B", "D"}}, []string{"E"})
+	a := AnalyzeWithFanOut([][2]string{{"A", "B"}, {"B", "C"}, {"B", "D"}}, []string{"E"})
 
 	wantDepth := map[string]int{"A": 0, "B": 1, "C": 2, "D": 2, "E": 0}
 	if !reflect.DeepEqual(a.Depth, wantDepth) {
@@ -38,7 +38,7 @@ func TestAnalyzeKnownDAG(t *testing.T) {
 
 func TestAnalyzeExcludesAndSurfacesCycle(t *testing.T) {
 	// X ↔ Y is a cycle; A → B is healthy and must keep correct numbers.
-	a := Analyze([][2]string{{"X", "Y"}, {"Y", "X"}, {"A", "B"}}, nil)
+	a := AnalyzeWithFanOut([][2]string{{"X", "Y"}, {"Y", "X"}, {"A", "B"}}, nil)
 
 	if len(a.Cycles) != 1 {
 		t.Fatalf("Cycles = %v; want one", a.Cycles)
@@ -62,5 +62,30 @@ func TestAnalyzeSelfLoopIsACycle(t *testing.T) {
 	a := Analyze([][2]string{{"X", "X"}}, nil)
 	if len(a.Cycles) != 1 || len(a.Cycles[0]) != 1 || a.Cycles[0][0] != "X" {
 		t.Fatalf("Cycles = %v; want [[X]]", a.Cycles)
+	}
+}
+
+// TestAnalyzeSkipsTheClosure covers the split: the closure is the expensive
+// half of this pass, and the three surfaces that only want depth and
+// criticality must not pay for it. A nil FanOut is the observable difference,
+// so it is asserted rather than left to a benchmark nobody runs.
+func TestAnalyzeSkipsTheClosure(t *testing.T) {
+	edges := [][2]string{{"A", "B"}, {"B", "C"}, {"B", "D"}}
+	cheap := Analyze(edges, nil)
+	if cheap.FanOut != nil {
+		t.Errorf("Analyze computed FanOut = %v; want nil, the caller did not ask", cheap.FanOut)
+	}
+
+	// Everything else is identical to the expensive pass, so a caller reading
+	// Depth or Critical never has to know which one it called.
+	full := AnalyzeWithFanOut(edges, nil)
+	if !reflect.DeepEqual(cheap.Depth, full.Depth) {
+		t.Errorf("Depth differs between the two passes: %v vs %v", cheap.Depth, full.Depth)
+	}
+	if !reflect.DeepEqual(cheap.Critical, full.Critical) {
+		t.Errorf("Critical differs between the two passes: %v vs %v", cheap.Critical, full.Critical)
+	}
+	if !reflect.DeepEqual(cheap.Cycles, full.Cycles) {
+		t.Errorf("Cycles differ between the two passes: %v vs %v", cheap.Cycles, full.Cycles)
 	}
 }
