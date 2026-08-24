@@ -1136,6 +1136,10 @@ CHECK (kind IN ('feature','bug','chore','design','review','spike','decision'))
   starts and closes it, never `lode task claim`. Where the answer wants a durable
   rationale, the decision **blocks** the `design`-kind task that authors the ADR (004
   §1.3) — one ordering edge between two undertakings, not one fused task (§2.2).
+- **`spike`** is a [time-boxed experiment](https://en.wikipedia.org/wiki/Spike_(software_development))
+  to validate an approach, throwaway by convention: nothing requires the code to survive the
+  task that wrote it, and a spike is never the deliverable a `feature` task was supposed to
+  produce.
 - **No kind is structural.** With no container row minted for a plan (§9.2), the only
   container is a decomposed parent, and its container-ness follows from having children rather
   than from a column. Task kinds therefore describe the nature of work throughout, and none is
