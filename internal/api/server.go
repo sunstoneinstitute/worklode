@@ -696,6 +696,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/events", s.listEvents)
 	r.api("GET /api/v1/events/stream", s.streamEvents)
 	r.api("GET /api/v1/event-subscribers", s.listEventSubscribers)
+	r.api("GET /api/v1/graph/projection/failures", s.listProjectionFailures)
 	r.api("POST /api/v1/event-subscribers/{name}/seek", s.seekEventSubscriber)
 
 	r.api("GET /api/v1/whoami", s.whoami)

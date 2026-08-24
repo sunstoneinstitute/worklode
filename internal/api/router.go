@@ -265,6 +265,7 @@ var routeGuards = map[string]routeGuard{
 	// handler.
 	"GET /api/v1/events/stream":                  guarded(permEventStream),
 	"GET /api/v1/event-subscribers":              guarded(permEventRead),
+	"GET /api/v1/graph/projection/failures":      guarded(permProjectionRead),
 	"POST /api/v1/event-subscribers/{name}/seek": guarded(permEventAdmin),
 
 	// --- identity (spec 013) --------------------------------------------------

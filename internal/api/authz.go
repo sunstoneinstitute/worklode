@@ -173,6 +173,13 @@ const (
 	// instance hands out deliberately.
 	permEventStream Permission = "event.stream"
 
+	// permProjectionRead covers GET /api/v1/graph/projection/failures: which
+	// projects the knowledge-graph projector has quarantined, since when, and
+	// why. Any authenticated actor may read it, on permEventRead's reasoning —
+	// it is operational visibility over a derived record, not a write, and the
+	// alternative today is psql against the backbone.
+	permProjectionRead Permission = "projection.read"
+
 	// permWhoAmI covers GET /api/v1/whoami: any authenticated actor may ask
 	// which identity their token resolves to. No admin gate — this is how
 	// the CLI (and lode doctor) confirms a token is accepted and whose it is.
@@ -287,9 +294,10 @@ var grants = map[Permission][]Role{
 	// one is an operational act, not ordinary blob authoring.
 	permBlobAdmin: {RoleAdmin},
 
-	permEventRead:   {RoleUser, RoleAdmin},
-	permEventAdmin:  {RoleAdmin},
-	permEventStream: {RoleAdmin},
+	permEventRead:      {RoleUser, RoleAdmin},
+	permProjectionRead: {RoleUser, RoleAdmin},
+	permEventAdmin:     {RoleAdmin},
+	permEventStream:    {RoleAdmin},
 
 	permWhoAmI: {RoleUser, RoleAdmin},
 
