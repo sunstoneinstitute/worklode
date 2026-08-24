@@ -24,6 +24,8 @@ package ui
 // rendered" cannot recur here: adding either panel means adding the field
 // back deliberately, alongside markup that reads it.
 
+import "github.com/sunstoneinstitute/worklode/internal/model"
+
 templ Cockpit(v CockpitView) {
 	@Page(v.Page) {
 		<link rel="canonical" href={ v.CanonicalURL }/>
@@ -184,8 +186,8 @@ templ automationBoundary(totals []CockpitCostTotal) {
 			<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">none recorded</span></div>
 		} else {
 			for _, t := range totals {
-				<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">{ t.Currency } { t.CostAmount }</span></div>
-				<div class="auto-line"><span class="k">&mdash; of which overhead</span><span class="v">{ t.Currency } { t.OverheadCostAmount }</span></div>
+				<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">{ t.Currency } { model.Money(t.CostAmount) }</span></div>
+				<div class="auto-line"><span class="k">&mdash; of which overhead</span><span class="v">{ t.Currency } { model.Money(t.OverheadCostAmount) }</span></div>
 			}
 		}
 		<p class="small muted">No automation policy or budget is configured for this project.</p>
