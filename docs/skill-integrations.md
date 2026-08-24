@@ -283,7 +283,7 @@ lifecycle `lode next`/`done` already owns.
   backbone assigns identity. The visual companion carries over unchanged.
 - **Vendored `writing-plans`**, emitting a lode plan with `covers:` and the
   `## Tasks` contract that plan acceptance mints from, and deferring to the
-  existing `splitting-specs-into-plans` skill for series.
+  existing `lode:splitting-specs-into-plans` skill for series.
 - **Vendored `executing-plans`**, with its plan-file ledger replaced by task
   state — `lode next`/`done` already hold it. Check first whether the existing
   `lode-worker` agent and `working-under-worklode` skill make this redundant.

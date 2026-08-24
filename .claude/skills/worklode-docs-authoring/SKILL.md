@@ -1,6 +1,6 @@
 ---
 name: worklode-docs-authoring
-description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc new", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use splitting-specs-into-plans instead.
+description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc new", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
 ---
 
 # Authoring specs and plans

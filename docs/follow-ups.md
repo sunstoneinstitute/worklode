@@ -18,7 +18,7 @@ Each item carries a priority tag (assessed 2026-08-14):
 - `[gated]` waiting on another decision, spec, or condition — don't schedule
 
 **A gap a plan's `covers:` already declares does not belong here.** A
-`coverage: partial` claim (026 §5, `splitting-specs-into-plans`) states the
+`coverage: partial` claim (026 §5, `lode:splitting-specs-into-plans`) states the
 gap in a form a coverage query reads; restating it here creates a second copy
 in a file nothing queries, and the two drift. This file is for what coverage
 cannot express: a conflict between spec and system, a fact that has gone

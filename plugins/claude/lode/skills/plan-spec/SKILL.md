@@ -33,7 +33,7 @@ accepted spec. `lode show <ref>` renders it, `-s <anchor>` one section;
 `lode doc get <id-or-slug> --json` gives the same body plus the parsed section
 anchors and edges. The backbone is the only copy — there is no corpus on disk.
 
-**Step 3: write the plans.** Load `splitting-specs-into-plans` if the spec is
+**Step 3: write the plans.** Load `lode:splitting-specs-into-plans` if the spec is
 large enough to need a numbered series, and `superpowers:writing-plans` for
 each plan document. A plan's `covers:` frontmatter must name the spec sections
 it undertakes, anchor by anchor: a whole-document edge discharges nothing, so
