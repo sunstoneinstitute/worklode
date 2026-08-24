@@ -237,6 +237,29 @@ usage was classified per directory. A `cwd` outside the configured worktree
 base, or one whose directory name/stamp carries no task id, groups under the
 empty string.
 
+**A `cwd` that resolves to a worktree of a different repository is dropped.**
+`WorktreeRootOf` matches path segments alone, so any directory named
+`.worktrees` anywhere on the filesystem yields a task id:
+`~/git/trusthere/.worktrees/TH-9-x` resolves to `TH-9`. That task belongs to
+another project, so the single project-scoped report this handler makes would
+bill it to *this* project's overhead, where nothing ever removes it.
+Resolution is therefore gated on containment: the worktree root must sit under
+the repository the hook resolved — `Layout.RepoRootOf(root)`, the path above
+the base, or `root` itself for a main checkout — tested with
+`worktree.Contains`, which falls back to `EvalSymlinks` before calling a path
+foreign, because a wrong "foreign" discards real spend. Containment rather
+than equality, so a worktree created from inside another worktree still counts
+as this repository's.
+
+Dropping is the disposal **only** for a `cwd` that is provably another
+repository's. The empty-string bucket keeps its deliberate role for a `cwd`
+this repo simply cannot classify: a directory outside the worktree base
+carries no claim about which repository it belongs to, and §0's rule that
+spend is never silently dropped still governs it. The two cases are
+distinguished rather than merged, and the residual gap is stated: a session
+that works in another repository's *main checkout* still bills to this
+project's overhead, because nothing in the path says otherwise (WL-329).
+
 A missing transcript, an unreadable file, or an empty result all yield `nil`
 — the same no-failure contract every hook call has.
 

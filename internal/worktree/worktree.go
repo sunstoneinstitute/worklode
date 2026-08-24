@@ -136,6 +136,73 @@ func (l Layout) WorktreeRootOf(path string) (string, bool) {
 	return filepath.FromSlash(strings.Join(segs[:end], "/")), true
 }
 
+// RepoRootOf returns the repository root implied by a path inside the worktree
+// base: everything above the base directory. It is the companion WorktreeRootOf
+// needs to be safe — that function matches path segments alone, so it resolves
+// a worktree root just as happily in someone else's repository as in this one,
+// and the caller has to be able to tell the two apart (WL-329).
+//
+// ok=false for a path with no base directory in it, which is what a main
+// checkout looks like: the caller's own root is then already the repo root.
+// Pure string work, like its siblings.
+func (l Layout) RepoRootOf(path string) (string, bool) {
+	if len(l.parts) == 0 || path == "" {
+		return "", false
+	}
+	segs := strings.Split(filepath.ToSlash(filepath.Clean(path)), "/")
+	idx := lastIndexOf(segs, l.parts)
+	if idx <= 0 {
+		return "", false
+	}
+	// An absolute path splits with a leading empty segment, so idx > 0 alone
+	// does not mean there is a directory above the base: "/.worktrees/WL-7-x"
+	// leaves nothing but that empty segment, and the filesystem root is no
+	// repository.
+	above := strings.Join(segs[:idx], "/")
+	if above == "" {
+		return "", false
+	}
+	return filepath.FromSlash(above), true
+}
+
+// Contains reports whether path is root or sits under it.
+//
+// The cheap comparison is on cleaned absolute strings. Only when that says no
+// does it pay for EvalSymlinks on both sides and ask again, because the two
+// answers differ exactly where a symlinked path (macOS's /var -> /private/var)
+// would otherwise be called foreign — and a false "foreign" discards real
+// spend, while a false "ours" merely keeps a token that was already going to
+// be kept. A path that no longer exists fails EvalSymlinks and keeps the
+// string answer.
+func Contains(root, path string) bool {
+	if root == "" || path == "" {
+		return false
+	}
+	if under(abs(root), abs(path)) {
+		return true
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return false
+	}
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	return under(abs(realRoot), abs(realPath))
+}
+
+func abs(p string) string {
+	if a, err := filepath.Abs(p); err == nil {
+		return a
+	}
+	return filepath.Clean(p)
+}
+
+func under(root, path string) bool {
+	return path == root || strings.HasPrefix(path, root+string(filepath.Separator))
+}
+
 // lastIndexOf returns the starting index of the last occurrence of sub in
 // segs, or -1. The *last* occurrence wins so a repository that itself sits
 // inside someone's worktree base still resolves against its own.
