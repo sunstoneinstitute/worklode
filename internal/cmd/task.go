@@ -1138,7 +1138,13 @@ func newTaskDuplicateCmd() *cobra.Command {
 	cmd := newTaskEdgeCmd("duplicate <id>",
 		"Mark a task as a duplicate of the canonical task for the same request",
 		"of", "id of the canonical task this one duplicates (required)",
-		"%s is now marked a duplicate of %s", (*cli.Client).Duplicate)
+		"%s is now marked a duplicate of %s; it stays claimable until you close it",
+		(*cli.Client).Duplicate)
+	// The confirmation names the second half because the edge is provenance,
+	// not scheduling (004): marking costs nothing and gates nothing, so a
+	// message that stopped at "is now marked" reads as if triage were done
+	// while `lode next` is still handing the duplicate out.
+	//
 	// The verb reads as "copy this task" to anyone who has not met the edge;
 	// the alias is the spelling that cannot.
 	cmd.Aliases = []string{"dupe"}
