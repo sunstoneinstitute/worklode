@@ -466,9 +466,10 @@ func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
 	out := make([]ui.CockpitCostTotal, 0, len(c.Totals))
 	for _, t := range c.Totals {
 		out = append(out, ui.CockpitCostTotal{
-			Currency:       t.Currency,
-			CostAmount:     t.CostAmount,
-			UnpricedTokens: t.UnpricedTokens,
+			Currency:           t.Currency,
+			CostAmount:         t.CostAmount,
+			UnpricedTokens:     t.UnpricedTokens,
+			OverheadCostAmount: t.Overhead.CostAmount,
 		})
 	}
 	return out
