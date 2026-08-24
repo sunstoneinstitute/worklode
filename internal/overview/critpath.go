@@ -11,6 +11,9 @@ type Analysis struct {
 	// Depth is the longest predecessor-chain length ending at each node.
 	Depth map[string]int
 	// FanOut counts the distinct nodes transitively downstream of each node.
+	// Nil unless AnalyzeWithFanOut was used: it is the one measure here that
+	// costs more than a topological pass, and only the critical path reports
+	// it.
 	FanOut map[string]int
 	// Critical marks nodes lying on some longest chain.
 	Critical map[string]bool
@@ -20,10 +23,32 @@ type Analysis struct {
 	Cycles [][]string
 }
 
-// Analyze runs the single longest-path + transitive-closure pass of spec
-// 007 §Critical path v1 over edges (from must precede to) plus any isolated
-// extra nodes (tasks with no edges still appear with depth 0).
+// Analyze runs the longest-path pass of spec 007 §Critical path v1 over edges
+// (from must precede to) plus any isolated extra nodes (tasks with no edges
+// still appear with depth 0). Depth, Critical and Cycles cost one topological
+// pass; FanOut is left nil.
 func Analyze(edges [][2]string, extraNodes []string) Analysis {
+	return analyze(edges, extraNodes, false)
+}
+
+// AnalyzeWithFanOut is Analyze plus the transitive fan-out closure.
+//
+// Separate because the closure is the expensive half: it materialises the set
+// of nodes reachable from each node, so it costs O(V·reach) time and memory
+// against the O(V+E) of everything else. Measured on one machine at the time
+// this split was made, a 1000-node chain took 105ms and allocated 45MB per
+// call, against ~0 for the rest; BenchmarkAnalyze in this package is that
+// measurement, kept so the next person deciding whether to cache or bitset it
+// has numbers rather than a hunch.
+//
+// Only CriticalPath reports fan-out. /frontier annotates its rows from
+// store.Frontier's SQL fan-out instead, so the three surfaces that used to pay
+// for this closure and throw it away no longer do.
+func AnalyzeWithFanOut(edges [][2]string, extraNodes []string) Analysis {
+	return analyze(edges, extraNodes, true)
+}
+
+func analyze(edges [][2]string, extraNodes []string, wantFanOut bool) Analysis {
 	nodes := map[string]bool{}
 	for _, e := range edges {
 		nodes[e[0]], nodes[e[1]] = true, true
@@ -111,20 +136,23 @@ func Analyze(edges [][2]string, extraNodes []string) Analysis {
 		critical[n] = maxChain > 0 && depth[n]+down[n] == maxChain
 	}
 
-	// Transitive fan-out by reverse-topological set union.
-	reach := map[string]map[string]bool{}
-	fanOut := map[string]int{}
-	for i := len(order) - 1; i >= 0; i-- {
-		n := order[i]
-		r := map[string]bool{}
-		for _, m := range succ[n] {
-			r[m] = true
-			for x := range reach[m] {
-				r[x] = true
+	var fanOut map[string]int
+	if wantFanOut {
+		// Transitive fan-out by reverse-topological set union.
+		reach := map[string]map[string]bool{}
+		fanOut = map[string]int{}
+		for i := len(order) - 1; i >= 0; i-- {
+			n := order[i]
+			r := map[string]bool{}
+			for _, m := range succ[n] {
+				r[m] = true
+				for x := range reach[m] {
+					r[x] = true
+				}
 			}
+			reach[n] = r
+			fanOut[n] = len(r)
 		}
-		reach[n] = r
-		fanOut[n] = len(r)
 	}
 
 	return Analysis{Depth: depth, FanOut: fanOut, Critical: critical, Cycles: cycles}

@@ -91,7 +91,7 @@ func (s *Service) CriticalPath(ctx context.Context) (*model.CriticalPath, error)
 	if err != nil {
 		return nil, err
 	}
-	a := Analyze(pairs, nil)
+	a := AnalyzeWithFanOut(pairs, nil)
 	cp := &model.CriticalPath{Cycles: a.Cycles}
 	for id, crit := range a.Critical {
 		if !crit {
