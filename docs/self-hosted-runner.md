@@ -3,10 +3,13 @@
 `test`, `lint` and `build-image` in `pr-checks.yml` run on a self-hosted
 GitHub Actions runner on `hel01` when the triggering PR is trustworthy;
 `validate-kustomize`, `obsidian`, and every PR the gate doesn't trust stay on
-`ubuntu-latest`. The payoff is a warm, persistent `GOCACHE`/`GOMODCACHE` — no
-`actions/cache` round trip for Go, no re-fetching `go.sum` on every run —
-plus 48 cores and a persistent Docker build cache instead of a hosted
-runner's 4 cores and a from-scratch layer cache each time.
+`ubuntu-latest`. `deploy-dev.yml`'s `build-image` targets hel01
+unconditionally — a push to `main` has no fork head, so it is trusted by
+construction and never needs the gate. The payoff is a warm, persistent
+`GOCACHE`/`GOMODCACHE` — no `actions/cache` round trip for Go, no re-fetching
+`go.sum` on every run — plus 48 cores and a persistent Docker build cache
+instead of a hosted runner's 4 cores and a from-scratch layer cache each
+time.
 
 ## Trust boundary
 
@@ -75,25 +78,22 @@ Both runners execute as the same `ghrunner` system user — a second
 dedicated user would double every isolation fact in this doc (docker-group
 grant, home permissions) for no security benefit, since both processes
 already run at the same privilege. What has to differ is the **cache
-state** `gha-buildcache` and Go point at, both of which resolve from
-`$HOME`: two concurrent `build-image` jobs writing into the same
-`buildkit-cache-dance` directory tree is exactly the failure mode in the
-*Persistent build caches* incident below, and while Go's own build/module
-cache format tolerates concurrent access, there's no reason to make
-`test`/`lint` share one either.
+state** Go resolves from `$HOME`: while Go's own build/module cache format
+tolerates concurrent access, there's no reason to make `test`/`lint` share
+one. `build-image`'s cache is a Docker volume behind a shared named builder,
+which both runners use by design — BuildKit handles concurrent builds itself.
 
 `hel01-2`'s systemd unit sets `Environment=HOME=/home/ghrunner/runner2-home`
 (everything else — `User=ghrunner`, working directory under
 `actions-runner2`, docker-group membership — matches `hel01`). That single
-override redirects `go env GOCACHE`/`GOMODCACHE` and `_build-image.yml`'s
-`$HOME/.cache/gha-buildcache` onto a second, cold cache tree, so the two
-runners can run any combination of jobs concurrently without touching each
-other's files. The `gha-ci-postgres` container below is unaffected — it's
-reached over TCP, not through `$HOME`, so both runners already share it
-safely by the same per-test-database convention. Setting up a third runner
-needs the same two things: its own `actions-runner<n>` install directory,
-and a `runner<n>-home` directory (with `.cache/gha-buildcache/{mod,build}`
-pre-created per that section) named in its unit's `Environment=HOME=`.
+override redirects `go env GOCACHE`/`GOMODCACHE` onto a second, cold cache
+tree, so the two runners can run any combination of jobs concurrently without
+touching each other's files. The `gha-ci-postgres` container below is
+unaffected — it's reached over TCP, not through `$HOME`, so both runners
+already share it safely by the same per-test-database convention. Setting up
+a third runner needs the same two things: its own `actions-runner<n>` install
+directory, and a `runner<n>-home` directory named in its unit's
+`Environment=HOME=`.
 
 ## Postgres for `test`
 
@@ -156,37 +156,55 @@ different places:
   (`lint` has no `Save` step — only `main` writes the cache, and only `test`
   runs there) and the `Go cache paths` step whenever `gha-buildcache` isn't
   in `runs-on`.
-- **`build-image`** needs a specific *prepared* directory instead, because
-  it doesn't get Go's defaults for free: `buildkit-cache-dance` extracts the
-  Dockerfile's `RUN --mount=type=cache` contents (`/go/pkg/mod`,
-  `/root/.cache/go-build`) into a host directory it's told about, and that
-  directory has to exist and be writable.
+- **`build-image`** relies on a **persistent BuildKit state volume**. On a
+  `gha-buildcache` runner it passes `docker/setup-buildx-action` a fixed
+  `name: worklode-ci` plus `keep-state: true`, which turns the job's teardown
+  into `buildx rm --keep-state`: the builder record goes, the Docker volume
+  behind it (`buildx_buildkit_worklode-ci0_state`) stays. The next run
+  recreates that builder by name, re-attaches the volume, and finds both the
+  layer cache and the Dockerfile's `RUN --mount=type=cache` contents
+  (`/go/pkg/mod`, `/root/.cache/go-build`) already warm. Nothing needs
+  exporting, so the job skips `buildkit-cache-dance` and passes empty
+  `cache-from`/`cache-to` instead of `type=gha`. Hosted runners get an
+  anonymous throwaway builder and both round trips, since their VM is gone
+  after the job.
+
+  Both hel01 runners share the one `worklode-ci` builder rather than getting
+  one each: they already share the Docker daemon, and BuildKit serializes
+  concurrent builds itself — the reason `$HOME` separation is still needed for
+  Go's caches (see *Two executors* above) does not apply here.
 
 ```
-sudo -u ghrunner mkdir -p /home/ghrunner/.cache/gha-buildcache/{mod,build}
 gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-buildcache"
 ```
 
-For `hel01-2`, whose unit overrides `$HOME` (see *Two executors* above), the
-same directory lives under that override instead:
-`/home/ghrunner/runner2-home/.cache/gha-buildcache/{mod,build}`.
+The volume grows unbounded. Trim it under disk pressure — this discards build
+cache only, never images:
 
-**It has to be an absolute path outside the checkout**, not a directory
-relative to the workspace the way `ubuntu-latest` uses `go-cache-mount/`
-today. `actions/checkout`'s clean step (`git clean -ffdx`) wipes anything
-untracked inside the checkout on every run — a relative cache-mount
-directory would never survive to the next job. This isn't theoretical: the
-first self-hosted `build-image` run (before `gha-buildcache` existed) wrote
-its cache mount to the old relative path, and `buildkit-cache-dance`'s
-extraction step ran as root inside a container, leaving root-owned files
-under `go-cache-mount/` in the shared checkout. The *next* job on the
-runner — of any kind, since every job shares the one checkout at
+```
+docker buildx prune --builder worklode-ci --filter until=168h
+```
+
+Not `driver: docker` (the host daemon's own builder), which would need no
+volume at all: pushing to a registry from that driver requires dockerd's
+containerd image store, which hel01 does not have enabled.
+
+`build-image` used to persist its cache mounts to a prepared
+`$HOME/.cache/gha-buildcache/{mod,build}` directory via
+`buildkit-cache-dance`. That directory is now unused on both runners and can
+be deleted. Its rule still binds anything that replaces it: **a self-hosted
+cache path must be absolute and outside the checkout**, not workspace-relative
+the way `ubuntu-latest`'s `go-cache-mount/` is. `actions/checkout`'s clean
+step (`git clean -ffdx`) wipes anything untracked inside the checkout every
+run. This isn't theoretical: the first self-hosted `build-image` run (before
+`gha-buildcache` existed) wrote its cache mount to the relative path, and
+`buildkit-cache-dance`'s extraction ran as root inside a container, leaving
+root-owned files under `go-cache-mount/` in the shared checkout. The *next*
+job on the runner — of any kind, since every job shares the one checkout at
 `_work/worklode/worklode` — failed at `actions/checkout` itself, unable to
 `unlink` those files as the unprivileged `ghrunner`. Recovery needed
-`sudo rm -rf` on the poisoned directory from outside the job entirely; nothing
-inside a job can clean up a mess a less-privileged user can't delete. A
-`gha-buildcache`-labeled directory can't have this failure mode, because
-nothing ever asks `actions/checkout` to clean it.
+`sudo rm -rf` from outside the job entirely; nothing inside a job can clean up
+a mess a less-privileged user can't delete.
 
 `_test.yml`, `_lint.yml` and `_build-image.yml`'s `runs-on` inputs are all
 JSON arrays (`fromJSON(inputs.runs-on)`) for this reason — `test` and
@@ -215,9 +233,11 @@ gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "
 ```
 
 `docker` and `gha-buildcache` are independent facts — a future runner could
-have Docker access set up before its cache directory exists, or vice versa —
-so `build-image`'s `runs-on` requires both rather than treating either as
-implied by the other: `runs-on: ["docker","gha-buildcache"]`.
+have Docker access set up before its build cache is worth reusing, or vice
+versa — so `build-image`'s `runs-on` requires both rather than treating either
+as implied by the other: `runs-on: ["docker","gha-buildcache"]`. Together they
+are what let the job keep one builder across runs and drop every cache export;
+see *Persistent build caches* above.
 
 ## `/tmp` inode exhaustion (WL-188)
 

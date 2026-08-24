@@ -174,8 +174,8 @@ jobs:
     with:
       push: false
       # `docker` + `gha-buildcache`, not the bare `self-hosted` lint uses:
-      # ghrunner holds Docker socket access, and its build-cache mount
-      # directory exists, only because this job needs them (see
+      # ghrunner holds Docker socket access, and the daemon's BuildKit cache
+      # survives between runs, only because this job needs both (see
       # docs/self-hosted-runner.md) — two real environment requirements,
       # scheduled on, not a default.
       runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["docker","gha-buildcache"]' || '["ubuntu-latest"]' }}

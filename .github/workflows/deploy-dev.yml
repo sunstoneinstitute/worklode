@@ -14,7 +14,12 @@ concurrency:
 
 jobs:
   build-image:
+    # A push to main has no fork head, so this is trusted by construction —
+    # routing it to hel01 doesn't widen pr-checks.yml's `trusted` gate. It
+    # lands on the caches the PR build of these same commits just warmed.
     uses: ./.github/workflows/_build-image.yml
+    with:
+      runs-on: '["docker","gha-buildcache"]'
 
   deploy:
     needs: build-image
