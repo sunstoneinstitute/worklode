@@ -1007,6 +1007,14 @@ nav.local a .cnt {
   width: 20px;
   height: 20px;
 }
+.info-icon {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+.info-icon svg {
+  width: 13px;
+  height: 13px;
+}
 .newlink {
   min-height: 24px;
   display: inline-flex;

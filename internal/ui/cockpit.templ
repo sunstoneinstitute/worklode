@@ -174,6 +174,18 @@ templ exceptionCard(c CockpitConcern) {
 	</div>
 }
 
+// unattributedInfo renders a subdued info icon next to the "unattributed"
+// label, explaining via its native title tooltip (desktop hover) and
+// aria-label (screen readers/touch) what the bucket means — same
+// title+aria-label convention as timelineIcon (internal/ui/task.templ).
+// Hand-drawn inline SVG, matching this file's existing icon style, rather
+// than a vendored icon font.
+templ unattributedInfo() {
+	<span class="info-icon" role="img" title="Spend not billed to a task — work run outside a claimed task's worktree (including quick fixes done directly in the main checkout), or in a worktree after its task's lease ended." aria-label="Spend not billed to a task — work run outside a claimed task's worktree (including quick fixes done directly in the main checkout), or in a worktree after its task's lease ended.">
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 7.5v.5M12 11v5.5"></path><circle cx="12" cy="12" r="9"></circle></svg>
+	</span>
+}
+
 // automationBoundary renders the automation-boundary card honestly: the
 // backbone stores no automation policy or budget yet ("not configured"), and
 // the real 30-day agent spend from the cost projection (or "none recorded").
@@ -187,7 +199,11 @@ templ automationBoundary(totals []CockpitCostTotal) {
 		} else {
 			for _, t := range totals {
 				<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">{ t.Currency } { model.Money(t.CostAmount) }</span></div>
-				<div class="auto-line"><span class="k">&mdash; of which overhead</span><span class="v">{ t.Currency } { model.Money(t.OverheadCostAmount) }</span></div>
+				<div class="auto-line">
+					<span class="k">&mdash; of which unattributed</span>
+					@unattributedInfo()
+					<span class="v">{ t.Currency } { model.Money(t.OverheadCostAmount) }</span>
+				</div>
 			}
 		}
 		<p class="small muted">No automation policy or budget is configured for this project.</p>
