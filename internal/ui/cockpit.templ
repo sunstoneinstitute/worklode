@@ -185,6 +185,7 @@ templ automationBoundary(totals []CockpitCostTotal) {
 		} else {
 			for _, t := range totals {
 				<div class="auto-line"><span class="k">Agent spend, 30 days</span><span class="v">{ t.Currency } { t.CostAmount }</span></div>
+				<div class="auto-line"><span class="k">&mdash; of which overhead</span><span class="v">{ t.Currency } { t.OverheadCostAmount }</span></div>
 			}
 		}
 		<p class="small muted">No automation policy or budget is configured for this project.</p>

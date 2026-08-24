@@ -281,6 +281,9 @@ type CockpitCostTotal struct {
 	Currency       string
 	CostAmount     string
 	UnpricedTokens int64
+	// OverheadCostAmount is the share of CostAmount that had no task to bill
+	// to — orchestration run from the main checkout (spec 052).
+	OverheadCostAmount string
 }
 
 // CockpitDecision is the next governed decision shown in the decision aside.
