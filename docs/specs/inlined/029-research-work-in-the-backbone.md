@@ -70,14 +70,15 @@ word is separate and needs no term either: a task with no milestone is ongoing
 maintenance, which is the query `milestone_id IS NULL` (§2).
 
 The Sunstone stage is likewise a query, not an editable project-status column. It is
-derived from governed decisions, milestones, deliverables and work. Entering Research
+derived from governed decisions (a `decision`-kind task, 025 §10, whose recorded answer is
+the fact the query reads), milestones, deliverables and work. Entering Research
 is an explicit decision by the project lead; that decision is one of the facts the
 query reads. Work from adjacent stages may overlap — the derived primary stage orients
 people and never hides valid work merely because it belongs to the next stage.
 
-After Research, Worklode may recommend a stage transition from governed milestone,
-deliverable and review facts; the project lead confirms it. Advancing with unfinished
-work requires a reason. That work remains attached to its original milestone and is
+After Research, Worklode may recommend a stage transition from governed decision,
+milestone, deliverable and review facts; the project lead confirms it. Advancing with
+unfinished work requires a reason. That work remains attached to its original milestone and is
 shown as carryover — stage movement neither closes nor reparents it. Returning to an
 earlier stage appends another reasoned transition event and preserves the full history.
 Once all required deliverables are terminal, Worklode may recommend closure, but the
@@ -85,6 +86,11 @@ lead explicitly closes the project after reviewing every unfinished item. Closur
 deliverable state alone, ends the bounded project and its active Crew.
 
 ## 2. Milestones and deliverables
+
+> Pending `025-documents-in-the-backbone.md#sec-10` (not yet effective)
+
+> **Amended by spec 025 §10.** A governed decision is a task kind (`decision`), not a
+> third new entity alongside milestone and deliverable.
 
 The container hierarchy becomes:
 
@@ -98,6 +104,15 @@ kinds. A deliverable cannot be claimed, worked, or closed — modelling it as a 
 would store a row that lies about what it is. A milestone's progress is a query over
 its tasks and the state of its deliverables; it stores no state of its own beyond
 identity, title, and ordering. This preserves 025 §1's rule: groupings are queries.
+
+The **governed decision** the stage query in §1 reads goes the other way: it *is* a task
+kind (`decision`, 025 §10), so it needs no entity here. A decision is undertaken, owned
+by one assignee, and closed when its answer is recorded — everything a task already is —
+and it sits in this same hierarchy, attaching to a milestone through the ordinary
+nullable `milestone_id` like any other task. What distinguishes it is where its
+deliverable lives (a row in `task_decisions`, not a document or a diff) and how it is
+picked up (assigned, never claimed into a worktree — 004 §6.3), neither of which is a
+reason for a table of its own.
 
 - A project has one or more milestones. A milestone has zero or more tasks and zero
   or more deliverables.
@@ -302,6 +317,14 @@ The requirement is **materialized as an `awaiting` row when the entity is create
 This is the design's load-bearing choice: a *missing* approval is a visible row, so
 "what is waiting on whom" is a query, and an absent sign-off can never be
 indistinguishable from a not-required one.
+
+A `decision`-kind task (025 §10) needs no approval by default: its assignee is the
+accountable decider (§6.1), so recording the answer is the decision, and no ratification
+layer is built into the kind. Where a particular governed decision does need sign-off
+beyond the decider — a lead ratifying a go/no-go — that is an ordinary `awaiting` row in
+this table with the decision task as its target, configured by the review flow (§7.2)
+like any other requirement. Which decisions those are, and what the flow says about them,
+is left to the flow rather than settled here.
 
 Each decision binds the exact governed revision it reviewed: a document version, an
 analysis commit, a PR head, or a deliverable evidence revision. Submitting a material
