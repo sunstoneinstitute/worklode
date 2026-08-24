@@ -1,13 +1,30 @@
-.PHONY: build install test test-e2e vet clean
+.PHONY: build build-user build-all install test test-e2e vet clean FORCE
 
-BIN := bin/lode
+# 053 §1: six executables from one module. The three user binaries are what
+# Homebrew and Scoop install; the other three ship in the container images.
+USER_BINARIES := lode lode-hook lode-statusline
+ALL_BINARIES := $(USER_BINARIES) lode-server lode-watch lode-migrate
+
 PREFIX := $(if $(shell test -w /usr/local/bin && echo yes),/usr/local,$(HOME))
 
-build: ## Build the lode binary into bin/lode
-	go build -trimpath -o $(BIN) ./cmd/lode
+# Focused build of any one executable: make bin/lode-hook, make bin/lode-server.
+# FORCE keeps the decision to rebuild with the Go build cache, which knows the
+# real inputs; make does not.
+bin/%: FORCE
+	go build -trimpath -o $@ ./cmd/$*
 
-install: ## Build lode and install it to $(PREFIX)/bin
-	go build -trimpath -o $(PREFIX)/bin/lode ./cmd/lode
+FORCE:
+
+build: bin/lode ## Build the lode binary into bin/lode
+
+build-user: $(addprefix bin/,$(USER_BINARIES)) ## Build the three end-user binaries
+
+build-all: $(addprefix bin/,$(ALL_BINARIES)) ## Build all six executables
+
+install: ## Build and install the three end-user binaries to $(PREFIX)/bin
+	@for b in $(USER_BINARIES); do \
+		go build -trimpath -o $(PREFIX)/bin/$$b ./cmd/$$b || exit 1; \
+	done
 
 test: ## Run the unit test suite
 	go test -trimpath -race -count=1 ./...

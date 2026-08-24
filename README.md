@@ -29,10 +29,11 @@ export LODE_BOOTSTRAP_TOKEN=wl_$(openssl rand -hex 20)
 docker compose up -d
 ```
 
-Install the `lode` CLI:
+Install the end-user binaries: the `lode` CLI plus `lode-hook` and
+`lode-statusline`, which agent harnesses invoke on every lifecycle event.
 
 ```bash
-go install ./cmd/lode    # or: go build -o ~/bin/lode ./cmd/lode
+make install    # builds all three with -trimpath into /usr/local/bin or ~/bin
 ```
 
 Or via a package manager:
