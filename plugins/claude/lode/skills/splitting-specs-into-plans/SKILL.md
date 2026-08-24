@@ -89,6 +89,16 @@ accepted plans contributing `full` or `partial` to the same section. `none`
 contributes nothing. `implements` remains readable only as a retired spelling
 and is reported; new output always writes `covers`.
 
+**`fullCoverageWith` is on its way out, but is still what runs.** Draft spec
+026 §5.4 replaces the forward pointer with a decomposition stamp: a `partial`
+claim is legal only inside a complete sibling set, `lode decompose <ref>`
+validates and stamps it, and a covered section in a decomposed spec counts as
+fully planned whatever its level says. None of that is built — no
+`wl:decomposedAt`, no `lode decompose` for documents — and the validator, the
+`doc_edges` completion side-table, and `lode doc list --needs-planning` all
+still read `fullCoverageWith`. Keep writing it. When §5.4 ships, the key
+disappears and the completeness rule replaces this subsection.
+
 `lode doc anchors <file>` lints a draft locally before `lode doc new` — anchors,
 and a plan's `## Tasks` definitions. Creating the document is what turns
 `covers:` into edges: a reference no document in the project resolves to is
@@ -188,10 +198,15 @@ Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), slug and
 reference syntax: `docs/authoring-design-docs.md` §"Declaring a plan's tasks",
 and the `worklode-docs-authoring` skill for how a document is created. A series
 part restarts task numbering at 1; ordering across parts is a document-level
-`blocks` edge, never a task number.
+edge, never a task number. Declare it with `blockedBy:` on the later part
+(WL-143): it writes the same single `blocks` row with the ends swapped, and it
+is the only spelling that works while writing a series forward, since `blocks:`
+on the earlier part would mean amending a plan that may already be accepted.
+Both ends must already resolve, so create the earlier part first either way.
 
-Constraints every worklode plan inherits — state them once in Global
-Constraints, do not repeat per task:
+Constraints a plan inherits in the worklode repo itself — state them once in
+Global Constraints, do not repeat per task. A plan in another project inherits
+that project's equivalents, not these:
 
 - New endpoint, background loop, outbound call, or store operation with
   meaningful outcomes adds or extends `worklode_*` metrics with tests, bounded
