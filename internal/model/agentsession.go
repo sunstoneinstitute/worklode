@@ -93,13 +93,18 @@ type AgentSessionInput struct {
 	Usage []SessionUsageBucket `json:"usage,omitempty"`
 }
 
-// ProjectOverheadUsageInput is the request body for
-// POST /api/v1/projects/{id}/overhead-usage: report usage with no task to
-// bill to (spec 052 §2). All three fields are required.
-type ProjectOverheadUsageInput struct {
-	Agent             string               `json:"agent"`
-	ExternalSessionID string               `json:"external_session_id"`
-	Usage             []SessionUsageBucket `json:"usage"`
+// ProjectSessionUsageInput is the request body for
+// POST /api/v1/projects/{id}/session-usage: one session's COMPLETE usage
+// across the project (spec 052 §2). ByTask keys are task ids; the "" key
+// carries the turns with no task to bill to.
+//
+// The whole classification is posted together because it is replaced
+// together: a turn's destination can change between two heartbeats, and a
+// per-destination write would leave the vacated one holding its copy.
+type ProjectSessionUsageInput struct {
+	Agent             string                          `json:"agent"`
+	ExternalSessionID string                          `json:"external_session_id"`
+	ByTask            map[string][]SessionUsageBucket `json:"by_task"`
 }
 
 // EndAgentSessionInput is the request body for EndAgentSession (POST

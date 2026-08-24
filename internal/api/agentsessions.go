@@ -71,23 +71,27 @@ func toUsageBuckets(in []model.SessionUsageBucket) ([]store.SessionUsageBucket, 
 	return out, nil
 }
 
-// reportProjectOverheadUsage handles POST /api/v1/projects/{id}/overhead-usage:
-// record usage with no task to bill to (spec 052 §2). All body fields are
-// required; toUsageBuckets does the same day/model validation the
-// task-scoped endpoints already use.
-func (s *server) reportProjectOverheadUsage(w http.ResponseWriter, r *http.Request) {
+// reportProjectSessionUsage handles POST /api/v1/projects/{id}/session-usage:
+// record one session's complete usage across the project, task rows and
+// overhead together (spec 052 §2). Each group is validated by the same
+// toUsageBuckets the task-scoped endpoints use.
+func (s *server) reportProjectSessionUsage(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var req model.ProjectOverheadUsageInput
+	var req model.ProjectSessionUsageInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
 		return
 	}
-	buckets, err := toUsageBuckets(req.Usage)
-	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
-		return
+	byTask := make(map[string][]store.SessionUsageBucket, len(req.ByTask))
+	for taskID, usage := range req.ByTask {
+		buckets, err := toUsageBuckets(usage)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		byTask[taskID] = buckets
 	}
-	if err := s.st.ReportProjectOverheadUsage(r.Context(), id, req.Agent, req.ExternalSessionID, buckets); err != nil {
+	if err := s.st.ReportProjectSessionUsage(r.Context(), id, req.Agent, req.ExternalSessionID, byTask); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}

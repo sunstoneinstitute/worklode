@@ -417,14 +417,31 @@ func recomputeProjectOverheadDailyCostTx(ctx context.Context, tx *sql.Tx, projec
 	return nil
 }
 
-// ReportProjectOverheadUsage records tokens billed by agent/externalSessionID
-// with no task to bill to (spec 052): a main-checkout orchestration session,
-// or a worktree whose lease this actor no longer held at report time.
-// Replace-not-accumulate per (project, agent, external session id) -- the
-// client re-reports a running transcript total on every heartbeat.
+// ReportProjectSessionUsage records ONE session's COMPLETE usage across one
+// project: every task it billed, keyed by task id, plus the remainder under
+// the "" key -- turns with no task to bill to. It replaces the session's
+// entire footprint in the project, task rows and overhead rows together, in
+// one transaction.
+//
+// That whole-session scope is the point (spec 052 §2). The client re-parses
+// its full transcript on every heartbeat and re-posts a running total, and a
+// turn's destination can change between two reports: a directory that
+// resolved to a task while its lease was held resolves to overhead once the
+// lease is gone. Replacing per destination -- one key per agent_sessions row,
+// another per project overhead row -- leaves the vacated side holding its
+// copy, because no single write spans both, and ProjectCost sums them. There
+// is no key here to leave behind: a session's tokens are written once per
+// report, wherever they now belong, so cross-bucket duplication has no
+// representation rather than being detected and corrected.
+//
+// A task whose agent_sessions row cannot be found -- this actor never opened
+// one, or the lease was swept -- bills to overhead rather than being dropped.
+// A task that HAD a row and is absent from byTask has its usage cleared, so a
+// reclassification away from it takes effect instead of stranding rows.
+//
 // ErrInvalidInput for an unknown agent or an empty external session id;
 // ErrNotFound for an unknown project.
-func (s *Store) ReportProjectOverheadUsage(ctx context.Context, projectID, agent, externalSessionID string, buckets []SessionUsageBucket) error {
+func (s *Store) ReportProjectSessionUsage(ctx context.Context, projectID, agent, externalSessionID string, byTask map[string][]SessionUsageBucket) error {
 	if !validAgent(agent) {
 		return fmt.Errorf("unknown agent %q: %w", agent, ErrInvalidInput)
 	}
@@ -434,16 +451,89 @@ func (s *Store) ReportProjectOverheadUsage(ctx context.Context, projectID, agent
 	if _, err := s.GetProject(ctx, projectID); err != nil {
 		return err
 	}
+
 	return s.Tx(ctx, func(tx *sql.Tx) error {
-		_, _, _, days, err := replaceProjectOverheadUsageTx(ctx, tx, projectID, agent, externalSessionID, buckets)
+		sessions, err := projectSessionRowsTx(ctx, tx, projectID, agent, externalSessionID)
 		if err != nil {
 			return err
 		}
-		if len(days) == 0 {
-			return nil
+
+		overhead := append([]SessionUsageBucket(nil), byTask[""]...)
+		billed := map[string]bool{}
+
+		// Newest row per task wins; any older row for the same task is
+		// cleared, so a task never holds usage under two leases at once.
+		// applySessionUsageTx, not the bare replace, because the session
+		// row's own headline totals and the project rollup are part of what
+		// a usage write means.
+		for _, row := range sessions {
+			buckets := []SessionUsageBucket(nil)
+			if !billed[row.taskID] {
+				buckets = byTask[row.taskID]
+				billed[row.taskID] = true
+			}
+			if err := applySessionUsageTx(ctx, tx, row.sessionID, buckets); err != nil {
+				return err
+			}
 		}
-		return recomputeProjectOverheadDailyCostTx(ctx, tx, projectID, days)
+
+		// A task named in the classification with no agent_sessions row to
+		// write to still spent the tokens; overhead is where they land.
+		for taskID, buckets := range byTask {
+			if taskID == "" || billed[taskID] {
+				continue
+			}
+			overhead = append(overhead, buckets...)
+		}
+
+		_, _, _, overheadDays, err := replaceProjectOverheadUsageTx(ctx, tx, projectID, agent, externalSessionID, overhead)
+		if err != nil {
+			return err
+		}
+
+		if len(overheadDays) > 0 {
+			return recomputeProjectOverheadDailyCostTx(ctx, tx, projectID, overheadDays)
+		}
+		return nil
 	})
+}
+
+// projectSessionRow is one agent_sessions row this session opened somewhere in
+// the project, with the task its lease belongs to.
+type projectSessionRow struct {
+	sessionID int64
+	taskID    string
+}
+
+// projectSessionRowsTx finds every agent_sessions row one external session id
+// opened in a project, newest lease first. Released leases are included on
+// purpose: their usage rows are still counted by recomputeProjectDailyCostTx,
+// so a whole-session replace has to be able to reach and rewrite them.
+func projectSessionRowsTx(ctx context.Context, tx *sql.Tx, projectID, agent, externalSessionID string) ([]projectSessionRow, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT s.id, t.id
+		   FROM agent_sessions s
+		   JOIN leases l ON l.id = s.lease_id
+		   JOIN tasks  t ON t.id = l.task_id
+		  WHERE s.agent = $1 AND s.external_session_id = $2 AND t.project_id = $3
+		  ORDER BY s.started_at DESC, s.id DESC`,
+		agent, externalSessionID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("find agent sessions for %s/%s in %s: %w", agent, externalSessionID, projectID, err)
+	}
+	defer rows.Close()
+	var out []projectSessionRow
+	for rows.Next() {
+		var r projectSessionRow
+		if err := rows.Scan(&r.sessionID, &r.taskID); err != nil {
+			return nil, fmt.Errorf("scan agent session row: %w", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find agent sessions for %s/%s in %s: %w", agent, externalSessionID, projectID, err)
+	}
+	return out, nil
 }
 
 // projectForSessionTx resolves the project a session's work belongs to, up the

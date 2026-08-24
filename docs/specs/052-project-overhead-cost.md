@@ -139,30 +139,51 @@ token costs what it costs regardless of which bucket it lands in.
 ## 2. Store and API {#sec-2}
 
 > **Amends spec 012 §3.** A third store entry point alongside
-> `TouchAgentSession`/`EndAgentSession`, with its own rollup, but no lease
-> holder check — overhead has no lease to check a holder against.
+> `TouchAgentSession`/`EndAgentSession`, owning every usage row one session
+> writes in a project, with no lease holder check — the rows it reaches
+> include ones whose lease is gone.
 
-**`(*Store) ReportProjectOverheadUsage(ctx, projectID, agent, externalSessionID string, buckets []SessionUsageBucket) error`**
-— replaces `agent`/`externalSessionID`'s complete overhead usage for
-`projectID`, the same replace-not-accumulate contract as
-`replaceSessionUsageTx`, and rebuilds `project_daily_overhead_cost` for every
-affected day inside the same transaction. Validates `agent` against the same
-vocabulary `TouchAgentSession` does and rejects an empty
-`externalSessionID`, both `ErrInvalidInput`; an unknown `projectID` is
-`ErrNotFound`. There is no holder check: nothing owns a lease here to hold,
-and any authenticated actor may report overhead for any project it can name
-— the same breadth already accepted for `permCrewWrite` (023 §... — see
+**`(*Store) ReportProjectSessionUsage(ctx, projectID, agent, externalSessionID string, byTask map[string][]SessionUsageBucket) error`**
+— replaces `agent`/`externalSessionID`'s **complete** usage across
+`projectID`: every task it billed, keyed by task id, plus the turns with no
+task to bill to under the `""` key. Task groups land on their
+`agent_sessions` row through `applySessionUsageTx`, the `""` group on
+`project_overhead_usage`, and both rollups are rebuilt for every affected day
+— all in one transaction. Validates `agent` against the same vocabulary
+`TouchAgentSession` does and rejects an empty `externalSessionID`, both
+`ErrInvalidInput`; an unknown `projectID` is `ErrNotFound`. There is no
+holder check: the write reaches rows whose lease has since been released, and
+any authenticated actor may report for any project it can name — the same
+breadth already accepted for `permCrewWrite` (023 §... — see
 `internal/api/authz.go`'s comment on that grant).
+
+**Whole-session scope is what makes the double count unrepresentable.** The
+client re-parses its full transcript and re-posts a running total on every
+heartbeat, and a turn's destination can change between two reports: a
+directory that resolved to a task while its lease was held resolves to
+overhead once the lease is gone. Replacing per destination — one key per
+`agent_sessions` row, another per project overhead row — leaves the vacated
+side holding its copy, because no single write spans both, and `ProjectCost`
+sums them. Replacing the whole classification at once leaves no key behind.
+This is why there is no separate overhead-only endpoint: a second write path
+to the same `(project, agent, external_session_id)` key would reintroduce
+exactly the split this removes.
+
+Two rules cover the edges. A task named in `byTask` with no `agent_sessions`
+row to write to — this actor never opened one, or the lease was swept — bills
+to overhead rather than being dropped. A task that **had** a row and is
+absent from `byTask` has its usage cleared, so reclassifying away from a task
+takes effect instead of stranding its rows.
 
 HTTP surface, a new project-scoped route:
 
-- `POST /api/v1/projects/{id}/overhead-usage` — body
-  `{agent, external_session_id, usage}`, all required. `usage` is the same
-  `SessionUsageBucket` shape `agent-session`/`agent-session/end` take.
-  204 on success. Guarded by a new permission, `project.report`
-  (`permProjectReport`), granted to every authenticated role — reporting
-  overhead is not a claim on any one task, so it does not belong under
-  `task.claim`.
+- `POST /api/v1/projects/{id}/session-usage` — body
+  `{agent, external_session_id, by_task}`, all required. `by_task` maps a
+  task id (or `""`) to the same `SessionUsageBucket` shape
+  `agent-session`/`agent-session/end` take. 204 on success. Guarded by a new
+  permission, `project.report` (`permProjectReport`), granted to every
+  authenticated role — reporting a session's spend is not a claim on any one
+  task, so it does not belong under `task.claim`.
 
 **`ProjectCost` becomes a combined report.** `(*Store) ProjectCost` now reads
 `project_daily_cost` and `project_daily_overhead_cost` for the window and
@@ -198,36 +219,48 @@ finer-grained rows sharing one `Cwd`, which the server's own
 `mergeUsageBuckets` already re-merges by `(day, model, speed)` — no existing
 caller's totals change.
 
-**`classifyTranscriptUsage(opts, l, transcriptPath) map[string][]model.SessionUsageBucket`**
+**`classifyTranscriptUsage(opts, l, ownTaskID, transcriptPath) map[string][]model.SessionUsageBucket`**
 is a new `internal/hookrun` function: it parses `transcriptPath` with no
 `Root` filter (every `cwd` the session touched, not just the calling
-handler's own worktree) and groups the buckets by task id, resolved per
-distinct `cwd` via `l.TaskID(cwd)` — the same worktree-layout resolution the
-hook guard itself uses, so a `cwd` outside the configured worktree base, or
-one whose directory name/stamp carries no task id, groups under the empty
-string. A missing transcript, an unreadable file, or an empty result all
-yield `nil` — the same no-failure contract `sessionUsage` already has, which
-this supplements rather than replaces (`sessionUsage`, and every existing
-`Options{Root: root}` call site, is untouched).
+handler's own worktree) and groups the buckets by task id, resolved **per
+distinct `cwd`** — memoized, because resolution spends a `git config`
+subprocess and this runs on a handler bound to every assistant turn.
 
-**`reportSession`/`endSession` are extended, not replaced.** Each still
-reports its own handler's task (when it has one) exactly as before —
-`TouchAgentSession`/`EndAgentSession` with that task's own transcript slice —
-and then hands every *other* group `classifyTranscriptUsage` found to a new
-`reportOtherTaskAndOverheadUsage(ctx, opts, c, root, sessionID, byTask)`:
-a real task id is reported through `TouchAgentSession` (never
-`EndAgentSession` — this call has no opinion on whether that other task's own
-session should end, only that these tokens billed to it); a `TouchAgentSession`
-failure for that task (most commonly `ErrNotFound` — this actor no longer
-holds that task's lease) redirects those buckets to overhead instead of
-dropping them; the empty-string group and every redirected group are reported
-together via a new `reportOverhead(ctx, opts, c, root, sessionID, buckets)`,
-which resolves the current repo's project from local config only
+Resolution trims a `cwd` back to its worktree root
+(`worktree.Layout.WorktreeRootOf`) before calling `l.TaskID`. The hook guard's
+own rule accepts exactly one segment below the worktree base, but a recorded
+working directory is routinely a directory *inside* the worktree; resolving
+the raw `cwd` would bill a task's own turns to overhead. An entry with no
+`cwd` at all — older transcripts omit the field — bills to `ownTaskID`, the
+task the calling handler is running for, which is where it landed before
+usage was classified per directory. A `cwd` outside the configured worktree
+base, or one whose directory name/stamp carries no task id, groups under the
+empty string.
+
+A missing transcript, an unreadable file, or an empty result all yield `nil`
+— the same no-failure contract every hook call has.
+
+**`reportSession`/`endSession` report usage in one call.**
+`TouchAgentSession`/`EndAgentSession` keep their lifecycle role — opening,
+heartbeating and closing the handler's own `agent_sessions` row — but carry
+**no usage**. Before reporting, `openOtherTaskSessions` touches the session
+row for every *other* task the classification names, again with no usage:
+an orchestrator running from the main checkout never touches the worktrees it
+dispatches into, so without this the subagent turns in its transcript would
+have no session row to land on. A failure there is a warning, not an error —
+the usual cause is not holding that task's lease, and the server bills an
+unreachable task's tokens to overhead by itself.
+
+Every bucket then goes to the backbone through one
+`reportClassifiedUsage(ctx, opts, c, root, sessionID, byTask)`, which
+resolves the current repo's project from local config only
 (`cli.CurrentProjectFrom(root)` — a new function mirroring
 `cli.WorktreeDirFrom`'s contract: repo-local config, then user config, no
-keychain, no server round trip) and calls the new
-`POST /api/v1/projects/{id}/overhead-usage`. No project configured degrades
-to a warning and the buckets are dropped — the same "never fail the
+keychain, no server round trip) and calls
+`POST /api/v1/projects/{id}/session-usage` with the whole classification. One
+call, not one per destination, for the reason §2 gives: the destinations are
+replaced together or the vacated one keeps its copy. No project configured
+degrades to a warning and the buckets are dropped — the same "never fail the
 triggering event" contract every hook call already has, applied to a
 genuinely unconfigured repo rather than a transient error.
 
@@ -236,7 +269,7 @@ guard from `leasedWorktree`'s `ok` (which requires a task id) to `root != ""`
 (inside a git worktree at all — `worktree.Root(dir)`, still resolved via
 `leasedWorktree`, whose `root` return is used regardless of `ok`). `taskID`
 may now be `""`; `reportSession`/`endSession` treat that as "no own task to
-report against" and skip straight to `reportOtherTaskAndOverheadUsage`. The
+report against" and skip straight to the consolidated report. The
 session marker (debounce, liveness) is unaffected: it is written and read
 against `root` exactly as before, and a main checkout gets its own marker
 file the same way a task worktree does — nothing about the marker mechanism
@@ -253,8 +286,10 @@ assumed a task id.
 - `handleSessionStart`'s lease-touch/brief-fetch side (`ensureLease`,
   `fetchBrief`, `ensureSkills`) stays gated on a real task id — nothing to
   renew or inject without one — and its call to `reportSession` is
-  reached only inside that same gate, so session-start does not report
-  overhead. This loses nothing: `heartbeat` fires every turn and
+  reached only inside that same gate. Session-start therefore reports only
+  for a session that starts in a task worktree — but when it does, it
+  reports that session's whole classification, overhead included. This loses
+  nothing for a main-checkout session: `heartbeat` fires every turn and
   `session-end` reports the full transcript, so between them every token a
   session bills is eventually reported even though session-start itself
   never opportunistically catches up a stale main-checkout report the way it
@@ -302,25 +337,34 @@ orchestration overhead rather than task work. `ui.CockpitCostTotal` gains an
   carrying each of them, under both an empty `Options.Root` and a `Root` that
   matches one of them (existing filtering behavior unchanged; grouping now
   splits by `cwd` too).
-- Store: `ReportProjectOverheadUsage` replaces rather than accumulates a
+- Store: `ReportProjectSessionUsage` replaces rather than accumulates a
   repeat report for the same `(project, agent, external session id)`;
-  rejects an unknown agent and an empty session id; 404s an unknown project.
+  rejects an unknown agent and an empty session id; 404s an unknown project;
+  a shrinking re-report drops the rollup row for a day it no longer names.
   `ProjectCost` combines task-attributed and overhead rows for the same day,
   including a day with overhead only. `TaskCost` is unchanged by a project
   that also has overhead recorded (its report carries none).
+- Store, the invariant this endpoint exists for: a session's tokens are
+  counted **once** whichever bucket they land in. Reported against a task,
+  then re-reported as overhead once its lease is gone, `ProjectCost` shows
+  the original total and not twice it; the same holds in reverse, overhead
+  re-reported against a reachable task. The healthy split — a task's own
+  turns plus an unattributed remainder in one report — keeps both sides and
+  sums to the transcript's total.
 - API: happy path, 400 for a malformed body, 404 for an unknown project, on
-  `POST /api/v1/projects/{id}/overhead-usage`. The route-guard boot check
+  `POST /api/v1/projects/{id}/session-usage`. The route-guard boot check
   (`internal/api`'s `NewServer` table test) covers the new route by
   construction once it is registered.
 - `hookrun`: a heartbeat fired from the main checkout, with a transcript
   containing one cwd under a currently lease-held task worktree and one cwd
-  with no matching task, reports the first through the ordinary
-  `agent-session` endpoint and the second through
-  `overhead-usage`; a heartbeat whose transcript names a task this actor no
-  longer holds the lease on (a `TouchAgentSession` 404) falls back to
-  overhead for that group instead of dropping it; `TestHeartbeatOutsideWorktreeIsNOP`
-  (a directory with no enclosing git repository at all) is unchanged, since
-  `root == ""` is still a hard NOP.
+  with no matching task, bills the first to that task and the second to
+  project overhead, and the project's combined cost counts each once; a
+  heartbeat whose transcript names a task this actor no longer holds the
+  lease on bills that group to overhead instead of dropping it; a turn
+  recorded in a **subdirectory** of a task worktree, and one recorded with no
+  cwd at all, both bill to that task rather than to overhead;
+  `TestHeartbeatOutsideWorktreeIsNOP` (a directory with no enclosing git
+  repository at all) is unchanged, since `root == ""` is still a hard NOP.
 
 ## 6. Out of scope {#sec-6}
 

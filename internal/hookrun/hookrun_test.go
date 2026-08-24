@@ -2046,6 +2046,24 @@ func newSessionRecorder(t *testing.T, route, reply string) *sessionRecorder {
 	return rec
 }
 
+// newUsageRecorder serves the consolidated session-usage endpoint, which is
+// where a session's billed tokens go since spec 052 §3. The lifecycle routes
+// (touch/end) 404 into a warning, which a hook downgrades and survives.
+func newUsageRecorder(t *testing.T) *sessionRecorder {
+	t.Helper()
+	return newSessionRecorder(t, "POST /api/v1/projects/{id}/session-usage", "")
+}
+
+// byTask decodes the recorded classification of the single usage report.
+func (r *sessionRecorder) byTask(t *testing.T) map[string][]model.SessionUsageBucket {
+	t.Helper()
+	var out map[string][]model.SessionUsageBucket
+	if err := json.Unmarshal(r.only(t)["by_task"], &out); err != nil {
+		t.Fatalf("decode by_task: %v", err)
+	}
+	return out
+}
+
 func newEndRecorder(t *testing.T) *sessionRecorder {
 	t.Helper()
 	return newSessionRecorder(t, "POST /api/v1/tasks/{id}/agent-session/end", "")
@@ -2065,7 +2083,7 @@ func (r *sessionRecorder) only(t *testing.T) map[string]json.RawMessage {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.bodies) != 1 {
-		t.Fatalf("agent-session/end called %d times, want 1", len(r.bodies))
+		t.Fatalf("recorded route called %d times, want 1", len(r.bodies))
 	}
 	return r.bodies[0]
 }
@@ -2114,8 +2132,9 @@ func transcriptLine(cwd, msgID, model string, in, write5m, write1h, read, out in
 // turn that ran in a different directory belongs to that worktree's lease, not
 // this one.
 func TestSessionEndPostsTranscriptUsage(t *testing.T) {
-	rec := newEndRecorder(t)
+	rec := newUsageRecorder(t)
 	root := initGitRepo(t)
+	writeProjectConfig(t, root, "proj")
 	wtDir := addWorktree(t, root, "WL-1", "bill-me")
 	elsewhere := t.TempDir()
 
@@ -2127,18 +2146,21 @@ func TestSessionEndPostsTranscriptUsage(t *testing.T) {
 
 	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
 
-	body := rec.only(t)
-	var usage []model.SessionUsageBucket
-	if err := json.Unmarshal(body["usage"], &usage); err != nil {
-		t.Fatalf("decode usage %s: %v", body["usage"], err)
-	}
-	want := []model.SessionUsageBucket{{
+	byTask := rec.byTask(t)
+	want := model.SessionUsageBucket{
 		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
 		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
 		CacheReadTokens: 400, OutputTokens: 50,
-	}}
-	if len(usage) != 1 || usage[0] != want[0] {
-		t.Fatalf("posted usage = %+v, want %+v", usage, want)
+	}
+	own := byTask["WL-1"]
+	if len(own) != 1 || own[0] != want {
+		t.Fatalf("WL-1 usage = %+v, want %+v", own, want)
+	}
+	// The turn that ran outside any worktree is classified, not dropped: it
+	// belongs to no task, so it reports under the overhead key.
+	other := byTask[""]
+	if len(other) != 1 || other[0].InputTokens != 9_000 {
+		t.Fatalf("overhead usage = %+v, want the 9000-token turn from elsewhere", other)
 	}
 }
 
@@ -2148,8 +2170,9 @@ func TestSessionEndPostsTranscriptUsage(t *testing.T) {
 // with no transcript posts no usage field at all, so it leaves whatever the
 // backbone already recorded alone rather than clearing it.
 func TestHeartbeatPostsTranscriptUsage(t *testing.T) {
-	rec := newTouchRecorder(t)
+	rec := newUsageRecorder(t)
 	root := initGitRepo(t)
+	writeProjectConfig(t, root, "proj")
 	wtDir := addWorktree(t, root, "WL-1", "bill-me")
 	elsewhere := t.TempDir()
 
@@ -2160,30 +2183,25 @@ func TestHeartbeatPostsTranscriptUsage(t *testing.T) {
 
 	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
 
-	var usage []model.SessionUsageBucket
-	if err := json.Unmarshal(rec.only(t)["usage"], &usage); err != nil {
-		t.Fatalf("decode usage: %v", err)
-	}
+	byTask := rec.byTask(t)
 	want := model.SessionUsageBucket{
 		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
 		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
 		CacheReadTokens: 400, OutputTokens: 50,
 	}
-	if len(usage) != 1 || usage[0] != want {
-		t.Fatalf("posted usage = %+v, want %+v", usage, want)
+	if own := byTask["WL-1"]; len(own) != 1 || own[0] != want {
+		t.Fatalf("WL-1 usage = %+v, want %+v", own, want)
 	}
 
-	// A second worktree, so this heartbeat is not debounced by the first's
-	// marker.
+	// A heartbeat with no transcript has nothing to classify, so it reports
+	// no usage at all rather than posting an empty classification, which
+	// would clear what the backbone already recorded.
 	quiet := addWorktree(t, root, "WL-2", "no-transcript")
 	runHook(t, "heartbeat", Payload{Cwd: quiet, SessionID: "sess-2"})
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-	if len(rec.bodies) != 2 {
-		t.Fatalf("agent-session called %d times, want 2", len(rec.bodies))
-	}
-	if raw, ok := rec.bodies[1]["usage"]; ok {
-		t.Fatalf("heartbeat with no transcript posted usage %s, want the key absent", raw)
+	if len(rec.bodies) != 1 {
+		t.Fatalf("session-usage called %d times, want 1 — the transcript-less heartbeat must not report", len(rec.bodies))
 	}
 }
 
@@ -2245,15 +2263,11 @@ func TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead(t *testing.T) {
 		transcriptLine(root, "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
 	)
 
-	beforeAgent := rec.count("/agent-session")
-	beforeOverhead := rec.count("/overhead-usage")
+	beforeUsage := rec.count("/session-usage")
 	runHook(t, "heartbeat", Payload{Cwd: root, SessionID: "sess-orch", TranscriptPath: transcriptPath})
 
-	if rec.count("/agent-session") != beforeAgent+1 {
-		t.Fatal("main-checkout heartbeat did not report the worktree's own task")
-	}
-	if rec.count("/overhead-usage") != beforeOverhead+1 {
-		t.Fatal("main-checkout heartbeat did not report project overhead")
+	if rec.count("/session-usage") != beforeUsage+1 {
+		t.Fatal("main-checkout heartbeat did not report the session's usage")
 	}
 
 	lease, err := st.ActiveLease(t.Context(), taskID)
@@ -2266,6 +2280,23 @@ func TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead(t *testing.T) {
 	}
 	if sess.InputTokens == nil || *sess.InputTokens != 100 {
 		t.Fatalf("worktree task input tokens = %v, want 100", sess.InputTokens)
+	}
+
+	// The main checkout's own turns have no task to bill to and land in the
+	// project's overhead bucket, and the project's combined cost counts each
+	// side once.
+	report, err := st.ProjectCost(t.Context(), "proj", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d cost days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadTokens.Input; got != 50 {
+		t.Errorf("overhead input = %d, want 50 (the main checkout's own turn)", got)
+	}
+	if got := report.Days[0].Tokens.Input; got != 150 {
+		t.Errorf("combined input = %d, want 150 (100 task + 50 overhead, each counted once)", got)
 	}
 }
 
@@ -2312,7 +2343,7 @@ func TestHeartbeatBillsSubdirAndCwdlessTurnsToItsOwnTask(t *testing.T) {
 // still be reported — as project overhead — rather than silently dropped,
 // which would reintroduce the very bug this plan fixes in a new place.
 func TestHeartbeatOtherTaskWithoutLeaseFallsBackToOverhead(t *testing.T) {
-	_, c, rec := newRealServer(t)
+	st, c, rec := newRealServer(t)
 	root := initGitRepo(t)
 	_, wtDir, _ := setupLeasedWorktree(t, c, root, "Own task")
 	otherTaskID, otherWtDir, _ := setupLeasedWorktree(t, c, root, "No longer held")
@@ -2327,14 +2358,26 @@ func TestHeartbeatOtherTaskWithoutLeaseFallsBackToOverhead(t *testing.T) {
 		transcriptLine(otherWtDir, "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
 	)
 
-	beforeOverhead := rec.count("/overhead-usage")
-	beforeOtherTouch := rec.count("/tasks/" + otherTaskID + "/agent-session")
+	beforeUsage := rec.count("/session-usage")
 	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: transcriptPath})
 
-	if rec.count("/tasks/"+otherTaskID+"/agent-session") != beforeOtherTouch+1 {
-		t.Fatal("heartbeat did not attempt to touch the unleased other task's agent session")
+	if rec.count("/session-usage") != beforeUsage+1 {
+		t.Fatal("heartbeat did not report the session's usage")
 	}
-	if rec.count("/overhead-usage") != beforeOverhead+1 {
-		t.Fatal("heartbeat did not redirect the unleased other task's usage to project overhead")
+
+	// The unleased task has no session to bill, so the server puts its tokens
+	// in overhead rather than dropping them — and counts them once.
+	report, err := st.ProjectCost(t.Context(), "proj", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d cost days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadTokens.Input; got != 50 {
+		t.Errorf("overhead input = %d, want 50 — the unleased task's tokens are not dropped", got)
+	}
+	if got := report.Days[0].Tokens.Input; got != 150 {
+		t.Errorf("combined input = %d, want 150 (100 own task + 50 overhead, each once)", got)
 	}
 }
