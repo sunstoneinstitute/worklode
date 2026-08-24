@@ -737,11 +737,12 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in model.EndAge
 	return err
 }
 
-// ReportProjectOverheadUsage calls POST /api/v1/projects/{id}/overhead-usage:
-// report usage with no task to bill to (spec 052 §2).
-func (c *Client) ReportProjectOverheadUsage(ctx context.Context, projectID string, in model.ProjectOverheadUsageInput) error {
+// ReportProjectSessionUsage calls POST /api/v1/projects/{id}/session-usage:
+// report one session's complete usage across the project, every task it
+// billed plus the remainder, replaced together (spec 052 §2).
+func (c *Client) ReportProjectSessionUsage(ctx context.Context, projectID string, in model.ProjectSessionUsageInput) error {
 	_, err := c.do(ctx, http.MethodPost,
-		"/api/v1/projects/"+url.PathEscape(projectID)+"/overhead-usage", in)
+		"/api/v1/projects/"+url.PathEscape(projectID)+"/session-usage", in)
 	return err
 }
 
