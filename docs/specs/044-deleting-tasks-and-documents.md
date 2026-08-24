@@ -137,6 +137,20 @@ Two deliberate consequences:
   deleted stops blocking, because the blocking check reads live tasks, and the
   edge itself stays for the undelete.
 
+**The graph shows live rows only.** The knowledge-graph projection (006 §11,
+025 §5) is one of the projections above: it is rebuilt from the same live-row
+queries, so a deleted row leaves the graph on the next projection pass and an
+undelete puts it back. A tombstone is deliberately *not* projected as a node
+carrying its delete record. Who deleted a row, when, and why is provenance, and
+the append-only event log owns provenance; projecting it as well would give one
+fact two owners, which is the split 006 exists to keep. Delete stays cheap to
+reverse because the log is complete, not because the graph remembers.
+
+This binds both row kinds, and one of them does not honour it yet: deleting a
+*document* leaves its declared graph in place, because the projector has no
+path that removes a graph it previously wrote. That is a defect against this
+rule, not an exception to it.
+
 **Deleted is not closed.** A tombstone changes no answer about the task's own
 state, `closed` included: 004 §1.3's predicate stays "delivered, or abandoned",
 so a deleted `draft` reports `closed: false` and says so on the wire. What the
