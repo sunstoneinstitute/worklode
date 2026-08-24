@@ -506,6 +506,7 @@ docs/specs/038-worklode-in-a-cloud-sandbox.md:
     sec-4.2: "### 4.2 Hooks must arrive before the session, not during it"
     sec-4.3: "### 4.3 Identity"
     sec-4.4: "### 4.4 Secrets"
+    sec-4.5: "### 4.5 A seam for human-in-the-loop questions"
     sec-5: "## 5. Seams for backbone-initiated dispatch"
     sec-5.1: "### 5.1 Why not an external agent runtime, yet"
     sec-6: "## 6. Testing"

@@ -219,6 +219,31 @@ declared, pre-materialised set is what makes execution off the operator's laptop
 inherits that design when it is built; until then, a task needing a secret is not a task for a
 sandbox.
 
+### 4.5 A seam for human-in-the-loop questions {#sec-4.5}
+
+§4.1 and §4.2 already establish what a sandbox session lacks: no terminal, no statusline, nobody
+watching. `AskUserQuestion` assumes exactly that audience, so a headless worker that hits a
+genuine judgment call has no channel to ask one — it stalls against a UI nobody can see, or the
+model guesses.
+
+A spike (`docs/research/askuserquestion-mcp-redirect.md`) verified that Claude Code's own
+extension points can redirect an `AskUserQuestion` call to a worklode-controlled tool instead: a
+`PreToolUse` hook blocking the call and naming a replacement, or a plain prompt instruction, both
+held at 100% across 280 reps. The redirect mechanism is not the gap. Two things are: nothing
+delivers the human's actual answer back to a blocked worker process, and the redirect is a
+followed instruction, not an enforced guarantee.
+
+**Declined for now, named trigger** — the pattern §2.1 and §5.1 already use. The trigger to
+revisit is the one §5.1 names for an external runtime: unattended sessions becoming common enough,
+via §5's dispatch seam or 032's agent pools, that stalling on an unanswerable question is a real
+cost rather than a hypothetical one. Building it means designing the answer-delivery channel
+first — a pending-question row, a cockpit or CLI surface to answer it, a wait/poll on worklode's
+side — which the spike deliberately did not attempt.
+
+Given §4.2's precedent, the mechanism this seam would need — an MCP server exposing the
+replacement tool — has the identical constraint hooks already have here: baked into the image at
+build time, not registered mid-session.
+
 ## 5. Seams for backbone-initiated dispatch {#sec-5}
 
 The backbone does not launch sandboxes. When it does — 032's agent pools, concurrency and
@@ -281,6 +306,8 @@ agent-sandbox note's §7 lists which sections of this spec that adoption would a
 - **An external agent runtime.** Declined with a named trigger (§5.1), not forgotten — the seam
   stays filled by worklode's own code.
 - **Task secrets.** 017 owns them (§4.4).
+- **Human-in-the-loop question routing.** Declined with a named trigger (§4.5), not forgotten —
+  the redirect mechanism is verified feasible, but the answer-delivery channel is undesigned.
 - **A tool manager.** Declined with a named trigger (§2.1), not forgotten.
 - **A cross-platform system-package schema.** Declined on cost (§2.2).
 - **Windows sandboxes.** Windows is a build target, not an execution environment for workers.
