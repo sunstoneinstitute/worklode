@@ -1,6 +1,6 @@
 {
   "name": "obsidian-worklode",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "private": true,
   "description": "Mirror a Worklode instance into an Obsidian vault.",
   "type": "module",
