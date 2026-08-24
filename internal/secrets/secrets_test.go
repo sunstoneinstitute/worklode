@@ -3,6 +3,7 @@ package secrets
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -173,5 +174,46 @@ func TestWriteEnvFile(t *testing.T) {
 	}
 	if strings.Contains(string(data), "gh_value") {
 		t.Fatal("env file must hold references only")
+	}
+}
+
+// TestMaterializedTasks: the manifest directory is the machine's only
+// inventory of materialized secrets (keyring cannot enumerate), so a
+// machine-wide sweep depends on reading it exactly.
+func TestMaterializedTasks(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Nothing materialized yet: an empty machine, not an error.
+	ids, err := MaterializedTasks()
+	if err != nil {
+		t.Fatalf("MaterializedTasks on an empty machine: %v", err)
+	}
+	if len(ids) != 0 {
+		t.Fatalf("MaterializedTasks on an empty machine = %v, want none", ids)
+	}
+
+	for _, id := range []string{"WL-9", "WL-7"} {
+		if err := SaveManifest(Manifest{Task: id, Materialized: []string{"A_TOKEN"}, At: time.Now()}); err != nil {
+			t.Fatalf("save manifest %s: %v", id, err)
+		}
+	}
+
+	// The directory is under the user's control, so junk in it must be
+	// skipped rather than swept: a stray file is not a task, and a name that
+	// is not a valid task id must never reach a keystore or path call.
+	dir := filepath.Join(home, ".cache", "worklode", "secrets")
+	for name, body := range map[string]string{"notes.txt": "x", "wl-7.json": "{}", "..json": "{}"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	ids, err = MaterializedTasks()
+	if err != nil {
+		t.Fatalf("MaterializedTasks: %v", err)
+	}
+	if !slices.Equal(ids, []string{"WL-7", "WL-9"}) {
+		t.Fatalf("MaterializedTasks = %v, want [WL-7 WL-9] sorted and junk-free", ids)
 	}
 }
