@@ -2249,9 +2249,9 @@ func writeProjectConfig(t *testing.T, dir, project string) {
 // subagent's turns into the orchestrator's OWN transcript, tagged with the
 // directory each ran in. A heartbeat fired from the main checkout must still
 // split that transcript's usage correctly: the cwd under a currently
-// lease-held task worktree bills through /agent-session, and the cwd with no
-// task at all (the main checkout itself) bills through /overhead-usage —
-// neither is dropped.
+// lease-held task worktree bills to that task, and the cwd with no task at all
+// (the main checkout itself) bills to project overhead — neither is dropped,
+// and one /session-usage call carries both.
 func TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead(t *testing.T) {
 	st, c, rec := newRealServer(t)
 	root := initGitRepo(t)
@@ -2306,7 +2306,7 @@ func TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead(t *testing.T) {
 // task the hook is running for. Billing either to project overhead would take
 // real money off the task's cost report (spec 052 §3).
 func TestHeartbeatBillsSubdirAndCwdlessTurnsToItsOwnTask(t *testing.T) {
-	st, c, rec := newRealServer(t)
+	st, c, _ := newRealServer(t)
 	root := initGitRepo(t)
 	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Own task")
 	writeProjectConfig(t, wtDir, "proj")
@@ -2316,11 +2316,17 @@ func TestHeartbeatBillsSubdirAndCwdlessTurnsToItsOwnTask(t *testing.T) {
 		transcriptLine("", "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
 	)
 
-	beforeOverhead := rec.count("/overhead-usage")
 	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: transcriptPath})
 
-	if got := rec.count("/overhead-usage"); got != beforeOverhead {
-		t.Fatalf("overhead reported %d time(s); the task's own turns must not become overhead", got-beforeOverhead)
+	report, err := st.ProjectCost(t.Context(), "proj", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d cost days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadTokens.Input; got != 0 {
+		t.Errorf("overhead input = %d, want 0; the task's own turns must not become overhead", got)
 	}
 
 	lease, err := st.ActiveLease(t.Context(), taskID)

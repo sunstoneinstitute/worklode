@@ -141,9 +141,13 @@ with a date — out of scope here; the table records what the vendor charged.
 ## 3. Store and API {#sec-3}
 
 > **Amended by spec 052 §2.** A third store entry point,
-> `ReportProjectOverheadUsage`, and a new `POST /api/v1/projects/{id}/overhead-usage`
+> `ReportProjectSessionUsage`, and a new `POST /api/v1/projects/{id}/session-usage`
 > route join `TouchAgentSession`/`EndAgentSession` below — it has no lease to
-> check a holder against, since overhead usage is not attached to any lease.
+> check a holder against, because it owns every usage row one session writes in
+> a project, including rows whose lease is already gone. There is deliberately
+> no overhead-only entry point beside it: a second write path to the same
+> `(project, agent, external session id)` key is what let a session's tokens be
+> counted twice.
 > `ProjectCost` also changes: its report becomes the combined total of
 > task-attributed and overhead spend, with overhead's own share broken out
 > alongside it. `TaskCost`, below, is unchanged.
