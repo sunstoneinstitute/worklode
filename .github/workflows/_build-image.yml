@@ -89,7 +89,7 @@ jobs:
       # VM, so it gets an anonymous throwaway builder and pays for both.
       # Both hel01 runners share this one builder — they share the daemon
       # anyway, and BuildKit handles concurrent builds itself.
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
         id: buildx
         with:
           name: ${{ contains(inputs.runs-on, 'gha-buildcache') && 'worklode-ci' || '' }}
