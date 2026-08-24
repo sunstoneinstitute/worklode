@@ -41,15 +41,25 @@ Every pre-merged state can go to `abandoned`; every terminal-ish state
 sent back to `ready` by `reopen`, which requires a fresh claim.
 
 **You drive:** `draft→ready` (`task ready`), `ready→in_progress` (`task
-claim`/`next`), `in_progress→ready` (`task stop`/`release`),
-`in_review→in_progress` (`task rework`), anything `→abandoned`
-(`task abandon`), anything terminal-ish `→ready` (`task reopen`).
+claim`/`next` when the work needs a worktree; `task start` when it doesn't —
+e.g. a design/review task that's just a judgment call, no code),
+`in_progress→ready` (`task stop`/`release`), `in_review→in_progress` (`task
+rework`), anything `→abandoned` (`task abandon`), anything terminal-ish
+`→ready` (`task reopen`).
 
 **Webhooks drive:** `in_progress→in_review` (a GitHub PR opens against the
 task), `→merged` (the merge SHA lands on the default branch via a `push`
 event — not the merge itself), `merged→deployed_dev/deployed_prod/released`
 (Flux reconciliation, resolved forward-only against whatever facts have
 arrived, in any order). Full event-by-event table: `references/webhooks.md`.
+
+**No PR, no webhook — close it by hand:** a design or review task (settling
+a decision, signing off on a proposal) has no code and no PR to drive the
+rest of the lifecycle. Once the call is made, drive it yourself: `task
+start` (ready→in_progress) → `task submit` (→in_review) → `task done`
+(→merged). `task start` refuses with a 422 if the task is already assigned
+to someone else's identity ("assigned to X; unassign first") — run `task
+unassign` first, then `start`.
 
 A task with `child_of` children can't itself sit in `in_review` or any
 delivery state — `task done` on a parent reports the roll-up rule instead.
@@ -72,7 +82,10 @@ lode task list                          # open tasks; --status for delivered/aba
 lode task show <id>                     # body, edges, blocked status, lease holder
 lode task claim [<id>]                  # lease it, create its worktree
 lode next                               # claim the top-ranked ready task
-lode task done
+lode task start [<id>]                  # ready->in_progress, no worktree/lease (e.g. a design/review call)
+lode task submit [<id>]                 # in_progress->in_review
+lode task done                          # in_review->merged
+lode task unassign [<id>]               # clear assignee (needed before `start` on someone else's task)
 lode task block --by <id>
 lode task abandon
 lode board                              # in-progress / in-review / blocked / ready, at a glance
