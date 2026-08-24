@@ -264,16 +264,16 @@ func TestAgentSessionTouchReportsUsage(t *testing.T) {
 	}
 }
 
-// TestReportProjectOverheadUsage covers the happy path: usage reported with
+// TestReportProjectSessionUsage covers the happy path: usage reported with
 // no task to bill to lands in the project's cost report under Overhead.
-func TestReportProjectOverheadUsage(t *testing.T) {
+func TestReportProjectSessionUsage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	rr := doReq(t, h, "POST", "/api/v1/projects/proj/overhead-usage", token,
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/session-usage", token,
 		map[string]any{
 			"agent": "claude-code", "external_session_id": "sess-1",
-			"usage": []map[string]any{sonnetUsage},
+			"by_task": map[string]any{"": []map[string]any{sonnetUsage}},
 		})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -294,45 +294,45 @@ func TestReportProjectOverheadUsage(t *testing.T) {
 	}
 }
 
-// TestReportProjectOverheadUsageUnknownProject404 covers the store's
+// TestReportProjectSessionUsageUnknownProject404 covers the store's
 // ErrNotFound for an unknown project mapping onto a 404.
-func TestReportProjectOverheadUsageUnknownProject404(t *testing.T) {
+func TestReportProjectSessionUsageUnknownProject404(t *testing.T) {
 	_, h, token := newTestServer(t)
 
-	rr := doReq(t, h, "POST", "/api/v1/projects/no-such-project/overhead-usage", token,
+	rr := doReq(t, h, "POST", "/api/v1/projects/no-such-project/session-usage", token,
 		map[string]any{
 			"agent": "claude-code", "external_session_id": "sess-1",
-			"usage": []map[string]any{sonnetUsage},
+			"by_task": map[string]any{"": []map[string]any{sonnetUsage}},
 		})
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404, body = %s", rr.Code, rr.Body.String())
 	}
 }
 
-// TestReportProjectOverheadUsageRejectsMalformedUsage covers spec 052 §5's
-// 400 for a malformed body: reportProjectOverheadUsage routes usage through
+// TestReportProjectSessionUsageRejectsMalformedUsage covers spec 052 §5's
+// 400 for a malformed body: reportProjectSessionUsage routes each group through
 // the same toUsageBuckets validation the task-scoped endpoints use.
-func TestReportProjectOverheadUsageRejectsMalformedUsage(t *testing.T) {
+func TestReportProjectSessionUsageRejectsMalformedUsage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
-	rr := doReq(t, h, "POST", "/api/v1/projects/proj/overhead-usage", token,
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/session-usage", token,
 		map[string]any{
 			"agent": "claude-code", "external_session_id": "sess-1",
-			"usage": []map[string]any{
+			"by_task": map[string]any{"": []map[string]any{
 				{"day": "31-07-2026", "model": "claude-sonnet-5", "output_tokens": 10},
-			},
+			}},
 		})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("malformed day: got %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 
-	rr = doReq(t, h, "POST", "/api/v1/projects/proj/overhead-usage", token,
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/session-usage", token,
 		map[string]any{
 			"agent": "claude-code", "external_session_id": "sess-1",
-			"usage": []map[string]any{
+			"by_task": map[string]any{"": []map[string]any{
 				{"day": "2026-07-31", "output_tokens": 10},
-			},
+			}},
 		})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("missing model: got %d, want 400, body %s", rr.Code, rr.Body.String())

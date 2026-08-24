@@ -860,18 +860,18 @@ func TestTaskCostUnpricedTokens(t *testing.T) {
 
 // The load-bearing case: overhead usage is a cumulative transcript total, so
 // a second report must replace the first, never accumulate on top of it.
-func TestReportProjectOverheadUsageReplacesNotAccumulates(t *testing.T) {
+func TestReportProjectSessionUsageReplacesNotAccumulates(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1", map[string][]SessionUsageBucket{"": {
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("first report: %v", err)
 	}
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1", map[string][]SessionUsageBucket{"": {
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 5, Output: 1}},
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("second report: %v", err)
 	}
 
@@ -890,10 +890,10 @@ func TestReportProjectOverheadUsageReplacesNotAccumulates(t *testing.T) {
 	}
 }
 
-func TestReportProjectOverheadUsageUnknownProject(t *testing.T) {
+func TestReportProjectSessionUsageUnknownProject(t *testing.T) {
 	s := openTaskStore(t)
-	err := s.ReportProjectOverheadUsage(t.Context(), "no-such-project", "claude-code", "sess-1",
-		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}})
+	err := s.ReportProjectSessionUsage(t.Context(), "no-such-project", "claude-code", "sess-1",
+		map[string][]SessionUsageBucket{"": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}}})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
@@ -901,15 +901,15 @@ func TestReportProjectOverheadUsageUnknownProject(t *testing.T) {
 
 // An unknown agent or an empty external session id are rejected before any
 // project lookup or write, per spec 052 §5.
-func TestReportProjectOverheadUsageRejectsInvalidInput(t *testing.T) {
+func TestReportProjectSessionUsageRejectsInvalidInput(t *testing.T) {
 	s := openTaskStore(t)
 	ctx := t.Context()
 	buckets := []SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}}
 
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "not-a-real-agent", "sess-1", buckets); !errors.Is(err, ErrInvalidInput) {
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "not-a-real-agent", "sess-1", map[string][]SessionUsageBucket{"": buckets}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("unknown agent: got %v, want ErrInvalidInput", err)
 	}
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "", buckets); !errors.Is(err, ErrInvalidInput) {
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "", map[string][]SessionUsageBucket{"": buckets}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("empty external session id: got %v, want ErrInvalidInput", err)
 	}
 }
@@ -922,8 +922,8 @@ func TestProjectCostCombinesTaskAndOverheadOnSameDay(t *testing.T) {
 	reportUsage(t, s, lease, "sess-task", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
 	})
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-overhead",
-		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 50, Output: 5}}}); err != nil {
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-overhead",
+		map[string][]SessionUsageBucket{"": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 50, Output: 5}}}}); err != nil {
 		t.Fatalf("overhead usage: %v", err)
 	}
 
@@ -951,8 +951,8 @@ func TestProjectCostDayWithOverheadOnlyNoTaskUsage(t *testing.T) {
 	s := openTaskStore(t)
 	ctx := t.Context()
 
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-overhead",
-		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}}); err != nil {
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-overhead",
+		map[string][]SessionUsageBucket{"": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}}}); err != nil {
 		t.Fatalf("overhead usage: %v", err)
 	}
 
@@ -1023,23 +1023,23 @@ func TestProjectCostOverheadCostIsSixDigitsWithNoOverheadUsage(t *testing.T) {
 // same-day shrink: DELETE ... RETURNING usage_day must surface the dropped
 // day so the rollup is rebuilt to nothing for it, not left stale. Task 7's
 // hook path re-reports transcripts that can shrink to cover fewer days.
-func TestReportProjectOverheadUsageDropsRollupForDayNoLongerReported(t *testing.T) {
+func TestReportProjectSessionUsageDropsRollupForDayNoLongerReported(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1", map[string][]SessionUsageBucket{"": {
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
 		{Day: usageDay2, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 200, Output: 20}},
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("first report: %v", err)
 	}
 	if got := projectOverheadRollupRows(t, s, "horndb"); len(got) != 2 {
 		t.Fatalf("got %d overhead rollup rows after first report, want 2: %+v", len(got), got)
 	}
 
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-1", []SessionUsageBucket{
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1", map[string][]SessionUsageBucket{"": {
 		{Day: usageDay2, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 200, Output: 20}},
-	}); err != nil {
+	}}); err != nil {
 		t.Fatalf("second (shrinking) report: %v", err)
 	}
 
@@ -1070,8 +1070,8 @@ func TestTaskCostUnaffectedByProjectOverhead(t *testing.T) {
 	reportUsage(t, s, lease, "sess-task", []SessionUsageBucket{
 		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
 	})
-	if err := s.ReportProjectOverheadUsage(ctx, "horndb", "claude-code", "sess-overhead",
-		[]SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 999, Output: 999}}}); err != nil {
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-overhead",
+		map[string][]SessionUsageBucket{"": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 999, Output: 999}}}}); err != nil {
 		t.Fatalf("overhead usage: %v", err)
 	}
 
@@ -1135,5 +1135,135 @@ func TestTaskCostMultipleCurrencies(t *testing.T) {
 		if got.Currency != want.Currency || got.Tokens != want.Tokens || got.Cost != want.Cost {
 			t.Fatalf("total %d: got %+v, want %+v", i, got, want)
 		}
+	}
+}
+
+// A session's tokens must be counted once, whichever bucket they land in.
+// The client re-reports a running transcript total on every heartbeat, and
+// the destination can change between two of them: usage billed to a task
+// while its lease was held comes back as overhead once the lease is gone.
+// Both sides then hold the same tokens, and ProjectCost sums the two.
+func TestProjectCostDoesNotDoubleCountUsageMovedToOverhead(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+
+	reportUsage(t, s, lease, "sess-1", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}},
+	})
+	// The next heartbeat, same session and same cumulative transcript, finds
+	// no lease to bill to and reports the identical tokens as overhead.
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1",
+		map[string][]SessionUsageBucket{
+			"": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}},
+		}); err != nil {
+		t.Fatalf("session usage: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].Tokens.Input; got != 100 {
+		t.Errorf("combined input = %d, want 100 — the same session's tokens counted once, not once per bucket", got)
+	}
+}
+
+// The healthy split and the duplicate are numerically identical within one
+// session, so the whole-session replace has to keep the split intact while
+// removing the duplicate: a task's own turns bill to its agent session, the
+// remainder bills to overhead, and the total is what the transcript held.
+func TestReportProjectSessionUsageSplitsWithoutDuplicating(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+	taskID := lease.TaskID
+
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1",
+		map[string][]SessionUsageBucket{
+			taskID: {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}},
+			"":     {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 50, Output: 5}}},
+		}); err != nil {
+		t.Fatalf("session usage: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1: %+v", len(report.Days), report.Days)
+	}
+	d := report.Days[0]
+	if d.Tokens.Input != 150 {
+		t.Errorf("combined input = %d, want 150 (100 task + 50 overhead)", d.Tokens.Input)
+	}
+	if d.OverheadTokens.Input != 50 {
+		t.Errorf("overhead input = %d, want 50 — only the unattributed remainder", d.OverheadTokens.Input)
+	}
+}
+
+// Reclassification in the other direction: tokens reported as overhead, then
+// re-reported against the task once its session is reachable again. The
+// overhead row must be released as the task row takes them, or the day
+// doubles just as it did the other way round.
+func TestReportProjectSessionUsageMovesOverheadBackToATask(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
+	taskID := lease.TaskID
+	buckets := []SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}}
+
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1",
+		map[string][]SessionUsageBucket{"": buckets}); err != nil {
+		t.Fatalf("first report: %v", err)
+	}
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1",
+		map[string][]SessionUsageBucket{taskID: buckets}); err != nil {
+		t.Fatalf("second report: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1: %+v", len(report.Days), report.Days)
+	}
+	d := report.Days[0]
+	if d.Tokens.Input != 100 {
+		t.Errorf("combined input = %d, want 100", d.Tokens.Input)
+	}
+	if d.OverheadTokens.Input != 0 {
+		t.Errorf("overhead input = %d, want 0 — the task took these tokens back", d.OverheadTokens.Input)
+	}
+}
+
+// A task named in the classification that this actor never opened a session
+// for cannot be billed, but the tokens were still spent: they land in
+// overhead rather than being dropped (spec 052 §3).
+func TestReportProjectSessionUsageUnreachableTaskBillsToOverhead(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	if err := s.ReportProjectSessionUsage(ctx, "horndb", "claude-code", "sess-1",
+		map[string][]SessionUsageBucket{
+			"HORN-999": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 100, Output: 10}}},
+		}); err != nil {
+		t.Fatalf("session usage: %v", err)
+	}
+
+	report, err := s.ProjectCost(ctx, "horndb", time.Time{}, time.Time{})
+	if err != nil {
+		t.Fatalf("ProjectCost: %v", err)
+	}
+	if len(report.Days) != 1 {
+		t.Fatalf("got %d days, want 1: %+v", len(report.Days), report.Days)
+	}
+	if got := report.Days[0].OverheadTokens.Input; got != 100 {
+		t.Errorf("overhead input = %d, want 100 — an unreachable task's tokens are not dropped", got)
 	}
 }

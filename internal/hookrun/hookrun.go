@@ -401,11 +401,11 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.
 	byTask := classifyTranscriptUsage(opts, l, taskID, transcriptPath)
 
 	if taskID != "" {
-		ownUsage := byTask[taskID]
-		delete(byTask, taskID)
-
+		// Lifecycle only: the session row and its last_seen_at. Usage goes
+		// through reportClassifiedUsage below, which owns every bucket this
+		// session billed anywhere in the project -- see its doc comment.
 		sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, ownUsage)
+		sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, nil)
 		cancel()
 		if err != nil {
 			warn(opts, "report agent session on %s: %v", taskID, err)
@@ -416,7 +416,7 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.
 		}
 	} else {
 		// No task of our own (main checkout, or an unleased worktree): there
-		// is no agent_sessions row to touch, only usage to classify below.
+		// is no agent_sessions row to touch, only usage to report below.
 		// The marker's own debounce still applies -- stamp it directly, since
 		// there is no TouchAgentSession response to gate it on.
 		if err := recordHeartbeat(root, opts.now()); err != nil {
@@ -424,7 +424,8 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.
 		}
 	}
 
-	reportOtherTaskAndOverheadUsage(ctx, opts, c, root, sessionID, byTask)
+	openOtherTaskSessions(ctx, opts, c, taskID, sessionID, byTask)
+	reportClassifiedUsage(ctx, opts, c, root, sessionID, byTask)
 }
 
 // endSession ends an agent session on taskID, reporting the tokens it billed
@@ -444,12 +445,10 @@ func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, se
 	byTask := classifyTranscriptUsage(opts, l, taskID, transcriptPath)
 
 	if taskID != "" {
-		ownUsage := byTask[taskID]
-		delete(byTask, taskID)
-
+		// Closes the session row; its usage is reported below, whole.
 		ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
 		endErr := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
-			Agent: opts.agentName(), SessionID: sessionID, Usage: ownUsage,
+			Agent: opts.agentName(), SessionID: sessionID,
 		})
 		cancel()
 		if endErr != nil {
@@ -460,7 +459,8 @@ func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, se
 	// agent_sessions row was ever opened here, so only the classification
 	// below applies.
 
-	reportOtherTaskAndOverheadUsage(ctx, opts, c, root, sessionID, byTask)
+	openOtherTaskSessions(ctx, opts, c, taskID, sessionID, byTask)
+	reportClassifiedUsage(ctx, opts, c, root, sessionID, byTask)
 }
 
 // closeSession ends the session recorded against root's lease and drops its
@@ -592,57 +592,63 @@ func classifyTranscriptUsage(opts Options, l worktree.Layout, ownTaskID, transcr
 	return out
 }
 
-// reportOverhead resolves the current repo's project from local config only
-// (no server round trip -- see cli.CurrentProjectFrom) and reports buckets
-// as that project's overhead usage: tokens with no task to bill to (spec
-// 052). root is the directory to resolve the project from -- see
-// layoutFor's doc comment on why this must be the hook's own resolved
-// worktree root, never os.Getwd().
-func reportOverhead(ctx context.Context, opts Options, c *cli.Client, root, sessionID string, buckets []model.SessionUsageBucket) {
-	if len(buckets) == 0 {
+// openOtherTaskSessions opens (or refreshes) the agent-session row for every
+// task in the classification other than ownTaskID, carrying NO usage: the
+// consolidated report writes the tokens, this only makes sure there is a row
+// for them to land on. An orchestrator running from the main checkout never
+// touches the worktrees it dispatches into, so without this the subagent
+// turns in its transcript would have no session to bill and would all fall
+// through to overhead.
+//
+// A failure here is not an error to report: the usual cause is that this
+// actor does not hold that task's lease, and the server bills an unreachable
+// task's tokens to overhead by itself (spec 052 §3).
+func openOtherTaskSessions(ctx context.Context, opts Options, c *cli.Client, ownTaskID, sessionID string, byTask map[string][]model.SessionUsageBucket) {
+	for taskID := range byTask {
+		if taskID == "" || taskID == ownTaskID {
+			continue
+		}
+		tctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+		_, _, err := c.TouchAgentSession(tctx, taskID, opts.agentName(), "", sessionID, nil)
+		cancel()
+		if err != nil {
+			warn(opts, "open agent session on %s: %v (its usage bills to project overhead)", taskID, err)
+		}
+	}
+}
+
+// reportClassifiedUsage reports one session's COMPLETE classification --
+// every task it billed plus the turns with no task to bill to -- as a single
+// call. root is the directory to resolve the project from; see layoutFor's
+// doc comment on why this must be the hook's own resolved worktree root,
+// never os.Getwd().
+//
+// One call, not one per destination, because the destinations are replaced
+// together. This hook re-parses its whole transcript and re-posts a running
+// total on every heartbeat, and a turn's destination can change between two
+// of them: a directory that resolved to a task while its lease was held
+// resolves to overhead once the lease is gone. Reporting each destination
+// separately left the vacated one holding its copy, and a project's cost
+// counted both (spec 052 §3).
+//
+// The server decides what an unreachable task's tokens become; this side
+// states the classification and nothing more.
+func reportClassifiedUsage(ctx context.Context, opts Options, c *cli.Client, root, sessionID string, byTask map[string][]model.SessionUsageBucket) {
+	if len(byTask) == 0 {
 		return
 	}
 	project := cli.CurrentProjectFrom(root)
 	if project == "" {
-		warn(opts, "no project configured for %s; dropping %d overhead usage bucket(s)", root, len(buckets))
+		warn(opts, "no project configured for %s; dropping %d usage group(s)", root, len(byTask))
 		return
 	}
-	octx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	uctx, cancel := context.WithTimeout(ctx, backboneTimeout)
 	defer cancel()
-	if err := c.ReportProjectOverheadUsage(octx, project, model.ProjectOverheadUsageInput{
-		Agent: opts.agentName(), ExternalSessionID: sessionID, Usage: buckets,
+	if err := c.ReportProjectSessionUsage(uctx, project, model.ProjectSessionUsageInput{
+		Agent: opts.agentName(), ExternalSessionID: sessionID, ByTask: byTask,
 	}); err != nil {
-		warn(opts, "report project overhead usage on %s: %v", project, err)
+		warn(opts, "report session usage on %s: %v", project, err)
 	}
-}
-
-// reportOtherTaskAndOverheadUsage reports every classifyTranscriptUsage
-// group besides the calling handler's own task (already removed from
-// byTask by the caller): a real task id bills through TouchAgentSession --
-// never EndAgentSession, since this call has no opinion on whether that
-// other task's own session should end, only that these tokens billed to it
-// -- and a TouchAgentSession failure (most commonly ErrNotFound: this actor
-// no longer holds that task's lease) redirects those buckets to overhead
-// instead of dropping them. The "" group (main checkout, or a cwd outside
-// the worktree layout) always goes to overhead.
-func reportOtherTaskAndOverheadUsage(ctx context.Context, opts Options, c *cli.Client, root, sessionID string, byTask map[string][]model.SessionUsageBucket) {
-	if len(byTask) == 0 {
-		return
-	}
-	overhead := byTask[""]
-	for taskID, buckets := range byTask {
-		if taskID == "" {
-			continue
-		}
-		octx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		_, _, err := c.TouchAgentSession(octx, taskID, opts.agentName(), "", sessionID, buckets)
-		cancel()
-		if err != nil {
-			warn(opts, "report agent session on %s: %v (billing to project overhead instead)", taskID, err)
-			overhead = append(overhead, buckets...)
-		}
-	}
-	reportOverhead(ctx, opts, c, root, sessionID, overhead)
 }
 
 // --- event handlers ---------------------------------------------------------
