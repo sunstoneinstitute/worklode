@@ -10,12 +10,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
+	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -174,7 +177,91 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 		}
 	}
 
+	// 7. Reap materialized secrets whose lease is gone (017 §4, ADR 048 §4).
+	checks = append(checks, sweepSecrets(ctx, c, serverReachable))
+
 	return checks
+}
+
+// leaseGone answers "has this task's lease gone away?" for a local caller,
+// three-valued on purpose. known=false means the backbone did not answer the
+// question — a transport failure, a 5xx, a rejected token — and the caller
+// must treat that as "no idea", never as "gone". Only two answers are
+// definite: the backbone served the task and it carries no lease, or the
+// backbone served a 404 because the task no longer exists (044).
+func leaseGone(ctx context.Context, c *cli.Client, taskID string) (gone, known bool) {
+	detail, _, err := c.GetTask(ctx, taskID)
+	var ce *cli.ClientError
+	switch {
+	case err == nil:
+		return detail.Lease == nil, true
+	case errors.As(err, &ce) && ce.Status == http.StatusNotFound:
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+// sweepSecrets purges the materialized secrets of every task on this machine
+// whose lease is definitely gone.
+//
+// This is the reaper for the abandoned worktree. Every other purge trigger
+// rides an event in the worktree — removal, `lode done`, `lode block`, and
+// ADR 048's conditional purge on exit — so a worktree left sitting while its
+// lease expires keeps live credentials on the laptop until someone visits it
+// again. ADR 048 §4 names that residual and leaves it to this sweep, which is
+// the one trigger that needs no hook to fire in the worktree at all.
+//
+// Uncertainty never purges. A secret reaped by mistake costs a fresh consent
+// and a fresh Touch ID to restore, which a non-interactive session cannot
+// give; a secret reaped one run later costs nothing. So an unreachable server
+// skips the whole sweep, and a task the backbone would not answer for is left
+// alone with the others still swept.
+func sweepSecrets(ctx context.Context, c *cli.Client, serverReachable bool) doctorCheck {
+	tasks, err := secrets.MaterializedTasks()
+	switch {
+	case err != nil:
+		return skip("secrets", "materialized set not readable: "+err.Error())
+	case len(tasks) == 0:
+		return pass("secrets", "nothing materialized on this machine")
+	case !serverReachable:
+		return skip("secrets", fmt.Sprintf("%d task(s) materialized (leases not checked: server unreachable)", len(tasks)))
+	}
+
+	var purged, held, unknown, failed []string
+	for _, id := range tasks {
+		gone, known := leaseGone(ctx, c, id)
+		switch {
+		case !known:
+			unknown = append(unknown, id)
+		case !gone:
+			held = append(held, id)
+		default:
+			names, err := secrets.PurgeTask(id)
+			if err != nil {
+				failed = append(failed, id)
+				continue
+			}
+			purged = append(purged, fmt.Sprintf("%s (%s)", id, strings.Join(names, ", ")))
+		}
+	}
+
+	var parts []string
+	if len(purged) > 0 {
+		parts = append(parts, "purged "+strings.Join(purged, "; "))
+	}
+	if len(held) > 0 {
+		parts = append(parts, "live lease: "+strings.Join(held, ", "))
+	}
+	if len(unknown) > 0 {
+		parts = append(parts, "lease not answered for: "+strings.Join(unknown, ", "))
+	}
+	if len(failed) > 0 {
+		return fail("secrets",
+			"could not purge "+strings.Join(failed, ", ")+" (lease gone); "+strings.Join(parts, "; "),
+			"run `lode secrets purge --task <id>` for each, then re-run `lode doctor`")
+	}
+	return pass("secrets", strings.Join(parts, "; "))
 }
 
 func newDoctorCmd() *cobra.Command {
