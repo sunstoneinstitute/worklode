@@ -288,6 +288,14 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .ticon{display:inline-flex;color:var(--ink-2)}
 .ticon svg{width:20px;height:20px}
 
+/* Info icon beside the cockpit's "unattributed" spend label (see
+ * internal/ui/cockpit.templ's unattributedInfo): a subdued inline SVG,
+ * explained via its native title tooltip on hover — same convention as
+ * .ticon. Sized small since it triggers no action and carries no hit-target
+ * requirement. */
+.info-icon{display:inline-flex;color:var(--ink-3)}
+.info-icon svg{width:13px;height:13px}
+
 /* A link rendered as a flex item is blockified, so its box is exactly its text
  * — 19px tall, under the 24px WCAG 2.5.8 minimum. These are the page-level
  * "new thing" affordances; give them the minimum height explicitly. */
