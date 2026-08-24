@@ -398,7 +398,7 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.
 	if sessionID == "" {
 		return
 	}
-	byTask := classifyTranscriptUsage(opts, l, transcriptPath)
+	byTask := classifyTranscriptUsage(opts, l, taskID, transcriptPath)
 
 	if taskID != "" {
 		ownUsage := byTask[taskID]
@@ -441,7 +441,7 @@ func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, se
 		return
 	}
 
-	byTask := classifyTranscriptUsage(opts, l, transcriptPath)
+	byTask := classifyTranscriptUsage(opts, l, taskID, transcriptPath)
 
 	if taskID != "" {
 		ownUsage := byTask[taskID]
@@ -538,14 +538,25 @@ func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsag
 }
 
 // classifyTranscriptUsage parses transcriptPath's FULL usage -- every cwd the
-// session touched, not just one worktree -- and groups it by task id,
-// resolved per distinct cwd via l.TaskID (the same worktree-layout
-// resolution the hook guard itself uses). A cwd outside the configured
-// worktree base, or one whose directory name/stamp carries no task id,
-// groups under the empty string key. Same no-failure contract as
-// sessionUsage, which this supplements rather than replaces: a missing
-// transcript, an unreadable file, or an empty result all yield nil.
-func classifyTranscriptUsage(opts Options, l worktree.Layout, transcriptPath string) map[string][]model.SessionUsageBucket {
+// session touched, not just one worktree -- and groups it by task id.
+// A cwd outside the configured worktree base, or one whose directory
+// name/stamp carries no task id, groups under the empty string key
+// (overhead). Same no-failure contract as sessionUsage: a missing transcript,
+// an unreadable file, or an empty result all yield nil.
+//
+// Two details decide where real money lands. A recorded cwd is usually a
+// directory *inside* a worktree, not its root, so it is trimmed back to the
+// root with WorktreeRootOf before resolution -- l.TaskID alone would reject
+// anything deeper and bill the task's own tokens to overhead. And an entry
+// with no cwd at all (older transcripts omit the field) bills to ownTaskID,
+// the task this hook is running for, which is where it landed before usage
+// was classified per cwd; sending it to overhead would move real task cost.
+//
+// Resolution is memoized per distinct cwd because l.TaskID spends a git
+// subprocess, and buckets are keyed (day, model, speed, cwd) -- a long
+// session yields many buckets over few directories, on a handler bound to
+// every assistant turn (spec 052 §3).
+func classifyTranscriptUsage(opts Options, l worktree.Layout, ownTaskID, transcriptPath string) map[string][]model.SessionUsageBucket {
 	if transcriptPath == "" {
 		return nil
 	}
@@ -555,8 +566,15 @@ func classifyTranscriptUsage(opts Options, l worktree.Layout, transcriptPath str
 		return nil
 	}
 	out := map[string][]model.SessionUsageBucket{}
+	byCwd := map[string]string{"": ownTaskID}
 	for _, b := range buckets {
-		taskID, _ := l.TaskID(b.Cwd) // ok=false ⇒ "" (overhead)
+		taskID, seen := byCwd[b.Cwd]
+		if !seen {
+			if root, ok := l.WorktreeRootOf(b.Cwd); ok {
+				taskID, _ = l.TaskID(root) // ok=false ⇒ "" (overhead)
+			}
+			byCwd[b.Cwd] = taskID
+		}
 		out[taskID] = append(out[taskID], model.SessionUsageBucket{
 			Day:                b.Day.Format(time.DateOnly),
 			Model:              b.Model,

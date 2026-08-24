@@ -735,3 +735,39 @@ func TestDefaultBranch(t *testing.T) {
 		t.Fatalf("DefaultBranch = %q, %v; want main", got, err)
 	}
 }
+
+// WorktreeRootOf accepts a path inside a worktree, which is what a recorded
+// working directory usually is, and trims it back to the worktree root. The
+// guard TaskID uses rejects anything deeper than one segment below the base,
+// so classifying usage needs this looser reading (spec 052 §3).
+func TestWorktreeRootOfTrimsToTheWorktreeRoot(t *testing.T) {
+	l, err := worktree.NewLayout(".worktrees")
+	if err != nil {
+		t.Fatalf("NewLayout: %v", err)
+	}
+	for _, tc := range []struct {
+		path string
+		want string
+		ok   bool
+	}{
+		{"/repo/.worktrees/WL-7-x", "/repo/.worktrees/WL-7-x", true},
+		{"/repo/.worktrees/WL-7-x/internal/store", "/repo/.worktrees/WL-7-x", true},
+		{"/repo/.worktrees/WL-7-x/", "/repo/.worktrees/WL-7-x", true},
+		{"/repo/.worktrees", "", false}, // the base itself is no worktree
+		{"/repo/internal/store", "", false},
+		{"", "", false},
+	} {
+		got, ok := l.WorktreeRootOf(filepath.FromSlash(tc.path))
+		if ok != tc.ok || got != filepath.FromSlash(tc.want) {
+			t.Errorf("WorktreeRootOf(%q) = %q, %v; want %q, %v", tc.path, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// A zero Layout rejects every path, WorktreeRootOf included.
+func TestWorktreeRootOfZeroLayout(t *testing.T) {
+	var l worktree.Layout
+	if got, ok := l.WorktreeRootOf("/repo/.worktrees/WL-7-x"); ok {
+		t.Fatalf("zero Layout resolved %q", got)
+	}
+}

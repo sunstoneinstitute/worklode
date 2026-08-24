@@ -2269,6 +2269,42 @@ func TestHeartbeatFromMainCheckoutSplitsTaskAndOverhead(t *testing.T) {
 	}
 }
 
+// Classifying usage per cwd must not move a task's own tokens to overhead.
+// A recorded cwd is routinely a directory *inside* the worktree rather than
+// its root, and an older transcript records no cwd at all; both belong to the
+// task the hook is running for. Billing either to project overhead would take
+// real money off the task's cost report (spec 052 §3).
+func TestHeartbeatBillsSubdirAndCwdlessTurnsToItsOwnTask(t *testing.T) {
+	st, c, rec := newRealServer(t)
+	root := initGitRepo(t)
+	taskID, wtDir, _ := setupLeasedWorktree(t, c, root, "Own task")
+	writeProjectConfig(t, wtDir, "proj")
+
+	transcriptPath := writeTranscript(t,
+		transcriptLine(filepath.Join(wtDir, "internal", "store"), "msg_1", "claude-sonnet-5", 100, 0, 0, 0, 10),
+		transcriptLine("", "msg_2", "claude-sonnet-5", 50, 0, 0, 0, 5),
+	)
+
+	beforeOverhead := rec.count("/overhead-usage")
+	runHook(t, "heartbeat", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: transcriptPath})
+
+	if got := rec.count("/overhead-usage"); got != beforeOverhead {
+		t.Fatalf("overhead reported %d time(s); the task's own turns must not become overhead", got-beforeOverhead)
+	}
+
+	lease, err := st.ActiveLease(t.Context(), taskID)
+	if err != nil {
+		t.Fatalf("active lease: %v", err)
+	}
+	sess, err := st.AgentSession(t.Context(), lease.ID, "claude-code", "sess-1")
+	if err != nil {
+		t.Fatalf("agent session: %v", err)
+	}
+	if sess.InputTokens == nil || *sess.InputTokens != 150 {
+		t.Fatalf("task input tokens = %v, want 150 (the subdirectory turn plus the cwd-less one)", sess.InputTokens)
+	}
+}
+
 // TestHeartbeatOtherTaskWithoutLeaseFallsBackToOverhead is the trap this
 // plan warns about most: a transcript names a task this actor no longer
 // holds the lease on (released, swept, or claimed by someone else), so
