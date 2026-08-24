@@ -236,3 +236,61 @@ func histogramCount(t *testing.T, g prometheus.Gatherer, family string) uint64 {
 	}
 	return m.GetHistogram().GetSampleCount()
 }
+
+// TestMetricsCountsOnlyRealGraphDeletions covers the counter added with 044
+// §4's graph removal: the delete is re-issued on every pass, so counting the
+// 404s would turn one deletion into a rate.
+func TestMetricsCountsOnlyRealGraphDeletions(t *testing.T) {
+	s, p, _, reg := newMetricsProjector(t)
+	ctx := t.Context()
+	if err := s.EnsureActor(ctx, "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
+
+	var docID int64
+	_, _, err := s.RecordEvent(ctx, "cli", "m-del1", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, cerr := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 4, Slug: "004-counted",
+				Body:      "---\nstatus: draft\n---\n# Spec 4 — Counted\n",
+				CreatedBy: "author",
+			}, eventID)
+			if cerr != nil {
+				return cerr
+			}
+			docID = d.ID
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project the live doc: %v", err)
+	}
+	if got := counterValue(t, reg, "worklode_graph_projection_graphs_deleted_total", "", ""); got != 0 {
+		t.Errorf("graphs_deleted_total before any delete = %v, want 0", got)
+	}
+
+	_, _, err = s.RecordEvent(ctx, "cli", "m-del1-delete", "doc.deleted", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.DeleteDoc(tx, time.Now().UTC(), docID, "author", "wrong number", eventID)
+		})
+	if err != nil {
+		t.Fatalf("delete doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project after the delete: %v", err)
+	}
+	if got := counterValue(t, reg, "worklode_graph_projection_graphs_deleted_total", "", ""); got != 1 {
+		t.Fatalf("graphs_deleted_total after the delete = %v, want 1", got)
+	}
+
+	// Another pass re-issues the delete against a graph that is already gone.
+	createTask(t, s, "m-del1-dirty", "alpha", "dirty the project again")
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("re-projection: %v", err)
+	}
+	if got := counterValue(t, reg, "worklode_graph_projection_graphs_deleted_total", "", ""); got != 1 {
+		t.Errorf("graphs_deleted_total after a re-issued delete = %v, want 1", got)
+	}
+}
