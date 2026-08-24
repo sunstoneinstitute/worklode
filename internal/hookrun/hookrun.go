@@ -398,7 +398,7 @@ func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.
 	if sessionID == "" {
 		return
 	}
-	byTask := classifyTranscriptUsage(opts, l, taskID, transcriptPath)
+	byTask := classifyTranscriptUsage(opts, l, taskID, root, transcriptPath)
 
 	if taskID != "" {
 		// Lifecycle only: the session row and its last_seen_at. Usage goes
@@ -442,7 +442,7 @@ func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, se
 		return
 	}
 
-	byTask := classifyTranscriptUsage(opts, l, taskID, transcriptPath)
+	byTask := classifyTranscriptUsage(opts, l, taskID, root, transcriptPath)
 
 	if taskID != "" {
 		// Closes the session row; its usage is reported below, whole.
@@ -552,11 +552,20 @@ func sessionUsage(opts Options, transcriptPath, root string) []model.SessionUsag
 // the task this hook is running for, which is where it landed before usage
 // was classified per cwd; sending it to overhead would move real task cost.
 //
+// A cwd that resolves to a worktree of a DIFFERENT repository is dropped, not
+// billed. The layout matches path segments alone, so any directory named
+// `.worktrees` anywhere on the filesystem yields a task id --
+// `~/git/trusthere/.worktrees/TH-9-x` resolves to `TH-9`. That task is not in
+// this project, so the report below would bill it to this project's overhead,
+// where nothing would ever remove it. Dropping is the disposal only for a cwd
+// that is provably another repository's; the overhead bucket keeps its
+// deliberate role for a cwd this repo simply cannot classify (WL-329).
+//
 // Resolution is memoized per distinct cwd because l.TaskID spends a git
 // subprocess, and buckets are keyed (day, model, speed, cwd) -- a long
 // session yields many buckets over few directories, on a handler bound to
 // every assistant turn (spec 052 §3).
-func classifyTranscriptUsage(opts Options, l worktree.Layout, ownTaskID, transcriptPath string) map[string][]model.SessionUsageBucket {
+func classifyTranscriptUsage(opts Options, l worktree.Layout, ownTaskID, root, transcriptPath string) map[string][]model.SessionUsageBucket {
 	if transcriptPath == "" {
 		return nil
 	}
@@ -565,16 +574,38 @@ func classifyTranscriptUsage(opts Options, l worktree.Layout, ownTaskID, transcr
 		warn(opts, "parse transcript %s: %v", transcriptPath, err)
 		return nil
 	}
+	// The repository every cwd is measured against. root is either the main
+	// checkout -- already the repo root -- or one of its worktrees, whose repo
+	// root is the path above the base. Containment rather than equality, so a
+	// worktree created from inside another worktree still counts as ours.
+	repoRoot := root
+	if r, ok := l.RepoRootOf(root); ok {
+		repoRoot = r
+	}
+
 	out := map[string][]model.SessionUsageBucket{}
-	byCwd := map[string]string{"": ownTaskID}
+	type resolved struct {
+		taskID string
+		drop   bool
+	}
+	byCwd := map[string]resolved{"": {taskID: ownTaskID}}
 	for _, b := range buckets {
-		taskID, seen := byCwd[b.Cwd]
+		r, seen := byCwd[b.Cwd]
 		if !seen {
-			if root, ok := l.WorktreeRootOf(b.Cwd); ok {
-				taskID, _ = l.TaskID(root) // ok=false ⇒ "" (overhead)
+			if wt, ok := l.WorktreeRootOf(b.Cwd); ok {
+				if worktree.Contains(repoRoot, wt) {
+					r.taskID, _ = l.TaskID(wt) // ok=false ⇒ "" (overhead)
+				} else {
+					r.drop = true
+					warn(opts, "%s is a worktree of another repository, not %s; dropping its usage", wt, repoRoot)
+				}
 			}
-			byCwd[b.Cwd] = taskID
+			byCwd[b.Cwd] = r
 		}
+		if r.drop {
+			continue
+		}
+		taskID := r.taskID
 		out[taskID] = append(out[taskID], model.SessionUsageBucket{
 			Day:                b.Day.Format(time.DateOnly),
 			Model:              b.Model,

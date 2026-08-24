@@ -771,3 +771,78 @@ func TestWorktreeRootOfZeroLayout(t *testing.T) {
 		t.Fatalf("zero Layout resolved %q", got)
 	}
 }
+
+func TestRepoRootOfStripsTheWorktreeBase(t *testing.T) {
+	l, err := worktree.NewLayout(".worktrees")
+	if err != nil {
+		t.Fatalf("NewLayout: %v", err)
+	}
+	for _, tc := range []struct {
+		path string
+		want string
+		ok   bool
+	}{
+		{"/repo/.worktrees/WL-7-x", "/repo", true},
+		{"/repo/.worktrees/WL-7-x/internal", "/repo", true},
+		// The last base wins, so a worktree made from inside a worktree
+		// reports its immediate parent. Callers ask about containment, not
+		// equality, so this still resolves under the outer repo.
+		{"/repo/.worktrees/WL-7-x/.worktrees/WL-8-y", "/repo/.worktrees/WL-7-x", true},
+		{"/repo/internal/store", "", false}, // a main checkout: no base in the path
+		{"/.worktrees/WL-7-x", "", false},   // nothing above the base to be a repo
+		{"", "", false},
+	} {
+		got, ok := l.RepoRootOf(filepath.FromSlash(tc.path))
+		if ok != tc.ok || got != filepath.FromSlash(tc.want) {
+			t.Errorf("RepoRootOf(%q) = %q, %v; want %q, %v", tc.path, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+func TestRepoRootOfZeroLayout(t *testing.T) {
+	var l worktree.Layout
+	if got, ok := l.RepoRootOf("/repo/.worktrees/WL-7-x"); ok {
+		t.Fatalf("zero Layout resolved %q", got)
+	}
+}
+
+func TestContains(t *testing.T) {
+	for _, tc := range []struct {
+		root, path string
+		want       bool
+	}{
+		{"/repo", "/repo", true},
+		{"/repo", "/repo/.worktrees/WL-7-x", true},
+		{"/repo", "/repo/.worktrees/WL-7-x/.worktrees/WL-8-y", true},
+		{"/repo", "/other/.worktrees/TH-9-x", false},
+		// A sibling whose name merely starts with the root's: a prefix test
+		// without the separator would call this contained.
+		{"/repo", "/repository/.worktrees/TH-9-x", false},
+		{"/repo/.worktrees/WL-7-x", "/repo", false},
+		{"", "/repo", false},
+		{"/repo", "", false},
+	} {
+		if got := worktree.Contains(filepath.FromSlash(tc.root), filepath.FromSlash(tc.path)); got != tc.want {
+			t.Errorf("Contains(%q, %q) = %v, want %v", tc.root, tc.path, got, tc.want)
+		}
+	}
+}
+
+// A symlinked root and a resolved path name the same directory, so a path
+// under one is under the other. The cheap string comparison cannot see that;
+// Contains falls back to EvalSymlinks rather than call the path foreign,
+// because a wrong "foreign" discards real spend (WL-329).
+func TestContainsResolvesSymlinks(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	inside := filepath.Join(real, ".worktrees", "WL-7-x")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if !worktree.Contains(link, inside) {
+		t.Errorf("Contains(%q, %q) = false; the symlinked root names the same directory", link, inside)
+	}
+}
