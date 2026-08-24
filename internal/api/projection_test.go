@@ -26,6 +26,10 @@ func TestListProjectionFailures(t *testing.T) {
 		t.Fatalf("failures on a healthy instance = %v, want []", decodeMap(t, rr)["failures"])
 	}
 
+	// The quarantine row is a foreign key into projects.
+	if err := st.CreateProject(ctx, "alpha", "Alpha", "AL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
 	t0 := time.Now().UTC().Truncate(time.Second)
 	if err := st.RecordProjectionFailure(ctx, model.ProjectionFailure{
 		Project: "alpha", Attempts: 3,
