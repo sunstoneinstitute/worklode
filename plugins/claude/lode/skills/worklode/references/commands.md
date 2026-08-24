@@ -72,6 +72,11 @@ Flags: --project, --repo
 
 ## `lode gaps` — Doc gaps and unmatched-path coverage gaps
 
+## `lode graph` — The knowledge-graph projection: its health, and what it owes
+
+- `lode graph projection` — The backbone→graph projector's state
+- `lode graph projection status` — Show the projects the projector has quarantined, since when, and why
+
 ## `lode hook` — Run a Worklode lifecycle hook (--list shows every event)
 
 ## `lode inbox` — Triage GitHub issues into tasks

@@ -464,9 +464,12 @@ a project that cannot be rendered or written is recorded in
 keep flowing. `worklode_graph_projection_quarantined_projects` staying above
 zero is the signal — `worklode_graph_projection_runs_total{result="error"}`
 climbing without it means the batch itself is broken, not one project. Which
-project, since when, and the last error are in that table; the projector
-re-attempts it immediately, then on a 1m→30m doubling backoff, and
-immediately again whenever the project has new task activity. The row is
+project, since when, and the last error is what `lode graph projection status`
+prints (`GET /api/v1/graph/projection/failures`), since the metric is
+deliberately unlabelled — 022 §8 keeps the project set, which is not closed,
+out of a label. The projector re-attempts a quarantined project immediately,
+then on a 1m→30m doubling backoff, and immediately again whenever the project
+has new task activity. The row is
 deleted the moment a projection succeeds; deleting it by hand only forgets
 that the project owes one.
 

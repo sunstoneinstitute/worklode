@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestProjectionCheckpointRoundTrip(t *testing.T) {
@@ -185,8 +187,8 @@ func TestProjectionFailuresRoundTrip(t *testing.T) {
 	}
 
 	t0 := time.Now().UTC().Truncate(time.Microsecond) // Postgres timestamptz resolution
-	first := ProjectionFailure{
-		ProjectID: "alpha", Attempts: 1,
+	first := model.ProjectionFailure{
+		Project: "alpha", Attempts: 1,
 		FirstFailedAt: t0, LastFailedAt: t0, NextAttemptAt: t0,
 		LastError: "put graph: 500",
 	}
@@ -197,7 +199,7 @@ func TestProjectionFailuresRoundTrip(t *testing.T) {
 	if err != nil || len(fails) != 1 {
 		t.Fatalf("quarantine = %v, %v; want one row", fails, err)
 	}
-	if got := fails[0]; got.ProjectID != "alpha" || got.Attempts != 1 ||
+	if got := fails[0]; got.Project != "alpha" || got.Attempts != 1 ||
 		!got.FirstFailedAt.Equal(t0) || !got.NextAttemptAt.Equal(t0) ||
 		got.LastError != "put graph: 500" {
 		t.Fatalf("row = %+v; want %+v", got, first)
@@ -206,8 +208,8 @@ func TestProjectionFailuresRoundTrip(t *testing.T) {
 	// A repeat failure updates the row in place and keeps FirstFailedAt: it
 	// is how long the project has been stuck, which Attempts alone omits.
 	t1 := t0.Add(time.Minute)
-	second := ProjectionFailure{
-		ProjectID: "alpha", Attempts: 2,
+	second := model.ProjectionFailure{
+		Project: "alpha", Attempts: 2,
 		FirstFailedAt: t0, LastFailedAt: t1, NextAttemptAt: t1.Add(time.Minute),
 		LastError: "put graph: 400",
 	}

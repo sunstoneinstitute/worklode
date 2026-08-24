@@ -1576,6 +1576,13 @@ func (c *Client) SeekEventSubscriber(ctx context.Context, name string, to int64)
 	return doJSON[model.EventSubscriberStatus](ctx, c, http.MethodPost, "/api/v1/event-subscribers/"+url.PathEscape(name)+"/seek", model.EventSubscriberSeekRequest{To: to}, "event subscriber status")
 }
 
+// ProjectionFailures calls GET /api/v1/graph/projection/failures: the
+// projects the knowledge-graph projector has quarantined, oldest failure
+// first (006 §11).
+func (c *Client) ProjectionFailures(ctx context.Context) (model.ProjectionFailureListResponse, []byte, error) {
+	return doJSON[model.ProjectionFailureListResponse](ctx, c, http.MethodGet, "/api/v1/graph/projection/failures", nil, "projection failure list")
+}
+
 // --- blobs ------------------------------------------------------------
 
 // UploadBlob streams r to POST /api/v1/blobs. The body is raw bytes, not
