@@ -3,8 +3,13 @@ status: draft
 covers:
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-7.1
     coverage: partial
+    fullCoverageWith:
+      - docs/plans/2026-08-25-approvals-2-flows-and-requirements.md
+      - docs/plans/2026-08-25-approvals-3-revision-binding-and-gates.md
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-7.3
     coverage: partial
+    fullCoverageWith:
+      - docs/plans/2026-08-25-approvals-3-revision-binding-and-gates.md
   - spec: docs/specs/032-project-cockpit.md#sec-10
     coverage: partial
   - spec: docs/specs/032-project-cockpit.md#sec-11
