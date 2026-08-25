@@ -3,12 +3,18 @@ status: draft
 covers:
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-6.1
     coverage: partial
+    fullCoverageWith:
+      - docs/plans/2026-08-25-research-work-6-crew-lifecycle.md
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-6.2
     coverage: partial
+    fullCoverageWith:
+      - docs/plans/2026-08-25-research-work-6-crew-lifecycle.md
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-8.2
     coverage: none
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-8.4
     coverage: partial
+    fullCoverageWith:
+      - docs/plans/2026-08-25-research-work-7-chat-crew-spaces.md
   - spec: docs/specs/032-project-cockpit.md#sec-6
     coverage: partial
   - spec: docs/specs/032-project-cockpit.md#sec-10
