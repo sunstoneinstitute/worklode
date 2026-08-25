@@ -140,6 +140,13 @@ type jsonrpcServerInfo struct {
 	Version string `json:"version"`
 }
 
+// jsonrpcInitializeParams is the initialize request's params: only
+// protocolVersion is used, echoed verbatim in the response (see
+// handleChannelRequest).
+type jsonrpcInitializeParams struct {
+	ProtocolVersion string `json:"protocolVersion"`
+}
+
 type jsonrpcInitializeResult struct {
 	ProtocolVersion string              `json:"protocolVersion"`
 	Capabilities    jsonrpcCapabilities `json:"capabilities"`
@@ -182,9 +189,7 @@ func handleChannelRequest(line []byte, writeLine func(any), stderr io.Writer, ma
 
 	switch method {
 	case "initialize":
-		var params struct {
-			ProtocolVersion string `json:"protocolVersion"`
-		}
+		var params jsonrpcInitializeParams
 		json.Unmarshal(raw["params"], &params)
 		writeLine(jsonrpcResponse{
 			JSONRPC: "2.0",
