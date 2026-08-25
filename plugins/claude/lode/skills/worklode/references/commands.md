@@ -20,6 +20,11 @@ Flags: --on
 
 Flags: --project, --repo
 
+## `lode channel` — The stdio MCP channel Claude Code spawns to receive steering instructions
+
+- `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
+  Flags: --interval
+
 ## `lode critical-path` — Estimate-free critical path over blocks + requires (D12)
 
 Flags: --task
