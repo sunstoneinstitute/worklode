@@ -62,6 +62,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskSkillsCmd(),
 		newTaskAttachCmd(),
 		newTaskDetachCmd(),
+		newTaskInstructCmd(),
 	)
 	return cmd
 }

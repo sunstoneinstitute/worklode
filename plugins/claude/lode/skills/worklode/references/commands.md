@@ -204,6 +204,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --artifact, --body, --body-file, --concern, --kind, --needs-decomposition, --no-upload, --priority, --secrets, --title
 - `lode task follow-up` — Record that a task was spun out of the work on another task
   Flags: --of
+- `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
   Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status
 - `lode task parent` — File a task under a parent task
