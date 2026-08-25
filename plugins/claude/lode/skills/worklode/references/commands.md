@@ -254,3 +254,8 @@ Flags: --agent, --no-agent, --no-statusline, --no-vcs, --scope, --skills, --stat
 ## `lode watch` — Watch Kubernetes pods and report crash loops and OOM kills
 
 Flags: --cluster, --kubeconfig, --server, --token
+
+## `lode worker` — Unattended worker-loop helpers
+
+- `lode worker listen` — Wait until there is work this worker could claim, then report it
+  Flags: --interval, --kind, --once, --project, --repo, --strict-focus
