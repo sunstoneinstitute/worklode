@@ -116,3 +116,5 @@ configMapGenerator:
       - migrations/0051_task_scoped_tokens.down.sql
       - migrations/0052_deputy_crew_role.up.sql
       - migrations/0052_deputy_crew_role.down.sql
+      - migrations/0053_plan_numbers.up.sql
+      - migrations/0053_plan_numbers.down.sql

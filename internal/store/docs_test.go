@@ -340,44 +340,57 @@ func TestDocSchemaSpecRow(t *testing.T) {
 	}
 }
 
-func TestDocSchemaPlanRowNumberNull(t *testing.T) {
+// Since 029 §4 every kind carries a number, plans included: the rule migration
+// 0037 split by kind is now one rule for the whole corpus, so a plan row is an
+// ordinary numbered row.
+func TestDocSchemaPlanRowCarriesANumber(t *testing.T) {
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
-	id, err := insertDoc(t, s, "plan", nil, "documents-in-the-backbone-2")
+	id, err := insertDoc(t, s, "plan", 7, "documents-in-the-backbone-2")
 	if err != nil {
-		t.Fatalf("insert plan row with NULL number: %v", err)
+		t.Fatalf("insert numbered plan row: %v", err)
 	}
 	if id == 0 {
 		t.Fatal("expected a generated id")
 	}
 }
 
-func TestDocSchemaSpecRowNumberNullViolatesCheck(t *testing.T) {
-	s := openTestStore(t)
-	seedDocsProject(t, s)
+// The schema half of 029 §4: no document goes without a number, whatever its
+// kind and whichever writer went around the store.
+func TestDocSchemaNumberIsRequiredForEveryKind(t *testing.T) {
+	for _, kind := range []string{"spec", "adr", "plan"} {
+		t.Run(kind, func(t *testing.T) {
+			s := openTestStore(t)
+			seedDocsProject(t, s)
 
-	_, err := insertDoc(t, s, "spec", nil, "no-number-spec")
-	if err == nil {
-		t.Fatal("expected CHECK violation, got nil error")
-	}
-	if !isCheckViolationOn(err, "docs_number_matches_kind") {
-		t.Fatalf("expected docs_number_matches_kind CHECK violation, got: %v", err)
+			_, err := insertDoc(t, s, kind, nil, "no-number-"+kind)
+			if err == nil {
+				t.Fatal("expected a NOT NULL violation, got nil error")
+			}
+			if !strings.Contains(err.Error(), "not-null") {
+				t.Fatalf("expected docs.number NOT NULL violation, got: %v", err)
+			}
+		})
 	}
 }
 
-// The other half of 025 §14.3, enforced by the schema since migration 0037:
-// a plan carries no corpus number even for a writer going around the store.
-func TestDocSchemaPlanRowWithNumberViolatesCheck(t *testing.T) {
+// A project's plan numbers are unique the way its spec numbers are: migration
+// 0052 replaced the partial index with a plain one once the column stopped
+// being nullable.
+func TestDocSchemaPlanNumberIsUniquePerProject(t *testing.T) {
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
-	_, err := insertDoc(t, s, "plan", 25, "numbered-plan")
-	if err == nil {
-		t.Fatal("expected CHECK violation, got nil error")
+	if _, err := insertDoc(t, s, "plan", 7, "first-plan"); err != nil {
+		t.Fatalf("insert first plan: %v", err)
 	}
-	if !isCheckViolationOn(err, "docs_number_matches_kind") {
-		t.Fatalf("expected docs_number_matches_kind CHECK violation, got: %v", err)
+	_, err := insertDoc(t, s, "plan", 7, "second-plan")
+	if err == nil {
+		t.Fatal("expected a unique violation on (project, kind, number), got nil error")
+	}
+	if !isUniqueViolationOn(err, "docs_project_kind_number") {
+		t.Fatalf("expected docs_project_kind_number unique violation, got: %v", err)
 	}
 }
 
@@ -401,11 +414,11 @@ func TestDocSchemaBlocksEdgeWithAnchorViolatesCheck(t *testing.T) {
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
-	fromID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	fromID, err := insertDoc(t, s, "plan", 1, "plan-a")
 	if err != nil {
 		t.Fatalf("insert from doc: %v", err)
 	}
-	toID, err := insertDoc(t, s, "plan", nil, "plan-b")
+	toID, err := insertDoc(t, s, "plan", 2, "plan-b")
 	if err != nil {
 		t.Fatalf("insert to doc: %v", err)
 	}
@@ -427,7 +440,7 @@ func TestDocSchemaCoversEdgeSucceeds(t *testing.T) {
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
-	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	planID, err := insertDoc(t, s, "plan", 1, "plan-a")
 	if err != nil {
 		t.Fatalf("insert plan doc: %v", err)
 	}
@@ -599,8 +612,10 @@ func TestDocCreatePlanHasNoSections(t *testing.T) {
 		Project: "p1", Kind: "plan",
 		Slug: "025-documents-in-the-backbone-2", Body: planBody, CreatedBy: "stig",
 	})
-	if plan.Number != 0 {
-		t.Errorf("plan number = %d, want 0", plan.Number)
+	// 029 §4: the server allocates a plan's number from its project's
+	// sequence, so the first plan in a fresh project is 1.
+	if plan.Number != 1 {
+		t.Errorf("plan number = %d, want 1 (the project's first plan)", plan.Number)
 	}
 	if secs := docSections(t, s, plan.ID); len(secs) != 0 {
 		t.Fatalf("plan sections = %+v, want none", secs)
@@ -1906,7 +1921,7 @@ func TestDocSchemaDefersEdgeSucceeds(t *testing.T) {
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
-	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	planID, err := insertDoc(t, s, "plan", 1, "plan-a")
 	if err != nil {
 		t.Fatalf("insert plan doc: %v", err)
 	}
@@ -1931,7 +1946,7 @@ func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
-	planID, err := insertDoc(t, s, "plan", nil, "plan-a")
+	planID, err := insertDoc(t, s, "plan", 1, "plan-a")
 	if err != nil {
 		t.Fatalf("insert plan doc: %v", err)
 	}
@@ -3911,9 +3926,10 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	// The covers edge lands on the spec's #sec-5, so from the spec's end that
 	// is the near anchor and the plan is the far end.
 	planFar := func(e model.DocEdge) model.DocEdge {
-		// A plan carries no corpus number (025 §14.3), so its far end names
-		// its kind and slug alone.
+		// Since 029 §4 a plan carries a number like every other kind, so its
+		// far end names one too.
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind = plan.ID, "p1", plan.Slug, "plan"
+		e.ToNumber = plan.Number
 		return e
 	}
 	wantIn := []model.DocEdge{
@@ -3970,7 +3986,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 		t.Fatalf("ListDocEdges(far): %v", err)
 	}
 	wantIn := []model.DocEdge{{
-		Type: "hadDerivation", ToDoc: near.ID,
+		Type: "hadDerivation", ToDoc: near.ID, ToNumber: near.Number,
 		ToProject: "p1", ToSlug: "plan-across", ToKind: "plan",
 	}}
 	if !reflect.DeepEqual(in, wantIn) {

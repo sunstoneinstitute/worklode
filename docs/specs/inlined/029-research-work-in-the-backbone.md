@@ -207,14 +207,19 @@ from `(project, kind)` counter rows:
 | Deliverable | `COW-DEL-3` | own |
 | Spec | `COW-SPEC-4` | own |
 | ADR | `COW-ADR-1` | own |
-| Plan | `COW-PLAN-4-1` | per parent spec |
+| Plan | `COW-PLAN-7` | own |
 
-A plan's first ordinal is its parent spec's; its second counts plans under that spec
-from 1. A plan with no governing spec uses spec ordinal **0** (`COW-PLAN-0-2`) —
-legal when the work is mechanical enough for the executing tier without a design
-document, a judgment the planning skill makes and a human may override in either
-direction. The spec+plan ceremony is deliberately skippable for simple work;
-`PLAN-0` keeps the skip visible instead of laundering it.
+Every kind takes the same `<KEY>-<TYPE>-<n>` form, so a reader learns one shape and
+a listing renders one column. An earlier draft of this section gave plans a two-part
+`COW-PLAN-4-1` — the parent spec's ordinal, then a count within it — to keep a
+deliberate spec-skip visible as `PLAN-0`. That is dropped: it made a plan the one
+kind whose id had a different arity, and it bound identity to coverage, so moving a
+plan's `covers` set would renumber the plan. Coverage is already an edge and answers
+that question without spending the id on it; whether a plan has a governing spec is
+the query "does it cover anything", which is exactly as visible and never stale.
+
+Numbers are unique per kind, not per corpus: each kind draws from its own sequence,
+so `COW-PLAN-1` and `COW-SPEC-1` both exist and a reference resolves on the pair.
 
 Only tasks are claimable, so only bare `<KEY>-<n>` ids ever appear in branch names,
 `Worklode-Task:` trailers, or merge-subject correlation — the existing patterns

@@ -50,10 +50,10 @@ type showTarget struct {
 	Type string
 }
 
-// unshowableKindWords names the entity a PLAN/MILE/DEL id refers to, singular,
-// for the "not showable yet" error.
+// unshowableKindWords names the entity a MILE/DEL id refers to, singular, for
+// the "not showable yet" error. PLAN left this map when 029 §4 gave plans a
+// number: a plan is a document and `lode show` renders it like any other.
 var unshowableKindWords = map[string]string{
-	"PLAN": "plan",
 	"MILE": "milestone",
 	"DEL":  "deliverable",
 }
@@ -61,12 +61,11 @@ var unshowableKindWords = map[string]string{
 const notYetAnEntity = "spec 029 §4 defines them; the entities land with spec 029"
 
 // unshowableReason is the parenthetical each "not showable yet" error ends
-// with, keyed by the singular kind word. Plans and milestones do not exist
-// yet; a deliverable does (spec 029 §3), and saying otherwise would send
-// someone looking for a row that is already there — so its reason names the
-// surfaces that do read it.
+// with, keyed by the singular kind word. A milestone does not exist yet; a
+// deliverable does (spec 029 §3), and saying otherwise would send someone
+// looking for a row that is already there — so its reason names the surfaces
+// that do read it.
 var unshowableReason = map[string]string{
-	"plan":      notYetAnEntity,
 	"milestone": notYetAnEntity,
 	"deliverable": "the entity exists; only the project's Deliverables page and " +
 		"GET /api/v1/projects/{id}/deliverables read it so far",
@@ -84,9 +83,9 @@ func classify(arg string) showTarget {
 	if m := typedID.FindStringSubmatch(arg); m != nil {
 		typ := m[2]
 		switch typ {
-		case "SPEC", "ADR":
+		case "SPEC", "ADR", "PLAN":
 			return showTarget{Kind: targetDoc}
-		case "PLAN", "MILE", "DEL":
+		case "MILE", "DEL":
 			return showTarget{Kind: targetUnshowable, Type: typ}
 		default:
 			return showTarget{Kind: targetUnknownType, Type: typ}
@@ -113,16 +112,16 @@ var docRefShape = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 var showKinds = []string{"task", "spec", "adr", "plan", "milestone", "project", "deliverable"}
 
 // showOrdinalShape validates a kind flag's value against its ordinal shape:
-// spec/adr/milestone/deliverable/task take a bare integer, plan additionally
-// allows a second ordinal ("4-1"). project has no entry here — any non-empty
-// string is a valid slug/id — and is checked separately.
+// every kind takes a bare integer, plans included since 029 §4 put them on
+// their project's sequence. project has no entry here — any non-empty string
+// is a valid slug/id — and is checked separately.
 var showOrdinalShape = map[string]*regexp.Regexp{
 	"task":        bareTaskNumber,
 	"spec":        bareTaskNumber,
 	"adr":         bareTaskNumber,
 	"milestone":   bareTaskNumber,
 	"deliverable": bareTaskNumber,
-	"plan":        regexp.MustCompile(`^\d+(-\d+)?$`),
+	"plan":        bareTaskNumber,
 }
 
 func newShowCmd() *cobra.Command {
@@ -205,7 +204,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&taskFlag, "task", "", "show a task by bare number (e.g. --task 12; equivalent to the bare number positional)")
 	cmd.Flags().StringVar(&specFlag, "spec", "", "show a spec by number (e.g. --spec 15)")
 	cmd.Flags().StringVar(&adrFlag, "adr", "", "show an ADR by number (e.g. --adr 7)")
-	cmd.Flags().StringVar(&planFlag, "plan", "", "show a plan by ordinal (e.g. --plan 4-1); not showable yet (spec 029 §4)")
+	cmd.Flags().StringVar(&planFlag, "plan", "", "show a plan by number (e.g. --plan 7)")
 	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2); not showable yet (spec 029 §4)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
@@ -249,7 +248,7 @@ func exampleOrdinal(value string) string {
 // typed-id path (dispatchShowPositional) uses.
 func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet, inline bool) error {
 	if sectionSet && kind != "spec" && kind != "adr" {
-		return errors.New("--section applies only to specs and ADRs")
+		return errors.New("--section applies only to documents")
 	}
 	// project has no shape entry: any non-empty string is a valid slug or id,
 	// and its own arm checks that.
@@ -259,9 +258,9 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 	switch kind {
 	case "task":
 		return runTaskShow(cmd, value)
-	case "spec", "adr":
+	case "spec", "adr", "plan":
 		return runDocShowByOrdinal(cmd, kind, value, section, inline)
-	case "plan", "milestone", "deliverable":
+	case "milestone", "deliverable":
 		return fmt.Errorf("%s %s is not showable yet (%s)", kind, value, unshowableReason[kind])
 	case "project":
 		if value == "" {
@@ -291,10 +290,7 @@ func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline
 	if err != nil {
 		return err
 	}
-	typ := "SPEC"
-	if kind == "adr" {
-		typ = "ADR"
-	}
+	typ := strings.ToUpper(kind)
 	ref := value
 	if cfg.ProjectKey != "" {
 		ref = fmt.Sprintf("%s-%s-%s", cfg.ProjectKey, typ, value)
@@ -309,7 +305,7 @@ func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline
 func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet, inline bool) error {
 	t := classify(arg)
 	if sectionSet && t.Kind != targetDoc {
-		return errors.New("--section applies only to specs and ADRs")
+		return errors.New("--section applies only to documents")
 	}
 	switch t.Kind {
 	case targetTask:

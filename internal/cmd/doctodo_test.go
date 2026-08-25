@@ -423,16 +423,14 @@ func TestDocTodoRefErrors(t *testing.T) {
 		t.Errorf("err = %v; want the sentinel explained", err)
 	}
 
-	// A plan refuses at the resolution step rather than at designdoc.Todo's
-	// "this walk starts from a spec or ADR" guard: resolveDocRef never offers
-	// a plan as a candidate, so one cannot reach the walk. The ref names plan
-	// 009-1 rather than 001-1 because a ref that matches no path falls through
-	// to the number form (resolveDocRef), where "001-1-first" would resolve to
-	// spec 1 — a documented consequence of that fallthrough, not of plans
-	// being candidates.
+	// A plan now resolves (029 §4 gave it a number), so it refuses at
+	// designdoc.Todo's own "this walk starts from a spec or ADR" guard, which
+	// says why rather than reporting the ref as naming nothing. The ref names
+	// plan 009-1 rather than 001-1 because a ref that matches no path falls
+	// through to the number form, where "001-1-first" would resolve to spec 1.
 	if out, err = runLode(t, "doc", "todo", "docs/plans/009-1-other.md"); err == nil {
 		t.Errorf("a plan was accepted as a starting point\noutput: %s", out)
-	} else if !strings.Contains(err.Error(), "names no spec or ADR in the backbone") {
+	} else if !strings.Contains(err.Error(), "this walk starts from a spec or ADR") {
 		t.Errorf("err = %v; want it to refuse the plan path", err)
 	}
 }

@@ -48,6 +48,100 @@ func TestCrewTableFallsBackToActorID(t *testing.T) {
 	}
 }
 
+// TestDocRefFormsTheShorthand: a spec or ADR renders as the 025 §14.3
+// shorthand a person cites; a plan, which carries no number and so has no
+// shorthand, renders as its kind alone; and a document whose project key did
+// not reach the client degrades to the unqualified form rather than printing a
+// leading dash.
+func TestDocRefFormsTheShorthand(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		doc  model.Doc
+		want string
+	}{
+		{"spec", model.Doc{ProjectKey: "WL", Kind: "spec", Number: 29}, "WL-SPEC-29"},
+		{"adr", model.Doc{ProjectKey: "WL", Kind: "adr", Number: 7}, "WL-ADR-7"},
+		{"plan", model.Doc{ProjectKey: "WL", Kind: "plan", Number: 7}, "WL-PLAN-7"},
+		{"no key", model.Doc{Kind: "spec", Number: 29}, "SPEC-29"},
+		{"unnumbered", model.Doc{ProjectKey: "WL", Kind: "plan"}, "plan"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DocRef(tc.doc); got != tc.want {
+				t.Fatalf("DocRef = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDocTableIsRefStatusTitle: the table is exactly three columns. The ref
+// carries the kind and the number, and everything else a document has —
+// the integer id, the slug, the version — is worth less than the width the
+// title gets instead, so it stays in --json (WL-336).
+func TestDocTableIsRefStatusTitle(t *testing.T) {
+	var b strings.Builder
+	DocTable(&b, []model.Doc{{
+		ID: 4242, ProjectKey: "WL", Kind: "spec", Number: 29,
+		Slug: "029-research-work-in-the-backbone", Title: "Research work",
+		Status: "draft", Version: 2,
+	}})
+	out := b.String()
+	header, row, _ := strings.Cut(out, "\n")
+	if got := strings.Fields(header); len(got) != 3 ||
+		got[0] != "REF" || got[1] != "STATUS" || got[2] != "TITLE" {
+		t.Fatalf("DocTable header = %v, want [REF STATUS TITLE]", got)
+	}
+	if fields := strings.Fields(row); len(fields) == 0 || fields[0] != "WL-SPEC-29" {
+		t.Fatalf("DocTable first cell should be the formatted id, got row %q", row)
+	}
+	for _, unwanted := range []struct{ name, text string }{
+		{"the integer id", "4242"},
+		{"the slug", "029-research-work-in-the-backbone"},
+	} {
+		if strings.Contains(out, unwanted.text) {
+			t.Errorf("DocTable should not print %s; --json carries it:\n%s", unwanted.name, out)
+		}
+	}
+}
+
+// TestDocTableRendersEveryKindTheSameWay: 029 §4 puts every kind on its
+// project's sequence, so a plan reads as WL-PLAN-7 beside WL-SPEC-29 rather
+// than as the bare kind word it showed while 025 §14.3 gave it no number.
+func TestDocTableRendersEveryKindTheSameWay(t *testing.T) {
+	var b strings.Builder
+	DocTable(&b, []model.Doc{
+		{ProjectKey: "WL", Kind: "spec", Number: 29, Title: "Research work", Status: "draft"},
+		{ProjectKey: "WL", Kind: "plan", Number: 7, Title: "Milestones", Status: "draft"},
+		{ProjectKey: "WL", Kind: "adr", Number: 43, Title: "Secrets catalog", Status: "draft"},
+	})
+	for _, want := range []string{"WL-SPEC-29", "WL-PLAN-7", "WL-ADR-43"} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("DocTable missing %s:\n%s", want, b.String())
+		}
+	}
+}
+
+// TestDocPlanningTableLeadsWithRef: the gap tables share the document view
+// family, so they open with the same formatted id rather than the integer one.
+func TestDocPlanningTableLeadsWithRef(t *testing.T) {
+	var b strings.Builder
+	DocPlanningTable(&b, []model.Doc{{
+		ID: 91, ProjectKey: "WL", Kind: "spec", Number: 7, Slug: "007-drift-and-overview",
+	}}, []model.DocPlanningGap{{
+		Doc: 91, Sections: 9, Gaps: []model.DocSectionGap{{Anchor: "sec-4", Coverage: "unplanned"}},
+	}})
+	out := b.String()
+	header, row, _ := strings.Cut(out, "\n")
+	if fields := strings.Fields(header); len(fields) == 0 || fields[0] != "REF" {
+		t.Fatalf("DocPlanningTable should open with a REF column, got header %q", header)
+	}
+	if fields := strings.Fields(row); len(fields) == 0 || fields[0] != "WL-SPEC-7" {
+		t.Fatalf("DocPlanningTable first cell should be the formatted id, got row %q", row)
+	}
+	if strings.Contains(out, "007-drift-and-overview") {
+		t.Errorf("DocPlanningTable should not print the slug:\n%s", out)
+	}
+}
+
 // TestDocPlanningTableAnnotatesAnchorsWithCoverage: the ANCHORS column
 // renders each gap as anchor(coverage), matching 026 §2.1's sample output
 // line.

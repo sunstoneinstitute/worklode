@@ -31,11 +31,11 @@ import (
 //  4. the <KEY>-<TYPE>-<n> shorthand, whose <TYPE> token is kind-checked.
 //
 // A form that matches nothing falls through to the next, which is how a bare
-// filename ("014-foo.md") still resolves by number. Plans are never
-// candidates: `lode show` renders specs and ADRs only.
+// filename ("014-foo.md") still resolves by number. Every kind is a candidate,
+// plans included, since 029 §4 gave them a number to be named by.
 func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, error) {
 	base, section := SplitFragment(ref)
-	candidates := showableRefDocs(docs)
+	candidates := docs
 
 	// Form 1: path. The corpus filename a path names is the slug, so an
 	// exact slug match comes first, then a prefix match.
@@ -85,7 +85,18 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 		if projectKey == "" || sh.Key != projectKey {
 			return model.Doc{}, "", &UnresolvedError{Key: sh.Key}
 		}
-		doc, sec, err := finishRef(ref, matchRefNumber(candidates, sh.Number), section)
+		// Numbers are unique per kind, not per corpus: 029 §4 gives each kind
+		// its own project sequence, so WL-PLAN-1 and WL-SPEC-1 both exist. Narrow
+		// by kind only when the number alone is ambiguous, so a single near-miss
+		// still reaches CheckDocKind and its mismatch error rather than
+		// disappearing into a not-found.
+		matched := matchRefNumber(candidates, sh.Number)
+		if len(matched) > 1 {
+			if byKind := matchRefKind(matched, sh.Kind()); len(byKind) == 1 {
+				matched = byKind
+			}
+		}
+		doc, sec, err := finishRef(ref, matched, section)
 		if err != nil {
 			return model.Doc{}, "", err
 		}
@@ -98,25 +109,27 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	return model.Doc{}, "", NotFoundRefError(ref)
 }
 
-// CheckDocKind enforces 025 §14.3's <TYPE> token ("SPEC" or "ADR") against
-// the document's own kind: a document is an ADR iff Kind is "adr" (026 §4.2).
-// It is the one implementation of the mismatch rule — the shorthand form
-// calls it, and so does runDocShow for the --spec/--adr flags, which reach a
-// document through the number form and would otherwise go unchecked.
+// CheckDocKind enforces 025 §14.3's <TYPE> token, as widened by 029 §4 to
+// every kind ("SPEC", "ADR" or "PLAN"), against the document's own kind
+// (026 §4.2). It is the one implementation of the mismatch rule — the
+// shorthand form calls it, and so does runDocShow for the --spec/--adr flags,
+// which reach a document through the number form and would otherwise go
+// unchecked.
 func CheckDocKind(doc model.Doc, typ string) error {
-	isADR := doc.Kind == "adr"
-	switch {
-	case typ == "ADR" && !isADR:
-		return &KindMismatchError{Doc: doc.Slug, Want: "adr", Got: "spec"}
-	case typ == "SPEC" && isADR:
-		return &KindMismatchError{Doc: doc.Slug, Want: "spec", Got: "adr"}
+	if want := strings.ToLower(typ); want != "" && want != doc.Kind {
+		return &KindMismatchError{Doc: doc.Slug, Want: want, Got: doc.Kind}
 	}
 	return nil
 }
 
+// matchRefKind returns every document of exactly this kind.
+func matchRefKind(docs []model.Doc, kind string) []model.Doc {
+	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind == kind })
+}
+
 // NotFoundRefError is 026 §4.2's tier-1 miss: a plain, named error.
 func NotFoundRefError(ref string) error {
-	return fmt.Errorf("ref %q names no spec or ADR in the backbone", ref)
+	return fmt.Errorf("ref %q names no document in the backbone", ref)
 }
 
 // LooksLikePath reports whether base is shaped like ref form 1: it names a
@@ -143,11 +156,10 @@ func filterRefDocs(docs []model.Doc, keep func(model.Doc) bool) []model.Doc {
 	return matches
 }
 
-// showableRefDocs drops the documents `lode show` cannot render: plans, which
-// carry no number and no sections (025 §9).
-func showableRefDocs(docs []model.Doc) []model.Doc {
-	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind != "plan" })
-}
+// showableRefDocs is every document a ref can name. Plans were excluded while
+// 025 §14.3 left them without a number to be named by; 029 §4 gives them one,
+// so a ref reaches them like any other kind. They still carry no sections
+// (025 §9), which renders as a document with none rather than a failure.
 
 // matchRefNumber returns every document whose corpus number equals n.
 func matchRefNumber(docs []model.Doc, n int) []model.Doc {

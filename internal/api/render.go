@@ -294,7 +294,8 @@ func docEdgeRef(e model.DocEdge) string {
 }
 
 // docRef is a document's corpus reference for display: "spec 25", or the kind
-// alone for a plan, which carries no number (025 §14.3).
+// alone for a document with no number — which since 029 §4's backfill means one
+// created before it, plans included.
 func docRef(d model.Doc) string {
 	if d.Number == 0 {
 		return d.Kind
@@ -302,14 +303,15 @@ func docRef(d model.Doc) string {
 	return d.Kind + " " + strconv.Itoa(d.Number)
 }
 
-// docWebRef is a document's direct cockpit reference. Specs and ADRs use the
-// cross-corpus shorthand; plans have no shorthand, so their slug is canonical.
+// docWebRef is a document's direct cockpit reference: the cross-corpus
+// shorthand, which every kind now carries (029 §4).
 func docWebRef(d model.Doc, projectKey string) string {
 	return projectKey + "-" + strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
 }
 
-// docPageURL is the fallback cockpit page path for plans, which deliberately
-// have no cross-corpus shorthand, and tombstones whose slug may be reused.
+// docPageURL is the fallback cockpit page path for a document with no number
+// to build a shorthand from: a tombstone, whose slug may be reused, and any row
+// predating 029 §4's backfill. Plans used to need it and no longer do.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
 
 // formTitle is a creation form's document title, prefixed "Error: " when the
