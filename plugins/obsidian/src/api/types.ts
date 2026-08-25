@@ -165,6 +165,11 @@ export interface DocRevision {
 export interface Doc {
   id: number;
   project: string;
+  /** The project's key ("WL"), the first segment of the 025 §14.3 shorthand
+   *  ("WL-SPEC-29"); project carries the project id, which the shorthand is not
+   *  built from. Stamped by the API from the document's project, so it is
+   *  absent on a response served before WL-336. */
+  project_key?: string;
   kind: string; // spec | adr | plan
   number: number; // 0 for plans, which carry no corpus number (025 §14.3)
   slug: string;

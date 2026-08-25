@@ -323,8 +323,9 @@ func TestDocLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc new (table): %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "Test Document") || !strings.Contains(out, "adr") {
-		t.Errorf("doc new table output = %q, want it to mention the title and kind", out)
+	// The kind is in the ref now, not a column of its own.
+	if !strings.Contains(out, "Test Document") || !strings.Contains(out, "PROJ-ADR-1") {
+		t.Errorf("doc new table output = %q, want it to mention the title and the ref", out)
 	}
 
 	// list
@@ -629,7 +630,8 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc list --needs-planning: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "my-spec") || !strings.Contains(out, "sec-2(deferred:owner-spec)") {
+	// Identified by ref, not slug: the slug is the file name and left to --json.
+	if !strings.Contains(out, "PROJ-SPEC-1") || !strings.Contains(out, "sec-2(deferred:owner-spec)") {
 		t.Errorf("needs-planning output = %q, want the spec and its deferred anchor with its owner", out)
 	}
 	if strings.Contains(out, "sec-1") {
@@ -656,7 +658,7 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc list --needs-execution: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "part-one") {
+	if !strings.Contains(out, "PROJ-PLAN-1") {
 		t.Errorf("needs-execution output = %q, want the accepted plan", out)
 	}
 }

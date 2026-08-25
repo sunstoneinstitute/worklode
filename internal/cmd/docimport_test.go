@@ -231,7 +231,7 @@ func TestDocImport(t *testing.T) {
 		}{
 			"001-forward-spec":         {"spec", 1},
 			"003-record-a-decision":    {"adr", 3},
-			"2026-01-01-mintable-plan": {"plan", 0},
+			"2026-01-01-mintable-plan": {"plan", 1}, // 029 §4: allocated, not 0
 		} {
 			d := importedDoc(t, c, slug)
 			if d.Kind != want.kind || d.Number != want.number {

@@ -337,10 +337,11 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("sec-1a published = false, want true (accept publishes every current anchor)")
 	}
 
-	// 9. The plan half: a plan carries no number and no anchors, and its body
-	// is freely editable at any status. Accepting this one is refused because
-	// it declares no `## Tasks` section — plan acceptance mints the plan's
-	// tasks (025 §9.2), and a plan that would mint nothing is not acceptable.
+	// 9. The plan half: a plan carries a server-allocated number like every
+	// other kind (029 §4) but no anchors, and its body is freely editable at
+	// any status. Accepting this one is refused because it declares no
+	// `## Tasks` section — plan acceptance mints the plan's tasks (025 §9.2),
+	// and a plan that would mint nothing is not acceptable.
 	// TestPlanAcceptanceMintsTasks drives the accepting path.
 	plan, _, err := actorA.CreateDoc(ctx, model.CreateDocInput{
 		Project: "docs", Kind: "plan", Slug: "test-plan",
@@ -349,8 +350,8 @@ func TestDocLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create plan: %v", err)
 	}
-	if plan.Number != 0 {
-		t.Fatalf("plan number = %d, want 0 (025 §14.3)", plan.Number)
+	if plan.Number != 1 {
+		t.Fatalf("plan number = %d, want 1 (029 §4, first plan in project)", plan.Number)
 	}
 	editedPlanBody := strings.Replace(planSourceBody, "Do the thing.", "Do the other thing.", 1)
 	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID, editedPlanBody); err != nil {
