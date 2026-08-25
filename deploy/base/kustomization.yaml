@@ -114,3 +114,5 @@ configMapGenerator:
       - migrations/0050_doc_edges_declared_by.down.sql
       - migrations/0051_task_scoped_tokens.up.sql
       - migrations/0051_task_scoped_tokens.down.sql
+      - migrations/0052_deputy_crew_role.up.sql
+      - migrations/0052_deputy_crew_role.down.sql
