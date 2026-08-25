@@ -92,6 +92,13 @@ func (s *Store) EnqueueInstruction(ctx context.Context, taskID, actorID, body st
 // scoping "tasks this actor currently leases" mirrors the ownership check
 // Claim/heldLease use elsewhere in this package: an active lease is
 // released_at IS NULL, additionally scoped to actor_id.
+//
+// delivered_at is stamped and this transaction committed before the caller
+// (the relay in internal/cmd/channel.go) ever writes the corresponding
+// notification to stdout — there is no ack. That makes delivery
+// at-most-once, not at-least-once: a crash between this commit and the
+// stdout write drops the instruction permanently, since a delivered_at
+// IS NOT NULL row is never claimed again.
 func (s *Store) ClaimPendingInstructionsForActor(ctx context.Context, actorID string) ([]model.Instruction, error) {
 	var out []model.Instruction
 	err := s.Tx(ctx, func(tx *sql.Tx) error {

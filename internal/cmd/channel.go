@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -51,6 +53,9 @@ notifications/claude/channel notification. Addressing is actor-scoped, so
 serve takes no task or worktree argument.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if interval <= 0 {
+				return fmt.Errorf("--interval must be positive, got %s", interval)
+			}
 			c, err := newAPIClient()
 			if err != nil {
 				return err
@@ -80,6 +85,18 @@ serve takes no task or worktree argument.`,
 // would be a permanently lost instruction, not a delayed one. markReady
 // closes ready right after handleChannelRequest writes the initialize
 // response.
+//
+// Scanning stdin and polling run as two independent goroutines so either can
+// end the loop: normal shutdown is stdin reaching EOF (Claude Code closed the
+// pipe), in which case the poll goroutine is canceled and joined before
+// returning so no write to out can land after the caller stops reading from
+// it. Abnormal shutdown is a terminal claim error (401/403) from
+// pollInstructions — a misconfigured token that will never self-heal — in
+// which case runChannel returns that error immediately without waiting on
+// stdin (Claude Code has no reason to close it just because polling failed).
+// A non-nil return makes Claude Code mark this MCP server failed, which is
+// the only way this failure becomes visible to the user: Claude Code never
+// surfaces an MCP child's stderr.
 func runChannel(ctx context.Context, c *cli.Client, in io.Reader, out io.Writer, stderr io.Writer, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -100,31 +117,42 @@ func runChannel(ctx context.Context, c *cli.Client, in io.Reader, out io.Writer,
 	var readyOnce sync.Once
 	markReady := func() { readyOnce.Do(func() { close(ready) }) }
 
-	var wg sync.WaitGroup
-	wg.Add(1)
+	pollDone := make(chan error, 1)
 	go func() {
-		defer wg.Done()
 		select {
 		case <-ready:
 		case <-ctx.Done():
+			pollDone <- nil
 			return
 		}
-		pollInstructions(ctx, c, interval, writeLine, stderr)
+		pollDone <- pollInstructions(ctx, c, interval, writeLine, stderr)
 	}()
 
-	scanner := bufio.NewScanner(in)
-	for scanner.Scan() {
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
+	scanDone := make(chan error, 1)
+	go func() {
+		scanner := bufio.NewScanner(in)
+		for scanner.Scan() {
+			line := bytes.TrimSpace(scanner.Bytes())
+			if len(line) == 0 {
+				continue
+			}
+			handleChannelRequest(line, writeLine, stderr, markReady)
 		}
-		handleChannelRequest(line, writeLine, stderr, markReady)
+		scanDone <- scanner.Err()
+	}()
+
+	select {
+	case scanErr := <-scanDone:
+		cancel()
+		<-pollDone
+		return scanErr
+	case pollErr := <-pollDone:
+		cancel()
+		if pollErr != nil {
+			return pollErr
+		}
+		return <-scanDone
 	}
-	// Stop the poll goroutine and wait for it before returning, so no write
-	// to out can land after the caller stops reading from it.
-	cancel()
-	wg.Wait()
-	return scanner.Err()
 }
 
 // jsonrpcCapabilities is the fixed shape of an initialize response's
@@ -243,20 +271,28 @@ type channelNotificationParams struct {
 // pollInstructions claims pending steering instructions every interval and
 // delivers each as a notification. A claim error is logged to stderr and
 // otherwise ignored: the instruction row is still held server-side, so
-// nothing is lost, and the next tick tries again.
-func pollInstructions(ctx context.Context, c *cli.Client, interval time.Duration, writeLine func(any), stderr io.Writer) {
+// nothing is lost, and the next tick tries again. The one exception is a
+// 401/403 response: that means the relay's token is denied outright (e.g.
+// a task-scoped token, which the claim route correctly rejects — see
+// docs/plans/2026-08-25-steering-instructions.md) and will never self-heal
+// by retrying, so it is returned as a terminal error instead.
+func pollInstructions(ctx context.Context, c *cli.Client, interval time.Duration, writeLine func(any), stderr io.Writer) error {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 		}
 		resp, _, err := c.ClaimInstructions(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
-				return
+				return nil
+			}
+			var clientErr *cli.ClientError
+			if errors.As(err, &clientErr) && (clientErr.Status == http.StatusUnauthorized || clientErr.Status == http.StatusForbidden) {
+				return fmt.Errorf("channel: claim instructions: %w", err)
 			}
 			fmt.Fprintf(stderr, "channel: claim instructions: %v\n", err)
 			continue

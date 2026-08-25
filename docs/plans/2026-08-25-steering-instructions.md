@@ -55,11 +55,16 @@ event per 3-second poll would be pure log noise. Both are counted by
 adds to `worklode_task_instructions_delivered_total`; the two together answer
 "is the relay dead" in PromQL without a separate backlog gauge.
 
-Because `lode-server` is authoritative over what is undelivered, a relay
-restart or a network blip during a node reschedule never loses an
-instruction — the row is just still pending on the next poll. Delivery is
-at-least-once, not exactly-once, which is fine for short human-paced
-steering text.
+`ClaimPendingInstructionsForActor` stamps `delivered_at` and commits before
+the relay ever writes the corresponding `notifications/claude/channel` line
+to stdout — there is no ack from Claude Code back to `lode-server`. So
+delivery is **at-most-once**, not at-least-once: if the relay crashes, the
+HTTP response is lost, or the process is killed in the narrow window between
+that commit and the stdout write, the instruction is gone for good — it will
+never be reclaimed, because `delivered_at IS NOT NULL` now excludes it from
+every future claim. That is an acceptable tradeoff for short, human-paced
+steering text; building a real ack protocol to close a rare crash window is
+not worth it here.
 
 ## The two routes, and the authorization shape
 

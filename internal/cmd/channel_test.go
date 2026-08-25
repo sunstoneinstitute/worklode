@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -210,6 +211,70 @@ func TestChannelDeliversClaimedInstruction(t *testing.T) {
 		if !metaKey.MatchString(k) {
 			t.Errorf("meta key %q does not match [A-Za-z0-9_]+ — Claude Code would silently drop it", k)
 		}
+	}
+}
+
+// TestChannelServeRejectsNonPositiveInterval proves the serve command's RunE
+// validates --interval before it ever reaches time.NewTicker, which panics
+// on a non-positive duration. Runs before newAPIClient, so no server config
+// is needed for this to fail cleanly.
+func TestChannelServeRejectsNonPositiveInterval(t *testing.T) {
+	for _, interval := range []string{"0s", "-1s"} {
+		cmd := newChannelServeCmd()
+		cmd.SilenceUsage = true
+		cmd.SilenceErrors = true
+		cmd.SetArgs([]string{"--interval=" + interval})
+		err := cmd.Execute()
+		if err == nil {
+			t.Fatalf("--interval=%s: want error, got nil", interval)
+		}
+		if !strings.Contains(err.Error(), "--interval must be positive") {
+			t.Errorf("--interval=%s: err = %v, want it to mention \"--interval must be positive\"", interval, err)
+		}
+	}
+}
+
+// TestChannelPollTerminatesOnUnauthorized proves a 401/403 claim response —
+// a permanent misconfiguration (e.g. a task-scoped token, which the claim
+// route correctly denies) that will never self-heal by retrying — makes
+// runChannel return a non-nil error instead of logging to stderr and polling
+// forever. That non-nil return is what makes Claude Code mark this MCP
+// server failed, since it never surfaces an MCP child's stderr to the user.
+func TestChannelPollTerminatesOnUnauthorized(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(model.ErrorResponse{Error: "task-scoped token cannot claim"})
+	}))
+	defer ts.Close()
+	c := cli.NewClient(cli.Config{ServerURL: ts.URL})
+
+	stdinR, stdinW := io.Pipe()
+	defer stdinW.Close()
+	var out, stderr syncBuffer
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runChannel(context.Background(), c, stdinR, &out, &stderr, 5*time.Millisecond)
+	}()
+
+	if _, err := stdinW.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}` + "\n")); err != nil {
+		t.Fatalf("write initialize: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("runChannel returned nil, want a terminal error for a 403 claim response")
+		}
+		var clientErr *cli.ClientError
+		if !errors.As(err, &clientErr) || clientErr.Status != http.StatusForbidden {
+			t.Errorf("runChannel err = %v, want it to wrap a *cli.ClientError with Status %d", err, http.StatusForbidden)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for runChannel to return after a 403 claim response")
 	}
 }
 
