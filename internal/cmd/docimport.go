@@ -11,6 +11,11 @@
 // pass 2 asks the server to re-resolve every document's frontmatter now that
 // the whole corpus is present.
 //
+// One relation cannot wait for pass 2: the server resolves a `blocks` edge at
+// create time and refuses one naming no plan (025 §5), so pass 1 creates the
+// corpus in an order that puts an ordering edge's target first
+// (importCreateOrder).
+//
 // Re-running is a no-op by *slug identity*: a slug already present in the
 // project is left alone. The plan proposed a deterministic external id per
 // file path, deduped through RecordEvent — client-side slug identity gives the
@@ -83,7 +88,10 @@ the import states the status directly instead of going through the accept gate.
 Edges are wired in a second pass, once every document exists, because the
 corpus references forward as well as backward. A reference no document in the
 project resolves to is kept verbatim as an external reference and reported on
-stderr; that is a fact about the corpus, not an import failure.
+stderr; that is a fact about the corpus, not an import failure. The exception
+is blocks/blockedBy, which the server resolves at create time: documents
+are created in an order that satisfies those references first, and one still
+unresolvable then is an error.
 
 History is not reconstructed: every imported document lands at version 1, so
 last_revised_in is 1 for every section and a claim pinned to an earlier version
@@ -136,7 +144,7 @@ Stating a status needs the admin-only doc.import permission.`,
 			}
 
 			var created, skipped int
-			for _, d := range docs {
+			for _, d := range importCreateOrder(docs) {
 				if _, ok := ids[d.slug]; ok {
 					skipped++
 					continue
@@ -264,38 +272,112 @@ func importStatus(kind string, fm *designdoc.Frontmatter) string {
 	return "draft"
 }
 
+// importIndex resolves a frontmatter reference to the walked document it
+// names, the way the server resolves one within a project: by slug, or by a
+// bare corpus number when exactly one spec or ADR carries it — a corpus can
+// hold both a spec 25 and an ADR 25.
+//
+// The 025 §14.3 <KEY>-<TYPE>-<n> shorthand is deliberately not resolved here:
+// it is matched against the project's key, which the walker cannot know
+// without a round trip.
+type importIndex struct {
+	bySlug   map[string]int
+	byNumber map[int][]int
+}
+
+func newImportIndex(docs []importDoc) importIndex {
+	ix := importIndex{bySlug: make(map[string]int, len(docs)), byNumber: map[int][]int{}}
+	for i, d := range docs {
+		ix.bySlug[d.slug] = i
+		if d.kind != "plan" {
+			ix.byNumber[d.number] = append(ix.byNumber[d.number], i)
+		}
+	}
+	return ix
+}
+
+// lookup returns the position in the walk of the document a reference names.
+func (ix importIndex) lookup(ref string) (int, bool) {
+	base, _, _ := strings.Cut(ref, "#")
+	base = strings.TrimSuffix(path.Base(base), ".md")
+	if i, ok := ix.bySlug[base]; ok {
+		return i, true
+	}
+	if n, err := strconv.Atoi(base); err == nil && len(ix.byNumber[n]) == 1 {
+		return ix.byNumber[n][0], true
+	}
+	return 0, false
+}
+
+// importCreateOrder returns the corpus in the order pass 1 must create it: a
+// document naming another in `blocks:` or `blockedBy:` comes after the one it
+// names.
+//
+// Every other reference can wait for pass 2, which re-resolves the whole
+// frontmatter once the corpus is present. An ordering edge cannot: the server
+// resolves it at create time and refuses one naming no plan (025 §5), because
+// a to_external ordering edge would gate nothing while looking like it did.
+// Walk order is filename order, so a plan series whose phases each block the
+// next fails outright unless the phases are created back to front (WL-339).
+//
+// A stable Kahn walk, so a corpus declaring no ordering keeps walk order. A
+// reference the corpus does not satisfy constrains nothing — it resolves
+// against documents already in the project, or it is reported unresolvable.
+// Documents still held when nothing more can be emitted are appended in walk
+// order: that is a reference cycle, and the server is the one that names it.
+func importCreateOrder(docs []importDoc) []importDoc {
+	ix := newImportIndex(docs)
+	needs := make([]map[int]bool, len(docs))
+	waiters := make([][]int, len(docs))
+	for i, d := range docs {
+		needs[i] = map[int]bool{}
+		for _, r := range d.fm.RefsFor("blocks", "blockedBy") {
+			j, ok := ix.lookup(r.Ref)
+			// A self-reference is refused by the server either way; holding
+			// it here would only strand the rest of the corpus behind it.
+			if !ok || j == i || needs[i][j] {
+				continue
+			}
+			needs[i][j] = true
+			waiters[j] = append(waiters[j], i)
+		}
+	}
+	out := make([]importDoc, 0, len(docs))
+	done := make([]bool, len(docs))
+	for progress := true; progress; {
+		progress = false
+		for i := range docs {
+			if done[i] || len(needs[i]) > 0 {
+				continue
+			}
+			done[i] = true
+			out = append(out, docs[i])
+			for _, w := range waiters[i] {
+				delete(needs[w], i)
+			}
+			progress = true
+		}
+	}
+	for i := range docs {
+		if !done[i] {
+			out = append(out, docs[i])
+		}
+	}
+	return out
+}
+
 // unresolvedImportRefs lists the frontmatter references no walked document
 // satisfies, in walk order. They are not errors: a reference across corpora
 // (another repo's spec) is a real fact, and the backbone keeps it verbatim in
 // to_external. Reporting them locally is what makes a dry run useful.
-//
-// The 025 §14.3 <KEY>-<TYPE>-<n> shorthand is deliberately not resolved here:
-// it is matched against the project's key, which the walker cannot know
-// without a round trip, so such a reference is reported even though the server
-// would resolve it.
 func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
-	slugs := make(map[string]bool, len(docs))
-	numbered := map[int]int{}
-	for _, d := range docs {
-		slugs[d.slug] = true
-		if d.kind != "plan" {
-			numbered[d.number]++
-		}
-	}
+	ix := newImportIndex(docs)
 	var out []unresolvedRef
 	for _, d := range docs {
 		for _, ref := range importRefs(d.fm) {
-			base, _, _ := strings.Cut(ref, "#")
-			base = strings.TrimSuffix(path.Base(base), ".md")
-			if slugs[base] {
-				continue
+			if _, ok := ix.lookup(ref); !ok {
+				out = append(out, unresolvedRef{slug: d.slug, ref: ref})
 			}
-			// A bare number resolves only when exactly one spec or ADR carries
-			// it — a corpus can hold both a spec 25 and an ADR 25.
-			if n, err := strconv.Atoi(base); err == nil && numbered[n] == 1 {
-				continue
-			}
-			out = append(out, unresolvedRef{slug: d.slug, ref: ref})
 		}
 	}
 	return out
