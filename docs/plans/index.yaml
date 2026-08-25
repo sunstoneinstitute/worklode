@@ -1251,3 +1251,11 @@ docs/plans/2026-08-25-research-work-7-chat-crew-spaces.md:
     task-5-handle-crewmember-added-create-invite-or-skip: "### Task 5 — Handle crew.member_added: create, invite, or skip"
     task-6-handle-crewmember-removed: "### Task 6 — Handle crew.member_removed"
     task-7-gcp-identity-workspace-approval-and-deploy-wiring: "### Task 7 — GCP identity, Workspace approval, and deploy wiring"
+docs/plans/2026-08-25-steering-instructions.md:
+  sections:
+    why-not-the-obvious-mechanisms: "## Why not the obvious mechanisms"
+    task-instructions-migration-0052: "## `task_instructions` (migration 0052)"
+    the-two-routes-and-the-authorization-shape: "## The two routes, and the authorization shape"
+    lode-channel-serve: "## `lode channel serve`"
+    lode-task-instruct-id-message: "## `lode task instruct <id> <message>`"
+    wiring-a-session-up-today-is-manual: "## Wiring a session up today is manual"
