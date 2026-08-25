@@ -32,7 +32,7 @@ survive that advance because they are derived from open state, not from the
 event window.
 
 **Architecture:** one new table, no new subscriber, no new notifier. The
-brief is a *pull*: migration 0063 adds `actor_event_cursor` (the per-actor
+brief is a *pull*: migration 0064 adds `actor_event_cursor` (the per-actor
 event boundary), and `homePage` reads events with id above the boundary
 through the existing horizon-bounded `store.ListEvents`, feeds them plus the
 already-fetched approval/membership state to a pure derivation
@@ -136,7 +136,7 @@ tracer, then the mutation.
   adds uses the `morningBrief`/`MorningBrief` prefix and lives in
   `morningbrief*.go` / `morningbrief.templ` / `actorcursor.go` — never a
   bare `brief` identifier or filename.
-- **Migration 0063 is this plan's one migration**, and its shape is fixed
+- **Migration 0064 is this plan's one migration**, and its shape is fixed
   across the 029 series:
   `actor_event_cursor (actor_id text PK, last_event_id bigint, updated_at
   timestamptz)`. A new `.up.sql`/`.down.sql` pair listed in
@@ -391,7 +391,7 @@ minimum:
 - [ ] `go test -trimpath ./internal/ui -count=1` → `ok` (structs compile)
 - [ ] Commit: e.g. `Derive the Morning Brief from events and open state`
 
-### Task 3 — Migration 0063: `actor_event_cursor`, and the cursor store methods
+### Task 3 — Migration 0064: `actor_event_cursor`, and the cursor store methods
 
 ```yaml
 kind: feature
@@ -402,7 +402,7 @@ skills:
 blockedBy: [ ]
 ```
 
-`deploy/base/migrations/0063_actor_event_cursor.up.sql` — the shape is
+`deploy/base/migrations/0064_actor_event_cursor.up.sql` — the shape is
 fixed across the 029 series, do not redesign it:
 
 ```sql
@@ -418,9 +418,9 @@ CREATE TABLE actor_event_cursor (
 
 (`ON DELETE CASCADE`, unlike the baseline's RESTRICT default: the cursor is
 a per-user convenience with nothing referencing it, and an actor deletion
-must not be blocked by their read position.) `0063_actor_event_cursor.down.sql`
+must not be blocked by their read position.) `0064_actor_event_cursor.down.sql`
 drops the table. List both files in `deploy/base/kustomization.yaml` after
-the 0062 pair (part 6 claims 0061–0062 in parallel; `check-migrations.sh`
+the 0063 pair (part 6 claims 0062–0063 in parallel; `check-migrations.sh`
 renumbers on collision, so the number is nominal until this lands).
 
 New file `internal/store/actorcursor.go` (not `brief.go` — that name is

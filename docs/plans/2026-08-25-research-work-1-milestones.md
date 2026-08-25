@@ -64,8 +64,9 @@ Why each claim above is what it is:
   P6's.
 - **029 §4** (`partial`, full with P2) — the `MILE` kind joins
   `project_entity_seq` and `lode show` learns to render milestones. The
-  SPEC/ADR/PLAN counters, the 0037 CHECK replacement, and the
-  `lode show --plan` cutover are P2's.
+  `PLAN` counter, the 0037 CHECK replacement, and `lode show --plan`
+  shipped ahead of the series under WL-336 (migration 0052); the SPEC/ADR
+  counters are P2's.
 - **029 §9** (`none`) — the out-of-scope list binds this part (no
   per-project access control, no probing-as-verification) and nothing in it
   is built.
@@ -123,7 +124,7 @@ motivates the mutation, and P4's template mints titles nobody types.
   `routeGuards` (`internal/api/router.go`) and the `grants` table
   (`internal/api/authz.go`) only — both granted `{RoleUser, RoleAdmin}` —
   never a check inside a handler.
-- **Migrations:** this part owns 0052 (0053 is reserved and unused). New
+- **Migrations:** this part owns 0053 (0054 is reserved and unused). New
   numbered `.up.sql`/`.down.sql` pair, listed in
   `deploy/base/kustomization.yaml`; never edit a shipped migration.
   `./scripts/check-migrations.sh --no-fix` before committing.
@@ -152,7 +153,7 @@ motivates the mutation, and P4's template mints titles nobody types.
 
 ## Tasks
 
-### Task 1 — Migration 0052: milestones, milestone_id, MILE counter kind
+### Task 1 — Migration 0053: milestones, milestone_id, MILE counter kind
 
 ```yaml
 kind: chore
@@ -163,9 +164,9 @@ blockedBy: [ ]
 ```
 
 One migration pair in `deploy/base/migrations/`, listed in
-`deploy/base/kustomization.yaml` after the 0051 entry.
+`deploy/base/kustomization.yaml` after the 0052 entries.
 
-`0052_milestones.up.sql`:
+`0053_milestones.up.sql`:
 
 ```sql
 -- Milestones (spec 029 §2): project → milestone → {task, deliverable}.
@@ -194,15 +195,17 @@ CREATE INDEX tasks_milestone_idx        ON tasks (milestone_id)        WHERE mil
 CREATE INDEX deliverables_milestone_idx ON deliverables (milestone_id) WHERE milestone_id IS NOT NULL;
 
 -- The MILE kind joins the per-project ordinal counter (029 §4), exactly the
--- CHECK widening migration 0015 promised when the entity arrived.
+-- CHECK widening migration 0015 promised when the entity arrived. 0052
+-- (WL-336) already widened it to ('DEL','PLAN').
 ALTER TABLE project_entity_seq DROP CONSTRAINT project_entity_seq_kind_check;
 ALTER TABLE project_entity_seq ADD CONSTRAINT project_entity_seq_kind_check
-    CHECK (kind IN ('DEL','MILE'));
+    CHECK (kind IN ('DEL','PLAN','MILE'));
 ```
 
-`0052_milestones.down.sql` reverses in order: restore the CHECK to
-`('DEL')` (delete any `MILE` counter rows first, or the ADD CONSTRAINT
-fails), drop the two partial indexes, drop the two columns, drop the table.
+`0053_milestones.down.sql` reverses in order: restore the CHECK to
+`('DEL','PLAN')` (delete any `MILE` counter rows first, or the ADD
+CONSTRAINT fails), drop the two partial indexes, drop the two columns, drop
+the table.
 
 Existing code is unaffected by construction: `internal/store/deliverables.go`
 selects by the explicit `deliverableColumns` list, never `*`, so the new
@@ -847,13 +850,13 @@ blockedBy: [8]
 change in this same task.
 
 - `classify`: move `"MILE"` out of the `targetUnshowable` arm into a new
-  `targetMilestone` kind. `PLAN` and `DEL` stay unshowable — P2 owns the
-  plan cutover, and a deliverable still renders on the surfaces its reason
-  string names.
+  `targetMilestone` kind. `DEL` stays unshowable — a deliverable still
+  renders on the surfaces its reason string names. (`PLAN` already routes
+  to `targetDoc`; WL-336's flat plan ids took it there.)
 - `unshowableKindWords` and `unshowableReason` drop their milestone
-  entries; `notYetAnEntity` stays (the plan entry still uses it). Update
-  the comment above `unshowableReason` — it currently says milestones do
-  not exist.
+  entries; `notYetAnEntity` loses its last user — delete it. Update the
+  comment above `unshowableReason` — it currently says milestones do not
+  exist.
 - `dispatchShowPositional`: `targetMilestone` → `runMilestoneShow(cmd, arg)`
   — fetch via `Client.GetMilestone`, render via `cli.MilestoneRender`
   (`--json` prints the raw body, matching the other show arms).
@@ -909,9 +912,9 @@ blockedBy: [5, 6, 7, 9]
 Then align the standing records:
 
 - `docs/follow-ups.md:179` (`project_entity_seq` carries only `DEL`):
-  rewrite for the remaining truth — the CHECK now admits `MILE`; SPEC, ADR
-  and PLAN arrive with plan `2026-08-25-research-work-2-identifiers-and-
-  references`.
+  rewrite for the remaining truth — the CHECK now admits `PLAN` (WL-336)
+  and `MILE` (this plan); SPEC and ADR arrive with plan
+  `2026-08-25-research-work-2-identifiers-and-references`.
 - `docs/follow-ups.md` WL-238 entry ("eight destinations … renders nine"):
   update the count — Milestones is a further addition to 032 §2's list, so
   the owed amendment now covers two extra destinations. Do not file new
@@ -936,9 +939,9 @@ Named here so nobody reads silence as an oversight; each is claimed by the
 - **Deliverable state beyond what `internal/hooks/catalog.go` already
   files** — by-label identity, the poll prober, the `user_reported` write
   path — P6 (`2026-08-25-research-work-4-deliverable-state`).
-- **SPEC/ADR/PLAN counters, the 0037 CHECK replacement, and the
-  `lode show --plan` cutover** — P2
+- **SPEC/ADR counters** — P2
   (`2026-08-25-research-work-2-identifiers-and-references`), together with
   the typed edge table that lets a milestone reference another project's
   deliverable (029 §5) — containment stayed same-project here by
-  construction.
+  construction. The PLAN counter, the 0037 CHECK replacement, and the
+  `lode show --plan` cutover shipped ahead of the series under WL-336.

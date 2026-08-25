@@ -110,7 +110,7 @@ Store and `internal/api` tests need Postgres with pgvector.
   (`deliverableFrom` stays the only reader). "Is the project published" is a
   query over that join; no task in this plan may add a status column to
   `deliverables` or `projects`.
-- **Migrations:** this plan owns numbers **0061 and 0062** in the series'
+- **Migrations:** this plan owns numbers **0062 and 0063** in the series'
   allocation. Each is a new numbered `.up.sql`/`.down.sql` pair listed in
   `deploy/base/kustomization.yaml`, never an edit to a shipped migration.
   `./scripts/check-migrations.sh` renumbers on collision — eight sibling
@@ -208,7 +208,7 @@ Store and `internal/api` tests need Postgres with pgvector.
 
 ## Tasks
 
-### Task 1 — Migration 0061: label-form artifact declarations
+### Task 1 — Migration 0062: label-form artifact declarations
 
 ```yaml
 kind: feature
@@ -219,7 +219,7 @@ skills:
 blockedBy: []
 ```
 
-Create `deploy/base/migrations/0061_label_declarations.up.sql` / `.down.sql`
+Create `deploy/base/migrations/0062_label_declarations.up.sql` / `.down.sql`
 (numbers nominal; the pre-commit collision check renumbers). One change:
 
 ```sql
@@ -560,7 +560,7 @@ reported row; metric increments; CLI confirmation line.
       against Postgres — expect `ok`.
 - [ ] Commit: `User-reported deliverable state across every surface (029 §3.2)`.
 
-### Task 6 — Migration 0062, label routing, and the parameterized ingest: `/hooks/ci`, `/hooks/pipeline`
+### Task 6 — Migration 0063, label routing, and the parameterized ingest: `/hooks/ci`, `/hooks/pipeline`
 
 ```yaml
 kind: feature
@@ -574,7 +574,7 @@ blockedBy: [2]
 §8.3's 004-pattern sources, minus the CMS (Task 7 — its person requirement
 deserves its own review). One migration, one refactor, two new routes.
 
-**Migration** `deploy/base/migrations/0062_ingest_sources.up.sql` /
+**Migration** `deploy/base/migrations/0063_ingest_sources.up.sql` /
 `.down.sql`, the same drop-and-recreate 0040 used:
 
 ```sql
@@ -659,7 +659,7 @@ matching both an address and a label files one row per routing key;
 redelivery dedupes; every existing catalog test still green; the renamed
 metric carries `source`.
 
-- [ ] `./scripts/check-migrations.sh --no-fix`; roundtrip 0062;
+- [ ] `./scripts/check-migrations.sh --no-fix`; roundtrip 0063;
       kustomization lines added.
 - [ ] `go test -trimpath ./internal/hooks ./internal/store -count=1` against
       Postgres — expect `ok`.

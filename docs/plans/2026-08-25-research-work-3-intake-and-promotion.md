@@ -160,7 +160,7 @@ need Postgres with pgvector.
   The promotion transaction inserts its extra rows (`crew.member_added`
   per Crew member, `intake.promoted`) through Task 9's tx-scoped event
   insert — same table, same provenance, one transaction.
-- **Migrations:** new numbered `.up.sql`/`.down.sql` pairs (0058, 0059),
+- **Migrations:** new numbered `.up.sql`/`.down.sql` pairs (0059, 0060),
   listed in `deploy/base/kustomization.yaml`, never an edit to a shipped
   one. Parts are authored in parallel; `./scripts/check-migrations.sh`
   renumbers on collision.
@@ -188,7 +188,7 @@ need Postgres with pgvector.
   events. No `dossiers` table, no dossier revision rows — the revision is
   the event high-water mark, so any new recorded fact makes prior
   approvals visibly stale.
-- **The `decision` kind and `task_decisions` land here** (migration 0059),
+- **The `decision` kind and `task_decisions` land here** (migration 0060),
   exactly as 025 §10/§10.1 specify. No other part of this series builds
   them, and §1's stage query and §8.1's gates cannot exist without them.
   The accepted 025 plan predates the seventh kind, so this plan carries it.
@@ -219,7 +219,7 @@ need Postgres with pgvector.
 
 ## Tasks
 
-### Task 1 — Migration 0058: project labels and horizon
+### Task 1 — Migration 0059: project labels and horizon
 
 ```yaml
 kind: feature
@@ -230,7 +230,7 @@ skills:
 blockedBy: []
 ```
 
-Create `deploy/base/migrations/0058_project_metadata.up.sql` / `.down.sql`
+Create `deploy/base/migrations/0059_project_metadata.up.sql` / `.down.sql`
 (number assigned to this part; the collision check renumbers):
 
 ```sql
@@ -288,7 +288,7 @@ horizon is `ErrInvalidInput`; the API create round-trips both fields.
       — expect `ok`, not a skip.
 - [ ] Commit: `Project labels and horizon (029 §1)`.
 
-### Task 2 — Migration 0059: the decision task kind and task_decisions
+### Task 2 — Migration 0060: the decision task kind and task_decisions
 
 ```yaml
 kind: feature
@@ -303,7 +303,7 @@ Implement 025 §10's seventh kind, which the gates (§8.1) and the stage
 query (§1) are made of. The CHECK, `validKinds`, and `wlc:TaskKind` change
 together (the standing rule 029 §2 restates), so this is one commit:
 
-`deploy/base/migrations/0059_decision_tasks.up.sql`:
+`deploy/base/migrations/0060_decision_tasks.up.sql`:
 
 ```sql
 -- 025 §10: 'decision' joins the kind scheme. A decision is assigned, never

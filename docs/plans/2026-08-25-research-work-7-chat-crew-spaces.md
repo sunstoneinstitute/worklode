@@ -92,7 +92,7 @@ This plan consumes those events and nothing upstream of them changes.
   package. Nil-safe structs, `prometheus.Registerer` threaded from the
   server, bounded labels — never a project, actor, or space id. Per-event
   loop metrics come free from the shared eventbus instruments.
-- **Migration** 0065 is a new `.up.sql`/`.down.sql` pair listed in
+- **Migration** 0066 is a new `.up.sql`/`.down.sql` pair listed in
   `deploy/base/kustomization.yaml`; never edit a shipped migration.
   `./scripts/check-migrations.sh --no-fix` must exit 0.
 - **Store and handler tests need Postgres with pgvector**
@@ -107,7 +107,7 @@ This plan consumes those events and nothing upstream of them changes.
 
 ## Tasks
 
-### Task 1 — Migration 0065 and chat-space store accessors
+### Task 1 — Migration 0066 and chat-space store accessors
 
 ```yaml
 kind: chore
@@ -117,8 +117,8 @@ skills:
 blockedBy: [ ]
 ```
 
-`deploy/base/migrations/0065_project_chat_space.up.sql`, listed in
-`deploy/base/kustomization.yaml` after the 0064 entries (P8's block; if it
+`deploy/base/migrations/0066_project_chat_space.up.sql`, listed in
+`deploy/base/kustomization.yaml` after the 0065 entries (P8's block; if it
 has not landed, after the highest present — `./scripts/check-migrations.sh`
 renumbers on collision):
 
@@ -131,7 +131,7 @@ renumbers on collision):
 ALTER TABLE projects ADD COLUMN chat_space_name text;
 ```
 
-`0065_project_chat_space.down.sql` drops the column.
+`0066_project_chat_space.down.sql` drops the column.
 
 Store accessors in `internal/store/projects.go`, deliberately **not** added
 to `projectColumns` or `model.Project` (see Global constraints):

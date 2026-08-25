@@ -123,7 +123,7 @@ here and are implemented by none of them.
   `outcome` ∈ `{applied, unknown_flow, error}`;
   `worklode_approval_requirements_total{origin}` with `origin` ∈
   `{flow, adhoc}`. An empty `subject_revision` (`''`) means "required, no
-  revision designated yet"; part 1's PR rows and the pre-0057 backfill keep
+  revision designated yet"; part 1's PR rows and the pre-0058 backfill keep
   lane `''`.
 - **The three lanes are the spec's, verbatim** (029 §7.2): "reproducible
   analysis: GitHub PR review per task policy plus one analysis-level
@@ -151,7 +151,7 @@ here and are implemented by none of them.
   deliverable creation rides the existing `deliverable.created`
   transaction's apply callback, so the rows' provenance is that event. No
   approval row is written outside an event transaction.
-- **Migrations:** new numbered `.up.sql`/`.down.sql` pairs — 0056 and 0057,
+- **Migrations:** new numbered `.up.sql`/`.down.sql` pairs — 0057 and 0058,
   assigned to this plan — listed in `deploy/base/kustomization.yaml`, never
   an edit to a shipped migration (0038 stays exactly as it landed; its
   comment anticipated this plan).
@@ -234,7 +234,7 @@ here and are implemented by none of them.
 
 ## Tasks
 
-### Task 1 — Migrations 0056 and 0057: the flow snapshot and the lane key
+### Task 1 — Migrations 0057 and 0058: the flow snapshot and the lane key
 
 ```yaml
 kind: feature
@@ -246,7 +246,7 @@ skills:
 blockedBy: []
 ```
 
-Two pairs. `deploy/base/migrations/0056_project_approval_flow.up.sql`:
+Two pairs. `deploy/base/migrations/0057_project_approval_flow.up.sql`:
 
 ```sql
 -- Spec 029 §7.2: the project stores the *effective snapshot* of its
@@ -261,7 +261,7 @@ ALTER TABLE projects ADD COLUMN approval_flow_rev  text;
 
 Down: drop the three columns.
 
-`deploy/base/migrations/0057_approvals_lanes.up.sql` — the two widenings
+`deploy/base/migrations/0058_approvals_lanes.up.sql` — the two widenings
 0038's comment reserved for this plan, plus row ownership:
 
 ```sql
@@ -288,9 +288,9 @@ columns. (The down direction fails on data only if two lanes share a
 revision — acceptable for a dev rollback, and the up is what ships.)
 
 - [ ] Write all four files; add the four lines under `worklode-migrations`
-      in `deploy/base/kustomization.yaml` after the 0051 entries.
+      in `deploy/base/kustomization.yaml` after the 0052 entries.
 - [ ] `./scripts/check-migrations.sh --no-fix` — expect exit 0. The other
-      series parts claim 0052–0055 and 0058+ in parallel; this plan's
+      series parts claim 0053–0056 and 0059+ in parallel; this plan's
       numbers are assigned, so a collision means someone strayed.
 - [ ] Roundtrip against a scratch database (golang-migrate:test-roundtrip):
       up → down → up applies cleanly on an empty database.

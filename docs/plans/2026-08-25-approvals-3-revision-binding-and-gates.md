@@ -58,7 +58,7 @@ unique key. This plan assumes all of that exists and rebuilds none of it.
 **One prose dependency this frontmatter cannot carry:** governed references
 (Task 3) are rows in the `entity_edges` table that
 `2026-08-25-research-work-2-identifiers-and-references` creates (migration
-0054). That plan is being authored in parallel, so the edge is stated here
+0055). That plan is being authored in parallel, so the edge is stated here
 the way part 1 stated its plan-B dependency: Tasks 3, 6, and 9 carry a
 verify-before-starting block, and the executor stops rather than stubbing
 the table.
@@ -148,7 +148,7 @@ style while its release demonstration belongs to no single plan: both
   The gate reads (`GET /api/v1/approvals`) and the designation act are
   bearer-token surfaces — CI has no browser. Deciding, noting, and
   authorizing an exception remain web-session acts behind `requireSession`.
-- **Migrations:** this plan owns exactly one pair, `0060` (nominal;
+- **Migrations:** this plan owns exactly one pair, `0061` (nominal;
   `./scripts/check-migrations.sh` renumbers on collision), listed in
   `deploy/base/kustomization.yaml`; never edit a shipped migration —
   including part 2's.
@@ -195,7 +195,7 @@ style while its release demonstration belongs to no single plan: both
   identity — no new table, no column added to a table this plan's `covers:`
   does not motivate. Dependents of an entity match `to_id` on
   `<id>` or `<id>@%`.
-- **0060 appends `review_kind` to the approvals uniqueness.** Without it, an
+- **0061 appends `review_kind` to the approvals uniqueness.** Without it, an
   impact row on a dependent's already-approved `(kind, id, revision)` would
   vanish into `ON CONFLICT DO NOTHING`. Part 2 owns the multi-lane key
   shape, so the migration reads the live schema and recreates whatever
@@ -225,7 +225,7 @@ style while its release demonstration belongs to no single plan: both
 
 ## Tasks
 
-### Task 1 — Migration 0060: review_kind, note, exception_authorized_by
+### Task 1 — Migration 0061: review_kind, note, exception_authorized_by
 
 ```yaml
 kind: feature
@@ -237,7 +237,7 @@ skills:
 blockedBy: []
 ```
 
-Create `deploy/base/migrations/0060_approval_revision_binding.up.sql` /
+Create `deploy/base/migrations/0061_approval_revision_binding.up.sql` /
 `.down.sql` (number nominal):
 
 ```sql
@@ -257,7 +257,7 @@ ALTER TABLE approvals ADD COLUMN exception_authorized_by text
 
 Then recreate the approvals uniqueness with `review_kind` appended.
 **Read the live schema first** (`\d approvals` against a migrated scratch
-database): part 2's 0056/0057 replaced part 1's
+database): part 2's 0057/0058 replaced part 1's
 `UNIQUE (entity_kind, entity_id, subject_revision)` with its multi-lane key,
 and this migration must drop *that* index by its actual name and recreate it
 with its actual column list plus `review_kind` — do not transcribe a guessed
@@ -385,7 +385,7 @@ blockedBy: [1, 2]
 
 **Cross-plan dependency — verify before starting:** the reference helpers
 write `entity_edges`, created by
-`2026-08-25-research-work-2-identifiers-and-references` (migration 0054). If
+`2026-08-25-research-work-2-identifiers-and-references` (migration 0056). If
 the table is absent from a migrated scratch database when this task runs,
 stop and escalate — do not create it here.
 
@@ -404,7 +404,7 @@ func ImpactRevision(dependentRevision, upstreamID, upstreamRevision string) stri
 
 // ListApprovalsForEntity returns every row for (kind, id), newest first —
 // the shared history for the detail page, the impact checks, and the read
-// API. Includes the 0060 columns.
+// API. Includes the 0061 columns.
 func ListApprovalsForEntity(tx *sql.Tx, entityKind, entityID string) ([]Approval, error)
 
 // DesignateRevision applies OnNewRevision inside the caller's event

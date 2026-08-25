@@ -37,7 +37,7 @@ makes 029 §6.1/§6.2 and 032 §6 full.
 
 **Series.** Blocked by `2026-08-14-project-crew-participants` (the stored
 Crew this plan extends) and by P4 of this series
-(`2026-08-25-research-work-3-intake-and-promotion`), whose migration 0059
+(`2026-08-25-research-work-3-intake-and-promotion`), whose migration 0060
 adds the `decision` task kind and `task_decisions` (025 §10/§10.1) that
 Task 4's widened removal guard reads. P4 also owns project closure itself;
 this plan ships the crew half as a store function P4's close transaction
@@ -87,7 +87,7 @@ Two scope decisions recorded here rather than as gaps: an invitation carries
 exactly one role label (the external-expert case 029 §6.1 names; a
 multi-role invitee is invited once and given further roles after linking),
 and the "decision" the widened guard sees is an open `decision`-kind task —
-the kind and its `task_decisions` side table are P4's migration 0059
+the kind and its `task_decisions` side table are P4's migration 0060
 (025 §10/§10.1), which is why P4 is in `blockedBy:`. The curated
 next-decision card (migration 0013) stays out of the guard: it is free text
 that names no actor reliably, and real decision tasks supersede it.
@@ -115,10 +115,10 @@ that names no actor reliably, and real decision tasks supersede it.
 - **The role vocabulary is fixed** (WL-297, migration 0046): exactly
   `member`, `editor`, `science-lead`, `reporter`, `domain-expert`,
   `data-scientist`, `engineer`. `crew_invitations.role` reuses it verbatim.
-- **Migration number is 0064, assigned by the series brief** — parts 1–9 of
+- **Migration number is 0065, assigned by the series brief** — parts 1–9 of
   this series each own a block, so do not let
   `./scripts/check-migrations.sh` renumber it; run with `--no-fix` and keep
-  0064. One pair carries all of this part's DDL (the 0013 precedent), listed
+  0065. One pair carries all of this part's DDL (the 0013 precedent), listed
   in `deploy/base/kustomization.yaml`. Never edit a shipped migration.
 - **Authz:** new routes get `routeGuards` entries only (`permCrewWrite` on
   the JSON API, `permWebWrite` on web forms) — never a check inside a
@@ -140,7 +140,7 @@ that names no actor reliably, and real decision tasks supersede it.
 
 ## Tasks
 
-### Task 1 — Migration 0064: github_username, invitations, lead handoffs
+### Task 1 — Migration 0065: github_username, invitations, lead handoffs
 
 ```yaml
 kind: chore
@@ -150,8 +150,8 @@ skills:
 blockedBy: [ ]
 ```
 
-One migration pair, `deploy/base/migrations/0064_crew_lifecycle.up.sql` /
-`.down.sql`, listed in `deploy/base/kustomization.yaml` after the 0051
+One migration pair, `deploy/base/migrations/0065_crew_lifecycle.up.sql` /
+`.down.sql`, listed in `deploy/base/kustomization.yaml` after the 0052
 entries. Three concerns, in this order:
 
 **1. The §6.2 identity upgrade.** Migration 0014's column stops being an
@@ -230,12 +230,12 @@ CREATE UNIQUE INDEX crew_lead_handoffs_one_pending
     ON crew_lead_handoffs (project_id) WHERE state = 'pending';
 ```
 
-`0064_crew_lifecycle.down.sql` drops the two tables, drops
+`0065_crew_lifecycle.down.sql` drops the two tables, drops
 `actors_github_username_unique`, and renames the column back.
 
 - [ ] Write the pair and the two kustomization entries.
-- [ ] `./scripts/check-migrations.sh --no-fix` — exits 0 (the gap from 0051
-      to 0064 is the series allocation, not a collision).
+- [ ] `./scripts/check-migrations.sh --no-fix` — exits 0 (the gap from 0052
+      to 0065 is the series allocation, not a collision).
 - [ ] Round-trip up → down → up against a scratch database
       (`golang-migrate:test-roundtrip`, or the compose Postgres).
 - [ ] `go test -trimpath ./internal/store` with Postgres up — existing tests
@@ -399,7 +399,7 @@ owned by nobody and stay out. `Kind: "review"`, `ID` = the approval's
 `entity_id` (`repo#number` — what a human acts on), `Title` from the PR,
 `State` from the approval.
 
-**Decisions.** A decision is a task: P4's migration 0059 adds the
+**Decisions.** A decision is a task: P4's migration 0060 adds the
 `decision` kind to the `tasks` CHECK and the `task_decisions` side table
 (025 §10/§10.1), and this plan is blocked on it. An open decision assigned
 to the member is therefore already caught by the existing task clause —
@@ -440,7 +440,7 @@ func TestOpenWorkOwnedBySeesReviewsAndDecisions(t *testing.T) {
 	// github login "adal"; ingest a PR for that repo and an awaiting
 	// approval whose required_actor is ada (InsertAwaitingApproval inside
 	// RecordEvent, as approvals-1's tests do). Mint a decision-kind task in
-	// p1 (CreateTask with kind "decision", migration 0059) and assign it to
+	// p1 (CreateTask with kind "decision", migration 0060) and assign it to
 	// ada (AssignTask via RecordEvent).
 
 	got, err := s.OpenWorkOwnedBy(ctx, "p1", "ada")
