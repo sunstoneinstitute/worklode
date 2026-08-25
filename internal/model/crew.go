@@ -28,9 +28,12 @@ type ParticipantListResponse struct {
 // defaults to "member" server-side, so adding someone to the Crew without an
 // opinion about what they do is one field. Role is drawn from the fixed
 // project-role vocabulary (WL-297; store.ParticipantRoles) — an unknown one
-// is refused naming the valid set.
+// is refused naming the valid set. Deputy marks the member as the project's
+// one deputy (spec 029 §6.1): full lead authority when the lead does not
+// act, without becoming lead. Lead and Deputy are mutually exclusive.
 type AddCrewMemberInput struct {
-	Actor string `json:"actor"`
-	Role  string `json:"role"`
-	Lead  bool   `json:"lead"`
+	Actor  string `json:"actor"`
+	Role   string `json:"role"`
+	Lead   bool   `json:"lead"`
+	Deputy bool   `json:"deputy"`
 }

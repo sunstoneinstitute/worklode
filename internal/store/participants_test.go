@@ -282,7 +282,7 @@ func addParticipant(t *testing.T, s *Store, projectID, actor, role string, lead 
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "crew.member_added", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return AddParticipant(tx, s.Now(), projectID, actor, role, lead, by, eventID)
+			return AddParticipant(tx, s.Now(), projectID, actor, role, lead, false, by, eventID)
 		})
 	return err
 }
@@ -372,6 +372,75 @@ func TestAddParticipant(t *testing.T) {
 	// existing "editor" row rather than creating a second one.
 	if err := add("ada", "  editor  ", false); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("untrimmed duplicate role: got %v", err)
+	}
+}
+
+// TestAddParticipantDeputy covers the deputy designation (spec 029 §6.1): it
+// is mutually exclusive with lead, at most one per project, and read back as
+// a virtual "acting-lead" entry folded into Roles rather than a stored role.
+func TestAddParticipantDeputy(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "AD1"); err != nil {
+		t.Fatalf("CreateProject p1: %v", err)
+	}
+	for _, id := range []string{"ada", "bob", "cleo"} {
+		if err := s.CreateActor(ctx, id, "human", strings.ToUpper(id[:1])+id[1:], false); err != nil {
+			t.Fatalf("CreateActor %s: %v", id, err)
+		}
+	}
+
+	addDeputy := func(actor, role string, lead, deputy bool) error {
+		_, _, err := s.RecordEvent(ctx, "cli", nextExt(t), "crew.member_added", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return AddParticipant(tx, s.Now(), "p1", actor, role, lead, deputy, "ada", eventID)
+			})
+		return err
+	}
+
+	if err := addDeputy("ada", "editor", true, false); err != nil {
+		t.Fatalf("add ada as lead: %v", err)
+	}
+	// Lead and deputy on the same add is refused.
+	if err := addDeputy("bob", "reporter", true, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("lead and deputy together: got %v", err)
+	}
+	if err := addDeputy("bob", "reporter", false, true); err != nil {
+		t.Fatalf("add bob as deputy: %v", err)
+	}
+	// A second deputy is refused.
+	if err := addDeputy("cleo", "member", false, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("second deputy: got %v", err)
+	}
+	// acting-lead cannot be set as a role directly — it stays outside the
+	// fixed vocabulary.
+	if err := addDeputy("cleo", "acting-lead", false, false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("role=acting-lead: got %v", err)
+	}
+
+	crew, err := s.ListParticipants(ctx, "p1")
+	if err != nil {
+		t.Fatalf("ListParticipants: %v", err)
+	}
+	if len(crew) != 2 {
+		t.Fatalf("crew = %+v, want 2 members", crew)
+	}
+	bobFound := false
+	for _, m := range crew {
+		if m.ActorID != "bob" {
+			continue
+		}
+		bobFound = true
+		if !m.IsDeputy {
+			t.Fatalf("bob.IsDeputy = %v, want true", m.IsDeputy)
+		}
+		if !slices.Equal(m.Roles, []string{"acting-lead", "reporter"}) {
+			t.Fatalf("bob.Roles = %+v, want [acting-lead reporter]", m.Roles)
+		}
+	}
+	if !bobFound {
+		t.Fatalf("crew = %+v, want bob present", crew)
 	}
 }
 
