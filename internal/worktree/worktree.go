@@ -230,9 +230,10 @@ func Root(dir string) (string, bool) {
 // This is the instruction-file analogue of what githooks.Dir already does for
 // hooks: `rev-parse --git-path hooks` resolves to the shared hooks directory
 // common to every worktree, so hooks installed from a task worktree land once,
-// for the whole repo. Repo-root files (AGENTS.md, CLAUDE.md) are tracked
-// content, so anchoring them at a linked worktree's own root would dirty that
-// worktree's branch with a change the task never asked for (WL-219).
+// for the whole repo. AGENTS.md is tracked content, so anchoring it at a
+// linked worktree's own root would dirty that worktree's branch with a change
+// the task never asked for (WL-219); CLAUDE.local.md is gitignored rather
+// than tracked, but it anchors at the same root so the pair stays together.
 //
 // The main root is derived from the common git dir — <main>/.git — one level
 // up, and then verified: the candidate must itself be a worktree root whose

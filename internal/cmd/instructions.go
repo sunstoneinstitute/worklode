@@ -10,20 +10,24 @@ import (
 )
 
 // The two repo-root instruction files `lode install` manages (spec 008 §17.7).
-// Six of the seven supported harnesses read AGENTS.md; Claude Code reads
-// CLAUDE.md, which is why the import line exists.
+// Six of the seven supported harnesses read AGENTS.md; Claude Code also reads
+// CLAUDE.local.md, which is why the import line exists there rather than in
+// CLAUDE.md — CLAUDE.md is committed, authored prose Worklode has no business
+// editing, while CLAUDE.local.md is per-checkout and gitignored, so the
+// import is safe to write unconditionally.
 const (
 	agentsFile       = "AGENTS.md"
-	claudeFile       = "CLAUDE.md"
+	claudeFile       = "CLAUDE.local.md"
 	claudeImportLine = "@AGENTS.md"
+	gitignoreFile    = ".gitignore"
 )
 
 // Actions reported for the instruction files. AGENTS.md is managed, so it is
 // created (no file at all), added (a file carrying no block of ours), updated
-// (a block of ours replaced) or unchanged; CLAUDE.md is authored prose
-// Worklode never edits, so an existing one yields suggested (say the line) or
-// satisfied (the line is already there, or AGENTS.md resolves to this same
-// file).
+// (a block of ours replaced) or unchanged; an existing CLAUDE.local.md may
+// carry a developer's own notes, so Worklode never edits it, and an existing
+// one yields suggested (say the line) or satisfied (the line is already
+// there, or AGENTS.md resolves to this same file).
 const (
 	instrCreated   = "created"
 	instrAdded     = "added"
@@ -65,7 +69,7 @@ type instructionsResult struct {
 }
 
 // ensureInstructions writes the managed block into root's AGENTS.md and, where
-// Worklode may, bootstraps CLAUDE.md to import it. root is the *main*
+// Worklode may, bootstraps CLAUDE.local.md to import it. root is the *main*
 // worktree's root (worktree.MainRoot), so a run from inside a linked worktree
 // refreshes the main checkout's files rather than the worktree's own copies.
 func ensureInstructions(root string) (*instructionsResult, error) {
@@ -81,7 +85,7 @@ func ensureInstructions(root string) (*instructionsResult, error) {
 }
 
 // removeInstructions is ensureInstructions' inverse. AGENTS.md goes first so
-// the CLAUDE.md step sees the state the strip left behind.
+// the CLAUDE.local.md step sees the state the strip left behind.
 func removeInstructions(root string) (*instructionsResult, error) {
 	agents, err := removeAgentsBlock(root)
 	if err != nil {
@@ -218,19 +222,24 @@ func spliceAgentsBlock(existing string) string {
 	return rebuild(existing, regions, strings.TrimSuffix(agentsBlock, "\n"))
 }
 
-// ensureClaudeMD bootstraps the CLAUDE.md import Claude Code needs. It writes
-// a file only where none exists: an existing CLAUDE.md is authored prose, so
-// the addition is reported as a suggestion instead (spec 008 §17.7).
+// ensureClaudeMD bootstraps the CLAUDE.local.md import Claude Code needs. It
+// writes a file only where none exists: an existing CLAUDE.local.md may carry
+// a developer's own local notes, so the addition is reported as a suggestion
+// instead (spec 008 §17.7). Either way, the file is gitignored, since it is
+// per-checkout state, never something to commit.
 func ensureClaudeMD(root string) (string, error) {
 	claudePath := filepath.Join(root, claudeFile)
 	same, err := sameFile(filepath.Join(root, agentsFile), claudePath)
 	if err != nil {
 		return "", err
 	}
-	// AGENTS.md symlinked to CLAUDE.md means the block already sits in the
-	// file Claude Code reads; there is nothing to create or suggest.
+	// AGENTS.md symlinked to CLAUDE.local.md means the block already sits in
+	// the file Claude Code reads; there is nothing to create or suggest.
 	if same {
 		return instrSatisfied, nil
+	}
+	if err := ensureGitignored(root, claudeFile); err != nil {
+		return "", err
 	}
 	b, err := os.ReadFile(claudePath)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -246,6 +255,35 @@ func ensureClaudeMD(root string) (string, error) {
 		return instrSatisfied, nil
 	}
 	return instrSuggested, nil
+}
+
+// ensureGitignored appends name to root's tracked .gitignore, once. Unlike
+// hookrun.ensureExcluded's info/exclude (worktree-local machine state), this
+// entry belongs in every clone's .gitignore: CLAUDE.local.md is a convention
+// every contributor's checkout produces, not just this machine's.
+func ensureGitignored(root, name string) error {
+	path := filepath.Join(root, gitignoreFile)
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == name {
+			return nil
+		}
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	// A hand-edited file with no trailing newline would otherwise get name
+	// merged onto the end of its last pattern.
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		fmt.Fprintln(f)
+	}
+	fmt.Fprintln(f, name)
+	return nil
 }
 
 // removeAgentsBlock strips the managed region from root's AGENTS.md. The file
@@ -283,9 +321,11 @@ func removeAgentsBlock(root string) (string, error) {
 	return instrRemoved, nil
 }
 
-// removeClaudeMD deletes the one-line CLAUDE.md ensureClaudeMD created. A
-// CLAUDE.md holding anything else — including the target of an AGENTS.md
-// symlink — is authored prose and is left in place.
+// removeClaudeMD deletes the one-line CLAUDE.local.md ensureClaudeMD created.
+// A CLAUDE.local.md holding anything else — including the target of an
+// AGENTS.md symlink — carries a developer's own notes and is left in place.
+// The .gitignore entry ensureGitignored added is left alone too: it is
+// harmless to keep ignoring a file that may still hold those notes.
 func removeClaudeMD(root string) (string, error) {
 	claudePath := filepath.Join(root, claudeFile)
 	same, err := sameFile(filepath.Join(root, agentsFile), claudePath)
