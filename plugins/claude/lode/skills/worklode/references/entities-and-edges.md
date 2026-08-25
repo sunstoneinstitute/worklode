@@ -16,7 +16,7 @@ command to run (that's `commands.md`) or how documents version (that's
 | Actor | free text id | A human, agent, or service account. Carries `admin`, and since spec 029 the Keycloak identity claims (`groups`, `email`) recorded at login. |
 | Lease | numeric id | One worktree's claim on one task. At most one active lease per task and per worktree. Ending a lease (release/done/block/abandon/reopen) never itself changes task state. |
 | Approval | `(entity_kind, entity_id, subject_revision)` | Spec 029 §7.1's one-table model of "does this need a sign-off". Currently populated only from GitHub PR review requests (`awaiting → approved/rejected/changes_requested`); no general CLI verb for it yet. |
-| Project participant | `(project_id, actor_id, role)` | Spec 029 §6.1 "Project Crew" — role-labelled, visible before any task is claimed. At most one `is_lead` row per project. `lode project crew`. |
+| Project participant | `(project_id, actor_id, role)` | Spec 029 §6.1 "Project Crew" — role-labelled, visible before any task is claimed. At most one `is_lead` and at most one `is_deputy` row per project. `lode project crew`. |
 | Issue / PullRequest | `(repo, number)` | GitHub facts ingested by the App webhook, optionally correlated to a task. |
 | Artifact / Deployment | numeric id | A built thing (`docker_image`, `pypi`, `git_tag`, `binary`) and where it landed (Flux Kustomization, PyPI, manual). |
 | RuntimeEvent | numeric id | Pod-watcher facts: `crashloop`, `oom`, `flux_failure`, `flux_recovery`. |

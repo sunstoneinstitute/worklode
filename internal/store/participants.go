@@ -369,6 +369,9 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 		if isUniqueViolationOn(err, "project_participants_one_deputy") {
 			return fmt.Errorf("project %s already has a deputy: %w", projectID, ErrInvalidInput)
 		}
+		if isUniqueViolationOn(err, "project_participants_one_flag_per_actor") {
+			return fmt.Errorf("actor %s cannot hold both lead and deputy on project %s: %w", actorID, projectID, ErrInvalidInput)
+		}
 		return fmt.Errorf("add participant %s to project %s: %w", actorID, projectID, err)
 	}
 

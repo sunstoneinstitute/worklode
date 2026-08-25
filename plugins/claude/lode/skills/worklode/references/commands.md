@@ -122,7 +122,7 @@ Flags: --project, --repo
   Flags: --done-state
 - `lode project crew` — List, or manage, a project's Crew
 - `lode project crew add` — Add an actor to a project's Crew
-  Flags: --lead, --role
+  Flags: --deputy, --lead, --role
 - `lode project crew remove` — Remove an actor from a project's Crew
 - `lode project decision` — Set or clear a project's next-decision card (cockpit card)
   Flags: --accountable, --clear, --rests-on, --title

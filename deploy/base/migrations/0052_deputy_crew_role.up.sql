@@ -12,3 +12,6 @@ ALTER TABLE project_participants
 
 CREATE UNIQUE INDEX project_participants_one_deputy
     ON project_participants (project_id) WHERE is_deputy;
+
+CREATE UNIQUE INDEX project_participants_one_flag_per_actor
+    ON project_participants (project_id, actor_id) WHERE is_lead OR is_deputy;

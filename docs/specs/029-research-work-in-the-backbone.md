@@ -272,7 +272,8 @@ the outgoing lead is unavailable, the Editor and Science Lead jointly authorize 
 handoff.
 
 A project may also designate one Crew member as **deputy** — a fact set when
-they are added, like the lead flag, and revocable at will. A deputy exercises
+they are added, like the lead flag, and revocable by removing and re-adding
+the member. A deputy exercises
 full lead authority, including authorizing the handoff above, whenever the
 lead does not act; the lead remains the accountable human, and holding the
 designation never makes the deputy lead. The lead and deputy positions are
