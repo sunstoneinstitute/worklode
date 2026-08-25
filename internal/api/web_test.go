@@ -640,10 +640,10 @@ func TestHomePageActorTiers(t *testing.T) {
 
 	// Crew rows come after login: the actor row is minted by the callback.
 	seedEvent(t, st, "home-crew", func(tx *sql.Tx, eventID int64) error {
-		if err := store.AddParticipant(tx, st.Now(), "plead", "grace", "engineer", true, "alice", eventID); err != nil {
+		if err := store.AddParticipant(tx, st.Now(), "plead", "grace", "engineer", true, false, "alice", eventID); err != nil {
 			return err
 		}
-		return store.AddParticipant(tx, st.Now(), "pmember", "grace", "engineer", false, "alice", eventID)
+		return store.AddParticipant(tx, st.Now(), "pmember", "grace", "engineer", false, false, "alice", eventID)
 	})
 
 	rr := withSession(t, h, "GET", "/", session, "")

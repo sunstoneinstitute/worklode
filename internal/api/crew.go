@@ -81,7 +81,7 @@ const defaultCrewRole = "member"
 // added. source is "cli" for the JSON API and "web" for the cockpit form,
 // which is the only difference between the two paths. by is the acting actor
 // ("" on an open instance, stored as NULL).
-func (s *server) recordCrewAdd(ctx context.Context, source, projectID, actorID, role string, lead bool, by string) (model.CrewMember, error) {
+func (s *server) recordCrewAdd(ctx context.Context, source, projectID, actorID, role string, lead, deputy bool, by string) (model.CrewMember, error) {
 	actorID = strings.TrimSpace(actorID)
 	if actorID == "" {
 		return model.CrewMember{}, fmt.Errorf("actor is required: %w", store.ErrInvalidInput)
@@ -94,9 +94,9 @@ func (s *server) recordCrewAdd(ctx context.Context, source, projectID, actorID, 
 
 	if err := s.recordEvent(ctx, source, "crew.member_added", map[string]any{
 		"project": projectID, "actor": actorID, "roles": []string{role},
-		"lead": lead, "by": by,
+		"lead": lead, "deputy": deputy, "by": by,
 	}, func(tx *sql.Tx, eventID int64) error {
-		return store.AddParticipant(tx, now, projectID, actorID, role, lead, by, eventID)
+		return store.AddParticipant(tx, now, projectID, actorID, role, lead, deputy, by, eventID)
 	}); err != nil {
 		return model.CrewMember{}, err
 	}
@@ -157,7 +157,7 @@ func (s *server) addCrewMember(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	member, err := s.recordCrewAdd(r.Context(), "cli", r.PathValue("id"), req.Actor, req.Role, req.Lead, actorIDFrom(r))
+	member, err := s.recordCrewAdd(r.Context(), "cli", r.PathValue("id"), req.Actor, req.Role, req.Lead, req.Deputy, actorIDFrom(r))
 	if err != nil {
 		s.observeCrewChange("api", "add", crewOutcome(err))
 		s.mapStoreErr(w, err)
@@ -183,7 +183,7 @@ func (s *server) addCrewMemberFromForm(w http.ResponseWriter, r *http.Request) {
 		Role:  strings.TrimSpace(r.PostFormValue("role")),
 		Lead:  r.PostFormValue("lead") != "",
 	}
-	if _, err := s.recordCrewAdd(ctx, "web", project.ID, values.Actor, values.Role, values.Lead, actorIDFrom(r)); err != nil {
+	if _, err := s.recordCrewAdd(ctx, "web", project.ID, values.Actor, values.Role, values.Lead, false, actorIDFrom(r)); err != nil {
 		s.observeCrewChange("web", "add", crewOutcome(err))
 		s.observeFormSubmission("crew_add", formOutcome(err))
 		// A refused add is about what was typed — an unknown actor id, a
