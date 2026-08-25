@@ -20,6 +20,7 @@ and the rules for adding and retiring skills.
 | Shipped plugin, Codex | `.agents/plugins/marketplace.json`, `plugins/claude/lode/.codex-plugin/plugin.json` | `lode` users on Codex | yes — `scripts/sync-codex-marketplace.py` |
 | `worklode` orientation skill's command catalog | `plugins/claude/lode/skills/worklode/references/commands.md` | `lode` users, on demand | yes — `go test ./internal/cmd -run TestCommandReference -update-command-ref` |
 | Org onboarding | `sunstoneinstitute/claude-plugins` → `plugins/sunstone-dev/skills/worklode-onboarding/SKILL.md` | any Sunstone repo adopting Worklode | no — **and out of this tree** |
+| Agent host scripts | `.github/agent-host/supervisor.sh`, `.github/agent-host/poke.sh` | the unattended sessions on hel01 | no |
 
 Three of these need care beyond ordinary editing.
 
@@ -35,6 +36,17 @@ under `make test` on any PR that touches a command or a flag — unlike
 this one also catches a command that went missing from the catalog. Add a
 command or a flag, then `go test ./internal/cmd -run TestCommandReference
 -update-command-ref` before committing.
+
+**The agent host scripts are instructions by another route.** `supervisor.sh`
+does not merely invoke `lode`: it reads
+`plugins/claude/lode/skills/start-agent-loop/SKILL.md`, strips its frontmatter,
+and hands the body to a model as its opening prompt. Moving or renaming that
+skill, or changing the `$ARGUMENTS` placeholder it substitutes, breaks the
+agent host silently — the session still starts, it just has nothing to do.
+`poke.sh` hardcodes `lode worker listen` and the filter vocabulary it shares
+with the skill (`--project`, `--kind`, `--strict-focus`); a flag that leaves one
+side has to leave the other. `TestAgentSurfaces` sees the `lode` invocations in
+both, but not the skill path, so that one is on you.
 
 **The onboarding skill lives in another repository.** It walks a repo through
 `lode login`, `lode project`, `.worklode/config.toml` and `lode install`, so it

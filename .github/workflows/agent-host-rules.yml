@@ -1,0 +1,84 @@
+name: Agent host rules
+
+# Builds and promotes the auto-mode permission rules the agent host runs
+# under.
+#
+# `/auto-mode-setup` is interactive: it drafts an autoMode block from the
+# project, its git remotes and recent history, and asks a human to accept the
+# draft as a whole. A workflow cannot answer that prompt, so this splits the
+# job in two — `setup` opens a window for you to do it in, `capture` promotes
+# the result into a reviewed pull request.
+#
+# The rules are committed rather than left on the box because the runner user
+# is in the docker group, which docs/self-hosted-runner.md calls
+# root-equivalent on hel01. What an unattended agent there is allowed to do
+# should be visible in a diff.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: setup opens a window to run /auto-mode-setup in; capture promotes the result to a PR
+        type: choice
+        required: true
+        default: capture
+        options:
+          - setup
+          - capture
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: agent-host-rules
+  cancel-in-progress: false
+
+jobs:
+  rules:
+    runs-on: ["gha-agent-host", "gha-buildcache"]
+    timeout-minutes: 15
+    env:
+      AGENT_ROOT: /home/ghrunner/gha-agent
+      TMUX_SOCKET: gha-agent
+      TMUX_SESSION: agents
+      RULES_FILE: .github/agent-host/settings.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+
+      - name: Open a setup window
+        if: inputs.action == 'setup'
+        run: |
+          set -euo pipefail
+          if [ ! -r "$AGENT_ROOT/env" ]; then
+            echo "::error::$AGENT_ROOT/env is missing — run the Agent host workflow first"
+            exit 1
+          fi
+          tmux -L "$TMUX_SOCKET" has-session -t "$TMUX_SESSION" 2>/dev/null \
+            || setsid tmux -L "$TMUX_SOCKET" new-session -d -s "$TMUX_SESSION" -n bootstrap -c "$AGENT_ROOT"
+          tmux -L "$TMUX_SOCKET" kill-window -t "$TMUX_SESSION:gha-rules" 2>/dev/null || true
+          tmux -L "$TMUX_SOCKET" new-window -d -t "$TMUX_SESSION" -n gha-rules \
+            -c "$AGENT_ROOT/repo" "$AGENT_ROOT/bin/rules-session.sh"
+          {
+            echo "### Auto-mode rules: setup window ready"
+            echo ""
+            echo "On hel01, as \`ghrunner\`:"
+            echo ""
+            echo '```'
+            echo "tmux -L $TMUX_SOCKET attach -t $TMUX_SESSION:gha-rules"
+            echo '```'
+            echo ""
+            echo "Run \`/auto-mode-setup\`, accept the draft, then re-run this"
+            echo "workflow with **capture** to open a pull request with the result."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The classifier reads user-scope settings only — it ignores a
+      # repository's own .claude/settings.json by design — so the agent home is
+      # where /auto-mode-setup will have written the block.
+      - name: Capture the rules into a PR
+        if: inputs.action == 'capture'
+        env:
+          GH_TOKEN: ${{ secrets.WORKER_GITHUB_TOKEN }}
+        run: .github/agent-host/capture-rules.sh

@@ -271,6 +271,122 @@ threshold); a systemd-tmpfiles aging rule on `/tmp` (host-wide blast radius
 for a runner-specific problem — worth revisiting if a non-runner source turns
 out to be the one refilling it).
 
+## The agent host (`gha-agent-host`)
+
+hel01 also hosts the long-lived Claude Code worker sessions. They are not a CI
+job: `agent-host.yml` is a **babysitter** that reconciles them every 15 minutes
+— create what is missing, respawn what died, touch nothing healthy — and
+`agent-host-rules.yml` manages the permission rules they run under. Neither is
+ever reachable from `pull_request`; both are `schedule`/`workflow_dispatch`
+only, so the *Trust boundary* above is untouched.
+
+`gha-agent-host` asserts what those jobs need and nothing else: **tmux and
+`claude` are installed, and the persistent `/home/ghrunner/gha-agent` tree
+exists**. Not the bare `self-hosted` label (a future runner without any of that
+must never be handed this job) and not `hel01` (a host identity, not a
+capability). `agent-host.yml` also requires `gha-buildcache`, because it builds
+the `lode` binaries and skips the `actions/cache` round trip like every other
+job here.
+
+```
+gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-agent-host"
+```
+
+### Layout
+
+Everything durable lives at an absolute path outside the checkout, for two
+reasons this document has already established. `actions/checkout`'s clean step
+erases anything untracked inside `_work/worklode/worklode`, and **`$HOME` is
+not stable**: `hel01-2` sets its own `HOME` (see *Two executors*), so a job that
+resolved `~/.config/worklode` would read a different file depending on which
+runner picked it up. The agent's `HOME` is therefore named explicitly, never
+inherited.
+
+```
+/home/ghrunner/gha-agent/
+  bin/          lode, lode-hook, lode-statusline + the agent-host scripts
+  home/         the supervisors' HOME
+    .config/worklode/config.toml     server = https://worklode.dev.sunstoneinstitute.ai
+    .config/worklode/token           0600, "<server> <token>" — one line per server
+    .claude/settings.json            the autoMode rules, user scope
+  repo/         a dedicated clone; worker worktrees live in its .worktrees/
+  env           0600, sourced by each window's shell
+  logs/         pane captures, 0600, pruned after 7 days
+```
+
+The tmux server has its own socket, `tmux -L gha-agent`, so it never collides
+with an interactive tmux. The socket is keyed by uid rather than `$HOME`, so
+both runners reach the same server.
+
+```
+tmux -L gha-agent list-windows -t agents
+tmux -L gha-agent attach -t agents:gha-agent1
+```
+
+Three repo secrets are required: `LODE_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, and
+`WORKER_GITHUB_TOKEN` (a fine-grained PAT scoped to this repo, contents + PR
+write). The job's own `GITHUB_TOKEN` expires when the job ends and is useless
+to a session that outlives it.
+
+### Adding a worker
+
+`.github/agent-host/workers.json` is the fleet. Each entry is a window name and
+one filter string:
+
+```json
+{ "window": "gha-chore1", "filter": "--project worklode --kind chore" }
+```
+
+That string is used twice — `supervisor.sh` substitutes it for `$ARGUMENTS` in
+the `start-agent-loop` skill body, and `poke.sh` passes it to `lode worker
+listen` — so the sidecar wakes on exactly the work its supervisor could claim.
+Only flags the skill accepts belong in it: `--project`, `--kind`,
+`--strict-focus`.
+
+Each worker gets two windows: `<name>` running the Claude session, and
+`<name>-poke` running the sidecar that nudges it when work appears. Health is
+judged by pane state — dead, or fallen back to a bare shell, means respawn.
+That is a denylist on purpose: `claude` runs as `node` today, and matching only
+`node` would turn any change in how it is launched into an endless respawn loop
+against a session that was working fine.
+
+### Rules are committed, not accumulated
+
+`ghrunner` is in the `docker` group, which the *Isolation* section above calls
+root-equivalent on this host. An unattended agent here is effectively
+unsandboxed, so what it may do is reviewed in a diff rather than left to
+accumulate on the box: `.github/agent-host/settings.json` holds the `autoMode`
+block, and the babysitter installs it to the agent `HOME` on every tick.
+
+It has to be **user scope**. The auto-mode classifier deliberately ignores a
+repository's own `.claude/settings.json` so that a hostile repo cannot grant
+itself permissions; rules committed there would silently do nothing.
+
+`/auto-mode-setup` is interactive — it drafts a block and asks a human to
+accept it — so `agent-host-rules.yml` splits the job: `action=setup` opens a
+`gha-rules` window to run it in, `action=capture` promotes the result into a
+pull request.
+
+### Scrollback stays on the box
+
+This repository is **public**, so Actions logs and job summaries are
+world-readable. Pane captures therefore go to `logs/` at 0600 and the step
+summary carries only window state and what was done. The `dump_scrollback`
+dispatch input prints a tail into the job log for debugging; it defaults to
+false, and it publishes whatever the agent had on screen.
+
+### Teardown
+
+```
+tmux -L gha-agent kill-server
+```
+
+Disable the `Agent host` workflow first, or the next tick rebuilds the fleet.
+That same tick is the recovery path for the one failure mode tmux's own
+daemonizing does not cover: the runner unit's default `KillMode=control-group`
+takes down everything in the service cgroup when the runner service restarts,
+the tmux server included.
+
 ## Extending self-hosted coverage
 
 `_test.yml`, `_lint.yml` and `_build-image.yml` all take a `runs-on` input
