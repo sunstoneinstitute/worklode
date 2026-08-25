@@ -27,15 +27,17 @@ func WithMetrics(reg prometheus.Registerer) Option {
 // storeMetrics holds the store's domain instruments. All methods are nil-safe
 // so call sites need no guards on stores opened without WithMetrics.
 type storeMetrics struct {
-	claims           *prometheus.CounterVec
-	renewals         *prometheus.CounterVec
-	releases         *prometheus.CounterVec
-	expiries         prometheus.Counter
-	sweeperRuns      *prometheus.CounterVec
-	projectWorkReads *prometheus.CounterVec
-	docOps           *prometheus.CounterVec
-	docTasksMinted   prometheus.Counter
-	skillAmbiguous   prometheus.Counter
+	claims                *prometheus.CounterVec
+	renewals              *prometheus.CounterVec
+	releases              *prometheus.CounterVec
+	expiries              prometheus.Counter
+	sweeperRuns           *prometheus.CounterVec
+	projectWorkReads      *prometheus.CounterVec
+	docOps                *prometheus.CounterVec
+	docTasksMinted        prometheus.Counter
+	skillAmbiguous        prometheus.Counter
+	instructions          *prometheus.CounterVec
+	instructionsDelivered prometheus.Counter
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -76,8 +78,16 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_skill_name_ambiguous_total",
 			Help: "Bare skill-name lookups matching more than one qualified skill (037 §4).",
 		}),
+		instructions: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_task_instructions_total",
+			Help: "Task instruction operations by op (enqueue|claim) and outcome.",
+		}, []string{"op", "outcome"}),
+		instructionsDelivered: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_task_instructions_delivered_total",
+			Help: "Instructions handed to a session by a claim.",
+		}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered)
 	// Pre-initialise both sweeper series so alert expressions see 0, not
 	// no-data, on a server whose sweeper has not ticked yet.
 	m.sweeperRuns.WithLabelValues("ok")
@@ -163,6 +173,26 @@ func (m *storeMetrics) skillNameAmbiguous() {
 		return
 	}
 	m.skillAmbiguous.Inc()
+}
+
+// instruction records one task-instruction operation (enqueue|claim) by
+// outcome.
+func (m *storeMetrics) instruction(op, outcome string) {
+	if m == nil {
+		return
+	}
+	m.instructions.WithLabelValues(op, outcome).Inc()
+}
+
+// deliverInstructions adds n to worklode_task_instructions_delivered_total,
+// the instructions handed to a session by one successful claim. n <= 0
+// records nothing — enqueue{outcome="ok"} minus this counter answers "is the
+// relay dead" in PromQL, so a zero-length claim must not move it.
+func (m *storeMetrics) deliverInstructions(n int) {
+	if m == nil || n <= 0 {
+		return
+	}
+	m.instructionsDelivered.Add(float64(n))
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the

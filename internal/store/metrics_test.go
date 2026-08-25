@@ -65,6 +65,8 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.sweeperRun(errors.New("boom"))
 	m.projectWorkRead(nil)
 	m.projectWorkRead(errors.New("boom"))
+	m.instruction("enqueue", "ok")
+	m.deliverInstructions(3)
 }
 
 // TestLeaseMetricsCounters drives claim/renew/release/expire through a store
@@ -177,6 +179,54 @@ func TestClaimNextDryRunRecordsNothing(t *testing.T) {
 	}
 	if got := testutil.ToFloat64(s.metrics.claims.WithLabelValues("claim_next", "none")); got != 0 {
 		t.Fatalf("claims{claim_next,none} after dry run = %v, want 0", got)
+	}
+}
+
+// TestInstructionMetrics drives EnqueueInstruction and
+// ClaimPendingInstructionsForActor through a store with metrics attached and
+// asserts the op/outcome counters plus the delivered-count counter.
+func TestInstructionMetrics(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/wt-a")
+
+	if _, err := s.EnqueueInstruction(ctx, lease.TaskID, "stig", "steer this"); err != nil {
+		t.Fatalf("enqueue instruction: %v", err)
+	}
+	if _, err := s.EnqueueInstruction(ctx, "no-such-task", "stig", "steer this"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("enqueue instruction on unknown task err = %v, want ErrNotFound", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.instructions.WithLabelValues("enqueue", "ok")); got != 1 {
+		t.Fatalf("instructions{enqueue,ok} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.instructions.WithLabelValues("enqueue", "error")); got != 1 {
+		t.Fatalf("instructions{enqueue,error} = %v, want 1", got)
+	}
+
+	delivered, err := s.ClaimPendingInstructionsForActor(ctx, "stig")
+	if err != nil || len(delivered) != 1 {
+		t.Fatalf("claim pending instructions = (%v, %v), want 1 delivered, nil", delivered, err)
+	}
+	if got := testutil.ToFloat64(s.metrics.instructions.WithLabelValues("claim", "ok")); got != 1 {
+		t.Fatalf("instructions{claim,ok} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.instructionsDelivered); got != 1 {
+		t.Fatalf("instructions_delivered = %v, want 1", got)
+	}
+
+	// A second claim finds nothing pending: instructions{claim,ok} still
+	// increments (the operation succeeded), but instructions_delivered does
+	// not move.
+	if delivered, err := s.ClaimPendingInstructionsForActor(ctx, "stig"); err != nil || len(delivered) != 0 {
+		t.Fatalf("second claim = (%v, %v), want 0 delivered, nil", delivered, err)
+	}
+	if got := testutil.ToFloat64(s.metrics.instructions.WithLabelValues("claim", "ok")); got != 2 {
+		t.Fatalf("instructions{claim,ok} after second claim = %v, want 2", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.instructionsDelivered); got != 1 {
+		t.Fatalf("instructions_delivered after empty claim = %v, want 1", got)
 	}
 }
 
