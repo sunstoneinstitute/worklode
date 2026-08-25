@@ -174,17 +174,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/lease/worktree":    guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/agent-session":     guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/agent-session/end": guardedBound(permTaskClaim),
-	// Enqueue is operator authorship onto a task, like assign/unassign below:
-	// plain guarded, so a task-scoped token (the agent working the task) may
-	// not message itself. Claim carries no {id} — an actor polls for
-	// whatever it currently leases — so it needs guardedAny, the existing
-	// helper for exactly this shape (see its doc comment): the same
-	// task-scoped token minted for one task's worktree (POST
-	// /api/v1/tasks/{id}/tokens) can poll here for the instructions queued
-	// against that task, since ClaimPendingInstructionsForActor already
-	// scopes the delivery to leases the caller holds.
+	// Both are actor writes, not task-scoped surfaces: guarded blocks a
+	// task-scoped token so claim can't drain instructions leased to a
+	// different task the same actor also holds (0016 multi-lease).
 	"POST /api/v1/tasks/{id}/instructions": guarded(permTaskWrite),
-	"POST /api/v1/instructions/claim":      guardedAny(permTaskClaim),
+	"POST /api/v1/instructions/claim":      guarded(permTaskClaim),
 	"POST /api/v1/tasks/{id}/assign":       guarded(permTaskAssign),
 	"POST /api/v1/tasks/{id}/unassign":     guarded(permTaskAssign),
 	"GET /api/v1/board":                    guarded(permTaskRead),

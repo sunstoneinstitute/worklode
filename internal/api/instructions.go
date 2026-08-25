@@ -17,7 +17,8 @@ func (s *server) enqueueInstruction(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	if strings.TrimSpace(req.Body) == "" {
+	req.Body = strings.TrimSpace(req.Body)
+	if req.Body == "" {
 		writeErr(w, http.StatusUnprocessableEntity, "body is required")
 		return
 	}
@@ -31,10 +32,9 @@ func (s *server) enqueueInstruction(w http.ResponseWriter, r *http.Request) {
 
 // claimInstructions handles POST /api/v1/instructions/claim: deliver every
 // pending instruction queued against a task the caller currently leases.
-// Actor-scoped rather than task-scoped — there is no task in the path, only
-// the caller's own identity (see requireTaskScope and guardedAny in
-// router.go) — so a task-scoped token minted for one task's worktree may
-// poll this route for the instructions queued against that same task.
+// guarded (not guardedAny): a task-scoped token must not reach this route,
+// since ClaimPendingInstructionsForActor scopes by actor across every task
+// that actor leases, not just the token's bound task (0016 multi-lease).
 func (s *server) claimInstructions(w http.ResponseWriter, r *http.Request) {
 	instructions, err := s.st.ClaimPendingInstructionsForActor(r.Context(), actorIDFrom(r))
 	if err != nil {
