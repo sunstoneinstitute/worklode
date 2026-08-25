@@ -9,7 +9,7 @@ import (
 
 // enqueueInstruction handles POST /api/v1/tasks/{id}/instructions: queue a
 // steering instruction against the task, delivered to whichever actor next
-// holds its lease (migration 0052).
+// holds its lease (migration 0055).
 func (s *server) enqueueInstruction(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req model.InstructionInput

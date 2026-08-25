@@ -187,6 +187,20 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in model.EndAge
 	return err
 }
 
+// Instruct calls POST /api/v1/tasks/{id}/instructions: queue a steering
+// instruction against the task, delivered to whichever actor next holds its
+// lease (migration 0055).
+func (c *Client) Instruct(ctx context.Context, taskID, body string) (model.Instruction, []byte, error) {
+	in := model.InstructionInput{Body: body}
+	return doJSON[model.Instruction](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(taskID)+"/instructions", in, "instruction")
+}
+
+// ClaimInstructions calls POST /api/v1/instructions/claim: deliver every
+// pending instruction queued against a task the caller currently leases.
+func (c *Client) ClaimInstructions(ctx context.Context) (model.InstructionsResponse, []byte, error) {
+	return doJSON[model.InstructionsResponse](ctx, c, http.MethodPost, "/api/v1/instructions/claim", nil, "instructions")
+}
+
 // EditTask calls PATCH /api/v1/tasks/{id}, sending only the fields set on in.
 func (c *Client) EditTask(ctx context.Context, id string, in model.EditTaskInput) (model.Task, []byte, error) {
 	return doJSON[model.Task](ctx, c, http.MethodPatch, "/api/v1/tasks/"+url.PathEscape(id), in, "task")
@@ -633,4 +647,15 @@ func TreeRender(w io.Writer, nodes []model.TaskTreeNode) {
 			fmt.Fprintln(w, "  (no children)")
 		}
 	}
+}
+
+// InstructionTable prints one row per queued steering instruction: id, task,
+// body, who queued it, when.
+func InstructionTable(w io.Writer, ins []model.Instruction) {
+	tw := newTabwriter(w)
+	fmt.Fprintln(tw, "ID\tTASK\tBODY\tCREATED_BY\tCREATED")
+	for _, i := range ins {
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\n", i.ID, i.Task, i.Body, dash(i.CreatedBy), LocalTime(i.CreatedAt))
+	}
+	tw.Flush()
 }
