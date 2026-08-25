@@ -1273,11 +1273,11 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 	ctx := t.Context()
 	seedDocsProject(t, s)
 
-	planA, err := insertDoc(t, s, "plan", nil, "plan-a")
+	planA, err := insertDoc(t, s, "plan", 1, "plan-a")
 	if err != nil {
 		t.Fatalf("insert plan a: %v", err)
 	}
-	planB, err := insertDoc(t, s, "plan", nil, "plan-b")
+	planB, err := insertDoc(t, s, "plan", 2, "plan-b")
 	if err != nil {
 		t.Fatalf("insert plan b: %v", err)
 	}

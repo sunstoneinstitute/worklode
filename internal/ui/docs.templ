@@ -37,10 +37,7 @@ templ Docs(v DocsView) {
 								<tr><th>Reference</th><th>Title</th><th>Project</th><th>Status</th><th>Version</th></tr>
 								for _, d := range v.Docs {
 									<tr>
-										<td>
-											<a href={ d.URL }>{ d.Ref }</a>
-											<div class="muted small mono">{ d.Doc.Slug }</div>
-										</td>
+										<td><a href={ d.URL }>{ d.Ref }</a></td>
 										<td><a href={ d.URL }>{ d.Doc.Title }</a></td>
 										<td><a href={ "/projects/" + d.Doc.Project }>{ d.Doc.Project }</a></td>
 										<td><span class={ "chip " + docStatusChip(d.Doc.Status) }>{ d.Doc.Status }</span></td>
@@ -67,7 +64,6 @@ templ Doc(v DocView) {
 					<span class="chip plain">version { v.Doc.Version }</span>
 					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a></span>
 				</p>
-				<p class="muted small mono">{ v.Doc.Slug }</p>
 				<p class="muted small">
 					Created { fmtTime(v.Doc.CreatedAt) } by { v.Doc.CreatedBy } &mdash; updated { fmtTime(v.Doc.UpdatedAt) }
 					if v.Doc.Issued != "" {

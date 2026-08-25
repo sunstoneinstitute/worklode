@@ -413,7 +413,7 @@ func TestCreateDocRejectsBadInput(t *testing.T) {
 		}, http.StatusUnprocessableEntity, "corpus number"},
 		"plan with a number": {model.CreateDocInput{
 			Project: "proj", Kind: "plan", Number: 3, Slug: "s", Body: docPlanBody,
-		}, http.StatusUnprocessableEntity, "carries no number"},
+		}, http.StatusUnprocessableEntity, "allocated by the server"},
 		"unknown project": {model.CreateDocInput{
 			Project: "nope", Kind: "spec", Number: 1, Slug: "s", Body: docSpecBody,
 		}, http.StatusNotFound, "not found"},
@@ -1101,9 +1101,14 @@ func TestDocsPage(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	// The plan is the point: since 029 §4 it carries a number, so the index
+	// links it by shorthand like every other kind rather than by database id.
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
 	})
+	if plan.Number == 0 {
+		t.Fatal("plan created without a number; 029 §4 allocates one")
+	}
 
 	rr := doReq(t, h, "GET", "/docs", "", nil)
 	if rr.Code != http.StatusOK {
@@ -1114,7 +1119,7 @@ func TestDocsPage(t *testing.T) {
 	bodyContains(t, body,
 		`href="/docs/WL-SPEC-25">WL-SPEC-25</a>`,
 		`href="/docs/WL-SPEC-25">Documents in the backbone</a>`,
-		`href="`+docPageURL(plan.ID)+`">Documents in the backbone, part 2</a>`,
+		`href="/docs/WL-PLAN-1">Documents in the backbone, part 2</a>`,
 		"accepted",
 		"draft",
 	)
@@ -1139,17 +1144,18 @@ func TestDocPage(t *testing.T) {
 		"accepted",                  // status chip
 		"sec-1",                     // section table
 		"Scope",
-		"isCoveredBy",       // the plan's covers, read backward
-		docPageURL(plan.ID), // plans have no shorthand
-		"025-part-2",        // named by slug, not as "document 42"
-		"Model body.",       // the body, rendered verbatim in a <pre>
+		"isCoveredBy", // the plan's covers, read backward
+		"plan 1",      // the far end's corpus reference
+		"025-part-2",  // named by slug, not as "document 42"
+		"Model body.", // the body, rendered verbatim in a <pre>
 	)
 	if strings.Contains(body, "document "+strconv.FormatInt(plan.ID, 10)) {
 		t.Errorf("relation names the far end by id rather than by slug:\n%s", body)
 	}
 
 	// The far end's corpus reference tells a plan from the spec it covers.
-	rr = doReq(t, h, "GET", docPageURL(plan.ID), "", nil)
+	// The plan's own page is at its shorthand now that it carries a number.
+	rr = doReq(t, h, "GET", "/docs/WL-PLAN-1", "", nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("plan page status = %d, body %s", rr.Code, rr.Body.String())
 	}

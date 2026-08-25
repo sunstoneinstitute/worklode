@@ -9,6 +9,11 @@ requires:
 - docs/specs/022-prometheus-metrics.md
 - docs/specs/026-design-doc-queries.md
 - docs/specs/029-research-work-in-the-backbone.md
+amendedBy:
+  "#sec-14.3":
+    - 029-research-work-in-the-backbone.md#sec-4
+  "#sec-16.3":
+    - 029-research-work-in-the-backbone.md#sec-4
 amends:
   "#sec-10":
     - 004-execution-backbone.md#sec-6.3
@@ -1443,6 +1448,14 @@ their own right.
 
 ### 14.3 The `<KEY>-<TYPE>-<n>` shorthand {#sec-14.3}
 
+> **Amended by spec 029 §4.** `<TYPE>` is not limited to `SPEC` and `ADR`, and
+> the closing paragraph's "plans get no shorthand, they carry no number" no
+> longer holds. Every kind draws a number from its own per-project sequence, so
+> `WL-PLAN-7` is a shorthand like `WL-SPEC-25` and resolves the same way. One
+> consequence for this section: a number is unique per kind rather than per
+> corpus, so `WL-SPEC-1` and `WL-PLAN-1` both exist and the `<TYPE>` token
+> selects rather than merely disambiguating.
+
 A filename is addressable only from inside its own repository, so a reference into another
 project's corpus has no form under §14.1. `wl:` cannot supply one — §17 binds it to the ontology
 namespace, and `wl:SPEC-23` would read as a term. The shorthand reuses the project key spec 004
@@ -1481,9 +1494,12 @@ Two consequences:
   costs a lookup on every write and is what this section amends. The number is the one already in
   the filename.
 
-Plans get no shorthand. They carry no number (§9), they are not DesignDocs, and §9.2 mints no
-root task an id could borrow — an accepted plan's tasks reference the document, so the plan's
-handle is its repo-relative path (its backbone doc id once this spec is implemented).
+> **Superseded by 029 §4** — kept because §16.3 and 026 still reference it.
+> Plans got no shorthand: they carried no number (§9), they are not DesignDocs, and §9.2
+> mints no root task an id could borrow, so a plan's handle was its repo-relative path.
+> A plan now draws a number from its project's plan sequence and is cited as `WL-PLAN-7`.
+> The reasons above never argued a plan should be *uncitable* — only that it had no number
+> to be cited by, which is what changed.
 
 **Distance decides which form is canonical.** A reference within one corpus stays a filename: it
 carries the slug, so `requires: 004-execution-backbone.md` says what it depends on without a
@@ -1904,6 +1920,13 @@ nothing. **`--json`** emits the same report as objects. A document whose
 frontmatter fails to parse is a sync error, not a silently skipped row.
 
 ### 16.3 Identity {#sec-16.3}
+
+> **Amended by spec 029 §4.** The plan bullet's two-part
+> `<KEY>-PLAN-<spec-ordinal>-<plan-ordinal>` is retired: a plan draws a single
+> number from its project's plan sequence, `<KEY>-PLAN-<n>`, so the paragraph
+> below about a plan-ordinal counted by corpus order and the renumbering it
+> could cause at the cutover no longer applies. The sync writes whatever number
+> the server allocated.
 
 Identity is derived from the corpus, per 026's model, so ids are stable and
 resolvable the moment a document exists:

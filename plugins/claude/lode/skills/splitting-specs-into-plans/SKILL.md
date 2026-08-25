@@ -44,7 +44,7 @@ covers:
 |---|---|---|
 | `spec` | yes | Document reference with a `#sec-N` fragment — `WL-SPEC-<N>` shorthand, or the document's slug. |
 | `coverage` | yes | `full`, `partial`, or `none` |
-| `fullCoverageWith` | no | Plans that, together with this one, make the section `full`. Plan slugs — plans have no number shorthand. |
+| `fullCoverageWith` | no | Plans that, together with this one, make the section `full`. Plan slugs; a plan's `WL-PLAN-7` shorthand names it too (029 §4). |
 
 **`full`** — after this plan executes, the section is satisfied. Nothing else
 is owed.

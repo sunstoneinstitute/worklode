@@ -209,12 +209,18 @@ func TestResolveDocRefTier1Miss(t *testing.T) {
 	}
 }
 
-// A plan is never a candidate: `lode show` renders specs and ADRs only.
-func TestResolveDocRefSkipsPlans(t *testing.T) {
+// Since 029 §4 a plan carries a number like every other kind, so a ref reaches
+// it: the corpus has one name space, not one for the kinds `lode show` used to
+// render and another for plans.
+func TestResolveDocRefResolvesPlans(t *testing.T) {
 	docs := resolveFixture()
 
-	if _, _, err := resolveDocRef(docs, "WL", "2026-08-19-a-plan.md"); err == nil {
-		t.Fatal("a plan slug resolved; want a miss")
+	d, _, err := resolveDocRef(docs, "WL", "2026-08-19-a-plan.md")
+	if err != nil {
+		t.Fatalf("a plan slug did not resolve: %v", err)
+	}
+	if d.Kind != "plan" {
+		t.Errorf("resolved kind = %q, want plan", d.Kind)
 	}
 }
 
