@@ -418,6 +418,15 @@ func TestAddParticipantDeputy(t *testing.T) {
 	if err := addDeputy("cleo", "acting-lead", false, false); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("role=acting-lead: got %v", err)
 	}
+	// The lead/deputy exclusion is per actor, not per row: ada already leads
+	// (from an earlier row) and bob is already deputy, so a second role row
+	// claiming the other flag is refused too.
+	if err := addDeputy("ada", "member", false, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("existing lead adding a deputy row: got %v", err)
+	}
+	if err := addDeputy("bob", "domain-expert", true, false); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("existing deputy adding a lead row: got %v", err)
+	}
 
 	crew, err := s.ListParticipants(ctx, "p1")
 	if err != nil {
