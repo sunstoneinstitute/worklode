@@ -10,6 +10,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -86,10 +87,10 @@ func TestCrewLifecycle(t *testing.T) {
 		t.Fatalf("create actor mo: %v", err)
 	}
 
-	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "lucy", "editor", true); err != nil {
+	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "lucy", "editor", true, false); err != nil {
 		t.Fatalf("add lucy as lead: %v", err)
 	}
-	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "mo", "member", false); err != nil {
+	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "mo", "member", false, false); err != nil {
 		t.Fatalf("add mo as member: %v", err)
 	}
 
@@ -195,6 +196,31 @@ func TestCrewLifecycle(t *testing.T) {
 	}
 	if got := strings.Count(body, `<span class="chip lead">`); got != 1 {
 		t.Fatalf("Lead badge count after mo's removal = %d, want exactly 1:\n%s", got, body)
+	}
+
+	// --- Step 5b: a deputy is added, shown as acting-lead, and --lead/--deputy stay exclusive ---
+
+	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
+		ID: "deb", Kind: "human", DisplayName: "Deb Deputy",
+	}); err != nil {
+		t.Fatalf("create actor deb: %v", err)
+	}
+	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "deb", "member", false, true); err != nil {
+		t.Fatalf("add deb as deputy: %v", err)
+	}
+	crew, _, err = admin.ListCrew(ctx, "crewproj")
+	if err != nil {
+		t.Fatalf("list crew after adding deb: %v", err)
+	}
+	deb := findCrewMember(t, crew, "deb")
+	if !slices.Contains(deb.Roles, "acting-lead") {
+		t.Fatalf("deb.Roles = %+v, want acting-lead present", deb.Roles)
+	}
+
+	// Lead and deputy together is refused by the store, independent of the
+	// CLI's own --lead/--deputy mutual exclusion.
+	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "mo", "editor", true, true); err == nil {
+		t.Fatal("add mo as lead and deputy: want error, got success")
 	}
 
 	// --- Step 6: the lead can never be removed -------------------------------

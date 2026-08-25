@@ -153,21 +153,25 @@ func newProjectCrewCmd() *cobra.Command {
 
 func newProjectCrewAddCmd() *cobra.Command {
 	var role string
-	var lead bool
+	var lead, deputy bool
 	cmd := &cobra.Command{
 		Use:   "add <project> <actor>",
 		Short: "Add an actor to a project's Crew",
 		Long: "Add an actor to a project's Crew with a role label.\n\n" +
 			"The role is one of the fixed project-role vocabulary (member, editor,\n" +
 			"science-lead, reporter, domain-expert, data-scientist, engineer);\n" +
-			"one actor may hold several. A project has at most one lead.",
+			"one actor may hold several. A project has at most one lead.\n\n" +
+			"--deputy marks the member as the project's one deputy: full lead\n" +
+			"authority when the lead does not act, without becoming lead. It is\n" +
+			"mutually exclusive with --lead, and shows on the roster as a\n" +
+			"read-only \"acting-lead\" role.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-			member, raw, err := c.AddCrewMember(cmd.Context(), args[0], args[1], role, lead)
+			member, raw, err := c.AddCrewMember(cmd.Context(), args[0], args[1], role, lead, deputy)
 			if err != nil {
 				return err
 			}
@@ -186,6 +190,8 @@ func newProjectCrewAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&role, "role", "", "role for this member: member, editor, science-lead, reporter, domain-expert, data-scientist, or engineer (default: member)")
 	cmd.Flags().BoolVar(&lead, "lead", false, "make this member the project lead")
+	cmd.Flags().BoolVar(&deputy, "deputy", false, "make this member the project deputy (acts with lead authority when the lead does not)")
+	cmd.MarkFlagsMutuallyExclusive("lead", "deputy")
 	return cmd
 }
 
