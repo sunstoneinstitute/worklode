@@ -589,7 +589,11 @@ while dogfooding it against the real corpus.
   a planned partial: there is no project-scoped role concept yet (`authz.go`'s
   own package doc says as much), and fixing it needs authz decisions to become
   project-scoped, which is a larger change than this plan's task set. Gated on
-  that decision landing.
+  that decision landing. The deputy designation (spec 029 §6.1) sharpens the
+  stakes too: deputy is meant to carry full lead authority, so that authority
+  needs to be properly scoped before it gates anything real, though today
+  nothing in `authz.go` grants anything off `is_deputy` so the label is purely
+  descriptive.
 ## From WL-47 — multi-harness skill delivery (2026-08-21)
 
 - `[P4]` **Five in-tree comments cite a "spec 024" that does not exist.**
