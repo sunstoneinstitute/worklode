@@ -34,14 +34,32 @@ const agentSessionColumns = `lease_id, agent, agent_version, external_session_id
 	started_at, last_seen_at, ended_at, input_tokens, output_tokens,
 	cost_amount, cost_currency`
 
+// agentSessionColumnsS is agentSessionColumns qualified for a join that also
+// selects from leases and tasks, where bare lease_id would be ambiguous.
+// Spelled out rather than derived from the string above: a query's column
+// list is the one place a clever transform buys nothing and costs the reader
+// the ability to check it against the scan.
+const agentSessionColumnsS = `s.lease_id, s.agent, s.agent_version, s.external_session_id,
+	s.started_at, s.last_seen_at, s.ended_at, s.input_tokens, s.output_tokens,
+	s.cost_amount, s.cost_currency`
+
 func scanAgentSession(row rowScanner) (*model.AgentSession, error) {
+	return scanAgentSessionWith(row)
+}
+
+// scanAgentSessionWith is scanAgentSession for a SELECT that appends columns
+// after agentSessionColumns — extra receives one pointer per trailing column,
+// in order. Sharing the scan is what keeps a joined query from re-deriving
+// the null handling for cost, tokens and ended_at.
+func scanAgentSessionWith(row rowScanner, extra ...any) (*model.AgentSession, error) {
 	var a model.AgentSession
 	var version, costAmount sql.NullString
 	var endedAt sql.NullTime
 	var inTok, outTok sql.NullInt64
-	if err := row.Scan(&a.LeaseID, &a.Agent, &version, &a.SessionID,
+	dest := []any{&a.LeaseID, &a.Agent, &version, &a.SessionID,
 		&a.StartedAt, &a.LastSeenAt, &endedAt, &inTok, &outTok,
-		&costAmount, &a.CostCurrency); err != nil {
+		&costAmount, &a.CostCurrency}
+	if err := row.Scan(append(dest, extra...)...); err != nil {
 		return nil, err
 	}
 	a.AgentVersion = version.String
@@ -428,4 +446,60 @@ func (s *Store) AgentSession(ctx context.Context, leaseID int64, agent, sessionI
 		return nil, fmt.Errorf("get agent session %s/%s: %w", agent, sessionID, err)
 	}
 	return a, nil
+}
+
+// ProjectAgentSession is one open agent session together with the task its
+// lease is on. The task fields are what make a session legible on a project
+// page — a bare session names only a lease id, which no reader can place.
+//
+// Deliberately package-local rather than an internal/model type: it crosses
+// no HTTP boundary (the cockpit projection's JSON shape is contracted by spec
+// 032 and unchanged by this), so ADR 036 does not reach it. internal/api
+// converts it to a ui view type at the render seam.
+type ProjectAgentSession struct {
+	model.AgentSession
+	TaskID    string
+	TaskTitle string
+	ActorID   string
+}
+
+// OpenAgentSessionsForProject returns every still-running agent session on a
+// task in projectID, most-recently-seen first.
+//
+// "Open" is ended_at IS NULL on a lease that is itself unreleased. Both
+// conditions are needed: releasing a lease stamps its open sessions
+// (endOpenAgentSessionsOnLease), but a session on a lease that was expired
+// out from under it can still be sitting unstamped, and reporting one of
+// those as running would be a lie on a page whose whole job is to say what is
+// running now.
+func (s *Store) OpenAgentSessionsForProject(ctx context.Context, projectID string) ([]ProjectAgentSession, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+agentSessionColumnsS+`, t.id, t.title, l.actor_id
+		   FROM agent_sessions s
+		   JOIN leases l ON l.id = s.lease_id
+		   JOIN tasks  t ON t.id = l.task_id
+		  WHERE t.project_id = $1
+		    AND s.ended_at IS NULL
+		    AND l.released_at IS NULL
+		  ORDER BY s.last_seen_at DESC, t.id`,
+		projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list open agent sessions for project %s: %w", projectID, err)
+	}
+	what := fmt.Sprintf("list open agent sessions for project %s", projectID)
+	sessions, err := collectRows(rows, what, byValue(scanProjectAgentSession))
+	if err != nil {
+		return nil, err
+	}
+	return nonNil(sessions), nil
+}
+
+func scanProjectAgentSession(row rowScanner) (*ProjectAgentSession, error) {
+	var p ProjectAgentSession
+	a, err := scanAgentSessionWith(row, &p.TaskID, &p.TaskTitle, &p.ActorID)
+	if err != nil {
+		return nil, err
+	}
+	p.AgentSession = *a
+	return &p, nil
 }

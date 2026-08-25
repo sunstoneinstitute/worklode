@@ -61,6 +61,15 @@ templ Cockpit(v CockpitView) {
 							}
 						</div>
 					</section>
+					if len(v.AgentSessions) > 0 {
+						<section class="card" id="agents" aria-labelledby="agents-heading">
+							<div class="hd">
+								<h3 id="agents-heading">Agent sessions</h3>
+								<div class="meta"><span class="muted">running now</span></div>
+							</div>
+							@agentSessionRows(v.AgentSessions)
+						</section>
+					}
 				</div>
 				<aside class="rail" aria-label="Decisions and exceptions">
 					if v.NextDecision != nil {

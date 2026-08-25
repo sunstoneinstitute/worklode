@@ -722,3 +722,95 @@ func TestAgentSessionAcceptsCopilot(t *testing.T) {
 		t.Fatalf("touch as copilot: %v", err)
 	}
 }
+
+func TestOpenAgentSessionsForProject(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	one := leaseForTest(t, s, "host:/.worktrees/one")
+	two := leaseForTest(t, s, "host:/.worktrees/two")
+
+	if _, err := s.TouchAgentSession(ctx, one.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
+		t.Fatalf("touch sess-1: %v", err)
+	}
+	*now = now.Add(time.Minute)
+	if _, err := s.TouchAgentSession(ctx, two.TaskID, "stig", "codex", "", "sess-2", nil); err != nil {
+		t.Fatalf("touch sess-2: %v", err)
+	}
+
+	sessions, err := s.OpenAgentSessionsForProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("OpenAgentSessionsForProject: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("sessions: got %d, want 2", len(sessions))
+	}
+	// Most recently seen first, so the page leads with the liveliest session.
+	if sessions[0].SessionID != "sess-2" || sessions[1].SessionID != "sess-1" {
+		t.Fatalf("order: got %q then %q, want sess-2 then sess-1",
+			sessions[0].SessionID, sessions[1].SessionID)
+	}
+	// The task is what makes a session legible: a lease id places nothing.
+	if sessions[0].TaskID != two.TaskID || sessions[0].TaskTitle != "a task" {
+		t.Fatalf("task on session = %q/%q, want %q/%q",
+			sessions[0].TaskID, sessions[0].TaskTitle, two.TaskID, "a task")
+	}
+	if sessions[0].ActorID != "stig" {
+		t.Fatalf("actor = %q, want stig", sessions[0].ActorID)
+	}
+
+	if got, err := s.OpenAgentSessionsForProject(ctx, "no-such-project"); err != nil {
+		t.Fatalf("OpenAgentSessionsForProject on unknown project: %v", err)
+	} else if len(got) != 0 {
+		t.Fatalf("unknown project: got %d sessions, want 0", len(got))
+	}
+}
+
+// A page that says what is running now must not count a session the agent
+// already finished.
+func TestOpenAgentSessionsForProjectExcludesEndedSessions(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/.worktrees/one")
+
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+	if err := s.EndAgentSession(ctx, lease.TaskID, "stig", "claude-code", "sess-1", SessionUsage{}); err != nil {
+		t.Fatalf("end: %v", err)
+	}
+
+	got, err := s.OpenAgentSessionsForProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("OpenAgentSessionsForProject: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("ended session still reported: got %d, want 0", len(got))
+	}
+}
+
+// Releasing a lease stamps its open sessions, but a lease expired out from
+// under a session can leave one unstamped. Reporting that as running would be
+// a lie on a page whose whole job is to say what is running now.
+func TestOpenAgentSessionsForProjectExcludesReleasedLeases(t *testing.T) {
+	s, now := openLeaseStore(t)
+	ctx := t.Context()
+	lease := leaseForTest(t, s, "host:/.worktrees/one")
+
+	if _, err := s.TouchAgentSession(ctx, lease.TaskID, "stig", "claude-code", "", "sess-1", nil); err != nil {
+		t.Fatalf("touch: %v", err)
+	}
+	// Expire the lease rather than releasing it: expiry is the path that does
+	// not stamp the session.
+	*now = now.Add(72 * time.Hour)
+	if _, err := s.ExpireLeases(ctx, *now); err != nil {
+		t.Fatalf("expire leases: %v", err)
+	}
+
+	got, err := s.OpenAgentSessionsForProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("OpenAgentSessionsForProject: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("session on an expired lease reported as running: got %d, want 0", len(got))
+	}
+}

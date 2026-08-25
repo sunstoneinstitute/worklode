@@ -37,6 +37,13 @@ templ Task(v TaskView) {
 				}
 			</section>
 
+			if len(v.AgentSessions) > 0 {
+				<section class="card" aria-labelledby="agent-sessions-heading">
+					<div class="hd"><h3 id="agent-sessions-heading">Agent sessions</h3></div>
+					@agentSessionRows(v.AgentSessions)
+				</section>
+			}
+
 			<section class="card">
 				<div class="hd"><h3>Body</h3></div>
 				// BodyHTML is the one value this package emits unescaped. What
