@@ -48,6 +48,76 @@ func TestCrewTableFallsBackToActorID(t *testing.T) {
 	}
 }
 
+// TestDocRefFormsTheShorthand: a spec or ADR renders as the 025 §14.3
+// shorthand a person cites; a plan, which carries no number and so has no
+// shorthand, renders as its kind alone; and a document whose project key did
+// not reach the client degrades to the unqualified form rather than printing a
+// leading dash.
+func TestDocRefFormsTheShorthand(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		doc  model.Doc
+		want string
+	}{
+		{"spec", model.Doc{ProjectKey: "WL", Kind: "spec", Number: 29}, "WL-SPEC-29"},
+		{"adr", model.Doc{ProjectKey: "WL", Kind: "adr", Number: 7}, "WL-ADR-7"},
+		{"plan", model.Doc{ProjectKey: "WL", Kind: "plan"}, "plan"},
+		{"no key", model.Doc{Kind: "spec", Number: 29}, "SPEC-29"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DocRef(tc.doc); got != tc.want {
+				t.Fatalf("DocRef = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDocTableLeadsWithRefNotTheIntegerID: the table opens with the formatted
+// id and spends no column on the database id, the kind or the number — the ref
+// carries the last two, and the id is the API's handle, which is why it stays
+// in --json (WL-336).
+func TestDocTableLeadsWithRefNotTheIntegerID(t *testing.T) {
+	var b strings.Builder
+	DocTable(&b, []model.Doc{{
+		ID: 4242, ProjectKey: "WL", Kind: "spec", Number: 29,
+		Slug: "029-research-work-in-the-backbone", Title: "Research work",
+		Status: "draft", Version: 2,
+	}})
+	out := b.String()
+	header, row, _ := strings.Cut(out, "\n")
+	if fields := strings.Fields(header); len(fields) == 0 || fields[0] != "REF" {
+		t.Fatalf("DocTable should open with a REF column, got header %q", header)
+	}
+	if strings.Contains(header, "NUMBER") || strings.Contains(header, "KIND") {
+		t.Fatalf("DocTable should fold kind and number into REF, got header %q", header)
+	}
+	if fields := strings.Fields(row); len(fields) == 0 || fields[0] != "WL-SPEC-29" {
+		t.Fatalf("DocTable first cell should be the formatted id, got row %q", row)
+	}
+	if strings.Contains(out, "4242") {
+		t.Fatalf("DocTable should not print the integer id; it is --json's handle:\n%s", out)
+	}
+}
+
+// TestDocPlanningTableLeadsWithRef: the gap tables share the document view
+// family, so they open with the same formatted id rather than the integer one.
+func TestDocPlanningTableLeadsWithRef(t *testing.T) {
+	var b strings.Builder
+	DocPlanningTable(&b, []model.Doc{{
+		ID: 91, ProjectKey: "WL", Kind: "spec", Number: 7, Slug: "007-drift-and-overview",
+	}}, []model.DocPlanningGap{{
+		Doc: 91, Sections: 9, Gaps: []model.DocSectionGap{{Anchor: "sec-4", Coverage: "unplanned"}},
+	}})
+	out := b.String()
+	header, row, _ := strings.Cut(out, "\n")
+	if fields := strings.Fields(header); len(fields) == 0 || fields[0] != "REF" {
+		t.Fatalf("DocPlanningTable should open with a REF column, got header %q", header)
+	}
+	if fields := strings.Fields(row); len(fields) == 0 || fields[0] != "WL-SPEC-7" {
+		t.Fatalf("DocPlanningTable first cell should be the formatted id, got row %q", row)
+	}
+}
+
 // TestDocPlanningTableAnnotatesAnchorsWithCoverage: the ANCHORS column
 // renders each gap as anchor(coverage), matching 026 §2.1's sample output
 // line.

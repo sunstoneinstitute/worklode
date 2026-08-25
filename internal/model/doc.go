@@ -8,18 +8,26 @@ import "time"
 // "" when unset, the body being the authority for it as for Title; Assignee
 // defaults to the creator and is what the accept gate checks.
 type Doc struct {
-	ID        int64  `json:"id"`
-	Project   string `json:"project"`
-	Kind      string `json:"kind"`   // spec | adr | plan
-	Number    int    `json:"number"` // 0 for plans
-	Slug      string `json:"slug"`
-	Title     string `json:"title"`
-	Body      string `json:"body"` // the full markdown, frontmatter included
-	Status    string `json:"status"`
-	Version   int    `json:"version"`
-	Issued    string `json:"issued"` // YYYY-MM-DD, "" when unset
-	Assignee  string `json:"assignee"`
-	CreatedBy string `json:"created_by"`
+	ID      int64  `json:"id"`
+	Project string `json:"project"`
+	// ProjectKey is the project's key ("WL"), the first segment of the
+	// 025 §14.3 shorthand a reader cites ("WL-SPEC-29"). Project carries the
+	// project id ("worklode"), which the shorthand is not built from, so
+	// rendering a document's formatted id needs this alongside it. Stamped at
+	// the API boundary rather than scanned: it is the project's fact, not the
+	// document's, and joining it into every doc query would put it in two
+	// GROUP BY clauses to serve one column. Empty on a store-side value.
+	ProjectKey string `json:"project_key,omitempty"`
+	Kind       string `json:"kind"`   // spec | adr | plan
+	Number     int    `json:"number"` // 0 for plans
+	Slug       string `json:"slug"`
+	Title      string `json:"title"`
+	Body       string `json:"body"` // the full markdown, frontmatter included
+	Status     string `json:"status"`
+	Version    int    `json:"version"`
+	Issued     string `json:"issued"` // YYYY-MM-DD, "" when unset
+	Assignee   string `json:"assignee"`
+	CreatedBy  string `json:"created_by"`
 	// GeneratedByTask is the task that authored this document (025 §12,
 	// projected as prov:wasGeneratedBy), "" when no task did — a cockpit
 	// author, an agent outside a claimed worktree, a corpus import. Distinct

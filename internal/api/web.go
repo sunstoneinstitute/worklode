@@ -507,16 +507,7 @@ func (s *server) docsPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	projects, err := s.st.ListProjects(r.Context())
-	if err != nil {
-		s.webStoreErr(w, err)
-		return
-	}
-	keys := make(map[string]string, len(projects))
-	for _, p := range projects {
-		keys[p.ID] = p.Key
-	}
-	view := docsView(docs, keys)
+	view := docsView(docs, s.projectKeyByID(r.Context()))
 	s.renderWeb(w, r, http.StatusOK, "docs page", ui.Docs(view))
 }
 

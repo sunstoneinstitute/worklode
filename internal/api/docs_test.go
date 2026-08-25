@@ -1558,3 +1558,38 @@ func TestCreateDocRecordsAuthoringTask(t *testing.T) {
 		t.Errorf("error = %q, want it to name the task", msg)
 	}
 }
+
+// TestDocResponsesCarryTheProjectKey: a document's formatted id ("WL-SPEC-25")
+// is built from the project key, which lives on the project rather than the
+// document, so the API stamps it onto every doc a client renders as a ref
+// (WL-336). Without it the CLI degrades to the unqualified "SPEC-25".
+func TestDocResponsesCarryTheProjectKey(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	created := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: docSpecBody,
+	})
+	if created.ProjectKey != "WL" {
+		t.Errorf("create response project_key = %q, want WL", created.ProjectKey)
+	}
+
+	rr := doReq(t, h, "GET", "/api/v1/docs?project=proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var list model.DocListResponse
+	decodeInto(t, rr, &list)
+	if len(list.Docs) != 1 {
+		t.Fatalf("listed %d documents, want 1", len(list.Docs))
+	}
+	if list.Docs[0].ProjectKey != "WL" {
+		t.Errorf("list response project_key = %q, want WL", list.Docs[0].ProjectKey)
+	}
+	// The integer id is what --json consumers key on, so widening the shape
+	// must not have cost them it.
+	if list.Docs[0].ID == 0 {
+		t.Error("list response dropped the integer id, which --json still carries")
+	}
+}
