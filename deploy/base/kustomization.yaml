@@ -118,3 +118,5 @@ configMapGenerator:
       - migrations/0052_deputy_crew_role.down.sql
       - migrations/0053_plan_numbers.up.sql
       - migrations/0053_plan_numbers.down.sql
+      - migrations/0054_spec_adr_numbers.up.sql
+      - migrations/0054_spec_adr_numbers.down.sql

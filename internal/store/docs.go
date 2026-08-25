@@ -38,9 +38,11 @@ var (
 	validDocStatuses = ns.Set(ns.DesignDocStatuses)
 )
 
-// DocInput carries the fields for creating a document. Number is 0 for plans,
-// which carry none (025 §14.3). Assignee defaults to CreatedBy — the accept
-// gate is assignee-only, so a document with none could never be accepted.
+// DocInput carries the fields for creating a document. Number 0 means
+// auto-assign the next free one for (project, kind); an explicit value stays
+// legal but is the rare override (029 §4). Assignee defaults to CreatedBy —
+// the accept gate is assignee-only, so a document with none could never be
+// accepted.
 type DocInput struct {
 	Project   string
 	Kind      string // spec | adr | plan
@@ -95,17 +97,38 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if in.Slug == "" {
 		return nil, fmt.Errorf("doc slug must not be empty: %w", ErrInvalidInput)
 	}
-	// A spec or ADR takes its number from its filename, so the caller supplies
-	// it and its absence is the caller's error, named here rather than surfacing
-	// as a NOT NULL violation. A plan has no filename number to inherit, so the
-	// server allocates one below (029 §4) and an explicit one is refused: the
-	// sequence is the only writer, and honouring a caller's guess would let two
-	// plans collide on it.
-	switch {
-	case in.Kind == "plan" && in.Number != 0:
-		return nil, fmt.Errorf("a plan's number is allocated by the server (029 §4), got %d: %w", in.Number, ErrInvalidInput)
-	case in.Kind != "plan" && in.Number <= 0:
-		return nil, fmt.Errorf("a %s needs a corpus number, got %d: %w", in.Kind, in.Number, ErrInvalidInput)
+	if in.Number < 0 {
+		return nil, fmt.Errorf("a %s needs a non-negative corpus number, got %d: %w", in.Kind, in.Number, ErrInvalidInput)
+	}
+	// Every kind draws its number from its project's (project_id, kind) row in
+	// project_entity_seq — the same counter deliverables and, as of 029 §4's
+	// plan-numbers cutover, plans already use. An explicit in.Number
+	// stays legal — the rare case of reserving one, or a corpus import
+	// preserving the number already in a spec/ADR's filename — checked for
+	// collision by docs_project_kind_number below; the upsert then bumps the
+	// counter past it so a later auto-assign never retraces it.
+	docSeqKind := strings.ToUpper(in.Kind)
+	docNumber := int64(in.Number)
+	if docNumber == 0 {
+		// The upsert both creates the counter row on a project's first
+		// document of this kind (next = 2, ordinal 1) and advances it
+		// afterwards, holding the row lock for the rest of the transaction
+		// so two concurrent creates cannot draw the same number.
+		if err := tx.QueryRow(
+			`INSERT INTO project_entity_seq (project_id, kind, next) VALUES ($1, $2, 2)
+			 ON CONFLICT (project_id, kind) DO UPDATE SET next = project_entity_seq.next + 1
+			 RETURNING next - 1`,
+			in.Project, docSeqKind,
+		).Scan(&docNumber); err != nil {
+			return nil, fmt.Errorf("allocate %s number: %w", in.Kind, err)
+		}
+	} else if _, err := tx.Exec(
+		`INSERT INTO project_entity_seq (project_id, kind, next) VALUES ($1, $2, $3 + 1)
+		 ON CONFLICT (project_id, kind) DO UPDATE
+		   SET next = GREATEST(project_entity_seq.next, $3 + 1)`,
+		in.Project, docSeqKind, docNumber,
+	); err != nil {
+		return nil, fmt.Errorf("reserve %s number %d: %w", in.Kind, docNumber, err)
 	}
 	status := in.Status
 	if status == "" {
@@ -139,20 +162,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	}
 	ts := now.UTC().Truncate(time.Second)
 
-	number := int64(in.Number)
-	if in.Kind == "plan" {
-		// The upsert both creates the counter row on a project's first plan
-		// (next = 2, ordinal 1) and advances it afterwards, holding the row
-		// lock for the rest of the transaction so two concurrent creates
-		// cannot draw the same number. Same shape as CreateDeliverable's.
-		if err := tx.QueryRow(
-			`INSERT INTO project_entity_seq (project_id, kind, next) VALUES ($1, 'PLAN', 2)
-			 ON CONFLICT (project_id, kind) DO UPDATE SET next = project_entity_seq.next + 1
-			 RETURNING next - 1`, in.Project,
-		).Scan(&number); err != nil {
-			return nil, fmt.Errorf("allocate plan number: %w", err)
-		}
-	}
+	number := sql.NullInt64{Int64: docNumber, Valid: true}
 	var id int64
 	err = tx.QueryRow(
 		`INSERT INTO docs (project_id, kind, number, slug, title, body, status, version,
@@ -172,7 +182,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		}
 		if isUniqueViolationOn(err, "docs_project_kind_number") {
 			return nil, fmt.Errorf("project %s already has %s %d: %w",
-				in.Project, in.Kind, in.Number, ErrDocExists)
+				in.Project, in.Kind, docNumber, ErrDocExists)
 		}
 		// A worktree can outlive the task it was named for, so an authoring
 		// task the backbone has never heard of is a caller mistake worth

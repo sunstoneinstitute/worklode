@@ -3,10 +3,11 @@ package model
 import "time"
 
 // Doc is a backbone design document (025 §5): a spec, an ADR, or a plan.
-// Number is 0 for plans, which carry no corpus number (025 §14.3); Issued is
-// the frontmatter's ISO date of first publication (dct:issued, 025 §14) and is
-// "" when unset, the body being the authority for it as for Title; Assignee
-// defaults to the creator and is what the accept gate checks.
+// Number is the project's per-kind ordinal, auto-assigned unless the caller
+// reserved one explicitly (029 §4); Issued is the frontmatter's ISO date of
+// first publication (dct:issued, 025 §14) and is "" when unset, the body
+// being the authority for it as for Title; Assignee defaults to the creator
+// and is what the accept gate checks.
 type Doc struct {
 	ID      int64  `json:"id"`
 	Project string `json:"project"`
@@ -18,8 +19,8 @@ type Doc struct {
 	// document's, and joining it into every doc query would put it in two
 	// GROUP BY clauses to serve one column. Empty on a store-side value.
 	ProjectKey string `json:"project_key,omitempty"`
-	Kind       string `json:"kind"`   // spec | adr | plan
-	Number     int    `json:"number"` // 0 for plans
+	Kind       string `json:"kind"` // spec | adr | plan
+	Number     int    `json:"number"`
 	Slug       string `json:"slug"`
 	Title      string `json:"title"`
 	Body       string `json:"body"` // the full markdown, frontmatter included

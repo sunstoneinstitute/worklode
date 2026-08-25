@@ -1483,8 +1483,13 @@ Two consequences:
   004 §2.2's key CHECK gains the exclusion.
 - **Document numbers are not drawn from the task sequence.** 004 §2.5 floated
   `<PROJECTKEY>-{ADR,SPEC}-<n>` with the numbers "drawn from the same sequence as tasks", which
-  costs a lookup on every write and is what this section amends. The number is the one already in
-  the filename.
+  costs a lookup on every write and is what this section amends. Numbers draw from their own
+  per-`(project, kind)` sequence instead — 029 §4's counter rows, the live design now that §16's
+  file-derived numbering is withdrawn. `lode doc new` allocates the next free number by default;
+  the caller is never required to supply one. An explicit `--number` stays legal for the rare
+  case — reserving a number ahead of writing, or importing a corpus that already fixed one — and
+  is checked against the same counter for collision before use, the same check an auto-assigned
+  number can never fail.
 
 > **Superseded by 029 §4** — kept because §16.3 and 026 still reference it.
 > Plans got no shorthand: they carried no number (§9), they are not DesignDocs, and §9.2
