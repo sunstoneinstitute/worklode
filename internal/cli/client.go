@@ -1281,11 +1281,12 @@ func (c *Client) Reconcile(ctx context.Context, in model.ReconcileInput) (model.
 // AddCrewMember calls POST /api/v1/projects/{id}/participants, adding one
 // role-labelled Crew member (spec 029 §6.1). An empty role means "member";
 // the returned member carries every role that actor holds on the project,
-// not just the one just added.
-func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string, lead bool) (model.CrewMember, []byte, error) {
+// not just the one just added. Deputy marks the member as the project's one
+// deputy; it is mutually exclusive with lead.
+func (c *Client) AddCrewMember(ctx context.Context, project, actor, role string, lead, deputy bool) (model.CrewMember, []byte, error) {
 	return doJSON[model.CrewMember](ctx, c, http.MethodPost,
 		"/api/v1/projects/"+url.PathEscape(project)+"/participants",
-		model.AddCrewMemberInput{Actor: actor, Role: role, Lead: lead}, "crew member")
+		model.AddCrewMemberInput{Actor: actor, Role: role, Lead: lead, Deputy: deputy}, "crew member")
 }
 
 // ListCrew calls GET /api/v1/projects/{id}/participants: every member of a
