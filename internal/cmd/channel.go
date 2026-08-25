@@ -72,6 +72,14 @@ serve takes no task or worktree argument.`,
 // in production; channel_test.go points it at an httptest.Server instead of
 // a real worklode server, the same fake-the-HTTP-side pattern the rest of
 // this package's tests use.
+//
+// The poll goroutine waits on ready before claiming anything: an MCP client
+// is expected to ignore any server-initiated message that arrives before its
+// initialize response completes, but a claimed steering instruction is
+// stamped delivered_at in the same claim query, so an early notification
+// would be a permanently lost instruction, not a delayed one. markReady
+// closes ready right after handleChannelRequest writes the initialize
+// response.
 func runChannel(ctx context.Context, c *cli.Client, in io.Reader, out io.Writer, stderr io.Writer, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(ctx)
 
@@ -88,10 +96,19 @@ func runChannel(ctx context.Context, c *cli.Client, in io.Reader, out io.Writer,
 		out.Write(b)
 	}
 
+	ready := make(chan struct{})
+	var readyOnce sync.Once
+	markReady := func() { readyOnce.Do(func() { close(ready) }) }
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		select {
+		case <-ready:
+		case <-ctx.Done():
+			return
+		}
 		pollInstructions(ctx, c, interval, writeLine, stderr)
 	}()
 
@@ -101,7 +118,7 @@ func runChannel(ctx context.Context, c *cli.Client, in io.Reader, out io.Writer,
 		if len(line) == 0 {
 			continue
 		}
-		handleChannelRequest(line, writeLine, stderr)
+		handleChannelRequest(line, writeLine, stderr, markReady)
 	}
 	// Stop the poll goroutine and wait for it before returning, so no write
 	// to out can land after the caller stops reading from it.
@@ -148,8 +165,9 @@ type jsonrpcResponse struct {
 // handleChannelRequest decodes one input line and writes the reply, if any,
 // through writeLine. A malformed line (not even valid JSON, or missing
 // "method") is logged to stderr and dropped — there is no id to reply
-// against safely.
-func handleChannelRequest(line []byte, writeLine func(any), stderr io.Writer) {
+// against safely. markReady is called once the initialize response has been
+// written, unblocking the poll goroutine.
+func handleChannelRequest(line []byte, writeLine func(any), stderr io.Writer, markReady func()) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(line, &raw); err != nil {
 		fmt.Fprintf(stderr, "channel: malformed request: %v\n", err)
@@ -183,6 +201,7 @@ func handleChannelRequest(line []byte, writeLine func(any), stderr io.Writer) {
 				ServerInfo: jsonrpcServerInfo{Name: "lode-channel", Version: buildinfo.Version},
 			},
 		})
+		markReady()
 	case "notifications/initialized":
 		// A notification: no id, no reply.
 	case "tools/list":

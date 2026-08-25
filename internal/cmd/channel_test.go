@@ -165,7 +165,12 @@ func TestChannelDeliversClaimedInstruction(t *testing.T) {
 		done <- runChannel(context.Background(), c, stdinR, &out, &stderr, 5*time.Millisecond)
 	}()
 
-	readLines(t, &out, 1, 2*time.Second)
+	// The poll goroutine only starts after initialize has been handled.
+	if _, err := stdinW.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}` + "\n")); err != nil {
+		t.Fatalf("write initialize: %v", err)
+	}
+
+	readLines(t, &out, 2, 2*time.Second) // initialize response + one notification
 	stdinW.Close()
 	if err := <-done; err != nil {
 		t.Fatalf("runChannel: %v", err)
@@ -175,13 +180,13 @@ func TestChannelDeliversClaimedInstruction(t *testing.T) {
 
 	got := strings.TrimRight(out.String(), "\n")
 	lines := strings.Split(got, "\n")
-	if len(lines) != 1 {
-		t.Fatalf("want exactly 1 notification line, got %d: %q", len(lines), got)
+	if len(lines) != 2 {
+		t.Fatalf("want exactly 2 lines (initialize response + notification), got %d: %q", len(lines), got)
 	}
 
 	var msg map[string]any
-	if err := json.Unmarshal([]byte(lines[0]), &msg); err != nil {
-		t.Fatalf("decode notification: %v (%q)", err, lines[0])
+	if err := json.Unmarshal([]byte(lines[1]), &msg); err != nil {
+		t.Fatalf("decode notification: %v (%q)", err, lines[1])
 	}
 	if msg["method"] != "notifications/claude/channel" {
 		t.Errorf("method = %v, want notifications/claude/channel", msg["method"])
@@ -205,5 +210,53 @@ func TestChannelDeliversClaimedInstruction(t *testing.T) {
 		if !metaKey.MatchString(k) {
 			t.Errorf("meta key %q does not match [A-Za-z0-9_]+ — Claude Code would silently drop it", k)
 		}
+	}
+}
+
+// TestChannelPollWaitsForInitialize proves the poll goroutine does not claim
+// or notify before initialize has been handled. An MCP client is expected to
+// ignore any server-initiated message that arrives before its initialize
+// response completes, but ClaimPendingInstructionsForActor stamps
+// delivered_at in the same query that reads the row (internal/store/
+// instructions.go), so an early notification would permanently lose the
+// instruction rather than merely delay it. The stub server returns a claim
+// on every call and the poll interval is 1ms, so if the poll goroutine ran
+// unguarded it would produce output almost immediately.
+func TestChannelPollWaitsForInitialize(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(model.InstructionsResponse{Instructions: []model.Instruction{
+			{ID: 1, Task: "WL-7", Body: "steer this way", CreatedBy: "stig"},
+		}})
+	}))
+	defer ts.Close()
+	c := cli.NewClient(cli.Config{ServerURL: ts.URL})
+
+	stdinR, stdinW := io.Pipe()
+	var out, stderr syncBuffer
+
+	done := make(chan error, 1)
+	go func() {
+		done <- runChannel(context.Background(), c, stdinR, &out, &stderr, time.Millisecond)
+	}()
+
+	// Hold off on initialize long enough that an unguarded poll goroutine
+	// would have ticked and claimed many times over.
+	deadline := time.Now().Add(150 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if got := out.String(); got != "" {
+			t.Fatalf("output appeared before initialize was sent: %q", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if _, err := stdinW.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}` + "\n")); err != nil {
+		t.Fatalf("write initialize: %v", err)
+	}
+
+	readLines(t, &out, 2, 2*time.Second) // initialize response, then at least one notification
+	stdinW.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("runChannel: %v", err)
 	}
 }
