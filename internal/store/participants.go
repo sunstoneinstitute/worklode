@@ -15,22 +15,27 @@ import (
 // Participant is one Crew member of a project, aggregated over their
 // role-labelled rows (spec 029 §6.1). One actor may hold several role
 // labels, each its own project_participants row; ListParticipants folds
-// those into one Participant per actor.
+// those into one Participant per actor. IsDeputy is folded into Roles as the
+// literal "acting-lead" entry (spec 029 §6.1) rather than kept only as a
+// flag, so every reader of Roles sees it with no further code.
 type Participant struct {
 	ProjectID   string
 	ActorID     string
 	DisplayName string
 	Roles       []string // sorted
 	IsLead      bool
+	IsDeputy    bool
 	AddedAt     time.Time // earliest role row for this actor
 }
 
 // ActorProject is one project an actor participates in, with the roles they
-// hold on it. Plan D's Home project list consumes this.
+// hold on it. Plan D's Home project list consumes this. IsDeputy is folded
+// into Roles as the literal "acting-lead" entry, the same as Participant.
 type ActorProject struct {
-	Project Project
-	Roles   []string // sorted
-	IsLead  bool
+	Project  Project
+	Roles    []string // sorted
+	IsLead   bool
+	IsDeputy bool
 }
 
 // ListParticipants returns the Crew of a project: one Participant per actor
@@ -58,7 +63,7 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		errDesc = "all projects"
 	}
 
-	query := `SELECT pp.project_id, pp.actor_id, a.display_name, pp.role, pp.is_lead, pp.added_at
+	query := `SELECT pp.project_id, pp.actor_id, a.display_name, pp.role, pp.is_lead, pp.is_deputy, pp.added_at
 	            FROM project_participants pp
 	            JOIN actors a ON a.id = pp.actor_id`
 	args := []any{}
@@ -86,9 +91,9 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 	for rows.Next() {
 		var pID, actorID, role string
 		var displayName sql.NullString
-		var isLead bool
+		var isLead, isDeputy bool
 		var addedAt time.Time
-		if err := rows.Scan(&pID, &actorID, &displayName, &role, &isLead, &addedAt); err != nil {
+		if err := rows.Scan(&pID, &actorID, &displayName, &role, &isLead, &isDeputy, &addedAt); err != nil {
 			return nil, fmt.Errorf("list participants for %s: %w", errDesc, err)
 		}
 		k := key{pID, actorID}
@@ -102,6 +107,9 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		if isLead {
 			p.IsLead = true
 		}
+		if isDeputy {
+			p.IsDeputy = true
+		}
 		if addedAt.Before(p.AddedAt) {
 			p.AddedAt = addedAt
 		}
@@ -113,6 +121,9 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 	out := make([]Participant, 0, len(order))
 	for _, k := range order {
 		p := byKey[k]
+		if p.IsDeputy {
+			p.Roles = append(p.Roles, "acting-lead")
+		}
 		slices.Sort(p.Roles)
 		out = append(out, *p)
 	}
@@ -125,7 +136,7 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 // slice, not an error.
 func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorProject, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+projectColumnsP+`, pp.role, pp.is_lead
+		`SELECT `+projectColumnsP+`, pp.role, pp.is_lead, pp.is_deputy
 		   FROM project_participants pp
 		   JOIN projects p ON p.id = pp.project_id
 		  WHERE pp.actor_id = $1
@@ -140,8 +151,8 @@ func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorPr
 	byProject := map[string]*ActorProject{}
 	for rows.Next() {
 		var role string
-		var isLead bool
-		p, err := scanProject(appendScan{rows, []any{&role, &isLead}})
+		var isLead, isDeputy bool
+		p, err := scanProject(appendScan{rows, []any{&role, &isLead, &isDeputy}})
 		if err != nil {
 			return nil, fmt.Errorf("list projects for actor %s: %w", actorID, err)
 		}
@@ -155,6 +166,9 @@ func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorPr
 		if isLead {
 			ap.IsLead = true
 		}
+		if isDeputy {
+			ap.IsDeputy = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list projects for actor %s: %w", actorID, err)
@@ -163,6 +177,9 @@ func (s *Store) ProjectsForActor(ctx context.Context, actorID string) ([]ActorPr
 	out := make([]ActorProject, 0, len(order))
 	for _, id := range order {
 		ap := byProject[id]
+		if ap.IsDeputy {
+			ap.Roles = append(ap.Roles, "acting-lead")
+		}
 		slices.Sort(ap.Roles)
 		out = append(out, *ap)
 	}
@@ -273,10 +290,11 @@ func ParticipantRoles() []string {
 // must be non-empty and at most maxParticipantRole characters
 // (ErrInvalidInput). One actor may hold several role labels, one row each,
 // so only the same role twice is a conflict; a project may hold at most one
-// lead. Both conflicts are ErrInvalidInput, named by which one fired. An
-// empty addedBy stores NULL — an open instance has no acting actor to
-// attribute the row to, and inventing one would be a fabricated fact.
-func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, isLead bool, addedBy string, eventID int64) error {
+// lead and at most one deputy, and a member cannot hold both. All three
+// conflicts are ErrInvalidInput, named by which one fired. An empty addedBy
+// stores NULL — an open instance has no acting actor to attribute the row
+// to, and inventing one would be a fabricated fact.
+func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, isLead, isDeputy bool, addedBy string, eventID int64) error {
 	role = strings.TrimSpace(role)
 	switch {
 	case role == "":
@@ -287,6 +305,9 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 	case !validParticipantRoles[role]:
 		return fmt.Errorf("unknown role %q; valid roles: %s: %w",
 			role, strings.Join(ParticipantRoles(), ", "), ErrInvalidInput)
+	}
+	if isLead && isDeputy {
+		return fmt.Errorf("a Crew member cannot be both lead and deputy: %w", ErrInvalidInput)
 	}
 
 	// Both referenced rows are checked before the insert: without this an
@@ -313,9 +334,9 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 	}
 
 	if _, err := tx.Exec(
-		`INSERT INTO project_participants (project_id, actor_id, role, is_lead, added_at, added_by)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		projectID, actorID, role, isLead, now.UTC(), by,
+		`INSERT INTO project_participants (project_id, actor_id, role, is_lead, is_deputy, added_at, added_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		projectID, actorID, role, isLead, isDeputy, now.UTC(), by,
 	); err != nil {
 		if isUniqueViolationOn(err, "project_participants_pkey") {
 			return fmt.Errorf("actor %s already holds role %q on project %s: %w",
@@ -324,12 +345,15 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 		if isUniqueViolationOn(err, "project_participants_one_lead") {
 			return fmt.Errorf("project %s already has a lead: %w", projectID, ErrInvalidInput)
 		}
+		if isUniqueViolationOn(err, "project_participants_one_deputy") {
+			return fmt.Errorf("project %s already has a deputy: %w", projectID, ErrInvalidInput)
+		}
 		return fmt.Errorf("add participant %s to project %s: %w", actorID, projectID, err)
 	}
 
 	return LogChange(tx, "project", projectID, eventID, map[string]any{
 		"field": "crew", "op": "add",
-		"actor": actorID, "role": role, "lead": isLead, "by": addedBy,
+		"actor": actorID, "role": role, "lead": isLead, "deputy": isDeputy, "by": addedBy,
 	})
 }
 
