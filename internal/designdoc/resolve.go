@@ -29,14 +29,16 @@ func SplitFragment(ref string) (base, section string) {
 // zero-padding, optionally followed by the rest of a slug. Both are anchored
 // end to end and expect a base — a ref with any fragment already removed.
 var (
-	shorthandPattern  = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR)-(\d+)$`)
+	shorthandPattern  = regexp.MustCompile(`^([A-Z][A-Z0-9]{1,9})-(SPEC|ADR|PLAN)-(\d+)$`)
 	numberFormPattern = regexp.MustCompile(`^(\d+)(-.*)?$`)
 )
 
 // Shorthand is a parsed <KEY>-<TYPE>-<n> reference, e.g. "WL-SPEC-25".
+// Every document kind has one: 025 §14.3 gave plans none, and 029 §4 put them
+// on their project's sequence like every other kind.
 type Shorthand struct {
 	Key    string // the project key the number is scoped to, e.g. "WL"
-	Type   string // "SPEC" or "ADR", as written
+	Type   string // "SPEC", "ADR" or "PLAN", as written
 	Number int
 }
 

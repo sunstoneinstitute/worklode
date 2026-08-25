@@ -36,6 +36,31 @@ func DocNumber(n int) string {
 	return strconv.Itoa(n)
 }
 
+// DocRef is a document's formatted id: <KEY>-<KIND>-<N>, the 025 §14.3
+// shorthand as widened by 029 §4 — "WL-SPEC-29", "WL-ADR-43", "WL-PLAN-7".
+// It is what a person cites, which the integer id and the bare corpus number
+// are not, so it replaces both wherever a document lists.
+//
+// Every kind takes the same form, plans included. They were the exception
+// while 025 §14.3 gave them no number; 029 §4 puts them on their project's
+// sequence, so nothing here special-cases a kind.
+//
+// An unknown project key degrades to the unqualified "SPEC-29" rather than
+// guessing one or printing a leading dash: the number is still true, and only
+// the corpus it is scoped to went missing. A document with no number at all
+// predates 029 §4's backfill and renders as its kind, which is what the whole
+// column said for plans before.
+func DocRef(d model.Doc) string {
+	if d.Number == 0 {
+		return d.Kind
+	}
+	ref := strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
+	if d.ProjectKey == "" {
+		return ref
+	}
+	return d.ProjectKey + "-" + ref
+}
+
 // LocalTime formats t in the local zone, or "-" for the zero value. Every
 // timestamp the CLI prints goes through it, including the one-line
 // confirmations in internal/cmd, so a lease expiry reads the same wherever it
@@ -271,21 +296,22 @@ func TaskCostRender(w io.Writer, tc model.TaskCost, window string) {
 	CostRender(w, tc.Cost, window)
 }
 
-// DocTable prints one row per document: id, kind, number, slug, title,
-// status, version. Number is "-" for a plan, which carries none (025 §14.3).
+// DocTable prints one row per document: ref, status, title.
+//
+// Three columns, because the title is what a reader scans for and every other
+// candidate spends width that the title is worth more than. REF carries the
+// kind and the number, so neither gets a column. The slug is the file name a
+// document is saved under, useful when writing the corpus to disk and noise in
+// a listing. The integer id and the version stay in --json, where the id is the
+// API's handle.
 func DocTable(w io.Writer, docs []model.Doc) {
 	tbl := newTable(
-		column{header: "ID"},
-		column{header: "KIND"},
-		column{header: "NUMBER"},
-		column{header: "SLUG"},
-		titleColumn("TITLE"),
+		column{header: "REF"},
 		column{header: "STATUS"},
-		column{header: "VERSION"},
+		titleColumn("TITLE"),
 	)
 	for _, d := range docs {
-		tbl.add(strconv.FormatInt(d.ID, 10), d.Kind, DocNumber(d.Number), d.Slug, d.Title,
-			d.Status, strconv.Itoa(d.Version))
+		tbl.add(DocRef(d), d.Status, d.Title)
 	}
 	tbl.flush(w)
 }
@@ -338,16 +364,14 @@ func DocSupersessionTable(w io.Writer, docs []model.Doc, gaps []model.DocSuperse
 func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc,
 	gapsOf func(model.Doc) (sections int, anchors []string)) {
 	tbl := newTable(
-		column{header: "ID"},
-		column{header: "NUMBER"},
-		column{header: "SLUG"},
+		column{header: "REF"},
 		titleColumn("TITLE"),
 		column{header: ratioHeader},
 		column{header: anchorHeader},
 	)
 	for _, d := range docs {
 		sections, anchors := gapsOf(d)
-		tbl.add(strconv.FormatInt(d.ID, 10), DocNumber(d.Number), d.Slug, d.Title,
+		tbl.add(DocRef(d), d.Title,
 			fmt.Sprintf("%d/%d", len(anchors), sections),
 			strings.Join(anchors, " "))
 	}

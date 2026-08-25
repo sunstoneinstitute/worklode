@@ -17,6 +17,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -144,13 +145,57 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusCreated, created)
+	writeJSON(w, http.StatusCreated, s.withProjectKey(r.Context(), *created))
 }
 
 // listDocs handles GET /api/v1/docs?project=&kind=&status=&deleted= plus the
 // three derived selectors: ?needs_planning= and ?needs_execution= (026 §2.1),
 // and ?bare_superseded= (026 §2.4, 025 §6 rule 2). deleted=true switches the
 // list from live documents to tombstoned ones (044 §5).
+// projectKeyByID reads the project id -> key map that a document's formatted
+// id needs (model.Doc.ProjectKey): the shorthand is built from the key, and a
+// document carries only its project id.
+//
+// Read per request, like the cockpit's sibling projectKeys and for the same
+// reason: it is one indexed SELECT over a table with a row per project, and
+// reading it live is what makes a new project's documents render their ref on
+// the next call instead of after a restart.
+//
+// A failed read degrades to the empty map rather than failing the request.
+// DocRef falls back to the unqualified "SPEC-29", so the caller loses the
+// corpus qualifier and nothing else.
+func (s *server) projectKeyByID(ctx context.Context) map[string]string {
+	projects, err := s.st.ListProjects(ctx)
+	if err != nil {
+		s.log.Warn("rendering documents without a project key: projects unreadable", "err", err)
+		return nil
+	}
+	keys := make(map[string]string, len(projects))
+	for _, p := range projects {
+		keys[p.ID] = p.Key
+	}
+	return keys
+}
+
+// withProjectKeys stamps each document's ProjectKey, the half of its formatted
+// id that lives on the project rather than the document. Every handler whose
+// response a client renders as a document ref runs its docs through this.
+func (s *server) withProjectKeys(ctx context.Context, docs []model.Doc) []model.Doc {
+	keys := s.projectKeyByID(ctx)
+	if len(keys) == 0 {
+		return docs
+	}
+	for i := range docs {
+		docs[i].ProjectKey = keys[docs[i].Project]
+	}
+	return docs
+}
+
+// withProjectKey is withProjectKeys for a single document.
+func (s *server) withProjectKey(ctx context.Context, d model.Doc) model.Doc {
+	return s.withProjectKeys(ctx, []model.Doc{d})[0]
+}
+
 func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	sel, err := docSelectorFrom(r)
 	if err != nil {
@@ -165,7 +210,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, model.DocListResponse{
-			Docs: withoutDocBodies(docs), PlanningGaps: gaps,
+			Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs)), PlanningGaps: gaps,
 		})
 	case sel.needsExecution:
 		docs, err := s.st.NeedsExecution(r.Context(), sel.filter.Project)
@@ -173,7 +218,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 			s.mapStoreErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs))})
 	case sel.bareSuperseded:
 		docs, gaps, err := s.st.BareSupersededSections(r.Context(), sel.filter.Project, sel.filter.Kind)
 		if err != nil {
@@ -181,7 +226,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, model.DocListResponse{
-			Docs: withoutDocBodies(docs), SupersessionGaps: gaps,
+			Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs)), SupersessionGaps: gaps,
 		})
 	default:
 		docs, err := s.st.ListDocs(r.Context(), sel.filter)
@@ -189,7 +234,7 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 			s.mapStoreErr(w, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: withoutDocBodies(docs)})
+		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs))})
 	}
 }
 
@@ -433,7 +478,7 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, updated)
+	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *updated))
 }
 
 // replaceDocEdges handles PUT /api/v1/docs/{id}/edges. It re-resolves the

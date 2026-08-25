@@ -95,12 +95,15 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if in.Slug == "" {
 		return nil, fmt.Errorf("doc slug must not be empty: %w", ErrInvalidInput)
 	}
-	// docs_number_matches_kind enforces both halves of 025 §14.3 in the schema;
-	// these two cases are kept so a caller gets ErrInvalidInput naming the field
-	// rather than a CHECK violation.
+	// A spec or ADR takes its number from its filename, so the caller supplies
+	// it and its absence is the caller's error, named here rather than surfacing
+	// as a NOT NULL violation. A plan has no filename number to inherit, so the
+	// server allocates one below (029 §4) and an explicit one is refused: the
+	// sequence is the only writer, and honouring a caller's guess would let two
+	// plans collide on it.
 	switch {
 	case in.Kind == "plan" && in.Number != 0:
-		return nil, fmt.Errorf("a plan carries no number (025 §14.3), got %d: %w", in.Number, ErrInvalidInput)
+		return nil, fmt.Errorf("a plan's number is allocated by the server (029 §4), got %d: %w", in.Number, ErrInvalidInput)
 	case in.Kind != "plan" && in.Number <= 0:
 		return nil, fmt.Errorf("a %s needs a corpus number, got %d: %w", in.Kind, in.Number, ErrInvalidInput)
 	}
@@ -136,9 +139,19 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	}
 	ts := now.UTC().Truncate(time.Second)
 
-	var number sql.NullInt64
-	if in.Kind != "plan" {
-		number = sql.NullInt64{Int64: int64(in.Number), Valid: true}
+	number := int64(in.Number)
+	if in.Kind == "plan" {
+		// The upsert both creates the counter row on a project's first plan
+		// (next = 2, ordinal 1) and advances it afterwards, holding the row
+		// lock for the rest of the transaction so two concurrent creates
+		// cannot draw the same number. Same shape as CreateDeliverable's.
+		if err := tx.QueryRow(
+			`INSERT INTO project_entity_seq (project_id, kind, next) VALUES ($1, 'PLAN', 2)
+			 ON CONFLICT (project_id, kind) DO UPDATE SET next = project_entity_seq.next + 1
+			 RETURNING next - 1`, in.Project,
+		).Scan(&number); err != nil {
+			return nil, fmt.Errorf("allocate plan number: %w", err)
+		}
 	}
 	var id int64
 	err = tx.QueryRow(

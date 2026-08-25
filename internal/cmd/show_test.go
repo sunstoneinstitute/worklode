@@ -30,7 +30,7 @@ func TestClassify(t *testing.T) {
 		{"WL-ADR-7", targetDoc, ""},
 		{"WL-SPEC-14#sec-2.1", targetDoc, ""},
 		{"WL-SPEC-14#sec-a_b", targetDoc, ""},
-		{"WL-PLAN-4-1", targetUnshowable, "PLAN"},
+		{"WL-PLAN-7", targetDoc, ""},
 		{"WL-MILE-2", targetUnshowable, "MILE"},
 		{"WL-DEL-3", targetUnshowable, "DEL"},
 		{"XX-FOO-3", targetUnknownType, "FOO"},
@@ -964,8 +964,8 @@ func TestShowErrorsSectionWithTask(t *testing.T) {
 	if err == nil {
 		t.Fatalf("lode show --task 1 --section sec-1 succeeded\noutput: %s", out)
 	}
-	if err.Error() != "--section applies only to specs and ADRs" {
-		t.Fatalf("err = %q; want %q", err.Error(), "--section applies only to specs and ADRs")
+	if err.Error() != "--section applies only to documents" {
+		t.Fatalf("err = %q; want %q", err.Error(), "--section applies only to documents")
 	}
 }
 
@@ -980,15 +980,15 @@ func TestShowMilestoneFlagErrors(t *testing.T) {
 	}
 }
 
-// TestShowPlanFlagOrdinalShape guards showOrdinalShape["plan"]'s
-// `^\d+(-\d+)?$` regex — the branch's only kind-specific ordinal shape
-// (019 §4.4) — by exercising its second-ordinal form ("4-1") end to end.
-func TestShowPlanFlagOrdinalShape(t *testing.T) {
+// TestShowPlanFlagTakesABareOrdinal: a plan's number is one per-project
+// sequence like every other kind's (029 §4), so the two-part "4-1" form the
+// flag used to accept is refused with the same message every kind gives.
+func TestShowPlanFlagTakesABareOrdinal(t *testing.T) {
 	out, err := runLode(t, "show", "--plan", "4-1")
 	if err == nil {
 		t.Fatalf("lode show --plan 4-1 succeeded\noutput: %s", out)
 	}
-	want := "plan 4-1 is not showable yet (spec 029 §4 defines them; the entities land with spec 029)"
+	want := `--plan takes a bare ordinal (e.g. --plan 15); "4-1" is not one`
 	if err.Error() != want {
 		t.Fatalf("err = %q; want %q", err.Error(), want)
 	}

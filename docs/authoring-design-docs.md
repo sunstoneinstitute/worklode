@@ -169,9 +169,10 @@ corpora, write the shorthand. Both parse in either position and `secfmt.py`
 rewrites each to its canonical form, so getting it wrong costs a re-stage rather
 than a review comment.
 
-Plans have no shorthand: they have no number, and no root task exists to stand
-in for one (025 §9.2 mints nothing above a plan's tasks). Reference a plan by
-path.
+Plans carry a shorthand like every other kind (029 §4): `WL-PLAN-7`, drawn from
+the project's plan sequence. Numbers are per kind, so `WL-PLAN-1` and `WL-SPEC-1`
+are different documents. Within one corpus a path still reads better, because it
+carries the slug.
 
 **`NO-SPEC` is reserved for "no governing spec".** A plan that answers to no
 spec — a mechanical refactor, a build fix, a convention too small to design —

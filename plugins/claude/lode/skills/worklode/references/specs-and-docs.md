@@ -68,11 +68,11 @@ Cross-project reference, since a doc reference cannot cross a repository:
 <PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>]
 ```
 
-`WL-SPEC-1` · `WL-SPEC-25#sec-9` · `WL-ADR-7` · `CMS-SPEC-4`. `<n>` is the
-document's own corpus number, unpadded. The `SPEC`/`ADR` token disambiguates
-it from a task id (`WL-4` the task vs `WL-SPEC-4` the document) and is
-checked against the document's actual kind. Plans have no shorthand — no
-number, no task standing in for one — reference a plan by slug. A shorthand
+`WL-SPEC-1` · `WL-SPEC-25#sec-9` · `WL-ADR-7` · `WL-PLAN-7` · `CMS-SPEC-4`.
+`<n>` is the document's own corpus number, unpadded. The `SPEC`/`ADR`/`PLAN`
+token disambiguates it from a task id (`WL-4` the task vs `WL-SPEC-4` the
+document) and is checked against the document's actual kind. Numbers are per
+kind, so `WL-SPEC-1` and `WL-PLAN-1` are different documents. A shorthand
 naming a project this checkout can't reach resolves as `unresolved`, not an
 error; `lode show <ref>` is what actually verifies one.
 
