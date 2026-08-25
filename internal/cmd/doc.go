@@ -128,7 +128,8 @@ func newDocNewCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "document kind: spec, adr, or plan (required)")
 	cmd.Flags().StringVar(&slug, "slug", "", "document slug (required)")
-	cmd.Flags().IntVar(&number, "number", 0, "corpus number (omit for a plan, which carries none)")
+	cmd.Flags().IntVar(&number, "number", 0,
+		"corpus number (omit to auto-assign the next free one; an explicit value is a rare reservation)")
 	cmd.Flags().StringVar(&assignee, "assignee", "", "actor id to assign the document to (default: yourself)")
 	cmd.Flags().StringVar(&file, "file", "", `markdown source file, frontmatter included ("-" for stdin) (required)`)
 	cmd.MarkFlagRequired("kind")

@@ -175,6 +175,49 @@ func TestCreateDoc(t *testing.T) {
 	}
 }
 
+// TestCreateDocAutoAssignsNumber: 025 §14.3 — a spec/ADR created with no
+// Number gets the next free one for its (project, kind) rather than a 422.
+func TestCreateDocAutoAssignsNumber(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	first := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Slug: "auto-1", Body: docSpecBody,
+	})
+	if first.Number != 1 {
+		t.Errorf("first number = %d, want 1", first.Number)
+	}
+
+	second := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Slug: "auto-2", Body: docSpecBody,
+	})
+	if second.Number != 2 {
+		t.Errorf("second number = %d, want 2", second.Number)
+	}
+}
+
+// TestCreateDocPlanWithExplicitNumberReservesIt: a plan's explicit number is
+// honored like a spec's or ADR's — the rare override — and the project's
+// counter advances past it so a later auto-assign never retraces it.
+func TestCreateDocPlanWithExplicitNumberReservesIt(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	reserved := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Number: 5, Slug: "reserved-plan", Body: docPlanBody,
+	})
+	if reserved.Number != 5 {
+		t.Errorf("reserved number = %d, want 5", reserved.Number)
+	}
+
+	next := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "next-plan", Body: docPlanBody,
+	})
+	if next.Number != 6 {
+		t.Errorf("next number = %d, want 6 (past the reserved 5)", next.Number)
+	}
+}
+
 // TestCreateDocRejectsStatus: status is the corpus importer's field, and an
 // ordinary actor holds no doc.import. The field is declared so the refusal can
 // name it rather than silently dropping it.
@@ -408,12 +451,12 @@ func TestCreateDocRejectsBadInput(t *testing.T) {
 		"missing slug": {model.CreateDocInput{
 			Project: "proj", Kind: "spec", Number: 1, Body: docSpecBody,
 		}, http.StatusUnprocessableEntity, "slug is required"},
-		"spec without a number": {model.CreateDocInput{
-			Project: "proj", Kind: "spec", Slug: "s", Body: docSpecBody,
+		"spec with a negative number": {model.CreateDocInput{
+			Project: "proj", Kind: "spec", Number: -1, Slug: "s", Body: docSpecBody,
 		}, http.StatusUnprocessableEntity, "corpus number"},
-		"plan with a number": {model.CreateDocInput{
-			Project: "proj", Kind: "plan", Number: 3, Slug: "s", Body: docPlanBody,
-		}, http.StatusUnprocessableEntity, "allocated by the server"},
+		"plan with a negative number": {model.CreateDocInput{
+			Project: "proj", Kind: "plan", Number: -1, Slug: "s", Body: docPlanBody,
+		}, http.StatusUnprocessableEntity, "corpus number"},
 		"unknown project": {model.CreateDocInput{
 			Project: "nope", Kind: "spec", Number: 1, Slug: "s", Body: docSpecBody,
 		}, http.StatusNotFound, "not found"},
