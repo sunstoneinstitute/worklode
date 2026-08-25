@@ -1,0 +1,3 @@
+DROP INDEX project_participants_one_deputy;
+ALTER TABLE project_participants DROP CONSTRAINT project_participants_lead_deputy_exclusive;
+ALTER TABLE project_participants DROP COLUMN is_deputy;
