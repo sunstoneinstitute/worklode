@@ -309,6 +309,27 @@ func AddParticipant(tx *sql.Tx, now time.Time, projectID, actorID, role string, 
 	if isLead && isDeputy {
 		return fmt.Errorf("a Crew member cannot be both lead and deputy: %w", ErrInvalidInput)
 	}
+	// isLead/isDeputy only guards this one row against itself; an actor can
+	// hold several role rows, so a lead adding a second role as deputy (or
+	// vice versa) would otherwise slip past it. Check the actor's other rows
+	// on this project too, but only when this add claims one of the flags —
+	// the common case (plain role add) skips the query entirely.
+	if isLead || isDeputy {
+		var conflict bool
+		if err := tx.QueryRow(
+			`SELECT EXISTS (
+				SELECT 1 FROM project_participants
+				 WHERE project_id = $1 AND actor_id = $2
+				   AND ((is_deputy AND $3) OR (is_lead AND $4))
+			)`,
+			projectID, actorID, isLead, isDeputy,
+		).Scan(&conflict); err != nil {
+			return fmt.Errorf("check lead/deputy conflict for %s on project %s: %w", actorID, projectID, err)
+		}
+		if conflict {
+			return fmt.Errorf("actor %s cannot hold both lead and deputy on project %s: %w", actorID, projectID, ErrInvalidInput)
+		}
+	}
 
 	// Both referenced rows are checked before the insert: without this an
 	// unknown project or actor surfaces as a raw foreign-key violation,
