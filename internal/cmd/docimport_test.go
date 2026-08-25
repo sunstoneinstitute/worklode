@@ -356,3 +356,47 @@ func TestDocImportDryRun(t *testing.T) {
 		t.Fatalf("a dry run wrote %d documents", len(resp.Docs))
 	}
 }
+
+// TestDocImportForwardBlockingPlanChain: a plan series whose phases each block
+// the next imports whole. `blocks` is the one relation the server resolves at
+// create time (025 §5), so pass 1 has to create the chain back to front
+// (WL-339) — in walk order every phase would name a plan that does not exist
+// yet and the whole import would fail on the first one.
+func TestDocImportForwardBlockingPlanChain(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	dir := t.TempDir()
+	plans := filepath.Join(dir, "plans")
+	if err := os.MkdirAll(plans, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	slugs := []string{"2026-08-22-mesh-1", "2026-08-22-mesh-2", "2026-08-22-mesh-3"}
+	for i, slug := range slugs {
+		body := "---\nstatus: draft\n"
+		if i+1 < len(slugs) {
+			body += "blocks: " + slugs[i+1] + ".md\n"
+		}
+		body += "---\n\n# " + slug + "\n"
+		if err := os.WriteFile(filepath.Join(plans, slug+".md"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	out, err := runLode(t, "doc", "import", "--project", "proj", "--docs", dir)
+	if err != nil {
+		t.Fatalf("doc import: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "3 created") {
+		t.Fatalf("import summary = %q, want 3 created", out)
+	}
+	for i := 0; i+1 < len(slugs); i++ {
+		d := importedDoc(t, c, slugs[i])
+		if len(d.Edges) != 1 {
+			t.Fatalf("%s edges = %+v, want the one blocks edge", slugs[i], d.Edges)
+		}
+		if want := importedDoc(t, c, slugs[i+1]).ID; d.Edges[0].ToDoc != want {
+			t.Errorf("%s blocks edge = %+v, want to_doc %d", slugs[i], d.Edges[0], want)
+		}
+	}
+}
