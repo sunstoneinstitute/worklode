@@ -198,7 +198,7 @@ func TestCrewLifecycle(t *testing.T) {
 		t.Fatalf("Lead badge count after mo's removal = %d, want exactly 1:\n%s", got, body)
 	}
 
-	// --- Step 5b: a deputy is added, shown as acting-lead, and --lead/--deputy stay exclusive ---
+	// --- Step 5b: a deputy is added, shown as acting-lead --------------------
 
 	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "deb", Kind: "human", DisplayName: "Deb Deputy",
@@ -219,8 +219,15 @@ func TestCrewLifecycle(t *testing.T) {
 
 	// Lead and deputy together is refused by the store, independent of the
 	// CLI's own --lead/--deputy mutual exclusion.
-	if _, _, err := admin.AddCrewMember(ctx, "crewproj", "mo", "editor", true, true); err == nil {
+	_, _, err = admin.AddCrewMember(ctx, "crewproj", "mo", "editor", true, true)
+	if err == nil {
 		t.Fatal("add mo as lead and deputy: want error, got success")
+	}
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("add mo as lead and deputy: error = %v (%T), want a *cli.ClientError", err, err)
+	}
+	if clientErr.Status != http.StatusUnprocessableEntity {
+		t.Fatalf("add mo as lead and deputy: status = %d, want 422", clientErr.Status)
 	}
 
 	// --- Step 6: the lead can never be removed -------------------------------
