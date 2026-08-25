@@ -45,7 +45,7 @@ import (
 type importDoc struct {
 	path   string // the file, for error messages
 	kind   string // spec | adr | plan
-	number int    // 0 for a plan, which carries none (025 §14.3)
+	number int    // a plan's filename carries none, so this stays 0 (auto-assigned)
 	slug   string
 	status string
 	title  string

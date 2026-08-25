@@ -292,6 +292,23 @@ func TestDocFileFlagRejectsEmptyPath(t *testing.T) {
 	}
 }
 
+// TestDocNewAutoAssignsNumber: omitting --number for a spec/ADR gets the next
+// free number for its (project, kind) rather than refusing (025 §14.3).
+func TestDocNewAutoAssignsNumber(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	specFile := writeDocFile(t, docTestBody)
+
+	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--slug", "auto-numbered", "--file", specFile, "--json")
+	if err != nil {
+		t.Fatalf("doc new (no --number): %v\noutput: %s", err, out)
+	}
+	if got := docJSON(t, out); got.Number != 1 {
+		t.Errorf("doc new (no --number): number = %d, want 1 (auto-assigned)", got.Number)
+	}
+}
+
 func TestDocLifecycle(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)

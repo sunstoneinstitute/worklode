@@ -511,6 +511,58 @@ func TestDocCreateSpec(t *testing.T) {
 	}
 }
 
+// TestDocCreateAutoAssignsNumber: 025 §14.3 — a caller who omits Number gets
+// the next free one for (project, kind), and it climbs on each subsequent
+// create rather than colliding.
+func TestDocCreateAutoAssignsNumber(t *testing.T) {
+	s := openDocStore(t)
+
+	first := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Slug: "auto-1", Body: specBody, CreatedBy: "stig",
+	})
+	if first.Number != 1 {
+		t.Fatalf("first auto number = %d, want 1", first.Number)
+	}
+
+	second := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Slug: "auto-2", Body: specBody, CreatedBy: "stig",
+	})
+	if second.Number != 2 {
+		t.Fatalf("second auto number = %d, want 2", second.Number)
+	}
+
+	// An explicit number ahead of the counter is honored; the next auto
+	// allocation picks up past it rather than colliding.
+	reserved := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 10, Slug: "auto-reserved", Body: specBody, CreatedBy: "stig",
+	})
+	if reserved.Number != 10 {
+		t.Fatalf("reserved number = %d, want 10", reserved.Number)
+	}
+	third := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Slug: "auto-3", Body: specBody, CreatedBy: "stig",
+	})
+	if third.Number != 11 {
+		t.Fatalf("third auto number = %d, want 11", third.Number)
+	}
+}
+
+// TestDocCreateAutoAssignsNumberPerKind: spec and ADR draw from separate
+// sequences within the same project, per 025 §14.3's "own" per-kind count.
+func TestDocCreateAutoAssignsNumberPerKind(t *testing.T) {
+	s := openDocStore(t)
+
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Slug: "kind-spec", Body: specBody, CreatedBy: "stig",
+	})
+	adr := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Slug: "kind-adr", Body: specBody, CreatedBy: "stig",
+	})
+	if spec.Number != 1 || adr.Number != 1 {
+		t.Fatalf("spec/adr numbers = %d/%d, want 1/1 (separate sequences)", spec.Number, adr.Number)
+	}
+}
+
 // TestDocCreateResolvesEdges: acting-direction frontmatter keys become edge
 // rows; a reference this project can resolve points at the doc, one it
 // cannot lands verbatim in to_external; inverse keys write nothing.
@@ -622,16 +674,25 @@ func TestDocCreatePlanHasNoSections(t *testing.T) {
 	}
 }
 
-// TestDocCreatePlanWithNumberRejected: plans get no shorthand and carry no
-// number (025 §14.3); the migration's CHECK only enforces the other half.
-func TestDocCreatePlanWithNumberRejected(t *testing.T) {
+// TestDocCreatePlanWithExplicitNumberReservesIt: an explicit plan number is
+// honored like a spec's or ADR's — the rare override, checked for collision —
+// and the project's counter advances past it so a later auto-assign never
+// retraces it.
+func TestDocCreatePlanWithExplicitNumberReservesIt(t *testing.T) {
 	s := openDocStore(t)
 
-	_, err := createDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Number: 3, Slug: "some-plan", Body: planBody, CreatedBy: "stig",
+	reserved := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Number: 5, Slug: "some-plan", Body: planBody, CreatedBy: "stig",
 	})
-	if !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	if reserved.Number != 5 {
+		t.Fatalf("plan number = %d, want 5", reserved.Number)
+	}
+
+	next := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "next-plan", Body: planBody, CreatedBy: "stig",
+	})
+	if next.Number != 6 {
+		t.Fatalf("plan number = %d, want 6 (past the reserved 5)", next.Number)
 	}
 }
 
@@ -1096,7 +1157,7 @@ func TestDocOperationsMetric(t *testing.T) {
 
 	// A rejected input records the error outcome under the same op.
 	if _, err := createDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Number: 3, Slug: "bad", Body: planBody, CreatedBy: "stig",
+		Project: "p1", Kind: "spec", Number: -1, Slug: "bad", Body: specBody, CreatedBy: "stig",
 	}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("err = %v, want ErrInvalidInput", err)
 	}
