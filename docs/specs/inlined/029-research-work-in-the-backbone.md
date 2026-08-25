@@ -274,7 +274,23 @@ Before removal, every open task, decision and review the member owns must be rea
 or explicitly left unassigned; the member's historical roles and contribution remain.
 Changing the project lead requires acceptance by the outgoing and incoming leads. If
 the outgoing lead is unavailable, the Editor and Science Lead jointly authorize the
-handoff. Closing the project closes the active Crew but preserves its roster, role
+handoff.
+
+A project may also designate one Crew member as **deputy** — a fact set when
+they are added, like the lead flag, and revocable at will. A deputy exercises
+full lead authority, including authorizing the handoff above, whenever the
+lead does not act; the lead remains the accountable human, and holding the
+designation never makes the deputy lead. The lead and deputy positions are
+mutually exclusive — no member holds both — and a project has at most one
+deputy. Removing a deputy from the Crew is an ordinary removal, subject only
+to the open-work guard above: there is no handoff process for it, because the
+designation carries no accountability to transfer. The roster shows the
+designation as **acting-lead**: a read-only, virtual role label folded into
+the member's role list for display. It cannot be set through the role
+vocabulary above — a role of `acting-lead` is refused the same way any other
+unrecognized role is.
+
+Closing the project closes the active Crew but preserves its roster, role
 history and derived contributions.
 
 An external expert may begin as an invited participant without a Keycloak actor. The
