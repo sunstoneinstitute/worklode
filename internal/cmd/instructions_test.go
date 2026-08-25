@@ -228,49 +228,93 @@ func TestEnsureClaudeMD(t *testing.T) {
 
 	action, err := ensureClaudeMD(root)
 	if err != nil || action != instrCreated {
-		t.Fatalf("no CLAUDE.md: %s %v", action, err)
+		t.Fatalf("no CLAUDE.local.md: %s %v", action, err)
 	}
 	if got := readFile(t, filepath.Join(root, claudeFile)); strings.TrimSpace(got) != claudeImportLine {
-		t.Fatalf("CLAUDE.md = %q, want %q", got, claudeImportLine)
+		t.Fatalf("CLAUDE.local.md = %q, want %q", got, claudeImportLine)
+	}
+	if got := readFile(t, filepath.Join(root, gitignoreFile)); !containsLine(got, claudeFile) {
+		t.Fatalf(".gitignore = %q, want a %s line", got, claudeFile)
 	}
 
-	// An existing CLAUDE.md is authored prose: never edited (spec 008 §17.7).
+	// An existing CLAUDE.local.md may carry a developer's own notes: never
+	// edited (spec 008 §17.7).
 	const prose = "# Mine\n"
 	if err := os.WriteFile(filepath.Join(root, claudeFile), []byte(prose), 0o644); err != nil {
-		t.Fatalf("seed CLAUDE.md: %v", err)
+		t.Fatalf("seed CLAUDE.local.md: %v", err)
 	}
 	action, err = ensureClaudeMD(root)
 	if err != nil || action != instrSuggested {
-		t.Fatalf("existing CLAUDE.md: %s %v", action, err)
+		t.Fatalf("existing CLAUDE.local.md: %s %v", action, err)
 	}
 	if got := readFile(t, filepath.Join(root, claudeFile)); got != prose {
-		t.Fatalf("CLAUDE.md was edited: %q", got)
+		t.Fatalf("CLAUDE.local.md was edited: %q", got)
 	}
 
 	// Once the suggestion has been taken, there is nothing left to suggest.
 	if err := os.WriteFile(filepath.Join(root, claudeFile),
 		[]byte(prose+"\n"+claudeImportLine+"\n"), 0o644); err != nil {
-		t.Fatalf("seed CLAUDE.md with import: %v", err)
+		t.Fatalf("seed CLAUDE.local.md with import: %v", err)
 	}
 	if action, err := ensureClaudeMD(root); err != nil || action != instrSatisfied {
-		t.Fatalf("CLAUDE.md already importing: %s %v", action, err)
+		t.Fatalf("CLAUDE.local.md already importing: %s %v", action, err)
 	}
 }
 
-// TestEnsureAgentsMDThroughSymlink pins the layout this repo itself uses:
-// AGENTS.md is a symlink to CLAUDE.md. The block must land in the target, the
-// authored prose must survive, the symlink must stay a symlink, and
-// ensureClaudeMD must have nothing to add.
+// TestEnsureClaudeMDGitignoreConverges pins ensureGitignored's own edge cases:
+// a missing .gitignore is created, an existing one gains the entry once, a
+// hand-edited one missing its trailing newline is not corrupted, and a run
+// once the entry is already there changes nothing.
+func TestEnsureClaudeMDGitignoreConverges(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, gitignoreFile)
+	const existing = "*.log" // deliberately no trailing newline
+	if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
+		t.Fatalf("seed %s: %v", gitignoreFile, err)
+	}
+	if err := ensureGitignored(root, claudeFile); err != nil {
+		t.Fatalf("ensureGitignored: %v", err)
+	}
+	first := readFile(t, path)
+	if !strings.HasPrefix(first, existing+"\n") {
+		t.Fatalf(".gitignore = %q, want the existing pattern preserved with a newline", first)
+	}
+	if n := strings.Count(first, claudeFile); n != 1 {
+		t.Fatalf(".gitignore has %s %d times: %q", claudeFile, n, first)
+	}
+
+	if err := ensureGitignored(root, claudeFile); err != nil {
+		t.Fatalf("second ensureGitignored: %v", err)
+	}
+	if got := readFile(t, path); got != first {
+		t.Fatalf("second run changed .gitignore:\n%q\nwant\n%q", got, first)
+	}
+}
+
+// containsLine reports whether body has line among its lines, trimmed.
+func containsLine(body, line string) bool {
+	for _, l := range strings.Split(body, "\n") {
+		if strings.TrimSpace(l) == line {
+			return true
+		}
+	}
+	return false
+}
+
+// TestEnsureAgentsMDThroughSymlink pins the AGENTS.md-symlinked-to-CLAUDE.local.md
+// layout: the block must land in the target, the authored prose must
+// survive, the symlink must stay a symlink, and ensureClaudeMD must have
+// nothing to add.
 func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 	root := t.TempDir()
 	claudePath := filepath.Join(root, claudeFile)
 	agentsPath := filepath.Join(root, agentsFile)
 	const prose = "# Mine\n\nAuthored prose.\n"
 	if err := os.WriteFile(claudePath, []byte(prose), 0o644); err != nil {
-		t.Fatalf("seed CLAUDE.md: %v", err)
+		t.Fatalf("seed CLAUDE.local.md: %v", err)
 	}
 	if err := os.Symlink(claudeFile, agentsPath); err != nil {
-		t.Fatalf("symlink AGENTS.md -> CLAUDE.md: %v", err)
+		t.Fatalf("symlink AGENTS.md -> CLAUDE.local.md: %v", err)
 	}
 
 	if action, err := ensureAgentsMD(root); err != nil || action != instrAdded {
@@ -278,7 +322,7 @@ func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 	}
 	got := readFile(t, claudePath)
 	if !strings.HasPrefix(got, prose) {
-		t.Fatalf("authored prose lost from CLAUDE.md: %q", got)
+		t.Fatalf("authored prose lost from CLAUDE.local.md: %q", got)
 	}
 	if !strings.Contains(got, agentsBlockBegin) {
 		t.Fatalf("block did not land in the symlink target: %q", got)
@@ -303,7 +347,7 @@ func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 		t.Fatalf("removeAgentsBlock: %s %v", action, err)
 	}
 	if stripped := readFile(t, claudePath); stripped != prose {
-		t.Fatalf("stripped CLAUDE.md = %q, want %q", stripped, prose)
+		t.Fatalf("stripped CLAUDE.local.md = %q, want %q", stripped, prose)
 	}
 	if _, err := os.Lstat(agentsPath); err != nil {
 		t.Fatalf("AGENTS.md symlink gone: %v", err)
@@ -312,7 +356,7 @@ func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 		t.Fatalf("removeClaudeMD on a symlink target: %s %v", action, err)
 	}
 	if _, err := os.Stat(claudePath); err != nil {
-		t.Fatalf("CLAUDE.md deleted: %v", err)
+		t.Fatalf("CLAUDE.local.md deleted: %v", err)
 	}
 }
 
@@ -361,33 +405,33 @@ func TestRemoveAgentsBlock(t *testing.T) {
 }
 
 func TestRemoveClaudeMD(t *testing.T) {
-	// The one-line CLAUDE.md Worklode created is Worklode's to remove.
+	// The one-line CLAUDE.local.md Worklode created is Worklode's to remove.
 	root := t.TempDir()
 	if _, err := ensureClaudeMD(root); err != nil {
 		t.Fatalf("ensureClaudeMD: %v", err)
 	}
 	if action, err := removeClaudeMD(root); err != nil || action != instrRemoved {
-		t.Fatalf("import-only CLAUDE.md: %s %v", action, err)
+		t.Fatalf("import-only CLAUDE.local.md: %s %v", action, err)
 	}
 	if _, err := os.Stat(filepath.Join(root, claudeFile)); !os.IsNotExist(err) {
-		t.Fatalf("CLAUDE.md survived: %v", err)
+		t.Fatalf("CLAUDE.local.md survived: %v", err)
 	}
 
 	// Authored prose is never deleted, even with the import line in it.
 	authored := t.TempDir()
 	body := "# Mine\n\n" + claudeImportLine + "\n"
 	if err := os.WriteFile(filepath.Join(authored, claudeFile), []byte(body), 0o644); err != nil {
-		t.Fatalf("seed CLAUDE.md: %v", err)
+		t.Fatalf("seed CLAUDE.local.md: %v", err)
 	}
 	if action, err := removeClaudeMD(authored); err != nil || action != instrNone {
-		t.Fatalf("authored CLAUDE.md: %s %v", action, err)
+		t.Fatalf("authored CLAUDE.local.md: %s %v", action, err)
 	}
 	if got := readFile(t, filepath.Join(authored, claudeFile)); got != body {
-		t.Fatalf("authored CLAUDE.md changed: %q", got)
+		t.Fatalf("authored CLAUDE.local.md changed: %q", got)
 	}
 
 	if action, err := removeClaudeMD(t.TempDir()); err != nil || action != instrNone {
-		t.Fatalf("missing CLAUDE.md: %s %v", action, err)
+		t.Fatalf("missing CLAUDE.local.md: %s %v", action, err)
 	}
 }
 
@@ -425,7 +469,7 @@ func TestInstallWritesInstructions(t *testing.T) {
 		t.Fatalf("AGENTS.md survived uninstall: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, claudeFile)); !os.IsNotExist(err) {
-		t.Fatalf("CLAUDE.md survived uninstall: %v", err)
+		t.Fatalf("CLAUDE.local.md survived uninstall: %v", err)
 	}
 }
 
@@ -466,9 +510,11 @@ func assertWorktreeClean(t *testing.T, dir string) {
 }
 
 // TestInstallFromLinkedWorktreeWritesToMainCheckout is the WL-219 regression:
-// AGENTS.md/CLAUDE.md are tracked files, so an install run from a task
-// worktree anchors them at the main checkout — the worktree inherits them
-// rather than committing a copy onto its own branch.
+// AGENTS.md is a tracked file, so an install run from a task worktree anchors
+// it at the main checkout — the worktree inherits it rather than committing a
+// copy onto its own branch. CLAUDE.local.md is gitignored rather than
+// tracked, but it anchors at the same root so the pair stays together and the
+// worktree does not grow its own separate copy.
 func TestInstallFromLinkedWorktreeWritesToMainCheckout(t *testing.T) {
 	root := initGitRepo(t)
 	wt := linkedWorktree(t, root, "WL-1-fix-the-thing")
@@ -512,11 +558,11 @@ func TestInstallFromLinkedWorktreeWritesToMainCheckout(t *testing.T) {
 	assertWorktreeClean(t, wt)
 }
 
-// TestInstallFromLinkedWorktreeFollowsAgentsSymlink covers the layout this
-// repo itself uses: AGENTS.md is a symlink to CLAUDE.md, both tracked. The
-// block must land in the main checkout's CLAUDE.md, through the main
-// checkout's own symlink, leaving the task worktree's copies untouched — that
-// pair is exactly what an install from a WL-46 worktree dirtied.
+// TestInstallFromLinkedWorktreeFollowsAgentsSymlink covers AGENTS.md symlinked
+// to CLAUDE.local.md, both tracked. The block must land in the main
+// checkout's CLAUDE.local.md, through the main checkout's own symlink,
+// leaving the task worktree's copies untouched — that pair is exactly what an
+// install from a WL-46 worktree dirtied.
 func TestInstallFromLinkedWorktreeFollowsAgentsSymlink(t *testing.T) {
 	root := initGitRepo(t)
 	const authored = "# Repo\n\nAuthored prose.\n"
@@ -538,8 +584,8 @@ func TestInstallFromLinkedWorktreeFollowsAgentsSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installHooks from a linked worktree: %v", err)
 	}
-	// AGENTS.md gained a block it did not have; CLAUDE.md *is* AGENTS.md, so
-	// it is already satisfied rather than suggested.
+	// AGENTS.md gained a block it did not have; CLAUDE.local.md *is* AGENTS.md,
+	// so it is already satisfied rather than suggested.
 	if res.Instructions.AgentsMD != instrAdded || res.Instructions.ClaudeMD != instrSatisfied {
 		t.Fatalf("instructions = %+v, want added/satisfied", res.Instructions)
 	}
@@ -628,7 +674,7 @@ func TestReportUninstallInstructionLines(t *testing.T) {
 	out := buf.String()
 	for _, want := range []string{
 		agentsFile + ": removed the Worklode block",
-		claudeFile + ": left alone (authored prose)",
+		claudeFile + ": left alone (local notes)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("report = %q, want it to contain %q", out, want)
