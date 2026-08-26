@@ -61,25 +61,14 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		return err
 	}
 
-	doc, refSection, err := resolveDocRef(list.Docs, cfg.ProjectKey, ref)
+	doc, refSection, err := resolveDocRefTiers(ctx, c, list.Docs, cfg.ProjectKey, ref)
 	if err != nil {
 		var unresolved *designdoc.UnresolvedError
-		if !errors.As(err, &unresolved) {
-			return err
+		if errors.As(err, &unresolved) {
+			// 026 §4.2 tier 3: printed, exit code unaffected.
+			return writeUnresolved(cmd, err)
 		}
-		// 026 §4.2 tier 2, live since 025 landed (WL-276): the key names
-		// another project — or this checkout has no project_key at all —
-		// and the backbone is reachable (the ListDocs above proved it), so
-		// resolve against the docs of the project whose key it is. Only a
-		// key the backbone does not know falls through to tier 3.
-		doc, refSection, err = resolveForeignDocRef(ctx, c, unresolved.Key, ref)
-		if err != nil {
-			if errors.As(err, &unresolved) {
-				// 026 §4.2 tier 3: printed, exit code unaffected.
-				return writeUnresolved(cmd, err)
-			}
-			return err
-		}
+		return err
 	}
 
 	if expectedKind != "" {
@@ -135,6 +124,26 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		return fmt.Errorf("no section %s in %s", section, doc.Slug)
 	}
 	return writeDocShow(cmd, doc, section, []byte(text))
+}
+
+// resolveDocRefTiers resolves ref through 026 §4.2's tiers 1 and 2: the pure
+// grammar against docs with this checkout's own project key, then — when the
+// key names another project, or this checkout declares no project_key at all —
+// against the docs of the project the backbone says owns that key. It returns
+// *designdoc.UnresolvedError only for tier 3, a key no registered project
+// carries, so every ref-taking command gets the same answer for the same ref.
+func resolveDocRefTiers(ctx context.Context, c *cli.Client, docs []model.Doc, projectKey, ref string) (model.Doc, string, error) {
+	doc, section, err := resolveDocRef(docs, projectKey, ref)
+	if err == nil {
+		return doc, section, nil
+	}
+	var unresolved *designdoc.UnresolvedError
+	if !errors.As(err, &unresolved) {
+		return model.Doc{}, "", err
+	}
+	// Tier 2, live since 025 landed (WL-276): the caller already reached the
+	// backbone for docs, so ask it whose key this is.
+	return resolveForeignDocRef(ctx, c, unresolved.Key, ref)
 }
 
 // resolveForeignDocRef is 026 §4.2's tier 2: resolve a shorthand whose key

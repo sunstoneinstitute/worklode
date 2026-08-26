@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -32,7 +31,8 @@ it up (blocked).
 
 The list is an execution queue, not a set: items are ordered
 topologically over the plans' requires edges. The exit status is 0
-whether or not work remains — this is a report.`,
+whether or not work remains — this is a report. A ref that names no
+document exits nonzero, so a typo cannot read as "nothing outstanding".`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDocTodo(cmd, args[0], deps)
@@ -85,13 +85,14 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	target, _, err := resolveDocRef(resp.Docs, cfg.ProjectKey, ref)
+	// Same resolution as `lode show`, tiers 1 and 2 both: a shorthand whose key
+	// is not this checkout's — which is every shorthand in a repo with no
+	// project_key — is the backbone's to answer, not a miss (026 §4.2). A tier-3
+	// key nothing carries is returned as an error rather than printed: the exit
+	// status of this command means "work remains" for a document it resolved,
+	// so a ref it could not resolve must not read as "no work".
+	target, _, err := resolveDocRefTiers(cmd.Context(), c, resp.Docs, cfg.ProjectKey, ref)
 	if err != nil {
-		var unresolved *designdoc.UnresolvedError
-		if errors.As(err, &unresolved) {
-			// 026 §4.2 tier 3: printed, exit code unaffected.
-			return writeUnresolved(cmd, err)
-		}
 		return err
 	}
 	docs, err := docTodoCorpus(cmd.Context(), c, resp.Docs)
