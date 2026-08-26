@@ -66,7 +66,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document mutations by op (create|update|accept|submit|revise|discard|edges|delete|undelete) and outcome.",
+			Help: "Design-document operations by op (create|update|accept|submit|revise|discard|edges|delete|undelete|list-versions|get-version) and outcome.",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
@@ -133,11 +133,11 @@ func (m *storeMetrics) projectWorkRead(err error) {
 	m.projectWorkReads.WithLabelValues(outcome(err)).Inc()
 }
 
-// docOp records one document mutation by op and outcome. op is the caller's
+// docOp records one document operation by op and outcome. op is the caller's
 // fixed verb — create|update|accept|submit|revise|discard|edges|delete|
-// undelete, the enumeration the Help string above is the contract for
-// (022 §8) — never a doc id or project, which are unbounded. Adding a verb
-// means adding it there too.
+// undelete|list-versions|get-version, the enumeration the Help string above
+// is the contract for (022 §8) — never a doc id or project, which are
+// unbounded. Adding a verb means adding it there too.
 func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
 		return

@@ -55,6 +55,26 @@ type DocSection struct {
 	Published     bool   `json:"published"`
 }
 
+// DocVersionSummary is one entry in a document's version list: a past or
+// current version's identity without its body.
+type DocVersionSummary struct {
+	Version   int       `json:"version"`
+	Title     string    `json:"title"`
+	Issued    string    `json:"issued"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// DocVersion is the full content of one document version, current or
+// superseded.
+type DocVersion struct {
+	Doc       int64     `json:"doc"`
+	Version   int       `json:"version"`
+	Title     string    `json:"title"`
+	Body      string    `json:"body"`
+	Issued    string    `json:"issued"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // DocRevision is a document's open candidate revision (025 §7.2): a copy of
 // the accepted body being edited against a stable document identity. At most
 // one exists per document, and the accepted version stays authoritative until

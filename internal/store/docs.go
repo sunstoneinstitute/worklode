@@ -77,6 +77,22 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 	return LogChange(tx, docEntityKind, strconv.FormatInt(docID, 10), eventID, change)
 }
 
+// snapshotDocVersion archives a document's current row into doc_versions
+// (025 §4.5), before the caller's own UPDATE docs SET ... overwrites it in
+// the same transaction. Called only from the two sites that bump
+// docs.version — UpdateDocBody's plan branch and AcceptRevision — so a draft
+// spec/ADR body edit, which never bumps version, never snapshots.
+func snapshotDocVersion(tx *sql.Tx, docID int64) error {
+	if _, err := tx.Exec(
+		`INSERT INTO doc_versions (doc_id, version, body, title, issued, created_at)
+		 SELECT id, version, body, title, issued, updated_at FROM docs WHERE id = $1
+		 ON CONFLICT (doc_id, version) DO NOTHING`, docID,
+	); err != nil {
+		return fmt.Errorf("snapshot doc %d before version bump: %w", docID, err)
+	}
+	return nil
+}
+
 // CreateDoc inserts a document, its section rows and its frontmatter-derived
 // edges inside the given transaction, and appends a state_log row attributed
 // to eventID. Call it from a RecordDocEvent apply callback with the store's
@@ -274,6 +290,12 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	}
 	if kind == "plan" {
 		if err := checkPlanTasksMinted(tx, id, parsed.doc); err != nil {
+			return nil, err
+		}
+		// Snapshot the version this edit is about to overwrite (025 §4.5):
+		// docs still holds its pre-update body, title and issued here, before
+		// the UPDATE below runs.
+		if err := snapshotDocVersion(tx, id); err != nil {
 			return nil, err
 		}
 		// A plan is edited in place rather than revised (025 §9), so its body
@@ -803,6 +825,12 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		title = d.slug
 	}
 	ts := now.UTC().Truncate(time.Second)
+	// Snapshot the version this accept is about to overwrite (025 §4.5):
+	// docs still holds its pre-update body, title and issued here, before the
+	// UPDATE below runs.
+	if err := snapshotDocVersion(tx, id); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(
 		`UPDATE docs SET body = $2, title = $3, issued = coalesce($4::date, issued),
 		                 version = $5, updated_at = $6
@@ -2184,6 +2212,82 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 		return nil, fmt.Errorf("list docs: %w", err)
 	}
 	return collectRows(rows, "list docs", byValue(scanDoc))
+}
+
+// scanDocVersionSummary scans one row of ListDocVersions' union: version,
+// title, issued, created_at, in that order.
+func scanDocVersionSummary(row rowScanner) (model.DocVersionSummary, error) {
+	var v model.DocVersionSummary
+	var issued sql.NullTime
+	if err := row.Scan(&v.Version, &v.Title, &issued, &v.CreatedAt); err != nil {
+		return model.DocVersionSummary{}, err
+	}
+	if issued.Valid {
+		v.Issued = issued.Time.Format(docDateLayout)
+	}
+	v.CreatedAt = v.CreatedAt.UTC()
+	return v, nil
+}
+
+// ListDocVersions returns every version of a document, newest first: its
+// current row (docs) and every version it has superseded (doc_versions),
+// (025 §4.5).
+func (s *Store) ListDocVersions(ctx context.Context, id int64) (out []model.DocVersionSummary, err error) {
+	defer func() { s.metrics.docOp("list-versions", err) }()
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT version, title, issued, updated_at FROM docs WHERE id = $1
+		 UNION ALL
+		 SELECT version, title, issued, created_at FROM doc_versions WHERE doc_id = $1
+		 ORDER BY version DESC`, id)
+	if err != nil {
+		return nil, fmt.Errorf("list versions of doc %d: %w", id, err)
+	}
+	out, err = collectRows(rows, fmt.Sprintf("list versions of doc %d", id), scanDocVersionSummary)
+	return out, err
+}
+
+// GetDocVersion returns one version of a document, current or superseded
+// (025 §4.5): the live docs row when version equals its current version,
+// otherwise the matching doc_versions row. ErrNotFound if neither exists.
+func (s *Store) GetDocVersion(ctx context.Context, id int64, version int) (out model.DocVersion, err error) {
+	defer func() { s.metrics.docOp("get-version", err) }()
+
+	var issued sql.NullTime
+	err = s.db.QueryRowContext(ctx,
+		`SELECT version, title, body, issued, updated_at FROM docs
+		  WHERE id = $1 AND version = $2`, id, version,
+	).Scan(&out.Version, &out.Title, &out.Body, &issued, &out.CreatedAt)
+	if err == nil {
+		out.Doc = id
+		if issued.Valid {
+			out.Issued = issued.Time.Format(docDateLayout)
+		}
+		out.CreatedAt = out.CreatedAt.UTC()
+		return out, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return model.DocVersion{}, fmt.Errorf("get version %d of doc %d: %w", version, id, err)
+	}
+
+	out = model.DocVersion{}
+	err = s.db.QueryRowContext(ctx,
+		`SELECT title, body, issued, created_at FROM doc_versions
+		  WHERE doc_id = $1 AND version = $2`, id, version,
+	).Scan(&out.Title, &out.Body, &issued, &out.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.DocVersion{}, fmt.Errorf("doc %d has no version %d: %w", id, version, ErrNotFound)
+	}
+	if err != nil {
+		return model.DocVersion{}, fmt.Errorf("get version %d of doc %d: %w", version, id, err)
+	}
+	out.Doc = id
+	out.Version = version
+	if issued.Valid {
+		out.Issued = issued.Time.Format(docDateLayout)
+	}
+	out.CreatedAt = out.CreatedAt.UTC()
+	return out, nil
 }
 
 // NeedsPlanning returns the accepted specs that have at least one section no
