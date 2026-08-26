@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -482,7 +483,7 @@ func (s *server) getDocVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	version, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || version <= 0 {
+	if err != nil || version <= 0 || version > math.MaxInt32 {
 		writeErr(w, http.StatusBadRequest, "version must be a positive integer")
 		return
 	}
