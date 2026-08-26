@@ -453,6 +453,47 @@ func (s *server) docDetail(r *http.Request, id int64) (*model.DocDetail, error) 
 	return detail, nil
 }
 
+// listDocVersions handles GET /api/v1/docs/{id}/versions.
+func (s *server) listDocVersions(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	versions, err := s.st.ListDocVersions(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	// ListDocVersions never errors for an unknown doc: its query is a UNION
+	// of the live docs row and its archived versions, so a document that
+	// exists always has at least one row (its current version). An empty
+	// result is the same "no such doc" getDoc answers with a 404 for.
+	if len(versions) == 0 {
+		s.mapStoreErr(w, fmt.Errorf("doc %d: %w", id, store.ErrNotFound))
+		return
+	}
+	writeJSON(w, http.StatusOK, versions)
+}
+
+// getDocVersion handles GET /api/v1/docs/{id}/versions/{n}.
+func (s *server) getDocVersion(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	version, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || version <= 0 {
+		writeErr(w, http.StatusBadRequest, "version must be a positive integer")
+		return
+	}
+	v, err := s.st.GetDocVersion(r.Context(), id, version)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
 // updateDocBody handles PUT /api/v1/docs/{id}/body.
 func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
