@@ -87,6 +87,18 @@ func (c *Client) GetDoc(ctx context.Context, id int64) (model.DocDetail, []byte,
 	return doJSON[model.DocDetail](ctx, c, http.MethodGet, docPath(id, ""), nil, "doc")
 }
 
+// ListDocVersions calls GET /api/v1/docs/{id}/versions: every version of a
+// document, newest first (025 §4.5).
+func (c *Client) ListDocVersions(ctx context.Context, id int64) ([]model.DocVersionSummary, []byte, error) {
+	return doJSON[[]model.DocVersionSummary](ctx, c, http.MethodGet, docPath(id, "/versions"), nil, "doc versions")
+}
+
+// GetDocVersion calls GET /api/v1/docs/{id}/versions/{n}: one version of a
+// document, current or superseded, with its full body.
+func (c *Client) GetDocVersion(ctx context.Context, id int64, version int) (model.DocVersion, []byte, error) {
+	return doJSON[model.DocVersion](ctx, c, http.MethodGet, docPath(id, "/versions/"+strconv.Itoa(version)), nil, "doc version")
+}
+
 // UpdateDocBody calls PUT /api/v1/docs/{id}/body: an in-place edit, which the
 // server allows on a draft and on a plan at any status. An accepted spec or
 // ADR is revised instead (see ReviseDoc).
@@ -260,6 +272,40 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 			strings.Join(anchors, " "))
 	}
 	tbl.flush(w)
+}
+
+// DocVersionsTable prints one row per version of a document, newest first:
+// the `lode doc versions` view.
+func DocVersionsTable(w io.Writer, versions []model.DocVersionSummary) {
+	tbl := newTable(
+		column{header: "VERSION"},
+		titleColumn("TITLE"),
+		column{header: "ISSUED"},
+		column{header: "CREATED AT"},
+	)
+	for _, v := range versions {
+		tbl.add(strconv.Itoa(v.Version), v.Title, dash(v.Issued), LocalTime(v.CreatedAt))
+	}
+	tbl.flush(w)
+}
+
+// DocVersionRender prints one version of a document: its identity and body —
+// the `lode doc get --version` view. current is the document's live version;
+// when it differs from v.Version, a line says the rendered version is not it.
+func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
+	fmt.Fprintf(w, "%d  %s\n", v.Doc, v.Title)
+	fmt.Fprintf(w, "  version:  %d\n", v.Version)
+	if v.Issued != "" {
+		fmt.Fprintf(w, "  issued:   %s\n", v.Issued)
+	}
+	fmt.Fprintf(w, "  created:  %s\n", LocalTime(v.CreatedAt))
+	if v.Version != current {
+		fmt.Fprintf(w, "  (not the current version; current is %d)\n", current)
+	}
+	if v.Body != "" {
+		fmt.Fprintln(w)
+		Markdown(w, v.Body)
+	}
 }
 
 // DocDetailRender prints one document: its metadata, body, sections, and
