@@ -309,10 +309,54 @@ inherited.
     .config/worklode/config.toml     server = https://worklode.dev.sunstoneinstitute.ai
     .config/worklode/token           0600, "<server> <token>" — one line per server
     .claude/settings.json            the autoMode rules, user scope
-  repo/         a dedicated clone; worker worktrees live in its .worktrees/
+  repo/         the primary clone: owns .git, stays on main, never worked in
+  agents/<id>/  one linked worktree per worker, on branch agent-main/<id>;
+                its task worktrees land in its own .worktrees/
   env           0600, sourced by each window's shell
   logs/         pane captures, 0600, pruned after 7 days
 ```
+
+### One working tree per worker, one `.git` for all of them
+
+Workers share the object store and never a working tree. Sharing `.git` is
+what makes a second worker cheap: one fetch, one LFS cache, one 8 MB object
+store. Sharing a *working tree* would be a bug — it is one HEAD, one index and
+one set of untracked files, so several agents in `repo/` would contend over
+the branch the babysitter fast-forwards, over build output, and over each
+other's `git` invocations.
+
+So `repo/` is the primary clone and nobody works in it: it owns `.git`, it is
+the checkout `worktree.MainRoot` resolves to (which is where the repo-wide half
+of `lode install` lands, once, however many workers run), and it is where the
+single `git fetch` per tick happens. Each worker gets a linked worktree at
+`agents/<id>` on its own branch.
+
+**The branch is `agent-main/<id>`, and it cannot be `main/<id>`.** Git stores
+`refs/heads/main` as a file, so `refs/heads/main/<id>` would need `main` to be
+a directory — a directory/file conflict git refuses:
+
+```
+fatal: cannot lock ref 'refs/heads/main/gha-agent1': 'refs/heads/main' exists
+```
+
+(The `claude/<name>` branches this repo already uses work only because no plain
+`claude` branch exists.)
+
+These branches are **local-only and must never be pushed**. They never receive
+commits either — agents commit on task branches inside their own
+`.worktrees/` — so `reconcile.sh` tracks `origin/main` with a hard reset rather
+than a merge: there is nothing to preserve and nothing to conflict. A worker
+tree with local changes is left alone and reported, so one agent's mess cannot
+stall the others.
+
+`lode install` therefore runs **per worker tree**, not once in the primary. The
+propagation that populates each task worktree's `settings.local.json` is gated
+on *its own root* having been installed, and every agent's root is now its own
+worktree. `internal/worktree`'s
+`TestTaskIDIsFalseForAWorktreeOutsideTheBase` pins the CLI behaviour this rests
+on: `lode next`'s "already inside a worktree" guard is a question about the
+path — exactly one segment below `.worktrees` — not about being the main
+checkout, so it runs happily in `agents/<id>`.
 
 The tmux server has its own socket, `tmux -L gha-agent`, so it never collides
 with an interactive tmux. The socket is keyed by uid rather than `$HOME`, so
@@ -343,8 +387,13 @@ listen` — so the sidecar wakes on exactly the work its supervisor could claim.
 Only flags the skill accepts belong in it: `--project`, `--kind`,
 `--strict-focus`.
 
-Each worker gets two windows: `<name>` running the Claude session, and
-`<name>-poke` running the sidecar that nudges it when work appears. Health is
+Each worker gets two windows — `<name>` running the Claude session and
+`<name>-poke` running the sidecar that nudges it when work appears — plus its
+own worktree at `agents/<name>`, all created by `reconcile.sh`. Retiring a
+worker means removing its entry here; `git worktree prune` only clears
+registrations whose directories are already gone, so deleting the tree itself
+stays a deliberate manual step and can never take an in-flight task worktree
+with it. Health is
 judged by pane state — dead, or fallen back to a bare shell, means respawn.
 That is a denylist on purpose: `claude` runs as `node` today, and matching only
 `node` would turn any change in how it is launched into an endless respawn loop

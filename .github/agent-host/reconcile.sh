@@ -24,6 +24,7 @@ WORKERS=${WORKERS:-.github/agent-host/workers.json}
 
 BIN="$AGENT_ROOT/bin"
 REPO="$AGENT_ROOT/repo"
+AGENTS="$AGENT_ROOT/agents"
 LOGS="$AGENT_ROOT/logs"
 # How long pane captures are kept. At the 15-minute cadence this is ~96 files
 # per window per day, so an unbounded directory would quietly become the next
@@ -90,6 +91,56 @@ if [ ! -r "$WORKERS" ]; then
   exit 1
 fi
 
+# ensure_worktree gives one worker its own working tree off the shared .git.
+#
+# They share the object store — one fetch, one LFS cache, 8 MB of .git instead
+# of N copies — but never a working tree. A working tree is one HEAD, one
+# index and one set of untracked files; several agents in the same one would
+# contend over the branch this script fast-forwards, over build output, and
+# over each other's git invocations.
+#
+# The base branch is agent-main/<window>, NOT main/<window>: git stores
+# refs/heads/main as a file, so refs/heads/main/<window> would need `main` to
+# be a directory, and git refuses that directory/file conflict outright.
+#
+# These branches are local-only and never receive commits — agents commit on
+# task branches inside their own .worktrees/ — so a hard reset is the honest
+# way to track origin/main. There is nothing to preserve and nothing to
+# conflict. A dirty tree is left alone and reported: something is going on in
+# there that this script did not put there.
+ensure_worktree() {
+  local dir="$AGENTS/$1" branch="agent-main/$1"
+
+  if [ ! -e "$dir/.git" ]; then
+    # A directory that exists but carries no .git is not a worktree this
+    # script can adopt, and `worktree add` onto a non-empty path fails with a
+    # message about the path rather than about what is wrong. Say it here.
+    if [ -e "$dir" ]; then
+      echo "::error::$dir exists but is not a git worktree; move it aside" >&2
+      return 1
+    fi
+    echo "reconcile: creating worktree $dir on $branch"
+    git -C "$REPO" worktree add -B "$branch" "$dir" origin/main
+    return
+  fi
+  if [ -n "$(git -C "$dir" status --porcelain)" ]; then
+    echo "::warning::$dir has local changes; leaving $branch where it is"
+    return
+  fi
+  git -C "$dir" reset --hard origin/main --quiet
+}
+
+install -d -m 0755 "$AGENTS"
+
+# One fetch for every worker: a single writer to the shared object store per
+# tick, rather than N agents racing each other into it.
+if [ -d "$REPO/.git" ]; then
+  git -C "$REPO" fetch --prune --quiet origin
+else
+  echo "reconcile: $REPO is not a clone yet" >&2
+  exit 1
+fi
+
 # setsid so the tmux server is not left in the runner service's cgroup, where
 # a `systemctl restart` of the runner would take it down with it. tmux already
 # double-forks; this is belt and braces.
@@ -114,14 +165,31 @@ while IFS=$'\t' read -r window filter; do
   # shellcheck disable=SC2086  # the filter is a flag list and must word-split
   set -- $filter
 
+  # A worker whose tree cannot be prepared is skipped, not fatal: one broken
+  # directory must not stop the rest of the fleet from being reconciled.
+  if ! ensure_worktree "$window"; then
+    summary "| \`$window\` | - | - | worktree failed |"
+    continue
+  fi
+  wt="$AGENTS/$window"
+
+  # `lode install` per worker tree, not once in the primary clone: the
+  # propagation that populates each task worktree's settings.local.json is
+  # gated on ITS OWN root having been installed, and every agent's root is now
+  # its own worktree. The repo-wide half (git hooks, the AGENTS.md block)
+  # still resolves to the primary checkout via worktree.MainRoot, so it lands
+  # once however many workers run.
+  ( cd "$wt" && HOME="$AGENT_ROOT/home" PATH="$BIN:$PATH" lode install >/dev/null ) \
+    || echo "::warning::lode install failed in $wt"
+
   action=none
   state=$(pane_command "$window")
   if ! window_exists "$window"; then
     action=created
-    start_window "$window" "$REPO" "$BIN/supervisor.sh" "$@"
+    start_window "$window" "$wt" "$BIN/supervisor.sh" "$window" "$@"
   elif ! healthy "$state"; then
     action=respawned
-    start_window "$window" "$REPO" "$BIN/supervisor.sh" "$@"
+    start_window "$window" "$wt" "$BIN/supervisor.sh" "$window" "$@"
   fi
 
   # The sidecar is judged only on being alive. It IS a shell loop, so the
@@ -132,7 +200,7 @@ while IFS=$'\t' read -r window filter; do
   poke_state=$(pane_command "$poke")
   case "$poke_state" in
     0:*) : ;;
-    *) start_window "$poke" "$REPO" "$BIN/poke.sh" "$window" "$@" ;;
+    *) start_window "$poke" "$wt" "$BIN/poke.sh" "$window" "$@" ;;
   esac
 
   # Scrollback goes to a 0600 file on the host, not into the job log: this
@@ -170,6 +238,11 @@ fi
 if [ "$(tm list-windows -t "$SESSION" -F '#{window_name}' | wc -l)" -gt 1 ]; then
   tm kill-window -t "$SESSION:bootstrap" 2>/dev/null || true
 fi
+
+# Clears registrations whose directories are gone. It never deletes a
+# directory, so it cannot take an in-flight task worktree with it — retiring a
+# worker's tree stays a deliberate manual step.
+git -C "$REPO" worktree prune
 
 summary ""
 summary "Scrollback is kept on hel01 under \`$LOGS\` for ${LOG_RETENTION_DAYS} days, not printed here."

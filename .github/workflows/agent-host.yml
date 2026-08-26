@@ -149,7 +149,11 @@ jobs:
           set -euo pipefail
           HOME="$AGENT_ROOT/home" "$AGENT_ROOT/bin/lode" doctor
 
-      - name: Ensure the agent's clone
+      # The primary clone owns .git and is never worked in: each worker gets
+      # its own linked worktree off it (see reconcile.sh). Keeping it on main
+      # is what makes it the checkout worktree.MainRoot resolves to, so the
+      # repo-wide half of `lode install` lands here once rather than per agent.
+      - name: Ensure the primary clone
         run: |
           set -euo pipefail
           repo="$AGENT_ROOT/repo"
@@ -161,9 +165,9 @@ jobs:
           fi
           git -C "$repo" fetch --prune origin
 
-          # Only fast-forward a clean tree. Worker output lives in
-          # .worktrees/ on task branches, so this does not disturb in-flight
-          # work — but a dirty main is someone's unfinished business.
+          # Only fast-forward a clean tree: a dirty primary is someone's
+          # unfinished business. Worker output never lands here — it lives in
+          # each agent worktree's own .worktrees/ on task branches.
           if [ -z "$(git -C "$repo" status --porcelain)" ]; then
             git -C "$repo" checkout main
             git -C "$repo" merge --ff-only origin/main
@@ -173,11 +177,6 @@ jobs:
 
           claude plugin marketplace add "$repo" --scope local || true
           claude plugin install lode@worklode --scope local -y || true
-
-          # The gate PropagateToWorktree tests: with this run at the root of
-          # the clone, every worktree `lode next` creates inherits the local
-          # settings. Without it, each worktree starts with none.
-          (cd "$repo" && lode install)
 
       - name: Reconcile workers
         env:
