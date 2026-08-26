@@ -342,6 +342,26 @@ A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn` nam
 therefore does not invalidate anyone's claim on §4.2 — document-level versioning, section-level
 precision, one property.
 
+### 4.5 Store-level version history
+
+§4.1–§4.4 specify the graph projection; the Postgres store underneath it
+retained nothing to project from — `UPDATE docs SET body = ...` overwrote
+the prior body outright. `doc_versions` (`doc_id`, `version`, `body`,
+`title`, `issued`, `created_at`; primary key `(doc_id, version)`) closes
+that gap: every site that increments `docs.version` snapshots the current,
+pre-update row into `doc_versions` in the same transaction before
+overwriting it. `docs` always holds the current version; `doc_versions`
+holds every version it has superseded. Listing a document's versions is
+therefore the union of both, and reading version N is `docs` when N is
+current, `doc_versions` otherwise.
+
+This is deliberately narrower than §4.1–§4.4: no immutable named graph, no
+`dcat:hasVersion` triples, no per-version IRI — only enough to answer "what
+did version N say" for `lode doc get --version`, its API route, and the
+equivalent UI view. Diffing between versions, and backfilling history for
+documents edited before this table existed, are both out of scope: the
+second cannot be derived from data that was never retained.
+
 ## 5. Documents move into the backbone
 
 Documents are durable, section-addressable, status-gated objects that are not git files. The
@@ -352,6 +372,8 @@ path, one review surface, one place `lode` talks to.
 
 - `docs`: identity, kind (`spec | adr | plan`), title, body, editorial status (§7), frontmatter
   as columns (`issued`, `requires`, `wasDerivedFrom`, …), version counter.
+- `doc_versions`: append-only snapshot of every version `docs` has
+  superseded (§4.5).
 - `doc_sections`: anchor, heading, depth, `last_revised_in` — specs and ADRs only (§9).
   Anchors follow §3 unchanged: assigned at first acceptance, frozen, letter-suffix inserts.
 - `doc_edges`: `covers`, `amends`/`amendedBy`, `replaces`/`isReplacedBy`, section-scoped

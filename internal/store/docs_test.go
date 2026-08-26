@@ -130,6 +130,37 @@ func docSections(t *testing.T, s *Store, docID int64) []model.DocSection {
 	return out
 }
 
+// docVersionRow is one archived doc_versions row, for tests that check the
+// snapshot table directly rather than through ListDocVersions/GetDocVersion.
+type docVersionRow struct {
+	version int
+	title   string
+	body    string
+}
+
+// docVersionRows reads a document's doc_versions rows in version order.
+func docVersionRows(t *testing.T, s *Store, docID int64) []docVersionRow {
+	t.Helper()
+	rows, err := s.db.QueryContext(t.Context(),
+		`SELECT version, title, body FROM doc_versions WHERE doc_id = $1 ORDER BY version`, docID)
+	if err != nil {
+		t.Fatalf("read doc_versions: %v", err)
+	}
+	defer rows.Close()
+	var out []docVersionRow
+	for rows.Next() {
+		var r docVersionRow
+		if err := rows.Scan(&r.version, &r.title, &r.body); err != nil {
+			t.Fatalf("scan doc_versions row: %v", err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("read doc_versions: %v", err)
+	}
+	return out
+}
+
 // docEdges reads a document's outbound edges in ListDocEdges' order — the
 // same expression, so these tests exercise the order production serves rather
 // than a second one that could disagree about where a NULL sorts.
@@ -2886,6 +2917,120 @@ func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
 	}
 	if editedSpec.Version != 1 {
 		t.Errorf("spec version = %d, want 1", editedSpec.Version)
+	}
+}
+
+// TestDocVersionsPlanBodyEdit: editing a plan's body snapshots the version it
+// leaves into doc_versions before overwriting it (025 §4.5), and
+// ListDocVersions/GetDocVersion serve the archived and the current version
+// off that split.
+func TestDocVersionsPlanBodyEdit(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "version-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	edited := strings.Replace(planMintBody, "Do the first thing.", "Do it now.", 1)
+	updated, err := updateDocBody(t, s, doc.ID, edited)
+	if err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("version = %d, want 2", updated.Version)
+	}
+
+	rows := docVersionRows(t, s, doc.ID)
+	if len(rows) != 1 {
+		t.Fatalf("doc_versions rows = %+v, want 1 row", rows)
+	}
+	if rows[0].version != 1 || rows[0].body != planMintBody || rows[0].title != doc.Title {
+		t.Errorf("snapshot = %+v, want version 1 of the pre-edit body/title", rows[0])
+	}
+
+	versions, err := s.ListDocVersions(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatalf("ListDocVersions: %v", err)
+	}
+	if len(versions) != 2 || versions[0].Version != 2 || versions[1].Version != 1 {
+		t.Fatalf("versions = %+v, want [2, 1]", versions)
+	}
+
+	v1, err := s.GetDocVersion(t.Context(), doc.ID, 1)
+	if err != nil {
+		t.Fatalf("GetDocVersion(1): %v", err)
+	}
+	if v1.Body != planMintBody {
+		t.Errorf("GetDocVersion(1).Body = %q, want the pre-edit body", v1.Body)
+	}
+
+	v2, err := s.GetDocVersion(t.Context(), doc.ID, 2)
+	if err != nil {
+		t.Fatalf("GetDocVersion(2): %v", err)
+	}
+	if v2.Body != edited {
+		t.Errorf("GetDocVersion(2).Body = %q, want the current body", v2.Body)
+	}
+
+	if _, err := s.GetDocVersion(t.Context(), doc.ID, 3); !errors.Is(err, ErrNotFound) {
+		t.Errorf("GetDocVersion(3) err = %v, want ErrNotFound", err)
+	}
+}
+
+// TestDocVersionsRevisionAccept: landing a revision snapshots the accepted
+// version it replaces (025 §4.5).
+func TestDocVersionsRevisionAccept(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustAcceptedSpec(t, s, "025-x")
+	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	updated, err := acceptRevision(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	if updated.Version != 2 {
+		t.Fatalf("version = %d, want 2", updated.Version)
+	}
+
+	rows := docVersionRows(t, s, doc.ID)
+	if len(rows) != 1 {
+		t.Fatalf("doc_versions rows = %+v, want 1 row", rows)
+	}
+	if rows[0].version != 1 || rows[0].body != specBody {
+		t.Errorf("snapshot = %+v, want version 1 of the accepted body", rows[0])
+	}
+
+	v1, err := s.GetDocVersion(t.Context(), doc.ID, 1)
+	if err != nil {
+		t.Fatalf("GetDocVersion(1): %v", err)
+	}
+	if v1.Body != specBody {
+		t.Errorf("GetDocVersion(1).Body = %q, want the pre-revision body", v1.Body)
+	}
+}
+
+// TestDocVersionsDraftEditNoSnapshot: a draft spec/ADR body edit does not
+// bump docs.version (025 §7), and the snapshot sits inside the
+// version-bumping branches only (025 §4.5) — so it must not run here.
+func TestDocVersionsDraftEditNoSnapshot(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 92, Slug: "092-x", Body: specBody, CreatedBy: "stig",
+	})
+	if _, err := updateDocBody(t, s, doc.ID, specBody+"\nmore\n"); err != nil {
+		t.Fatalf("UpdateDocBody: %v", err)
+	}
+	if rows := docVersionRows(t, s, doc.ID); len(rows) != 0 {
+		t.Errorf("doc_versions rows = %+v, want none", rows)
+	}
+	versions, err := s.ListDocVersions(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatalf("ListDocVersions: %v", err)
+	}
+	if len(versions) != 1 || versions[0].Version != 1 {
+		t.Fatalf("versions = %+v, want just [1]", versions)
 	}
 }
 
