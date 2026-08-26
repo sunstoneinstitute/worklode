@@ -126,7 +126,7 @@ var showOrdinalShape = map[string]*regexp.Regexp{
 
 func newShowCmd() *cobra.Command {
 	var kind, taskFlag, specFlag, adrFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
-	var pager, inline bool
+	var pager, inline, usage bool
 	cmd := &cobra.Command{
 		Use:   "show [id]",
 		Short: "Show any entity by id or kind flag: a task, a design doc, a project",
@@ -186,17 +186,17 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 				if len(args) != 1 {
 					return fmt.Errorf("--kind %s requires exactly one positional argument (the ordinal or slug)", kind)
 				}
-				return dispatchShowKind(cmd, kind, args[0], section, sectionSet, inline)
+				return dispatchShowKind(cmd, kind, args[0], section, sectionSet, inline, usage)
 			case changedKind != "":
 				if len(args) != 0 {
 					return fmt.Errorf("--%s and a positional id are mutually exclusive: the flag's value is the id", changedKind)
 				}
-				return dispatchShowKind(cmd, changedKind, changedValue, section, sectionSet, inline)
+				return dispatchShowKind(cmd, changedKind, changedValue, section, sectionSet, inline, usage)
 			default:
 				if len(args) != 1 {
 					return errors.New("show requires exactly one argument: a task id, a document id, or a kind flag (--task, --spec, --adr, --plan, --milestone, --project, --deliverable, --kind)")
 				}
-				return dispatchShowPositional(cmd, args[0], section, sectionSet, inline)
+				return dispatchShowPositional(cmd, args[0], section, sectionSet, inline, usage)
 			}
 		},
 	}
@@ -211,6 +211,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
+	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
 	return cmd
 }
 
@@ -246,9 +247,12 @@ func exampleOrdinal(value string) string {
 // dispatchShowKind routes a resolved (kind, value) pair — from a --<kind>
 // flag or from --kind <K> plus its positional — to the same routines the
 // typed-id path (dispatchShowPositional) uses.
-func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet, inline bool) error {
+func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSet, inline, usage bool) error {
 	if sectionSet && kind != "spec" && kind != "adr" {
 		return errors.New("--section applies only to documents")
+	}
+	if usage && kind != "task" {
+		return errors.New("--usage applies only to tasks")
 	}
 	// project has no shape entry: any non-empty string is a valid slug or id,
 	// and its own arm checks that.
@@ -257,7 +261,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 	}
 	switch kind {
 	case "task":
-		return runTaskShow(cmd, value)
+		return runTaskShow(cmd, value, usage)
 	case "spec", "adr", "plan":
 		return runDocShowByOrdinal(cmd, kind, value, section, inline)
 	case "milestone", "deliverable":
@@ -302,14 +306,17 @@ func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline
 // show <id>` (no kind flags): unchanged from the original show.go behavior,
 // plus the --section-applies-only-to-docs check the flag-routed path also
 // enforces.
-func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet, inline bool) error {
+func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet, inline, usage bool) error {
 	t := classify(arg)
 	if sectionSet && t.Kind != targetDoc {
 		return errors.New("--section applies only to documents")
 	}
+	if usage && t.Kind != targetTask {
+		return errors.New("--usage applies only to tasks")
+	}
 	switch t.Kind {
 	case targetTask:
-		return runTaskShow(cmd, arg)
+		return runTaskShow(cmd, arg, usage)
 	case targetDoc:
 		return runDocShow(cmd, arg, section, "", inline)
 	case targetUnshowable:

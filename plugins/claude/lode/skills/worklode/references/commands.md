@@ -161,7 +161,7 @@ Flags: --admin-listen, --dsn, --listen
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
-Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task
+Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage
 
 ## `lode skills` — Org-wide agent skills: list, recommend, install, sync
 
@@ -215,7 +215,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task reopen` — Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)
 - `lode task rework` — Send a task under review back to in_progress (e.g. changes requested)
 - `lode task show` — Show a task's details: body, edges, blocked status, and lease holder
-  Flags: --pager
+  Flags: --pager, --usage
 - `lode task skills` — Show or replace the task's pinned skills
   Flags: --set
 - `lode task start` — Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.
