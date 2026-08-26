@@ -310,6 +310,7 @@ docs/specs/025-documents-in-the-backbone.md:
     sec-4.2: "### 4.2 Relationship to ADR-0006"
     sec-4.3: "### 4.3 Publication is one transaction"
     sec-4.4: "### 4.4 Section-level staleness without section-level versions"
+    sec-4.5: "### 4.5 Store-level version history"
     sec-5: "## 5. Documents move into the backbone"
     sec-5.1: "### 5.1 The document store"
     sec-6: "## 6. Constraints on accepted documents"

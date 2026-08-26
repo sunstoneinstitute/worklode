@@ -120,3 +120,5 @@ configMapGenerator:
       - migrations/0053_plan_numbers.down.sql
       - migrations/0054_spec_adr_numbers.up.sql
       - migrations/0054_spec_adr_numbers.down.sql
+      - migrations/0055_doc_versions.up.sql
+      - migrations/0055_doc_versions.down.sql
