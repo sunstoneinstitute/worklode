@@ -37,6 +37,7 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 - `lode doc edit` — Replace a document's body (a draft, or a plan at any status)
   Flags: --file
 - `lode doc get` — Get a document: its body, sections, and edges
+  Flags: --version
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
@@ -49,6 +50,7 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 - `lode doc todo` — What is left before a spec is fully implemented
   Flags: --deps
 - `lode doc undelete` — Restore a deleted document, clearing its tombstone
+- `lode doc versions` — List a document's version history
 
 ## `lode doctor` — Diagnose this machine's lode setup
 
