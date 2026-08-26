@@ -438,7 +438,7 @@ func resolveStatusFilter(statuses []string) []string {
 }
 
 func newTaskShowCmd() *cobra.Command {
-	var pager bool
+	var pager, usage bool
 	cmd := &cobra.Command{
 		Use:   "show <id>",
 		Short: "Show a task's details: body, edges, blocked status, and lease holder",
@@ -472,16 +472,20 @@ func newTaskShowCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cleanupPager := withPager(cmd, pager)
 			defer cleanupPager()
-			return runTaskShow(cmd, args[0])
+			return runTaskShow(cmd, args[0], usage)
 		},
 	}
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
+	cmd.Flags().BoolVar(&usage, "usage", false, "include the task's token usage/cost (all history, own sessions only; see task cost for a window or --children)")
 	return cmd
 }
 
 // runTaskShow is `task show`'s body, shared with the `lode show <id>`
-// dispatcher (show.go) once it has classified arg as a task id.
-func runTaskShow(cmd *cobra.Command, arg string) error {
+// dispatcher (show.go) once it has classified arg as a task id. usage, when
+// set, folds in the same all-history, own-sessions-only cost `task cost`
+// reports by default (no --days/--children window here; use `task cost` for
+// that).
+func runTaskShow(cmd *cobra.Command, arg string, usage bool) error {
 	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
 		return err
@@ -494,11 +498,27 @@ func runTaskShow(cmd *cobra.Command, arg string) error {
 	if err != nil {
 		return err
 	}
-	if jsonOut(cmd) {
-		printRaw(cmd, raw)
+	if !usage {
+		if jsonOut(cmd) {
+			printRaw(cmd, raw)
+			return nil
+		}
+		cli.TaskDetailRender(cmd.OutOrStdout(), t, cfg.ServerURL)
 		return nil
 	}
+	tc, costRaw, err := c.TaskCost(cmd.Context(), id, false, time.Time{}, time.Time{})
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		return printJSON(cmd, struct {
+			Task json.RawMessage `json:"task"`
+			Cost json.RawMessage `json:"cost"`
+		}{json.RawMessage(raw), json.RawMessage(costRaw)})
+	}
 	cli.TaskDetailRender(cmd.OutOrStdout(), t, cfg.ServerURL)
+	fmt.Fprintln(cmd.OutOrStdout())
+	cli.TaskCostRender(cmd.OutOrStdout(), tc, "all time")
 	return nil
 }
 
