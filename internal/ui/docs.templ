@@ -82,6 +82,25 @@ templ Doc(v DocView) {
 					<p><strong>A candidate revision is open</strong>, by { v.Revision.CreatedBy } ({ fmtTime(v.Revision.CreatedAt) }). The accepted version below stays authoritative until it lands.</p>
 				}
 			</section>
+			if len(v.Versions) > 0 {
+				<section class="card">
+					<div class="hd"><h3>Versions</h3></div>
+					<div class="bd">
+						@tableWrap("Versions") {
+							<table>
+								<tr><th>Version</th><th>Title</th><th>Created at</th></tr>
+								for _, ver := range v.Versions {
+									<tr>
+										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
+										<td><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Title }</a></td>
+										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
+									</tr>
+								}
+							</table>
+						}
+					</div>
+				</section>
+			}
 			if len(v.Sections) > 0 {
 				<section class="card">
 					<div class="hd"><h3>Sections</h3></div>
@@ -128,6 +147,45 @@ templ Doc(v DocView) {
 				// allowlist. The document flavour adds one attribute to that
 				// allowlist, an id on a heading matching the section-anchor
 				// grammar, and nothing else.
+				<div class="bd prose">
+					@templ.Raw(string(v.BodyHTML))
+				</div>
+			</section>
+		}
+	}
+}
+
+// DocVersion renders one version of a document, current or superseded
+// (025 §4.5), reusing Doc's header/chip markup. The body is read-only, as
+// every document body is; a superseded version additionally gets a banner
+// pointing back to the current one.
+templ DocVersion(v DocVersionView) {
+	@Page(v.Page) {
+		@globalShell("knowledge") {
+			<section class="card pad">
+				<h1>{ v.Version.Title }</h1>
+				<p>
+					<span class={ "chip " + docStatusChip(v.Doc.Status) }>{ v.Doc.Status }</span>
+					<span class="chip plain">{ v.Ref }</span>
+					<span class="chip plain">version { v.Version.Version }</span>
+					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a></span>
+				</p>
+				<p class="muted small">
+					Created { fmtTime(v.Version.CreatedAt) }
+					if v.Version.Issued != "" {
+						{ " · issued " + v.Version.Issued }
+					}
+				</p>
+			</section>
+			if !v.Current {
+				<section class="card pad">
+					<p><strong>Viewing version { v.Version.Version }</strong> &mdash; <a href={ v.DocURL }>back to current</a></p>
+				</section>
+			}
+			<section class="card">
+				<div class="hd"><h3>Body</h3></div>
+				// BodyHTML is emitted unescaped for the reason Doc's Body
+				// section gives.
 				<div class="bd prose">
 					@templ.Raw(string(v.BodyHTML))
 				</div>

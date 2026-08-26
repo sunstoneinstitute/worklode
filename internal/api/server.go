@@ -544,6 +544,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// where the body — the artifact itself — comes from a file.
 	r.web("GET /docs", s.navWrap("knowledge", s.docsPage))
 	r.web("GET /docs/{id}", s.navWrap("knowledge", s.docPage))
+	// /docs/versions/{id}/{n}, not /docs/{id}/versions/{n}: see routeGuards'
+	// comment on this route in router.go.
+	r.web("GET /docs/versions/{id}/{n}", s.navWrap("knowledge", s.docVersionPage))
 	// The reference redirect (WL-301): not navWrapped — it answers a 302,
 	// never a page.
 	r.web("GET /docs/ref/{ref...}", s.docRefRedirect)

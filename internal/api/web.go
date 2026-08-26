@@ -550,7 +550,43 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view := docView(s.mdcache, s.projectKeys(r.Context()), detail)
+	versions, err := s.st.ListDocVersions(r.Context(), detail.Doc.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	view.Versions = versions
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
+}
+
+// docVersionPage handles GET /docs/versions/{id}/{n}: one version of a
+// document, current or superseded (025 §4.5), addressed by the document's
+// numeric id like its JSON API sibling — unlike docPage, this route takes no
+// corpus-shorthand form.
+func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		webErr(w, http.StatusBadRequest, "doc id must be a positive integer")
+		return
+	}
+	version, err := strconv.Atoi(r.PathValue("n"))
+	if err != nil || version <= 0 {
+		webErr(w, http.StatusBadRequest, "version must be a positive integer")
+		return
+	}
+	d, err := s.st.GetDoc(r.Context(), id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	v, err := s.st.GetDocVersion(r.Context(), id, version)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	projectKey := s.projectKeyByID(r.Context())[d.Project]
+	view := docVersionView(s.mdcache, s.projectKeys(r.Context()), *d, v, projectKey)
+	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
 }
 
 // projectPage handles GET /projects/{id}: the project cockpit, via the same
