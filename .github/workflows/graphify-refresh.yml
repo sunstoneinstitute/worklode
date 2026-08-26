@@ -1,0 +1,57 @@
+name: graphify refresh
+
+# Keeps graphify-out/graph.json's code layer current between interactive
+# `/graphify --update` sessions. `graphify update --no-cluster` is AST-only
+# (no LLM, no API key) and skips clustering entirely, so it can never
+# renumber communities or clobber the labels an interactive session set —
+# those, and the doc/paper/image semantic pass, stay a manual/interactive
+# job. graphify-out/ is gitignored, so state persists across runs via
+# actions/cache rather than a commit.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'  # ~04:17 UTC daily; avoid the top of the hour
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: graphify-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Restore graphify-out state
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            graphify-out/graph.json
+            graphify-out/manifest.json
+            graphify-out/.graphify_root
+          key: graphify-out-${{ github.run_id }}
+          restore-keys: |
+            graphify-out-
+      - name: Install graphify
+        run: python3 -m pip install --quiet --break-system-packages graphifyy
+      - name: Update code graph
+        run: graphify update . --no-cluster
+      - name: Save graphify-out state
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            graphify-out/graph.json
+            graphify-out/manifest.json
+            graphify-out/.graphify_root
+          key: graphify-out-${{ github.run_id }}
+      - name: Upload graph.json artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: graphify-graph
+          path: graphify-out/graph.json
+          retention-days: 14
