@@ -108,8 +108,14 @@ var routeGuards = map[string]routeGuard{
 	"GET /tasks/{id}":                           guarded(permWebRead),
 	"GET /docs":                                 guarded(permWebRead),
 	"GET /docs/{id}":                            guarded(permWebRead),
-	"GET /docs/ref/{ref...}":                    guarded(permWebRead),
-	"GET /drift":                                guarded(permWebRead),
+	// Shaped /docs/versions/{id}/{n} rather than /docs/{id}/versions/{n}: the
+	// latter is ambiguous with "GET /docs/ref/{ref...}" below when {id}
+	// matches the literal "ref" — net/http's ServeMux refuses to register two
+	// patterns neither of which is more specific for every path they share,
+	// and here it isn't.
+	"GET /docs/versions/{id}/{n}": guarded(permWebRead),
+	"GET /docs/ref/{ref...}":      guarded(permWebRead),
+	"GET /drift":                  guarded(permWebRead),
 	// The cockpit's one decision act (029 §7.3). permApprovalDecide rather
 	// than permWebWrite: deciding an approval is a different capability from
 	// filing a task through a form, and the route is additionally gated by

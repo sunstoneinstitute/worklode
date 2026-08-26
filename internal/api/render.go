@@ -240,6 +240,28 @@ func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail) 
 	}
 }
 
+// docVersionView maps one document version into its page (GET
+// /docs/versions/{id}/{n}). doc carries the document's live identity —
+// status, project, corpus reference; projectKey is that project's key,
+// needed only to build DocURL's shorthand form when doc carries a number.
+// ver is the version rendered, current when its number matches doc's live
+// version.
+func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc, ver model.DocVersion, projectKey string) ui.DocVersionView {
+	docURL := docPageURL(doc.ID)
+	if doc.Number != 0 {
+		docURL = "/docs/" + docWebRef(doc, projectKey)
+	}
+	return ui.DocVersionView{
+		Page:     ui.PageProps{Title: "worklode: " + doc.Slug + " v" + strconv.Itoa(ver.Version)},
+		Doc:      doc,
+		Ref:      docRef(doc),
+		Version:  ver,
+		BodyHTML: md.DocBody(keys, ver.Body),
+		Current:  ver.Version == doc.Version,
+		DocURL:   docURL,
+	}
+}
+
 // docEdgeRows renders each edge's far end: a link labelled with the other
 // document's slug and corpus reference — the store resolved both alongside
 // the id — or the verbatim reference when the edge names something outside

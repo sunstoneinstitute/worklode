@@ -10,6 +10,7 @@ package ui
 
 import (
 	"html/template"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -506,6 +507,36 @@ type DocView struct {
 	Edges    []DocEdgeRow
 	EdgesIn  []DocEdgeRow
 	Revision *model.DocRevision
+	// Versions is the document's version history (025 §4.5), newest first —
+	// its live row and every version it has superseded — rendered as the
+	// Versions table below the chips.
+	Versions []model.DocVersionSummary
+}
+
+// DocVersionView is one version's page (GET /docs/versions/{id}/{n}): the
+// document's live identity for the header chips (status, project, corpus
+// reference) alongside the specific version rendered — its own title and
+// body, since a superseded version's title can differ from the current
+// one's. Current is false for every version but the document's live one,
+// which is what shows the "back to current" banner; DocURL is where that
+// banner links.
+type DocVersionView struct {
+	Page     PageProps
+	Doc      model.Doc
+	Ref      string
+	Version  model.DocVersion
+	BodyHTML template.HTML
+	Current  bool
+	DocURL   string
+}
+
+// docVersionURL is a version's page path, always addressed by the document's
+// numeric id rather than its corpus shorthand — this route, unlike docPage,
+// takes no ref form. Shaped /docs/versions/{id}/{n} rather than
+// /docs/{id}/versions/{n}: see routeGuards' comment on this route in
+// internal/api/router.go.
+func docVersionURL(docID int64, version int) string {
+	return "/docs/versions/" + strconv.FormatInt(docID, 10) + "/" + strconv.Itoa(version)
 }
 
 // DocEdgeRow is one typed link with its far end resolved for rendering.
