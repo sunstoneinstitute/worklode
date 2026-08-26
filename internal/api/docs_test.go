@@ -1276,6 +1276,51 @@ func TestDocPage(t *testing.T) {
 	}
 }
 
+// TestDocVersionPage covers GET /docs/{id}/versions/{n} (025 §4.5): a plan
+// stays freely mutable (025 §9), so editing its body once leaves version 1
+// superseded and version 2 current, and only the superseded one shows the
+// "back to current" banner.
+func TestDocVersionPage(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
+	})
+	edited := strings.Replace(docPlanBody, "Do the thing.", "Do it now.", 1)
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited}); rr.Code != http.StatusOK {
+		t.Fatalf("update body status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/2", plan.ID), "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("current version status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	bodyContains(t, body, "Do it now.")
+	if strings.Contains(body, "back to current") {
+		t.Errorf("current version shows the back-to-current banner:\n%s", body)
+	}
+
+	rr = doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/1", plan.ID), "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("superseded version status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body = rr.Body.String()
+	bodyContains(t, body, "back to current", "Do the thing.")
+	if strings.Contains(body, "Do it now.") {
+		t.Errorf("superseded version shows the edited body:\n%s", body)
+	}
+
+	if rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/3", plan.ID), "", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown version status = %d, want 404", rr.Code)
+	}
+	if rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/x", plan.ID), "", nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("non-numeric version status = %d, want 400", rr.Code)
+	}
+}
+
 // docPageURL is the cockpit page path retained for plans, which have no
 // cross-corpus shorthand.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
