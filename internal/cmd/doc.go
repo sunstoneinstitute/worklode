@@ -63,6 +63,7 @@ func newDocCmd() *cobra.Command {
 		newDocNewCmd(),
 		newDocListCmd(),
 		newDocGetCmd(),
+		newDocVersionsCmd(),
 		newDocEditCmd(),
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
@@ -329,6 +330,7 @@ func isPlanFile(doc *designdoc.Document) bool {
 // for plans. Neither is an alias of the other because they answer different
 // questions about the same row.
 func newDocGetCmd() *cobra.Command {
+	var version int
 	cmd := &cobra.Command{
 		Use:   "get <id-or-slug>",
 		Short: "Get a document: its body, sections, and edges",
@@ -342,6 +344,22 @@ func newDocGetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if version != 0 {
+				v, raw, err := c.GetDocVersion(cmd.Context(), id, version)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				d, _, err := c.GetDoc(cmd.Context(), id)
+				if err != nil {
+					return err
+				}
+				cli.DocVersionRender(cmd.OutOrStdout(), v, d.Version)
+				return nil
+			}
 			d, raw, err := c.GetDoc(cmd.Context(), id)
 			if err != nil {
 				return err
@@ -351,6 +369,38 @@ func newDocGetCmd() *cobra.Command {
 				return nil
 			}
 			cli.DocDetailRender(cmd.OutOrStdout(), d)
+			return nil
+		},
+	}
+	cmd.Flags().IntVar(&version, "version", 0, "get a specific past version instead of the current one (025 §4.5)")
+	return cmd
+}
+
+// newDocVersionsCmd lists a document's version history (025 §4.5): its
+// current version and every one it has superseded, newest first.
+func newDocVersionsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "versions <id-or-slug>",
+		Short: "List a document's version history",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			versions, raw, err := c.ListDocVersions(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DocVersionsTable(cmd.OutOrStdout(), versions)
 			return nil
 		},
 	}

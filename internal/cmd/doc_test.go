@@ -489,6 +489,97 @@ func TestDocLifecycle(t *testing.T) {
 	}
 }
 
+// TestDocGetVersion covers `lode doc get <ref> --version N`: it reads back a
+// past version instead of the current one, and the rendered view says so.
+func TestDocGetVersion(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	specFile := writeDocFile(t, docTestBody)
+	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+		"--slug", "test-plan", "--file", specFile, "--json")
+	if err != nil {
+		t.Fatalf("doc new: %v\noutput: %s", err, out)
+	}
+	idArg := strconv.FormatInt(docJSON(t, out).ID, 10)
+
+	editFile := writeDocFile(t, "# Test Document\n\nEdited body text.\n")
+	if out, err := runLode(t, "doc", "edit", idArg, "--file", editFile, "--json"); err != nil {
+		t.Fatalf("doc edit: %v\noutput: %s", err, out)
+	}
+
+	out, err = runLode(t, "doc", "get", idArg, "--version", "1", "--json")
+	if err != nil {
+		t.Fatalf("doc get --version 1 --json: %v\noutput: %s", err, out)
+	}
+	var v1 model.DocVersion
+	if err := json.Unmarshal([]byte(out), &v1); err != nil {
+		t.Fatalf("decode doc version %q: %v", out, err)
+	}
+	if v1.Body != docTestBody {
+		t.Errorf("doc get --version 1: body = %q, want the pre-edit body %q", v1.Body, docTestBody)
+	}
+
+	out, err = runLode(t, "doc", "get", idArg, "--version", "1")
+	if err != nil {
+		t.Fatalf("doc get --version 1 (rendered): %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "not the current version") {
+		t.Errorf("doc get --version 1 rendered output = %q, want it to flag a stale version", out)
+	}
+
+	out, err = runLode(t, "doc", "get", idArg, "--version", "2")
+	if err != nil {
+		t.Fatalf("doc get --version 2 (rendered): %v\noutput: %s", err, out)
+	}
+	if strings.Contains(out, "not the current version") {
+		t.Errorf("doc get --version 2 rendered output = %q, want no stale-version note", out)
+	}
+	if !strings.Contains(out, "Edited body text.") {
+		t.Errorf("doc get --version 2 rendered output = %q, want the current body", out)
+	}
+}
+
+// TestDocVersionsCmd covers `lode doc versions <ref>`: the version history
+// list, newest first.
+func TestDocVersionsCmd(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	specFile := writeDocFile(t, docTestBody)
+	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+		"--slug", "test-plan", "--file", specFile, "--json")
+	if err != nil {
+		t.Fatalf("doc new: %v\noutput: %s", err, out)
+	}
+	idArg := strconv.FormatInt(docJSON(t, out).ID, 10)
+
+	editFile := writeDocFile(t, "# Test Document\n\nEdited body text.\n")
+	if out, err := runLode(t, "doc", "edit", idArg, "--file", editFile, "--json"); err != nil {
+		t.Fatalf("doc edit: %v\noutput: %s", err, out)
+	}
+
+	out, err = runLode(t, "doc", "versions", idArg, "--json")
+	if err != nil {
+		t.Fatalf("doc versions --json: %v\noutput: %s", err, out)
+	}
+	var versions []model.DocVersionSummary
+	if err := json.Unmarshal([]byte(out), &versions); err != nil {
+		t.Fatalf("decode versions %q: %v", out, err)
+	}
+	if len(versions) != 2 || versions[0].Version != 2 || versions[1].Version != 1 {
+		t.Fatalf("versions = %+v, want [2, 1]", versions)
+	}
+
+	out, err = runLode(t, "doc", "versions", idArg)
+	if err != nil {
+		t.Fatalf("doc versions (table): %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "VERSION") {
+		t.Errorf("doc versions table output = %q, want a VERSION column", out)
+	}
+}
+
 // --- list selectors (026 §2) --------------------------------------------
 
 // TestDocListSelectorConflicts: each derived selector implies a kind and a
