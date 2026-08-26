@@ -84,6 +84,9 @@ func logDocChange(tx *sql.Tx, docID, eventID int64, change map[string]string) er
 // spec/ADR body edit, which never bumps version, never snapshots.
 func snapshotDocVersion(tx *sql.Tx, docID int64) error {
 	if _, err := tx.Exec(
+		// ON CONFLICT DO NOTHING is unreachable with both current callers:
+		// docs.version only increases and each snapshots the pre-bump value.
+		// Kept as belt-and-braces against a version somehow going backwards.
 		`INSERT INTO doc_versions (doc_id, version, body, title, issued, created_at)
 		 SELECT id, version, body, title, issued, updated_at FROM docs WHERE id = $1
 		 ON CONFLICT (doc_id, version) DO NOTHING`, docID,

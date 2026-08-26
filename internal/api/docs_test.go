@@ -767,6 +767,22 @@ func TestDocVersions(t *testing.T) {
 	}
 }
 
+// TestGetDocVersionRejectsInt32Overflow pins WL-345 (I1): docs.version is a
+// Postgres int4, so a version above math.MaxInt32 must be rejected by the
+// handler's own guard rather than reaching pgx's parameter encoder, which
+// fails the query and would otherwise surface as a 500.
+func TestGetDocVersionRejectsInt32Overflow(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
+	})
+
+	if rr := doReq(t, h, "GET", docPath(plan.ID, "/versions/99999999999"), token, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("version above int32 max status = %d, want 400, body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestDocsRequireAuth(t *testing.T) {
 	_, h, _ := newTestServer(t)
 	if rr := doReq(t, h, "GET", "/api/v1/docs", "", nil); rr.Code != http.StatusUnauthorized {
@@ -1276,6 +1292,30 @@ func TestDocPage(t *testing.T) {
 	}
 }
 
+// TestDocPageDegradesWithoutVersions pins WL-345 (I3): a ListDocVersions
+// failure must not take down the whole doc page, the same call
+// projectKeyByID already makes for its own dependency. Forces the failure by
+// dropping doc_versions out from under a live store, the cross-package
+// DBForTests seam other packages already use for this (e.g.
+// internal/hooks/github_test.go).
+func TestDocPageDegradesWithoutVersions(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+
+	if _, err := st.DBForTests().Exec(`DROP TABLE doc_versions`); err != nil {
+		t.Fatalf("drop doc_versions: %v", err)
+	}
+
+	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	bodyContains(t, body, "Documents in the backbone")
+}
+
 // TestDocVersionPage covers GET /docs/{id}/versions/{n} (025 §4.5): a plan
 // stays freely mutable (025 §9), so editing its body once leaves version 1
 // superseded and version 2 current, and only the superseded one shows the
@@ -1318,6 +1358,21 @@ func TestDocVersionPage(t *testing.T) {
 	}
 	if rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/x", plan.ID), "", nil); rr.Code != http.StatusBadRequest {
 		t.Errorf("non-numeric version status = %d, want 400", rr.Code)
+	}
+}
+
+// TestDocVersionPageRejectsInt32Overflow is the web-route sibling of
+// TestGetDocVersionRejectsInt32Overflow (WL-345 I1): docVersionPage guards
+// the same int4 column and must refuse the same way.
+func TestDocVersionPageRejectsInt32Overflow(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
+	})
+
+	if rr := doReq(t, h, "GET", fmt.Sprintf("/docs/versions/%d/99999999999", plan.ID), "", nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("version above int32 max status = %d, want 400, body %s", rr.Code, rr.Body.String())
 	}
 }
 

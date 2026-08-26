@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -550,12 +551,14 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	view := docView(s.mdcache, s.projectKeys(r.Context()), detail)
+	// A failed read degrades to an empty Versions card rather than failing
+	// the whole page, the same call projectKeyByID makes for its dependency.
 	versions, err := s.st.ListDocVersions(r.Context(), detail.Doc.ID)
 	if err != nil {
-		s.webStoreErr(w, err)
-		return
+		s.log.Warn("rendering doc page without version history: versions unreadable", "doc", detail.Doc.ID, "err", err)
+	} else {
+		view.Versions = versions
 	}
-	view.Versions = versions
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
 }
 
@@ -570,7 +573,7 @@ func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	version, err := strconv.Atoi(r.PathValue("n"))
-	if err != nil || version <= 0 {
+	if err != nil || version <= 0 || version > math.MaxInt32 {
 		webErr(w, http.StatusBadRequest, "version must be a positive integer")
 		return
 	}

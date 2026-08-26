@@ -112,7 +112,9 @@ var routeGuards = map[string]routeGuard{
 	// latter is ambiguous with "GET /docs/ref/{ref...}" below when {id}
 	// matches the literal "ref" — net/http's ServeMux refuses to register two
 	// patterns neither of which is more specific for every path they share,
-	// and here it isn't.
+	// and here it isn't. The JSON API's sibling route below keeps the
+	// straightforward /api/v1/docs/{id}/versions/{n} order because there is
+	// no /api/v1/docs/ref/{ref...} pattern to collide with.
 	"GET /docs/versions/{id}/{n}": guarded(permWebRead),
 	"GET /docs/ref/{ref...}":      guarded(permWebRead),
 	"GET /drift":                  guarded(permWebRead),
