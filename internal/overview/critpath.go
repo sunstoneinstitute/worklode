@@ -222,3 +222,18 @@ func cyclicSCCs(edges [][2]string) [][]string {
 	}
 	return out
 }
+
+// OpenSubgraph filters a task DAG to the edges whose both ends are open:
+// spec 007 §4's rule that criticality and fan-out are computed over
+// remaining work. A closed task no longer blocks its dependents and has
+// nothing left to unblock, so edges touching one contribute history (depth,
+// which Analyze still computes over the full DAG) and never criticality.
+func OpenSubgraph(edges [][2]string, closed map[string]bool) [][2]string {
+	var out [][2]string
+	for _, e := range edges {
+		if !closed[e[0]] && !closed[e[1]] {
+			out = append(out, e)
+		}
+	}
+	return out
+}

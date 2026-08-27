@@ -89,3 +89,29 @@ func TestAnalyzeSkipsTheClosure(t *testing.T) {
 		t.Errorf("Cycles differ between the two passes: %v vs %v", cheap.Cycles, full.Cycles)
 	}
 }
+
+// WL-354: a chain whose work is entirely finished must not be reported as
+// the critical path. OpenSubgraph is the pure half of that rule.
+func TestOpenSubgraph(t *testing.T) {
+	edges := [][2]string{{"A", "B"}, {"B", "C"}, {"C", "D"}}
+	closed := map[string]bool{"A": true, "B": true}
+
+	open := OpenSubgraph(edges, closed)
+	if len(open) != 1 || open[0] != [2]string{"C", "D"} {
+		t.Fatalf("OpenSubgraph = %v, want only C->D", open)
+	}
+
+	// Fully closed: nothing remains, so an Analyze over it marks nothing
+	// critical — the exact live case the bug report shows.
+	all := map[string]bool{"A": true, "B": true, "C": true, "D": true}
+	if got := OpenSubgraph(edges, all); len(got) != 0 {
+		t.Fatalf("fully closed chain: OpenSubgraph = %v, want empty", got)
+	}
+
+	// Depth over the full DAG stays historical: C is still at depth 2 even
+	// though A and B are closed.
+	full := Analyze(edges, nil)
+	if full.Depth["C"] != 2 || full.Depth["D"] != 3 {
+		t.Fatalf("historical depths = C:%d D:%d, want 2/3", full.Depth["C"], full.Depth["D"])
+	}
+}

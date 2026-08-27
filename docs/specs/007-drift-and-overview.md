@@ -301,6 +301,23 @@ a materialized `is_critical`/`fanout` attribute.
 detect it, exclude the cycle from depth/fan-out, and surface it as its own overview finding rather
 than looping or silently dropping edges.
 
+**Closed tasks** (WL-354). Depth and criticality answer different questions and split on closure:
+
+- `depth(t)` stays **historical** — computed over the full live DAG, closed predecessors included.
+  A task at depth 5 waited on five rounds of work whether or not they are done now.
+- The **reported critical path** and `is_critical(t)` are computed over the **open subgraph** —
+  edges both of whose ends are open — so a chain whose work is entirely finished is never reported
+  as what holds the project up. Each reported node still carries its historical depth. When no
+  chain of open work exists, the path is empty; finished chains are history, not findings.
+- `fanout(t)` counts **open** tasks only. The transitive walk still crosses closed intermediates
+  (a closed task does not cut its open dependents off from the root), but finished dependents lend
+  no weight — the count feeds both `claim --next`'s sort key and the overview surfaces, and "how
+  much work `t` unblocks when done" is about remaining work.
+
+"Closed" is the per-repo `done_state` predicate of 004 §1.3 (abandoned, or at-or-past every landed
+repo's gate), never a fixed tuple of states. Tombstoned tasks stay excluded from every measure
+(044 §4), which is orthogonal to closure.
+
 Weighted critical path stays **v2** (optional, low priority).
 
 ---
