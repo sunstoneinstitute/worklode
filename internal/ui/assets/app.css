@@ -1600,6 +1600,7 @@ nav.local a .cnt {
   display: flex;
   flex-direction: column;
   gap: 0;
+  position: relative;
 }
 .mdtabs {
   display: flex;
@@ -1651,6 +1652,36 @@ nav.local a .cnt {
 }
 .mdpreview[hidden] {
   display: none;
+}
+.mdsuggest {
+  position: absolute;
+  left: 8px;
+  bottom: 0;
+  transform: translateY(100%);
+  z-index: 20;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
+  padding: 4px;
+  min-width: 200px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.mdsuggest[hidden] {
+  display: none;
+}
+.mdsuggest-item {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: pre;
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.mdsuggest-item.active {
+  background: var(--bg);
+  color: var(--ink-1);
 }
 .fieldrow.check label {
   text-transform: none;
