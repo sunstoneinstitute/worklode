@@ -174,9 +174,14 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/lease/worktree":    guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/agent-session":     guardedBound(permTaskClaim),
 	"POST /api/v1/tasks/{id}/agent-session/end": guardedBound(permTaskClaim),
-	"POST /api/v1/tasks/{id}/assign":            guarded(permTaskAssign),
-	"POST /api/v1/tasks/{id}/unassign":          guarded(permTaskAssign),
-	"GET /api/v1/board":                         guarded(permTaskRead),
+	// Both are actor writes, not task-scoped surfaces: guarded blocks a
+	// task-scoped token so claim can't drain instructions leased to a
+	// different task the same actor also holds (0016 multi-lease).
+	"POST /api/v1/tasks/{id}/instructions": guarded(permTaskWrite),
+	"POST /api/v1/instructions/claim":      guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/assign":       guarded(permTaskAssign),
+	"POST /api/v1/tasks/{id}/unassign":     guarded(permTaskAssign),
+	"GET /api/v1/board":                    guarded(permTaskRead),
 
 	// --- documents (spec 025 §5, §6, §7) --------------------------------------
 	// Reading and writing the corpus is its own capability (see permDocRead in
