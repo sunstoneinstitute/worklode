@@ -1,7 +1,8 @@
-package graphproj
+package storederive
 
 import (
 	"bytes"
+	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func testArtifact() store.Artifact {
 }
 
 func TestArtifactTriples(t *testing.T) {
-	got := string(Document(ArtifactTriples(testArtifact(), func(string, string) bool { return true })))
+	got := string(graphproj.Document(ArtifactTriples(testArtifact(), func(string, string) bool { return true })))
 	want := []string{
 		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Artifact> .`,
 		`<https://worklode.io/ns/id/artifact/docker_image/ghcr.io/sunstoneinstitute/graph-server/v1> <https://worklode.io/ns/ontology#artifactKind> <https://worklode.io/ns/concept/docker_image> .`,
@@ -46,8 +47,8 @@ func TestArtifactTriples(t *testing.T) {
 // AC3: re-projecting an unchanged row is a byte-identical no-op.
 func TestArtifactProjectionIsIdempotent(t *testing.T) {
 	known := func(string, string) bool { return true }
-	first := Document(ArtifactTriples(testArtifact(), known))
-	second := Document(ArtifactTriples(testArtifact(), known))
+	first := graphproj.Document(ArtifactTriples(testArtifact(), known))
+	second := graphproj.Document(ArtifactTriples(testArtifact(), known))
 	if !bytes.Equal(first, second) {
 		t.Fatal("re-projecting an unchanged artifact row changed bytes")
 	}
@@ -60,7 +61,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 	a.Kind = "git_tag"
 	a.Name = "sunstoneinstitute/worklode"
 	a.SourceSHA = "main" // UI-created release: branch name, not a sha
-	got := string(Document(ArtifactTriples(a, func(string, string) bool { return false })))
+	got := string(graphproj.Document(ArtifactTriples(a, func(string, string) bool { return false })))
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatalf("branch-name source_sha minted a commit edge:\n%s", got)
 	}
@@ -73,7 +74,7 @@ func TestBranchNameProjectsNoCommitEdge(t *testing.T) {
 func TestArtifactWithoutRepoProjectsNoCommitEdge(t *testing.T) {
 	a := testArtifact()
 	a.Repo = ""
-	got := string(Document(ArtifactTriples(a, func(string, string) bool { return true })))
+	got := string(graphproj.Document(ArtifactTriples(a, func(string, string) bool { return true })))
 	if strings.Contains(got, "wasDerivedFrom") {
 		t.Fatal("artifact without a repo projected a commit edge")
 	}
@@ -91,7 +92,7 @@ func TestDeploymentTriples(t *testing.T) {
 		LastUpdate:  time.Date(2026, 7, 29, 9, 0, 0, 0, time.UTC),
 	}
 	a := testArtifact()
-	got := string(Document(DeploymentTriples(d, &a)))
+	got := string(graphproj.Document(DeploymentTriples(d, &a)))
 	want := []string{
 		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Deployment> .`,
 		`<https://worklode.io/ns/id/deployment/prod/flux_kustomization/graph-server> <https://worklode.io/ns/ontology#toEnvironment> <https://worklode.io/ns/id/environment/prod> .`,
@@ -118,7 +119,7 @@ func TestDeploymentWithoutArtifactHasNoUsedEdge(t *testing.T) {
 		Status:    "pending",
 		FirstSeen: time.Unix(0, 0).UTC(), LastUpdate: time.Unix(0, 0).UTC(),
 	}
-	if got := string(Document(DeploymentTriples(d, nil))); strings.Contains(got, "prov#used") {
+	if got := string(graphproj.Document(DeploymentTriples(d, nil))); strings.Contains(got, "prov#used") {
 		t.Fatalf("deployment without artifact projected prov:used:\n%s", got)
 	}
 }
@@ -130,14 +131,14 @@ func TestPyPITargetKindConcept(t *testing.T) {
 		Status:    "deployed",
 		FirstSeen: time.Unix(0, 0).UTC(), LastUpdate: time.Unix(0, 0).UTC(),
 	}
-	got := string(Document(DeploymentTriples(d, nil)))
+	got := string(graphproj.Document(DeploymentTriples(d, nil)))
 	if !strings.Contains(got, "<https://worklode.io/ns/concept/pypi_target>") {
 		t.Fatalf("target kind pypi not mapped to wlc:pypi_target:\n%s", got)
 	}
 }
 
 func TestEnvironmentAndCommitTriples(t *testing.T) {
-	envs := string(Document(EnvironmentTriples()))
+	envs := string(graphproj.Document(EnvironmentTriples()))
 	for _, line := range []string{
 		`<https://worklode.io/ns/id/environment/dev> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Environment> .`,
 		`<https://worklode.io/ns/id/environment/prod> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Environment> .`,
@@ -147,7 +148,7 @@ func TestEnvironmentAndCommitTriples(t *testing.T) {
 		}
 	}
 
-	got := string(Document(CommitTriples(GitHubHost, "sunstoneinstitute/worklode", "a16c2a7")))
+	got := string(graphproj.Document(CommitTriples(graphproj.GitHubHost, "sunstoneinstitute/worklode", "a16c2a7")))
 	for _, line := range []string{
 		`<https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://worklode.io/ns/ontology#Commit> .`,
 		`<https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> <http://purl.org/dc/terms/identifier> "a16c2a7" .`,
@@ -162,7 +163,7 @@ func TestEnvironmentAndCommitTriples(t *testing.T) {
 // wl:covers until 026 §6.1 took that name) from the git_tag artifact to the
 // frontier commit.
 func TestReleaseCutFromTriples(t *testing.T) {
-	got := string(Document(ReleaseCutFromTriples("sunstoneinstitute/worklode", "v0.4", "a16c2a7")))
+	got := string(graphproj.Document(ReleaseCutFromTriples("sunstoneinstitute/worklode", "v0.4", "a16c2a7")))
 	want := `<https://worklode.io/ns/id/artifact/git_tag/github.com/sunstoneinstitute/worklode/v0.4> <https://worklode.io/ns/ontology#cutFrom> <https://worklode.io/ns/id/commit/github.com/sunstoneinstitute/worklode/a16c2a7> .` + "\n"
 	if got != want {
 		t.Fatalf("ReleaseCutFromTriples = %q; want %q", got, want)
@@ -191,17 +192,17 @@ func TestCutFromEdgeLandsOnProjectedNodes(t *testing.T) {
 		t.Errorf("cutFrom subject %q is not the artifact ArtifactTriples projects (%q)", edge[0].S, artifact[0].S)
 	}
 
-	commit := CommitTriples(GitHubHost, repo, sha)
+	commit := CommitTriples(graphproj.GitHubHost, repo, sha)
 	if len(commit) == 0 {
 		t.Fatal("CommitTriples projected nothing for a well-formed repo")
 	}
-	if edge[0].O != IRIRef(commit[0].S) {
+	if edge[0].O != graphproj.IRIRef(commit[0].S) {
 		t.Errorf("cutFrom object %v is not the commit CommitTriples projects (%q)", edge[0].O, commit[0].S)
 	}
 }
 
 func TestMalformedRepoOmitsEdges(t *testing.T) {
-	if ts := CommitTriples(GitHubHost, "not-owner-name", "a16c2a7"); ts != nil {
+	if ts := CommitTriples(graphproj.GitHubHost, "not-owner-name", "a16c2a7"); ts != nil {
 		t.Fatalf("CommitTriples on malformed repo = %v; want nil", ts)
 	}
 	if ts := ReleaseCutFromTriples("not-owner-name", "v1", "a16c2a7"); ts != nil {

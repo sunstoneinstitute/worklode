@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // fakeRepoReader serves manifests and PR file lists from maps, counting
@@ -43,7 +42,7 @@ func (f *fakeRepoReader) PRFiles(_ context.Context, repo string, number int64) (
 func repoNum(repo string, n int64) string { return fmt.Sprintf("%s#%d", repo, n) }
 
 func TestPRAffectsTriples(t *testing.T) {
-	prs := []store.PRRef{
+	prs := []derive.PRRef{
 		{Repo: "sunstoneinstitute/research-stack", Number: 1, TaskID: "WL-7"},
 		{Repo: "sunstoneinstitute/unmapped", Number: 2, TaskID: "WL-8"},
 	}
@@ -79,7 +78,7 @@ func TestPRAffectsTriples(t *testing.T) {
 // skipped-repo cache: a second PR in a repo already known to lack a
 // manifest must not re-fetch it or double-report the repo as skipped.
 func TestPRAffectsTriplesSkipsManifestlessRepoOnce(t *testing.T) {
-	prs := []store.PRRef{
+	prs := []derive.PRRef{
 		{Repo: "sunstoneinstitute/unmapped", Number: 1, TaskID: "WL-1"},
 		{Repo: "sunstoneinstitute/unmapped", Number: 2, TaskID: "WL-2"},
 	}
@@ -105,7 +104,7 @@ func TestPRAffectsTriplesSkipsManifestlessRepoOnce(t *testing.T) {
 // alphabetical order so an unsorted result would come out wrong at least
 // sometimes.
 func TestPRAffectsTriplesSortsSkippedRepos(t *testing.T) {
-	prs := []store.PRRef{
+	prs := []derive.PRRef{
 		{Repo: "sunstoneinstitute/zeta", Number: 1, TaskID: "WL-1"},
 		{Repo: "sunstoneinstitute/alpha", Number: 2, TaskID: "WL-2"},
 		{Repo: "sunstoneinstitute/mid", Number: 3, TaskID: "WL-3"},
@@ -125,7 +124,7 @@ func TestPRAffectsTriplesSortsSkippedRepos(t *testing.T) {
 // a second PR in an already-fetched repo must reuse the cached manifest
 // rather than fetching it again.
 func TestPRAffectsTriplesFetchesManifestOnce(t *testing.T) {
-	prs := []store.PRRef{
+	prs := []derive.PRRef{
 		{Repo: "sunstoneinstitute/research-stack", Number: 1, TaskID: "WL-7"},
 		{Repo: "sunstoneinstitute/research-stack", Number: 2, TaskID: "WL-9"},
 	}

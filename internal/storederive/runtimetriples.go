@@ -1,28 +1,12 @@
-package graphproj
+package storederive
 
 import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/store"
-)
-
-// GitHubHost qualifies repo-derived local ids passed to internal/kg/iri. The
-// backbone stores repos as "owner/name" (GitHub full_name); the shared IRI
-// grammar wants host-qualified, owner/repo-split coordinates.
-const GitHubHost = "github.com"
-
-// External vocabulary the runtime projection reuses (006 §3.1 table),
-// extending the constants task.go declares. wl: terms resolve through
-// iri.Term, wlc: concepts through iri.Concept — never hardcoded.
-const (
-	DCTIdentifier       = "http://purl.org/dc/terms/identifier"
-	OWLVersionInfo      = "http://www.w3.org/2002/07/owl#versionInfo"
-	ProvGeneratedAtTime = "http://www.w3.org/ns/prov#generatedAtTime"
-	ProvStartedAtTime   = "http://www.w3.org/ns/prov#startedAtTime"
-	ProvUsed            = "http://www.w3.org/ns/prov#used"
-	ProvWasDerivedFrom  = "http://www.w3.org/ns/prov#wasDerivedFrom"
 )
 
 // CommitKnown reports whether sha names a known main_commits row for repo
@@ -51,7 +35,7 @@ func splitRepo(full string) (owner, name string, ok bool) {
 func artifactCoordinate(a store.Artifact) (name, artifactIRI string) {
 	name = a.Name
 	if a.Kind == "git_tag" {
-		name = GitHubHost + "/" + name
+		name = graphproj.GitHubHost + "/" + name
 	}
 	return name, iri.Artifact(a.Kind, name, a.Version)
 }
@@ -62,24 +46,24 @@ func artifactCoordinate(a store.Artifact) (name, artifactIRI string) {
 // emit prov:wasDerivedFrom only when source_sha resolves via known. An
 // artifact with no repo, or a malformed one, projects no commit edge at
 // all: a repository alone does not identify a commit.
-func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
+func ArtifactTriples(a store.Artifact, known CommitKnown) []graphproj.Triple {
 	name, s := artifactCoordinate(a)
-	ts := []Triple{
-		{S: s, P: RDFType, O: IRIRef(iri.Term("Artifact"))},
-		{S: s, P: iri.Term("artifactKind"), O: IRIRef(iri.Concept(a.Kind))},
-		{S: s, P: OWLVersionInfo, O: Text(a.Version)},
-		{S: s, P: DCTIdentifier, O: Text(name)},
+	ts := []graphproj.Triple{
+		{S: s, P: graphproj.RDFType, O: graphproj.IRIRef(iri.Term("Artifact"))},
+		{S: s, P: iri.Term("artifactKind"), O: graphproj.IRIRef(iri.Concept(a.Kind))},
+		{S: s, P: graphproj.OWLVersionInfo, O: graphproj.Text(a.Version)},
+		{S: s, P: graphproj.DCTIdentifier, O: graphproj.Text(name)},
 	}
 	if a.Digest != nil {
-		ts = append(ts, Triple{S: s, P: iri.Term("digest"), O: Text(*a.Digest)})
+		ts = append(ts, graphproj.Triple{S: s, P: iri.Term("digest"), O: graphproj.Text(*a.Digest)})
 	}
 	if !a.BuiltAt.IsZero() {
-		ts = append(ts, Triple{S: s, P: ProvGeneratedAtTime, O: Typed(xsdTime(a.BuiltAt), XSDDateTime)})
+		ts = append(ts, graphproj.Triple{S: s, P: graphproj.ProvGeneratedAtTime, O: graphproj.Typed(xsdTime(a.BuiltAt), graphproj.XSDDateTime)})
 	}
 	if a.Repo != "" && a.SourceSHA != "" && known != nil && known(a.Repo, a.SourceSHA) {
 		if owner, repo, ok := splitRepo(a.Repo); ok {
-			ts = append(ts, Triple{S: s, P: ProvWasDerivedFrom,
-				O: IRIRef(iri.Commit(GitHubHost, owner, repo, a.SourceSHA))})
+			ts = append(ts, graphproj.Triple{S: s, P: graphproj.ProvWasDerivedFrom,
+				O: graphproj.IRIRef(iri.Commit(graphproj.GitHubHost, owner, repo, a.SourceSHA))})
 		}
 	}
 	return ts
@@ -96,20 +80,20 @@ func ArtifactTriples(a store.Artifact, known CommitKnown) []Triple {
 // NOT NULL text with no CHECK (0001_baseline.up.sql), so the dev/prod closure
 // wl:EnvironmentShape asserts rests on store.NormalizeEnvironment alone. A row
 // that escaped it projects an edge to an untyped node.
-func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
+func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []graphproj.Triple {
 	s := iri.Deployment(d.Environment, d.TargetKind, d.TargetName)
-	ts := []Triple{
-		{S: s, P: RDFType, O: IRIRef(iri.Term("Deployment"))},
-		{S: s, P: iri.Term("toEnvironment"), O: IRIRef(iri.Environment(d.Environment))},
-		{S: s, P: iri.Term("targetKind"), O: IRIRef(iri.Concept(targetKindConcept(d.TargetKind)))},
-		{S: s, P: iri.Term("deploymentStatus"), O: IRIRef(iri.Concept(d.Status))},
-		{S: s, P: DCTIdentifier, O: Text(d.TargetName)},
-		{S: s, P: ProvStartedAtTime, O: Typed(xsdTime(d.FirstSeen), XSDDateTime)},
-		{S: s, P: DCTModified, O: Typed(xsdTime(d.LastUpdate), XSDDateTime)},
+	ts := []graphproj.Triple{
+		{S: s, P: graphproj.RDFType, O: graphproj.IRIRef(iri.Term("Deployment"))},
+		{S: s, P: iri.Term("toEnvironment"), O: graphproj.IRIRef(iri.Environment(d.Environment))},
+		{S: s, P: iri.Term("targetKind"), O: graphproj.IRIRef(iri.Concept(targetKindConcept(d.TargetKind)))},
+		{S: s, P: iri.Term("deploymentStatus"), O: graphproj.IRIRef(iri.Concept(d.Status))},
+		{S: s, P: graphproj.DCTIdentifier, O: graphproj.Text(d.TargetName)},
+		{S: s, P: graphproj.ProvStartedAtTime, O: graphproj.Typed(xsdTime(d.FirstSeen), graphproj.XSDDateTime)},
+		{S: s, P: graphproj.DCTModified, O: graphproj.Typed(xsdTime(d.LastUpdate), graphproj.XSDDateTime)},
 	}
 	if artifact != nil {
 		_, artifactIRI := artifactCoordinate(*artifact)
-		ts = append(ts, Triple{S: s, P: ProvUsed, O: IRIRef(artifactIRI)})
+		ts = append(ts, graphproj.Triple{S: s, P: graphproj.ProvUsed, O: graphproj.IRIRef(artifactIRI)})
 	}
 	return ts
 }
@@ -118,13 +102,13 @@ func DeploymentTriples(d store.Deployment, artifact *store.Artifact) []Triple {
 // matching wl:EnvironmentShape's closure and store.NormalizeEnvironment. It is
 // the only place that closure is honoured by construction; see
 // DeploymentTriples for where it is merely assumed.
-func EnvironmentTriples() []Triple {
-	var ts []Triple
+func EnvironmentTriples() []graphproj.Triple {
+	var ts []graphproj.Triple
 	for _, name := range []string{"dev", "prod"} {
 		s := iri.Environment(name)
 		ts = append(ts,
-			Triple{S: s, P: RDFType, O: IRIRef(iri.Term("Environment"))},
-			Triple{S: s, P: DCTIdentifier, O: Text(name)},
+			graphproj.Triple{S: s, P: graphproj.RDFType, O: graphproj.IRIRef(iri.Term("Environment"))},
+			graphproj.Triple{S: s, P: graphproj.DCTIdentifier, O: graphproj.Text(name)},
 		)
 	}
 	return ts
@@ -133,15 +117,15 @@ func EnvironmentTriples() []Triple {
 // CommitTriples projects one main_commits row. repo is "owner/name"
 // (GitHub full_name); a malformed repo projects nothing — the §6 guard
 // posture, an unmintable node is omitted rather than fabricated.
-func CommitTriples(host, repo, sha string) []Triple {
+func CommitTriples(host, repo, sha string) []graphproj.Triple {
 	owner, name, ok := splitRepo(repo)
 	if !ok {
 		return nil
 	}
 	s := iri.Commit(host, owner, name, sha)
-	return []Triple{
-		{S: s, P: RDFType, O: IRIRef(iri.Term("Commit"))},
-		{S: s, P: DCTIdentifier, O: Text(sha)},
+	return []graphproj.Triple{
+		{S: s, P: graphproj.RDFType, O: graphproj.IRIRef(iri.Term("Commit"))},
+		{S: s, P: graphproj.DCTIdentifier, O: graphproj.Text(sha)},
 	}
 }
 
@@ -151,15 +135,15 @@ func CommitTriples(host, repo, sha string) []Triple {
 // the property was spelled wl:covers until 026 §6.1 took that name for the
 // Plan→Section undertaking). repo is "owner/name" (GitHub full_name); a
 // malformed repo projects nothing.
-func ReleaseCutFromTriples(repo, tag, sha string) []Triple {
+func ReleaseCutFromTriples(repo, tag, sha string) []graphproj.Triple {
 	owner, name, ok := splitRepo(repo)
 	if !ok {
 		return nil
 	}
-	return []Triple{{
-		S: iri.Artifact("git_tag", GitHubHost+"/"+repo, tag),
+	return []graphproj.Triple{{
+		S: iri.Artifact("git_tag", graphproj.GitHubHost+"/"+repo, tag),
 		P: iri.Term("cutFrom"),
-		O: IRIRef(iri.Commit(GitHubHost, owner, name, sha)),
+		O: graphproj.IRIRef(iri.Commit(graphproj.GitHubHost, owner, name, sha)),
 	}}
 }
 

@@ -9,8 +9,16 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
-	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// PRRef is the slice of a task-bound pull request this deriver needs. Shaped
+// like store.PRRef but declared here so the CLI-safe half of the derivers
+// does not import the store (053 §2, WL-324); the API caller converts.
+type PRRef struct {
+	Repo   string
+	Number int64
+	TaskID string
+}
 
 // wlAffects is the wl:affects predicate (006 ontology), resolved through
 // iri.Term rather than hardcoded, matching internal/graphproj's convention
@@ -45,7 +53,7 @@ type RepoReader interface {
 // `lode derive` therefore fails wl:affectsShape's sh:class under union
 // validation, and that violation is the wiring gap made visible (007 §2.3),
 // not something to stub over here.
-func PRAffectsTriples(ctx context.Context, prs []store.PRRef, rr RepoReader) (doc []byte, skippedRepos []string, err error) {
+func PRAffectsTriples(ctx context.Context, prs []PRRef, rr RepoReader) (doc []byte, skippedRepos []string, err error) {
 	manifests := map[string]*manifest.Manifest{}
 	skipped := map[string]bool{}
 	var ts []graphproj.Triple

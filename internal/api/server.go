@@ -25,7 +25,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
-	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
@@ -39,6 +38,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/storederive"
 	"github.com/sunstoneinstitute/worklode/internal/tokencrypt"
 	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
@@ -240,7 +240,7 @@ type server struct {
 	// GitHub App is not configured (postDerive then refuses with 503). Built
 	// once and shared: it caches one installation token per repo, so a run
 	// over many PRs in one repo mints one token rather than one per read.
-	repoReader *derive.GitHubReader
+	repoReader *storederive.GitHubReader
 
 	// hookMetrics is the webhook/replay instrument set (internal/hooks),
 	// shared by the webhook handlers and POST /api/v1/reconcile's replay
@@ -821,7 +821,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// exists only when the GitHub App does.
 	s.overview = &overview.Service{Store: st, Graph: cfg.Graph}
 	if appAuth != nil {
-		s.repoReader = &derive.GitHubReader{Auth: appAuth}
+		s.repoReader = &storederive.GitHubReader{Auth: appAuth}
 	}
 
 	s.skillFloor = 0.35
