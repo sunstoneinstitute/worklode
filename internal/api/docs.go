@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
@@ -239,19 +240,26 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// resolveDocRef handles GET /api/v1/docs/resolve?ref=<id-or-slug>: the one
-// document a reference names (025 §14.3). Every `lode doc <verb>` takes a
-// ref, and resolving it here rather than by listing the corpus client-side
-// keeps the ambiguity and tombstone-fallback rules beside the data — the same
-// reason GET /api/v1/projects/resolve normalizes a remote URL server-side, and
-// what lets the ref grammar grow without a client upgrade.
+// resolveDocRef handles GET /api/v1/docs/resolve?ref=<ref>: the one document
+// a reference names (025 §14.3). Every `lode doc <verb>` takes a ref, and
+// resolving it here rather than by listing the corpus client-side keeps the
+// ambiguity and tombstone-fallback rules beside the data — the same reason
+// GET /api/v1/projects/resolve normalizes a remote URL server-side, and what
+// lets the ref grammar grow without a client upgrade.
+//
+// Two tiers (WL-358). The store's id/exact-slug lookup runs first — it alone
+// reaches tombstoned documents, which `lode doc undelete <slug>` needs. A
+// miss then goes through the full 026 §3 grammar `lode show` and the /docs/ref/
+// redirect already resolve (designdoc.ResolveRef via resolveDocRefWeb), so
+// the <KEY>-<TYPE>-<n> shorthand, a corpus path, and the number forms name a
+// document on every doc surface, not just some.
 //
 // The body is blanked as it is on a list: the caller wants an id, and follows
 // with GET /api/v1/docs/{id} when it wants the text.
 //
 // No dedicated metric. Every outcome this route derives is already its own
 // status code on http_requests_total's {route, code}: 200 resolved, 404 no
-// such document, 422 an ambiguous slug.
+// such document, 422 an ambiguous ref.
 func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
 	ref := strings.TrimSpace(r.URL.Query().Get("ref"))
 	if ref == "" {
@@ -260,6 +268,17 @@ func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := s.st.ResolveDocRef(r.Context(), ref)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			if gd, gerr := s.resolveDocRefWeb(r.Context(), ref); gerr == nil {
+				gd.Body = ""
+				writeJSON(w, http.StatusOK, gd)
+				return
+			} else if amb := (*designdoc.AmbiguousRefError)(nil); errors.As(gerr, &amb) {
+				writeErr(w, http.StatusUnprocessableEntity, gerr.Error())
+				return
+			}
+			// Any other grammar miss keeps the store's own not-found below.
+		}
 		s.mapStoreErr(w, err)
 		return
 	}

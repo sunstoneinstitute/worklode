@@ -49,16 +49,27 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 		}
 	}
 
-	// Form 2: document number / slug prefix.
+	// Form 2: document number / slug prefix. A number-led slug
+	// ("001-zero-trust-gateway", "014-foo.md") names the document whose slug
+	// it is; documents that merely share the leading number — a plan on its
+	// own 029 §4 sequence, another project's spec — are not candidates
+	// (WL-358: the union of the two criteria reported them as a bogus
+	// ambiguity). The number match is the fallback that still serves a bare
+	// number and a ref whose slug text drifted from the document's current
+	// slug.
 	if nf, ok := ParseNumberForm(base); ok {
 		if nf.Number == 0 {
 			return model.Doc{}, "", NoSpecError(ref)
 		}
-		matches := matchRefNumber(candidates, nf.Number)
 		if nf.Rest != "" {
-			matches = append(matches, matchRefSlugPrefix(candidates, base)...)
+			if m := matchRefSlug(candidates, base); len(m) > 0 {
+				return finishRef(ref, m, section)
+			}
+			if m := matchRefSlugPrefix(candidates, base); len(m) > 0 {
+				return finishRef(ref, m, section)
+			}
 		}
-		return finishRef(ref, matches, section)
+		return finishRef(ref, matchRefNumber(candidates, nf.Number), section)
 	}
 
 	// Form 3: bare slug. Digit-leading refs never reach here — the number
