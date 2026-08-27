@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -68,23 +69,35 @@ func OpenUnmigratedTestStore(t *testing.T) *Store {
 	return openTestDB(t, dbName)
 }
 
-// adminConnForTest opens a connection to the admin (default) database used
-// to create/drop per-test databases, skipping the test if Postgres is
-// unreachable and CI is not set.
+// adminOnce/adminDB memoize one pool against the admin (default) database
+// for the lifetime of the test binary. Opening a fresh one per test paid a
+// full Postgres connection handshake — ~8ms idle, ~25ms once the suite has
+// the server busy — on every OpenTestStore call, and a package's test binary
+// makes hundreds of those.
+var (
+	adminOnce sync.Once
+	adminDB   *sql.DB
+	adminErr  error
+)
+
+// adminConnForTest returns the shared admin pool used to create and drop
+// per-test databases, skipping the test if Postgres is unreachable and CI is
+// not set.
 func adminConnForTest(t *testing.T) *sql.DB {
 	t.Helper()
-	admin, err := sql.Open("pgx", TestDSN())
-	if err == nil {
-		err = admin.Ping()
-	}
-	if err != nil {
-		if os.Getenv("CI") == "" {
-			t.Skipf("postgres unreachable at %s: %v", TestDSN(), err)
+	adminOnce.Do(func() {
+		adminDB, adminErr = sql.Open("pgx", TestDSN())
+		if adminErr == nil {
+			adminErr = adminDB.Ping()
 		}
-		t.Fatalf("postgres unreachable at %s: %v", TestDSN(), err)
+	})
+	if adminErr != nil {
+		if os.Getenv("CI") == "" {
+			t.Skipf("postgres unreachable at %s: %v", TestDSN(), adminErr)
+		}
+		t.Fatalf("postgres unreachable at %s: %v", TestDSN(), adminErr)
 	}
-	t.Cleanup(func() { admin.Close() })
-	return admin
+	return adminDB
 }
 
 func randomDBName(t *testing.T, prefix string) string {
@@ -271,11 +284,20 @@ func buildOrFindTemplate(admin *sql.DB, migrationsDir string) (string, error) {
 		return "", err
 	}
 
+	// Advisory locks are session-scoped, and admin is a pool whose Exec
+	// picks any free member — so lock and unlock have to be pinned to one
+	// connection. Closing it releases the lock even if the unlock is lost.
+	ctx := context.Background()
+	lockConn, err := admin.Conn(ctx)
+	if err != nil {
+		return "", fmt.Errorf("pin connection for template lock: %w", err)
+	}
+	defer lockConn.Close()
 	lockKey := advisoryLockKey(name)
-	if _, err := admin.Exec("SELECT pg_advisory_lock($1)", lockKey); err != nil {
+	if _, err := lockConn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
 		return "", fmt.Errorf("acquire template lock: %w", err)
 	}
-	defer admin.Exec("SELECT pg_advisory_unlock($1)", lockKey)
+	defer lockConn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
 
 	// Re-check existence inside the lock: another process may have built
 	// this exact template (same migration hash) while we waited for it.
