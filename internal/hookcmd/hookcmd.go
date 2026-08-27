@@ -84,7 +84,7 @@ func printEvents(w io.Writer) {
 	for _, event := range events {
 		width = max(width, len(event.Name))
 	}
-	fmt.Fprint(w, "Worklode lifecycle hooks — `lode hook <event>`, payload on stdin:\n\n")
+	fmt.Fprint(w, "Worklode lifecycle hooks — `lode-hook <event>`, payload on stdin:\n\n")
 	for _, event := range events {
 		trigger := triggers[event.Name]
 		if trigger == "" {
