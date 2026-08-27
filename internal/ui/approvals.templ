@@ -3,11 +3,13 @@ package ui
 import "strconv"
 
 // approvals.templ renders the Reviews destination (GET /reviews): the
-// awaiting-approvals queue (spec 029 §7.1), one row per PR-kind approval
-// still in state 'awaiting', oldest first, each with the decide form (029
-// §7.3). The PR title jumps out to GitHub, which stays the review surface;
-// the project name and task id stay in-app links. An empty queue states that
-// honestly rather than showing a fabricated record.
+// awaiting-approvals queue (spec 029 §7.1), one row per approval still in
+// state 'awaiting', oldest first, each with the decide form (029 §7.3). A row
+// links to whatever it governs — a pull request jumps out to GitHub, which
+// stays the review surface for one; a document links to its cockpit page —
+// and names the kind, so the queue does not ask a reviewer to infer it from
+// the URL. The project name and task id stay in-app links. An empty queue
+// states that honestly rather than showing a fabricated record.
 
 templ Approvals(v ApprovalsView) {
 	@Page(v.Page) {
@@ -26,25 +28,37 @@ templ Approvals(v ApprovalsView) {
 	}
 }
 
-// approvalRow renders one queue row. rel="noreferrer" on the PR link
+// approvalRow renders one queue row. rel="noreferrer" on the entity link
 // matches the task page's own jump-out convention for an external source
-// link.
+// link. Every line-two part is conditional: only a PR-kind row has a task.
 templ approvalRow(row ApprovalRow) {
 	<li>
 		<div>
-			<a href={ row.PRURL } rel="noreferrer">{ row.PRTitle }</a>
+			if row.Kind != "" {
+				<span class="chip plain">{ row.Kind }</span>
+				{ " " }
+			}
+			<a href={ row.URL } rel="noreferrer">{ row.Title }</a>
 			{ " " }
 			<span class="mono muted">{ row.EntityID }</span>
 		</div>
 		<div class="muted small">
-			<a href={ "/projects/" + row.ProjectID }>{ row.ProjectName }</a>
-			{ " · " }
-			<a href={ "/tasks/" + row.TaskID }>{ row.TaskID }</a>
-			if row.RequiredActorName != "" {
-				{ " · awaiting " }
-				{ row.RequiredActorName }
+			if row.ProjectID != "" {
+				<a href={ "/projects/" + row.ProjectID }>{ row.ProjectName }</a>
+				{ " · " }
 			}
-			{ " · " }
+			if row.TaskID != "" {
+				<a href={ "/tasks/" + row.TaskID }>{ row.TaskID }</a>
+				{ " · " }
+			}
+			if row.Revision != "" {
+				{ "version " + row.Revision }
+				{ " · " }
+			}
+			if row.RequiredActorName != "" {
+				{ "awaiting " + row.RequiredActorName }
+				{ " · " }
+			}
 			{ row.Age }
 		</div>
 		<form method="post" action={ "/approvals/" + strconv.FormatInt(row.ID, 10) + "/decide" } class="decide">
