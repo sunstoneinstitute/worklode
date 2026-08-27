@@ -1,4 +1,4 @@
-package derive_test
+package storederive_test
 
 import (
 	"context"
@@ -17,8 +17,21 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
-	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/storederive"
 )
+
+// importsManifest mirrors internal/derive/imports_test.go's fixture — the
+// manifest shape GitHubReader's callers parse.
+const importsManifest = `
+repo: github.com/sunstoneinstitute/research-stack
+components:
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/ingest
+    name: ingest
+    paths: ["cmd/ingest/**", "internal/ingest/**"]
+  - iri: https://worklode.io/ns/id/component/github.com/sunstoneinstitute/research-stack/graphsrv
+    name: graphsrv
+    paths: ["cmd/graph-server/**", "internal/graph/**"]
+`
 
 // fakeGitHubApp starts an httptest server serving the app-auth routes for
 // every repo in installed, plus the caller's own routes, and returns an
@@ -65,7 +78,7 @@ func fakeGitHubApp(t *testing.T, installed map[string]bool, routes map[string]ht
 // cached RepoClient instead of minting a fresh installation token.
 func TestGitHubReaderMapsNotFoundAndCachesClient(t *testing.T) {
 	auth, installLookups := fakeGitHubApp(t, map[string]bool{"acme/app": true}, nil)
-	gr := &derive.GitHubReader{Auth: auth}
+	gr := &storederive.GitHubReader{Auth: auth}
 
 	if _, err := gr.FileAt(t.Context(), "acme/app", "missing.yaml"); !errors.Is(err, derive.ErrNotFound) {
 		t.Fatalf("FileAt error = %v, want derive.ErrNotFound", err)
@@ -80,7 +93,7 @@ func TestGitHubReaderMapsNotFoundAndCachesClient(t *testing.T) {
 
 // TestGitHubReaderRemintsExpiredClient pins the cache's freshness window: the
 // installation token NewRepoClient bakes into the client expires after an
-// hour, so an entry older than derive.RepoClientTTL must be re-minted rather
+// hour, so an entry older than storederive.RepoClientTTL must be re-minted rather
 // than reused forever by a GitHubReader that lives as long as the server.
 func TestGitHubReaderRemintsExpiredClient(t *testing.T) {
 	auth, installLookups := fakeGitHubApp(t, map[string]bool{"acme/app": true}, nil)
@@ -88,7 +101,7 @@ func TestGitHubReaderRemintsExpiredClient(t *testing.T) {
 	base := time.Date(2026, 7, 30, 9, 0, 0, 0, time.UTC)
 	var mu sync.Mutex
 	now := base
-	gr := &derive.GitHubReader{Auth: auth}
+	gr := &storederive.GitHubReader{Auth: auth}
 	gr.SetClock(func() time.Time {
 		mu.Lock()
 		defer mu.Unlock()
@@ -109,7 +122,7 @@ func TestGitHubReaderRemintsExpiredClient(t *testing.T) {
 
 	read("first")
 	// Just inside the window: the cached client is still good.
-	advance(derive.RepoClientTTL - time.Minute)
+	advance(storederive.RepoClientTTL - time.Minute)
 	read("inside the window")
 	if got := atomic.LoadInt32(installLookups); got != 1 {
 		t.Fatalf("installation lookups inside the window = %d, want 1", got)
@@ -129,7 +142,7 @@ func TestGitHubReaderRemintsExpiredClient(t *testing.T) {
 // recover middleware catches.
 func TestGitHubReaderConcurrentSameRepo(t *testing.T) {
 	auth, _ := fakeGitHubApp(t, map[string]bool{"acme/app": true, "acme/other": true}, nil)
-	gr := &derive.GitHubReader{Auth: auth}
+	gr := &storederive.GitHubReader{Auth: auth}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -161,9 +174,9 @@ func TestPRAffectsSkipsUninstalledRepo(t *testing.T) {
 			io.WriteString(w, `[{"filename":"internal/ingest/x.go"}]`)
 		},
 	})
-	gr := &derive.GitHubReader{Auth: auth}
+	gr := &storederive.GitHubReader{Auth: auth}
 
-	prs := []store.PRRef{
+	prs := []derive.PRRef{
 		{Repo: repo, Number: 1, TaskID: "WL-7"},
 		// acme/uninstalled has no /installation route: GitHub 404s it, which
 		// githubauth reports as ErrAppNotInstalled.

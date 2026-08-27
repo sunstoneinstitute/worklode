@@ -1,4 +1,4 @@
-package derive
+package storederive
 
 import "time"
 
