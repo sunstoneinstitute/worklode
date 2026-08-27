@@ -16,12 +16,14 @@
 // corpus in an order that puts an ordering edge's target first
 // (importCreateOrder).
 //
-// Re-running is a no-op by *slug identity*: a slug already present in the
-// project is left alone. The plan proposed a deterministic external id per
-// file path, deduped through RecordEvent — client-side slug identity gives the
-// same guarantee with no server change, and reads back plainly in `lode doc
-// list`. The cost is that a drifted body is not updated; the corpus files are
-// deleted right after the import, so there is no drift to track.
+// Re-running matches by *slug identity*: a slug already present in the
+// project is compared against the walked file, and an identical body is left
+// alone. A drifted body is updated in place where an in-place edit is legal —
+// plans at any status, draft specs and ADRs — because a corpus that keeps its
+// files (WL-357: edge-agent) edits frontmatter there and re-runs the import
+// expecting the backbone to follow. An accepted spec or ADR cannot be edited
+// in place (025 §7: revise it), so its drift is reported loudly instead of
+// silently keeping the stored body while claiming the document "wired".
 package cmd
 
 import (
@@ -55,6 +57,10 @@ type importDoc struct {
 
 // unresolvedRef is one frontmatter reference no walked document satisfies.
 type unresolvedRef struct{ slug, ref string }
+
+// driftedDoc is one walked file whose body differs from the stored document
+// and cannot be edited in place (an accepted or superseded spec/ADR).
+type driftedDoc struct{ path, kind, status string }
 
 // noSpecSentinel is 026 §4.3's "no governing spec" coverage declaration. It
 // resolves to nothing on purpose, so it is reported apart from the references
@@ -97,9 +103,12 @@ History is not reconstructed: every imported document lands at version 1, so
 last_revised_in is 1 for every section and a claim pinned to an earlier version
 re-baselines at import.
 
-Re-running is safe. A slug already present in the project is left alone, and
-its edges are re-wired, so an interrupted import is finished by running it
-again.
+Re-running is safe. A slug already present with an identical body is left
+alone, and its edges are re-wired, so an interrupted import is finished by
+running it again. A body that drifted from the backbone is updated in place
+where an in-place edit is legal (a plan at any status, a draft spec or ADR);
+a drifted accepted spec or ADR is reported on stderr instead — revise it with
+lode doc revise. A dry run is entirely local and cannot see drift.
 
 Stating a status needs the admin-only doc.import permission.`,
 		Args: cobra.NoArgs,
@@ -143,10 +152,31 @@ Stating a status needs the admin-only doc.import permission.`,
 				ids[d.Slug] = d.ID
 			}
 
-			var created, skipped int
+			var created, present, updated int
+			var drifted []driftedDoc
 			for _, d := range importCreateOrder(docs) {
-				if _, ok := ids[d.slug]; ok {
-					skipped++
+				if id, ok := ids[d.slug]; ok {
+					present++
+					stored, _, err := c.GetDoc(cmd.Context(), id)
+					if err != nil {
+						return fmt.Errorf("read the stored body of %s: %w", d.path, err)
+					}
+					if stored.Body == d.body {
+						continue
+					}
+					// Editable in place: a plan at any status, a draft spec or
+					// ADR (025 §7/§9 — the same gate UpdateDocBody enforces,
+					// checked here to tell "cannot" from a real failure).
+					if stored.Kind != "plan" && stored.Status != "draft" {
+						drifted = append(drifted, driftedDoc{
+							path: d.path, kind: stored.Kind, status: stored.Status,
+						})
+						continue
+					}
+					if _, _, err := c.UpdateDocBody(cmd.Context(), id, d.body); err != nil {
+						return fmt.Errorf("update the drifted body of %s: %w", d.path, err)
+					}
+					updated++
 					continue
 				}
 				nd, _, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
@@ -166,8 +196,13 @@ Stating a status needs the admin-only doc.import permission.`,
 					return fmt.Errorf("wire the edges of %s: %w", d.path, err)
 				}
 			}
-			fmt.Fprintf(out, "imported %d document(s) into %s: %d created, %d already present, %d wired\n",
-				len(docs), sc.Project, created, skipped, len(docs))
+			summary := fmt.Sprintf("imported %d document(s) into %s: %d created, %d already present, %d updated, %d wired",
+				len(docs), sc.Project, created, present, updated, len(docs))
+			if len(drifted) > 0 {
+				summary += fmt.Sprintf(", %d drifted (not updated)", len(drifted))
+			}
+			fmt.Fprintln(out, summary)
+			printDriftedDocs(errOut, drifted)
 			printUnresolvedRefs(errOut, unresolved)
 			return nil
 		},
@@ -412,6 +447,21 @@ func printImportCorpus(w io.Writer, docs []importDoc) {
 		}
 	}
 	fmt.Fprintf(w, "\n%d document(s): %d spec(s), %d ADR(s), %d plan(s)\n", len(docs), specs, adrs, plans)
+}
+
+// printDriftedDocs names every file whose body drifted from a document the
+// import cannot edit in place. Silence here was WL-357: the drifted file's
+// frontmatter — its edges included — is not in the backbone, and a summary
+// still counting the document as wired hid exactly that.
+func printDriftedDocs(w io.Writer, drifted []driftedDoc) {
+	for _, d := range drifted {
+		fmt.Fprintf(w, "%s: differs from the stored body of the %s %s; not updated — revise it with lode doc revise, or align the file\n",
+			d.path, d.status, d.kind)
+	}
+	if len(drifted) > 0 {
+		fmt.Fprintf(w, "%d drifted document(s) not updated: their frontmatter, edges included, is not what the backbone holds\n",
+			len(drifted))
+	}
 }
 
 // printUnresolvedRefs reports every reference that will land in to_external,
