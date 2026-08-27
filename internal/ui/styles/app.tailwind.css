@@ -484,7 +484,7 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 
 /* MarkdownInput (WL-299): Write/Preview tabs over the textarea, optional
  * dictation button, and a preview pane rendered by the server. */
-.mdinput{display:flex;flex-direction:column;gap:0}
+.mdinput{display:flex;flex-direction:column;gap:0;position:relative}
 .mdtabs{display:flex;gap:2px;align-items:center}
 .mdtab{appearance:none;border:1px solid var(--line);border-bottom:none;background:var(--bg);
   color:var(--ink-3);font:inherit;font-size:12px;font-weight:600;padding:5px 12px;
@@ -497,6 +497,17 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .mdpreview{border:1px solid var(--line);border-radius:0 10px 10px 10px;background:var(--surface);
   padding:10px 12px;min-height:96px;font-size:14px;line-height:1.5;overflow-x:auto}
 .mdpreview[hidden]{display:none}
+/* Emoji shortcode completion: anchored under the textarea rather than at the
+ * caret — the caret's pixel position in a textarea is not readable without
+ * mirroring the whole field, which this does not earn. */
+.mdsuggest{position:absolute;left:8px;bottom:0;transform:translateY(100%);z-index:20;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  box-shadow:0 6px 18px rgb(0 0 0 / 0.14);padding:4px;min-width:200px;max-height:260px;
+  overflow-y:auto}
+.mdsuggest[hidden]{display:none}
+.mdsuggest-item{padding:4px 8px;border-radius:6px;font-size:13px;white-space:pre;cursor:pointer;
+  color:var(--ink-2)}
+.mdsuggest-item.active{background:var(--bg);color:var(--ink-1)}
 .fieldrow.check label{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink-2)}
 /* 24px square, and never shrunk by the flex row: WCAG 2.5.8's minimum target
  * size. At 320px the 20px box was flex-shrunk to 14.5px wide. */
