@@ -97,6 +97,10 @@ templ crewAddForm(v CrewView) {
 				<input id="lead" name="lead" type="checkbox" value="1" checked?={ v.Add.Lead }/>
 				<label for="lead">Project lead &mdash; the one accountable human</label>
 			</p>
+			<p class="fieldrow check">
+				<input id="deputy" name="deputy" type="checkbox" value="1" checked?={ v.Add.Deputy }/>
+				<label for="deputy">Deputy &mdash; full lead authority when the lead does not act (shows as acting-lead)</label>
+			</p>
 			<div class="btnrow">
 				<button type="submit" class="btn primary">Add member</button>
 			</div>
