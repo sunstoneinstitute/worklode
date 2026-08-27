@@ -88,6 +88,7 @@ go test -trimpath ./internal/store -run TestClaim   # single test
 ./scripts/secfmt.py -l              # spec section numbering + anchor check
 ./scripts/inlinespec.py             # regenerate docs/specs/inlined/
 ./scripts/nsgen.py                  # regenerate internal/ns/gen.go from ns/concept.ttl
+./scripts/gen-emoji.py              # regenerate internal/ui/assets/emoji.json (editor completion)
 ```
 
 Store tests need a reachable Postgres with **pgvector**
