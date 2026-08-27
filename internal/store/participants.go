@@ -71,7 +71,7 @@ func (s *Store) ListParticipants(ctx context.Context, projectID string) ([]Parti
 		query += ` WHERE pp.project_id = $1`
 		args = append(args, projectID)
 	}
-	query += ` ORDER BY pp.project_id, pp.is_lead DESC, pp.added_at, pp.actor_id`
+	query += ` ORDER BY pp.project_id, pp.is_lead DESC, pp.is_deputy DESC, pp.added_at, pp.actor_id`
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
