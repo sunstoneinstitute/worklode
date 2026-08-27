@@ -1,0 +1,465 @@
+<meta charset="utf-8">
+<title>Walking the Sunstone Way</title>
+<style>
+:root{
+  --bg:#F0F0F1; --surface:#FFFFFF; --surface-2:#F7F7F8; --sunk:#ECECEE;
+  --ink:#0E1937; --ink-2:#404963; --ink-3:#6A7189; --line:#E1E1E4; --line-2:#D2D2D6;
+  --link:#266680; --accent:#B77B00; --accent-ink:#0E1937; --accent-line:#9A6700;
+  --ok:#1E6F63; --ok-bg:#E4F1EE; --warn:#9A5410; --warn-bg:#FBEBDA;
+  --crit:#A32836; --crit-bg:#F8E3E5; --info:#266680; --info-bg:#E2EEF2;
+  --code-bg:#ECECEE; --code-ink:#0E1937;
+  --shadow:0 1px 2px rgba(14,25,55,.06),0 6px 20px rgba(14,25,55,.05);
+  --shadow-sm:0 1px 2px rgba(14,25,55,.06);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E1937; --surface:#16213F; --surface-2:#1B274A; --sunk:#101B39;
+  --ink:#F4F4F4; --ink-2:#C4CADA; --ink-3:#9096AC; --line:#293457; --line-2:#334063;
+  --link:#46C5DE; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#C9AD06;
+  --ok:#5FD3C0; --ok-bg:#153A38; --warn:#F58221; --warn-bg:#3A2A16;
+  --crit:#E5808C; --crit-bg:#3A1E24; --info:#46C5DE; --info-bg:#123243;
+  --code-bg:#101B39; --code-ink:#E7EAF2;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.28);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --bg:#0E1937; --surface:#16213F; --surface-2:#1B274A; --sunk:#101B39;
+  --ink:#F4F4F4; --ink-2:#C4CADA; --ink-3:#9096AC; --line:#293457; --line-2:#334063;
+  --link:#46C5DE; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#C9AD06;
+  --ok:#5FD3C0; --ok-bg:#153A38; --warn:#F58221; --warn-bg:#3A2A16;
+  --crit:#E5808C; --crit-bg:#3A1E24; --info:#46C5DE; --info-bg:#123243;
+  --code-bg:#101B39; --code-ink:#E7EAF2;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.28);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-weight:600;margin:0;letter-spacing:-.012em;text-wrap:balance}
+a{color:var(--link)}
+a:hover{text-decoration:none}
+code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.88em;font-variant-ligatures:none}
+:focus-visible{outline:2px solid var(--link);outline-offset:2px;border-radius:4px}
+
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 96px}
+
+/* ---------- masthead ---------- */
+.mast{border-bottom:1px solid var(--line);background:var(--surface)}
+.mast .wrap{padding-top:34px;padding-bottom:30px}
+.eyebrow{display:flex;align-items:center;gap:9px;font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-3);font-weight:600}
+.eyebrow .mark{width:19px;height:19px;border-radius:5px;background:var(--accent);display:inline-block;flex:0 0 auto}
+h1{font-size:clamp(30px,4.4vw,44px);line-height:1.08;margin:16px 0 0;max-width:20ch}
+.standfirst{margin:16px 0 0;max-width:66ch;font-size:17px;color:var(--ink-2)}
+.mast dl{display:flex;flex-wrap:wrap;gap:0 34px;margin:26px 0 0;padding-top:20px;border-top:1px solid var(--line)}
+.mast dl>div{display:flex;flex-direction:column;gap:3px}
+.mast dt{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:600}
+.mast dd{margin:0;font-size:14px;font-weight:500}
+
+/* ---------- readiness key ---------- */
+.key{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:12px;margin:34px 0 0}
+.key .k{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;box-shadow:var(--shadow-sm);border-left-width:3px}
+.key .k.ok{border-left-color:var(--ok)}
+.key .k.conv{border-left-color:var(--accent)}
+.key .k.gap{border-left-color:var(--crit)}
+.key .k b{display:block;font-size:13px;margin-bottom:3px}
+.key .k span{font-size:13px;color:var(--ink-2)}
+.key .k .n{float:right;font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+.key .k.ok .n{color:var(--ok)}
+.key .k.conv .n{color:var(--accent)}
+.key .k.gap .n{color:var(--crit)}
+
+/* ---------- section headings ---------- */
+h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.11em;color:var(--ink-3);font-weight:700;
+  font-family:"DM Sans",system-ui,sans-serif;margin:56px 0 0;padding-bottom:10px;border-bottom:1px solid var(--line-2)}
+.lede{margin:16px 0 0;max-width:70ch;color:var(--ink-2)}
+
+/* ---------- stage spine ---------- */
+.spine{display:flex;flex-direction:column;gap:18px;margin-top:24px}
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);overflow:hidden}
+.stage>header{display:flex;align-items:flex-start;gap:15px;padding:18px 20px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.num{flex:0 0 auto;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+  font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;background:var(--sunk);color:var(--ink-2);border:1px solid var(--line-2)}
+.stage.ok .num{background:var(--ok-bg);color:var(--ok);border-color:transparent}
+.stage.conv .num{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.stage.gap .num{background:var(--crit-bg);color:var(--crit);border-color:transparent}
+.stage>header h3{font-size:20px;line-height:1.25}
+.stage>header .who{font-size:13px;color:var(--ink-3);margin-top:3px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;border-radius:20px;padding:4px 10px;white-space:nowrap;margin-left:auto;flex:0 0 auto}
+.chip.ok{background:var(--ok-bg);color:var(--ok)}
+.chip.conv{background:var(--warn-bg);color:var(--warn)}
+.chip.gap{background:var(--crit-bg);color:var(--crit)}
+
+.cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0}
+.col{padding:17px 20px;min-width:0;border-right:1px solid var(--line)}
+.col:last-child{border-right:0}
+.col h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:700;
+  font-family:"DM Sans",system-ui,sans-serif;margin-bottom:9px}
+.col p{margin:0 0 9px;font-size:14px;color:var(--ink-2)}
+.col p:last-child{margin-bottom:0}
+.col p b{color:var(--ink);font-weight:600}
+pre{margin:0 0 9px;background:var(--code-bg);color:var(--code-ink);border-radius:8px;padding:11px 13px;
+  overflow-x:auto;font-size:12.5px;line-height:1.65;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+pre:last-child{margin-bottom:0}
+pre .c{color:var(--ink-3)}
+ul.facts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+ul.facts li{font-size:13.5px;color:var(--ink-2);padding-left:16px;position:relative}
+ul.facts li::before{content:"";position:absolute;left:0;top:.55em;width:5px;height:5px;border-radius:50%;background:var(--line-2)}
+ul.facts li .mono{color:var(--ink);font-weight:500}
+
+.note{display:flex;gap:11px;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface-2);font-size:13.5px;color:var(--ink-2)}
+.note b{color:var(--ink)}
+.note .tag{flex:0 0 auto;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  border-radius:5px;padding:3px 7px;height:fit-content}
+.note.conv .tag{background:var(--warn-bg);color:var(--warn)}
+.note.gap .tag{background:var(--crit-bg);color:var(--crit)}
+
+/* ---------- tables ---------- */
+.tblwrap{overflow-x:auto;margin-top:20px;border:1px solid var(--line);border-radius:11px;background:var(--surface);box-shadow:var(--shadow-sm)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:13.5px}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-3);font-weight:700;
+  background:var(--surface-2);border-bottom:1px solid var(--line-2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+td .mono{color:var(--ink)}
+td.st{white-space:nowrap}
+
+/* ---------- build list ---------- */
+ol.build{list-style:none;counter-reset:b;margin:22px 0 0;padding:0;display:flex;flex-direction:column;gap:11px}
+ol.build li{counter-increment:b;background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:15px 18px 15px 52px;position:relative;box-shadow:var(--shadow-sm)}
+ol.build li::before{content:counter(b);position:absolute;left:16px;top:15px;width:22px;height:22px;border-radius:6px;
+  background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:12px;font-weight:700}
+ol.build b{display:block;font-size:14.5px;margin-bottom:3px}
+ol.build span{font-size:13.5px;color:var(--ink-2)}
+ol.build .est{float:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+  color:var(--ink-3);background:var(--sunk);border-radius:5px;padding:3px 8px;margin-left:12px}
+
+footer.end{margin-top:60px;padding-top:22px;border-top:1px solid var(--line-2);font-size:13px;color:var(--ink-3);max-width:70ch}
+footer.end p{margin:0 0 8px}
+
+@media (max-width:880px){
+  .cols{grid-template-columns:1fr}
+  .col{border-right:0;border-bottom:1px solid var(--line)}
+  .col:last-child{border-bottom:0}
+}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="eyebrow"><span class="mark"></span>Worklode · WL-332 mockup · 27 August 2026</p>
+    <h1>Walking the Sunstone Way</h1>
+    <p class="standfirst">One investigation carried from a pitch to a reviewed report, using the Worklode
+      that is running today. Every command on this page exists. Every gap on this page is real.</p>
+    <dl>
+      <div><dt>Story</dt><dd>Forever chemicals in Norwegian tap water</dd></div>
+      <div><dt>Stages covered</dt><dd>Discovery through Report (1&ndash;5)</dd></div>
+      <div><dt>Schema changes</dt><dd>None</dd></div>
+      <div><dt>Testable by</dt><dd>1 September 2026</dd></div>
+    </dl>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="key">
+    <div class="k ok"><span class="n">1</span><b>Works today</b><span>Supported surfaces, no workaround.</span></div>
+    <div class="k conv"><span class="n">2</span><b>Works by convention</b><span>Real machinery, used for something it was not named for.</span></div>
+    <div class="k gap"><span class="n">2</span><b>Has a gap</b><span>Part of the stage has no home yet.</span></div>
+  </section>
+
+  <h2 class="sec">The walk</h2>
+  <p class="lede">Four people carry this story: <b>Tomas Lind</b> (reporter), <b>Ingerid Solheim</b>
+    (data scientist, lead), <b>Dr. Anaya Rao</b> (science lead) and <b>Marit Holt</b> (editor).
+    Those four role names are already the vocabulary Worklode stores for a project's crew.</p>
+
+  <div class="spine">
+
+    <!-- ── 1 ── -->
+    <article class="stage conv">
+      <header>
+        <span class="num">1</span>
+        <div><h3>Discovery</h3><div class="who">Tomas pitches the story</div></div>
+        <span class="chip conv">By convention</span>
+      </header>
+      <div class="cols">
+        <div class="col">
+          <h4>What happens</h4>
+          <p>Tomas has been reading Mattilsynet's waterworks reports and files a pitch: PFAS shows up
+            in 41 of 356 municipal systems, and 12 are over the EU limit of 0.5&nbsp;µg/L.</p>
+          <p>The pitch is one task in a standing <b>INTAKE</b> project that every candidate story lands in.</p>
+        </div>
+        <div class="col">
+          <h4>What he runs</h4>
+<pre><span class="c"># once, by an admin</span>
+lode project add intake \
+  --name "Story intake" --key INT
+
+<span class="c"># the pitch</span>
+lode task add --project intake \
+  --kind design --priority high \
+  --title "PFAS in Norwegian tap water" \
+  --body-file pitch.md
+lode task assign INT-41 --to tomas</pre>
+        </div>
+        <div class="col">
+          <h4>What Worklode holds</h4>
+          <ul class="facts">
+            <li>Task <span class="mono">INT-41</span>, kind <span class="mono">design</span>, state <span class="mono">draft</span></li>
+            <li>Author, timestamp and every later edit in the event log</li>
+            <li>Source links and images uploaded with the body, so they survive</li>
+            <li>Assigned to a human actor, the same way an engineering task is</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note conv"><span class="tag">Convention</span>
+        <span><b>There is no intake surface.</b> The cockpit's <span class="mono">/intake</span> and
+          <span class="mono">/ideas</span> pages are placeholders, and a project has no
+          <span class="mono">seeded_by</span> field. A standing project full of tasks does the job:
+          pitches are listable, assignable and rankable on day one. What it does not give you is a
+          capture form a reporter would use without being taught the CLI.</span>
+      </div>
+    </article>
+
+    <!-- ── 2 ── -->
+    <article class="stage conv">
+      <header>
+        <span class="num">2</span>
+        <div><h3>Selection</h3><div class="who">Ingerid and Tomas build the dossier</div></div>
+        <span class="chip conv">By convention</span>
+      </header>
+      <div class="cols">
+        <div class="col">
+          <h4>What happens</h4>
+          <p>The pair works the pitch into a Selection dossier: the bounded question, the strongest
+            evidence, the evidence against, and what is still unknown.</p>
+          <p>The dossier is a <b>document</b>, not a task body, so it gets revisions, an addressable
+            id, and a review that names the revision it covered.</p>
+        </div>
+        <div class="col">
+          <h4>What they run</h4>
+<pre>lode doc new --project intake \
+  --kind spec --slug pfas-dossier \
+  --file dossier.md
+
+<span class="c"># revise until it holds</span>
+lode doc revise INT-SPEC-4 --file dossier.md
+lode doc versions INT-SPEC-4</pre>
+        </div>
+        <div class="col">
+          <h4>What Worklode holds</h4>
+          <ul class="facts">
+            <li>Document <span class="mono">INT-SPEC-4</span>, status <span class="mono">draft</span></li>
+            <li>Every revision, diffable, with <span class="mono">lode doc versions</span></li>
+            <li>Sections addressable as <span class="mono">INT-SPEC-4 §2</span> in a review</li>
+            <li><span class="mono">lode show</span> and <span class="mono">/docs</span> render it for anyone</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note conv"><span class="tag">Convention</span>
+        <span><b>A dossier is filed as kind <span class="mono">spec</span>.</b> Documents come in three
+          kinds &mdash; spec, ADR and plan &mdash; and a Selection dossier is none of them. Spec is the
+          honest fit: it is the design of the investigation, and it earns the revision history and the
+          section anchors that a task body does not have. The word on screen will say "spec" until the
+          kind vocabulary grows.</span>
+      </div>
+    </article>
+
+    <!-- ── 3 ── -->
+    <article class="stage gap">
+      <header>
+        <span class="num">3</span>
+        <div><h3>Editorial Evaluation</h3><div class="who">Marit and Anaya decide</div></div>
+        <span class="chip gap">Has a gap</span>
+      </header>
+      <div class="cols">
+        <div class="col">
+          <h4>What happens</h4>
+          <p>The gate. The editor and the science lead each have to say yes on a named revision of the
+            dossier before the story becomes a project.</p>
+          <p>Passing the gate promotes the dossier into an investigation project with its own key.</p>
+        </div>
+        <div class="col">
+          <h4>What they run</h4>
+<pre>lode doc submit INT-SPEC-4   <span class="c"># asks for review</span>
+
+<span class="c"># each reviewer, after reading:</span>
+lode doc accept INT-SPEC-4
+
+<span class="c"># promotion, by hand</span>
+lode project add pfas \
+  --name "Forever chemicals in \
+    Norwegian tap water" --key PFAS</pre>
+        </div>
+        <div class="col">
+          <h4>What Worklode holds</h4>
+          <ul class="facts">
+            <li><span class="mono">doc submit</span> records a review event and mints review tasks</li>
+            <li>Status moves <span class="mono">draft &rarr; accepted</span>, one acceptance</li>
+            <li>The new project <span class="mono">PFAS</span>, with no repo attached</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note gap"><span class="tag">Gap</span>
+        <span><b>Two approvals cannot be required, and promotion leaves no trail.</b> The approvals table
+          is built and the <span class="mono">/reviews</span> page decides them, but the only rows anything
+          writes are pull requests &mdash; a document cannot be sent for approval yet. So "both the editor
+          and the science lead approved revision 5" is today two people agreeing in a meeting, and
+          <span class="mono">lode doc accept</span> takes one assignee's word for it. Nothing links the new
+          <span class="mono">PFAS</span> project back to <span class="mono">INT-41</span> either.</span>
+      </div>
+    </article>
+
+    <!-- ── 4 ── -->
+    <article class="stage ok">
+      <header>
+        <span class="num">4</span>
+        <div><h3>Research</h3><div class="who">The crew works</div></div>
+        <span class="chip ok">Works today</span>
+      </header>
+      <div class="cols">
+        <div class="col">
+          <h4>What happens</h4>
+          <p>The crew is named, the analysis repo is attached, and the work runs the way engineering work
+            already runs: tasks, worktrees, pull requests, agents where they help.</p>
+          <p>The methodology is drafted as a document alongside the code that produces the numbers.</p>
+        </div>
+        <div class="col">
+          <h4>What they run</h4>
+<pre>lode project crew add pfas ingerid \
+  --role data-scientist --lead
+lode project crew add pfas anaya \
+  --role science-lead
+lode project crew add pfas marit --role editor
+lode project crew add pfas tomas --role reporter
+
+lode project add-repo pfas \
+  --repo sunstone/pfas-no-analysis
+
+lode task add --project pfas --kind design \
+  --title "Sampling and exclusion method"</pre>
+        </div>
+        <div class="col">
+          <h4>What Worklode holds</h4>
+          <ul class="facts">
+            <li>A crew roster with real roles, one lead, one optional deputy</li>
+            <li>Tasks claimable into worktrees by a person or an agent</li>
+            <li>PRs, checks and merges correlated back to the task automatically</li>
+            <li>Agent sessions priced per task, so the story has a cost</li>
+            <li>The methodology as <span class="mono">PFAS-SPEC-1</span>, revisable and reviewable</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note conv"><span class="tag">Convention</span>
+        <span><b>Grouping is a parent task.</b> Milestones do not exist &mdash; there is no table and
+          <span class="mono">lode show --milestone</span> says so out loud. Until they land, "internal
+          review" and "publication" are two ordinary tasks with the stage's work filed under them
+          via <span class="mono">lode task parent --under</span>. Everything else in this stage is
+          the backbone doing what it was built for.</span>
+      </div>
+    </article>
+
+    <!-- ── 5 ── -->
+    <article class="stage gap">
+      <header>
+        <span class="num">5</span>
+        <div><h3>Report</h3><div class="who">Anaya, the buddy and the expert review</div></div>
+        <span class="chip gap">Has a gap</span>
+      </header>
+      <div class="cols">
+        <div class="col">
+          <h4>What happens</h4>
+          <p>The project declares what it ships &mdash; the dataset, the reproducible analysis, the
+            methodology and the report &mdash; and each one has to be shown to exist before the story
+            can move on.</p>
+          <p>The data pipeline reports the dataset itself. Nobody ticks a box to say it is there.</p>
+        </div>
+        <div class="col">
+          <h4>What they do</h4>
+<pre><span class="c"># in the cockpit:</span>
+<span class="c"># /projects/pfas/deliverables/new</span>
+<span class="c">#   name  Dataset — municipal PFAS 2019–2025</span>
+<span class="c">#   url   ds:pfas-no@2025-07</span>
+
+<span class="c"># the pipeline, on registration:</span>
+POST /hooks/catalog   <span class="c">(signed)</span></pre>
+        </div>
+        <div class="col">
+          <h4>What Worklode holds</h4>
+          <ul class="facts">
+            <li>Deliverables <span class="mono">PFAS-DEL-1..4</span> on the project page</li>
+            <li>Artifact evidence against the declared address, from an emitter</li>
+            <li>State reported, never asserted by someone closing a task</li>
+          </ul>
+        </div>
+      </div>
+      <div class="note gap"><span class="tag">Gap</span>
+        <span><b>The review matrix is the missing piece.</b> Deliverables are real and their state
+          arrives from the catalog, but the reviews that make a report publishable have nowhere to live:
+          approvals still only cover pull requests, so "buddy, domain expert and journalist have signed
+          off on report rev&nbsp;7" is not a query. There is also no <span class="mono">lode
+          deliverable</span> verb &mdash; declaring one is a web form only &mdash; and no address that
+          nothing pushes about is ever checked.</span>
+      </div>
+    </article>
+
+  </div>
+
+  <h2 class="sec">What stands in for what</h2>
+  <p class="lede">The whole walk above, as a mapping. Nothing in the right-hand column needs a migration.</p>
+  <div class="tblwrap">
+    <table>
+      <thead><tr><th>Sunstone Way</th><th>Stands on, today</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Story pitch</td><td>Task in a standing <span class="mono">intake</span> project, kind <span class="mono">design</span></td><td class="st">By convention</td></tr>
+        <tr><td>Selection dossier</td><td>Document, kind <span class="mono">spec</span>, with revisions</td><td class="st">By convention</td></tr>
+        <tr><td>Editorial gate</td><td><span class="mono">lode doc accept</span>, one assignee</td><td class="st">Partial &mdash; one approver, not two</td></tr>
+        <tr><td>Promotion to a project</td><td><span class="mono">lode project add</span>, by hand</td><td class="st">Partial &mdash; no link back</td></tr>
+        <tr><td>Crew and roles</td><td><span class="mono">project_participants</span>, fixed role vocabulary</td><td class="st">Works today</td></tr>
+        <tr><td>Milestone</td><td>A parent task, children filed under it</td><td class="st">By convention</td></tr>
+        <tr><td>Research work</td><td>Tasks, worktrees, PR correlation</td><td class="st">Works today</td></tr>
+        <tr><td>Methodology</td><td>Document, kind <span class="mono">spec</span></td><td class="st">Works today</td></tr>
+        <tr><td>Dataset / report / analysis</td><td>Deliverables, state from <span class="mono">/hooks/catalog</span></td><td class="st">Works today</td></tr>
+        <tr><td>Review sign-off</td><td>&mdash;</td><td class="st">Missing for anything but a PR</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec">To be walkable by 1 September</h2>
+  <p class="lede">Stage 4 already works. The shortest path to a walk a data scientist and an editor can
+    complete without being coached through it, in the order that unblocks the most.</p>
+  <ol class="build">
+    <li><span class="est">Largest</span><b>Let a document be sent for approval</b>
+      <span>The approvals table already takes any <span class="mono">entity_kind</span>; its migration
+      says so. Writing <span class="mono">doc</span> rows and widening the <span class="mono">/reviews</span>
+      join is what turns the editorial gate from a meeting into a record, and it is the same change stage 5
+      needs for deliverables.</span></li>
+    <li><span class="est">Small</span><b>Seed the intake project and write the two body templates</b>
+      <span>A pitch template and a dossier template, so the first thing a reporter meets is a form to fill
+      in and not a blank file.</span></li>
+    <li><span class="est">Small</span><b>Add <span class="mono">lode deliverable add</span> and <span class="mono">list</span></b>
+      <span>The API and the web form exist; the CLI verb is the missing mirror, and it is what lets the
+      walk be scripted for a rehearsal.</span></li>
+    <li><span class="est">Small</span><b>Name the promotion link</b>
+      <span>Until <span class="mono">seeded_by</span> exists, a one-line convention: the new project's
+      first task references the intake task id, so the trail is at least greppable.</span></li>
+    <li><span class="est">Rehearsal</span><b>Walk it once, end to end, with the real four people</b>
+      <span>Before 1 September, on the real instance, with this story. Every step that needs explaining
+      out loud is the next thing to fix.</span></li>
+  </ol>
+
+  <footer class="end">
+    <p><b>What this mockup is.</b> A proposal for how stages 1 to 5 run on Worklode as it stands on
+      27 August 2026, put up for the checkpoint so the conventions can be argued with before anyone
+      builds on them. The commands were read out of the CLI, and the gaps out of the migrations.</p>
+    <p><b>What it is not.</b> It is not spec 029. Milestones, deliverable-level approvals and the intake
+      store are that spec's work and stay out of scope here. It is also not the cockpit redesign &mdash;
+      that mockup already exists, one directory over, and shows the interface these conventions are a
+      stopgap for.</p>
+  </footer>
+
+</div>
