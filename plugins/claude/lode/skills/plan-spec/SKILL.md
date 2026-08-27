@@ -30,7 +30,7 @@ that decided which task to pick up — stay unattributed by design.
 
 **Step 2: read the spec, not the plan of it.** The task's `about_doc` names the
 accepted spec. `lode show <ref>` renders it, `-s <anchor>` one section;
-`lode doc get <id-or-slug> --json` gives the same body plus the parsed section
+`lode doc get <ref> --json` gives the same body plus the parsed section
 anchors and edges. The backbone is the only copy — there is no corpus on disk.
 
 **Step 3: write the plans.** Load `lode:splitting-specs-into-plans` if the spec is
