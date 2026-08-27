@@ -63,3 +63,45 @@ func TestHotPathDependencyBoundaries(t *testing.T) {
 		})
 	}
 }
+
+// 053 §2's third boundary (WL-324): internal/cmd is the `lode` CLI surface
+// and no longer imports internal/api, internal/store, internal/watch,
+// internal/hookrun, or internal/statusline — the split's whole point is that
+// editing a server or watcher package does not rebuild the CLI, and k8s.io
+// staying out of the user binary is what closed WL-236. Cobra and Goldmark
+// are legitimate here, so the CLI has its own forbidden set rather than the
+// hot-path one.
+func cliForbidden(dep string) string {
+	switch {
+	case dep == modulePath+"/internal/api",
+		dep == modulePath+"/internal/store",
+		dep == modulePath+"/internal/watch",
+		dep == modulePath+"/internal/hookrun",
+		dep == modulePath+"/internal/statusline":
+		return "a server-, watcher-, or hot-path-mode package (053 §2)"
+	case strings.HasPrefix(dep, "k8s.io/"):
+		return "a Kubernetes package (WL-236)"
+	}
+	return ""
+}
+
+func TestCLIDependencyBoundaries(t *testing.T) {
+	target := modulePath + "/cmd/lode"
+	out, err := exec.Command("go", "list", "-deps", target).Output()
+	if err != nil {
+		t.Fatalf("go list -deps %s: %v", target, err)
+	}
+	deps := strings.Fields(string(out))
+	var found bool
+	for _, dep := range deps {
+		if dep == target {
+			found = true
+		}
+		if why := cliForbidden(dep); why != "" {
+			t.Errorf("%s must not depend on %s (%s)", target, dep, why)
+		}
+	}
+	if !found {
+		t.Fatalf("go list -deps %s did not report the target itself; is the entry point still there?", target)
+	}
+}

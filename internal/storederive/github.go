@@ -1,8 +1,9 @@
-package derive
+package storederive
 
 import (
 	"context"
 	"errors"
+	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 // and is still reading with it when the hour runs out.
 const repoClientTTL = 45 * time.Minute
 
-// GitHubReader implements RepoReader over internal/githubauth's per-repo
+// GitHubReader implements derive.RepoReader over internal/githubauth's per-repo
 // installation-token client (RepoClient). It mints one RepoClient per repo
 // and reuses it while the token is fresh, so a run over many PRs in one repo
 // mints one token rather than one per read.
@@ -75,7 +76,7 @@ func (g *GitHubReader) client(ctx context.Context, repo string) (*githubauth.Rep
 }
 
 // notFound collapses githubauth's two "routine fact about this repo"
-// sentinels onto the RepoReader contract's ErrNotFound. ErrContentNotFound is
+// sentinels onto the derive.RepoReader contract's derive.ErrNotFound. ErrContentNotFound is
 // the obvious one. ErrAppNotInstalled joins it because the derivers run
 // org-globally over every repo a PR was ever opened against: a repo the App
 // was never installed on (or was uninstalled from) simply has nothing this
@@ -87,24 +88,24 @@ func notFound(err error) bool {
 		errors.Is(err, githubauth.ErrAppNotInstalled)
 }
 
-// FileAt implements RepoReader, mapping githubauth's not-found sentinels to
+// FileAt implements derive.RepoReader, mapping githubauth's not-found sentinels to
 // this package's forge-independent one (see notFound).
 func (g *GitHubReader) FileAt(ctx context.Context, repo, path string) ([]byte, error) {
 	rc, err := g.client(ctx, repo)
 	if err != nil {
 		if notFound(err) {
-			return nil, ErrNotFound
+			return nil, derive.ErrNotFound
 		}
 		return nil, err
 	}
 	data, err := rc.FileAt(ctx, path)
 	if notFound(err) {
-		return nil, ErrNotFound
+		return nil, derive.ErrNotFound
 	}
 	return data, err
 }
 
-// PRFiles implements RepoReader. Only the client-minting step can report
+// PRFiles implements derive.RepoReader. Only the client-minting step can report
 // ErrAppNotInstalled; the files endpoint itself has no not-found case the
 // deriver may skip — it is called only for a PR the backbone already has a
 // row for, so a 404 there is a real fault.
@@ -112,7 +113,7 @@ func (g *GitHubReader) PRFiles(ctx context.Context, repo string, number int64) (
 	rc, err := g.client(ctx, repo)
 	if err != nil {
 		if notFound(err) {
-			return nil, ErrNotFound
+			return nil, derive.ErrNotFound
 		}
 		return nil, err
 	}

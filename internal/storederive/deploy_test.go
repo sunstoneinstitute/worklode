@@ -1,4 +1,4 @@
-package derive_test
+package storederive_test
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunstoneinstitute/worklode/internal/derive"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/storederive"
 )
 
 const (
@@ -107,7 +107,7 @@ func TestDeployTriplesProjectsRows(t *testing.T) {
 		BuiltAt:   deployTestNow,
 	}, "")
 
-	doc, err := derive.DeployTriples(context.Background(), s)
+	doc, err := storederive.DeployTriples(context.Background(), s)
 	if err != nil {
 		t.Fatalf("DeployTriples: %v", err)
 	}
@@ -151,12 +151,12 @@ func TestDeployTriplesDeterministic(t *testing.T) {
 		}, []string{"dev", "prod", "dev"}[i])
 	}
 
-	first, err := derive.DeployTriples(context.Background(), s)
+	first, err := storederive.DeployTriples(context.Background(), s)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 4; i++ {
-		next, err := derive.DeployTriples(context.Background(), s)
+		next, err := storederive.DeployTriples(context.Background(), s)
 		if err != nil {
 			t.Fatal(err)
 		}
