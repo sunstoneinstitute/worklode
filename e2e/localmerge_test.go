@@ -18,8 +18,8 @@ import (
 
 // TestLocalMergeReportEndToEnd drives the local merge reporter across the
 // process boundary it is otherwise only ever tested up to: a real clone, the
-// real CLI entry point running `lode hook post-merge`, and a real server
-// with a real store on the other end of POST /api/v1/merges.
+// real `lode-hook post-merge` binary, and a real server with a real store on
+// the other end of POST /api/v1/merges.
 //
 // Both halves are covered on their own — internal/hookrun proves the git
 // probe and the request body against a stub server, internal/api proves the
@@ -91,9 +91,10 @@ func TestLocalMergeReportEndToEnd(t *testing.T) {
 	e2eGit(t, root, "merge", "--no-ff", "-m", "Merge "+landedBranch, landedBranch)
 	mergeSHA := e2eGit(t, root, "rev-parse", "HEAD")
 
-	t.Chdir(root)
-	if out, err := runLodeCLI(t, "hook", "post-merge"); err != nil {
-		t.Fatalf("lode hook post-merge: %v\noutput: %s", err, out)
+	hook := exec.Command(filepath.Join(dist, "lode-hook"), "post-merge")
+	hook.Dir = root
+	if out, err := hook.CombinedOutput(); err != nil {
+		t.Fatalf("lode-hook post-merge: %v\noutput: %s", err, out)
 	}
 
 	// The merge never reached GitHub and no webhook was delivered, so the

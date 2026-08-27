@@ -90,8 +90,6 @@ Flags: --project, --repo
 - `lode graph projection` — The backbone→graph projector's state
 - `lode graph projection status` — Show the projects the projector has quarantined, since when, and why
 
-## `lode hook` — Run a Worklode lifecycle hook (--list shows every event)
-
 ## `lode inbox` — Triage GitHub issues into tasks
 
 - `lode inbox dismiss` — Dismiss an inbox issue without creating a task
@@ -114,10 +112,6 @@ Flags: --no-browser, --server
 ## `lode logout` — Remove the stored token for a server from the OS keychain or token file
 
 Flags: --server
-
-## `lode migrate` — Apply database migrations
-
-Flags: --dsn, --migrations-path
 
 ## `lode next` — Claim a task (or the top-ranked ready one), set up its worktree, and print its brief
 
@@ -166,10 +160,6 @@ Flags: --dry-run, --repo, --since, --task
   Flags: --task
 - `lode secrets status` — Show declared vs materialized secret names for the bound task (names only)
 
-## `lode serve` — Run the worklode HTTP server
-
-Flags: --admin-listen, --dsn, --listen
-
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
 Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage
@@ -184,8 +174,6 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode skills sync` — Trigger a full server-side skill sync (admin)
 
 ## `lode status` — Show the current worktree's task, lease, and session-marker state (read-only)
-
-## `lode statusline` — Render one status line from a coding agent's status-line payload
 
 ## `lode task` — Create, inspect, and drive tasks through their lifecycle
 
@@ -256,10 +244,6 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 ## `lode uninstall` — Remove Worklode's hooks from this repo's VCS and coding agent
 
 Flags: --agent, --no-agent, --no-statusline, --no-vcs, --scope, --skills, --statusline, --vcs
-
-## `lode watch` — Watch Kubernetes pods and report crash loops and OOM kills
-
-Flags: --cluster, --kubeconfig, --server, --token
 
 ## `lode worker` — Unattended worker-loop helpers
 
