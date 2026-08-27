@@ -55,9 +55,9 @@ frontmatter carries a `lode-cli-version:` stamp naming the CLI release it was
 last checked against; bump the stamp whenever you touch it.
 
 `lode install` writes lifecycle bindings with the sibling binaries
-`lode-hook <event>` and `lode-statusline`. The `lode hook` and `lode statusline`
-commands remain compatibility entry points, so command references may continue
-to document them; do not use those aliases in newly written managed bindings.
+`lode-hook <event>` and `lode-statusline`. The old subcommand spellings were
+removed with the WL-319 shim cleanup; `lode install` still recognises them in
+existing settings files so upgrades replace pre-split bindings.
 
 ## When the CLI changes
 

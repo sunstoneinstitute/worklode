@@ -425,7 +425,7 @@ reached over HTTPS (or `localhost`); the `lode login` CLI flow is unaffected.
 
 ## Knowledge graph projection
 
-When `LODE_GRAPHSERVER_URL` is set, `lode serve` mirrors every project's
+When `LODE_GRAPHSERVER_URL` is set, `lode-server` mirrors every project's
 tasks into the data-platform knowledge graph (spec 006). A background
 projector follows the `state_log` outbox and, for each dirtied project,
 replaces its named graph (`https://worklode.io/ns/graph/project/<id>`)
@@ -444,7 +444,7 @@ The three Keycloak variables must be set together or not at all; with none of
 them set, the client runs unauthenticated, which only works against a
 graph-server started without `AUTH_ENFORCE`. Unset `LODE_GRAPHSERVER_URL`
 disables projection entirely; set but otherwise misconfigured, it fails
-`lode serve`'s boot rather than silently running without it.
+`lode-server`'s boot rather than silently running without it.
 
 Forcing a full re-projection — after a schema change to the projected shape,
 say — is a watermark rewind: `UPDATE graph_projection SET last_txid = 0`. The
@@ -527,11 +527,11 @@ graph-backed reads answer 503.
 
 ## Cluster watcher
 
-`lode watch` runs a pod informer against one cluster and reports crash loops
+`lode-watch` runs a pod informer against one cluster and reports crash loops
 and OOM kills to the server:
 
 ```bash
-lode watch --kubeconfig ~/.kube/config --cluster dev \
+lode-watch --kubeconfig ~/.kube/config --cluster dev \
   --server http://localhost:8080 --token $LODE_TOKEN
 ```
 
@@ -604,7 +604,7 @@ without changing the CLI shape.
 
 ### Agent session tracking
 
-`lode hook` reports which coding-agent session is working a task, so the
+`lode-hook` reports which coding-agent session is working a task, so the
 backbone can show what is running right now. Sessions are recorded against the
 task's lease; a lease outlives many sessions (restarts, `/clear`, resuming the
 next day), and one session can span several leases as it moves between
@@ -616,12 +616,12 @@ Accepted values: `claude-code`, `codex`, `copilot`, `cursor`, `aider`,
 the unrecognised value — a hook never fails its triggering event, so rejecting
 the id outright would just lose the session.
 
-`lode hook --list` prints every supported event, what `lode install` binds it
+`lode-hook --list` prints every supported event, what `lode install` binds it
 to, and what its handler does.
 
 Claude Code bindings:
 
-| `lode hook` event | Claude Code event |
+| `lode-hook` event | Claude Code event |
 |---|---|
 | `session-start` | `SessionStart` |
 | `heartbeat` | `Stop`, `StopFailure`, `SubagentStop`, `Notification` |
@@ -633,8 +633,8 @@ Claude Code bindings:
 *the* worktree creator, replacing Claude Code's built-in `git worktree add`, and
 `EnterWorktree` then fails unless the hook prints the path it created. Both
 events stay available for scripts that do create Worklode's own worktrees
-(under `.worktrees/` by default); invoke them as `lode hook worktree-create` /
-`worktree-remove`.
+(under `.worktrees/` by default); invoke them as `lode-hook worktree-create` /
+`lode-hook worktree-remove`.
 
 Install these bindings into a repo with:
 
@@ -645,7 +645,8 @@ lode install --scope project           # .claude/settings.json
 
 `lode uninstall` (same flags) removes both integrations again: it restores
 whatever git hooks Worklode preserved and strips every managed `lode-hook`
-binding (including legacy `lode hook` bindings) from the settings file. Both
+binding (including legacy `lode hook` bindings written before the binary
+split) from the settings file. Both
 commands are idempotent, the VCS side never touches a hook it does not
 recognize as its own, and the agent side only touches those managed command
 forms, so third-party hooks on the same events are left alone.
@@ -673,7 +674,7 @@ completes.
 
 ### Token cost
 
-Ending a session reports what it spent. `lode hook` parses the agent's own
+Ending a session reports what it spent. `lode-hook` parses the agent's own
 transcript — Claude Code's `SessionEnd` payload carries `transcript_path`, and
 every assistant entry in it carries the vendor's `usage` block, so the numbers
 are reported rather than estimated. The server prices them from `model_prices`.
@@ -748,9 +749,9 @@ set.
 
 Migrations live under `deploy/base/migrations/` and use
 [golang-migrate](https://github.com/golang-migrate/migrate). They are no
-longer embedded in the binary or applied automatically — `lode serve` expects
+longer embedded in the binary or applied automatically — `lode-server` expects
 the schema to already exist. Apply them explicitly with
-`lode migrate --dsn <postgres-dsn> --migrations-path deploy/base/migrations`
+`lode-migrate --dsn <postgres-dsn> --migrations-path deploy/base/migrations`
 (the `docker-compose.yml` `migrate` service does this before `worklode`
 starts; in Kubernetes an initContainer does the same from a ConfigMap).
 Never edit a migration that has already shipped — add a new pair instead:

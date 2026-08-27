@@ -6,10 +6,10 @@ Worklode is Sunstone's org-wide work tracker and coordination layer for
 multi-agent, multi-repo work. It ships as six Go executables from one module
 (053 §1): `lode` (CLI), `lode-hook` and `lode-statusline` (short-lived agent
 hot paths), and `lode-server`, `lode-watch`, `lode-migrate` (operator side),
-backed by Postgres with an append-only event log for provenance. `lode hook`,
-`lode statusline`, `lode serve`, `lode watch`, and `lode migrate` survive as
-compatibility shims that exec the sibling binary, for one release only
-(WL-319). Design lives in `docs/specs/` (numbered, flat); start with
+backed by Postgres with an append-only event log for provenance. The old
+subcommand shims (hook, statusline, serve, watch, migrate) were removed
+after the first split release shipped (053 §3, WL-319). Design lives
+in `docs/specs/` (numbered, flat); start with
 `004-execution-backbone.md`; `docs/specs/index.yaml` is the generated map of
 every document's sections.
 
@@ -125,7 +125,7 @@ confirmation that needs a time uses `cli.LocalTime`, and cell formatters
 (`cli.Money`, `cli.HumanTokens`, `cli.DocNumber`, `cli.KeySuffix`) are shared,
 never re-derived. What legitimately renders in `internal/cmd` is output over
 values that never cross the API: `lode doc import`'s dry run over walked corpus
-files, `lode hook`'s list of hook names, `lode next`'s no-work guidance.
+files, `lode-hook`'s list of hook names, `lode next`'s no-work guidance.
 `internal/cmd/renderrule_test.go` catches the two tells a view has drifted back
 — a hand-built tabwriter, a hand-formatted timestamp — but it is a tripwire,
 not the rule; this paragraph is.

@@ -8,7 +8,7 @@ description: Use when adding or changing a database migration in this repo — "
 `deploy/base/migrations/`, golang-migrate, `NNNN_name.up.sql`/`.down.sql`
 pairs.
 
-They are **not** embedded in the binary or auto-applied — `lode serve` expects
+They are **not** embedded in the binary or auto-applied — `lode-server` expects
 the schema to exist (the compose `migrate` service and the K8s initContainer
 apply them).
 

@@ -79,12 +79,12 @@ Today only a deliverable can declare an address, via `artifact` on `POST
 data-platform emitter exists yet; see the doc block atop
 `internal/hooks/catalog.go` for the payload.
 
-## Kubernetes pod watcher (`lode watch`, not a webhook)
+## Kubernetes pod watcher (`lode-watch`, not a webhook)
 
 An informer, not an ingest endpoint: it watches pod status directly and
 writes `runtime_events` of kind `crashloop` or `oom` when a container's
 termination reason matches, deduped per (pod, container, kind). These are
-observability facts only — no task-state effect. `lode watch` is what a
+observability facts only — no task-state effect. `lode-watch` is what a
 cluster runs continuously; nothing about it is triggered by GitHub or Flux.
 
 ## `lode inbox import`
