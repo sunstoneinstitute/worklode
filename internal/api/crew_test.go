@@ -637,3 +637,25 @@ func validCrewRole(role string) bool {
 	}
 	return false
 }
+
+// WL-337: the roster form carries a deputy checkbox that threads through to
+// recordCrewAdd the same way lead does — a deputy added from the web shows
+// the acting-lead virtual role, and a refused submit keeps the checkbox
+// state.
+func TestAddCrewMemberFormDeputy(t *testing.T) {
+	st, h, _, _ := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	seedCrewActors(t, st, "ada")
+
+	rr := doForm(t, h, "/projects/proj/crew",
+		url.Values{"actor": {"ada"}, "role": {"editor"}, "deputy": {"1"}}, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+
+	page := doReq(t, h, "GET", "/projects/proj/crew", "", nil)
+	bodyContains(t, page.Body.String(), "Ada Person", "acting-lead")
+	if !strings.Contains(page.Body.String(), `name="deputy" type="checkbox"`) {
+		t.Fatalf("crew form is missing the deputy checkbox:\n%s", page.Body.String())
+	}
+}

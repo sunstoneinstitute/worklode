@@ -440,9 +440,10 @@ type CrewWorkItem struct {
 // menu the page offers, and the store and migration 0046's CHECK enforce the
 // same set.
 type CrewFormValues struct {
-	Actor string
-	Role  string
-	Lead  bool
+	Actor  string
+	Role   string
+	Lead   bool
+	Deputy bool
 }
 
 // CrewMember is one Crew member: an actor holding at least one role-labelled
