@@ -1,7 +1,8 @@
 ---
 status: draft
 covers:
-- docs/specs/025-documents-in-the-backbone.md#sec-11.5
+  - spec: docs/specs/025-documents-in-the-backbone.md#sec-11.5
+    coverage: partial
 ---
 # The repo-implements deriver — implementation plan
 
@@ -113,10 +114,14 @@ shipping a query that always returns nothing):
   document's current version.
 
 Surface them in `lode overview` beside the drift queries, same rendering
-conventions (`internal/cli` renderer, `--json` passthrough). Note the stale
-and orphan queries return nothing until documents project versioned snapshots
-(`wl:lastRevisedIn` lands with 025's projection work); assert the query text
-against the harness anyway so the shapes cannot rot silently.
+conventions (`internal/cli` renderer, `--json` passthrough). Note that against
+today's production graph **all four** queries return nothing: WL-289's
+document projection deliberately defers sections
+(`internal/graphproj/doc.go`), so no `wl:Section` nodes exist for the
+unimplemented-intent and coverage joins until 025's fuller projection lands
+them, and the stale and orphan queries additionally wait on versioned
+snapshots (`wl:lastRevisedIn`). Assert every query's text against the harness
+with hand-loaded fixture triples anyway so the shapes cannot rot silently.
 
 - [ ] four queries with wrappers and harness tests
 - [ ] `lode overview` renders the new sections; command catalog regenerated
