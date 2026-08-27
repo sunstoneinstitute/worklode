@@ -330,3 +330,30 @@ func TestRenderedOutputIsBounded(t *testing.T) {
 		t.Fatalf("rendered output is %d bytes", got)
 	}
 }
+
+// WL-356: the doc flavour has its own ceiling — the task-sized 64 KiB cap
+// was showing raw escaped source for 12 of the corpus's largest documents.
+func TestDocBodyRendersPastTheTaskCap(t *testing.T) {
+	// A well-formed doc body in the (64 KiB, 512 KiB] band.
+	body := "## 1. Big {#sec-1}\n\n" + strings.Repeat("A paragraph of ordinary prose.\n\n", 3000)
+	if len(body) <= 64<<10 || len(body) > 512<<10 {
+		t.Fatalf("fixture is %d bytes; want between the task and doc caps", len(body))
+	}
+
+	got := string(mdrender.DocBody(mdrender.ProjectKeys{}, body))
+	if !strings.Contains(got, `<h2 id="sec-1">`) {
+		t.Fatalf("doc body over the task cap was not rendered:\n%.300s", got)
+	}
+
+	// The same body through the task flavour still takes the oversize
+	// fallback — tasks keep the 64 KiB inbox-import bound.
+	if task := string(mdrender.Body(mdrender.ProjectKeys{}, body)); strings.Contains(task, "<h2") {
+		t.Fatalf("task flavour rendered past its cap:\n%.300s", task)
+	}
+
+	// And the doc flavour still has a ceiling of its own.
+	over := "x" + strings.Repeat("y", 512<<10)
+	if doc := string(mdrender.DocBody(mdrender.ProjectKeys{}, over)); strings.Contains(doc, "<p>") {
+		t.Fatalf("doc flavour rendered past maxDocBody")
+	}
+}

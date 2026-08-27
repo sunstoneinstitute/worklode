@@ -264,3 +264,24 @@ func TestConcurrentMissesCoalesce(t *testing.T) {
 		t.Fatalf("32 concurrent views performed %v renders; singleflight is not coalescing", n)
 	}
 }
+
+// WL-356: a doc body between the task and doc caps is rendered AND cached —
+// the point of raising the doc ceiling is that big specs pay the render once.
+func TestDocBodyBetweenCapsIsCached(t *testing.T) {
+	c, reg := newTestCache(t)
+	body := "## 1. Big {#sec-1}\n\n" + strings.Repeat("Prose here.\n\n", 6000)
+	if len(body) <= 64<<10 {
+		t.Fatalf("fixture is %d bytes; want over the task cap", len(body))
+	}
+
+	first := c.DocBody(mdrender.ProjectKeys{}, body)
+	if !strings.Contains(string(first), `<h2 id="sec-1">`) {
+		t.Fatalf("doc body was not rendered:\n%.300s", first)
+	}
+	if got := c.DocBody(mdrender.ProjectKeys{}, body); got != first {
+		t.Fatal("second read differs from the first")
+	}
+	if got := lookups(t, reg, "doc", "hit"); got != 1 {
+		t.Fatalf("got %v doc cache hits, want 1 — the body was not stored", got)
+	}
+}
