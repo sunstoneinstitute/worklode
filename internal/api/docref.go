@@ -36,11 +36,7 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
 	}
-	url := docPageURL(d.ID)
-	if d.Number != 0 {
-		url = "/docs/" + docWebRef(d, p.Key)
-	}
-	http.Redirect(w, r, url, http.StatusFound)
+	http.Redirect(w, r, docCanonicalURL(d, p.Key), http.StatusFound)
 }
 
 // resolveDocRefWeb resolves ref against every live document, using the same
