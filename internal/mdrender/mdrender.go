@@ -257,9 +257,10 @@ func buildDocPolicy() *bluemonday.Policy {
 // on purpose, because a document body being more trusted than a task body is
 // not a reason to sanitise it less.
 type flavour struct {
-	kind   string
-	md     goldmark.Markdown
-	policy *bluemonday.Policy
+	kind    string
+	md      goldmark.Markdown
+	policy  *bluemonday.Policy
+	maxBody int // per-flavour body ceiling (WL-356): tasks keep maxBody, docs get maxDocBody
 }
 
 // Body kinds, reported as the "kind" label of the cache's metrics and mixed
@@ -271,8 +272,8 @@ const (
 )
 
 var (
-	taskFlavour = flavour{kind: kindTask, md: md, policy: policy}
-	docFlavour  = flavour{kind: kindDoc, md: mdDoc, policy: docPolicy}
+	taskFlavour = flavour{kind: kindTask, md: md, policy: policy, maxBody: maxBody}
+	docFlavour  = flavour{kind: kindDoc, md: mdDoc, policy: docPolicy, maxBody: maxDocBody}
 )
 
 // maxRendered bounds what balance will emit.
@@ -357,6 +358,15 @@ func balance(fragment []byte) ([]byte, error) {
 // again on every view.
 const maxBody = 64 << 10
 
+// maxDocBody is the doc flavour's ceiling (WL-356). A design-document body
+// arrives through the doc.write-gated docs API — authored, not spec 020's
+// untrusted issue import — and the corpus's largest specs and plans are
+// routinely past the task cap (025 is 137 KB). The DoS argument is weaker
+// (permission-gated writes, and Cache pays the render once per body) but a
+// ceiling stays: 512 KiB keeps a hostile-shaped body bounded and sits under
+// maxRendered's 1 MiB output cap.
+const maxDocBody = 512 << 10
+
 // Render outcomes, reported by the cache as the "outcome" label of
 // worklode_mdrender_renders_total. outcomeOversize means the body was refused
 // before the parser saw it; outcomeFallback means the pipeline ran and one of
@@ -418,7 +428,7 @@ func render(f flavour, keys ProjectKeys, body string) (template.HTML, string) {
 	if f.kind == kindDoc {
 		body = stripFrontmatter(body)
 	}
-	if len(body) > maxBody {
+	if len(body) > f.maxBody {
 		return template.HTML(template.HTMLEscapeString(body)), outcomeOversize
 	}
 	var buf bytes.Buffer

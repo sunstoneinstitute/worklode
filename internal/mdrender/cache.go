@@ -106,7 +106,7 @@ func (c *Cache) render(f flavour, keys ProjectKeys, body string) template.HTML {
 	// cost is linear in the body and whose output is several times the body
 	// — up to the API's 1 MiB request cap — so an entry would blow the byte
 	// bound to avoid work that was never the expensive kind.
-	if len(body) > maxBody {
+	if len(body) > f.maxBody {
 		html, outcome := render(f, keys, body)
 		c.metrics.render(f.kind, outcome)
 		return html
