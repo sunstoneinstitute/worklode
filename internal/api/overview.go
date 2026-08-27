@@ -17,6 +17,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
+	"github.com/sunstoneinstitute/worklode/internal/storederive"
 )
 
 // failedOverviewRead records one overview read and, when it failed, writes
@@ -145,7 +146,7 @@ func deriveFailureStatus(err error) int {
 // which graph was replaced before the failure.
 func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, error) {
 	var out []model.DeriveResult
-	doc, err := derive.DeployTriples(ctx, s.st)
+	doc, err := storederive.DeployTriples(ctx, s.st)
 	if err != nil {
 		s.observeDeriveRun(deriveDeploy, deriveErrored)
 		return out, err
@@ -168,7 +169,11 @@ func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, e
 		s.observeDeriveRun(derivePRAffects, deriveErrored)
 		return out, err
 	}
-	doc, skipped, err := derive.PRAffectsTriples(ctx, prs, s.repoReader)
+	refs := make([]derive.PRRef, len(prs))
+	for i, pr := range prs {
+		refs[i] = derive.PRRef{Repo: pr.Repo, Number: pr.Number, TaskID: pr.TaskID}
+	}
+	doc, skipped, err := derive.PRAffectsTriples(ctx, refs, s.repoReader)
 	if err != nil {
 		s.observeDeriveRun(derivePRAffects, deriveErrored)
 		return out, err
