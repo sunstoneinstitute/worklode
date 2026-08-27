@@ -740,3 +740,26 @@ while dogfooding it against the real corpus.
   not exist yet (`store.CreateDoc`), so a `to_external` entry can become a
   link without the near document's row moving. It corrects on that document's
   next write.
+
+## From the steering-instructions final review (2026-08-25)
+
+Surfaced while applying the fix wave from the final cross-cutting review of
+`docs/plans/2026-08-25-steering-instructions.md` (`lode channel serve`, the
+stdio MCP relay that lets `lode-server` push steering instructions into a
+live supervisor session).
+
+- `[P2]` **No read/cancel surface exists for a pending instruction.** `lode
+  task instruct` can enqueue one, but there is no `lode task instructions`
+  list, no cockpit surface, and no way to see whether an instruction is still
+  pending, was delivered, or to cancel one before it is delivered. Also:
+  `EnqueueInstruction` (`internal/store/instructions.go`) only rejects a
+  soft-deleted task, so an instruction can be queued against a task already
+  in a terminal state (e.g. `delivered`, `abandoned`) whose lease will never
+  be reclaimed — it then sits pending forever with no visibility that it
+  will never be delivered.
+- `[P2]` **`lode install` has no automation for the `.mcp.json` entry or the
+  `--channels server:lode --dangerously-load-development-channels` launch
+  flags this feature needs.** Wiring a supervisor session for steering
+  instructions is entirely manual today — documented in
+  `docs/plans/2026-08-25-steering-instructions.md`, but not tracked as a
+  follow-up until now.

@@ -137,6 +137,16 @@ func TestAgentSessionEndedEventNamesTask(t *testing.T) {
 	})
 }
 
+func TestEnqueueInstructionEventNamesTask(t *testing.T) {
+	s, _ := openLeaseStore(t)
+	task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+	if _, err := s.EnqueueInstruction(t.Context(), task.ID, "stig", "check the flaky test"); err != nil {
+		t.Fatalf("enqueue instruction on %s: %v", task.ID, err)
+	}
+	wantPayload(t, s, "task.instructed", map[string]any{"task": task.ID, "actor": "stig"})
+}
+
 // TestAttributeEventToTask covers the seam the task-minting events use: the
 // id does not exist when RecordEvent marshals the payload, so apply merges
 // it into the row it just inserted, in the same transaction.

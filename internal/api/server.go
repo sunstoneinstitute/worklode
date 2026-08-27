@@ -621,6 +621,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/tasks/{id}/lease/worktree", s.rebindWorktree)
 	r.api("POST /api/v1/tasks/{id}/agent-session", s.touchAgentSession)
 	r.api("POST /api/v1/tasks/{id}/agent-session/end", s.endAgentSession)
+	r.api("POST /api/v1/tasks/{id}/instructions", s.enqueueInstruction)
+	r.api("POST /api/v1/instructions/claim", s.claimInstructions)
 	r.api("POST /api/v1/tasks/{id}/done", s.doneTask)
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
 	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)

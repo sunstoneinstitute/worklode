@@ -102,6 +102,16 @@ func TestTaskTokenScope(t *testing.T) {
 	if rr := doReq(t, h, "POST", "/api/v1/actors/sandbox/tokens", scoped, nil); rr.Code != http.StatusForbidden {
 		t.Fatalf("actor token mint via task token: status = %d, want 403", rr.Code)
 	}
+	// Steering instructions are operator writes onto a task: a task-scoped
+	// token must not message its own task, bound route or not.
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+mine+"/instructions", scoped, model.InstructionInput{Body: "do X"}); rr.Code != http.StatusForbidden {
+		t.Fatalf("instruction enqueue via task token: status = %d, want 403", rr.Code)
+	}
+	// Claim is guarded, not guardedAny: a task-scoped token must not drain
+	// instructions queued for other tasks the same actor also leases.
+	if rr := doReq(t, h, "POST", "/api/v1/instructions/claim", scoped, nil); rr.Code != http.StatusForbidden {
+		t.Fatalf("instruction claim via task token: status = %d, want 403", rr.Code)
+	}
 	// Unbound worker surface (taskScopeAny): allowed.
 	if rr := doReq(t, h, "GET", "/api/v1/tasks?project=proj", scoped, nil); rr.Code != http.StatusOK {
 		t.Fatalf("task list: status = %d, body %s", rr.Code, rr.Body.String())
