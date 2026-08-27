@@ -1259,6 +1259,18 @@ docs/plans/2026-08-25-steering-instructions.md:
     lode-channel-serve: "## `lode channel serve`"
     lode-task-instruct-id-message: "## `lode task instruct <id> <message>`"
     wiring-a-session-up-today-is-manual: "## Wiring a session up today is manual"
+docs/plans/2026-08-27-nav-shell-and-inbox.md:
+  sections:
+    global-constraints: "## Global Constraints"
+    decisions-this-plan-executes-settled-here-do-not-reopen: "## Decisions this plan executes (settled here; do not reopen)"
+    tasks: "## Tasks"
+    task-1-one-navigation-row-in-the-top-bar: "### Task 1 — One navigation row in the top bar"
+    task-2-the-task-page-carries-the-project-sidebar: "### Task 2 — The task page carries the project sidebar"
+    task-3-pure-inbox-assembly-buckets-order-membership-filter: "### Task 3 — Pure inbox assembly: buckets, order, membership filter"
+    task-4-store-readers-open-pr-reviews-org-wide-and-the-existence-check: "### Task 4 — Store readers: open PR reviews org-wide, and the existence check"
+    task-5-tracer-get-inbox: "### Task 5 — Tracer: `GET /inbox`"
+    task-6-the-inbox-indicator-on-every-page: "### Task 6 — The inbox indicator on every page"
+    task-7-e2e-and-docs-alignment: "### Task 7 — e2e and docs alignment"
 docs/plans/2026-08-27-project-cockpit-3-run-board.md:
   sections:
     coverage-why-each-level-is-what-it-is: "## Coverage: why each level is what it is"
