@@ -211,6 +211,14 @@ const (
 	// approval's own required_role, which is a per-row fact the store checks
 	// rather than a role in this table.
 	permApprovalDecide Permission = "approval.decide"
+
+	// permApprovalRead covers reading the awaiting queue (029 §7.1): GET
+	// /api/v1/approvals. Its own permission rather than a flavour of
+	// task.read, because the queue spans entity kinds — a pull request, a
+	// document — and reads across every project, which is what makes "who
+	// may see the whole review backlog" a question worth being able to
+	// answer separately from "who may read a task".
+	permApprovalRead Permission = "approval.read"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -293,6 +301,11 @@ var grants = map[Permission][]Role{
 	// Admin-only: a GC sweep deletes data on every actor's behalf, so running
 	// one is an operational act, not ordinary blob authoring.
 	permBlobAdmin: {RoleAdmin},
+
+	// Reading the queue is every authenticated actor's: an agent that has
+	// just asked for review needs to see whether it is still outstanding.
+	// Deciding is not in this table's gift alone — see permApprovalDecide.
+	permApprovalRead: {RoleUser, RoleAdmin},
 
 	permEventRead:      {RoleUser, RoleAdmin},
 	permProjectionRead: {RoleUser, RoleAdmin},

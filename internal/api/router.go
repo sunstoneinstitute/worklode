@@ -188,23 +188,32 @@ var routeGuards = map[string]routeGuard{
 	// authz.go). The accept routes are permDocWrite like the rest: whether a
 	// given actor may accept a given document is the assignee gate of 025 §7,
 	// a per-document fact the store checks, not a role.
-	"POST /api/v1/docs":                      guardedAny(permDocWrite),
-	"GET /api/v1/docs":                       guardedAny(permDocRead),
-	"GET /api/v1/docs/resolve":               guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}":                  guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}/versions":         guardedAny(permDocRead),
-	"GET /api/v1/docs/{id}/versions/{n}":     guardedAny(permDocRead),
-	"PUT /api/v1/docs/{id}/body":             guardedAny(permDocWrite),
-	"PUT /api/v1/docs/{id}/edges":            guarded(permDocImport),
-	"POST /api/v1/docs/{id}/submit":          guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/accept":          guarded(permDocWrite),
-	"POST /api/v1/docs/{id}/revise":          guardedAny(permDocWrite),
-	"PUT /api/v1/docs/{id}/revision":         guardedAny(permDocWrite),
-	"DELETE /api/v1/docs/{id}/revision":      guardedAny(permDocWrite),
-	"POST /api/v1/docs/{id}/revision/accept": guarded(permDocWrite),
+	"POST /api/v1/docs":                  guardedAny(permDocWrite),
+	"GET /api/v1/docs":                   guardedAny(permDocRead),
+	"GET /api/v1/docs/resolve":           guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}":              guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}/versions":     guardedAny(permDocRead),
+	"GET /api/v1/docs/{id}/versions/{n}": guardedAny(permDocRead),
+	"PUT /api/v1/docs/{id}/body":         guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/edges":        guarded(permDocImport),
+	"POST /api/v1/docs/{id}/submit":      guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/accept":      guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/revise":      guardedAny(permDocWrite),
+	// Asking for review is authoring, not deciding: same permission as
+	// submit, and reachable by the task-scoped token an agent writes a
+	// document under.
+	"POST /api/v1/docs/{id}/request-approval": guardedAny(permDocWrite),
+	"PUT /api/v1/docs/{id}/revision":          guardedAny(permDocWrite),
+	"DELETE /api/v1/docs/{id}/revision":       guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/revision/accept":  guarded(permDocWrite),
 	// The document half of 044 §5; see the task entries above.
 	"DELETE /api/v1/docs/{id}":        guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
+
+	// --- approvals (spec 029 §7) --------------------------------------------
+	// Read-only. Deciding is not on the JSON API at all: 029 §7.3 makes it a
+	// web-session act, and its route is "POST /approvals/{id}/decide" above.
+	"GET /api/v1/approvals": guarded(permApprovalRead),
 
 	// --- skills --------------------------------------------------------------
 	"GET /api/v1/skills":                       guardedAny(permSkillRead),

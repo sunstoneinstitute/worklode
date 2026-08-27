@@ -644,11 +644,16 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/docs/{id}/submit", s.submitDoc)
 	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
 	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
+	r.api("POST /api/v1/docs/{id}/request-approval", s.requestDocApproval)
 	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)
 	r.api("DELETE /api/v1/docs/{id}/revision", s.discardDocRevision)
 	r.api("POST /api/v1/docs/{id}/revision/accept", s.acceptDocRevision)
 	r.api("DELETE /api/v1/docs/{id}", s.deleteDoc)
 	r.api("POST /api/v1/docs/{id}/undelete", s.undeleteDoc)
+
+	// Requesting and listing only. Deciding is web-session-gated
+	// (029 §7.3) and lives at POST /approvals/{id}/decide; see approvals.go.
+	r.api("GET /api/v1/approvals", s.listApprovals)
 
 	r.api("GET /api/v1/skills", s.listSkills)
 	r.api("GET /api/v1/skills/{name}", s.getSkill)
