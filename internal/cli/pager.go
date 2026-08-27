@@ -17,12 +17,14 @@ import (
 // watching the terminal makes no sense, and scripts must never end up
 // blocking on a pager waiting for a keypress that will never come.
 //
-// If stdout IS a terminal but the chosen pager can't actually be started
-// (nothing in $PAGER or "less" resolves on $PATH), Pager prints one note to
-// stderr and returns (nil, no-op) so the caller falls back to printing
-// directly rather than losing the output.
-//
 // Callers must treat a nil writer as "use my existing output unchanged."
+//
+// The external pager is exec'd lazily, on the first byte written, so a
+// command that fails before producing any output prints its error and exits
+// without ever launching an empty pager (WL-331). A pager that turns out to
+// be unstartable at that point (nothing in $PAGER or "less" resolves on
+// $PATH) prints one note to stderr and the writer falls back to printing
+// directly rather than losing the output.
 func Pager(enabled bool) (io.Writer, func()) {
 	if !enabled {
 		return nil, func() {}
@@ -31,30 +33,63 @@ func Pager(enabled bool) (io.Writer, func()) {
 	if !isTTY {
 		return nil, func() {}
 	}
-	w, cleanup, err := startPager(pagerArgv(), os.Stdout, os.Stderr)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "lode: pager unavailable (%v); printing directly\n", err)
-		return nil, func() {}
+	l := &lazyPager{
+		ttyFd:    uintptr(fd),
+		start:    func() (io.Writer, func(), error) { return startPager(pagerArgv(), os.Stdout, os.Stderr) },
+		fallback: os.Stdout,
+		note:     os.Stderr,
 	}
-	return pagerWriter{Writer: w, ttyFd: uintptr(fd)}, cleanup
+	return l, l.cleanup
 }
 
-// pagerWriter wraps a pager subprocess's stdin pipe so callers that
-// TTY-detect their writer (terminalFd, used by Markdown and the table/
-// render width-fitting) see the real terminal's fd instead of the pipe's.
-// The pipe itself is never a terminal, but everything written to it is
-// ultimately displayed on one via the pager — content should render (style,
-// word-wrap) exactly as it would writing directly to that terminal.
-type pagerWriter struct {
-	io.Writer
-	ttyFd uintptr
+// lazyPager defers exec'ing the external pager to the first byte written:
+// an error path that renders nothing never launches a pager with nothing to
+// show (WL-331). It also plays the old pagerWriter's role — Fd() reports the
+// real terminal's fd rather than the pipe's, so callers that TTY-detect
+// their writer (terminalFd, used by Markdown and the table/render
+// width-fitting) style and word-wrap exactly as they would writing directly
+// to that terminal.
+type lazyPager struct {
+	ttyFd    uintptr
+	start    func() (io.Writer, func(), error)
+	fallback io.Writer // where writes land when the pager cannot start
+	note     io.Writer // stderr, for the one pager-unavailable note
+
+	started bool
+	w       io.Writer
+	stop    func()
 }
 
-func (w pagerWriter) Fd() uintptr { return w.ttyFd }
+func (l *lazyPager) Write(p []byte) (int, error) {
+	if !l.started {
+		l.started = true
+		w, stop, err := l.start()
+		if err != nil {
+			// Discovered at first write now, since that is when the exec
+			// happens; same fallback the eager version had at setup time.
+			fmt.Fprintf(l.note, "lode: pager unavailable (%v); printing directly\n", err)
+			l.w = l.fallback
+		} else {
+			l.w, l.stop = w, stop
+		}
+	}
+	return l.w.Write(p)
+}
+
+func (l *lazyPager) Fd() uintptr { return l.ttyFd }
+
+// cleanup stops the pager if one was ever started; with no writes it is a
+// no-op, which is the whole point.
+func (l *lazyPager) cleanup() {
+	if l.stop != nil {
+		l.stop()
+		l.stop = nil
+	}
+}
 
 // pagerArgv is the pager command line: $PAGER's fields when set to a
 // non-blank value, else "less -R". Content reaching the pager's stdin is
-// already ANSI-styled by cli.Markdown's rendering (pagerWriter makes
+// already ANSI-styled by cli.Markdown's rendering (the lazy writer makes
 // the writer report the real terminal's fd, so Markdown styles and
 // word-wraps exactly as it would writing directly to that terminal); -R lets
 // less pass those escape codes through to the terminal instead of showing
