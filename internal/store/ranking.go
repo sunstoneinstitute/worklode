@@ -13,12 +13,17 @@ import (
 )
 
 // BlockingFanOut returns, for every task that blocks at least one other task,
-// the transitive count of distinct tasks it unblocks over 'blocks' edges. A
-// task absent from the returned map has fan-out 0. The count is unit-weight
-// over all 'blocks' edges regardless of the blocked task's state (matches
-// spec D12; this deliberately does not filter by blocked-task state).
+// the transitive count of distinct OPEN tasks it unblocks over 'blocks'
+// edges. A task absent from the returned map has fan-out 0. The closure
+// itself walks every live 'blocks' edge — a closed intermediate does not cut
+// an open dependent off from its root — but the count keeps only open tasks
+// (the taskClosed predicate, per-repo done_state and all): spec 007 §4's
+// closed-task rule (WL-354). "How much work t unblocks when done" is about
+// remaining work, and this map feeds both claim-next's sort key and the
+// overview surfaces, so counting finished dependents would inflate pickup
+// priority for no benefit.
 //
-// It does filter tombstoned tasks off both ends of every edge (044 §4): the
+// It also filters tombstoned tasks off both ends of every edge (044 §4): the
 // count is a ranking input, and a deleted task neither waits on anything nor
 // lends weight to whatever blocks it.
 func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
@@ -33,7 +38,11 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 		    FROM closure c JOIN task_edges e ON e.from_task = c.task AND e.type = 'blocks'
 		      JOIN tasks b ON b.id = e.to_task AND b.deleted_at IS NULL
 		)
-		SELECT root, COUNT(DISTINCT task) FROM closure GROUP BY root`)
+		SELECT c.root, COUNT(DISTINCT c.task)
+		  FROM closure c
+		  JOIN tasks bt ON bt.id = c.task
+		 WHERE NOT `+taskClosed("bt")+`
+		 GROUP BY c.root`)
 	if err != nil {
 		return nil, fmt.Errorf("blocking fan-out: %w", err)
 	}

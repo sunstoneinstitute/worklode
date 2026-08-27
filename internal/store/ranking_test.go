@@ -673,3 +673,53 @@ func TestPlanBlockedIgnoresTasksWithoutPlan(t *testing.T) {
 		t.Fatalf("IsBlocked(%s): want true, the fixture's plan-blocked task", blocked[0])
 	}
 }
+
+// WL-354: fan-out counts only open dependents (spec 007 §4's closed-task
+// rule). A closed intermediate still connects its open dependents to the
+// root, but finished work lends no weight.
+func TestBlockingFanOutCountsOnlyOpenTasks(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	a := createTask(t, s, taskTestNow, defaultTaskInput())
+	b := createTask(t, s, taskTestNow, defaultTaskInput())
+	c := createTask(t, s, taskTestNow, defaultTaskInput())
+	for _, e := range [][2]string{{a.ID, b.ID}, {b.ID, c.ID}} {
+		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
+			t.Fatalf("AddEdge: %v", err)
+		}
+	}
+
+	fan, err := s.BlockingFanOut(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fan[a.ID] != 2 || fan[b.ID] != 1 {
+		t.Fatalf("open chain: fan = a:%d b:%d, want 2/1", fan[a.ID], fan[b.ID])
+	}
+
+	// Close the middle task: a's count drops to the one open dependent it
+	// still transitively unblocks, reached through the closed intermediate.
+	walkTo(t, s, b.ID, "merged")
+	fan, err = s.BlockingFanOut(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fan[a.ID] != 1 || fan[b.ID] != 1 {
+		t.Fatalf("b closed: fan = a:%d b:%d, want 1/1", fan[a.ID], fan[b.ID])
+	}
+
+	// Close the tail too: the whole downstream is finished work, so both
+	// roots vanish from the map — the exact live case WL-354 reports.
+	walkTo(t, s, c.ID, "merged")
+	fan, err = s.BlockingFanOut(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := fan[a.ID]; ok {
+		t.Fatalf("fully closed downstream: a still has fan-out %d", fan[a.ID])
+	}
+	if _, ok := fan[b.ID]; ok {
+		t.Fatalf("fully closed downstream: b still has fan-out %d", fan[b.ID])
+	}
+}
