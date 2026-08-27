@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -68,23 +69,43 @@ func OpenUnmigratedTestStore(t *testing.T) *Store {
 	return openTestDB(t, dbName)
 }
 
-// adminConnForTest opens a connection to the admin (default) database used
-// to create/drop per-test databases, skipping the test if Postgres is
-// unreachable and CI is not set.
+// adminOnce/adminDB/adminErr memoize the admin pool for the lifetime of the
+// test binary (WL-352): opening, pinging, and closing a fresh pool per test
+// was a full Postgres handshake of pure waste — ~8ms idle and ~26ms under
+// suite load — on each of the ~1200 OpenTestStore calls across the suite.
+// The unreachable outcome is memoized too, so every test skips (or fails,
+// under CI) the way the first one did. Nothing closes the pool; process
+// exit does.
+var (
+	adminOnce sync.Once
+	adminDB   *sql.DB
+	adminErr  error
+)
+
+// adminConnForTest returns the process-wide connection pool to the admin
+// (default) database used to create/drop per-test databases, skipping the
+// test if Postgres is unreachable and CI is not set.
 func adminConnForTest(t *testing.T) *sql.DB {
 	t.Helper()
-	admin, err := sql.Open("pgx", TestDSN())
-	if err == nil {
-		err = admin.Ping()
-	}
-	if err != nil {
-		if os.Getenv("CI") == "" {
-			t.Skipf("postgres unreachable at %s: %v", TestDSN(), err)
+	adminOnce.Do(func() {
+		adminDB, adminErr = sql.Open("pgx", TestDSN())
+		if adminErr == nil {
+			adminErr = adminDB.Ping()
 		}
-		t.Fatalf("postgres unreachable at %s: %v", TestDSN(), err)
+		if adminErr == nil {
+			// Keep a few connections warm: database/sql's default of two
+			// idle conns would close the rest after each burst of parallel
+			// tests, reintroducing the handshake this pool exists to avoid.
+			adminDB.SetMaxIdleConns(8)
+		}
+	})
+	if adminErr != nil {
+		if os.Getenv("CI") == "" {
+			t.Skipf("postgres unreachable at %s: %v", TestDSN(), adminErr)
+		}
+		t.Fatalf("postgres unreachable at %s: %v", TestDSN(), adminErr)
 	}
-	t.Cleanup(func() { admin.Close() })
-	return admin
+	return adminDB
 }
 
 func randomDBName(t *testing.T, prefix string) string {
@@ -271,11 +292,22 @@ func buildOrFindTemplate(admin *sql.DB, migrationsDir string) (string, error) {
 		return "", err
 	}
 
+	// pg_advisory_lock is session-scoped, so the lock and unlock must run on
+	// the same connection. Through the pool they might not — the per-test
+	// pools this code used to get made that unlikely, but the shared admin
+	// pool (WL-352) makes it routine — so pin one *sql.Conn for the lock's
+	// lifetime. Everything else below can keep using the pool.
 	lockKey := advisoryLockKey(name)
-	if _, err := admin.Exec("SELECT pg_advisory_lock($1)", lockKey); err != nil {
+	ctx := context.Background()
+	lockConn, err := admin.Conn(ctx)
+	if err != nil {
+		return "", fmt.Errorf("dedicated template-lock connection: %w", err)
+	}
+	defer lockConn.Close()
+	if _, err := lockConn.ExecContext(ctx, "SELECT pg_advisory_lock($1)", lockKey); err != nil {
 		return "", fmt.Errorf("acquire template lock: %w", err)
 	}
-	defer admin.Exec("SELECT pg_advisory_unlock($1)", lockKey)
+	defer lockConn.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockKey)
 
 	// Re-check existence inside the lock: another process may have built
 	// this exact template (same migration hash) while we waited for it.
