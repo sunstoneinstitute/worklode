@@ -1283,3 +1283,9 @@ docs/plans/2026-08-27-project-cockpit-3-run-board.md:
     task-5-the-board-page-templ-component-and-stylesheet: "### Task 5 — The board page: templ component and stylesheet"
     task-6-tracer-get-projectsidwork: "### Task 6 — Tracer: `GET /projects/{id}/work`"
     task-7-e2e-and-docs-alignment: "### Task 7 — e2e and docs alignment"
+docs/plans/2026-08-27-prose-details-and-mark.md:
+  sections:
+    global-constraints: "## Global constraints"
+    tasks: "## Tasks"
+    task-1-prose-mark-on-the-warn-pair-held-to-aa: "### Task 1 — `.prose mark` on the warn pair, held to AA"
+    task-2-prose-details-and-prose-summary: "### Task 2 — `.prose details` and `.prose summary`"
