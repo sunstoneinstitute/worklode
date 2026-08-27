@@ -191,11 +191,20 @@ func installClaudeHooks(path string) error {
 	return installGroupedHooks(path, claudeBindings)
 }
 
-// PropagateToWorktree mirrors root's local-scope Claude Code
-// bindings — and, if it is ours, the status line — into a freshly created
-// worktree at dir. Local scope is a developer's own opt-in file
-// (settings.local.json), and git does not track it, so a linked worktree's
-// own checkout never receives it the way it inherits committed settings.
+// PropagateToWorktree gives a freshly created worktree at dir the
+// local-scope Claude Code settings its root already has. Local scope is a
+// developer's own opt-in file (settings.local.json), and git does not track
+// it, so a linked worktree's own checkout never receives it the way it
+// inherits committed settings — it starts empty, and an agent working there
+// gets none of the repo's hooks, permissions or enabled plugins.
+//
+// Root's other local settings are carried over key by key, and only for keys
+// the worktree does not already set: a worktree that has since diverged keeps
+// its own choices, so this converges rather than stomping on re-run. Worklode's
+// own bindings are then applied on top, which is what makes a re-run repair a
+// worktree whose hooks were removed. The status line is not carried over —
+// see the note at the copy.
+//
 // This only ever mirrors a choice the developer already made at root: a repo
 // where `lode install` was never run locally is left alone, so `lode next`
 // never opts a worktree into Claude Code hooks on its own.
@@ -218,6 +227,23 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 	settings, err := ReadJSONFile(dirPath)
 	if err != nil {
 		return err
+	}
+	// Everything else root sets locally — permissions, enabled plugins, env,
+	// the developer's own hooks — is what an agent in the worktree would
+	// otherwise be missing. Copied only where the worktree is silent, so its
+	// own edits survive.
+	//
+	// statusLine is the one key held back: it is a slot that holds exactly
+	// one command, and applyStatusLine below refuses to take one the user
+	// chose. Copying a foreign status line here would install through the
+	// back door what that rule exists to protect.
+	for k, v := range rootSettings {
+		if k == "statusLine" {
+			continue
+		}
+		if _, ok := settings[k]; !ok {
+			settings[k] = v
+		}
 	}
 	applyGroupedHooks(settings, claudeBindings)
 	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {

@@ -110,6 +110,47 @@ func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsVie
 	}
 }
 
+// agentSessionRows maps a task's agent sessions into rendered rows. The times
+// are formatted here, not in internal/ui: ui takes pre-formatted rows and has
+// no clock, and FmtAge is the phrasing every relative age on the cockpit
+// already uses (ui.FmtAge).
+func agentSessionRows(sessions []model.AgentSession, now time.Time) []ui.AgentSessionRow {
+	out := make([]ui.AgentSessionRow, 0, len(sessions))
+	for _, a := range sessions {
+		out = append(out, agentSessionRow(a, now))
+	}
+	return out
+}
+
+// agentSessionRow maps one session. The opaque session id is deliberately not
+// carried: it addresses a row in the API and no page renders it, and a view
+// field nothing reads is how a page grows fields that quietly stop being true.
+func agentSessionRow(a model.AgentSession, now time.Time) ui.AgentSessionRow {
+	return ui.AgentSessionRow{
+		Agent:        a.Agent,
+		AgentVersion: a.AgentVersion,
+		Started:      ui.FmtAge(a.StartedAt, now),
+		LastSeen:     ui.FmtAge(a.LastSeenAt, now),
+		Running:      a.EndedAt == nil,
+	}
+}
+
+// projectAgentSessionRows is agentSessionRows for the cockpit, where a session
+// has to name the task it is on — the project page lists work from every task,
+// so a row without one places nothing.
+func projectAgentSessionRows(sessions []store.ProjectAgentSession, now time.Time) []ui.AgentSessionRow {
+	out := make([]ui.AgentSessionRow, 0, len(sessions))
+	for _, p := range sessions {
+		row := agentSessionRow(p.AgentSession, now)
+		row.ActorID = p.ActorID
+		row.Task = p.TaskID
+		row.TaskTitle = p.TaskTitle
+		row.TaskURL = "/tasks/" + p.TaskID
+		out = append(out, row)
+	}
+	return out
+}
+
 // timelineRows maps a task's timeline entries into rendered rows via
 // summarizeEntry (which stays in api: internal/ui takes pre-formatted rows,
 // not the raw entries).

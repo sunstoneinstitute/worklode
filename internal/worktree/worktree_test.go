@@ -846,3 +846,84 @@ func TestContainsResolvesSymlinks(t *testing.T) {
 		t.Errorf("Contains(%q, %q) = false; the symlinked root names the same directory", link, inside)
 	}
 }
+
+// The agent host (docs/self-hosted-runner.md) gives each unattended worker its
+// own linked worktree at agents/<id>, off one shared .git, so several agents
+// never contend over a single working tree. That layout only works because
+// `lode next` treats "am I already in a task worktree?" as a question about
+// the path — exactly one segment below the configured base — rather than
+// "am I the main checkout?".
+//
+// A worker's base worktree is not under the base, so it answers no and
+// `lode next` proceeds there. Tightening this guard to compare against
+// MainRoot would silently strand every agent on the host, so it is pinned
+// here rather than left to the guard's current wording.
+func TestTaskIDIsFalseForAWorktreeOutsideTheBase(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	agent := filepath.Join(dir, "agents", "gha-agent1")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "add",
+		"-b", "agent-main/gha-agent1", agent).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+
+	root, ok := worktree.Root(agent)
+	if !ok {
+		t.Fatalf("Root(%s) = not a repo", agent)
+	}
+	// EvalSymlinks because --show-toplevel resolves them and t.TempDir() is
+	// behind one on macOS.
+	want, err := filepath.EvalSymlinks(agent)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", agent, err)
+	}
+	if root != want {
+		t.Fatalf("Root(%s) = %s, want %s — the linked worktree's own root, "+
+			"not the main checkout", agent, root, want)
+	}
+	if id, ok := mustLayout(t).TaskID(root); ok {
+		t.Fatalf("TaskID(%s) = (%q, true), want ok=false: an agent's base worktree "+
+			"is not a task worktree, and `lode next` must run there", root, id)
+	}
+}
+
+// The other half of the same contract: a task worktree created from inside an
+// agent's base worktree still resolves, even though it is nested two worktrees
+// deep. `lode next` run in agents/<id> creates agents/<id>/.worktrees/<branch>,
+// and every hook that fires there has to recognise it.
+func TestTaskIDResolvesInsideANestedAgentWorktree(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := worktree.EnableWorktreeConfigExtension(dir); err != nil {
+		t.Fatalf("EnableWorktreeConfigExtension: %v", err)
+	}
+	agent := filepath.Join(dir, "agents", "gha-agent1")
+	if out, err := exec.Command("git", "-C", dir, "worktree", "add",
+		"-b", "agent-main/gha-agent1", agent).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	task := filepath.Join(agent, worktree.DefaultBase, "WL-7-fix-thing")
+	if out, err := exec.Command("git", "-C", agent, "worktree", "add",
+		"-b", "WL-7-fix-thing", task).CombinedOutput(); err != nil {
+		t.Fatalf("nested git worktree add: %v\n%s", err, out)
+	}
+
+	id, ok := mustLayout(t).TaskID(task)
+	if !ok || id != "WL-7" {
+		t.Fatalf("TaskID(%s) = (%q, %v), want (WL-7, true)", task, id, ok)
+	}
+	// Distinct identities are what keep two agents' leases from colliding on
+	// the (actor_id, worktree) uniqueness the backbone enforces.
+	agentID, err := worktree.Identity(agent)
+	if err != nil {
+		t.Fatalf("Identity(agent): %v", err)
+	}
+	taskID, err := worktree.Identity(task)
+	if err != nil {
+		t.Fatalf("Identity(task): %v", err)
+	}
+	if agentID == taskID {
+		t.Fatalf("Identity is %q for both the agent worktree and its task worktree", agentID)
+	}
+}
