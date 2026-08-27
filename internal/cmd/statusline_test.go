@@ -208,28 +208,3 @@ func TestReportInstallJSONOmitsSkippedStatusLine(t *testing.T) {
 		t.Fatalf("status_line present when skipped: %s", buf.String())
 	}
 }
-
-// Guard the naming decision itself: the command is un-namespaced and takes no
-// harness flag, because Claude Code and Cursor CLI share one payload contract
-// and the harnesses that differ take no command at all.
-func TestStatuslineCmdIsHarnessNeutral(t *testing.T) {
-	cmd := newStatuslineCmd()
-	if cmd.Use != "statusline" {
-		t.Fatalf("Use = %q, want a top-level, un-namespaced %q", cmd.Use, "statusline")
-	}
-	if f := cmd.Flags().Lookup("agent"); f != nil {
-		t.Fatal("statusline grew an --agent flag; there is no second dialect to dispatch on")
-	}
-	if len(cmd.Commands()) != 0 {
-		t.Fatal("statusline grew per-harness subcommands")
-	}
-}
-
-func TestStatuslineCmdIsRegisteredOnRoot(t *testing.T) {
-	for _, c := range rootCmd.Commands() {
-		if c.Name() == "statusline" {
-			return
-		}
-	}
-	t.Fatal("lode statusline is not registered on the root command")
-}

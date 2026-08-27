@@ -9,7 +9,11 @@ import (
 // comments, so the command itself is the marker. legacyLodeHookPrefix stays
 // recognized so upgrades and uninstall remove bindings from older releases.
 const (
-	lodeHookPrefix       = "lode-hook "
+	lodeHookPrefix = "lode-hook "
+	// legacyLodeHookPrefix outlives the removed `lode hook` shim (WL-319)
+	// deliberately: it is what lets upgrade/uninstall recognise and replace
+	// bindings written by a pre-split installation. Remove it only when no
+	// installation can still carry them.
 	legacyLodeHookPrefix = "lode hook "
 )
 

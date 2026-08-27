@@ -27,9 +27,8 @@ import (
 // LODE_SERVER/LODE_TOKEN and t.Chdir'd into the directory the command should
 // run from.
 //
-// The stdin swap matters for `lode hook`, which reads its payload from
-// stdin: git gives a hook no payload, and a test binary's inherited stdin
-// may be anything at all.
+// The stdin swap keeps a command that reads stdin from consuming whatever
+// the test binary inherited.
 func runLodeCLI(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	oldArgs := os.Args
