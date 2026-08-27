@@ -596,3 +596,50 @@ func TestParticipantRolesMatchMigration(t *testing.T) {
 		}
 	}
 }
+
+// addDeputyTo adds one deputy-designated member.
+func addDeputyTo(t *testing.T, s *Store, projectID, actor, role string) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "crew.member_added", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return AddParticipant(tx, s.Now(), projectID, actor, role, false, true, actor, eventID)
+		})
+	return err
+}
+
+// WL-338: the deputy sorts right after the lead, ahead of ordinary members
+// whose added_at would otherwise place them earlier.
+func TestListParticipantsSortsDeputyAfterLead(t *testing.T) {
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateProject(ctx, "p1", "P1", "LP1"); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"ada", "bob", "dana"} {
+		if err := s.CreateActor(ctx, a, "human", a, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// bob (ordinary) joins first, dana (deputy) last: added_at alone would
+	// put bob second.
+	seedParticipant(t, s, "p1", "ada", "editor", true)
+	seedParticipant(t, s, "p1", "bob", "member", false)
+	if err := addDeputyTo(t, s, "p1", "dana", "member"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListParticipants(ctx, "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, p := range got {
+		order = append(order, p.ActorID)
+	}
+	want := []string{"ada", "dana", "bob"}
+	if !slices.Equal(order, want) {
+		t.Fatalf("roster order = %v, want %v (lead, deputy, then members)", order, want)
+	}
+}
