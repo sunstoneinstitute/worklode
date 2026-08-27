@@ -1024,3 +1024,33 @@ func TestProjectionFailureTable(t *testing.T) {
 		}
 	}
 }
+
+// TestApprovalTableNamesWhoItAwaits: the queue's whole job is saying who is
+// blocking what, and required_actor_name is a nullable column — a lane whose
+// actor has no display name must still name the actor, and a role-scoped lane
+// must name the role.
+func TestApprovalTableNamesWhoItAwaits(t *testing.T) {
+	at := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	name, actor, role := "Bob Reviewer", "carol", "reviewers"
+	var buf bytes.Buffer
+	ApprovalTable(&buf, []model.AwaitingApproval{
+		{Approval: model.Approval{ID: 1, EntityKind: "doc", EntityID: "doc:9",
+			SubjectRevision: "3", RequiredActor: &actor, State: "awaiting", CreatedAt: at},
+			Title: "Approvals for documents", Project: "worklode",
+			RequiredActorName: &name},
+		{Approval: model.Approval{ID: 2, EntityKind: "doc", EntityID: "doc:9",
+			SubjectRevision: "3", RequiredActor: &actor, State: "awaiting", CreatedAt: at},
+			Title: "Approvals for documents", Project: "worklode"},
+		{Approval: model.Approval{ID: 3, EntityKind: "pr", EntityID: "acme/site#7",
+			SubjectRevision: "abc", RequiredRole: &role, State: "awaiting", CreatedAt: at},
+			Title: "Fix the thing", Project: "worklode"},
+	})
+	out := buf.String()
+	for _, want := range []string{"ID", "KIND", "AWAITING", "PROJECT", "REQUESTED", "TITLE",
+		"doc", "pr", "Bob Reviewer", "carol", "reviewers", "worklode",
+		"Approvals for documents", "Fix the thing"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ApprovalTable output missing %q:\n%s", want, out)
+		}
+	}
+}

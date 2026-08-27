@@ -1,0 +1,52 @@
+package model
+
+import "time"
+
+// Approval is one row of the approvals table (spec 029 §7.1): the human
+// decision one entity revision is waiting on, or the settled record of one.
+// internal/store aliases this type rather than declaring its own, so the
+// queue reader scans into the shape internal/api serializes (ADR 036 §2).
+type Approval struct {
+	ID              int64      `json:"id"`
+	EntityKind      string     `json:"entity_kind"`
+	EntityID        string     `json:"entity_id"`
+	SubjectRevision string     `json:"subject_revision"`
+	RequiredRole    *string    `json:"required_role,omitempty"`
+	RequiredActor   *string    `json:"required_actor,omitempty"`
+	ResolvingActor  *string    `json:"resolving_actor,omitempty"`
+	State           string     `json:"state"`
+	CreatedAt       time.Time  `json:"created_at"`
+	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+}
+
+// AwaitingApproval is one row of the awaiting queue: the approval plus what a
+// person needs to act on it. The entity fields are kind-neutral — Title/URL/
+// Author are the PR's for a 'pr' row and the document's for a 'doc' row — so
+// the queue does not grow a parallel set of columns per kind. Every one of
+// them, Task included, is "" when the row's kind does not carry it: a
+// document hangs off its project directly, with no task in between.
+type AwaitingApproval struct {
+	Approval
+	Title             string  `json:"title"`
+	URL               string  `json:"url"`
+	Author            string  `json:"author,omitempty"`
+	Task              string  `json:"task,omitempty"`
+	Project           string  `json:"project,omitempty"`
+	ProjectName       string  `json:"project_name,omitempty"`
+	RequiredActorName *string `json:"required_actor_name,omitempty"`
+}
+
+// ApprovalListResponse is the response body of GET /api/v1/approvals.
+type ApprovalListResponse struct {
+	Approvals []AwaitingApproval `json:"approvals"`
+}
+
+// RequestApprovalInput is the body of POST
+// /api/v1/docs/{id}/request-approval: the actors whose approval the
+// document's current version needs (025 §7.3). One awaiting lane is opened
+// per reviewer. There is no version field — a review request is always
+// against the version the document is at now, and re-requesting at that same
+// version is a no-op.
+type RequestApprovalInput struct {
+	Reviewers []string `json:"reviewers"`
+}
