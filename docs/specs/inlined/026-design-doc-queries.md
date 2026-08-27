@@ -459,12 +459,25 @@ or the bare number `3`, which is expanded to `sec-3`.
 a document slug (`design-doc-queries` — the name the `lode doc` verbs resolve, so the two
 readers cannot disagree about what a name means), or
 025 §14.3's shorthand (`WL-SPEC-25`, and `WL-SPEC-25#sec-9` as sugar for `--section sec-9`)
-that matches exactly one document; an ambiguous ref is an error listing the candidates.
-A bare number is always a task id at the `lode show` surface; a document by bare number is
-spelled with a kind flag (`--spec 25`) or the shorthand.
+that matches exactly one document; an ambiguous ref is an error listing the candidates. The
+candidates of an ambiguous ref are the documents that bear the name asked for and nothing
+else: a number-led slug (`001-zero-trust-gateway`) names the document whose slug it is, and
+where no document carries that slug the ref names none — the corpus's own documents sharing
+the leading number are not candidates for a name none of them has (WL-358).
+
+**A bare number is the one ref form that is not universal, and deliberately.** It is a task
+id at the `lode show` surface and a document id at the `lode doc <verb>` surface, because
+both surfaces are reached far more often by id than by corpus number; in the ref grammar
+itself it is a corpus number, which 029 §4 makes per kind, so `26` naming both a spec and a
+plan is a real ambiguity rather than a resolver defect. A document by bare number is
+therefore spelled with a kind flag (`--spec 25`) or the shorthand. Every other form — a
+path, a filename, a slug, a number-led slug, the shorthand — resolves identically on all
+four surfaces (`lode show`, `lode doc todo`, `lode doc get`, `lode doc versions`).
 A shorthand naming another project resolves against that project's backbone docs — §4.2's
 tier 2, live since 025 landed (WL-276); only a key no registered project carries is reported
-unresolved. Without
+unresolved. A ref carrying no key has no tier of its own: where the current project's
+documents hold nothing by that name, it resolves against the org's, so the surface a ref is
+typed at never changes which corpus answers it. Without
 `--resolved` this is `cat` with ref resolution, which is worth having only because it takes
 the same ref forms as everything else.
 
