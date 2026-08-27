@@ -88,11 +88,12 @@ templ Doc(v DocView) {
 					<div class="bd">
 						@tableWrap("Versions") {
 							<table>
-								<tr><th>Version</th><th>Title</th><th>Created at</th></tr>
+								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Created at</th></tr>
 								for _, ver := range v.Versions {
 									<tr>
 										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
 										<td><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Title }</a></td>
+										<td class="mono">{ ver.Issued }</td>
 										<td class="mono">{ fmtTime(ver.CreatedAt) }</td>
 									</tr>
 								}

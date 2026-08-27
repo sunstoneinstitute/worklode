@@ -763,3 +763,11 @@ live supervisor session).
   instructions is entirely manual today — documented in
   `docs/plans/2026-08-25-steering-instructions.md`, but not tracked as a
   follow-up until now.
+
+Recorded by WL-347's housekeeping pass over the doc-version-history plan:
+
+- `[P4]` **Version-to-version document diffing is deliberately out of scope.**
+  `lode doc versions` and `/docs/versions/{id}/{n}` show whole snapshots; a
+  diff between two versions was declined by the doc-version-history plan and
+  025 §4.5 (versions are immutable snapshots read whole). Check here before
+  filing a diffing feature request as new.
