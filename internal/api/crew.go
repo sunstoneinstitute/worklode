@@ -179,11 +179,12 @@ func (s *server) addCrewMemberFromForm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	values := ui.CrewFormValues{
-		Actor: strings.TrimSpace(r.PostFormValue("actor")),
-		Role:  strings.TrimSpace(r.PostFormValue("role")),
-		Lead:  r.PostFormValue("lead") != "",
+		Actor:  strings.TrimSpace(r.PostFormValue("actor")),
+		Role:   strings.TrimSpace(r.PostFormValue("role")),
+		Lead:   r.PostFormValue("lead") != "",
+		Deputy: r.PostFormValue("deputy") != "",
 	}
-	if _, err := s.recordCrewAdd(ctx, "web", project.ID, values.Actor, values.Role, values.Lead, false, actorIDFrom(r)); err != nil {
+	if _, err := s.recordCrewAdd(ctx, "web", project.ID, values.Actor, values.Role, values.Lead, values.Deputy, actorIDFrom(r)); err != nil {
 		s.observeCrewChange("web", "add", crewOutcome(err))
 		s.observeFormSubmission("crew_add", formOutcome(err))
 		// A refused add is about what was typed — an unknown actor id, a
