@@ -95,7 +95,7 @@ lode timeline <id>                      # full history: states, PRs, CI, deploys
 lode doc new --kind spec --slug <slug> --file <draft.md>   # kind: spec, adr, plan
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
-lode doc get <id-or-slug> --json        # body, sections, edges
+lode doc get <ref> --json        # body, sections, edges
 lode doc todo <slug> --deps             # one spec's remaining work, recursively
 lode doc submit <id>
 lode doc accept <id>

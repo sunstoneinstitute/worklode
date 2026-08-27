@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -1801,5 +1802,56 @@ func TestDocResponsesCarryTheProjectKey(t *testing.T) {
 	// must not have cost them it.
 	if list.Docs[0].ID == 0 {
 		t.Error("list response dropped the integer id, which --json still carries")
+	}
+}
+
+// TestResolveDocRefFullGrammar is WL-358: the resolve endpoint behind every
+// `lode doc <verb> <ref>` must accept the same 026 §3 grammar `lode show`
+// resolves — the <KEY>-<TYPE>-<n> shorthand included — not just id and exact
+// slug, or no single ref form works across the doc surfaces.
+func TestResolveDocRefFullGrammar(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25, Slug: "025-x", Body: docSpecBody,
+	})
+
+	for _, ref := range []string{
+		"WL-SPEC-25",          // 025 §14.3 shorthand
+		"docs/specs/025-x.md", // corpus path
+		"25",                  // bare corpus number, unique here
+	} {
+		rr := doReq(t, h, "GET", "/api/v1/docs/resolve?ref="+url.QueryEscape(ref), token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("resolve %q: status = %d, body %s", ref, rr.Code, rr.Body.String())
+		}
+		var got model.Doc
+		decodeInto(t, rr, &got)
+		if got.ID != spec.ID {
+			t.Errorf("resolve %q = %d, want %d", ref, got.ID, spec.ID)
+		}
+		if got.Body != "" {
+			t.Errorf("resolve %q carries a body of %d bytes, want none", ref, len(got.Body))
+		}
+	}
+
+	// A shorthand whose key no project carries is a 404, not a 500.
+	if rr := doReq(t, h, "GET", "/api/v1/docs/resolve?ref=ZZ-SPEC-25", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("resolve unknown key: status = %d, body %s, want 404", rr.Code, rr.Body.String())
+	}
+
+	// A genuinely ambiguous grammar ref is a 422 whose candidates are only
+	// actual candidates.
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "other", Kind: "spec", Number: 25, Slug: "025-y", Body: docSpecBody,
+	})
+	rr := doReq(t, h, "GET", "/api/v1/docs/resolve?ref=25", token, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("resolve ambiguous number: status = %d, body %s, want 422", rr.Code, rr.Body.String())
+	}
+	msg, _ := decodeMap(t, rr)["error"].(string)
+	if !strings.Contains(msg, "025-x") || !strings.Contains(msg, "025-y") {
+		t.Errorf("error = %q, want both real candidates named", msg)
 	}
 }

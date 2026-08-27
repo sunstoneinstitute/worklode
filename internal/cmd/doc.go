@@ -29,11 +29,13 @@ var docKinds = []string{"spec", "adr", "plan"}
 // doc <ref>`'s verbs and `lode task list`'s `--plan`/`--about` call, so the
 // surfaces cannot disagree about what a ref names.
 //
-// The grammar itself — exact slug match, the refusal of an ambiguous slug,
-// the fallback to tombstoned documents that `lode doc undelete <slug>` needs
-// — is the server's (store.ResolveDocRef). What is left here is the numeric
-// shortcut, because an id needs no lookup to become an id, and naming the ref
-// in the 404: the server's "not found" says nothing about what was tried.
+// The grammar itself is the server's (WL-358): exact slug match, the refusal
+// of an ambiguous ref, the fallback to tombstoned documents that `lode doc
+// undelete <slug>` needs, and — on a slug miss — the full 026 §3 grammar
+// `lode show` resolves, `<KEY>-<TYPE>-<n>` shorthand included. What is left
+// here is the numeric shortcut, because an id needs no lookup to become an
+// id, and naming the ref in the 404: the server's "not found" says nothing
+// about what was tried.
 func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error) {
 	if id, err := strconv.ParseInt(ref, 10, 64); err == nil && id > 0 {
 		return id, nil
@@ -45,7 +47,7 @@ func resolveDocID(ctx context.Context, c *cli.Client, ref string) (int64, error)
 			// A refusal about this ref: 404 says nothing about what was
 			// tried, and the ambiguity message already names it.
 			if cerr.Status == http.StatusNotFound {
-				return 0, fmt.Errorf("no document found with id or slug %q", ref)
+				return 0, fmt.Errorf("no document found for %q (an id, slug, number, path, or <KEY>-<TYPE>-<n> shorthand)", ref)
 			}
 			return 0, err
 		}
@@ -332,7 +334,7 @@ func isPlanFile(doc *designdoc.Document) bool {
 func newDocGetCmd() *cobra.Command {
 	var version int
 	cmd := &cobra.Command{
-		Use:   "get <id-or-slug>",
+		Use:   "get <ref>",
 		Short: "Get a document: its body, sections, and edges",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -380,7 +382,7 @@ func newDocGetCmd() *cobra.Command {
 // current version and every one it has superseded, newest first.
 func newDocVersionsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "versions <id-or-slug>",
+		Use:   "versions <ref>",
 		Short: "List a document's version history",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -410,7 +412,7 @@ func newDocVersionsCmd() *cobra.Command {
 func newDocEditCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "edit <id-or-slug>",
+		Use:   "edit <ref>",
 		Short: "Replace a document's body (a draft, or a plan at any status)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -445,7 +447,7 @@ func newDocEditCmd() *cobra.Command {
 
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "accept <id-or-slug>",
+		Use:   "accept <ref>",
 		Short: "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the assignee may accept it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -484,7 +486,7 @@ func newDocAcceptCmd() *cobra.Command {
 // minting a review task, say — is the doc-lifecycle watcher's to decide.
 func newDocSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "submit <id-or-slug>",
+		Use:   "submit <ref>",
 		Short: "Submit a document for review (records a review event; the document's status does not change)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -519,7 +521,7 @@ func newDocSubmitCmd() *cobra.Command {
 func newDocDeleteCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
-		Use:   "delete <id-or-slug>",
+		Use:   "delete <ref>",
 		Short: "Delete a document: hide a row that should not have existed",
 		Long: "Delete a document. The row is tombstoned, not removed: its events stay\n" +
 			"in the log, references to it still resolve, and `lode doc undelete`\n" +
@@ -560,7 +562,7 @@ func newDocDeleteCmd() *cobra.Command {
 // (044 §3).
 func newDocUndeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "undelete <id-or-slug>",
+		Use:   "undelete <ref>",
 		Short: "Restore a deleted document, clearing its tombstone",
 		Long: "Restore a deleted document. A slug resolves here even though the\n" +
 			"document has left every live list, because the lookup falls back to\n" +
@@ -600,7 +602,7 @@ func newDocReviseCmd() *cobra.Command {
 	var file string
 	var accept, discard bool
 	cmd := &cobra.Command{
-		Use:   "revise <id-or-slug>",
+		Use:   "revise <ref>",
 		Short: "Open, update, land, or discard a document's candidate revision",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

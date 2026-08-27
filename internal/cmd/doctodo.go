@@ -85,13 +85,24 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	// Same resolution as `lode show`, tiers 1 and 2 both: a shorthand whose key
-	// is not this checkout's — which is every shorthand in a repo with no
-	// project_key — is the backbone's to answer, not a miss (026 §4.2). A tier-3
-	// key nothing carries is returned as an error rather than printed: the exit
-	// status of this command means "work remains" for a document it resolved,
-	// so a ref it could not resolve must not read as "no work".
-	target, _, err := resolveDocRefTiers(cmd.Context(), c, resp.Docs, cfg.ProjectKey, ref)
+	// Same resolution as `lode show`, tiers 1 and 2 both: tier 1 resolves
+	// against the current project's documents when the checkout has one —
+	// exactly the candidate set `lode show` uses, so the two cannot disagree
+	// (WL-358) — and a shorthand whose key is not this checkout's is the
+	// backbone's to answer, not a miss (026 §4.2). A tier-3 key nothing
+	// carries is returned as an error rather than printed: the exit status of
+	// this command means "work remains" for a document it resolved, so a ref
+	// it could not resolve must not read as "no work".
+	candidates := resp.Docs
+	if scope := currentScope(cmd.Context(), c, cfg); scope.Project != "" {
+		candidates = nil
+		for _, d := range resp.Docs {
+			if d.Project == scope.Project {
+				candidates = append(candidates, d)
+			}
+		}
+	}
+	target, _, err := resolveDocRefTiers(cmd.Context(), c, candidates, cfg.ProjectKey, ref)
 	if err != nil {
 		return err
 	}
