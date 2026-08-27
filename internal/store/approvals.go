@@ -10,22 +10,16 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// Approval is one row of the approvals table.
-type Approval struct {
-	ID              int64
-	EntityKind      string
-	EntityID        string
-	SubjectRevision string
-	RequiredRole    *string
-	RequiredActor   *string
-	ResolvingActor  *string
-	State           string
-	CreatedAt       time.Time
-	ResolvedAt      *time.Time
-}
+// Approval is one row of the approvals table. It is model.Approval: the row
+// crosses the HTTP boundary on GET /api/v1/approvals, so it is declared once,
+// in internal/model (ADR 036 §2), and scanned into directly here.
+type Approval = model.Approval
 
 // PREntityID renders the approvals entity_id for a pull request: the webhook
 // ingest and the queue reader must share this one spelling.
@@ -33,9 +27,20 @@ func PREntityID(repo string, number int64) string {
 	return fmt.Sprintf("%s#%d", repo, number)
 }
 
+// DocEntityID renders the approvals entity_id for a document: "doc:" plus the
+// docs.id. Same contract as PREntityID — writer and reader share one spelling
+// — and it stays parseable back to the id, which is what lets the queue query
+// correlate a row to its docs row (and its project) in SQL.
+func DocEntityID(docID int64) string {
+	return fmt.Sprintf("doc:%d", docID)
+}
+
 // InsertAwaitingApproval materializes the requirement as an 'awaiting' row.
-// ON CONFLICT (entity_kind, entity_id, subject_revision) DO NOTHING: a
-// redelivered or reopened PR never duplicates the requirement.
+// The ON CONFLICT list is migration 0057's whole unique key, lane columns
+// included, so two reviewer lanes on one document revision coexist while a
+// redelivered or reopened PR — which writes the same NULL/NULL lane — still
+// does not duplicate the requirement. That last part holds only because the
+// key is NULLS NOT DISTINCT.
 func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 	entityKind, entityID, subjectRevision string,
 	requiredRole, requiredActor *string) error {
@@ -44,12 +49,60 @@ func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 		   (entity_kind, entity_id, subject_revision, required_role,
 		    required_actor, state, created_at)
 		 VALUES ($1, $2, $3, $4, $5, 'awaiting', $6)
-		 ON CONFLICT (entity_kind, entity_id, subject_revision) DO NOTHING`,
+		 ON CONFLICT (entity_kind, entity_id, subject_revision, required_role,
+		              required_actor) DO NOTHING`,
 		entityKind, entityID, subjectRevision, requiredRole, requiredActor,
 		now.UTC())
 	if err != nil {
 		return fmt.Errorf("insert awaiting approval %s %s@%s: %w",
 			entityKind, entityID, subjectRevision, err)
+	}
+	return nil
+}
+
+// RequestDocApproval materializes 025 §7.3's reviewer set for one document
+// revision: one 'awaiting' row per assigned reviewer, all on the same
+// subject_revision (the docs.version the reviewers see), which is exactly the
+// shape migration 0057's per-lane unique key permits. Re-running it for the
+// same version is a no-op, and adding a reviewer later inserts only the new
+// lane.
+//
+// Reviewers are actor ids; 029 §7.2's role-scoped lanes (a flow requiring
+// "someone in this group") call InsertAwaitingApproval directly with a
+// required_role, since there is no reviewer set in the schema to read them
+// from — a document's reviewers are whatever the caller assigns.
+func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int,
+	reviewers []string) error {
+	if len(reviewers) == 0 {
+		return fmt.Errorf("%w: a review request needs at least one reviewer", ErrInvalidInput)
+	}
+	entityID := DocEntityID(docID)
+	revision := strconv.Itoa(version)
+	for _, r := range reviewers {
+		// required_actor is an FK to actors, so an unknown reviewer would
+		// otherwise surface as a constraint violation — a 500 naming a
+		// constraint instead of the name the caller got wrong. Checked here
+		// rather than in the handler so every caller gets the same refusal.
+		if err := checkActorExists(tx, r); err != nil {
+			return err
+		}
+		if err := InsertAwaitingApproval(tx, now, "doc", entityID, revision,
+			nil, &r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkActorExists returns ErrInvalidInput naming id when no actor has it.
+func checkActorExists(tx *sql.Tx, id string) error {
+	var exists bool
+	err := tx.QueryRow(`SELECT true FROM actors WHERE id = $1`, id).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: no actor %q", ErrInvalidInput, id)
+	}
+	if err != nil {
+		return fmt.Errorf("look up actor %s: %w", id, err)
 	}
 	return nil
 }
@@ -71,9 +124,10 @@ func scanApproval(row rowScanner) (*Approval, error) {
 
 // OpenApprovalForEntity returns the open row for (entityKind, entityID) —
 // state 'awaiting' or 'changes_requested', both counting as open —
-// ErrNotFound otherwise. The ingest keeps at most one open row per entity,
+// ErrNotFound otherwise. The PR ingest keeps at most one open row per entity,
 // so ORDER BY id DESC is a deterministic tiebreak rather than a lane
-// selector; part 2 revisits it when one entity needs several open lanes.
+// selector. A document's reviewer set is several open rows on purpose (§7.3),
+// so this is the wrong reader for one: address a doc lane by id instead.
 func OpenApprovalForEntity(tx *sql.Tx, entityKind, entityID string) (*Approval, error) {
 	a, err := scanApproval(tx.QueryRow(
 		`SELECT `+approvalColumns+` FROM approvals
@@ -275,58 +329,68 @@ func (s *Store) GetApproval(ctx context.Context, id int64) (*Approval, error) {
 	return a, nil
 }
 
-// prEntityJoin correlates an approvals row to its pull request the same way
-// the ingest wrote it: entity_id spelled as PREntityID renders it. Kept in
-// one place so ListAwaitingApprovals and ApprovalsAwaiting cannot drift onto
-// a hand-rolled spelling.
-const prEntityJoin = `JOIN pull_requests pr
-	ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number`
+// approvalEntityJoins correlates an approvals row to whatever it governs,
+// one LEFT JOIN per entity_kind, each matching entity_id the way the writer
+// spelled it (PREntityID, DocEntityID). Kept in one place so
+// ListAwaitingApprovals and ApprovalsAwaiting cannot drift apart.
+//
+// Every join is a LEFT JOIN, and that is the point: a doc has no task between
+// it and its project, and an entity_kind added later has no join here at all.
+// An inner join would silently drop those rows from the queue — the one thing
+// 029 §7.1's "a missing approval is a visible row" cannot afford. A row whose
+// kind nothing correlates still lists, with empty columns.
+const approvalEntityJoins = `LEFT JOIN pull_requests pr
+		ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number
+	LEFT JOIN tasks t ON t.id = pr.task_id
+	LEFT JOIN docs d ON a.entity_kind = 'doc' AND a.entity_id = 'doc:' || d.id`
 
-// AwaitingApproval is one queue row: the approval plus what a person needs
-// to act on it. PR-kind only until another entity kind joins the queue.
-type AwaitingApproval struct {
-	Approval
-	PRTitle, PRURL    string
-	PRAuthor          string // "" when unknown (pre-column row)
-	TaskID, ProjectID string
-	ProjectName       string
-	RequiredActorName *string // display_name, for "awaiting <who>"
-}
+// approvalProjectID is the project an approvals row belongs to under those
+// joins: through its task for a PR, directly for a doc.
+const approvalProjectID = `coalesce(t.project_id, d.project_id)`
+
+// AwaitingApproval is one queue row: the approval plus what a person needs to
+// act on it. Declared in internal/model for the same reason Approval is; see
+// there for what each field means and when it is empty.
+type AwaitingApproval = model.AwaitingApproval
 
 // scanAwaitingApproval reads one row selected with the SELECT list
-// ListAwaitingApprovals builds: approvalColumns qualified under "a", then
-// the PR/task/project/actor columns in the order below.
+// ListAwaitingApprovals builds: approvalColumns qualified under "a", then the
+// entity/task/project/actor columns in the order below. All of them scan
+// through sql.NullString: under the LEFT JOINs every one can be NULL.
 func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
 	var aa AwaitingApproval
-	var title, url, author, actorName sql.NullString
+	var title, url, author, taskID, projectID, projectName, actorName sql.NullString
 	err := row.Scan(&aa.ID, &aa.EntityKind, &aa.EntityID, &aa.SubjectRevision,
 		&aa.RequiredRole, &aa.RequiredActor, &aa.ResolvingActor, &aa.State,
 		&aa.CreatedAt, &aa.ResolvedAt,
-		&title, &url, &author, &aa.TaskID, &aa.ProjectID, &aa.ProjectName, &actorName)
+		&title, &url, &author, &taskID, &projectID, &projectName, &actorName)
 	if err != nil {
 		return nil, err
 	}
-	aa.PRTitle = title.String
-	aa.PRURL = url.String
-	aa.PRAuthor = author.String
+	aa.Title = title.String
+	aa.URL = url.String
+	aa.Author = author.String
+	aa.Task = taskID.String
+	aa.Project = projectID.String
+	aa.ProjectName = projectName.String
 	if actorName.Valid {
 		aa.RequiredActorName = &actorName.String
 	}
 	return &aa, nil
 }
 
-// ListAwaitingApprovals returns every awaiting approval joined to its PR,
-// task, and project, oldest first. The join is per entity_kind; today that
-// is one branch ('pr' via pull_requests -> tasks -> projects).
+// ListAwaitingApprovals returns every awaiting approval with the entity it
+// governs, oldest first. Title/URL/Author come from whichever entity join
+// matched: a PR jumps out to GitHub, a doc links to its cockpit page (its
+// SubjectRevision names the version reviewed).
 func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+qualifyColumns(approvalColumns, "a")+`,
-		        coalesce(pr.title, ''), coalesce(pr.url, ''), coalesce(pr.author, ''),
-		        t.id, t.project_id, p.name, ra.display_name
+		        coalesce(pr.title, d.title), coalesce(pr.url, '/docs/' || d.id),
+		        pr.author, t.id, `+approvalProjectID+`, p.name, ra.display_name
 		 FROM approvals a
-		 `+prEntityJoin+`
-		 JOIN tasks t ON t.id = pr.task_id
-		 JOIN projects p ON p.id = t.project_id
+		 `+approvalEntityJoins+`
+		 LEFT JOIN projects p ON p.id = `+approvalProjectID+`
 		 LEFT JOIN actors ra ON ra.id = a.required_actor
 		 WHERE a.state = 'awaiting'
 		 ORDER BY a.created_at, a.id`)
@@ -347,7 +411,9 @@ type ApprovalCount struct {
 // ApprovalsAwaiting counts awaiting approvals whose required_actor is
 // actorID or whose required_role names a group actorID belongs to, grouped
 // by project. An empty actorID with no groups (the open-instance subject)
-// matches nothing, by design.
+// matches nothing, by design. Unlike the queue, a row no entity join
+// correlates is dropped rather than listed: this feeds a per-project badge,
+// and a row with no project has no badge to land on.
 func (s *Store) ApprovalsAwaiting(ctx context.Context,
 	actorID string, groups []string) ([]ApprovalCount, error) {
 	if actorID == "" && len(groups) == 0 {
@@ -357,13 +423,13 @@ func (s *Store) ApprovalsAwaiting(ctx context.Context,
 		groups = []string{}
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT t.project_id, count(*)
+		`SELECT `+approvalProjectID+`, count(*)
 		 FROM approvals a
-		 `+prEntityJoin+`
-		 JOIN tasks t ON t.id = pr.task_id
+		 `+approvalEntityJoins+`
 		 WHERE a.state = 'awaiting'
 		   AND (a.required_actor = $1 OR a.required_role = ANY($2))
-		 GROUP BY t.project_id`,
+		   AND `+approvalProjectID+` IS NOT NULL
+		 GROUP BY 1`,
 		actorID, groups)
 	if err != nil {
 		return nil, fmt.Errorf("approvals awaiting for %s: %w", actorID, err)

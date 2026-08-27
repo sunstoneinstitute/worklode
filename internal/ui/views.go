@@ -104,22 +104,29 @@ type ProjectsView struct {
 
 // --- reviews (spec 029 §7.1) -------------------------------------------------
 
-// ApprovalsView is the /reviews queue: every PR-kind approval still awaiting
-// a decision, oldest first. Each row carries the decide form (029 §7.3).
+// ApprovalsView is the /reviews queue: every approval still awaiting a
+// decision, whatever kind of entity it governs, oldest first. Each row
+// carries the decide form (029 §7.3).
 type ApprovalsView struct {
 	Page PageProps
 	Rows []ApprovalRow
 }
 
-// ApprovalRow is one awaiting-approval queue row: the PR it governs, the
-// task and project it belongs to, who it is awaiting (when known), and how
-// long it has waited. ID is the approvals row id the decide form posts to.
-// Age is pre-formatted (see FmtAge); RequiredActorName is "" when the
-// approval names no actor yet.
+// ApprovalRow is one awaiting-approval queue row: the entity it governs (a
+// pull request, a document), the task and project it belongs to, who it is
+// awaiting (when known), and how long it has waited. ID is the approvals row
+// id the decide form posts to.
+//
+// Everything below Title/URL is optional and rendered only when set: a
+// document hangs off its project with no task in between, and a row whose
+// kind nothing correlates has neither. Kind, Revision and Age are
+// pre-formatted for display (see FmtAge).
 type ApprovalRow struct {
 	ID                int64
+	Kind              string // "PR", "Document"
 	EntityID          string
-	PRTitle, PRURL    string
+	Title, URL        string
+	Revision          string // the version under review, when the kind has one
 	TaskID, ProjectID string
 	ProjectName       string
 	RequiredActorName string

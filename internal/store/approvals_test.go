@@ -3,8 +3,12 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"reflect"
+	"strconv"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // mustBegin starts a tx against s and registers a rollback cleanup, matching
@@ -428,46 +432,184 @@ func TestListAwaitingApprovals(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got %d rows, want 2 (resolved row must be excluded): %+v", len(got), got)
 	}
-	if got[0].PRTitle != "old pr" || got[1].PRTitle != "new pr" {
+	if got[0].Title != "old pr" || got[1].Title != "new pr" {
 		t.Errorf("got order %q, %q; want oldest first: old pr, new pr",
-			got[0].PRTitle, got[1].PRTitle)
+			got[0].Title, got[1].Title)
 	}
 
 	// Assert the rest of the SELECT list too: title/url/author,
 	// task/project, and required-actor columns are same-typed strings, so a
 	// transposition in the SELECT or scan would pass silently if only
-	// PRTitle were checked.
+	// Title were checked.
 	oldRow := got[0]
-	if oldRow.TaskID != task.ID {
-		t.Errorf("got TaskID %q, want %q", oldRow.TaskID, task.ID)
+	if oldRow.Task != task.ID {
+		t.Errorf("got TaskID %q, want %q", oldRow.Task, task.ID)
 	}
-	if oldRow.ProjectID != "horndb" {
-		t.Errorf("got ProjectID %q, want horndb", oldRow.ProjectID)
+	if oldRow.Project != "horndb" {
+		t.Errorf("got ProjectID %q, want horndb", oldRow.Project)
 	}
 	if oldRow.ProjectName != "HornDB" {
 		t.Errorf("got ProjectName %q, want HornDB", oldRow.ProjectName)
 	}
-	if oldRow.PRURL != prOld.URL {
-		t.Errorf("got PRURL %q, want %q", oldRow.PRURL, prOld.URL)
+	if oldRow.URL != prOld.URL {
+		t.Errorf("got URL %q, want %q", oldRow.URL, prOld.URL)
 	}
 	if oldRow.RequiredActorName == nil || *oldRow.RequiredActorName != "Stig" {
 		t.Errorf("got RequiredActorName %v, want Stig", oldRow.RequiredActorName)
 	}
 
 	newRow := got[1]
-	if newRow.TaskID != task.ID {
-		t.Errorf("got TaskID %q, want %q", newRow.TaskID, task.ID)
+	if newRow.Task != task.ID {
+		t.Errorf("got TaskID %q, want %q", newRow.Task, task.ID)
 	}
-	if newRow.ProjectID != "horndb" {
-		t.Errorf("got ProjectID %q, want horndb", newRow.ProjectID)
+	if newRow.Project != "horndb" {
+		t.Errorf("got ProjectID %q, want horndb", newRow.Project)
 	}
 	if newRow.ProjectName != "HornDB" {
 		t.Errorf("got ProjectName %q, want HornDB", newRow.ProjectName)
 	}
-	if newRow.PRURL != prNew.URL {
-		t.Errorf("got PRURL %q, want %q", newRow.PRURL, prNew.URL)
+	if newRow.URL != prNew.URL {
+		t.Errorf("got URL %q, want %q", newRow.URL, prNew.URL)
 	}
 	if newRow.RequiredActorName != nil {
 		t.Errorf("got RequiredActorName %v, want nil", newRow.RequiredActorName)
+	}
+}
+
+// docForApproval creates a doc in the horndb project openTaskStore seeds, for
+// the two doc-approval tests below.
+func docForApproval(t *testing.T, s *Store, slug string, number int) *model.Doc {
+	t.Helper()
+	return mustCreateDoc(t, s, DocInput{
+		Project: "horndb", Kind: "spec", Number: number, Slug: slug,
+		Body: specBody, CreatedBy: "stig",
+	})
+}
+
+// TestRequestDocApprovalOpensOneLanePerReviewer is 025 §7.3's reviewer set:
+// every assigned reviewer gets an own awaiting row on the same revision.
+// Migration 0038's key allowed only one row per revision, so this is the case
+// 0057 exists for. Re-running must stay a no-op, which is what proves the
+// widened ON CONFLICT list still infers the index.
+func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
+	s := openTaskStore(t)
+	if err := s.CreateActor(t.Context(), "ada", "human", "Ada", false); err != nil {
+		t.Fatal(err)
+	}
+	doc := docForApproval(t, s, "025-lanes", 25)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewers := []string{"stig", "ada"}
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1, reviewers); err != nil {
+		t.Fatal(err)
+	}
+	// Twice: the requirement is materialized on every doc event that reads
+	// the reviewer set, so duplicate calls must not duplicate lanes.
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1, reviewers); err != nil {
+		t.Fatal(err)
+	}
+	// A newer revision is a separate set of lanes, not a reuse of these.
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 2, []string{"stig"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := s.ListAwaitingApprovals(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, r := range rows {
+		if r.RequiredActor == nil {
+			t.Fatalf("row %d has no required_actor: %+v", r.ID, r)
+		}
+		got[*r.RequiredActor+"@"+r.SubjectRevision] = r.EntityID
+	}
+	want := map[string]string{
+		"stig@1": DocEntityID(doc.ID),
+		"ada@1":  DocEntityID(doc.ID),
+		"stig@2": DocEntityID(doc.ID),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("lanes = %v, want %v", got, want)
+	}
+}
+
+// TestListAwaitingApprovalsIncludesDocs: the queue is per entity_kind, and a
+// doc reaches its project directly, with no task between. The inner joins the
+// PR-only query used would have dropped the doc row entirely.
+func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
+	s := openTaskStore(t)
+	ctx := t.Context()
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+	pr := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 1, Title: "a pr", State: "open",
+		HeadRef: task.ID + "-pr", HeadSHA: "sha1",
+		URL: "https://github.com/sunstoneinstitute/q/pull/1", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, pr, ""); err != nil {
+		t.Fatal(err)
+	}
+	doc := docForApproval(t, s, "026-queue", 26)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertAwaitingApproval(tx, taskTestNow.Add(-time.Hour), "pr",
+		PREntityID(pr.Repo, pr.Number), "sha1", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1, []string{"stig"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := s.ListAwaitingApprovals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want the pr row and the doc row: %+v", len(rows), rows)
+	}
+	prRow, docRow := rows[0], rows[1]
+	if prRow.EntityKind != "pr" || docRow.EntityKind != "doc" {
+		t.Fatalf("got kinds %q, %q; want pr then doc (oldest first)",
+			prRow.EntityKind, docRow.EntityKind)
+	}
+	if prRow.Title != "a pr" || prRow.URL != pr.URL || prRow.Task != task.ID {
+		t.Errorf("pr row = %+v, want the PR's own title/url/task", prRow)
+	}
+	if docRow.Title != doc.Title {
+		t.Errorf("doc row Title = %q, want %q", docRow.Title, doc.Title)
+	}
+	if want := "/docs/" + strconv.FormatInt(doc.ID, 10); docRow.URL != want {
+		t.Errorf("doc row URL = %q, want %q", docRow.URL, want)
+	}
+	if docRow.Task != "" {
+		t.Errorf("doc row TaskID = %q, want empty: a doc hangs off no task", docRow.Task)
+	}
+	if docRow.Project != "horndb" || docRow.ProjectName != "HornDB" {
+		t.Errorf("doc row project = %q/%q, want horndb/HornDB",
+			docRow.Project, docRow.ProjectName)
+	}
+
+	// The per-project badge counts both kinds through the same joins.
+	counts, err := s.ApprovalsAwaiting(ctx, "stig", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(counts) != 1 || counts[0].ProjectID != "horndb" || counts[0].Count != 1 {
+		t.Errorf("ApprovalsAwaiting = %+v, want horndb:1 (the doc lane)", counts)
 	}
 }
