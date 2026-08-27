@@ -4,7 +4,7 @@ import "time"
 
 // Instruction is a steering instruction queued against a task: an
 // operator-authored message delivered to whichever actor next claims that
-// task's lease (migration 0055).
+// task's lease (migration 0056).
 type Instruction struct {
 	ID        int64     `json:"id"`
 	Task      string    `json:"task"`

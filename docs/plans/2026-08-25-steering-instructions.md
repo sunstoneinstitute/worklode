@@ -30,7 +30,7 @@ So the piece that actually works is a small **local** process that holds the
 stdio connection to Claude Code and bridges it to `lode-server` over ordinary
 HTTPS. That process is `lode channel serve`.
 
-## `task_instructions` (migration 0055)
+## `task_instructions` (migration 0056)
 
 ```sql
 CREATE TABLE task_instructions (

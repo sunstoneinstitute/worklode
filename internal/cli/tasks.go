@@ -189,7 +189,7 @@ func (c *Client) EndAgentSession(ctx context.Context, id string, in model.EndAge
 
 // Instruct calls POST /api/v1/tasks/{id}/instructions: queue a steering
 // instruction against the task, delivered to whichever actor next holds its
-// lease (migration 0055).
+// lease (migration 0056).
 func (c *Client) Instruct(ctx context.Context, taskID, body string) (model.Instruction, []byte, error) {
 	in := model.InstructionInput{Body: body}
 	return doJSON[model.Instruction](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(taskID)+"/instructions", in, "instruction")

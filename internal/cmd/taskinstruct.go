@@ -9,7 +9,7 @@ import (
 
 // newTaskInstructCmd is `lode task instruct <id> <message>`: queue a steering
 // instruction against a task, delivered to whichever actor next claims its
-// lease (migration 0052). Separate file from instructions.go, which manages
+// lease (migration 0056). Separate file from instructions.go, which manages
 // AGENTS.md/CLAUDE.local.md instruction files for `lode install` — an
 // unrelated concept that happens to share the name.
 func newTaskInstructCmd() *cobra.Command {

@@ -25,7 +25,7 @@ func scanInstruction(row rowScanner) (model.Instruction, error) {
 
 // EnqueueInstruction queues a steering instruction against taskID: an
 // operator-authored message delivered to whichever actor next claims the
-// task's lease (migration 0055). Recorded as a "task.instructed" cli event.
+// task's lease (migration 0056). Recorded as a "task.instructed" cli event.
 //
 // Errors: ErrNotFound if taskID does not exist or is soft-deleted (same
 // tombstone rule as Claim, 044 §4), or if actorID does not name an actor.
