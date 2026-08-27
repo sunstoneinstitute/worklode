@@ -145,3 +145,77 @@ func TestOverviewRollWithoutGraph(t *testing.T) {
 		t.Errorf("frontier_size = %d; want 1", o.FrontierSize)
 	}
 }
+
+// WL-354 regression: a chain whose work is entirely finished is not the
+// critical path. Depth stays historical; criticality follows the open
+// subgraph (spec 007 §4's closed-task rule).
+func TestCriticalPathExcludesFinishedChains(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	// WL-1 blocks WL-2 blocks WL-3 blocks WL-4.
+	for i := 1; i <= 4; i++ {
+		createTaskViaAPI(t, h, token, map[string]any{
+			"project": "proj", "title": "chain", "priority": "medium", "kind": "chore",
+		})
+	}
+	for _, e := range [][2]string{{"WL-1", "WL-2"}, {"WL-2", "WL-3"}, {"WL-3", "WL-4"}} {
+		rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+e[0]+"/edges", token,
+			map[string]any{"type": "blocks", "to": e[1]})
+		if rr.Code != http.StatusCreated && rr.Code != http.StatusOK {
+			t.Fatalf("edge %v: %d %s", e, rr.Code, rr.Body.String())
+		}
+	}
+
+	// Abandon is the one public one-step close, and taskClosed treats it
+	// exactly like the live case's deployed_prod: closed is closed.
+	closeTask := func(id string) {
+		t.Helper()
+		rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/abandon", token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("abandon %s: %d %s", id, rr.Code, rr.Body.String())
+		}
+	}
+
+	fetch := func() model.CriticalPath {
+		t.Helper()
+		rr := doReq(t, h, http.MethodGet, "/api/v1/critical-path", token, nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("critical-path: %d %s", rr.Code, rr.Body.String())
+		}
+		var cp model.CriticalPath
+		if err := json.Unmarshal(rr.Body.Bytes(), &cp); err != nil {
+			t.Fatal(err)
+		}
+		return cp
+	}
+
+	// Fully open: the whole chain is critical.
+	if cp := fetch(); len(cp.Tasks) != 4 || cp.MaxDepth != 3 {
+		t.Fatalf("open chain: %d tasks max depth %d, want 4/3", len(cp.Tasks), cp.MaxDepth)
+	}
+
+	// Close the first two. The path is the open remainder, with historical
+	// depths: WL-3 at depth 2, WL-4 at depth 3.
+	closeTask("WL-1")
+	closeTask("WL-2")
+	cp := fetch()
+	if len(cp.Tasks) != 2 {
+		t.Fatalf("half-closed chain: tasks = %+v, want WL-3 and WL-4", cp.Tasks)
+	}
+	depths := map[string]int{}
+	for _, task := range cp.Tasks {
+		depths[task.ID] = task.Depth
+	}
+	if depths["WL-3"] != 2 || depths["WL-4"] != 3 {
+		t.Fatalf("historical depths = %v, want WL-3:2 WL-4:3", depths)
+	}
+
+	// Close the rest: the exact live case — every node deployed-or-merged.
+	// The card reports no chain at all rather than finished work.
+	closeTask("WL-3")
+	closeTask("WL-4")
+	if cp := fetch(); len(cp.Tasks) != 0 {
+		t.Fatalf("fully closed chain still reported: %+v", cp.Tasks)
+	}
+}
