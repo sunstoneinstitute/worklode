@@ -603,8 +603,14 @@ func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	projectKey := s.projectKeyByID(r.Context())[d.Project]
-	view := docVersionView(s.mdcache, s.projectKeys(r.Context()), *d, v, projectKey)
+	// One ListProjects serves both needs (WL-347): the project key for the
+	// canonical URL and the key set the body's task autolinks match on.
+	keyByID := s.projectKeyByID(r.Context())
+	keys := make([]string, 0, len(keyByID))
+	for _, k := range keyByID {
+		keys = append(keys, k)
+	}
+	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys), *d, v, keyByID[d.Project])
 	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
 }
 
