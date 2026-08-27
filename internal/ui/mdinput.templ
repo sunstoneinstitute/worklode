@@ -7,7 +7,9 @@ import "strconv"
 // The behaviour lives in /assets/mdinput.js — Preview POSTs the draft to
 // /preview and injects the server-rendered, server-sanitized fragment;
 // dictation records audio and POSTs it to /dictate, appending the
-// transcription to the draft. With scripts unavailable the component is
+// transcription to the draft. Typing a ":shortcode" offers an emoji
+// completion popup, filled from the emoji.json asset that carries the same
+// names mdrender substitutes. With scripts unavailable the component is
 // exactly the textarea it wraps: the tabs and the microphone are
 // progressive enhancement, never a dependency.
 
@@ -15,7 +17,7 @@ import "strconv"
 // bare <textarea> in the cockpit's forms; the textarea keeps the given id
 // and name so labels and form handlers are untouched.
 templ MarkdownInput(v MarkdownInputView) {
-	<div class="mdinput" data-mdinput>
+	<div class="mdinput" data-mdinput data-emoji-src={ assetURL("emoji.json") }>
 		<div class="mdtabs" role="tablist">
 			<button type="button" class="mdtab active" data-md-write aria-selected="true">Write</button>
 			<button type="button" class="mdtab" data-md-preview aria-selected="false">Preview</button>
@@ -27,6 +29,7 @@ templ MarkdownInput(v MarkdownInputView) {
 			}
 		</div>
 		<textarea id={ v.ID } name={ v.Name } rows={ strconv.Itoa(v.Rows) } placeholder={ v.Placeholder }>{ v.Value }</textarea>
+		<div class="mdsuggest" role="listbox" hidden></div>
 		<div class="mdpreview" hidden></div>
 	</div>
 }
