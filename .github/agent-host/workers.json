@@ -1,0 +1,6 @@
+[
+  {
+    "window": "gha-agent1",
+    "filter": "--project worklode"
+  }
+]

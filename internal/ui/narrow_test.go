@@ -78,6 +78,19 @@ func pages(t *testing.T) map[string]string {
 			},
 			SecondaryConcerns: []CockpitConcern{{Title: "WL-140 blocks three ready tasks", URL: "/tasks/WL-140", EvidenceSummary: "an open blocker task holds the frontier"}},
 			CostTotals:        []CockpitCostTotal{{Currency: "USD", CostAmount: "1284.55", UnpricedTokens: 92311}},
+			AgentSessions: []AgentSessionRow{
+				{
+					Agent: "claude-code", AgentVersion: "2.1.231", ActorID: "claude-worker-01",
+					Task: "WL-234", TaskTitle: longTitle, TaskURL: "/tasks/WL-234",
+					Started: "3h ago", LastSeen: "2m ago", Running: true,
+				},
+				{
+					Agent: "codex", AgentVersion: "0.52.0-alpha.20260814",
+					ActorID: "stig@sunstoneinstitute.ai",
+					Task:    "WL-141", TaskTitle: tokenTitle, TaskURL: "/tasks/WL-141",
+					Started: "26h ago", LastSeen: "just now", Running: true,
+				},
+			},
 		}),
 		"task": Task(TaskView{
 			Page: PageProps{Title: "WL-234"},
@@ -100,6 +113,10 @@ func pages(t *testing.T) map[string]string {
 				{At: now, Type: "pr", Label: "Pull request", Summary: "#242 Make the narrow-width reflow check runnable — merged by stig", URL: "https://github.com/sunstoneinstitute/worklode/pull/242"},
 				{At: now, Type: "ci", Label: "Check", Summary: "pr-checks / test (pull_request) succeeded in 4m12s", URL: "https://github.com/sunstoneinstitute/worklode/actions/runs/1234567890"},
 				{At: now, Type: "lease", Label: "Lease", Summary: "claimed by claude-worker-01 in .worktrees/WL-234-make-the-narrow-width-reflow-check-runna"},
+			},
+			AgentSessions: []AgentSessionRow{
+				{Agent: "claude-code", AgentVersion: "2.1.231", ActorID: "claude-worker-01", Started: "3h ago", LastSeen: "2m ago", Running: true},
+				{Agent: "codex", AgentVersion: "0.52.0-alpha.20260814", ActorID: "stig@sunstoneinstitute.ai", Started: "2d ago", LastSeen: "1d ago"},
 			},
 		}),
 		"docs": Docs(DocsView{

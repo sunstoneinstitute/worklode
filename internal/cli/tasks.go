@@ -659,3 +659,21 @@ func InstructionTable(w io.Writer, ins []model.Instruction) {
 	}
 	tw.Flush()
 }
+
+// workerPickRowFmt lays out one `lode worker listen` row. Fixed widths for
+// the same reason eventStreamRowFmt uses them: this is a stream, so there is
+// no complete row set to measure and a tabwriter's columns would jitter as
+// picks arrive.
+const workerPickRowFmt = "%-12v  %-10v  %-12v  %-14v  %v\n"
+
+// WorkerPickHeader prints the listen view's column header, once.
+func WorkerPickHeader(w io.Writer) {
+	fmt.Fprintf(w, workerPickRowFmt, "ID", "PRIORITY", "CONCERN", "PROJECT", "BRANCH")
+}
+
+// WorkerPickRow prints one dry-run claim-next pick — what `lode next` would
+// take right now. Concern is dashed when the task carries none, matching how
+// every other view renders an unset optional field.
+func WorkerPickRow(w io.Writer, p model.ClaimNextPick) {
+	fmt.Fprintf(w, workerPickRowFmt, p.ID, p.Priority, dash(p.Concern), p.Project, p.Branch)
+}

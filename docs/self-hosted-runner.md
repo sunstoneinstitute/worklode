@@ -271,6 +271,171 @@ threshold); a systemd-tmpfiles aging rule on `/tmp` (host-wide blast radius
 for a runner-specific problem — worth revisiting if a non-runner source turns
 out to be the one refilling it).
 
+## The agent host (`gha-agent-host`)
+
+hel01 also hosts the long-lived Claude Code worker sessions. They are not a CI
+job: `agent-host.yml` is a **babysitter** that reconciles them every 15 minutes
+— create what is missing, respawn what died, touch nothing healthy — and
+`agent-host-rules.yml` manages the permission rules they run under. Neither is
+ever reachable from `pull_request`; both are `schedule`/`workflow_dispatch`
+only, so the *Trust boundary* above is untouched.
+
+`gha-agent-host` asserts what those jobs need and nothing else: **tmux and
+`claude` are installed, and the persistent `/home/ghrunner/gha-agent` tree
+exists**. Not the bare `self-hosted` label (a future runner without any of that
+must never be handed this job) and not `hel01` (a host identity, not a
+capability). `agent-host.yml` also requires `gha-buildcache`, because it builds
+the `lode` binaries and skips the `actions/cache` round trip like every other
+job here.
+
+```
+gh api -X POST repos/sunstoneinstitute/worklode/actions/runners/<id>/labels -f "labels[]=gha-agent-host"
+```
+
+### Layout
+
+Everything durable lives at an absolute path outside the checkout, for two
+reasons this document has already established. `actions/checkout`'s clean step
+erases anything untracked inside `_work/worklode/worklode`, and **`$HOME` is
+not stable**: `hel01-2` sets its own `HOME` (see *Two executors*), so a job that
+resolved `~/.config/worklode` would read a different file depending on which
+runner picked it up. The agent's `HOME` is therefore named explicitly, never
+inherited.
+
+```
+/home/ghrunner/gha-agent/
+  bin/          lode, lode-hook, lode-statusline + the agent-host scripts
+  home/         the supervisors' HOME
+    .config/worklode/config.toml     server = https://worklode.dev.sunstoneinstitute.ai
+    .config/worklode/token           0600, "<server> <token>" — one line per server
+    .claude/settings.json            the autoMode rules, user scope
+  repo/         the primary clone: owns .git, stays on main, never worked in
+  agents/<id>/  one linked worktree per worker, on branch agent-main/<id>;
+                its task worktrees land in its own .worktrees/
+  env           0600, sourced by each window's shell
+  logs/         pane captures, 0600, pruned after 7 days
+```
+
+### One working tree per worker, one `.git` for all of them
+
+Workers share the object store and never a working tree. Sharing `.git` is
+what makes a second worker cheap: one fetch, one LFS cache, one 8 MB object
+store. Sharing a *working tree* would be a bug — it is one HEAD, one index and
+one set of untracked files, so several agents in `repo/` would contend over
+the branch the babysitter fast-forwards, over build output, and over each
+other's `git` invocations.
+
+So `repo/` is the primary clone and nobody works in it: it owns `.git`, it is
+the checkout `worktree.MainRoot` resolves to (which is where the repo-wide half
+of `lode install` lands, once, however many workers run), and it is where the
+single `git fetch` per tick happens. Each worker gets a linked worktree at
+`agents/<id>` on its own branch.
+
+**The branch is `agent-main/<id>`, and it cannot be `main/<id>`.** Git stores
+`refs/heads/main` as a file, so `refs/heads/main/<id>` would need `main` to be
+a directory — a directory/file conflict git refuses:
+
+```
+fatal: cannot lock ref 'refs/heads/main/gha-agent1': 'refs/heads/main' exists
+```
+
+(The `claude/<name>` branches this repo already uses work only because no plain
+`claude` branch exists.)
+
+These branches are **local-only and must never be pushed**. They never receive
+commits either — agents commit on task branches inside their own
+`.worktrees/` — so `reconcile.sh` tracks `origin/main` with a hard reset rather
+than a merge: there is nothing to preserve and nothing to conflict. A worker
+tree with local changes is left alone and reported, so one agent's mess cannot
+stall the others.
+
+`lode install` therefore runs **per worker tree**, not once in the primary. The
+propagation that populates each task worktree's `settings.local.json` is gated
+on *its own root* having been installed, and every agent's root is now its own
+worktree. `internal/worktree`'s
+`TestTaskIDIsFalseForAWorktreeOutsideTheBase` pins the CLI behaviour this rests
+on: `lode next`'s "already inside a worktree" guard is a question about the
+path — exactly one segment below `.worktrees` — not about being the main
+checkout, so it runs happily in `agents/<id>`.
+
+The tmux server has its own socket, `tmux -L gha-agent`, so it never collides
+with an interactive tmux. The socket is keyed by uid rather than `$HOME`, so
+both runners reach the same server.
+
+```
+tmux -L gha-agent list-windows -t agents
+tmux -L gha-agent attach -t agents:gha-agent1
+```
+
+Three repo secrets are required: `LODE_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, and
+`WORKER_GITHUB_TOKEN` (a fine-grained PAT scoped to this repo, contents + PR
+write). The job's own `GITHUB_TOKEN` expires when the job ends and is useless
+to a session that outlives it.
+
+### Adding a worker
+
+`.github/agent-host/workers.json` is the fleet. Each entry is a window name and
+one filter string:
+
+```json
+{ "window": "gha-chore1", "filter": "--project worklode --kind chore" }
+```
+
+That string is used twice — `supervisor.sh` substitutes it for `$ARGUMENTS` in
+the `start-agent-loop` skill body, and `poke.sh` passes it to `lode worker
+listen` — so the sidecar wakes on exactly the work its supervisor could claim.
+Only flags the skill accepts belong in it: `--project`, `--kind`,
+`--strict-focus`.
+
+Each worker gets two windows — `<name>` running the Claude session and
+`<name>-poke` running the sidecar that nudges it when work appears — plus its
+own worktree at `agents/<name>`, all created by `reconcile.sh`. Retiring a
+worker means removing its entry here; `git worktree prune` only clears
+registrations whose directories are already gone, so deleting the tree itself
+stays a deliberate manual step and can never take an in-flight task worktree
+with it. Health is
+judged by pane state — dead, or fallen back to a bare shell, means respawn.
+That is a denylist on purpose: `claude` runs as `node` today, and matching only
+`node` would turn any change in how it is launched into an endless respawn loop
+against a session that was working fine.
+
+### Rules are committed, not accumulated
+
+`ghrunner` is in the `docker` group, which the *Isolation* section above calls
+root-equivalent on this host. An unattended agent here is effectively
+unsandboxed, so what it may do is reviewed in a diff rather than left to
+accumulate on the box: `.github/agent-host/settings.json` holds the `autoMode`
+block, and the babysitter installs it to the agent `HOME` on every tick.
+
+It has to be **user scope**. The auto-mode classifier deliberately ignores a
+repository's own `.claude/settings.json` so that a hostile repo cannot grant
+itself permissions; rules committed there would silently do nothing.
+
+`/auto-mode-setup` is interactive — it drafts a block and asks a human to
+accept it — so `agent-host-rules.yml` splits the job: `action=setup` opens a
+`gha-rules` window to run it in, `action=capture` promotes the result into a
+pull request.
+
+### Scrollback stays on the box
+
+This repository is **public**, so Actions logs and job summaries are
+world-readable. Pane captures therefore go to `logs/` at 0600 and the step
+summary carries only window state and what was done. The `dump_scrollback`
+dispatch input prints a tail into the job log for debugging; it defaults to
+false, and it publishes whatever the agent had on screen.
+
+### Teardown
+
+```
+tmux -L gha-agent kill-server
+```
+
+Disable the `Agent host` workflow first, or the next tick rebuilds the fleet.
+That same tick is the recovery path for the one failure mode tmux's own
+daemonizing does not cover: the runner unit's default `KillMode=control-group`
+takes down everything in the service cgroup when the runner service restarts,
+the tmux server included.
+
 ## Extending self-hosted coverage
 
 `_test.yml`, `_lint.yml` and `_build-image.yml` all take a `runs-on` input

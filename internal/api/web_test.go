@@ -1233,3 +1233,77 @@ func TestDriftPageRendersWithoutGraph(t *testing.T) {
 		t.Fatal("drift page contains a mutation affordance")
 	}
 }
+
+// The task page shows the coding-agent sessions the backbone recorded against
+// the task's lease — what is actually working on it, not just who holds it.
+func TestTaskPageShowsAgentSessions(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
+	})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/agent-session", token, map[string]any{
+		"agent": "claude-code", "agent_version": "2.1.231", "session_id": "sess-1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("agent-session status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	// The actor comes off the lease: a session row that cannot say who is
+	// running it renders a blank avatar.
+	bodyContains(t, rr.Body.String(), "Agent sessions", "Claude Code", "2.1.231", "running", "alice")
+}
+
+// An unheld task has no lease, and a session is recorded against a lease, so
+// there is nowhere for one to hang — the card must not appear at all rather
+// than appear empty.
+func TestTaskPageOmitsAgentSessionsWhenUnheld(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), "Agent sessions") {
+		t.Errorf("unheld task rendered an Agent sessions card:\n%s", rr.Body.String())
+	}
+}
+
+// The project page answers "what is running across this project right now",
+// which a per-task page cannot.
+func TestProjectPageShowsAgentSessions(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Add feature", "body": "do the thing", "priority": "high", "kind": "feature",
+	})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/claim", token, map[string]any{"worktree": "host:/wt-1"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/agent-session", token, map[string]any{
+		"agent": "codex", "session_id": "sess-1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("agent-session status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/projects/proj", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("project page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	// The row has to name its task: the page lists work from every task.
+	bodyContains(t, rr.Body.String(), "Agent sessions", "Codex", `href="/tasks/WL-1"`)
+}

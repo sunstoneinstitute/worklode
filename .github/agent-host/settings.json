@@ -1,0 +1,23 @@
+{
+  "autoMode": {
+    "allow": [
+      "$defaults"
+    ],
+    "environment": [
+      "$defaults",
+      "Source control: github.com/sunstoneinstitute. Pushing task branches and opening pull requests against repositories in this organisation is expected work, not an action aimed outside the environment.",
+      "Work happens in git worktrees under .worktrees/ inside the checkout. Each is a normal working directory for the task claimed into it."
+    ],
+    "hard_deny": [
+      "$defaults",
+      "Never read or copy the agent host's credentials: /home/ghrunner/gha-agent/env, the token under ~/.config/worklode/, or any GitHub token in the environment. They are for the tools to use, never for the transcript.",
+      "Never deploy, apply Kubernetes manifests, or touch the hzdev or production clusters.",
+      "Never run docker. The runner user is in the docker group, which is root-equivalent on this host."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Never push to main, or to any branch that is not the task branch lode next created for the claimed task.",
+      "Never force-push, and never rewrite history on a branch that already exists on the remote."
+    ]
+  }
+}

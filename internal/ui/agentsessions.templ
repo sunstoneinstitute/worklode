@@ -1,0 +1,56 @@
+package ui
+
+// agentsessions.templ renders the coding-agent sessions the backbone has
+// recorded — the answer to "what is actually working on this right now".
+//
+// One component serves both pages that ask it: the task page (sessions on
+// that task's lease) and the project cockpit (every session running across
+// the project). They differ only in whether a row names its task, which is
+// what AgentSessionRow.Task carries.
+//
+// Honest empty states, as everywhere in the cockpit: a caller renders this
+// only when it has sessions, so there is never an empty card claiming
+// something is running.
+
+// agentSessionRows renders the session list itself, without a card around it,
+// so each page can supply its own heading and framing.
+templ agentSessionRows(rows []AgentSessionRow) {
+	<div class="bd wl">
+		for _, r := range rows {
+			@agentSessionRow(r)
+		}
+	</div>
+}
+
+// agentSessionRow is one session. The agent and who is running it lead,
+// because that is what identifies a session to a human; the opaque session id
+// is deliberately absent — it addresses a row in the API, and no reader needs
+// it to understand the page.
+templ agentSessionRow(r AgentSessionRow) {
+	<div class="wlrow">
+		<div class="who agent">
+			<span class="avatar" aria-hidden="true">{ Initials(r.ActorID) }</span>
+		</div>
+		<div class="tl">
+			<div class="t">
+				{ agentLabel(r.Agent) }
+				if r.AgentVersion != "" {
+					<span class="muted small">{ r.AgentVersion }</span>
+				}
+			</div>
+			<div class="s">
+				if r.Task != "" {
+					<a href={ templ.SafeURL(r.TaskURL) }>{ r.Task }</a>
+				}
+				{ agentSessionDetail(r) }
+			</div>
+		</div>
+		<div class="rt">
+			if r.Running {
+				<span class="chip ok"><span class="cd" aria-hidden="true"></span>running</span>
+			} else {
+				<span class="chip"><span class="cd" aria-hidden="true"></span>ended</span>
+			}
+		</div>
+	</div>
+}
