@@ -116,12 +116,24 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 
 	srv := &todoServer{}
 	mux := http.NewServeMux()
+	// The org's projects, which 026 §4.2's tier 2 resolves a shorthand key
+	// through — the same path `lode show` takes.
+	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
+			{ID: "proj", Name: "Proj", Key: "WL"},
+		}})
+	})
 	mux.HandleFunc("GET /api/v1/docs", func(w http.ResponseWriter, r *http.Request) {
 		srv.listCalls.Add(1)
 		// The real list blanks bodies (withoutDocBodies); a walk that leaned
 		// on them would pass here otherwise.
-		listed := make([]model.Doc, len(docs))
-		copy(listed, docs)
+		project := r.URL.Query().Get("project")
+		listed := make([]model.Doc, 0, len(docs))
+		for _, d := range docs {
+			if project == "" || d.Project == project {
+				listed = append(listed, d)
+			}
+		}
 		writeTestJSON(t, w, model.DocListResponse{Docs: listed})
 	})
 	mux.HandleFunc("GET /api/v1/docs/{id}", func(w http.ResponseWriter, r *http.Request) {
@@ -401,20 +413,44 @@ func TestDocTodoPrintsShortAnchorListWhole(t *testing.T) {
 	}
 }
 
+// TestDocTodoResolvesShorthandWithoutProjectKey is WL-348: `.worklode/config.toml`
+// carries no project_key, so every <KEY>-<TYPE>-<n> ref — the checkout's own
+// included — misses tier 1 and is the backbone's to resolve (026 §4.2 tier 2).
+// It used to print "unresolved: project WL not known here" and exit 0.
+func TestDocTodoResolvesShorthandWithoutProjectKey(t *testing.T) {
+	setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{"001-1-first.md": todoPlanOpen}, noTasks)
+	// setupTodoCorpus chdir'd into the repo it wrote; drop the key line.
+	if err := os.WriteFile(filepath.Join(".worklode", "config.toml"),
+		[]byte("current_project = \"proj\"\n"), 0o600); err != nil {
+		t.Fatalf("rewrite repo config: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1")
+	if err != nil {
+		t.Fatalf("doc todo WL-SPEC-1: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "docs/specs/001-example.md") || !strings.Contains(out, "unplanned") {
+		t.Errorf("output is not the spec's work list:\n%s", out)
+	}
+}
+
 // TestDocTodoRefErrors covers the three ref outcomes that are not a document:
-// a foreign key is tier-3 unresolved (printed, exit 0 — 026 §4.2), NO-SPEC is
-// an error rather than an empty run, and a plan is not a starting point.
+// a key no project carries is tier-3 unresolved, NO-SPEC is an error rather
+// than an empty run, and a plan is not a starting point. All three exit
+// nonzero — this command's exit status means "work remains" for a document it
+// resolved, so a ref it could not resolve must not read as "no work" (WL-348).
 func TestDocTodoRefErrors(t *testing.T) {
 	setupTodoCorpus(t,
 		map[string]string{"001-example.md": todoSpec},
 		map[string]string{"001-1-first.md": todoPlanOpen, "009-1-other.md": todoPlanOpen}, noTasks)
 
 	out, err := runLode(t, "doc", "todo", "OT-SPEC-1")
-	if err != nil {
-		t.Fatalf("a foreign-key ref must not fail the command: %v\noutput: %s", err, out)
-	}
-	if !strings.Contains(out, "unresolved: project OT not known here") {
-		t.Errorf("output = %q; want the tier-3 unresolved message", out)
+	if err == nil {
+		t.Errorf("an unresolved ref exited 0\noutput: %s", out)
+	} else if !strings.Contains(err.Error(), "unresolved: project OT not known here") {
+		t.Errorf("err = %v; want the tier-3 unresolved message", err)
 	}
 
 	if out, err = runLode(t, "doc", "todo", "WL-SPEC-0"); err == nil {
