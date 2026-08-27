@@ -3,6 +3,8 @@ package cmd
 import (
 	"bytes"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -171,5 +173,32 @@ func TestTaskShowPagerFlagWiresOutputThroughPager(t *testing.T) {
 	}
 	if !strings.Contains(pagerBuf.String(), task.ID) {
 		t.Fatalf("pager buffer = %q; want it to contain the task id", pagerBuf.String())
+	}
+}
+
+// WL-331 regression: a show that errors before rendering must write nothing
+// to the pager writer — with cli.Pager's lazy start, no bytes means no
+// external pager is ever launched for `lode show -p <unknown ref>`.
+func TestShowErrorPathWritesNothingToPager(t *testing.T) {
+	old := pagerFn
+	var pagerBuf bytes.Buffer
+	pagerFn = func(bool) (io.Writer, func()) { return &pagerBuf, func() {} }
+	t.Cleanup(func() { pagerFn = old })
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	t.Setenv("HOME", t.TempDir())
+
+	if _, err := runLode(t, "show", "-p", "WL-99999"); err == nil {
+		t.Fatal("show of an unknown task should error")
+	}
+	if pagerBuf.Len() != 0 {
+		t.Fatalf("error path wrote %q to the pager; the pager must stay unused", pagerBuf.String())
 	}
 }
