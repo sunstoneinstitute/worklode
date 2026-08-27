@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
@@ -320,5 +323,118 @@ func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
 	}
 	if want := []string{"001-zero-trust-gateway", "2026-08-22-mesh-5-tray"}; !reflect.DeepEqual(amb.Candidates, want) {
 		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
+	}
+}
+
+// WL-358, second round: a number-led slug the candidate set does not hold is
+// not-found, not an ambiguity over that set's own documents of the same
+// number. The fixtures are the ones the bug was reported on, ids included:
+// resolving edge-agent's "001-zero-trust-gateway" against worklode's corpus
+// used to report worklode's spec 001 and plan 1 as candidates, neither of
+// which bears the name asked for. The assertion is on the candidate list, not
+// on resolve success — the previous round passed a success-only test while
+// this was live.
+func TestResolveDocRefForeignNumberLedSlugIsNotFound(t *testing.T) {
+	// worklode's corpus, as `lode doc list --project worklode` serves it.
+	docs := []model.Doc{
+		{ID: 33, Kind: "spec", Number: 1, Slug: "001-identity-and-authentication"},
+		{ID: 9, Kind: "plan", Number: 1, Slug: "2026-08-21-cloud-sandbox-provisioning"},
+		{ID: 48, Kind: "spec", Number: 26, Slug: "026-design-doc-queries"},
+		{ID: 21, Kind: "plan", Number: 26, Slug: "2026-07-25-worklode-homebrew-bottles"},
+	}
+
+	// The reported symptom: a slug from another project's corpus.
+	_, _, err := resolveDocRef(docs, "WL", "001-zero-trust-gateway")
+	var amb *designdoc.AmbiguousRefError
+	if errors.As(err, &amb) {
+		t.Fatalf("foreign number-led slug: reported candidates %v; want no document", amb.Candidates)
+	}
+	var notFound *designdoc.NotFoundError
+	if !errors.As(err, &notFound) {
+		t.Fatalf("foreign number-led slug: err = %v, want *NotFoundError", err)
+	}
+
+	// A bare number carries no kind to narrow by, so both documents numbered
+	// 26 are real candidates — and only those two. The list is the whole
+	// assertion: a resolver that unioned in slug-prefix or cross-number
+	// matches would still fail here, having "resolved" nothing.
+	_, _, err = resolveDocRef(docs, "WL", "26")
+	if !errors.As(err, &amb) {
+		t.Fatalf("bare shared number: err = %v, want *AmbiguousRefError", err)
+	}
+	want := []string{"026-design-doc-queries", "2026-07-25-worklode-homebrew-bottles"}
+	if !reflect.DeepEqual(amb.Candidates, want) {
+		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
+	}
+
+	// The drifted-slug fallback survives only where the number is unique:
+	// spec 26 and plan 26 both exist, so "026-renamed-since" names neither.
+	if _, _, err := resolveDocRef(docs, "WL", "026-renamed-since"); !errors.As(err, &notFound) {
+		t.Errorf("drifted slug on a shared number: err = %v, want *NotFoundError", err)
+	}
+}
+
+// WL-358, second round: the four doc surfaces resolve one grammar over one
+// corpus. A ref with no project key of its own — a slug, a path, a number-led
+// slug — used to stop at the current project's documents in `lode show` and
+// `lode doc todo` while `lode doc get` resolved the same string org-wide.
+// resolveDocRefTiers now falls through to the backbone's own resolver, the
+// endpoint the doc verbs already call.
+//
+// Only a not-found falls through: an ambiguity is an answer about this ref,
+// and the fallback must not launder it into some other project's document.
+func TestResolveDocRefTiersFallsBackToBackbone(t *testing.T) {
+	foreign := model.Doc{ID: 26, Project: "edge-agent", Kind: "spec", Number: 1, Slug: "001-zero-trust-gateway"}
+	local := []model.Doc{
+		{ID: 33, Project: "worklode", Kind: "spec", Number: 1, Slug: "001-identity-and-authentication"},
+		{ID: 9, Project: "worklode", Kind: "plan", Number: 1, Slug: "2026-08-21-cloud-sandbox-provisioning"},
+	}
+
+	var resolved []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/docs/resolve", func(w http.ResponseWriter, r *http.Request) {
+		ref := r.URL.Query().Get("ref")
+		resolved = append(resolved, ref)
+		if ref == foreign.Slug {
+			writeTestJSON(t, w, foreign)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	c, _, err := newAPIClientWithConfig()
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	ctx := context.Background()
+
+	// The reported symptom, end to end: a slug the local corpus does not hold.
+	got, section, err := resolveDocRefTiers(ctx, c, local, "WL", foreign.Slug+"#sec-3")
+	if err != nil {
+		t.Fatalf("foreign slug: %v", err)
+	}
+	if got.ID != foreign.ID || section != "sec-3" {
+		t.Errorf("got id %d section %q, want %d sec-3", got.ID, section, foreign.ID)
+	}
+
+	// A local hit never reaches the backbone.
+	before := len(resolved)
+	if got, _, err := resolveDocRefTiers(ctx, c, local, "WL", "001-identity-and-authentication"); err != nil || got.ID != 33 {
+		t.Fatalf("local slug: got id %d, err %v", got.ID, err)
+	}
+	if len(resolved) != before {
+		t.Errorf("local slug hit the backbone: %v", resolved[before:])
+	}
+
+	// An ambiguity is returned as such, not widened into a lookup that would
+	// answer with a document nobody asked for.
+	_, _, err = resolveDocRefTiers(ctx, c, local, "WL", "1")
+	var amb *designdoc.AmbiguousRefError
+	if !errors.As(err, &amb) {
+		t.Fatalf("ambiguous number: err = %v, want *AmbiguousRefError", err)
 	}
 }

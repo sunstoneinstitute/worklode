@@ -56,7 +56,12 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	// (WL-358: the union of the two criteria reported them as a bogus
 	// ambiguity). The number match is the fallback that still serves a bare
 	// number and a ref whose slug text drifted from the document's current
-	// slug.
+	// slug — but only when it names exactly one document. A number shared by
+	// several is not the drifted slug of any of them, so reporting them as
+	// this ref's candidates is the same bogus ambiguity by another route
+	// (WL-358 again: "001-zero-trust-gateway" resolved against a corpus that
+	// does not hold it listed that corpus's spec 001 and plan 1). None of
+	// them bears the name asked for, so the ref names no document.
 	if nf, ok := ParseNumberForm(base); ok {
 		if nf.Number == 0 {
 			return model.Doc{}, "", NoSpecError(ref)
@@ -68,6 +73,10 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 			if m := matchRefSlugPrefix(candidates, base); len(m) > 0 {
 				return finishRef(ref, m, section)
 			}
+			if m := matchRefNumber(candidates, nf.Number); len(m) == 1 {
+				return finishRef(ref, m, section)
+			}
+			return model.Doc{}, "", NotFoundRefError(ref)
 		}
 		return finishRef(ref, matchRefNumber(candidates, nf.Number), section)
 	}
@@ -138,10 +147,19 @@ func matchRefKind(docs []model.Doc, kind string) []model.Doc {
 	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind == kind })
 }
 
-// NotFoundRefError is 026 §4.2's tier-1 miss: a plain, named error.
-func NotFoundRefError(ref string) error {
-	return fmt.Errorf("ref %q names no document in the backbone", ref)
+// NotFoundError is 026 §4.2's tier-1 miss: the ref is well-formed and names
+// nothing in the candidate set. It is typed rather than a fmt.Errorf so a
+// caller resolving against one project's documents can tell "no such
+// document" — worth widening the search for — from an ambiguity or a kind
+// mismatch, which a wider search would only mask (WL-358).
+type NotFoundError struct{ Ref string }
+
+func (e *NotFoundError) Error() string {
+	return fmt.Sprintf("ref %q names no document in the backbone", e.Ref)
 }
+
+// NotFoundRefError returns 026 §4.2's tier-1 miss for ref.
+func NotFoundRefError(ref string) error { return &NotFoundError{Ref: ref} }
 
 // LooksLikePath reports whether base is shaped like ref form 1: it names a
 // directory somewhere (contains '/') or names a markdown file directly.
