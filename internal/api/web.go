@@ -480,6 +480,21 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
 		view.Holder = &l
+		// Sessions hang off the lease, not the task, so an unheld task has
+		// nowhere for one to be recorded — the same shape GET
+		// /api/v1/tasks/{id} returns (see taskDetail).
+		sessions, err := s.st.AgentSessionsForLease(ctx, lease.ID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		// The lease holder is the session's actor by construction, and giving
+		// each row its own attribution is what lets the card be read on its
+		// own rather than only next to the "Held by" line above.
+		view.AgentSessions = agentSessionRows(sessions, s.now())
+		for i := range view.AgentSessions {
+			view.AgentSessions[i].ActorID = lease.ActorID
+		}
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.webStoreErr(w, err)
 		return
@@ -608,7 +623,17 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read off the store rather than the projection: the cockpit's JSON shape
+	// is contracted by spec 032, and this is a page affordance, not a change
+	// to that contract.
+	sessions, err := s.st.OpenAgentSessionsForProject(ctx, id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
 	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
+	view.AgentSessions = projectAgentSessionRows(sessions, s.now())
 	s.renderWeb(w, r, http.StatusOK, "project page", ui.Cockpit(view))
 }
 

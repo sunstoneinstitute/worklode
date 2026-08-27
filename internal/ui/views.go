@@ -155,6 +155,33 @@ type TaskView struct {
 	Duplicates  []string
 	Progress    model.TaskProgress
 	Timeline    []TimelineRow
+	// AgentSessions is the coding-agent sessions recorded against the task's
+	// active lease, oldest first. Empty when nothing holds the task — a lease
+	// is what a session is recorded against, so there is nowhere for one to
+	// hang otherwise.
+	AgentSessions []AgentSessionRow
+}
+
+// AgentSessionRow is one coding-agent session as a page renders it: the
+// harness, who is running it, and how long it has been alive. Times are
+// pre-formatted relative strings because "last seen 3m ago" is the question a
+// reader is actually asking, and internal/ui has no clock of its own to
+// answer it with — internal/api formats them at the render seam.
+//
+// Task and TaskTitle are set only on the project page, where a session has to
+// name the work it is on; on a task page they would repeat the heading.
+type AgentSessionRow struct {
+	Agent        string
+	AgentVersion string
+	ActorID      string
+	Task         string
+	TaskTitle    string
+	TaskURL      string
+	Started      string
+	LastSeen     string
+	// Running is false once the session has ended. A task page shows both,
+	// since a finished session is still part of that task's story.
+	Running bool
 }
 
 // TimelineRow is one rendered row of a task's timeline: a type label and a
@@ -210,6 +237,12 @@ type CockpitView struct {
 	Work              CockpitWork
 	SecondaryConcerns []CockpitConcern
 	CostTotals        []CockpitCostTotal
+	// AgentSessions is the agent sessions running on this project's tasks
+	// right now, liveliest first. It is carried on the view rather than added
+	// to model.CockpitProjection: the JSON projection's shape is contracted
+	// by spec 032, and this is a page affordance, not a change to that
+	// contract.
+	AgentSessions []AgentSessionRow
 }
 
 // CockpitFocus is the project's pinned focus note shown at the top of the

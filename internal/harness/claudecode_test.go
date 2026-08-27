@@ -252,6 +252,103 @@ func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T
 	}
 }
 
+// The gap that makes a fresh worktree useless to an agent is everything
+// `lode install` does not itself write: permissions and enabled plugins are
+// what decide whether /lode:* commands exist there and whether the agent is
+// prompted for every tool call.
+func TestPropagateClaudeSettingsCarriesPermissionsAndPlugins(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	seedClaudeSettings(t, rootPath, false)
+	rootSettings := readSettings(t, rootPath)
+	rootSettings["permissions"] = map[string]any{"allow": []any{"Bash(lode *)"}}
+	rootSettings["enabledPlugins"] = []any{"lode@worklode"}
+	if err := writeJSONFile(rootPath, rootSettings); err != nil {
+		t.Fatalf("seed root settings: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+
+	settings := readSettings(t, filepath.Join(dir, ".claude", "settings.local.json"))
+	perms, ok := settings["permissions"].(map[string]any)
+	if !ok {
+		t.Fatalf("permissions in worktree = %v, want root's", settings["permissions"])
+	}
+	if allow, _ := perms["allow"].([]any); len(allow) != 1 || allow[0] != "Bash(lode *)" {
+		t.Fatalf("permissions.allow in worktree = %v, want root's", perms["allow"])
+	}
+	if plugins, _ := settings["enabledPlugins"].([]any); len(plugins) != 1 || plugins[0] != "lode@worklode" {
+		t.Fatalf("enabledPlugins in worktree = %v, want root's", settings["enabledPlugins"])
+	}
+}
+
+// A worktree that has since diverged keeps its own choices: propagation
+// converges on re-run rather than stomping what the agent changed there.
+func TestPropagateClaudeSettingsKeepsWorktreesOwnKeys(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	seedClaudeSettings(t, rootPath, false)
+	rootSettings := readSettings(t, rootPath)
+	rootSettings["permissions"] = map[string]any{"allow": []any{"Bash(lode *)"}}
+	if err := writeJSONFile(rootPath, rootSettings); err != nil {
+		t.Fatalf("seed root settings: %v", err)
+	}
+
+	dir := t.TempDir()
+	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
+	if err := writeJSONFile(dirPath, map[string]any{
+		"permissions": map[string]any{"allow": []any{"Bash(git *)"}},
+	}); err != nil {
+		t.Fatalf("seed worktree settings: %v", err)
+	}
+
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+
+	settings := readSettings(t, dirPath)
+	perms, _ := settings["permissions"].(map[string]any)
+	if allow, _ := perms["allow"].([]any); len(allow) != 1 || allow[0] != "Bash(git *)" {
+		t.Fatalf("permissions.allow = %v, want the worktree's own", perms["allow"])
+	}
+	// Worklode's own bindings still land, which is what repairs a worktree
+	// whose hooks were removed.
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode-hook session-start" {
+		t.Fatalf("SessionStart = %v, want the binding applied on top", got)
+	}
+}
+
+// A developer's own hooks are part of how the repo behaves, so a worktree of
+// that repo runs them too.
+func TestPropagateClaudeSettingsCarriesForeignHooks(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	seedClaudeSettings(t, rootPath, false)
+	rootSettings := readSettings(t, rootPath)
+	rootSettings["hooks"].(map[string]any)["PreCompact"] = []any{
+		map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "my-own-hook"}}},
+	}
+	if err := writeJSONFile(rootPath, rootSettings); err != nil {
+		t.Fatalf("seed foreign hook: %v", err)
+	}
+
+	dir := t.TempDir()
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+
+	settings := readSettings(t, filepath.Join(dir, ".claude", "settings.local.json"))
+	if got := HookCommands(settings, "PreCompact"); len(got) != 1 || got[0] != "my-own-hook" {
+		t.Fatalf("PreCompact in worktree = %v, want root's own hook", got)
+	}
+	if got := HookCommands(settings, "SessionStart"); len(got) != 1 || got[0] != "lode-hook session-start" {
+		t.Fatalf("SessionStart = %v, want Worklode's binding alongside", got)
+	}
+}
+
 func TestClaudeUninstallWithNoSettingsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".claude", "settings.local.json")
 	action, err := uninstallClaudeHooks(path)
