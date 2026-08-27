@@ -54,6 +54,9 @@ templ Task(v TaskView) {
 				<div class="bd prose">
 					@templ.Raw(string(v.BodyHTML))
 				</div>
+				if hasMermaid(v.BodyHTML) {
+					@mermaidScripts()
+				}
 			</section>
 
 			if len(v.Attachments) > 0 {

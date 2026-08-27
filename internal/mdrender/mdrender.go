@@ -17,14 +17,18 @@ import (
 	"bytes"
 	"errors"
 	"html/template"
+	"io"
 	"regexp"
 	"strings"
 
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
+	emoji "github.com/yuin/goldmark-emoji"
+	meta "github.com/yuin/goldmark-meta"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	mdhtml "github.com/yuin/goldmark/renderer/html"
+	mermaid "go.abhg.dev/goldmark/mermaid"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )
@@ -49,6 +53,7 @@ var (
 	checkboxType = regexp.MustCompile(`(?i)\Acheckbox\z`)
 	mediaType    = regexp.MustCompile(`(?i)\A(audio|video|image)/[a-z0-9.+-]{1,64}\z`)
 	langTag      = regexp.MustCompile(`\A[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*\z`)
+	mermaidClass = regexp.MustCompile(`\Amermaid\z`)
 )
 
 // linkHref is the only shape an a[href] may take: spec 021 section 8.1's three
@@ -76,8 +81,27 @@ var linkHref = regexp.MustCompile(`\A[\t\n\f\r ]*(?i:https?:|mailto:|[#?]|/(?:[^
 // drift apart. \A and \z rather than ^ and $ for the reason blobSrc gives.
 var sectionAnchor = regexp.MustCompile(`\Asec-[a-z0-9][a-z0-9.-]*\z`)
 
+// emojiExt renders ":emoji:" shortcodes as the literal Unicode character
+// rather than the extension's default <img> tag. An <img> would point at a
+// CDN, which buildPolicy's img[src] rule (blobSrc only) would strip anyway —
+// Unicode substitution is what makes emoji actually render instead of
+// silently vanishing, and it needs no allowlist change at all.
+var emojiExt = emoji.New(emoji.WithRenderingMethod(emoji.Unicode))
+
+// mermaidExt turns a ```mermaid fence into <pre class="mermaid">, for
+// mermaid.js (loaded separately by the pages that need it, self-hosted per
+// the page CSP's script-src 'self') to draw client-side. RenderModeClient is
+// pinned rather than left at the default RenderModeAuto: auto-detection
+// shells out to the "mmdc" CLI when present on $PATH to render server-side,
+// which is both a subprocess a rendering path should never invoke over
+// untrusted input and a silent behaviour change depending on what happens to
+// be installed on the host. NoScript suppresses the extension's own <script>
+// tags — bluemonday drops them anyway since script is not in buildPolicy's
+// allowlist, so emitting them would just be dead output.
+var mermaidExt = &mermaid.Extender{RenderMode: mermaid.RenderModeClient, NoScript: true}
+
 var md = goldmark.New(
-	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt),
 	// Unsafe here means "let raw HTML through to the sanitiser", not "trust
 	// it". The bluemonday policy below is the actual boundary.
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
@@ -93,10 +117,31 @@ var md = goldmark.New(
 // WithAttribute lets an author write any attribute, not just id — the
 // allowlist, not the parser, is what keeps that harmless.
 var mdDoc = goldmark.New(
-	goldmark.WithExtensions(extension.GFM),
+	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt),
 	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
+
+// mdMeta parses only front matter, into the parser.Context DocMeta hands it —
+// it never renders a body and is never given to render(), so it shares
+// nothing with the sanitised pipeline above and cannot affect what a page
+// shows. mdDoc's own frontmatter is stripped as raw text by stripFrontmatter
+// before Convert ever sees it (WL-301), so wiring this extension into mdDoc
+// itself would parse nothing; DocMeta exists to reach the fields that removal
+// throws away.
+var mdMeta = goldmark.New(goldmark.WithExtensions(meta.Meta))
+
+// DocMeta parses a design-document body's YAML front matter and returns it as
+// a plain map, for callers that want the fields programmatically rather than
+// rendered. It does no sanitisation and returns no HTML, so it is safe to
+// call on an untrusted body without going through render.
+func DocMeta(body string) (map[string]any, error) {
+	ctx := parser.NewContext()
+	if err := mdMeta.Convert([]byte(body), io.Discard, parser.WithContext(ctx)); err != nil {
+		return nil, err
+	}
+	return meta.Get(ctx), nil
+}
 
 var (
 	policy    = buildPolicy()
@@ -157,6 +202,13 @@ func buildPolicy() *bluemonday.Policy {
 	// not replace it — so leave it alone unless the whole table allowlist is
 	// rewritten here.
 	p.AllowTables()
+
+	// mermaidExt's client renderer marks its container "pre.mermaid" for
+	// mermaid.js to find; this is the one class value that element may carry.
+	// It is not the "class" global UGCPolicy leaves out reversed — it is
+	// scoped to one element and one exact value, not a general reopening of
+	// class/style.
+	p.AllowAttrs("class").Matching(mermaidClass).OnElements("pre")
 
 	// Media, pinned to blobs served by this server.
 	p.AllowAttrs("src").Matching(blobSrc).OnElements("img", "video", "source")

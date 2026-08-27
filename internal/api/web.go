@@ -104,8 +104,9 @@ func (s *server) blobOrigin() string {
 // place, renderWeb). Each directive is what the pages actually load:
 //
 //   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js, and
-//     /assets/htmx.min.js, and cliauth.templ's /assets/copy.js. No page has
-//     an inline script.
+//     /assets/htmx.min.js, cliauth.templ's /assets/copy.js, and task.templ /
+//     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js. No
+//     page has an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
 //     meta turns off the unnonced <style> htmx would otherwise inject for its
