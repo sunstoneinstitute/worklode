@@ -71,6 +71,16 @@ templ Page(p PageProps) {
 	</html>
 }
 
+// mermaidScripts loads mermaid.js and starts it, for the two pages that
+// render a body through mdrender (task.templ, docs.templ) rather than every
+// page: at 3.5MB, layout.templ's shared footer is the wrong place for it.
+// Both scripts are deferred, so document order relative to each other is what
+// makes mermaid-init.js see window.mermaid already set.
+templ mermaidScripts() {
+	<script src={ assetURL("mermaid.min.js") } defer></script>
+	<script src={ assetURL("mermaid-init.js") } defer></script>
+}
+
 // tableWrap is the scroll container every data table on a page renders inside.
 // A table is the one thing WCAG 1.4.10 exempts from reflow — it needs two
 // dimensions to mean anything — so at 320px it scrolls horizontally inside

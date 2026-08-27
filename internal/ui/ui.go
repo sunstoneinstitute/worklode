@@ -12,8 +12,10 @@ import (
 	"crypto/sha256"
 	"embed"
 	"fmt"
+	"html/template"
 	"io/fs"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -45,6 +47,16 @@ func assetURL(name string) string {
 // "2006-01-02 15:04". Every page-facing timestamp goes through it, so the web
 // UI never disagrees with itself about how a time is written.
 func fmtTime(t time.Time) string { return t.UTC().Format("2006-01-02 15:04") }
+
+// hasMermaid reports whether a rendered body contains a diagram, so
+// task.templ/docs.templ can skip loading mermaid.min.js (3.5MB) on the
+// common page that has none. The marker is mdrender's own output —
+// mermaidExt's client renderer always writes exactly
+// `<pre class="mermaid">`, and buildPolicy allows that class on no other
+// element — so this cannot mistake author-written prose for a diagram.
+func hasMermaid(body template.HTML) bool {
+	return strings.Contains(string(body), `<pre class="mermaid">`)
+}
 
 // FmtAge renders how long ago t was, relative to now, in the coarsest unit
 // that stays legible: minutes under an hour, hours under a day, days beyond
