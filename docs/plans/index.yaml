@@ -1259,3 +1259,15 @@ docs/plans/2026-08-25-steering-instructions.md:
     lode-channel-serve: "## `lode channel serve`"
     lode-task-instruct-id-message: "## `lode task instruct <id> <message>`"
     wiring-a-session-up-today-is-manual: "## Wiring a session up today is manual"
+docs/plans/2026-08-27-project-cockpit-3-run-board.md:
+  sections:
+    coverage-why-each-level-is-what-it-is: "## Coverage: why each level is what it is"
+    global-constraints: "## Global Constraints"
+    tasks: "## Tasks"
+    task-1-pure-classification-fact-row-to-run-group: "### Task 1 — Pure classification: fact row to run group"
+    task-2-store-open-and-merged-prs-per-project-in-bulk: "### Task 2 — Store: open and merged PRs per project, in bulk"
+    task-3-store-costs-for-a-set-of-tasks-in-bulk: "### Task 3 — Store: costs for a set of tasks, in bulk"
+    task-4-pure-assembly-groups-bounds-per-item-facts: "### Task 4 — Pure assembly: groups, bounds, per-item facts"
+    task-5-the-board-page-templ-component-and-stylesheet: "### Task 5 — The board page: templ component and stylesheet"
+    task-6-tracer-get-projectsidwork: "### Task 6 — Tracer: `GET /projects/{id}/work`"
+    task-7-e2e-and-docs-alignment: "### Task 7 — e2e and docs alignment"
