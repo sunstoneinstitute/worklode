@@ -52,6 +52,28 @@ func (s *Service) taskDAG(ctx context.Context) ([][2]string, error) {
 	return pairs, nil
 }
 
+// openSubgraph filters pairs to edges between open tasks, asking the store
+// which of the DAG's nodes are closed (the per-repo done_state predicate —
+// never a hardcoded state tuple). KG-only node ids that name no task row are
+// simply never reported closed, so they stay in the subgraph.
+func (s *Service) openSubgraph(ctx context.Context, pairs [][2]string) ([][2]string, error) {
+	seen := map[string]bool{}
+	var ids []string
+	for _, e := range pairs {
+		for _, id := range e {
+			if !seen[id] {
+				seen[id] = true
+				ids = append(ids, id)
+			}
+		}
+	}
+	closed, err := s.Store.ClosedTaskIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	return OpenSubgraph(pairs, closed), nil
+}
+
 // taskIDFromIRI inverts iri.Task ("" for a non-task IRI).
 func taskIDFromIRI(s string) string {
 	const p = iri.IDNS + "task/"
@@ -72,13 +94,20 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 	if err != nil {
 		return nil, err
 	}
-	a := Analyze(pairs, nil)
+	// Depth is historical (full DAG); criticality follows the open subgraph,
+	// matching CriticalPath (spec 007 §4's closed-task rule, WL-354).
+	full := Analyze(pairs, nil)
+	openPairs, err := s.openSubgraph(ctx, pairs)
+	if err != nil {
+		return nil, err
+	}
+	open := Analyze(openPairs, nil)
 	out := make([]model.FrontierTask, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, model.FrontierTask{
 			ID: t.ID, Title: t.Title, Project: t.Project,
 			Priority: t.Priority, Concern: t.Concern,
-			FanOut: fanOut[t.ID], Depth: a.Depth[t.ID], IsCritical: a.Critical[t.ID],
+			FanOut: fanOut[t.ID], Depth: full.Depth[t.ID], IsCritical: open.Critical[t.ID],
 		})
 	}
 	return out, nil
@@ -86,22 +115,34 @@ func (s *Service) Frontier(ctx context.Context, projectID string) ([]model.Front
 
 // CriticalPath computes the enriched cross-store critical path (overview
 // only, D12) plus any cycles found.
+//
+// Per spec 007 §4's closed-task rule (WL-354): depth is historical — the
+// full live DAG, closed predecessors included — while criticality and
+// fan-out are computed over the open subgraph, so a chain whose work is
+// entirely finished is never reported as the thing holding the project up.
+// Each reported node carries its historical depth, so "depth 5" still says
+// how long the chain behind it really was.
 func (s *Service) CriticalPath(ctx context.Context) (*model.CriticalPath, error) {
 	pairs, err := s.taskDAG(ctx)
 	if err != nil {
 		return nil, err
 	}
-	a := AnalyzeWithFanOut(pairs, nil)
-	cp := &model.CriticalPath{Cycles: a.Cycles}
-	for id, crit := range a.Critical {
+	full := Analyze(pairs, nil)
+	openPairs, err := s.openSubgraph(ctx, pairs)
+	if err != nil {
+		return nil, err
+	}
+	open := AnalyzeWithFanOut(openPairs, nil)
+	cp := &model.CriticalPath{Cycles: full.Cycles}
+	for id, crit := range open.Critical {
 		if !crit {
 			continue
 		}
 		cp.Tasks = append(cp.Tasks, model.FrontierTask{
-			ID: id, Depth: a.Depth[id], FanOut: a.FanOut[id], IsCritical: true,
+			ID: id, Depth: full.Depth[id], FanOut: open.FanOut[id], IsCritical: true,
 		})
-		if a.Depth[id] > cp.MaxDepth {
-			cp.MaxDepth = a.Depth[id]
+		if full.Depth[id] > cp.MaxDepth {
+			cp.MaxDepth = full.Depth[id]
 		}
 	}
 	sort.Slice(cp.Tasks, func(i, j int) bool {
