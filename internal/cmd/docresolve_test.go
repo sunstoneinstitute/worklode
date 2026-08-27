@@ -281,3 +281,44 @@ func TestCheckDocKind(t *testing.T) {
 		t.Errorf("SPEC on an ADR: err = %v, want *KindMismatchError", err)
 	}
 }
+
+// WL-358: a number-led slug names the document whose slug it is. Other
+// documents that merely share its number — a plan on its own 029 §4 sequence,
+// another kind's number — are not candidates, and the union of the two
+// criteria used to report them as a bogus ambiguity.
+func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
+	docs := []model.Doc{
+		{ID: 26, Kind: "spec", Number: 1, Slug: "001-zero-trust-gateway"},
+		{ID: 27, Kind: "spec", Number: 2, Slug: "002-distributed-downloader-mesh"},
+		{ID: 30, Kind: "plan", Number: 1, Slug: "2026-08-22-mesh-5-tray"},
+	}
+
+	got, _, err := resolveDocRef(docs, "EA", "001-zero-trust-gateway")
+	if err != nil {
+		t.Fatalf("number-led slug: %v", err)
+	}
+	if got.ID != 26 {
+		t.Errorf("ID = %d, want 26", got.ID)
+	}
+
+	// The number fallback still serves a ref whose slug text drifted from the
+	// document's current slug: nothing prefix-matches, the number is unique.
+	got, _, err = resolveDocRef(docs, "EA", "002-renamed-since")
+	if err != nil {
+		t.Fatalf("renamed slug falls back to the number: %v", err)
+	}
+	if got.ID != 27 {
+		t.Errorf("ID = %d, want 27", got.ID)
+	}
+
+	// A bare number that two kinds share is still genuinely ambiguous, and
+	// the candidates are exactly the documents carrying that number.
+	_, _, err = resolveDocRef(docs, "EA", "1")
+	var amb *designdoc.AmbiguousRefError
+	if !errors.As(err, &amb) {
+		t.Fatalf("bare shared number: err = %v, want *AmbiguousRefError", err)
+	}
+	if want := []string{"001-zero-trust-gateway", "2026-08-22-mesh-5-tray"}; !reflect.DeepEqual(amb.Candidates, want) {
+		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
+	}
+}

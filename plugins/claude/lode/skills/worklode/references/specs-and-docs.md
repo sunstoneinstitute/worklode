@@ -26,17 +26,17 @@ superseded`; `proposed` was retired — a document under review just stays
 ```bash
 lode doc anchors <file>                                    # local lint before creating/editing
 lode doc new --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
-lode doc edit <id-or-slug> --file <file>                    # replace a draft's body
-lode doc revise <id-or-slug> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
-lode doc revise <id-or-slug> --discard                      # withdraw it without landing: assignee or its author
-lode doc submit <id-or-slug>                                # records a review event; mints a review task
-lode doc accept <id-or-slug>                                # assignee-gated; on a plan, mints the declarations that have no task yet
+lode doc edit <ref> --file <file>                    # replace a draft's body
+lode doc revise <ref> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
+lode doc revise <ref> --discard                      # withdraw it without landing: assignee or its author
+lode doc submit <ref>                                # records a review event; mints a review task
+lode doc accept <ref>                                # assignee-gated; on a plan, mints the declarations that have no task yet
 ```
 
 Draft the markdown — frontmatter included — in a scratch file first; it's an
 editor buffer, nothing reads it again after `lode doc new`. Read a document
 back with `lode show <ref>` (see shorthand below) or `lode doc get
-<id-or-slug> --json` for the body plus parsed sections and edges.
+<ref> --json` for the body plus parsed sections and edges.
 
 ## Frontmatter
 

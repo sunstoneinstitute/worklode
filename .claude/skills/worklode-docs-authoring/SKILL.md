@@ -20,15 +20,15 @@ included — in a scratch file, then:
 ```bash
 lode doc anchors <file>                             # local lint: anchors, plan ## Tasks
 lode doc new --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
-lode doc edit <id-or-slug> --file <file>            # replace a draft's body
-lode doc revise <id-or-slug> --file <file>          # candidate revision on an accepted doc
-lode doc revise <id-or-slug> --discard              # withdraw it unlanded: assignee or its author
-lode doc submit <id-or-slug>                        # mints the review task
-lode doc accept <id-or-slug>                        # assignee-gated; a plan's accept mints its tasks
+lode doc edit <ref> --file <file>            # replace a draft's body
+lode doc revise <ref> --file <file>          # candidate revision on an accepted doc
+lode doc revise <ref> --discard              # withdraw it unlanded: assignee or its author
+lode doc submit <ref>                        # mints the review task
+lode doc accept <ref>                        # assignee-gated; a plan's accept mints its tasks
 ```
 
 Read one back with `lode show <ref>` (`WL-SPEC-25`, `WL-SPEC-25#sec-9`, or
-`-s <anchor>`) or `lode doc get <id-or-slug> --json` for the body plus parsed
+`-s <anchor>`) or `lode doc get <ref> --json` for the body plus parsed
 sections and edges. The scratch file is an editor buffer, not a copy of record
 — nothing reads it after `lode doc new`.
 
