@@ -889,10 +889,15 @@ brief exists: that this repo is Worklode-tracked, and that work is entered throu
 `lode task claim`. Content outside the markers is never touched, and a repo with no `AGENTS.md`
 gets one created.
 
-Claude Code reads `CLAUDE.md`, not `AGENTS.md`. Where no `CLAUDE.md` exists, `lode install`
-creates one containing exactly `@AGENTS.md` — the pattern Claude Code's own memory documentation
-prescribes. Where one exists, Worklode leaves it alone and reports the one-line addition as a
-suggestion; a `CLAUDE.md` is authored prose and Worklode has no business editing it.
+Claude Code reads `CLAUDE.md` and `CLAUDE.local.md`, not `AGENTS.md`. Worklode targets
+`CLAUDE.local.md`: a `CLAUDE.md` is authored, committed prose Worklode has no business editing,
+while `CLAUDE.local.md` is per-checkout state — so `lode install` also ensures that name is in the
+repo's tracked `.gitignore`, appended once. Where no `CLAUDE.local.md` exists, `lode install`
+creates one containing exactly `@AGENTS.md` — the import pattern Claude Code's own memory
+documentation prescribes. Where one exists, it may carry the developer's own local notes, so
+Worklode leaves it alone and reports the one-line addition as a suggestion. An `AGENTS.md`
+symlinked to `CLAUDE.local.md` already puts the managed block in a file Claude Code reads and
+satisfies the step with nothing created.
 
 ## 18. Degradation {#sec-18}
 
