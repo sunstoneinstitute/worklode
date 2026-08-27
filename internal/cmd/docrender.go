@@ -132,18 +132,36 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 // against the docs of the project the backbone says owns that key. It returns
 // *designdoc.UnresolvedError only for tier 3, a key no registered project
 // carries, so every ref-taking command gets the same answer for the same ref.
+//
+// A ref carrying no key — a slug, a path, a number form — has no tier 2 of
+// its own, and used to stop at the current project's documents while `lode
+// doc get` resolved the same string org-wide (WL-358: `lode doc get
+// 001-zero-trust-gateway` worked from a worklode checkout and `lode doc todo`
+// on the same string did not). It now falls through to the backbone's own
+// resolver — the endpoint `lode doc <verb>` already calls — so the four doc
+// surfaces accept one grammar over one corpus. Only a not-found falls
+// through: an ambiguity or a kind mismatch is an answer about this ref, and a
+// wider search would mask it rather than improve it.
 func resolveDocRefTiers(ctx context.Context, c *cli.Client, docs []model.Doc, projectKey, ref string) (model.Doc, string, error) {
 	doc, section, err := resolveDocRef(docs, projectKey, ref)
 	if err == nil {
 		return doc, section, nil
 	}
 	var unresolved *designdoc.UnresolvedError
-	if !errors.As(err, &unresolved) {
+	if errors.As(err, &unresolved) {
+		// Tier 2, live since 025 landed (WL-276): the caller already reached
+		// the backbone for docs, so ask it whose key this is.
+		return resolveForeignDocRef(ctx, c, unresolved.Key, ref)
+	}
+	var notFound *designdoc.NotFoundError
+	if !errors.As(err, &notFound) {
 		return model.Doc{}, "", err
 	}
-	// Tier 2, live since 025 landed (WL-276): the caller already reached the
-	// backbone for docs, so ask it whose key this is.
-	return resolveForeignDocRef(ctx, c, unresolved.Key, ref)
+	base, section := designdoc.SplitFragment(ref)
+	if d, rerr := c.ResolveDoc(ctx, base); rerr == nil {
+		return d, section, nil
+	}
+	return model.Doc{}, "", err
 }
 
 // resolveForeignDocRef is 026 §4.2's tier 2: resolve a shorthand whose key
