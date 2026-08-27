@@ -511,15 +511,24 @@ func runTaskShow(cmd *cobra.Command, arg string, usage bool) error {
 		return err
 	}
 	if jsonOut(cmd) {
-		return printJSON(cmd, struct {
-			Task json.RawMessage `json:"task"`
-			Cost json.RawMessage `json:"cost"`
-		}{json.RawMessage(raw), json.RawMessage(costRaw)})
+		return printJSON(cmd, taskShowUsageResult{
+			Task: json.RawMessage(raw),
+			Cost: json.RawMessage(costRaw),
+		})
 	}
 	cli.TaskDetailRender(cmd.OutOrStdout(), t, cfg.ServerURL)
 	fmt.Fprintln(cmd.OutOrStdout())
 	cli.TaskCostRender(cmd.OutOrStdout(), tc, "all time")
 	return nil
+}
+
+// taskShowUsageResult is `task show --usage`'s --json output: it splices two
+// already-serialized API responses (the task and its cost) together for
+// display. It never crosses the HTTP boundary itself, so it stays local to
+// the CLI rather than living in internal/model (ADR 036 §2).
+type taskShowUsageResult struct {
+	Task json.RawMessage `json:"task"`
+	Cost json.RawMessage `json:"cost"`
 }
 
 func newTaskSkillsCmd() *cobra.Command {
