@@ -1155,9 +1155,9 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotFound):
 		writeErr(w, http.StatusNotFound, "not found")
 	// A refusal about this row, not about the endpoint: the document accept
-	// gate (025 §7) admits only the assignee, whatever role the caller holds.
-	// The message is the store's, because "someone else is assigned" is what
-	// the caller has to act on.
+	// and transfer gates (025 §7) admit only the owner, whatever role the
+	// caller holds. The message is the store's, because "someone else owns
+	// it" is what the caller has to act on.
 	case errors.Is(err, store.ErrForbidden):
 		writeErr(w, http.StatusForbidden, err.Error())
 	// A body citing a hash with no blob row: user error, not a server fault.

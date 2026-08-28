@@ -28,9 +28,10 @@ lode doc anchors <file>                                    # local lint before c
 lode doc new --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
 lode doc edit <ref> --file <file>                    # replace a draft's body
 lode doc revise <ref> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
-lode doc revise <ref> --discard                      # withdraw it without landing: assignee or its author
+lode doc revise <ref> --discard                      # withdraw it without landing: owner or its author
 lode doc submit <ref>                                # records a review event; mints a review task
-lode doc accept <ref>                                # assignee-gated; on a plan, mints the declarations that have no task yet
+lode doc accept <ref>                                # owner-gated; on a plan, mints the declarations that have no task yet
+lode doc transfer <ref> --to <actor>                 # owner-gated; reassigns the document to another actor
 ```
 
 Draft the markdown — frontmatter included — in a scratch file first; it's an
@@ -121,7 +122,7 @@ double-accept never double-mints):
 | `lode doc accept` **of a spec** | a `design` task charged with decomposing it into plans, `about_doc` = the doc | suppressed if a design task on it is already open; accepting an ADR or a plan mints nothing here — a plan's own acceptance mints its *task set* directly, not through this watcher |
 
 Minting the prompt is not performing the act: nothing here reviews, accepts,
-or decomposes anything on its own — those stay manual, assignee-gated
+or decomposes anything on its own — those stay manual, owner-gated
 commands.
 
 ## The spec / plan / task model, in one paragraph
