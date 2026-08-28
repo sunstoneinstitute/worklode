@@ -150,10 +150,10 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.withProjectKey(r.Context(), *created))
 }
 
-// listDocs handles GET /api/v1/docs?project=&kind=&status=&deleted= plus the
-// three derived selectors: ?needs_planning= and ?needs_execution= (026 §2.1),
-// and ?bare_superseded= (026 §2.4, 025 §6 rule 2). deleted=true switches the
-// list from live documents to tombstoned ones (044 §5).
+// listDocs handles GET /api/v1/docs?project=&kind=&status=&owner=&deleted=
+// plus the three derived selectors: ?needs_planning= and ?needs_execution=
+// (026 §2.1), and ?bare_superseded= (026 §2.4, 025 §6 rule 2). deleted=true
+// switches the list from live documents to tombstoned ones (044 §5).
 // projectKeyByID reads the project id -> key map that a document's formatted
 // id needs (model.Doc.ProjectKey): the shorthand is built from the key, and a
 // document carries only its project id.
@@ -300,7 +300,7 @@ func withoutDocBodies(docs []model.Doc) []model.Doc {
 	return out
 }
 
-// docFilterFrom reads the three plain list filters off the query string. An
+// docFilterFrom reads the four plain list filters off the query string. An
 // unknown value filters to nothing rather than erroring — the same way the
 // task list treats a state nobody uses. The cockpit's /docs page calls it
 // directly; the JSON API goes through docSelectorFrom, which adds 026 §2's
@@ -311,10 +311,11 @@ func docFilterFrom(r *http.Request) store.DocFilter {
 		Project: q.Get("project"),
 		Kind:    q.Get("kind"),
 		Status:  q.Get("status"),
+		Owner:   q.Get("owner"),
 	}
 }
 
-// docListSelector is GET /api/v1/docs' query string once validated: the three
+// docListSelector is GET /api/v1/docs' query string once validated: the four
 // plain filters, plus at most one of the three derived selectors of 026 §2.
 type docListSelector struct {
 	filter         store.DocFilter
@@ -339,7 +340,7 @@ type docDerivedSelector struct {
 
 // docSelectorFrom reads the list selectors off the query string.
 //
-// The three plain filters take any value — an unknown one filters to nothing,
+// The four plain filters take any value — an unknown one filters to nothing,
 // the same way the task list treats a state nobody uses. The three derived
 // selectors do not: each implies a status, and needs_planning/needs_execution
 // each imply a single kind while bare_superseded implies one of two (026

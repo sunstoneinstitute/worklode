@@ -52,7 +52,7 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
-  Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --project, --repo, --status
+  Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
 - `lode doc new` — Create a document (spec, ADR, or plan) in draft
   Flags: --file, --kind, --number, --owner, --project, --repo, --slug
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision

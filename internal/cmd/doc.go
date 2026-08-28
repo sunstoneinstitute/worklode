@@ -143,7 +143,7 @@ func newDocNewCmd() *cobra.Command {
 
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
-	var kind, status string
+	var kind, status, owner string
 	var needsPlanning, needsExecution, bareSuperseded, deleted bool
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -164,7 +164,7 @@ func newDocListCmd() *cobra.Command {
 				return err
 			}
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
-				Project: sc.Project, Kind: kind, Status: status,
+				Project: sc.Project, Kind: kind, Status: status, Owner: owner,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
 				Deleted: deleted,
 			})
@@ -189,6 +189,7 @@ func newDocListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
 	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded")
+	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")
 	cmd.Flags().BoolVar(&needsPlanning, "needs-planning", false,
 		"accepted specs with a section no accepted plan covers")
 	cmd.Flags().BoolVar(&needsExecution, "needs-execution", false,

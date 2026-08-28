@@ -31,6 +31,7 @@ type DocListFilter struct {
 	Project        string
 	Kind           string // spec | adr | plan
 	Status         string // draft | accepted | superseded
+	Owner          string
 	NeedsPlanning  bool
 	NeedsExecution bool
 	BareSuperseded bool
@@ -51,6 +52,9 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	}
 	if f.Status != "" {
 		q.Set("status", f.Status)
+	}
+	if f.Owner != "" {
+		q.Set("owner", f.Owner)
 	}
 	if f.NeedsPlanning {
 		q.Set("needs_planning", "true")

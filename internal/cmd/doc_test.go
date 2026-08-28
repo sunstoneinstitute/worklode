@@ -771,6 +771,67 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	}
 }
 
+// TestDocListByOwner: `lode doc list --owner` filters to that actor's
+// documents and composes with --kind rather than replacing it (WL-382 task
+// 4); an owner with no documents returns an empty list, not an error.
+func TestDocListByOwner(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor bob: %v", err)
+	}
+
+	specFile := writeDocFile(t, docTestBody)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--slug", "alice-spec", "--file", specFile); err != nil {
+		t.Fatalf("doc new (alice spec): %v", err)
+	}
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+		"--slug", "alice-adr", "--file", specFile); err != nil {
+		t.Fatalf("doc new (alice adr): %v", err)
+	}
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--slug", "bob-spec", "--owner", "bob", "--file", specFile); err != nil {
+		t.Fatalf("doc new (bob spec): %v", err)
+	}
+
+	out, err := runLode(t, "doc", "list", "--project", "proj", "--owner", "bob", "--json")
+	if err != nil {
+		t.Fatalf("doc list --owner bob: %v\noutput: %s", err, out)
+	}
+	var listed struct {
+		Docs []model.Doc `json:"docs"`
+	}
+	if err := json.Unmarshal([]byte(out), &listed); err != nil {
+		t.Fatalf("decode doc list %q: %v", out, err)
+	}
+	if len(listed.Docs) != 1 || listed.Docs[0].Owner != "bob" {
+		t.Fatalf("doc list --owner bob = %+v, want just bob's doc", listed.Docs)
+	}
+
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--owner", "alice", "--kind", "adr", "--json")
+	if err != nil {
+		t.Fatalf("doc list --owner alice --kind adr: %v\noutput: %s", err, out)
+	}
+	if err := json.Unmarshal([]byte(out), &listed); err != nil {
+		t.Fatalf("decode doc list %q: %v", out, err)
+	}
+	if len(listed.Docs) != 1 || listed.Docs[0].Slug != "alice-adr" {
+		t.Fatalf("doc list --owner alice --kind adr = %+v, want just alice-adr", listed.Docs)
+	}
+
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--owner", "carol", "--json")
+	if err != nil {
+		t.Fatalf("doc list --owner carol: %v\noutput: %s", err, out)
+	}
+	if err := json.Unmarshal([]byte(out), &listed); err != nil {
+		t.Fatalf("decode doc list %q: %v", out, err)
+	}
+	if len(listed.Docs) != 0 {
+		t.Fatalf("doc list --owner carol = %+v, want an empty list, not an error", listed.Docs)
+	}
+}
+
 // --- lode doc anchors (the local pre-accept lint, 025 §18) ---------------
 
 func TestDocAnchors(t *testing.T) {

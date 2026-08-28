@@ -61,6 +61,9 @@ type DocFilter struct {
 	Project string
 	Kind    string
 	Status  string
+	// Owner narrows to documents with this exact owner (025 §7.3), served by
+	// the docs_owner partial index (migration 0058).
+	Owner string
 	// Deleted switches the list from live documents to tombstoned ones
 	// (044 §5). See TaskFilter.Deleted for why it is a switch.
 	Deleted bool
@@ -848,7 +851,7 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 	for _, c := range []struct {
 		column string
 		value  string
-	}{{"project_id", f.Project}, {"kind", f.Kind}, {"status", f.Status}} {
+	}{{"project_id", f.Project}, {"kind", f.Kind}, {"status", f.Status}, {"owner", f.Owner}} {
 		if c.value == "" {
 			continue
 		}
