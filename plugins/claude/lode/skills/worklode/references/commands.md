@@ -60,6 +60,8 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 - `lode doc submit` — Submit a document for review (records a review event; the document's status does not change)
 - `lode doc todo` — What is left before a spec is fully implemented
   Flags: --deps
+- `lode doc transfer` — Transfer document ownership to another actor
+  Flags: --from, --project, --repo, --to
 - `lode doc undelete` — Restore a deleted document, clearing its tombstone
 - `lode doc versions` — List a document's version history
 

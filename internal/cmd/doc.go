@@ -75,6 +75,7 @@ func newDocCmd() *cobra.Command {
 		newDocTodoCmd(),
 		newDocDeleteCmd(),
 		newDocUndeleteCmd(),
+		newDocTransferCmd(),
 	)
 	return cmd
 }
