@@ -36,7 +36,7 @@ var (
 	// or that (kind, number).
 	ErrDocExists = errors.New("document already exists")
 	// ErrForbidden means the actor may not perform this operation on this
-	// entity — a document accept is the assignee's act (025 §7).
+	// entity — a document accept is the owner's act (025 §7).
 	ErrForbidden = errors.New("forbidden")
 	// ErrRevisionExists means the document already has an open candidate
 	// revision; 025 §7.2 allows one at a time.

@@ -70,8 +70,8 @@ templ Doc(v DocView) {
 						{ " · issued " + v.Doc.Issued }
 					}
 				</p>
-				if v.Doc.Assignee != "" {
-					<p class="muted small">Assigned to { v.Doc.Assignee }</p>
+				if v.Doc.Owner != "" {
+					<p class="muted small">Owned by { v.Doc.Owner }</p>
 				}
 				if v.Doc.GeneratedByTask != "" {
 					<p class="muted small">

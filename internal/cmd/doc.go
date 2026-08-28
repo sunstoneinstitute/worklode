@@ -75,6 +75,7 @@ func newDocCmd() *cobra.Command {
 		newDocTodoCmd(),
 		newDocDeleteCmd(),
 		newDocUndeleteCmd(),
+		newDocTransferCmd(),
 	)
 	return cmd
 }
@@ -85,7 +86,7 @@ func init() {
 
 func newDocNewCmd() *cobra.Command {
 	var scope scopeFlags
-	var kind, slug, assignee, file string
+	var kind, slug, owner, file string
 	var number int
 	cmd := &cobra.Command{
 		Use:   "new",
@@ -114,7 +115,7 @@ func newDocNewCmd() *cobra.Command {
 			// rather than refusing the create — a human in the cockpit and an
 			// agent working ad hoc both author documents legitimately.
 			d, raw, err := c.CreateDoc(cmd.Context(), model.CreateDocInput{
-				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Assignee: assignee,
+				Project: sc.Project, Kind: kind, Number: number, Slug: slug, Body: body, Owner: owner,
 				GeneratedByTask: currentTaskID(),
 			})
 			if err != nil {
@@ -133,7 +134,7 @@ func newDocNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&slug, "slug", "", "document slug (required)")
 	cmd.Flags().IntVar(&number, "number", 0,
 		"corpus number (omit to auto-assign the next free one; an explicit value is a rare reservation)")
-	cmd.Flags().StringVar(&assignee, "assignee", "", "actor id to assign the document to (default: yourself)")
+	cmd.Flags().StringVar(&owner, "owner", "", "actor id to own the document (default: yourself)")
 	cmd.Flags().StringVar(&file, "file", "", `markdown source file, frontmatter included ("-" for stdin) (required)`)
 	cmd.MarkFlagRequired("kind")
 	cmd.MarkFlagRequired("slug")
@@ -143,7 +144,7 @@ func newDocNewCmd() *cobra.Command {
 
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
-	var kind, status string
+	var kind, status, owner string
 	var needsPlanning, needsExecution, bareSuperseded, deleted bool
 	cmd := &cobra.Command{
 		Use:   "list",
@@ -164,7 +165,7 @@ func newDocListCmd() *cobra.Command {
 				return err
 			}
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
-				Project: sc.Project, Kind: kind, Status: status,
+				Project: sc.Project, Kind: kind, Status: status, Owner: owner,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
 				Deleted: deleted,
 			})
@@ -189,6 +190,7 @@ func newDocListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
 	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded")
+	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")
 	cmd.Flags().BoolVar(&needsPlanning, "needs-planning", false,
 		"accepted specs with a section no accepted plan covers")
 	cmd.Flags().BoolVar(&needsExecution, "needs-execution", false,
@@ -448,7 +450,7 @@ func newDocEditCmd() *cobra.Command {
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accept <ref>",
-		Short: "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the assignee may accept it",
+		Short: "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

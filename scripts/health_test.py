@@ -36,7 +36,7 @@ def doc(doc_id, kind, slug, status="accepted", updated=None):
         "id": doc_id, "project": "worklode", "kind": kind,
         "number": doc_id if kind == "spec" else 0, "slug": slug, "title": slug,
         "body": "",  # blanked on every list response, as the server does
-        "status": status, "version": 1, "issued": "", "assignee": "",
+        "status": status, "version": 1, "issued": "", "owner": "",
         "created_by": "stig", "created_at": ago(30),
         "updated_at": updated or ago(5),
     }
