@@ -314,14 +314,26 @@ func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
 		t.Errorf("ID = %d, want 27", got.ID)
 	}
 
-	// A bare number that two kinds share is still genuinely ambiguous, and
-	// the candidates are exactly the documents carrying that number.
+	// A bare number names the spec: a plan sits on its own 029 §4 sequence, so
+	// plan 1 shares the number with spec 001 by construction and reporting
+	// that as an ambiguity would break every "025 §10" link in the corpus.
+	got, _, err = resolveDocRef(docs, "EA", "1")
+	if err != nil {
+		t.Fatalf("bare number shared with a plan: %v", err)
+	}
+	if got.ID != 26 {
+		t.Errorf("ID = %d, want 26", got.ID)
+	}
+
+	// Two *numbered* kinds sharing one number is still genuinely ambiguous,
+	// and the candidates are exactly the documents carrying that number.
+	docs = append(docs, model.Doc{ID: 31, Kind: "adr", Number: 1, Slug: "001-use-postgres"})
 	_, _, err = resolveDocRef(docs, "EA", "1")
 	var amb *designdoc.AmbiguousRefError
 	if !errors.As(err, &amb) {
 		t.Fatalf("bare shared number: err = %v, want *AmbiguousRefError", err)
 	}
-	if want := []string{"001-zero-trust-gateway", "2026-08-22-mesh-5-tray"}; !reflect.DeepEqual(amb.Candidates, want) {
+	if want := []string{"001-use-postgres", "001-zero-trust-gateway"}; !reflect.DeepEqual(amb.Candidates, want) {
 		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
 	}
 }
@@ -354,17 +366,15 @@ func TestResolveDocRefForeignNumberLedSlugIsNotFound(t *testing.T) {
 		t.Fatalf("foreign number-led slug: err = %v, want *NotFoundError", err)
 	}
 
-	// A bare number carries no kind to narrow by, so both documents numbered
-	// 26 are real candidates — and only those two. The list is the whole
-	// assertion: a resolver that unioned in slug-prefix or cross-number
-	// matches would still fail here, having "resolved" nothing.
-	_, _, err = resolveDocRef(docs, "WL", "26")
-	if !errors.As(err, &amb) {
-		t.Fatalf("bare shared number: err = %v, want *AmbiguousRefError", err)
+	// A bare number names the spec: plan 26 sits on its own 029 §4 sequence
+	// and shares the number by construction, which used to make every
+	// "026 §N" the corpus writes ambiguous.
+	got, _, err := resolveDocRef(docs, "WL", "26")
+	if err != nil {
+		t.Fatalf("bare number shared with a plan: %v", err)
 	}
-	want := []string{"026-design-doc-queries", "2026-07-25-worklode-homebrew-bottles"}
-	if !reflect.DeepEqual(amb.Candidates, want) {
-		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
+	if got.ID != 48 {
+		t.Errorf("ID = %d, want 48", got.ID)
 	}
 
 	// The drifted-slug fallback survives only where the number is unique:
@@ -388,6 +398,9 @@ func TestResolveDocRefTiersFallsBackToBackbone(t *testing.T) {
 	local := []model.Doc{
 		{ID: 33, Project: "worklode", Kind: "spec", Number: 1, Slug: "001-identity-and-authentication"},
 		{ID: 9, Project: "worklode", Kind: "plan", Number: 1, Slug: "2026-08-21-cloud-sandbox-provisioning"},
+		// A bare number is narrowed to spec and ADR, so the ambiguity below
+		// needs two of those kinds sharing one number, not a plan.
+		{ID: 12, Project: "worklode", Kind: "adr", Number: 1, Slug: "001-use-postgres"},
 	}
 
 	var resolved []string

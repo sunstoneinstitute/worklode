@@ -1362,6 +1362,43 @@ func TestDocVersionPage(t *testing.T) {
 	}
 }
 
+// TestDocPageVersionQuery covers /docs/<ref>?v=<n>: the same version page as
+// /docs/versions/{id}/{n}, reached through the canonical KEY-KIND-n URL.
+func TestDocPageVersionQuery(t *testing.T) {
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "025-part-2", Body: docPlanBody,
+	})
+	edited := strings.Replace(docPlanBody, "Do the thing.", "Do it now.", 1)
+	if rr := doReq(t, h, "PUT", docPath(plan.ID, "/body"), token, model.UpdateDocBodyInput{Body: edited}); rr.Code != http.StatusOK {
+		t.Fatalf("update body status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	ref := fmt.Sprintf("/docs/WL-PLAN-%d", plan.Number)
+
+	rr := doReq(t, h, "GET", ref+"?v=1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("superseded version status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	bodyContains(t, body, "back to current", "Do the thing.")
+
+	if rr := doReq(t, h, "GET", ref+"?v=3", "", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown version status = %d, want 404", rr.Code)
+	}
+	if rr := doReq(t, h, "GET", ref+"?v=x", "", nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("non-numeric version status = %d, want 400", rr.Code)
+	}
+	// No ?v= is still the document itself.
+	if rr := doReq(t, h, "GET", ref, "", nil); rr.Code != http.StatusOK {
+		t.Fatalf("doc page status = %d, body %s", rr.Code, rr.Body.String())
+	} else if strings.Contains(rr.Body.String(), "back to current") {
+		t.Error("the document page rendered as a version page")
+	}
+}
+
 // TestDocVersionPageRejectsInt32Overflow is the web-route sibling of
 // TestGetDocVersionRejectsInt32Overflow (WL-345 I1): docVersionPage guards
 // the same int4 column and must refuse the same way.

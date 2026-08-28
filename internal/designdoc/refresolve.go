@@ -31,8 +31,9 @@ import (
 //  4. the <KEY>-<TYPE>-<n> shorthand, whose <TYPE> token is kind-checked.
 //
 // A form that matches nothing falls through to the next, which is how a bare
-// filename ("014-foo.md") still resolves by number. Every kind is a candidate,
-// plans included, since 029 §4 gave them a number to be named by.
+// filename ("014-foo.md") still resolves by number. Every kind is a candidate
+// by slug and by shorthand; a bare number reaches specs and ADRs only, since
+// 029 §4 puts plans on a sequence of their own (see form 2).
 func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, error) {
 	base, section := SplitFragment(ref)
 	candidates := docs
@@ -62,6 +63,15 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 	// (WL-358 again: "001-zero-trust-gateway" resolved against a corpus that
 	// does not hold it listed that corpus's spec 001 and plan 1). None of
 	// them bears the name asked for, so the ref names no document.
+	//
+	// A *bare* number reaches specs and ADRs only, the kinds 026 §3 calls a
+	// "spec number". Plans sit on a sequence of their own (029 §4), so plan
+	// 25 and spec 025 share a number by construction, and including them made
+	// "025 §10" — the way the corpus writes a reference — ambiguous for every
+	// such pair. internal/store's docsByNumber restricts the same way; the
+	// two resolvers have to agree. A plan is named by its slug or by
+	// WL-PLAN-25. The drifted-slug fallback above keeps every kind: there the
+	// shared number is what says the ref names none of them.
 	if nf, ok := ParseNumberForm(base); ok {
 		if nf.Number == 0 {
 			return model.Doc{}, "", NoSpecError(ref)
@@ -78,7 +88,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 			}
 			return model.Doc{}, "", NotFoundRefError(ref)
 		}
-		return finishRef(ref, matchRefNumber(candidates, nf.Number), section)
+		return finishRef(ref, matchRefNumber(numberedRefDocs(candidates), nf.Number), section)
 	}
 
 	// Form 3: bare slug. Digit-leading refs never reach here — the number
@@ -185,10 +195,11 @@ func filterRefDocs(docs []model.Doc, keep func(model.Doc) bool) []model.Doc {
 	return matches
 }
 
-// showableRefDocs is every document a ref can name. Plans were excluded while
-// 025 §14.3 left them without a number to be named by; 029 §4 gives them one,
-// so a ref reaches them like any other kind. They still carry no sections
-// (025 §9), which renders as a document with none rather than a failure.
+// numberedRefDocs is every document a bare corpus number can name: spec and
+// ADR, the kinds whose number the corpus writes as "025 §10". See form 2.
+func numberedRefDocs(docs []model.Doc) []model.Doc {
+	return filterRefDocs(docs, func(d model.Doc) bool { return d.Kind != "plan" })
+}
 
 // matchRefNumber returns every document whose corpus number equals n.
 func matchRefNumber(docs []model.Doc, n int) []model.Doc {
