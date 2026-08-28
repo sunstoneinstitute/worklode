@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -80,7 +79,7 @@ func newDocTransferCmd() *cobra.Command {
 				}
 				docs = resp.Docs
 				if !confirmDocTransfer(cmd, docs, from, to) {
-					fmt.Fprintln(cmd.OutOrStdout(), "aborted: no documents transferred")
+					fmt.Fprintln(cmd.ErrOrStderr(), "aborted: no documents transferred")
 					return nil
 				}
 			} else {
@@ -110,7 +109,7 @@ func newDocTransferCmd() *cobra.Command {
 				for i, o := range outcomes {
 					results[i] = docTransferResult{Doc: o.Doc, Error: o.Err}
 				}
-				if err := json.NewEncoder(cmd.OutOrStdout()).Encode(results); err != nil {
+				if err := printJSON(cmd, results); err != nil {
 					return err
 				}
 			} else {

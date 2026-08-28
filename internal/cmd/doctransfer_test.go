@@ -5,12 +5,48 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
+
+// TestConfirmDocTransferSkipsPromptOnNonTerminalStdin: an *os.File stdin
+// that is not a terminal (redirected from a file or pipe, as under CI or an
+// agent) must proceed without ever reading an answer from it. Asserted
+// directly rather than relying on the other tests' implicit coverage (they
+// get their non-interactive behavior for free from `go test`'s own
+// non-terminal stdin): the file here "answers" n, so if the terminal check
+// ever inverted and the code actually read it, this fails on that answer
+// instead of hanging — a real file's Read never blocks, unlike an
+// interactive terminal or an unclosed pipe would.
+func TestConfirmDocTransferSkipsPromptOnNonTerminalStdin(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+	if _, err := f.WriteString("n\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	cmd.SetIn(f)
+	cmd.SetErr(io.Discard)
+
+	docs := []model.Doc{{ID: 1, Kind: "spec", Number: 1, Title: "x"}}
+	if !confirmDocTransfer(cmd, docs, "bob", "ada") {
+		t.Fatal("confirmDocTransfer on non-terminal stdin = false, want true (proceed without reading the file's \"n\" answer)")
+	}
+}
 
 // TestDocTransferBothOrNeitherRefused: refs and --from are mutually
 // exclusive, and exactly one is required (Task 5's Args validator).
@@ -60,6 +96,64 @@ func TestDocTransferByRefs(t *testing.T) {
 	}
 	if got := docJSON(t, out).Owner; got != "bob" {
 		t.Errorf("owner after transfer = %q, want bob", got)
+	}
+}
+
+// TestDocTransferJSONReportsNewOwner: a successful `--json` transfer reports
+// the endpoint's response, not the pre-transfer document ListDocs/GetDoc
+// resolved it from — otherwise the emitted owner would be stale (round 1
+// finding F1). Covers both forms.
+func TestDocTransferJSONReportsNewOwner(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
+		t.Fatalf("create actor bob: %v", err)
+	}
+	if err := st.CreateActor(context.Background(), "ada", "human", "Ada", false); err != nil {
+		t.Fatalf("create actor ada: %v", err)
+	}
+	specFile := writeDocFile(t, docTestBody)
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--slug", "ref-json-spec", "--file", specFile); err != nil {
+		t.Fatalf("doc new: %v", err)
+	}
+
+	// By ref.
+	out, err := runLode(t, "doc", "transfer", "ref-json-spec", "--to", "bob", "--json")
+	if err != nil {
+		t.Fatalf("doc transfer --json: %v\noutput: %s", err, out)
+	}
+	var results []docTransferResult
+	if err := json.Unmarshal([]byte(out), &results); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if len(results) != 1 || results[0].Doc.Owner != "bob" {
+		t.Fatalf("doc transfer --json results = %+v, want one result owned by bob", results)
+	}
+
+	// By --from.
+	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		"--slug", "from-json-spec", "--owner", "bob", "--file", specFile); err != nil {
+		t.Fatalf("doc new: %v", err)
+	}
+	// --from's confirmDocTransfer prints its preview to stderr even under
+	// --json (it only skips the interactive question); split streams so
+	// that preview does not land in the JSON stdout is decoded.
+	out, _, err = runLodeOutErr(t, "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj", "--json")
+	if err != nil {
+		t.Fatalf("doc transfer --from --json: %v\noutput: %s", err, out)
+	}
+	results = nil
+	if err := json.Unmarshal([]byte(out), &results); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	for _, r := range results {
+		if r.Doc.Owner != "ada" {
+			t.Errorf("doc transfer --from --json result = %+v, want owner ada", r)
+		}
+	}
+	if len(results) == 0 {
+		t.Fatal("doc transfer --from --json results = [], want bob's document(s)")
 	}
 }
 

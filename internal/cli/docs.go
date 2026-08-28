@@ -203,15 +203,25 @@ type DocTransferOutcome struct {
 // rest. There is no bulk transfer endpoint — TransferDocOwner's no-op-on-
 // same-owner rule is what makes looping safe to simply run again after a
 // partial failure, rather than needing one.
+//
+// On success the outcome carries the endpoint's response, not the pre-
+// transfer document docs[i] still holds — otherwise a successful --json
+// transfer would report the actor the document used to belong to. On
+// failure there is no updated document, so the input one is reported as-is.
 func (c *Client) TransferDocs(ctx context.Context, docs []model.Doc, owner string) []DocTransferOutcome {
 	out := make([]DocTransferOutcome, len(docs))
 	for i, d := range docs {
 		d.Body = ""
-		if _, _, err := c.TransferDocOwner(ctx, d.ID, owner); err != nil {
+		if updated, _, err := c.TransferDocOwner(ctx, d.ID, owner); err != nil {
 			out[i] = DocTransferOutcome{Doc: d, Err: err.Error()}
-			continue
+		} else {
+			updated.Body = ""
+			// The owner endpoint's response carries no ProjectKey (it skips
+			// the withProjectKey stamp GetDoc/ListDocs apply) — keep the one
+			// already resolved so DocRef still renders the "WL-" prefix.
+			updated.ProjectKey = d.ProjectKey
+			out[i] = DocTransferOutcome{Doc: updated}
 		}
-		out[i] = DocTransferOutcome{Doc: d}
 	}
 	return out
 }
