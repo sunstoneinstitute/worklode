@@ -36,8 +36,8 @@ var (
 
 // DocInput carries the fields for creating a document. Number 0 means
 // auto-assign the next free one for (project, kind); an explicit value stays
-// legal but is the rare override (029 §4). Assignee defaults to CreatedBy —
-// the accept gate is assignee-only, so a document with none could never be
+// legal but is the rare override (029 §4). Owner defaults to CreatedBy —
+// the accept gate is owner-only, so a document with none could never be
 // accepted.
 type DocInput struct {
 	Project   string
@@ -45,7 +45,7 @@ type DocInput struct {
 	Number    int
 	Slug      string
 	Body      string
-	Assignee  string
+	Owner     string
 	CreatedBy string
 	// GeneratedByTask is the task that authored the document (025 §12). Empty
 	// for every caller bound to no task — a cockpit author, an agent outside a
@@ -61,6 +61,9 @@ type DocFilter struct {
 	Project string
 	Kind    string
 	Status  string
+	// Owner narrows to documents with this exact owner (025 §7.3), served by
+	// the docs_owner partial index (migration 0058).
+	Owner string
 	// Deleted switches the list from live documents to tombstoned ones
 	// (044 §5). See TaskFilter.Deleted for why it is a switch.
 	Deleted bool
@@ -171,9 +174,9 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if !ok {
 		title = in.Slug
 	}
-	assignee := in.Assignee
-	if assignee == "" {
-		assignee = in.CreatedBy
+	owner := in.Owner
+	if owner == "" {
+		owner = in.CreatedBy
 	}
 	ts := now.UTC().Truncate(time.Second)
 
@@ -181,11 +184,11 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	var id int64
 	err = tx.QueryRow(
 		`INSERT INTO docs (project_id, kind, number, slug, title, body, status, version,
-		                   issued, assignee, created_by, generated_by_task, created_at, updated_at)
+		                   issued, owner, created_by, generated_by_task, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $12, $12)
 		 RETURNING id`,
 		in.Project, in.Kind, number, in.Slug, title, in.Body, status,
-		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy),
+		nullText(parsed.issued), nullText(owner), nullText(in.CreatedBy),
 		nullText(in.GeneratedByTask), ts,
 	).Scan(&id)
 	if err != nil {
@@ -345,7 +348,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 }
 
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
-// assignee. For a spec or ADR it freezes the document's published anchor set
+// owner. For a spec or ADR it freezes the document's published anchor set
 // and flips the target of every document-level replaces edge to superseded,
 // in the same transaction. For a plan it mints the plan's execution tasks
 // instead (see acceptPlanDoc) — the second return is that minted set, in
@@ -363,10 +366,10 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err != nil {
 		return nil, nil, err
 	}
-	// Assignee first, matching AcceptRevision: standing to touch the document
+	// Owner first, matching AcceptRevision: standing to touch the document
 	// does not depend on its state, and checking state first would disclose it
 	// to an actor who has none.
-	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
+	if err := checkDocOwner(id, d.owner, actorID); err != nil {
 		return nil, nil, err
 	}
 	if d.kind == "plan" {
@@ -419,50 +422,50 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 
 // lockedDoc is the row the lifecycle writers read and lock before deciding.
 type lockedDoc struct {
-	kind     string
-	status   string
-	project  string
-	slug     string
-	body     string
-	assignee string
-	version  int
+	kind    string
+	status  string
+	project string
+	slug    string
+	body    string
+	owner   string
+	version int
 }
 
 // lockDoc reads a document FOR UPDATE, so two accepts of one document
 // serialise rather than racing.
 func lockDoc(tx *sql.Tx, id int64) (lockedDoc, error) {
 	var d lockedDoc
-	var assignee sql.NullString
+	var owner sql.NullString
 	err := tx.QueryRow(
-		`SELECT kind, status, project_id, slug, body, assignee, version
+		`SELECT kind, status, project_id, slug, body, owner, version
 		   FROM docs WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&d.kind, &d.status, &d.project, &d.slug, &d.body, &assignee, &d.version)
+	).Scan(&d.kind, &d.status, &d.project, &d.slug, &d.body, &owner, &d.version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lockedDoc{}, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return lockedDoc{}, fmt.Errorf("load doc %d: %w", id, err)
 	}
-	d.assignee = assignee.String
+	d.owner = owner.String
 	return d, nil
 }
 
-// checkDocAssignee enforces 025 §7's accept gate: acceptance is the assignee's
-// deliberate act. A document with no assignee can be accepted by nobody, which
+// checkDocOwner enforces 025 §7's accept gate: acceptance is the owner's
+// deliberate act. A document with no owner can be accepted by nobody, which
 // is why CreateDoc defaults it to the creator.
-func checkDocAssignee(id int64, assignee, actorID string) error {
-	if assignee == "" {
-		return fmt.Errorf("doc %d has no assignee to accept it: %w", id, ErrForbidden)
+func checkDocOwner(id int64, owner, actorID string) error {
+	if owner == "" {
+		return fmt.Errorf("doc %d has no owner to accept it: %w", id, ErrForbidden)
 	}
-	if assignee != actorID {
-		return fmt.Errorf("doc %d is assigned to %s, not %s: %w", id, assignee, actorID, ErrForbidden)
+	if owner != actorID {
+		return fmt.Errorf("doc %d is owned by %s, not %s: %w", id, owner, actorID, ErrForbidden)
 	}
 	return nil
 }
 
 // CheckDocAcceptable re-runs AcceptDoc's gates without accepting anything, and
 // returns the same sentinels: ErrNotFound, ErrForbidden for an actor that is
-// not the assignee, ErrInvalidInput for a document that is not draft.
+// not the owner, ErrInvalidInput for a document that is not draft.
 //
 // The first return says the accept has already happened and mints nothing
 // more: an accepted plan re-accepted at a version it was accepted at. That is
@@ -474,24 +477,24 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 // same version conflicts at the log and eventbus.Emit skips apply — which
 // means AcceptDoc's gates never run and the handler has no store answer to
 // return. Without this the request would report success for an accept that
-// did not happen, to an actor who may not even be the assignee. The gates live
+// did not happen, to an actor who may not even be the owner. The gates live
 // here, next to the ones AcceptDoc runs, so the two cannot drift.
 func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) (settled bool, err error) {
-	var kind, status, assignee string
-	var assigneeCol sql.NullString
+	var kind, status, owner string
+	var ownerCol sql.NullString
 	err = s.db.QueryRowContext(ctx,
-		`SELECT kind, status, assignee FROM docs WHERE id = $1`, id).Scan(&kind, &status, &assigneeCol)
+		`SELECT kind, status, owner FROM docs WHERE id = $1`, id).Scan(&kind, &status, &ownerCol)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return false, fmt.Errorf("load doc %d: %w", id, err)
 	}
-	assignee = assigneeCol.String
-	// Assignee first, matching AcceptDoc: standing to touch the document does
+	owner = ownerCol.String
+	// Owner first, matching AcceptDoc: standing to touch the document does
 	// not depend on its state, and checking state first would disclose it to
 	// an actor who has none.
-	if err := checkDocAssignee(id, assignee, actorID); err != nil {
+	if err := checkDocOwner(id, owner, actorID); err != nil {
 		return false, err
 	}
 	if kind == "plan" && status == "accepted" {
@@ -501,6 +504,71 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 		return false, fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
 	}
 	return false, nil
+}
+
+// checkDocOwnerOrAdmin is checkDocOwner plus the admin bypass 025 §7.3 gives
+// ownership transfer: the current owner may always transfer, and so may an
+// actor whose actors.admin column is set, whether or not they own the
+// document. No caller plumbs an isAdmin flag into internal/store today, so
+// this reads the column itself, in the same transaction as the row lock, next
+// to the gate it extends.
+//
+// actorID != "" is required even on the owner-match branch: owner is "" for
+// an ownerless document (nullable column, flattened by lockDoc), and an empty
+// actorID must match nobody, including that empty owner — the same defense
+// checkDocOwner and checkRevisionDiscarder both keep. An ownerless document
+// is still reachable through the admin branch below.
+func checkDocOwnerOrAdmin(tx *sql.Tx, id int64, owner, actorID string) error {
+	if actorID != "" && owner == actorID {
+		return nil
+	}
+	var admin bool
+	err := tx.QueryRow(`SELECT admin FROM actors WHERE id = $1`, actorID).Scan(&admin)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("load actor %s: %w", actorID, err)
+	}
+	if !admin {
+		return fmt.Errorf("doc %d is owned by %s, not %s: %w", id, owner, actorID, ErrForbidden)
+	}
+	return nil
+}
+
+// TransferDocOwner reassigns a document's owner (025 §7.3), so a document
+// whose owner has left the org is not stuck forever unacceptable. The current
+// owner or an admin may transfer; anyone else is ErrForbidden. Transferring
+// to the actor that already owns it is a legal no-op that still answers
+// success — Task 5's bulk transfer is a client-side loop over many
+// documents, and re-running it has to be safe.
+func TransferDocOwner(tx *sql.Tx, now time.Time, id int64, newOwner, actorID string, eventID int64) (*model.Doc, error) {
+	if newOwner == "" {
+		return nil, fmt.Errorf("owner must not be empty: %w", ErrInvalidInput)
+	}
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkDocOwnerOrAdmin(tx, id, d.owner, actorID); err != nil {
+		return nil, err
+	}
+	if newOwner == d.owner {
+		return getDocTx(tx, id)
+	}
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.Exec(
+		`UPDATE docs SET owner = $2, updated_at = $3 WHERE id = $1`, id, newOwner, ts,
+	); err != nil {
+		// docs_assignee_fkey: ALTER TABLE ... RENAME COLUMN (0058_doc_owner)
+		// renamed the column, not the constraint Postgres auto-named for it.
+		if pgViolation(err, "23503", "docs_assignee_fkey") {
+			return nil, fmt.Errorf("owner names no actor %q: %w", newOwner, ErrInvalidInput)
+		}
+		return nil, fmt.Errorf("transfer doc %d owner: %w", id, err)
+	}
+	if err := logDocChange(tx, id, eventID,
+		map[string]string{"field": "owner", "old": d.owner, "new": newOwner}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
 }
 
 // supersedeReplacedDocs flips every accepted document a document-level
@@ -713,7 +781,7 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 // docColumns is the SELECT list scanDoc expects, in order. The three
 // tombstone columns (migration 0034) are last so positional scans elsewhere
 // are unaffected by their addition; they are all-null or all-set together.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
+const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, owner, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -723,11 +791,11 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	var d model.Doc
 	var number sql.NullInt64
 	var issued sql.NullTime
-	var assignee, createdBy, generatedByTask sql.NullString
+	var owner, createdBy, generatedByTask sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
-		&d.Status, &d.Version, &issued, &assignee, &createdBy, &generatedByTask,
+		&d.Status, &d.Version, &issued, &owner, &createdBy, &generatedByTask,
 		&d.CreatedAt, &d.UpdatedAt,
 		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
@@ -737,7 +805,7 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	if issued.Valid {
 		d.Issued = issued.Time.Format(docDateLayout)
 	}
-	d.Assignee = assignee.String
+	d.Owner = owner.String
 	d.CreatedBy = createdBy.String
 	d.GeneratedByTask = generatedByTask.String
 	d.CreatedAt = d.CreatedAt.UTC()
@@ -783,7 +851,7 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 	for _, c := range []struct {
 		column string
 		value  string
-	}{{"project_id", f.Project}, {"kind", f.Kind}, {"status", f.Status}} {
+	}{{"project_id", f.Project}, {"kind", f.Kind}, {"status", f.Status}, {"owner", f.Owner}} {
 		if c.value == "" {
 			continue
 		}
@@ -996,7 +1064,7 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
-// create|update|accept|revise|discard|edges.
+// create|update|accept|revise|discard|edges|transfer.
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —

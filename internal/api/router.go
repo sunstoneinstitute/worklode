@@ -186,8 +186,11 @@ var routeGuards = map[string]routeGuard{
 	// --- documents (spec 025 §5, §6, §7) --------------------------------------
 	// Reading and writing the corpus is its own capability (see permDocRead in
 	// authz.go). The accept routes are permDocWrite like the rest: whether a
-	// given actor may accept a given document is the assignee gate of 025 §7,
-	// a per-document fact the store checks, not a role.
+	// given actor may accept a given document is the owner gate of 025 §7,
+	// a per-document fact the store checks, not a role. Owner transfer
+	// (§7.3) is the same shape: guarded rather than guardedAny, matching
+	// accept and revision/accept, since it is another deliberate act on the
+	// document's identity rather than routine authoring.
 	"POST /api/v1/docs":                  guardedAny(permDocWrite),
 	"GET /api/v1/docs":                   guardedAny(permDocRead),
 	"GET /api/v1/docs/resolve":           guardedAny(permDocRead),
@@ -199,6 +202,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/submit":      guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/accept":      guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revise":      guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/owner":       guarded(permDocWrite),
 	// Asking for review is authoring, not deciding: same permission as
 	// submit, and reachable by the task-scoped token an agent writes a
 	// document under.

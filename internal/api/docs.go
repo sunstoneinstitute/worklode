@@ -86,7 +86,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Project = strings.TrimSpace(req.Project)
 	req.Slug = strings.TrimSpace(req.Slug)
-	req.Assignee = strings.TrimSpace(req.Assignee)
+	req.Owner = strings.TrimSpace(req.Owner)
 	req.Status = strings.TrimSpace(req.Status)
 	req.GeneratedByTask = strings.TrimSpace(req.GeneratedByTask)
 	// A stated status bypasses the accept gate, so it needs the importer's
@@ -130,7 +130,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				Number:    req.Number,
 				Slug:      req.Slug,
 				Body:      req.Body,
-				Assignee:  req.Assignee,
+				Owner:     req.Owner,
 				CreatedBy: actorID,
 				// The authoring task (025 §12). Left empty by every caller
 				// bound to no task, which is a document with no authoring
@@ -150,10 +150,10 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.withProjectKey(r.Context(), *created))
 }
 
-// listDocs handles GET /api/v1/docs?project=&kind=&status=&deleted= plus the
-// three derived selectors: ?needs_planning= and ?needs_execution= (026 §2.1),
-// and ?bare_superseded= (026 §2.4, 025 §6 rule 2). deleted=true switches the
-// list from live documents to tombstoned ones (044 §5).
+// listDocs handles GET /api/v1/docs?project=&kind=&status=&owner=&deleted=
+// plus the three derived selectors: ?needs_planning= and ?needs_execution=
+// (026 §2.1), and ?bare_superseded= (026 §2.4, 025 §6 rule 2). deleted=true
+// switches the list from live documents to tombstoned ones (044 §5).
 // projectKeyByID reads the project id -> key map that a document's formatted
 // id needs (model.Doc.ProjectKey): the shorthand is built from the key, and a
 // document carries only its project id.
@@ -300,7 +300,7 @@ func withoutDocBodies(docs []model.Doc) []model.Doc {
 	return out
 }
 
-// docFilterFrom reads the three plain list filters off the query string. An
+// docFilterFrom reads the four plain list filters off the query string. An
 // unknown value filters to nothing rather than erroring — the same way the
 // task list treats a state nobody uses. The cockpit's /docs page calls it
 // directly; the JSON API goes through docSelectorFrom, which adds 026 §2's
@@ -311,10 +311,11 @@ func docFilterFrom(r *http.Request) store.DocFilter {
 		Project: q.Get("project"),
 		Kind:    q.Get("kind"),
 		Status:  q.Get("status"),
+		Owner:   q.Get("owner"),
 	}
 }
 
-// docListSelector is GET /api/v1/docs' query string once validated: the three
+// docListSelector is GET /api/v1/docs' query string once validated: the four
 // plain filters, plus at most one of the three derived selectors of 026 §2.
 type docListSelector struct {
 	filter         store.DocFilter
@@ -339,7 +340,7 @@ type docDerivedSelector struct {
 
 // docSelectorFrom reads the list selectors off the query string.
 //
-// The three plain filters take any value — an unknown one filters to nothing,
+// The four plain filters take any value — an unknown one filters to nothing,
 // the same way the task list treats a state nobody uses. The three derived
 // selectors do not: each implies a status, and needs_planning/needs_execution
 // each imply a single kind while bare_superseded implies one of two (026
@@ -573,7 +574,7 @@ func (s *server) replaceDocEdges(w http.ResponseWriter, r *http.Request) {
 }
 
 // acceptDoc handles POST /api/v1/docs/{id}/accept: the manual commit of
-// 025 §7, gated on the document's assignee. On a plan this also mints its
+// 025 §7, gated on the document's owner. On a plan this also mints its
 // execution tasks (025 §9.2) in the same transaction; the response carries
 // the doc and, for a plan, the minted set (model.AcceptDocResponse) — empty
 // and omitted for a spec or ADR, so their response stays byte-identical.
@@ -588,7 +589,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 	}
 	// Read the document before the transaction because that external id needs
 	// its IRI and version before the insert. The pre-read decides nothing:
-	// store.AcceptDoc re-locks the row FOR UPDATE and re-checks the assignee
+	// store.AcceptDoc re-locks the row FOR UPDATE and re-checks the owner
 	// and the draft-only rule inside the transaction, so a document that
 	// changed in between is still refused there, not here.
 	doc, err := s.st.GetDoc(r.Context(), id)
@@ -628,7 +629,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		// The (source, external_id) conflict means this document at this
 		// version was already accepted, so Emit skipped apply and AcceptDoc's
 		// gates never ran — accepted is nil. Answering 200 here would report
-		// an accept that did not happen, to an actor the assignee gate might
+		// an accept that did not happen, to an actor the owner gate might
 		// not even admit, so the refusal AcceptDoc would have raised is raised
 		// here instead. Typing the event must not quietly change what the
 		// endpoint answers.
@@ -709,6 +710,39 @@ func (s *server) reviseDoc(w http.ResponseWriter, r *http.Request) {
 	s.writeDocRevision(w, r, id)
 }
 
+// transferDocOwner handles POST /api/v1/docs/{id}/owner: hands the document
+// to another actor (025 §7.3). The current owner or an admin may transfer;
+// transferring to the actor that already owns it is a no-op that still
+// answers 200, since Task 5's bulk form is a client-side loop over many
+// documents and relies on re-running being safe.
+func (s *server) transferDocOwner(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.TransferDocOwnerInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	var doc *model.Doc
+	err := s.recordDocEvent(w, r, "transfer", "doc.owner_changed", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.TransferDocOwner(tx, now, id, req.Owner, actorID, eventID)
+			if err != nil {
+				return err
+			}
+			doc = d
+			return nil
+		})
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
 // updateDocRevision handles PUT /api/v1/docs/{id}/revision: replaces the open
 // candidate's body, which is parsed and linted here so a malformed candidate
 // is refused at the edit rather than at the accept gate.
@@ -735,7 +769,7 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 
 // discardDocRevision handles DELETE /api/v1/docs/{id}/revision: withdraws the
 // open candidate without landing it (025 §7.2's close-without-merging), which
-// frees the document's one candidate slot. Either the assignee or the
+// frees the document's one candidate slot. Either the owner or the
 // revision's author may; anyone else gets 403.
 //
 // It answers with the document, which the discard leaves untouched — read
@@ -806,7 +840,7 @@ func (s *server) recordDocEvent(
 	}
 	// The payload records who asked for what against which document. The
 	// actor matters most here: events carries no actor column, and acceptance
-	// is an assignee-gated deliberate act (025 §7), so this is the only place
+	// is an owner-gated deliberate act (025 §7), so this is the only place
 	// the log says who performed it. A wrapper rather than the request alone,
 	// because the five bodyless verbs would otherwise record a bare null and
 	// lose the subject. It is an event row and not an HTTP body, so no

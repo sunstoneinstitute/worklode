@@ -31,6 +31,7 @@ type DocListFilter struct {
 	Project        string
 	Kind           string // spec | adr | plan
 	Status         string // draft | accepted | superseded
+	Owner          string
 	NeedsPlanning  bool
 	NeedsExecution bool
 	BareSuperseded bool
@@ -51,6 +52,9 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	}
 	if f.Status != "" {
 		q.Set("status", f.Status)
+	}
+	if f.Owner != "" {
+		q.Set("owner", f.Owner)
 	}
 	if f.NeedsPlanning {
 		q.Set("needs_planning", "true")
@@ -124,7 +128,7 @@ func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, er
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/submit"), nil)
 }
 
-// AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's assignee
+// AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's owner
 // may accept it (025 §7); anyone else gets 403. The response also carries the
 // tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
 // ADR.
@@ -147,7 +151,7 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 
 // DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
 // open candidate without landing it and freeing the document's one candidate
-// slot. Either the document's assignee or the revision's author may (025
+// slot. Either the document's owner or the revision's author may (025
 // §7.2); anyone else gets 403. The document itself is unchanged, and is what
 // the response carries.
 func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
@@ -173,6 +177,53 @@ func (c *Client) DeleteDoc(ctx context.Context, id int64, justification string) 
 // justification on either instance environment (044 §3).
 func (c *Client) UndeleteDoc(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/undelete"), nil)
+}
+
+// TransferDocOwner calls POST /api/v1/docs/{id}/owner: hands the document to
+// another actor (025 §7.3). The current owner or an admin may call it;
+// transferring to the actor that already owns the document is a legal no-op
+// that still answers 200 — what makes TransferDocs' retry-after-failure safe.
+func (c *Client) TransferDocOwner(ctx context.Context, id int64, owner string) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/owner"), model.TransferDocOwnerInput{Owner: owner})
+}
+
+// DocTransferOutcome is one document's result from TransferDocs: the document
+// (body cleared — the loop can cover hundreds of documents and none of them
+// need it) and the error transferring it hit, "" on success including the
+// already-owns-it no-op. No json tags: this crosses no HTTP boundary (ADR
+// 036 §2), so it carries no wire contract of its own — `lode doc transfer
+// --json`'s contract is internal/cmd's docTransferResult, built from this.
+type DocTransferOutcome struct {
+	Doc model.Doc
+	Err string
+}
+
+// TransferDocs is `lode doc transfer`'s loop: one TransferDocOwner call per
+// document, continuing past a failure so one bad document does not stop the
+// rest. There is no bulk transfer endpoint — TransferDocOwner's no-op-on-
+// same-owner rule is what makes looping safe to simply run again after a
+// partial failure, rather than needing one.
+//
+// On success the outcome carries the endpoint's response, not the pre-
+// transfer document docs[i] still holds — otherwise a successful --json
+// transfer would report the actor the document used to belong to. On
+// failure there is no updated document, so the input one is reported as-is.
+func (c *Client) TransferDocs(ctx context.Context, docs []model.Doc, owner string) []DocTransferOutcome {
+	out := make([]DocTransferOutcome, len(docs))
+	for i, d := range docs {
+		d.Body = ""
+		if updated, _, err := c.TransferDocOwner(ctx, d.ID, owner); err != nil {
+			out[i] = DocTransferOutcome{Doc: d, Err: err.Error()}
+		} else {
+			updated.Body = ""
+			// The owner endpoint's response carries no ProjectKey (it skips
+			// the withProjectKey stamp GetDoc/ListDocs apply) — keep the one
+			// already resolved so DocRef still renders the "WL-" prefix.
+			updated.ProjectKey = d.ProjectKey
+			out[i] = DocTransferOutcome{Doc: updated}
+		}
+	}
+	return out
 }
 
 // docPath builds a document endpoint path.
@@ -208,6 +259,25 @@ func DocTable(w io.Writer, docs []model.Doc) {
 	)
 	for _, d := range docs {
 		tbl.add(DocRef(d), d.Status, d.Title)
+	}
+	tbl.flush(w)
+}
+
+// DocTransferTable prints `lode doc transfer`'s per-document result: one row
+// per document and whether it moved. A failed transfer's error is the whole
+// point of the row — it is what tells a re-run what still needs doing.
+func DocTransferTable(w io.Writer, outcomes []DocTransferOutcome) {
+	tbl := newTable(
+		column{header: "REF"},
+		titleColumn("TITLE"),
+		column{header: "RESULT"},
+	)
+	for _, o := range outcomes {
+		result := "moved"
+		if o.Err != "" {
+			result = "FAILED: " + o.Err
+		}
+		tbl.add(DocRef(o.Doc), o.Doc.Title, result)
 	}
 	tbl.flush(w)
 }
@@ -323,7 +393,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if d.Issued != "" {
 		fmt.Fprintf(w, "  issued:   %s\n", d.Issued)
 	}
-	fmt.Fprintf(w, "  assignee: %s\n", dash(d.Assignee))
+	fmt.Fprintf(w, "  owner:    %s\n", dash(d.Owner))
 	// Only when set: most documents predate the column or were authored
 	// outside a worktree, and a row of dashes is not worth the line (025 §12).
 	if d.GeneratedByTask != "" {

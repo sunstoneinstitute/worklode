@@ -104,7 +104,7 @@ COMMIT;
 
    ```bash
    lode doc new --kind plan --slug <slug> --file <path|->   # if not already imported; lands draft
-   lode doc accept <ref>                             # mints the tasks; assignee-gated
+   lode doc accept <ref>                             # mints the tasks; owner-gated
    ```
 
    Do not hand-create execute-tasks. The mint is the seeding.

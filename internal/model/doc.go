@@ -6,7 +6,7 @@ import "time"
 // Number is the project's per-kind ordinal, auto-assigned unless the caller
 // reserved one explicitly (029 §4); Issued is the frontmatter's ISO date of
 // first publication (dct:issued, 025 §14) and is "" when unset, the body
-// being the authority for it as for Title; Assignee defaults to the creator
+// being the authority for it as for Title; Owner defaults to the creator
 // and is what the accept gate checks.
 type Doc struct {
 	ID      int64  `json:"id"`
@@ -27,7 +27,7 @@ type Doc struct {
 	Status     string `json:"status"`
 	Version    int    `json:"version"`
 	Issued     string `json:"issued"` // YYYY-MM-DD, "" when unset
-	Assignee   string `json:"assignee"`
+	Owner      string `json:"owner"`
 	CreatedBy  string `json:"created_by"`
 	// GeneratedByTask is the task that authored this document (025 §12,
 	// projected as prov:wasGeneratedBy), "" when no task did — a cockpit
@@ -137,7 +137,7 @@ type DocEdge struct {
 }
 
 // CreateDocInput is the request body for POST /api/v1/docs. Number is omitted
-// for a plan, which carries no corpus number (025 §14.3); Assignee defaults to
+// for a plan, which carries no corpus number (025 §14.3); Owner defaults to
 // the caller, who is then the only actor that can accept the document.
 //
 // Status is the corpus importer's field: a caller holding doc.import (admin)
@@ -146,18 +146,25 @@ type DocEdge struct {
 // Every other caller is refused with a 422 naming the field — a document is
 // created as a draft and accepted through POST /api/v1/docs/{id}/accept.
 type CreateDocInput struct {
-	Project  string `json:"project"`
-	Kind     string `json:"kind"` // spec | adr | plan
-	Number   int    `json:"number,omitempty"`
-	Slug     string `json:"slug"`
-	Body     string `json:"body"`
-	Assignee string `json:"assignee,omitempty"`
-	Status   string `json:"status,omitempty"`
+	Project string `json:"project"`
+	Kind    string `json:"kind"` // spec | adr | plan
+	Number  int    `json:"number,omitempty"`
+	Slug    string `json:"slug"`
+	Body    string `json:"body"`
+	Owner   string `json:"owner,omitempty"`
+	Status  string `json:"status,omitempty"`
 	// GeneratedByTask names the task authoring the document (025 §12). The
 	// CLI fills it from the worktree lease it is standing in; it is omitted
 	// when the caller is bound to no task, which leaves the document with no
 	// authoring task rather than refusing the create.
 	GeneratedByTask string `json:"generated_by_task,omitempty"`
+}
+
+// TransferDocOwnerInput is the request body for POST /api/v1/docs/{id}/owner
+// (025 §7.3): the current owner or an admin hands the document to another
+// actor, so one whose owner has left the org is not stuck unacceptable.
+type TransferDocOwnerInput struct {
+	Owner string `json:"owner"`
 }
 
 // UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and

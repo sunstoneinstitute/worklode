@@ -41,7 +41,7 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
-- `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the assignee may accept it
+- `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
 - `lode doc anchors` — Lint a markdown file's anchors (and, for a plan, its task definitions)
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
@@ -52,14 +52,16 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
-  Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --project, --repo, --status
+  Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
 - `lode doc new` — Create a document (spec, ADR, or plan) in draft
-  Flags: --assignee, --file, --kind, --number, --project, --repo, --slug
+  Flags: --file, --kind, --number, --owner, --project, --repo, --slug
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision
   Flags: --accept, --discard, --file
 - `lode doc submit` — Submit a document for review (records a review event; the document's status does not change)
 - `lode doc todo` — What is left before a spec is fully implemented
   Flags: --deps
+- `lode doc transfer` — Transfer document ownership to another actor
+  Flags: --from, --project, --repo, --to
 - `lode doc undelete` — Restore a deleted document, clearing its tombstone
 - `lode doc versions` — List a document's version history
 

@@ -219,11 +219,11 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 	}
 }
 
-// TestDocDiscardRevisionStanding: the assignee and the revision's author may
+// TestDocDiscardRevisionStanding: the owner and the revision's author may
 // each withdraw an open candidate; a third party may not (025 §7.2).
 //
 // mustAcceptedSpec's documents are created by stig, and CreateDoc defaults the
-// assignee to the creator, so stig is the assignee throughout and ada is the
+// owner to the creator, so stig is the owner throughout and ada is the
 // proposer.
 func TestDocDiscardRevisionStanding(t *testing.T) {
 	t.Run("author", func(t *testing.T) {
@@ -240,14 +240,14 @@ func TestDocDiscardRevisionStanding(t *testing.T) {
 		}
 	})
 
-	t.Run("assignee", func(t *testing.T) {
+	t.Run("owner", func(t *testing.T) {
 		s := openDocStore(t)
 		doc := mustAcceptedSpec(t, s, "025-x")
 		if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
 			t.Fatalf("ReviseDoc: %v", err)
 		}
 		if _, err := discardRevision(t, s, doc.ID, "stig"); err != nil {
-			t.Fatalf("DiscardRevision by the assignee: %v", err)
+			t.Fatalf("DiscardRevision by the owner: %v", err)
 		}
 		if _, err := s.GetDocRevision(t.Context(), doc.ID); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("GetDocRevision after discard = %v, want ErrNotFound", err)
@@ -309,7 +309,7 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 }
 
 // TestDocDiscardRevisionWithoutOpenRevision: nothing to withdraw is
-// ErrNotFound, for the assignee as much as for anyone.
+// ErrNotFound, for the owner as much as for anyone.
 func TestDocDiscardRevisionWithoutOpenRevision(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")

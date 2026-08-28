@@ -239,7 +239,7 @@ func TestDeleteDocument(t *testing.T) {
 
 	doc, _, err := c.CreateDoc(ctx, model.CreateDocInput{
 		Project: "del", Kind: "spec", Number: 1, Slug: "deletable-spec",
-		Body: deleteSpecBody, Assignee: "deleter",
+		Body: deleteSpecBody, Owner: "deleter",
 	})
 	if err != nil {
 		t.Fatalf("create doc: %v", err)

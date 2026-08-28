@@ -259,7 +259,7 @@ var grants = map[Permission][]Role{
 
 	// Authoring the corpus is open to every authenticated actor; who may
 	// *accept* a document is not a role question at all — 025 §7 gates it on
-	// the document's assignee, checked in the store.
+	// the document's owner, checked in the store.
 	permDocRead:  {RoleUser, RoleAdmin},
 	permDocWrite: {RoleUser, RoleAdmin},
 	// Admin-only: importing a corpus states statuses and edge sets directly,

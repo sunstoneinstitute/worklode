@@ -99,6 +99,7 @@ lode doc get <ref> --json        # body, sections, edges
 lode doc todo <slug> --deps             # one spec's remaining work, recursively
 lode doc submit <id>
 lode doc accept <id>
+lode doc transfer <ref> --to <actor>    # owner-gated; move ownership to another actor
 ```
 
 Every command also takes `--json`. Full command-by-command reference,
