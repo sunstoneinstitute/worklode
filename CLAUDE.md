@@ -204,6 +204,24 @@ keep new state on the right side of that split.
   reasoning effort each agent role uses when working this repo with subagents.
 - `e2e/` drives the stack through public surfaces only (HTTP API, signed
   webhooks, web pages) — never direct store writes. Keep it that way.
+- **A file is named after the feature it serves, not the mechanism it uses.**
+  A feature that spans layers carries the same stem in every package —
+  `model/doc.go`, `store/docs.go`, `api/docs.go`, `cli/docs.go`,
+  `cmd/doc.go` — so `ls internal/*/doc*.go` is the whole vertical, and
+  reading one feature never means opening a file that is mostly other
+  features. Plurality follows what the layer already uses (singular in
+  `model/` and `cmd/`, plural in `store/` and `api/`); don't rename working
+  files to normalize it. A mechanism-named file (`client.go`, `render.go`,
+  `server.go`) holds only what every feature in that package uses:
+  transport, config, the shared cell formatters. In `internal/cli` a feature
+  file carries both halves of that feature — its `Client` methods and its
+  `*Table`/`*Render` functions — because the thing an agent opens is the
+  feature, and the client/render seam that matters is the one against
+  `internal/cmd`, described above. 2000 lines is the ceiling: past it an
+  agent's read of the file gets chunked, and a file that long has stopped
+  being one feature. `filerule_test.go` fails the build on the ceiling and
+  names the files still over it. The ceiling is the part a test can check;
+  the naming is the part review has to hold.
 
 ## `www/` copy style
 
