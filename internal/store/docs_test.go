@@ -673,6 +673,14 @@ func TestDocOperationsMetric(t *testing.T) {
 		t.Fatalf("doc_operations{create,error} = %v, want 1", got)
 	}
 
+	// Owner transfer (025 §7.3) records under its own verb too.
+	if _, _, err := transferDocOwner(t, s, created.ID, "ada", "stig"); err != nil {
+		t.Fatalf("TransferDocOwner: %v", err)
+	}
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("transfer", "ok")); got != 1 {
+		t.Fatalf("doc_operations{transfer,ok} = %v, want 1", got)
+	}
+
 	mfs, gatherErr := reg.Gather()
 	if gatherErr != nil {
 		t.Fatalf("gather: %v", gatherErr)
@@ -735,6 +743,22 @@ func acceptDoc(t *testing.T, s *Store, id int64, actor string) (*model.Doc, []mo
 			return err
 		})
 	return out, minted, err
+}
+
+// transferDocOwner runs TransferDocOwner through RecordDocEvent, the way the
+// API will, and returns the event id the caller can look up to check what
+// landed.
+func transferDocOwner(t *testing.T, s *Store, id int64, newOwner, actor string) (*model.Doc, int64, error) {
+	t.Helper()
+	var out *model.Doc
+	eventID, _, err := s.RecordDocEvent(t.Context(), "transfer", "cli",
+		fmt.Sprintf("doc-transfer-%d", docEventSeq.Add(1)), "doc.owner_changed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			out, err = TransferDocOwner(tx, s.Now(), id, newOwner, actor, eventID)
+			return err
+		})
+	return out, eventID, err
 }
 
 // reviseDoc runs ReviseDoc through RecordDocEvent.
@@ -891,6 +915,120 @@ func TestDocAcceptAlreadyAccepted(t *testing.T) {
 	doc := mustAcceptedSpec(t, s, "025-x")
 
 	if _, _, err := acceptDoc(t, s, doc.ID, "stig"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDocTransferOwner: the owner may hand the document to another actor
+// (025 §7.3), which lands as a doc.owner_changed event and a state_log entry
+// naming the old and new owner.
+func TestDocTransferOwner(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	got, eventID, err := transferDocOwner(t, s, doc.ID, "ada", "stig")
+	if err != nil {
+		t.Fatalf("TransferDocOwner: %v", err)
+	}
+	if got.Owner != "ada" {
+		t.Errorf("owner = %q, want ada", got.Owner)
+	}
+
+	ev, err := s.GetEvent(t.Context(), eventID)
+	if err != nil {
+		t.Fatalf("GetEvent: %v", err)
+	}
+	if ev.Type != "doc.owner_changed" {
+		t.Errorf("event type = %q, want doc.owner_changed", ev.Type)
+	}
+
+	entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(doc.ID, 10))
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	last := entries[len(entries)-1]
+	if !strings.Contains(last.Change, `"field": "owner"`) ||
+		!strings.Contains(last.Change, `"old": "stig"`) || !strings.Contains(last.Change, `"new": "ada"`) {
+		t.Errorf("state log entry = %q, want field/old/new naming the transfer", last.Change)
+	}
+}
+
+// TestDocTransferOwnerAdminNotOwner: an admin may transfer a document it does
+// not own (025 §7.3) — the mechanism a document whose owner left the org is
+// rescued through.
+func TestDocTransferOwnerAdminNotOwner(t *testing.T) {
+	s := openDocStore(t)
+	if err := s.CreateActor(t.Context(), "root", "human", "root", true); err != nil {
+		t.Fatalf("create admin actor: %v", err)
+	}
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	got, _, err := transferDocOwner(t, s, doc.ID, "ada", "root")
+	if err != nil {
+		t.Fatalf("TransferDocOwner: %v", err)
+	}
+	if got.Owner != "ada" {
+		t.Errorf("owner = %q, want ada", got.Owner)
+	}
+}
+
+// TestDocTransferOwnerThirdPartyForbidden: neither the owner nor an admin
+// refuses with ErrForbidden.
+func TestDocTransferOwnerThirdPartyForbidden(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	_, _, err := transferDocOwner(t, s, doc.ID, "ada", "ada")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden", err)
+	}
+	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Owner != "stig" {
+		t.Fatalf("doc owner = %+v, %v; want it still stig", got, err)
+	}
+}
+
+// TestDocTransferOwnerSelfNoop: transferring to the actor that already owns
+// the document is a legal no-op, not a refusal — Task 5's bulk transfer loops
+// this endpoint over many documents and relies on re-runs being safe.
+func TestDocTransferOwnerSelfNoop(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	got, _, err := transferDocOwner(t, s, doc.ID, "stig", "stig")
+	if err != nil {
+		t.Fatalf("TransferDocOwner: %v", err)
+	}
+	if got.Owner != "stig" {
+		t.Errorf("owner = %q, want stig", got.Owner)
+	}
+	entries, err := s.StateLogForEntity(t.Context(), "doc", strconv.FormatInt(doc.ID, 10))
+	if err != nil {
+		t.Fatalf("state log: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("state log entries = %d, want 1 (no-op writes nothing new)", len(entries))
+	}
+}
+
+// TestDocTransferOwnerUnknownActor: the new owner must be an existing actor
+// (owner REFERENCES actors), surfaced as ErrInvalidInput naming the field
+// rather than a raw constraint failure.
+func TestDocTransferOwnerUnknownActor(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+
+	_, _, err := transferDocOwner(t, s, doc.ID, "nobody", "stig")
+	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("err = %v, want ErrInvalidInput", err)
 	}
 }

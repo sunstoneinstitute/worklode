@@ -160,6 +160,13 @@ type CreateDocInput struct {
 	GeneratedByTask string `json:"generated_by_task,omitempty"`
 }
 
+// TransferDocOwnerInput is the request body for POST /api/v1/docs/{id}/owner
+// (025 §7.3): the current owner or an admin hands the document to another
+// actor, so one whose owner has left the org is not stuck unacceptable.
+type TransferDocOwnerInput struct {
+	Owner string `json:"owner"`
+}
+
 // UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and
 // PUT /api/v1/docs/{id}/revision: the whole markdown source, frontmatter
 // included, since the body is the authority for title, issued and edges.

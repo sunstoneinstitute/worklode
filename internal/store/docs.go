@@ -503,6 +503,65 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 	return false, nil
 }
 
+// checkDocOwnerOrAdmin is checkDocOwner plus the admin bypass 025 §7.3 gives
+// ownership transfer: the current owner may always transfer, and so may an
+// actor whose actors.admin column is set, whether or not they own the
+// document. No caller plumbs an isAdmin flag into internal/store today, so
+// this reads the column itself, in the same transaction as the row lock, next
+// to the gate it extends.
+func checkDocOwnerOrAdmin(tx *sql.Tx, id int64, owner, actorID string) error {
+	if owner == actorID {
+		return nil
+	}
+	var admin bool
+	err := tx.QueryRow(`SELECT admin FROM actors WHERE id = $1`, actorID).Scan(&admin)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("load actor %s: %w", actorID, err)
+	}
+	if !admin {
+		return fmt.Errorf("doc %d is owned by %s, not %s: %w", id, owner, actorID, ErrForbidden)
+	}
+	return nil
+}
+
+// TransferDocOwner reassigns a document's owner (025 §7.3), so a document
+// whose owner has left the org is not stuck forever unacceptable. The current
+// owner or an admin may transfer; anyone else is ErrForbidden. Transferring
+// to the actor that already owns it is a legal no-op that still answers
+// success — Task 5's bulk transfer is a client-side loop over many
+// documents, and re-running it has to be safe.
+func TransferDocOwner(tx *sql.Tx, now time.Time, id int64, newOwner, actorID string, eventID int64) (*model.Doc, error) {
+	if newOwner == "" {
+		return nil, fmt.Errorf("owner must not be empty: %w", ErrInvalidInput)
+	}
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkDocOwnerOrAdmin(tx, id, d.owner, actorID); err != nil {
+		return nil, err
+	}
+	if newOwner == d.owner {
+		return getDocTx(tx, id)
+	}
+	ts := now.UTC().Truncate(time.Second)
+	if _, err := tx.Exec(
+		`UPDATE docs SET owner = $2, updated_at = $3 WHERE id = $1`, id, newOwner, ts,
+	); err != nil {
+		// docs_assignee_fkey: ALTER TABLE ... RENAME COLUMN (0058_doc_owner)
+		// renamed the column, not the constraint Postgres auto-named for it.
+		if pgViolation(err, "23503", "docs_assignee_fkey") {
+			return nil, fmt.Errorf("owner names no actor %q: %w", newOwner, ErrInvalidInput)
+		}
+		return nil, fmt.Errorf("transfer doc %d owner: %w", id, err)
+	}
+	if err := logDocChange(tx, id, eventID,
+		map[string]string{"field": "owner", "old": d.owner, "new": newOwner}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
+}
+
 // supersedeReplacedDocs flips every accepted document a document-level
 // replaces edge names to superseded, in the accepting transaction.
 // Section-scoped replaces edges flip nothing — section-level supersession
@@ -996,7 +1055,7 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 
 // RecordDocEvent wraps RecordEvent for a document mutation, recording
 // worklode_doc_operations_total{op,outcome}. op is one of
-// create|update|accept|revise|discard|edges.
+// create|update|accept|revise|discard|edges|transfer.
 //
 // The write functions themselves take a *sql.Tx rather than owning one, so a
 // single transaction can host a document mutation and its consequences —

@@ -622,7 +622,8 @@ owner can accept. Who reviews stays a social choice, as it is on a pull request;
 is mechanical.
 
 The owner defaults to the document's creator and is **transferable**: the current owner, or an
-admin, hands ownership to another actor, and the transfer emits `doc.owner_changed` (§15.2).
+admin, hands ownership to another actor through `POST /api/v1/docs/{id}/owner`, and the transfer
+emits `doc.owner_changed` (§15.2).
 Without transfer, a document whose creator has left the org would be permanently unacceptable,
 because the one account that could accept it is gone.
 

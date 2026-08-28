@@ -709,6 +709,39 @@ func (s *server) reviseDoc(w http.ResponseWriter, r *http.Request) {
 	s.writeDocRevision(w, r, id)
 }
 
+// transferDocOwner handles POST /api/v1/docs/{id}/owner: hands the document
+// to another actor (025 §7.3). The current owner or an admin may transfer;
+// transferring to the actor that already owns it is a no-op that still
+// answers 200, since Task 5's bulk form is a client-side loop over many
+// documents and relies on re-running being safe.
+func (s *server) transferDocOwner(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.TransferDocOwnerInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	var doc *model.Doc
+	err := s.recordDocEvent(w, r, "transfer", "doc.owner_changed", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.TransferDocOwner(tx, now, id, req.Owner, actorID, eventID)
+			if err != nil {
+				return err
+			}
+			doc = d
+			return nil
+		})
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
+}
+
 // updateDocRevision handles PUT /api/v1/docs/{id}/revision: replaces the open
 // candidate's body, which is parsed and linted here so a malformed candidate
 // is refused at the edit rather than at the accept gate.
