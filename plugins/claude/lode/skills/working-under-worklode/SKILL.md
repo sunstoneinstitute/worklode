@@ -29,6 +29,29 @@ task genuinely still workable (wrong fit, user redirected you), just stop;
 removing the worktree releases the lease, and an untouched worktree ages out
 to the sweeper. Don't mark done what isn't.
 
+## Before you call it done
+
+Two ways a check lies, both seen in one day (WL-357, WL-358, WL-371, WL-378):
+
+**The deployed fix may not be the code you ran.** `lode` ships as client and
+server. A change under `internal/cmd/`, `internal/designdoc/` or
+`internal/hookrun/` lands in the *binary*; a task reaching `deployed_dev` says
+nothing about it. Rerunning a reproduction against a stale local `lode`
+reproduces the old behaviour whatever shipped — that mistake reported a correct
+fix as broken, reopened the task, and cost a redundant PR. Read the diff: if it
+touches the client, rebuild before you retest.
+
+**Capability is not occurrence.** Code that *permits* a transition is not
+evidence it happened that way. Reading the source for the endpoint that could
+have caused a state change yields a confident wrong story just as readily as a
+right one. Worklode keeps the actual record — `lode timeline <id>`, plus `git
+reflog` for anything a hook did — so ask what happened rather than what was
+possible.
+
+Both reduce to one habit: name the evidence for the claim you are about to
+make. "The reproduction passes" is a claim about a binary; "a worker ran X" is
+a claim about an event log. Neither is established by reading code.
+
 ## Context discipline
 
 The brief is the context contract. If it is not enough to do the work, that
