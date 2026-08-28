@@ -509,8 +509,14 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 // document. No caller plumbs an isAdmin flag into internal/store today, so
 // this reads the column itself, in the same transaction as the row lock, next
 // to the gate it extends.
+//
+// actorID != "" is required even on the owner-match branch: owner is "" for
+// an ownerless document (nullable column, flattened by lockDoc), and an empty
+// actorID must match nobody, including that empty owner — the same defense
+// checkDocOwner and checkRevisionDiscarder both keep. An ownerless document
+// is still reachable through the admin branch below.
 func checkDocOwnerOrAdmin(tx *sql.Tx, id int64, owner, actorID string) error {
-	if owner == actorID {
+	if actorID != "" && owner == actorID {
 		return nil
 	}
 	var admin bool

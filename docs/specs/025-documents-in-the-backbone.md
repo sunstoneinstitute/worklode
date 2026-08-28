@@ -1730,7 +1730,7 @@ The contract, per emitted type:
 | `issue.promoted` | `cli` | the promotion request, plus `task` — the minted id |
 | `issue.linked` | `cli` | the link request, plus `task` |
 | `merge.local` | `cli` | `repo`, `sha`, `tasks` — one report can land several, hence the plural |
-| `doc.owner_changed` | `cli` | `doc`, plus `previous_owner` and `owner` (§7.3) |
+| `doc.owner_changed` | `cli` | `doc`, `actor`, `request` — the shared shape every document verb records; the previous owner lands in `state_log` as `field`/`old`/`new`, not in the payload (§7.3). A transfer to the current owner is a legal no-op and still emits. |
 
 **A minted id is completed inside the recording transaction.** `task.created` and
 `issue.promoted` allocate the task id from the project counter (`UPDATE projects … RETURNING`)

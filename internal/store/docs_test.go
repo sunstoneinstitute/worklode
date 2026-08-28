@@ -976,6 +976,55 @@ func TestDocTransferOwnerAdminNotOwner(t *testing.T) {
 	}
 }
 
+// nullDocOwner clears a document's owner column directly, for the ownerless
+// cases only a raw write can reach: CreateDoc always defaults owner to the
+// creator.
+func nullDocOwner(t *testing.T, s *Store, id int64) {
+	t.Helper()
+	if _, err := s.db.ExecContext(t.Context(), `UPDATE docs SET owner = NULL WHERE id = $1`, id); err != nil {
+		t.Fatalf("null owner of doc %d: %v", id, err)
+	}
+}
+
+// TestDocTransferOwnerEmptyActorForbidden: an ownerless document's owner
+// column flattens to "" (lockDoc), so an empty actorID must not satisfy the
+// owner-match branch by accident — the same defense checkDocOwner and
+// checkRevisionDiscarder both keep.
+func TestDocTransferOwnerEmptyActorForbidden(t *testing.T) {
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	nullDocOwner(t, s, doc.ID)
+
+	_, _, err := transferDocOwner(t, s, doc.ID, "ada", "")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("err = %v, want ErrForbidden", err)
+	}
+}
+
+// TestDocTransferOwnerAdminRescuesOwnerlessDoc: an admin can still transfer a
+// document with no owner — the rescue path 025 §7.3 exists for, and the one
+// the empty-actorID defense above must not break.
+func TestDocTransferOwnerAdminRescuesOwnerlessDoc(t *testing.T) {
+	s := openDocStore(t)
+	if err := s.CreateActor(t.Context(), "root", "human", "root", true); err != nil {
+		t.Fatalf("create admin actor: %v", err)
+	}
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	nullDocOwner(t, s, doc.ID)
+
+	got, _, err := transferDocOwner(t, s, doc.ID, "ada", "root")
+	if err != nil {
+		t.Fatalf("TransferDocOwner: %v", err)
+	}
+	if got.Owner != "ada" {
+		t.Errorf("owner = %q, want ada", got.Owner)
+	}
+}
+
 // TestDocTransferOwnerThirdPartyForbidden: neither the owner nor an admin
 // refuses with ErrForbidden.
 func TestDocTransferOwnerThirdPartyForbidden(t *testing.T) {
