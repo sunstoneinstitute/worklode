@@ -86,7 +86,7 @@ Do the second thing.
 `
 
 // docActor registers an actor and returns a bearer token for it, for the
-// cases that need a second identity (the accept gate is assignee-only).
+// cases that need a second identity (the accept gate is owner-only).
 func docActor(t *testing.T, st *store.Store, id string) string {
 	t.Helper()
 	return seedActor(t, st, id, "human", id, false)
@@ -164,7 +164,7 @@ func TestCreateDoc(t *testing.T) {
 		{"slug", got.Slug, "025-documents-in-the-backbone"},
 		{"status", got.Status, "draft"},
 		{"issued", got.Issued, "2026-08-01"},
-		{"assignee", got.Assignee, "alice"},
+		{"owner", got.Owner, "alice"},
 		{"created_by", got.CreatedBy, "alice"},
 	} {
 		if c.got != c.want {
@@ -840,7 +840,7 @@ func TestUpdateDocBody(t *testing.T) {
 	}
 }
 
-// TestAcceptDoc: acceptance is the assignee's deliberate act (025 §7), so
+// TestAcceptDoc: acceptance is the owner's deliberate act (025 §7), so
 // another authenticated actor is refused with 403 — an authorization refusal
 // about this document, not about the endpoint.
 func TestAcceptDoc(t *testing.T) {
@@ -857,7 +857,7 @@ func TestAcceptDoc(t *testing.T) {
 
 	rr := doReq(t, h, "POST", docPath(spec.ID, "/accept"), token, nil)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("assignee status = %d, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("owner status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	var got model.Doc
 	decodeInto(t, rr, &got)
@@ -911,7 +911,7 @@ func TestReAcceptPlanMintsAddedDeclaration(t *testing.T) {
 		t.Fatalf("first accept minted %d tasks, want 2", len(first.Tasks))
 	}
 
-	// The no-op path below must not swallow the assignee gate: another actor
+	// The no-op path below must not swallow the owner gate: another actor
 	// re-accepting an accepted plan is still 403.
 	bobToken := docActor(t, st, "bob")
 	if rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), bobToken, nil); rr.Code != http.StatusForbidden {
@@ -1117,7 +1117,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 // party is refused, the proposer withdraws their own candidate, and the slot
 // the withdrawal frees takes a fresh one straight away (025 §7.2).
 //
-// The token identity is alice, who is the spec's assignee; bob proposes.
+// The token identity is alice, who is the spec's owner; bob proposes.
 func TestDocRevisionDiscard(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -1136,7 +1136,7 @@ func TestDocRevisionDiscard(t *testing.T) {
 		t.Fatalf("revise as bob status = %d, body %s", rr.Code, rr.Body.String())
 	}
 
-	// Carol is neither the assignee nor the proposer.
+	// Carol is neither the owner nor the proposer.
 	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), carolToken, nil); rr.Code != http.StatusForbidden {
 		t.Fatalf("third-party discard status = %d, want 403, body %s", rr.Code, rr.Body.String())
 	}
@@ -1160,13 +1160,13 @@ func TestDocRevisionDiscard(t *testing.T) {
 	}
 
 	// The slot is free: a fresh candidate opens rather than 409ing. This one
-	// is bob's again, and the assignee withdraws it — the other half of the
+	// is bob's again, and the owner withdraws it — the other half of the
 	// gate.
 	if rr := doReq(t, h, "POST", docPath(spec.ID, "/revise"), bobToken, nil); rr.Code != http.StatusOK {
 		t.Fatalf("revise after a discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
 	}
 	if rr := doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), token, nil); rr.Code != http.StatusOK {
-		t.Fatalf("assignee discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
+		t.Fatalf("owner discard status = %d, want 200, body %s", rr.Code, rr.Body.String())
 	}
 	rr = doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
 	decodeInto(t, rr, &detail)
@@ -1207,7 +1207,7 @@ func TestDocRevisionRefusals(t *testing.T) {
 		model.UpdateDocBodyInput{Body: docSpecBody}); rr.Code != http.StatusNotFound {
 		t.Errorf("update with no open revision status = %d, want 404", rr.Code)
 	}
-	// Landing a revision is assignee-gated like the first accept.
+	// Landing a revision is owner-gated like the first accept.
 	if rr := doReq(t, h, "POST", docPath(spec.ID, "/revise"), token, nil); rr.Code != http.StatusOK {
 		t.Fatalf("revise status = %d, body %s", rr.Code, rr.Body.String())
 	}

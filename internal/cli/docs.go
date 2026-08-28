@@ -124,7 +124,7 @@ func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, er
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/submit"), nil)
 }
 
-// AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's assignee
+// AcceptDoc calls POST /api/v1/docs/{id}/accept. Only the document's owner
 // may accept it (025 §7); anyone else gets 403. The response also carries the
 // tasks a plan's acceptance minted (025 §9.2); Tasks is empty for a spec or
 // ADR.
@@ -147,7 +147,7 @@ func (c *Client) UpdateDocRevision(ctx context.Context, id int64, body string) (
 
 // DiscardDocRevision calls DELETE /api/v1/docs/{id}/revision, withdrawing the
 // open candidate without landing it and freeing the document's one candidate
-// slot. Either the document's assignee or the revision's author may (025
+// slot. Either the document's owner or the revision's author may (025
 // §7.2); anyone else gets 403. The document itself is unchanged, and is what
 // the response carries.
 func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
@@ -323,7 +323,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	if d.Issued != "" {
 		fmt.Fprintf(w, "  issued:   %s\n", d.Issued)
 	}
-	fmt.Fprintf(w, "  assignee: %s\n", dash(d.Assignee))
+	fmt.Fprintf(w, "  owner:    %s\n", dash(d.Owner))
 	// Only when set: most documents predate the column or were authored
 	// outside a worktree, and a row of dashes is not worth the line (025 §12).
 	if d.GeneratedByTask != "" {

@@ -221,8 +221,8 @@ func TestDocLifecycleWatcher(t *testing.T) {
 
 	// 1. A project, two actors with their own tokens, and a spec draft
 	// assigned to the actor that will accept it. The other actor submits it,
-	// which needs no assignee relationship — submission is an observation
-	// anyone may make, acceptance is the assignee's deliberate act (025 §7).
+	// which needs no owner relationship — submission is an observation
+	// anyone may make, acceptance is the owner's deliberate act (025 §7).
 	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "doclife", Name: "Doc Lifecycle", Key: "DL",
 	}); err != nil {
@@ -248,12 +248,12 @@ func TestDocLifecycleWatcher(t *testing.T) {
 
 	doc, _, err := owner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "doclife", Kind: "spec", Number: 1, Slug: "watched-spec",
-		Body: specSourceBody, Assignee: "owner",
+		Body: specSourceBody, Owner: "owner",
 	})
 	if err != nil {
 		t.Fatalf("create spec: %v", err)
 	}
-	if doc.Title != "Test Spec" || doc.Status != "draft" || doc.Assignee != "owner" {
+	if doc.Title != "Test Spec" || doc.Status != "draft" || doc.Owner != "owner" {
 		t.Fatalf("created doc = %+v, want a draft titled \"Test Spec\" assigned to owner", doc)
 	}
 	// Nothing references the document before anything happens to it: this is
@@ -326,7 +326,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 			doc.ID, describeTasks(tasks), review.ID)
 	}
 
-	// 4. Close the review, then accept the spec as its assignee. With no open
+	// 4. Close the review, then accept the spec as its owner. With no open
 	// design task referencing the document, the second rule mints one.
 	abandoned, _, err := owner.AbandonTask(ctx, review.ID)
 	if err != nil {
@@ -337,7 +337,7 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	}
 	accept, _, err := owner.AcceptDoc(ctx, doc.ID)
 	if err != nil {
-		t.Fatalf("accept doc as its assignee: %v", err)
+		t.Fatalf("accept doc as its owner: %v", err)
 	}
 	if accept.Doc.Status != "accepted" {
 		t.Fatalf("doc status after accept = %q, want accepted", accept.Doc.Status)

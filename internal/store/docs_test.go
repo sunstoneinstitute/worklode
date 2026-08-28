@@ -29,7 +29,7 @@ func seedDocsProject(t *testing.T, s *Store) {
 	}
 }
 
-// seedDocsActor inserts the actor docs rows reference as creator/assignee.
+// seedDocsActor inserts the actor docs rows reference as creator/owner.
 func seedDocsActor(t *testing.T, s *Store, id string) {
 	t.Helper()
 	if _, err := s.db.ExecContext(context.Background(),
@@ -39,7 +39,7 @@ func seedDocsActor(t *testing.T, s *Store, id string) {
 }
 
 // openDocStore opens a store with the project and the two actors the doc
-// tests write as created_by/assignee.
+// tests write as created_by/owner.
 func openDocStore(t *testing.T) *Store {
 	t.Helper()
 	s := openTestStore(t)
@@ -830,7 +830,7 @@ Detail body.
 Inserted body.
 `
 
-// TestDocAcceptDraftSpec: the assignee's accept flips the status, freezes the
+// TestDocAcceptDraftSpec: the owner's accept flips the status, freezes the
 // published anchor set, and lands in the state log.
 func TestDocAcceptDraftSpec(t *testing.T) {
 	s := openDocStore(t)
@@ -866,7 +866,7 @@ func TestDocAcceptDraftSpec(t *testing.T) {
 	}
 }
 
-// TestDocAcceptWrongActorForbidden: acceptance is the assignee's act (025 §7).
+// TestDocAcceptWrongActorForbidden: acceptance is the owner's act (025 §7).
 func TestDocAcceptWrongActorForbidden(t *testing.T) {
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
@@ -878,7 +878,7 @@ func TestDocAcceptWrongActorForbidden(t *testing.T) {
 		t.Fatalf("err = %v, want ErrForbidden", err)
 	}
 	if !strings.Contains(err.Error(), "stig") {
-		t.Errorf("err = %v, want it to name the assignee", err)
+		t.Errorf("err = %v, want it to name the owner", err)
 	}
 	if got, err := s.GetDoc(t.Context(), doc.ID); err != nil || got.Status != "draft" {
 		t.Fatalf("doc = %+v, %v; want it still draft", got, err)

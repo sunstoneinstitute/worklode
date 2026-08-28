@@ -178,7 +178,7 @@ export interface Doc {
   status: string;
   version: number;
   issued: string; // YYYY-MM-DD, "" when unset
-  assignee: string;
+  owner: string;
   created_by: string;
   /** The task that authored the document (025 §12, projected as
    *  prov:wasGeneratedBy); "" when no task did -- a cockpit author, an agent

@@ -63,7 +63,7 @@ function fixtureDoc(overrides: Partial<Doc> = {}): Doc {
     title: "Documents in the backbone",
     version: 3,
     issued: "2026-06-01",
-    assignee: "stig",
+    owner: "stig",
     created_by: "stig",
     generated_by_task: "",
     created_at: "2026-06-01T09:00:00Z",
@@ -860,11 +860,13 @@ describe("golden note etags", () => {
     // Both doc-derived constants moved once, in WL-196: a doc note's etag no
     // longer hashes the body (docEtag), and a project note's no longer hashes
     // its docs whole. The doc constant moved again in WL-217, which added
-    // `generated_by_task` to the identity payload (025 §12) — one re-render
-    // of every doc note, which is the deliberate cost of the new field.
-    expect((await docToNote(fixtureDoc())).etag).toBe("29807eb8cf8c7658");
+    // `generated_by_task` to the identity payload (025 §12), and again in
+    // WL-382, which renamed the identity payload's `assignee` key to `owner`
+    // — one re-render of every doc note, which is the deliberate cost of the
+    // renamed field.
+    expect((await docToNote(fixtureDoc())).etag).toBe("2d9b2ecac2c0163b");
     expect((await projectToNote(fixtureProject(), [fixtureDoc()], [fixtureTask()])).etag).toBe(
-      "982eb076affeaad0",
+      "cfdd6b4e17cc82c7",
     );
     const byProject = new Map([["worklode", { docs: [fixtureDoc()], tasks: [fixtureTask()] }]]);
     expect(

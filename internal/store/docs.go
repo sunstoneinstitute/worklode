@@ -36,8 +36,8 @@ var (
 
 // DocInput carries the fields for creating a document. Number 0 means
 // auto-assign the next free one for (project, kind); an explicit value stays
-// legal but is the rare override (029 §4). Assignee defaults to CreatedBy —
-// the accept gate is assignee-only, so a document with none could never be
+// legal but is the rare override (029 §4). Owner defaults to CreatedBy —
+// the accept gate is owner-only, so a document with none could never be
 // accepted.
 type DocInput struct {
 	Project   string
@@ -45,7 +45,7 @@ type DocInput struct {
 	Number    int
 	Slug      string
 	Body      string
-	Assignee  string
+	Owner     string
 	CreatedBy string
 	// GeneratedByTask is the task that authored the document (025 §12). Empty
 	// for every caller bound to no task — a cockpit author, an agent outside a
@@ -171,9 +171,9 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	if !ok {
 		title = in.Slug
 	}
-	assignee := in.Assignee
-	if assignee == "" {
-		assignee = in.CreatedBy
+	owner := in.Owner
+	if owner == "" {
+		owner = in.CreatedBy
 	}
 	ts := now.UTC().Truncate(time.Second)
 
@@ -181,11 +181,11 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	var id int64
 	err = tx.QueryRow(
 		`INSERT INTO docs (project_id, kind, number, slug, title, body, status, version,
-		                   issued, assignee, created_by, generated_by_task, created_at, updated_at)
+		                   issued, owner, created_by, generated_by_task, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8::date, $9, $10, $11, $12, $12)
 		 RETURNING id`,
 		in.Project, in.Kind, number, in.Slug, title, in.Body, status,
-		nullText(parsed.issued), nullText(assignee), nullText(in.CreatedBy),
+		nullText(parsed.issued), nullText(owner), nullText(in.CreatedBy),
 		nullText(in.GeneratedByTask), ts,
 	).Scan(&id)
 	if err != nil {
@@ -345,7 +345,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 }
 
 // AcceptDoc is the manual commit of 025 §7: draft -> accepted, gated on the
-// assignee. For a spec or ADR it freezes the document's published anchor set
+// owner. For a spec or ADR it freezes the document's published anchor set
 // and flips the target of every document-level replaces edge to superseded,
 // in the same transaction. For a plan it mints the plan's execution tasks
 // instead (see acceptPlanDoc) — the second return is that minted set, in
@@ -363,10 +363,10 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if err != nil {
 		return nil, nil, err
 	}
-	// Assignee first, matching AcceptRevision: standing to touch the document
+	// Owner first, matching AcceptRevision: standing to touch the document
 	// does not depend on its state, and checking state first would disclose it
 	// to an actor who has none.
-	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
+	if err := checkDocOwner(id, d.owner, actorID); err != nil {
 		return nil, nil, err
 	}
 	if d.kind == "plan" {
@@ -419,50 +419,50 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 
 // lockedDoc is the row the lifecycle writers read and lock before deciding.
 type lockedDoc struct {
-	kind     string
-	status   string
-	project  string
-	slug     string
-	body     string
-	assignee string
-	version  int
+	kind    string
+	status  string
+	project string
+	slug    string
+	body    string
+	owner   string
+	version int
 }
 
 // lockDoc reads a document FOR UPDATE, so two accepts of one document
 // serialise rather than racing.
 func lockDoc(tx *sql.Tx, id int64) (lockedDoc, error) {
 	var d lockedDoc
-	var assignee sql.NullString
+	var owner sql.NullString
 	err := tx.QueryRow(
-		`SELECT kind, status, project_id, slug, body, assignee, version
+		`SELECT kind, status, project_id, slug, body, owner, version
 		   FROM docs WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&d.kind, &d.status, &d.project, &d.slug, &d.body, &assignee, &d.version)
+	).Scan(&d.kind, &d.status, &d.project, &d.slug, &d.body, &owner, &d.version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return lockedDoc{}, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return lockedDoc{}, fmt.Errorf("load doc %d: %w", id, err)
 	}
-	d.assignee = assignee.String
+	d.owner = owner.String
 	return d, nil
 }
 
-// checkDocAssignee enforces 025 §7's accept gate: acceptance is the assignee's
-// deliberate act. A document with no assignee can be accepted by nobody, which
+// checkDocOwner enforces 025 §7's accept gate: acceptance is the owner's
+// deliberate act. A document with no owner can be accepted by nobody, which
 // is why CreateDoc defaults it to the creator.
-func checkDocAssignee(id int64, assignee, actorID string) error {
-	if assignee == "" {
-		return fmt.Errorf("doc %d has no assignee to accept it: %w", id, ErrForbidden)
+func checkDocOwner(id int64, owner, actorID string) error {
+	if owner == "" {
+		return fmt.Errorf("doc %d has no owner to accept it: %w", id, ErrForbidden)
 	}
-	if assignee != actorID {
-		return fmt.Errorf("doc %d is assigned to %s, not %s: %w", id, assignee, actorID, ErrForbidden)
+	if owner != actorID {
+		return fmt.Errorf("doc %d is owned by %s, not %s: %w", id, owner, actorID, ErrForbidden)
 	}
 	return nil
 }
 
 // CheckDocAcceptable re-runs AcceptDoc's gates without accepting anything, and
 // returns the same sentinels: ErrNotFound, ErrForbidden for an actor that is
-// not the assignee, ErrInvalidInput for a document that is not draft.
+// not the owner, ErrInvalidInput for a document that is not draft.
 //
 // The first return says the accept has already happened and mints nothing
 // more: an accepted plan re-accepted at a version it was accepted at. That is
@@ -474,24 +474,24 @@ func checkDocAssignee(id int64, assignee, actorID string) error {
 // same version conflicts at the log and eventbus.Emit skips apply — which
 // means AcceptDoc's gates never run and the handler has no store answer to
 // return. Without this the request would report success for an accept that
-// did not happen, to an actor who may not even be the assignee. The gates live
+// did not happen, to an actor who may not even be the owner. The gates live
 // here, next to the ones AcceptDoc runs, so the two cannot drift.
 func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) (settled bool, err error) {
-	var kind, status, assignee string
-	var assigneeCol sql.NullString
+	var kind, status, owner string
+	var ownerCol sql.NullString
 	err = s.db.QueryRowContext(ctx,
-		`SELECT kind, status, assignee FROM docs WHERE id = $1`, id).Scan(&kind, &status, &assigneeCol)
+		`SELECT kind, status, owner FROM docs WHERE id = $1`, id).Scan(&kind, &status, &ownerCol)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return false, fmt.Errorf("load doc %d: %w", id, err)
 	}
-	assignee = assigneeCol.String
-	// Assignee first, matching AcceptDoc: standing to touch the document does
+	owner = ownerCol.String
+	// Owner first, matching AcceptDoc: standing to touch the document does
 	// not depend on its state, and checking state first would disclose it to
 	// an actor who has none.
-	if err := checkDocAssignee(id, assignee, actorID); err != nil {
+	if err := checkDocOwner(id, owner, actorID); err != nil {
 		return false, err
 	}
 	if kind == "plan" && status == "accepted" {
@@ -713,7 +713,7 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 // docColumns is the SELECT list scanDoc expects, in order. The three
 // tombstone columns (migration 0034) are last so positional scans elsewhere
 // are unaffected by their addition; they are all-null or all-set together.
-const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, assignee, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
+const docColumns = `id, project_id, kind, number, slug, title, body, status, version, issued, owner, created_by, generated_by_task, created_at, updated_at, deleted_at, deleted_by, delete_justification`
 
 // docColumnsD is docColumns under the `d` alias, for the queries that join
 // docs against a table carrying a column of the same name (doc_sections.number).
@@ -723,11 +723,11 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	var d model.Doc
 	var number sql.NullInt64
 	var issued sql.NullTime
-	var assignee, createdBy, generatedByTask sql.NullString
+	var owner, createdBy, generatedByTask sql.NullString
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
 	if err := row.Scan(&d.ID, &d.Project, &d.Kind, &number, &d.Slug, &d.Title, &d.Body,
-		&d.Status, &d.Version, &issued, &assignee, &createdBy, &generatedByTask,
+		&d.Status, &d.Version, &issued, &owner, &createdBy, &generatedByTask,
 		&d.CreatedAt, &d.UpdatedAt,
 		&deletedAt, &deletedBy, &justification); err != nil {
 		return nil, err
@@ -737,7 +737,7 @@ func scanDoc(row rowScanner) (*model.Doc, error) {
 	if issued.Valid {
 		d.Issued = issued.Time.Format(docDateLayout)
 	}
-	d.Assignee = assignee.String
+	d.Owner = owner.String
 	d.CreatedBy = createdBy.String
 	d.GeneratedByTask = generatedByTask.String
 	d.CreatedAt = d.CreatedAt.UTC()

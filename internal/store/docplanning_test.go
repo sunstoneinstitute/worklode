@@ -599,7 +599,7 @@ Do it.
 	}
 }
 
-// TestDocAcceptPlanWrongActorForbidden: acceptance is the assignee's act,
+// TestDocAcceptPlanWrongActorForbidden: acceptance is the owner's act,
 // exactly as for a spec (025 §7); a forbidden accept mints nothing.
 func TestDocAcceptPlanWrongActorForbidden(t *testing.T) {
 	s := openDocStore(t)

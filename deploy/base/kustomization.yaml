@@ -126,3 +126,5 @@ configMapGenerator:
       - migrations/0056_task_instructions.down.sql
       - migrations/0057_approval_lanes.up.sql
       - migrations/0057_approval_lanes.down.sql
+      - migrations/0058_doc_owner.up.sql
+      - migrations/0058_doc_owner.down.sql
