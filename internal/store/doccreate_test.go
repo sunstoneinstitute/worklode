@@ -249,24 +249,24 @@ func TestDocCreatePlanWithExplicitNumberReservesIt(t *testing.T) {
 	}
 }
 
-// TestDocCreateDefaultsAssigneeToCreator: the accept gate is assignee-only, so
-// a NULL assignee would make the document unacceptable.
-func TestDocCreateDefaultsAssigneeToCreator(t *testing.T) {
+// TestDocCreateDefaultsOwnerToCreator: the accept gate is owner-only, so
+// a NULL owner would make the document unacceptable.
+func TestDocCreateDefaultsOwnerToCreator(t *testing.T) {
 	s := openDocStore(t)
 
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
 	})
-	if doc.Assignee != "stig" {
-		t.Errorf("assignee = %q, want the creator", doc.Assignee)
+	if doc.Owner != "stig" {
+		t.Errorf("owner = %q, want the creator", doc.Owner)
 	}
 
 	explicit := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 26, Slug: "026-y", Body: specBody,
-		CreatedBy: "stig", Assignee: "ada",
+		CreatedBy: "stig", Owner: "ada",
 	})
-	if explicit.Assignee != "ada" {
-		t.Errorf("assignee = %q, want ada", explicit.Assignee)
+	if explicit.Owner != "ada" {
+		t.Errorf("owner = %q, want ada", explicit.Owner)
 	}
 }
 

@@ -309,7 +309,7 @@ lode project add pfas \
           is built and the <span class="mono">/reviews</span> page decides them, but the only rows anything
           writes are pull requests &mdash; a document cannot be sent for approval yet. So "both the editor
           and the science lead approved revision 5" is today two people agreeing in a meeting, and
-          <span class="mono">lode doc accept</span> takes one assignee's word for it. Nothing links the new
+          <span class="mono">lode doc accept</span> takes one owner's word for it. Nothing links the new
           <span class="mono">PFAS</span> project back to <span class="mono">INT-41</span> either.</span>
       </div>
     </article>
@@ -417,7 +417,7 @@ POST /hooks/catalog   <span class="c">(signed)</span></pre>
       <tbody>
         <tr><td>Story pitch</td><td>Task in a standing <span class="mono">intake</span> project, kind <span class="mono">design</span></td><td class="st">By convention</td></tr>
         <tr><td>Selection dossier</td><td>Document, kind <span class="mono">spec</span>, with revisions</td><td class="st">By convention</td></tr>
-        <tr><td>Editorial gate</td><td><span class="mono">lode doc accept</span>, one assignee</td><td class="st">Partial &mdash; one approver, not two</td></tr>
+        <tr><td>Editorial gate</td><td><span class="mono">lode doc accept</span>, one owner</td><td class="st">Partial &mdash; one approver, not two</td></tr>
         <tr><td>Promotion to a project</td><td><span class="mono">lode project add</span>, by hand</td><td class="st">Partial &mdash; no link back</td></tr>
         <tr><td>Crew and roles</td><td><span class="mono">project_participants</span>, fixed role vocabulary</td><td class="st">Works today</td></tr>
         <tr><td>Milestone</td><td>A parent task, children filed under it</td><td class="st">By convention</td></tr>

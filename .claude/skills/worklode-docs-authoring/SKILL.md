@@ -22,9 +22,10 @@ lode doc anchors <file>                             # local lint: anchors, plan 
 lode doc new --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body
 lode doc revise <ref> --file <file>          # candidate revision on an accepted doc
-lode doc revise <ref> --discard              # withdraw it unlanded: assignee or its author
+lode doc revise <ref> --discard              # withdraw it unlanded: owner or its author
 lode doc submit <ref>                        # mints the review task
-lode doc accept <ref>                        # assignee-gated; a plan's accept mints its tasks
+lode doc accept <ref>                        # owner-gated; a plan's accept mints its tasks
+lode doc transfer <ref> --to <actor>         # owner-gated; move ownership to another actor
 ```
 
 Read one back with `lode show <ref>` (`WL-SPEC-25`, `WL-SPEC-25#sec-9`, or
@@ -112,4 +113,4 @@ Spec 025, as implemented by the document store.
   both carrying `about_doc` and suppressed while an open task of that kind
   already references the document. Minting the prompt is not performing the
   act: nothing here reviews, accepts or plans anything — `lode doc accept`
-  stays the manual, assignee-gated commit it was.
+  stays the manual, owner-gated commit it was.

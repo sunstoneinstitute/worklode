@@ -70,7 +70,7 @@ func newDocWatchFixture(t *testing.T) *docWatchFixture {
 			doc, err = store.CreateDoc(tx, st.Now(), store.DocInput{
 				Project: "proj", Kind: "spec", Number: 25,
 				Slug: "025-documents-in-the-backbone", Body: watchSpecBody,
-				Assignee: "alice", CreatedBy: "alice",
+				Owner: "alice", CreatedBy: "alice",
 			}, eventID)
 			return err
 		})

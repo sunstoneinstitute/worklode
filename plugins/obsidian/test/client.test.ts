@@ -129,7 +129,7 @@ describe("WorklodeClient", () => {
       status: "draft",
       version: 3,
       issued: "2026-06-01",
-      assignee: "stig",
+      owner: "stig",
       created_by: "stig",
       created_at: "2026-06-01T09:00:00Z",
       updated_at: "2026-08-16T09:12:00Z",

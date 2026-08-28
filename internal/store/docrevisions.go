@@ -83,9 +83,9 @@ func UpdateRevision(tx *sql.Tx, now time.Time, id int64, body string, eventID in
 // one-candidate-per-document slot, so the next ReviseDoc succeeds immediately
 // instead of hitting ErrRevisionExists. ErrNotFound if no revision is open.
 //
-// Gated on the document's assignee or the revision's created_by: anyone with
+// Gated on the document's owner or the revision's created_by: anyone with
 // doc.write may propose a revision, and either its author or the document's
-// assignee may withdraw it. That pairing is what keeps ReviseDoc open — an
+// owner may withdraw it. That pairing is what keeps ReviseDoc open — an
 // unwanted candidate can always be cleared by someone.
 //
 // Unlike AcceptRevision this checks no status: a candidate left behind on a
@@ -113,7 +113,7 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 	if err != nil {
 		return nil, fmt.Errorf("load revision of doc %d: %w", id, err)
 	}
-	if err := checkRevisionDiscarder(id, d.assignee, createdBy.String, actorID); err != nil {
+	if err := checkRevisionDiscarder(id, d.owner, createdBy.String, actorID); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +139,7 @@ func DiscardRevision(tx *sql.Tx, _ time.Time, id int64, actorID string, eventID 
 // the body, bumps the version, rebuilds sections and edges, stamps
 // last_revised_in on exactly the changed anchors, publishes every anchor the
 // new version carries, applies any new document-level replaces edges, and
-// consumes the candidate — one transaction, assignee-gated like AcceptDoc.
+// consumes the candidate — one transaction, owner-gated like AcceptDoc.
 //
 // The append-only rule protects the anchors the accepted version *published*
 // (025 §7.2), so a never-published row that disappears is legal; renumbering
@@ -149,7 +149,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
-	if err := checkDocAssignee(id, d.assignee, actorID); err != nil {
+	if err := checkDocOwner(id, d.owner, actorID); err != nil {
 		return nil, err
 	}
 	if d.kind == "plan" {
@@ -289,18 +289,18 @@ func (s *Store) GetDocRevision(ctx context.Context, id int64) (*model.DocRevisio
 }
 
 // checkRevisionDiscarder gates withdrawing an open candidate on the document's
-// assignee or the revision's author. Wider than checkDocAssignee on purpose:
+// owner or the revision's author. Wider than checkDocOwner on purpose:
 // accepting is the maintainer's act, but closing a proposal without merging it
 // is also the proposer's, which is what lets ReviseDoc stay open to any
 // doc.write holder (025 §7.2's pull-request analogy).
 //
 // An empty actorID matches nobody, including a revision or document whose own
 // column is empty.
-func checkRevisionDiscarder(id int64, assignee, createdBy, actorID string) error {
-	if actorID != "" && (actorID == assignee || actorID == createdBy) {
+func checkRevisionDiscarder(id int64, owner, createdBy, actorID string) error {
+	if actorID != "" && (actorID == owner || actorID == createdBy) {
 		return nil
 	}
 	return fmt.Errorf(
-		"revision of doc %d was opened by %q and the doc is assigned to %q: %q may discard neither: %w",
-		id, createdBy, assignee, actorID, ErrForbidden)
+		"revision of doc %d was opened by %q and the doc is owned by %q: %q may discard neither: %w",
+		id, createdBy, owner, actorID, ErrForbidden)
 }

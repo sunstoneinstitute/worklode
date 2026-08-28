@@ -164,7 +164,7 @@ func clientErrStatus(t *testing.T, err error) int {
 
 // TestDocLifecycle drives spec 025's document lifecycle through the public
 // HTTP API only: a spec's draft -> accept -> revise -> accept-revision path,
-// its assignee gate and its §6 anchor rules, and a plan's freely-editable
+// its owner gate and its §6 anchor rules, and a plan's freely-editable
 // body with acceptance still stubbed out (025 §9.2, lifted in part 3).
 func TestDocLifecycle(t *testing.T) {
 	ctx := context.Background()
@@ -181,7 +181,7 @@ func TestDocLifecycle(t *testing.T) {
 	defer srv.Close()
 
 	// 1. Project and two actors, each with its own token: actor A is the
-	// spec's assignee, actor B is not.
+	// spec's owner, actor B is not.
 	admin := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bootstrapToken})
 	if _, _, err := admin.CreateProject(ctx, model.CreateProjectInput{
 		ID: "docs", Name: "Docs E2E", Key: "DOCS",
@@ -210,16 +210,16 @@ func TestDocLifecycle(t *testing.T) {
 	// itself — the only actor that can accept it (025 §7).
 	doc, _, err := actorA.CreateDoc(ctx, model.CreateDocInput{
 		Project: "docs", Kind: "spec", Number: 1, Slug: "test-spec",
-		Body: specSourceBody, Assignee: "actor-a",
+		Body: specSourceBody, Owner: "actor-a",
 	})
 	if err != nil {
 		t.Fatalf("create spec: %v", err)
 	}
-	if doc.Status != "draft" || doc.Assignee != "actor-a" {
+	if doc.Status != "draft" || doc.Owner != "actor-a" {
 		t.Fatalf("created doc = %+v, want draft assigned to actor-a", doc)
 	}
 
-	// 3. Actor B's accept fails: the assignee gate is 403, not a generic
+	// 3. Actor B's accept fails: the owner gate is 403, not a generic
 	// error.
 	if _, _, err := actorB.AcceptDoc(ctx, doc.ID); err == nil {
 		t.Fatal("actor-b accept: want an error, got nil")
@@ -250,13 +250,13 @@ func TestDocLifecycle(t *testing.T) {
 
 	// 5. A revision is structurally a pull request (025 §7.2): actor B may
 	// open one against actor A's document even though B cannot accept it, and
-	// A — the assignee — may withdraw it without landing anything, freeing the
+	// A — the owner — may withdraw it without landing anything, freeing the
 	// one-candidate slot for the steps below.
 	if _, _, err := actorB.ReviseDoc(ctx, doc.ID); err != nil {
-		t.Fatalf("revise doc as a non-assignee: %v", err)
+		t.Fatalf("revise doc as a non-owner: %v", err)
 	}
 	if _, _, err := actorA.DiscardDocRevision(ctx, doc.ID); err != nil {
-		t.Fatalf("discard a non-assignee's revision as the assignee: %v", err)
+		t.Fatalf("discard a non-owner's revision as the owner: %v", err)
 	}
 	if _, _, err := actorA.DiscardDocRevision(ctx, doc.ID); err == nil {
 		t.Fatal("discard with nothing open: want an error, got nil")
@@ -287,7 +287,7 @@ func TestDocLifecycle(t *testing.T) {
 		}
 	}
 
-	// 7. Actor B is neither the assignee nor this candidate's author, so B
+	// 7. Actor B is neither the owner nor this candidate's author, so B
 	// cannot withdraw it either — the discard gate is the pair, not doc.write.
 	if _, _, err := actorB.DiscardDocRevision(ctx, doc.ID); err == nil {
 		t.Fatal("third-party discard: want an error, got nil")
@@ -345,7 +345,7 @@ func TestDocLifecycle(t *testing.T) {
 	// TestPlanAcceptanceMintsTasks drives the accepting path.
 	plan, _, err := actorA.CreateDoc(ctx, model.CreateDocInput{
 		Project: "docs", Kind: "plan", Slug: "test-plan",
-		Body: planSourceBody, Assignee: "actor-a",
+		Body: planSourceBody, Owner: "actor-a",
 	})
 	if err != nil {
 		t.Fatalf("create plan: %v", err)
@@ -485,14 +485,14 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	// already be accepted and spent (025 §5).
 	alpha, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "plans", Kind: "plan", Slug: "plan-alpha",
-		Body: planAlphaBody, Assignee: "planner",
+		Body: planAlphaBody, Owner: "planner",
 	})
 	if err != nil {
 		t.Fatalf("create plan-alpha: %v", err)
 	}
 	beta, _, err := planner.CreateDoc(ctx, model.CreateDocInput{
 		Project: "plans", Kind: "plan", Slug: "plan-beta",
-		Body: planBetaBody, Assignee: "planner",
+		Body: planBetaBody, Owner: "planner",
 	})
 	if err != nil {
 		t.Fatalf("create plan-beta: %v", err)
