@@ -559,6 +559,18 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		}
 		d = resolved
 	}
+	// ?v=<n> serves one version of that same document (025 §4.5), so a
+	// superseded version is reachable under the canonical /docs/<KEY-KIND-n>
+	// URL and not only by numeric id.
+	if q := strings.TrimSpace(r.URL.Query().Get("v")); q != "" {
+		version, err := strconv.Atoi(q)
+		if err != nil || version <= 0 || version > math.MaxInt32 {
+			webErr(w, http.StatusBadRequest, "version must be a positive integer")
+			return
+		}
+		s.renderDocVersion(w, r, d, version)
+		return
+	}
 	if detail == nil {
 		detail, err = s.docDetail(r, d.ID)
 		if err != nil {
@@ -580,8 +592,8 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 
 // docVersionPage handles GET /docs/versions/{id}/{n}: one version of a
 // document, current or superseded (025 §4.5), addressed by the document's
-// numeric id like its JSON API sibling — unlike docPage, this route takes no
-// corpus-shorthand form.
+// numeric id like its JSON API sibling. /docs/<ref>?v=<n> reaches the same
+// page through every ref form docPage takes.
 func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -598,7 +610,13 @@ func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	v, err := s.st.GetDocVersion(r.Context(), id, version)
+	s.renderDocVersion(w, r, *d, version)
+}
+
+// renderDocVersion renders one version of doc, for both spellings of the
+// version page: the numeric /docs/versions/{id}/{n} and /docs/<ref>?v=<n>.
+func (s *server) renderDocVersion(w http.ResponseWriter, r *http.Request, d model.Doc, version int) {
+	v, err := s.st.GetDocVersion(r.Context(), d.ID, version)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
@@ -610,7 +628,7 @@ func (s *server) docVersionPage(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keyByID {
 		keys = append(keys, k)
 	}
-	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys), *d, v, keyByID[d.Project])
+	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys), d, v, keyByID[d.Project])
 	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
 }
 
