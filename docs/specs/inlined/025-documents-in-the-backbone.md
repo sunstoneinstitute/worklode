@@ -524,7 +524,7 @@ supersession there rather than by adding a column here.
 ## 7. Editorial lifecycle
 
 ```
-draft ──(manual accept, assignee only)──▶ accepted ──▶ superseded
+draft ──(manual accept, owner only)──▶ accepted ──▶ superseded
 ```
 
 `proposed` leaves the scheme (it was already reduced to "editorial" by §7.1, which removed
@@ -595,18 +595,26 @@ Within a revision, sections may be freely added, reworded, or marked superseded.
 may **not** do is remove an anchor that the accepted version published — that is the one invariant
 that survives into draft, because inbound links do not care that a document is mid-revision.
 
-Opening a revision needs only `doc.write` — proposing an edit is not the maintainer's privilege —
+Opening a revision needs only `doc.write` — proposing an edit is not the owner's privilege —
 but the two resolutions above are gated more narrowly, and differently from each other. Landing is
-the assignee's act alone, as narrow as acceptance (§7.3). Discarding is wider: the assignee **or**
+the owner's act alone, as narrow as acceptance (§7.3). Discarding is wider: the owner **or**
 the revision's own author, because closing a proposal without merging it is the proposer's act too,
-not only the maintainer's. That pairing is what lets opening stay open to anyone with `doc.write` —
+not only the owner's. That pairing is what lets opening stay open to anyone with `doc.write` —
 an unwanted candidate can always be cleared by someone with standing to do it.
 
 ### 7.3 Reviewers and the accept gate
 
-A document carries an assigned reviewer set and is not accepted until every assigned reviewer
-approves. Who gets assigned stays a social choice, as it is on a pull request; the gate itself
+A document has one **owner**, and separately a set of assigned **reviewers**. The owner holds the
+authority: accepting the document, landing a revision and withdrawing one (§7.2) are the owner's
+acts. The reviewers hold the gate: the document is not accepted until every assigned reviewer
+approves. Approval is not acceptance — a reviewer can withhold approval and block, and only the
+owner can accept. Who reviews stays a social choice, as it is on a pull request; the gate itself
 is mechanical.
+
+The owner defaults to the document's creator and is **transferable**: the current owner, or an
+admin, hands ownership to another actor, and the transfer emits `doc.owner_changed` (§15.2).
+Without transfer, a document whose creator has left the org would be permanently unacceptable,
+because the one account that could accept it is gone.
 
 `in_review` means a human has begun the review work — entering the document in the review UI
 sets it.
@@ -1713,6 +1721,7 @@ The contract, per emitted type:
 | `issue.promoted` | `cli` | the promotion request, plus `task` — the minted id |
 | `issue.linked` | `cli` | the link request, plus `task` |
 | `merge.local` | `cli` | `repo`, `sha`, `tasks` — one report can land several, hence the plural |
+| `doc.owner_changed` | `cli` | `doc`, plus `previous_owner` and `owner` (§7.3) |
 
 **A minted id is completed inside the recording transaction.** `task.created` and
 `issue.promoted` allocate the task id from the project counter (`UPDATE projects … RETURNING`)
@@ -2246,7 +2255,7 @@ Two further pieces of work follow from this spec without belonging to it:
 6. `wlc:implemented` is absent from `wlc:DesignDocStatus`, and `wlc:proposed` with it: the
    order `draft → proposed → accepted → superseded` reduces to `draft → accepted → superseded`.
    A document under review is `draft` with an open review task, and `lode doc accept` is manual
-   and assignee-gated.
+   and owner-gated.
 7. A revision of an accepted document leaves the accepted version current and drift queries
    unaffected until crit resolves; the accepted version's anchors are protected throughout.
 8. A section declared `## 2.1 Title {#sec-2.1}` is addressable as
