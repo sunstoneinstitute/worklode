@@ -615,11 +615,11 @@ an unwanted candidate can always be cleared by someone with standing to do it.
 ### 7.3 Reviewers and the accept gate {#sec-7.3}
 
 A document has one **owner**, and separately a set of assigned **reviewers**. The owner holds the
-authority: accepting the document, landing a revision and withdrawing one (§7.2) are the owner's
-acts. The reviewers hold the gate: the document is not accepted until every assigned reviewer
-approves. Approval is not acceptance — a reviewer can withhold approval and block, and only the
-owner can accept. Who reviews stays a social choice, as it is on a pull request; the gate itself
-is mechanical.
+authority: accepting the document and landing a revision are the owner's acts; withdrawing one
+(§7.2) is the owner's or the revision's own author's. The reviewers hold the gate: the document
+is not accepted until every assigned reviewer approves. Approval is not acceptance — a reviewer
+can withhold approval and block, and only the owner can accept. Who reviews stays a social choice,
+as it is on a pull request; the gate itself is mechanical.
 
 The owner defaults to the document's creator and is **transferable**: the current owner, or an
 admin, hands ownership to another actor through `POST /api/v1/docs/{id}/owner`, exposed as

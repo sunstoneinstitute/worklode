@@ -226,10 +226,11 @@ func TestDocTransferFromEmptyOwnerIsNotAnError(t *testing.T) {
 
 // TestDocTransferPartialFailureThenRetryFinishes: a failure partway through
 // reports which documents moved and which did not and exits non-zero;
-// re-running finishes the job because a transfer to the current owner is a
-// no-op (Task 3). The fake server fails only the very first POST .../owner
-// call across the whole test, whichever document it lands on, simulating one
-// transient failure in an otherwise-working run.
+// re-running with the same --from finishes the job because the doc that
+// already moved has dropped out of the --from filter, leaving only the one
+// that failed to retry. The fake server fails only the very first
+// POST .../owner call across the whole test, whichever document it lands
+// on, simulating one transient failure in an otherwise-working run.
 func TestDocTransferPartialFailureThenRetryFinishes(t *testing.T) {
 	var ownerCalls int32
 	st, c := testServer(t, api.Config{}, func(h http.Handler) http.Handler {
@@ -268,8 +269,10 @@ func TestDocTransferPartialFailureThenRetryFinishes(t *testing.T) {
 		t.Fatalf("partial-failure output = %q, want one row moved and one row FAILED", out)
 	}
 
-	// Re-run: the doc that already moved is a no-op, the one that failed
-	// transfers for real, and the whole run now succeeds.
+	// Re-run with the same --from bob: the doc that already moved to ada is
+	// no longer owned by bob, so it drops out of the filter and isn't
+	// retried; the one that failed is still bob's, so it transfers for real
+	// and the whole run now succeeds.
 	out, err = runLode(t, "doc", "transfer", "--from", "bob", "--to", "ada", "--project", "proj")
 	if err != nil {
 		t.Fatalf("retry: %v\noutput: %s", err, out)
