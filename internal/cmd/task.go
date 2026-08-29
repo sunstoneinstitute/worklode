@@ -749,16 +749,32 @@ func newTaskReworkCmd() *cobra.Command {
 
 // currentWorktreeIdentity derives the worktree identity for the current
 // directory, used as the default lease binding for claim and claim --next.
+//
+// It refuses the main checkout: `task claim` binds a lease to whatever
+// directory it runs from without creating one, so claiming from the main
+// checkout leases it directly, a lease `lode resume`/`lode status` can never
+// resolve back to a task worktree and a second claim from the same place
+// then collides with (WL-383). Only `lode next` is meant to enter Worklode
+// from the main checkout — it creates the worktree first. IsMain's ok=false
+// (can't tell) is treated as permission, not refusal: this check is a new
+// guard against a real trap, not a reason to break claims in a repo layout
+// it cannot read.
 func currentWorktreeIdentity() (string, error) {
 	cwd, err := workingDir()
 	if err != nil {
 		return "", err
 	}
-	wt, err := worktree.Identity(cwd)
-	if err != nil {
-		return "", fmt.Errorf("not inside a git worktree; run from one or pass --worktree: %w", err)
+	root, ok := worktree.Root(cwd)
+	if !ok {
+		return "", fmt.Errorf("not inside a git worktree; run from one or pass --worktree")
 	}
-	return wt, nil
+	if isMain, ok := worktree.IsMain(root); ok && isMain {
+		return "", fmt.Errorf("%s is the main checkout, not a task worktree: claiming here binds "+
+			"the lease to a directory `lode resume`/`lode status` can't see. Create a worktree "+
+			"first (`lode next [id]`, or `git worktree add`) and run `lode task claim` from inside "+
+			"it, or pass --worktree", root)
+	}
+	return worktree.IdentityOf(root)
 }
 
 func newTaskClaimCmd() *cobra.Command {
