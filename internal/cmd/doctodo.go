@@ -116,7 +116,7 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 		return err
 	}
 	items, diag, err := designdoc.Todo(docs, designdoc.CorpusPath(target.Kind, target.Slug),
-		designdoc.TodoOptions{Deps: deps, Closed: closed})
+		designdoc.TodoOptions{Deps: deps, Closed: closed, ProjectKey: cfg.ProjectKey})
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 				return fmt.Errorf("read document %s: %w", d.Slug, err)
 			}
 			cd, err := designdoc.CorpusDocFromBody(
-				designdoc.CorpusPath(d.Kind, d.Slug), d.Kind, []byte(detail.Doc.Body))
+				designdoc.CorpusPath(d.Kind, d.Slug), d.Kind, d.Number, []byte(detail.Doc.Body))
 			if err != nil {
 				return err
 			}

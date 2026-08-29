@@ -50,9 +50,14 @@ type Diagnostics struct {
 // lookup: closure is the server's answer, never a state string (026 §2.4),
 // so this package never derives it. A nil Closed is the offline case — the
 // planning half still answers and every task state reads as unknown.
+// ProjectKey is the current repo's project key ("WL"), for resolving a
+// covers/defers/requires/amends entry written as a <KEY>-<TYPE>-<n>
+// shorthand (WL-409) — "" declines every shorthand rather than guessing one,
+// which is every offline caller's answer and every caller predating this.
 type TodoOptions struct {
-	Deps   bool
-	Closed func(taskID string) (closed bool, known bool)
+	Deps       bool
+	Closed     func(taskID string) (closed bool, known bool)
+	ProjectKey string
 }
 
 // Todo walks specPath's current sections, the plans covering them, and those
@@ -123,7 +128,7 @@ func newTodoWalk(docs []CorpusDoc, opts TodoOptions) *todoWalk {
 		byPath:      make(map[string]CorpusDoc, len(docs)),
 		frontmatter: make(map[string]*Frontmatter, len(docs)),
 		replacedBy:  make(map[sectionKey][]string),
-		ix:          NewPlanIndex(docs),
+		ix:          NewPlanIndex(docs, opts.ProjectKey),
 		visited:     make(map[string]bool),
 		docOrder:    make(map[string]int),
 		decidedPlan: make(map[string]bool),
@@ -163,11 +168,11 @@ func (w *todoWalk) indexSupersession(d CorpusDoc) {
 		}
 		switch e.Rel {
 		case "replaces":
-			key := sectionKey{spec: normalizeRef(e.Target, home), anchor: e.TargetAnchor}
+			key := sectionKey{spec: w.ix.normalizeRef(e.Target, home), anchor: e.TargetAnchor}
 			w.replacedBy[key] = append(w.replacedBy[key], canon)
 		case "isReplacedBy":
 			key := sectionKey{spec: canon, anchor: e.SrcAnchor}
-			w.replacedBy[key] = append(w.replacedBy[key], normalizeRef(e.Target, home))
+			w.replacedBy[key] = append(w.replacedBy[key], w.ix.normalizeRef(e.Target, home))
 		}
 	}
 }
@@ -265,7 +270,7 @@ func (w *todoWalk) requires(docPath string) []string {
 		if base == "" || base == "NO-SPEC" {
 			continue
 		}
-		out = append(out, normalizeRef(base, home))
+		out = append(out, w.ix.normalizeRef(base, home))
 	}
 	return out
 }
