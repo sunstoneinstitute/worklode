@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // decodePayload decodes one event's JSON payload into a map for field-by-field
@@ -276,6 +278,7 @@ func TestEventPayloadTaskAssigned(t *testing.T) {
 		"project": "proj", "title": "Needs an owner", "priority": "medium", "kind": "feature",
 	})
 	secondActor(t, st, "bob")
+	store.SeedCrewForTests(t, st, "proj", "bob")
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
 	if rr.Code != http.StatusOK {
