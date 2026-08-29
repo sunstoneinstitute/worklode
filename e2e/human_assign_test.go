@@ -69,6 +69,12 @@ func TestHumanAssignLifecycle(t *testing.T) {
 		t.Fatalf("create token for bob: %v", err)
 	}
 	bob := cli.NewClient(cli.Config{ServerURL: srv.URL, Token: bobTok.Token})
+	// Both are on the Crew, the precondition for being assigned work (spec
+	// 029 §6.1); bob's refusals below are then the guards they name, not the
+	// membership check.
+	if _, _, err := admin.AddCrewMember(ctx, "human", "bob", "member", false, false); err != nil {
+		t.Fatalf("add bob to the crew: %v", err)
+	}
 
 	// --- Positive case: the full human lifecycle -------------------------
 
@@ -80,6 +86,11 @@ func TestHumanAssignLifecycle(t *testing.T) {
 	}
 	if task.State != "ready" {
 		t.Fatalf("created task state = %q, want ready", task.State)
+	}
+
+	// Assignment goes to Crew members (spec 029 §6.1), so alice joins first.
+	if _, _, err := admin.AddCrewMember(ctx, "human", "alice", "member", false, false); err != nil {
+		t.Fatalf("add alice to the crew: %v", err)
 	}
 
 	// Explicit assignee body, not the default-to-caller path.

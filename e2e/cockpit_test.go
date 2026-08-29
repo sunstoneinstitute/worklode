@@ -174,6 +174,9 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
+	if _, _, err := admin.AddCrewMember(ctx, "proj", "dana", "member", false, false); err != nil {
+		t.Fatalf("add dana to the crew: %v", err)
+	}
 	if _, _, err := admin.AssignTask(ctx, task.ID, "dana"); err != nil {
 		t.Fatalf("assign task to dana: %v", err)
 	}
@@ -305,17 +308,19 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		}
 	}
 
-	// Crew is a built, writable destination: it renders the honest empty
-	// state rather than a placeholder message, and it carries the one
-	// affordance the page is entitled to — the add-member form (spec 029
-	// §6.1). Removal is a later task.
+	// Crew is a built, writable destination: it renders the roster the
+	// mutations wrote — Dana, added above so she could be assigned the task
+	// — rather than a placeholder message, and it carries the one affordance
+	// the page is entitled to: the add-member form (spec 029 §6.1). Removal
+	// is a later task. The empty state is covered in internal/api's web
+	// tests, which have a crewless project to show it with.
 	{
 		code, body := getPage(t, srv.URL+"/projects/proj/crew")
 		if code != http.StatusOK {
 			t.Fatalf("GET /projects/proj/crew: status = %d, want 200", code)
 		}
-		if !strings.Contains(body, "No Crew yet") {
-			t.Fatalf("GET /projects/proj/crew: body missing the empty-state text:\n%s", body)
+		if !strings.Contains(body, "Dana") {
+			t.Fatalf("GET /projects/proj/crew: body missing the roster's one member:\n%s", body)
 		}
 		main := mainContent(t, body)
 		if !strings.Contains(main, `<form method="post" action="/projects/proj/crew">`) {
