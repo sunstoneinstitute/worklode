@@ -55,8 +55,20 @@ type importDoc struct {
 	fm     *designdoc.Frontmatter
 }
 
-// unresolvedRef is one frontmatter reference no walked document satisfies.
-type unresolvedRef struct{ slug, ref string }
+// unresolvedRef is one frontmatter reference that will not become a stored
+// edge: either it resolves to no document in the walked corpus, or (WL-375)
+// it is an inverse-only spelling whose target exists but does not declare
+// the acting relation back — designdoc.StoredRels stores neither, so both
+// are reported the same way an import failure is not.
+type unresolvedRef struct {
+	slug, ref string
+	// oneSided is true for the WL-375 case: ref names a real document in
+	// this corpus, just not one that reciprocates. Kept apart from a
+	// genuinely dangling reference only for the summary line's wording —
+	// the per-line report and the round-trip test's check are identical
+	// either way.
+	oneSided bool
+}
 
 // driftedDoc is one walked file whose body differs from the stored document
 // and cannot be edited in place (an accepted or superseded spec/ADR).
@@ -402,20 +414,67 @@ func importCreateOrder(docs []importDoc) []importDoc {
 }
 
 // unresolvedImportRefs lists the frontmatter references no walked document
-// satisfies, in walk order. They are not errors: a reference across corpora
-// (another repo's spec) is a real fact, and the backbone keeps it verbatim in
-// to_external. Reporting them locally is what makes a dry run useful.
+// satisfies, in walk order, plus every one-sided inverse spelling (WL-375).
+// Neither is an error: a reference across corpora (another repo's spec) is a
+// real fact the backbone keeps verbatim in to_external, and a one-sided
+// inverse is a corpus that has not (yet) declared the other half. Reporting
+// them locally is what makes a dry run useful.
 func unresolvedImportRefs(docs []importDoc) []unresolvedRef {
 	ix := newImportIndex(docs)
 	var out []unresolvedRef
-	for _, d := range docs {
+	for i, d := range docs {
 		for _, ref := range importRefs(d.fm) {
 			if _, ok := ix.lookup(ref); !ok {
 				out = append(out, unresolvedRef{slug: d.slug, ref: ref})
 			}
 		}
+		out = append(out, oneSidedInverseRefs(ix, docs, i)...)
 	}
 	return out
+}
+
+// oneSidedInverseRefs reports document i's inverse-only references
+// (designdoc.InverseOf — isRequiredBy, amendedBy, isReplacedBy today) whose
+// target does not assert the acting relation back (WL-375). designdoc's own
+// Frontmatter.Refs, not importRefs' StoredRels-narrowed view, is walked here
+// because these three are exactly what StoredRels excludes: nothing else
+// ever sees them, which is how a one-sided inverse used to reach neither an
+// edge nor a report.
+//
+// A target this corpus does not hold at all is not handled here — importRefs
+// only reads StoredRels, so that case is not caught by the loop above
+// either, and is exactly as unresolvable as any other dangling reference.
+func oneSidedInverseRefs(ix importIndex, docs []importDoc, i int) []unresolvedRef {
+	d := docs[i]
+	var out []unresolvedRef
+	for _, r := range d.fm.Refs() {
+		acting, isInverse := designdoc.InverseOf[r.Rel]
+		if !isInverse {
+			continue
+		}
+		j, ok := ix.lookup(r.Ref)
+		if !ok {
+			out = append(out, unresolvedRef{slug: d.slug, ref: r.Ref})
+			continue
+		}
+		if !declaresRelTo(ix, docs[j].fm, acting, i) {
+			out = append(out, unresolvedRef{slug: d.slug, ref: r.Ref, oneSided: true})
+		}
+	}
+	return out
+}
+
+// declaresRelTo reports whether fm asserts rel against document i, resolved
+// through the same corpus index every other lookup here uses rather than by
+// comparing reference text: the acting end may spell the target differently
+// (bare filename, path, section-qualified) from how the inverse end named it.
+func declaresRelTo(ix importIndex, fm *designdoc.Frontmatter, rel string, i int) bool {
+	for _, r := range fm.RefsFor(rel) {
+		if j, ok := ix.lookup(r.Ref); ok && j == i {
+			return true
+		}
+	}
+	return false
 }
 
 // importRefs lists the frontmatter references one document would become edges
@@ -473,18 +532,31 @@ func printDriftedDocs(w io.Writer, drifted []driftedDoc) {
 // no spec governs it — so counting it with the genuinely dangling references
 // would make a clean corpus look defective at exactly the moment the count is
 // being read as a go/no-go.
+// oneSided is counted apart from a genuinely dangling reference (WL-375):
+// the target document exists in this corpus, so "kept verbatim" — true of a
+// dangling reference, which becomes a to_external edge — would misdescribe
+// it. A one-sided inverse becomes no edge at all; the other end simply has
+// not declared the relation it restates yet.
 func printUnresolvedRefs(w io.Writer, refs []unresolvedRef) {
-	var dangling, sentinels int
+	var dangling, oneSided, sentinels int
 	for _, u := range refs {
 		if u.ref == noSpecSentinel {
 			sentinels++
 			continue
 		}
-		dangling++
+		if u.oneSided {
+			oneSided++
+		} else {
+			dangling++
+		}
 		fmt.Fprintf(w, "%s: %s\n", u.slug, u.ref)
 	}
 	if dangling > 0 {
 		fmt.Fprintf(w, "%d reference(s) resolve to no document in this project; kept verbatim\n", dangling)
+	}
+	if oneSided > 0 {
+		fmt.Fprintf(w, "%d one-sided inverse reference(s): the named document does not declare "+
+			"the relation back (025 §14.2); no edge stored either way\n", oneSided)
 	}
 	if sentinels > 0 {
 		fmt.Fprintf(w, "%d plan(s) declare %s; kept verbatim, no target expected (026 §4.3)\n",
