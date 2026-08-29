@@ -187,6 +187,13 @@ func (c *Client) TransferDocOwner(ctx context.Context, id int64, owner string) (
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/owner"), model.TransferDocOwnerInput{Owner: owner})
 }
 
+// SetDocReviewers calls POST /api/v1/docs/{id}/reviewers: replaces the
+// document's durable reviewer set wholesale (025 §7.3, WL-359). The current
+// owner or an admin may call it, the same authority TransferDocOwner checks.
+func (c *Client) SetDocReviewers(ctx context.Context, id int64, reviewers []string) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/reviewers"), model.SetDocReviewersInput{Reviewers: reviewers})
+}
+
 // DocTransferOutcome is one document's result from TransferDocs: the document
 // (body cleared — the loop can cover hundreds of documents and none of them
 // need it) and the error transferring it hit, "" on success including the
