@@ -10,17 +10,18 @@ import (
 )
 
 // RequestDocApproval calls POST /api/v1/docs/{id}/request-approval, opening
-// one awaiting lane per reviewer on the document's current version (025
-// §7.3). Reviewers are actor ids; a name no actor answers to is a 422 naming
-// it. Re-requesting the same set at the same version changes nothing.
+// one awaiting lane per reviewer in the document's durable reviewer set (025
+// §7.3; assigned separately, see SetDocReviewers) on its current version. A
+// document with no reviewers assigned is a 422 naming it. Re-requesting the
+// same set at the same version changes nothing.
 //
 // There is deliberately no Decide counterpart on this client: 029 §7.3 makes
 // approving a web UI act, because a session's group claims are fresh and a
 // 30-day CLI token's are not.
-func (c *Client) RequestDocApproval(ctx context.Context, id int64, reviewers []string) (model.Doc, []byte, error) {
+func (c *Client) RequestDocApproval(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return doJSON[model.Doc](ctx, c, http.MethodPost,
 		"/api/v1/docs/"+strconv.FormatInt(id, 10)+"/request-approval",
-		model.RequestApprovalInput{Reviewers: reviewers}, "doc")
+		nil, "doc")
 }
 
 // ListApprovals calls GET /api/v1/approvals: every outstanding approval,

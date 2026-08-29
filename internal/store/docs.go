@@ -827,7 +827,9 @@ func getDocTx(tx *sql.Tx, id int64) (*model.Doc, error) {
 }
 
 // GetDoc looks up one document by id. Returns ErrNotFound if it does not
-// exist.
+// exist. Reviewers and ReviewersAwaiting are populated here and nowhere
+// else (WL-359) — see model.Doc's doc comment on both fields for why
+// ListDocs leaves them nil.
 func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 	d, err := scanDoc(s.db.QueryRowContext(ctx, `SELECT `+docColumns+` FROM docs WHERE id = $1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -835,6 +837,12 @@ func (s *Store) GetDoc(ctx context.Context, id int64) (*model.Doc, error) {
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get doc %d: %w", id, err)
+	}
+	if d.Reviewers, err = s.docReviewersCtx(ctx, id); err != nil {
+		return nil, err
+	}
+	if d.ReviewersAwaiting, err = s.DocReviewersAwaiting(ctx, id); err != nil {
+		return nil, err
 	}
 	return d, nil
 }

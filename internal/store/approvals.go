@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -60,38 +61,135 @@ func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 	return nil
 }
 
-// RequestDocApproval materializes 025 §7.3's reviewer set for one document
+// RequestDocApproval materializes 025 §7.3's durable reviewer set (WL-359:
+// doc_reviewers, assigned separately via SetDocReviewers) for one document
 // revision: one 'awaiting' row per assigned reviewer, all on the same
 // subject_revision (the docs.version the reviewers see), which is exactly the
 // shape migration 0057's per-lane unique key permits. Re-running it for the
-// same version is a no-op, and adding a reviewer later inserts only the new
-// lane.
+// same version is a no-op, and a reviewer assigned later gets only the new
+// lane the next time this runs.
 //
-// Reviewers are actor ids; 029 §7.2's role-scoped lanes (a flow requiring
-// "someone in this group") call InsertAwaitingApproval directly with a
-// required_role, since there is no reviewer set in the schema to read them
-// from — a document's reviewers are whatever the caller assigns.
-func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int,
-	reviewers []string) error {
+// 029 §7.2's role-scoped lanes (a flow requiring "someone in this group")
+// call InsertAwaitingApproval directly with a required_role: that assignment
+// is project policy, not a document's own reviewer set, and the two lane
+// kinds coexist on one revision under 0057's key without conflict.
+func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) error {
+	reviewers, err := docReviewers(tx, docID)
+	if err != nil {
+		return err
+	}
 	if len(reviewers) == 0 {
-		return fmt.Errorf("%w: a review request needs at least one reviewer", ErrInvalidInput)
+		return fmt.Errorf("%w: doc %d has no assigned reviewers; set them with `lode doc reviewers` first", ErrInvalidInput, docID)
 	}
 	entityID := DocEntityID(docID)
 	revision := strconv.Itoa(version)
 	for _, r := range reviewers {
-		// required_actor is an FK to actors, so an unknown reviewer would
-		// otherwise surface as a constraint violation — a 500 naming a
-		// constraint instead of the name the caller got wrong. Checked here
-		// rather than in the handler so every caller gets the same refusal.
-		if err := checkActorExists(tx, r); err != nil {
-			return err
-		}
 		if err := InsertAwaitingApproval(tx, now, "doc", entityID, revision,
 			nil, &r); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// scanString reads a single-column string row — the shared scan collectRows
+// takes for every one-column query in this file.
+func scanString(row rowScanner) (string, error) {
+	var s string
+	err := row.Scan(&s)
+	return s, err
+}
+
+// docReviewers returns doc's durable reviewer set (WL-359), in assignment
+// order.
+func docReviewers(tx *sql.Tx, docID int64) ([]string, error) {
+	rows, err := tx.Query(
+		`SELECT actor_id FROM doc_reviewers WHERE doc_id = $1 ORDER BY assigned_at, actor_id`,
+		docID)
+	if err != nil {
+		return nil, fmt.Errorf("load reviewers for doc %d: %w", docID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("load reviewers for doc %d", docID), scanString)
+}
+
+// docReviewersCtx is docReviewers for a caller with a context and no open
+// transaction — GetDoc's shape, not RequestDocApproval's.
+func (s *Store) docReviewersCtx(ctx context.Context, docID int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT actor_id FROM doc_reviewers WHERE doc_id = $1 ORDER BY assigned_at, actor_id`,
+		docID)
+	if err != nil {
+		return nil, fmt.Errorf("load reviewers for doc %d: %w", docID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("load reviewers for doc %d", docID), scanString)
+}
+
+// SetDocReviewers replaces doc's durable reviewer set wholesale (025 §7.3):
+// "who reviews stays a social choice", decided once per change the way a
+// PR's reviewer list is, not accumulated a name at a time — so this is a
+// replace, with no separate add/remove verb. The set is not versioned: it
+// survives an accept/revise cycle, which is what lets a review task minted
+// for a §8.2 in-place amendment name "the original approvers" (§7.3) without
+// the caller having to re-assign them.
+//
+// The current owner or an admin may set it — the same authority
+// TransferDocOwner checks — since who reviews a document is the same kind of
+// call as who owns it: the author's, not a role's.
+func SetDocReviewers(tx *sql.Tx, now time.Time, docID int64, actorID string, reviewers []string, eventID int64) error {
+	d, err := lockDoc(tx, docID)
+	if err != nil {
+		return err
+	}
+	if err := checkDocOwnerOrAdmin(tx, docID, d.owner, actorID); err != nil {
+		return err
+	}
+	for _, r := range reviewers {
+		// required_actor (via doc_reviewers.actor_id) is an FK to actors, so
+		// an unknown reviewer would otherwise surface as a constraint
+		// violation — a 500 naming a constraint instead of the name the
+		// caller got wrong.
+		if err := checkActorExists(tx, r); err != nil {
+			return err
+		}
+	}
+	old, err := docReviewers(tx, docID)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM doc_reviewers WHERE doc_id = $1`, docID); err != nil {
+		return fmt.Errorf("clear reviewers for doc %d: %w", docID, err)
+	}
+	for _, r := range reviewers {
+		if _, err := tx.Exec(
+			`INSERT INTO doc_reviewers (doc_id, actor_id, assigned_at) VALUES ($1, $2, $3)`,
+			docID, r, now.UTC()); err != nil {
+			return fmt.Errorf("assign reviewer %s to doc %d: %w", r, docID, err)
+		}
+	}
+	return logDocChange(tx, docID, eventID, map[string]string{
+		"field": "reviewers",
+		"old":   strings.Join(old, ","),
+		"new":   strings.Join(reviewers, ","),
+	})
+}
+
+// DocReviewersAwaiting returns the reviewer ids doc's current version still
+// owes an approval from — 025 §7.3's "who still owes a review on this
+// document" as a query, oldest lane first. A document's reviewer set is
+// several open lanes on purpose, unlike OpenApprovalForEntity's single-row
+// PR case, so this reads every open one rather than the newest.
+func (s *Store) DocReviewersAwaiting(ctx context.Context, docID int64) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT required_actor FROM approvals
+		 WHERE entity_kind = 'doc' AND entity_id = $1
+		   AND state IN ('awaiting', 'changes_requested')
+		   AND required_actor IS NOT NULL
+		 ORDER BY id`,
+		DocEntityID(docID))
+	if err != nil {
+		return nil, fmt.Errorf("reviewers awaiting for doc %d: %w", docID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("reviewers awaiting for doc %d", docID), scanString)
 }
 
 // checkActorExists returns ErrInvalidInput naming id when no actor has it.

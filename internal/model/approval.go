@@ -41,12 +41,11 @@ type ApprovalListResponse struct {
 	Approvals []AwaitingApproval `json:"approvals"`
 }
 
-// RequestApprovalInput is the body of POST
-// /api/v1/docs/{id}/request-approval: the actors whose approval the
-// document's current version needs (025 §7.3). One awaiting lane is opened
-// per reviewer. There is no version field — a review request is always
-// against the version the document is at now, and re-requesting at that same
-// version is a no-op.
-type RequestApprovalInput struct {
+// SetDocReviewersInput is the body of POST /api/v1/docs/{id}/reviewers:
+// replaces the document's durable reviewer set wholesale (025 §7.3, WL-359).
+// There is no add/remove verb — "who reviews stays a social choice",
+// decided once per change the way a PR's reviewer list is, not accumulated a
+// name at a time.
+type SetDocReviewersInput struct {
 	Reviewers []string `json:"reviewers"`
 }
