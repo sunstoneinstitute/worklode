@@ -78,6 +78,22 @@ func TaskIDFromBody(body string) string {
 	return ""
 }
 
+// TaskIDsFromBody scans body line by line and returns the task id from every
+// "Worklode-Task: <task-id>" trailer line found, in order. A squash or merge
+// commit can legitimately carry several trailers, one per task it lands work
+// for; TaskIDFromBody's single-result contract is for callers (a PR body)
+// where only one task ever applies. Returns nil if no such line exists.
+func TaskIDsFromBody(body string) []string {
+	var ids []string
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if m := bodyTaskIDPattern.FindStringSubmatch(line); m != nil {
+			ids = append(ids, m[1])
+		}
+	}
+	return ids
+}
+
 // taskExists reports whether a task with the given id exists, inside tx.
 func taskExists(tx *sql.Tx, taskID string) (bool, error) {
 	if taskID == "" {
