@@ -204,6 +204,32 @@ func TestPushMainMarkerOtherProjectKey(t *testing.T) {
 	}
 }
 
+// TestPushMainMultiMarkerAdvancesAllTasks pins WL-386: a squash or merge
+// commit can legitimately carry several "Worklode-Task:" trailers, one per
+// task it lands work for, and every one of them must be attributed and
+// resolved — not just the first.
+func TestPushMainMultiMarkerAdvancesAllTasks(t *testing.T) {
+	e := newEnv(t)
+	task1 := e.seedTaskNamed(t, "1") // WL-1
+	task2 := e.seedTaskNamed(t, "2") // WL-2
+	task3 := e.seedTaskNamed(t, "3") // WL-3
+
+	rr := deliver(t, e.h, "push", "d-1", "push_main_marker_multi.json")
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
+		t.Fatalf("code=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	const sha = "9999999999999999999999999999999999999999"
+	for _, taskID := range []string{task1, task2, task3} {
+		if src := e.taskCommitSource(t, taskID, demoRepo, sha); src != "marker" {
+			t.Fatalf("marker task_commit source for %s = %q, want marker", taskID, src)
+		}
+		if st := e.taskState(t, taskID); st != "merged" {
+			t.Fatalf("task %s state = %q, want merged", taskID, st)
+		}
+	}
+}
+
 func TestPushLastDeployMapsShas(t *testing.T) {
 	e := newEnv(t)
 	deliverPushOK(t, e, "d-1", "push_main_merge.json")
