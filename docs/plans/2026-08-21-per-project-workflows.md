@@ -1,14 +1,42 @@
 ---
 status: draft
 covers:
-- docs/specs/045-per-project-workflows.md#sec-1
-- docs/specs/045-per-project-workflows.md#sec-2
-- docs/specs/045-per-project-workflows.md#sec-3
-- docs/specs/045-per-project-workflows.md#sec-4
-- docs/specs/045-per-project-workflows.md#sec-5
-- docs/specs/045-per-project-workflows.md#sec-6
-- docs/specs/045-per-project-workflows.md#sec-8
-- docs/specs/045-per-project-workflows.md#sec-9
+  - spec: docs/specs/045-per-project-workflows.md#sec-1.1
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-1.2
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-1.3
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-1.4
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-2
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-3
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-4
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-4.1
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-4.2
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-4.3
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-5.3
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-6.1
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-6.2
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-6.3
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-7
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-8
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-9
+    coverage: full
+  - spec: docs/specs/045-per-project-workflows.md#sec-11
+    coverage: full
 blocks:
 - 2026-08-21-workflow-rule-engine.md
 ---
