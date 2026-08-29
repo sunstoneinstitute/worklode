@@ -223,10 +223,6 @@ func (c *Client) TransferDocs(ctx context.Context, docs []model.Doc, owner strin
 			out[i] = DocTransferOutcome{Doc: d, Err: err.Error()}
 		} else {
 			updated.Body = ""
-			// The owner endpoint's response carries no ProjectKey (it skips
-			// the withProjectKey stamp GetDoc/ListDocs apply) — keep the one
-			// already resolved so DocRef still renders the "WL-" prefix.
-			updated.ProjectKey = d.ProjectKey
 			out[i] = DocTransferOutcome{Doc: updated}
 		}
 	}

@@ -1882,6 +1882,82 @@ func TestDocResponsesCarryTheProjectKey(t *testing.T) {
 	}
 }
 
+// TestDocMutationResponsesCarryTheProjectKey is WL-384: five doc handlers
+// answered writeJSON directly instead of going through withProjectKey, so
+// their responses carried ProjectKey == "" even though the list/detail paths
+// stamp it. Each of the five is exercised here against its own response
+// shape.
+func TestDocMutationResponsesCarryTheProjectKey(t *testing.T) {
+	st, h, token := newTestServer(t) // token's actor is alice
+	createProject(t, st, "proj")
+	docActor(t, st, "bob")
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: docSpecBody,
+	})
+
+	// GET /docs/{id} — docDetail.
+	rr := doReq(t, h, "GET", docPath(spec.ID, ""), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var detail model.DocDetail
+	decodeInto(t, rr, &detail)
+	if detail.Doc.ProjectKey != "WL" {
+		t.Errorf("detail response project_key = %q, want WL", detail.Doc.ProjectKey)
+	}
+
+	// POST /docs/{id}/submit.
+	rr = doReq(t, h, "POST", docPath(spec.ID, "/submit"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("submit status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var submitted model.Doc
+	decodeInto(t, rr, &submitted)
+	if submitted.ProjectKey != "WL" {
+		t.Errorf("submit response project_key = %q, want WL", submitted.ProjectKey)
+	}
+
+	// POST /docs/{id}/accept.
+	rr = doReq(t, h, "POST", docPath(spec.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var accepted model.AcceptDocResponse
+	decodeInto(t, rr, &accepted)
+	if accepted.Doc.ProjectKey != "WL" {
+		t.Errorf("accept response project_key = %q, want WL", accepted.Doc.ProjectKey)
+	}
+
+	// POST /docs/{id}/owner.
+	rr = doReq(t, h, "POST", docPath(spec.ID, "/owner"), token,
+		model.TransferDocOwnerInput{Owner: "bob"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("transfer status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var transferred model.Doc
+	decodeInto(t, rr, &transferred)
+	if transferred.ProjectKey != "WL" {
+		t.Errorf("transfer response project_key = %q, want WL", transferred.ProjectKey)
+	}
+
+	// POST /docs/{id}/revise, then DELETE /docs/{id}/revision (discard).
+	rr = doReq(t, h, "POST", docPath(spec.ID, "/revise"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("revise status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "DELETE", docPath(spec.ID, "/revision"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("discard status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var discarded model.Doc
+	decodeInto(t, rr, &discarded)
+	if discarded.ProjectKey != "WL" {
+		t.Errorf("discard response project_key = %q, want WL", discarded.ProjectKey)
+	}
+}
+
 // TestResolveDocRefFullGrammar is WL-358: the resolve endpoint behind every
 // `lode doc <verb> <ref>` must accept the same 026 §3 grammar `lode show`
 // resolves — the <KEY>-<TYPE>-<n> shorthand included — not just id and exact

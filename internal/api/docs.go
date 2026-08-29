@@ -462,7 +462,7 @@ func (s *server) docDetail(r *http.Request, id int64) (*model.DocDetail, error) 
 	if err != nil {
 		return nil, err
 	}
-	detail := &model.DocDetail{Doc: *d, Sections: sections, Edges: out, EdgesIn: in}
+	detail := &model.DocDetail{Doc: s.withProjectKey(ctx, *d), Sections: sections, Edges: out, EdgesIn: in}
 	// No open revision is the ordinary case, not a failure: only an accepted
 	// spec or ADR ever has one.
 	rev, err := s.st.GetDocRevision(ctx, id)
@@ -642,7 +642,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 			// carries a new version, so this is not the path it takes. The op
 			// is already counted as a success above; counting it again here
 			// would make one request two.
-			writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *doc})
+			writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: s.withProjectKey(r.Context(), *doc)})
 			return
 		}
 		if err == nil {
@@ -658,7 +658,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.st.RecordPlanTasksMinted(len(minted))
-	writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: *accepted, Tasks: minted})
+	writeJSON(w, http.StatusOK, model.AcceptDocResponse{Doc: s.withProjectKey(r.Context(), *accepted), Tasks: minted})
 }
 
 // submitDoc handles POST /api/v1/docs/{id}/submit: the document enters review.
@@ -688,7 +688,7 @@ func (s *server) submitDoc(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, d)
+	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *d))
 }
 
 // reviseDoc handles POST /api/v1/docs/{id}/revise: opens the one candidate
@@ -740,7 +740,7 @@ func (s *server) transferDocOwner(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, doc)
+	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *doc))
 }
 
 // updateDocRevision handles PUT /api/v1/docs/{id}/revision: replaces the open
@@ -795,7 +795,7 @@ func (s *server) discardDocRevision(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, doc)
+	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *doc))
 }
 
 // acceptDocRevision handles POST /api/v1/docs/{id}/revision/accept: runs the
