@@ -740,6 +740,7 @@ func TestWorkPageOrgBoard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create token for dana: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj1", "dana")
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-4/start", danaToken, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("start WL-4 status = %d, body %s", rr.Code, rr.Body.String())
@@ -864,6 +865,7 @@ func TestTaskPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create token for erin: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "erin")
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/start", erinToken, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("start WL-2 status = %d, body %s", rr.Code, rr.Body.String())
@@ -886,6 +888,7 @@ func TestTaskPage(t *testing.T) {
 	if err := st.CreateActor(context.Background(), "frank", "human", "Frank", false); err != nil {
 		t.Fatalf("create actor frank: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "frank")
 	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/assign", token, map[string]any{"assignee": "frank"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("reassign WL-2 status = %d, body %s", rr.Code, rr.Body.String())
@@ -1195,6 +1198,7 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 		t.Fatalf("create actor dana: %v", err)
 	}
 	agentToken := seedActor(t, st, "agent-one", "agent", "Agent One", false)
+	store.SeedCrewForTests(t, st, "proj", "dana")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Owned and delegated", "priority": "medium", "kind": "feature",
 	})

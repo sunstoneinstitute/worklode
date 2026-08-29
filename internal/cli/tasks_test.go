@@ -12,6 +12,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 func TestClientTaskLifecycle(t *testing.T) {
@@ -878,6 +879,7 @@ func TestClientAssignmentFlow(t *testing.T) {
 	if _, _, err := c.CreateProject(ctx, model.CreateProjectInput{ID: "proj", Name: "Project", Key: "WL"}); err != nil {
 		t.Fatalf("CreateProject: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "alice", "bob")
 	task, _, err := c.CreateTask(ctx, model.CreateTaskInput{Project: "proj", Title: "Assign me", Priority: "high", Kind: "feature"})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
