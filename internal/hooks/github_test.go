@@ -143,6 +143,29 @@ func (e *env) seedTask(t *testing.T) string {
 	return id
 }
 
+// seedTaskNamed is seedTask for a test that needs more than one task: suffix
+// makes the RecordEvent external id unique, since seedTask's fixed key would
+// otherwise dedup every call after the first into a no-op.
+func (e *env) seedTaskNamed(t *testing.T, suffix string) string {
+	t.Helper()
+	var id string
+	_, _, err := e.st.RecordEvent(context.Background(), "cli", "seed:"+t.Name()+":"+suffix, "task.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			task, err := store.CreateTask(tx, e.st.Now(), store.TaskInput{
+				ProjectID: "demo", Title: "fix crash", Priority: "medium", Kind: "bug",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			id = task.ID
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("seed task %s: %v", suffix, err)
+	}
+	return id
+}
+
 // claimTask moves a seeded task to in_progress with an active lease.
 func (e *env) claimTask(t *testing.T, taskID string) {
 	t.Helper()

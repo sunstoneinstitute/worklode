@@ -167,9 +167,9 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 }
 
 // taskIDsFromMessage extracts task ids from a commit message: the branch
-// named in a merge-commit subject, plus any "Worklode-Task: <id>" trailer
+// named in a merge-commit subject, plus every "Worklode-Task: <id>" trailer
 // line. The label is fixed — the id after it carries its own project key
-// (SW-3, ...), matched by store.TaskIDFromBody. source is the attribution
+// (SW-3, ...), matched by store.TaskIDsFromBody. source is the attribution
 // every id from this message is filed under: a trailer is the stronger
 // signal, so its presence makes the whole message "marker".
 func taskIDsFromMessage(msg string) (ids []string, source string) {
@@ -180,8 +180,8 @@ func taskIDsFromMessage(msg string) (ids []string, source string) {
 			}
 		}
 	}
-	if id := store.TaskIDFromBody(msg); id != "" {
-		return append(ids, id), "marker"
+	if trailers := store.TaskIDsFromBody(msg); len(trailers) > 0 {
+		return append(ids, trailers...), "marker"
 	}
 	return ids, "merge_message"
 }

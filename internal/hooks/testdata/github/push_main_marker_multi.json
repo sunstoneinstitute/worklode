@@ -1,0 +1,8 @@
+{
+  "ref": "refs/heads/main",
+  "repository": {"full_name": "sunstoneinstitute/demo", "default_branch": "main"},
+  "commits": [
+    {"id": "9999999999999999999999999999999999999999", "message": "Squash three tasks\n\nWorklode-Task: WL-1\nWorklode-Task: WL-2\nWorklode-Task: WL-3"}
+  ],
+  "head_commit": {"id": "9999999999999999999999999999999999999999", "message": "Squash three tasks\n\nWorklode-Task: WL-1\nWorklode-Task: WL-2\nWorklode-Task: WL-3"}
+}
