@@ -32,18 +32,21 @@ func newApprovalCmd() *cobra.Command {
 
 func init() { rootCmd.AddCommand(newApprovalCmd()) }
 
-// newApprovalRequestCmd opens one awaiting lane per reviewer on the
-// document's current version (025 §7.3).
+// newApprovalRequestCmd opens one awaiting lane per reviewer in the
+// document's durable reviewer set (025 §7.3) on its current version. The set
+// itself is assigned separately, with `lode doc reviewers` (WL-359) — this
+// command only materializes the lanes.
 func newApprovalRequestCmd() *cobra.Command {
-	var reviewers []string
 	cmd := &cobra.Command{
 		Use:   "request <id-or-slug>",
-		Short: "Request approval on a document from one or more reviewers",
-		Args:  cobra.ExactArgs(1),
+		Short: "Open an approval lane for each of a document's assigned reviewers",
+		Long: "Open an approval lane for each of a document's assigned reviewers,\n" +
+			"on its current version (025 §7.3). Assign the reviewer set first with\n" +
+			"`lode doc reviewers <ref> --set <actor>,<actor>,...`; re-running this\n" +
+			"after a later `lode doc reviewers` call adds only the newly assigned\n" +
+			"lanes.",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(reviewers) == 0 {
-				return fmt.Errorf("at least one --reviewer is required")
-			}
 			c, err := newAPIClient()
 			if err != nil {
 				return err
@@ -52,7 +55,7 @@ func newApprovalRequestCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			d, raw, err := c.RequestDocApproval(cmd.Context(), id, reviewers)
+			d, raw, err := c.RequestDocApproval(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -61,12 +64,10 @@ func newApprovalRequestCmd() *cobra.Command {
 				return nil
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "requested approval on %s v%d from %s\n",
-				cli.DocRef(d), d.Version, strings.Join(reviewers, ", "))
+				cli.DocRef(d), d.Version, strings.Join(d.Reviewers, ", "))
 			return nil
 		},
 	}
-	cmd.Flags().StringArrayVar(&reviewers, "reviewer", nil,
-		"actor id whose approval the document needs (repeat the flag for each one; not comma-separated)")
 	return cmd
 }
 

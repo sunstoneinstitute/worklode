@@ -3,7 +3,12 @@ package api_test
 // docapproval_test.go covers the two approval routes a CLI token may reach:
 // POST /api/v1/docs/{id}/request-approval and GET /api/v1/approvals. What
 // they must NOT reach — a decide route — is covered by
-// TestNoDecideRouteOnTheJSONAPI below.
+// TestNoDecideRouteOnTheJSONAPI below. POST /api/v1/docs/{id}/reviewers, the
+// durable reviewer set request-approval reads (WL-359), is covered in
+// docreviewers_test.go — this file's setReviewers helper calls it, and
+// TestSetDocReviewersUnknownActor stays here since it is really about
+// request-approval's actor-validation contract having moved, not about the
+// reviewers route's own behavior.
 
 import (
 	"context"
@@ -41,6 +46,17 @@ func awaitingFor(t *testing.T, st *store.Store, docID int64) []model.AwaitingApp
 	return out
 }
 
+// setReviewers PUTs a document's durable reviewer set (WL-359) and fails the
+// test if the call does not succeed.
+func setReviewers(t *testing.T, h http.Handler, token string, docID int64, reviewers []string) {
+	t.Helper()
+	rr := doReq(t, h, "POST", docPath(docID, "/reviewers"), token,
+		model.SetDocReviewersInput{Reviewers: reviewers})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set reviewers %v: status = %d, body %s", reviewers, rr.Code, rr.Body.String())
+	}
+}
+
 // TestRequestDocApprovalOpensOneLanePerReviewer: 025 §7.3's reviewer set is
 // several open rows on one revision, not one row with several names.
 func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
@@ -53,9 +69,9 @@ func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 		}
 	}
 	d := draftSpecForReview(t, h, token, "proj", "req-lanes", 61)
+	setReviewers(t, h, token, d.ID, []string{"bob", "carol"})
 
-	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token,
-		model.RequestApprovalInput{Reviewers: []string{"bob", "carol"}})
+	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -99,7 +115,8 @@ func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 
 // TestRequestDocApprovalIsIdempotentAndAdditive: re-requesting the same
 // version opens only the lanes that are missing, which is what lets a caller
-// add a reviewer by resending the whole set.
+// add a reviewer — via SetDocReviewers (WL-359) — and simply run request
+// again.
 func TestRequestDocApprovalIsIdempotentAndAdditive(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
@@ -113,9 +130,10 @@ func TestRequestDocApprovalIsIdempotentAndAdditive(t *testing.T) {
 	path := docPath(d.ID, "/request-approval")
 
 	for _, reviewers := range [][]string{{"bob"}, {"bob"}, {"bob", "carol"}} {
-		rr := doReq(t, h, "POST", path, token, model.RequestApprovalInput{Reviewers: reviewers})
+		setReviewers(t, h, token, d.ID, reviewers)
+		rr := doReq(t, h, "POST", path, token, nil)
 		if rr.Code != http.StatusOK {
-			t.Fatalf("request %v status = %d, body %s", reviewers, rr.Code, rr.Body.String())
+			t.Fatalf("request after set %v: status = %d, body %s", reviewers, rr.Code, rr.Body.String())
 		}
 	}
 	if rows := awaitingFor(t, st, d.ID); len(rows) != 2 {
@@ -123,16 +141,18 @@ func TestRequestDocApprovalIsIdempotentAndAdditive(t *testing.T) {
 	}
 }
 
-// TestRequestDocApprovalUnknownReviewer: required_actor is an FK, so an
-// unresolvable reviewer has to come back as an input error naming the name,
-// not as a 500 naming a constraint.
-func TestRequestDocApprovalUnknownReviewer(t *testing.T) {
+// TestSetDocReviewersUnknownActor: required_actor (via doc_reviewers) is an
+// FK, so an unresolvable reviewer has to come back as an input error naming
+// the name, not as a 500 naming a constraint. Unknown-reviewer validation
+// moved here from request-approval (WL-359): the set is validated once, at
+// assignment, not again at every request.
+func TestSetDocReviewersUnknownActor(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
-	d := draftSpecForReview(t, h, token, "proj", "req-unknown", 63)
+	d := draftSpecForReview(t, h, token, "proj", "rev-unknown", 63)
 
-	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token,
-		model.RequestApprovalInput{Reviewers: []string{"nobody"}})
+	rr := doReq(t, h, "POST", docPath(d.ID, "/reviewers"), token,
+		model.SetDocReviewersInput{Reviewers: []string{"nobody"}})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
@@ -140,19 +160,19 @@ func TestRequestDocApprovalUnknownReviewer(t *testing.T) {
 		t.Errorf("body %q does not name the reviewer that could not be resolved", body)
 	}
 	if rows := awaitingFor(t, st, d.ID); len(rows) != 0 {
-		t.Errorf("awaiting rows = %d after a refused request, want none", len(rows))
+		t.Errorf("awaiting rows = %d after a refused set, want none", len(rows))
 	}
 }
 
-// TestRequestDocApprovalNeedsAReviewer: an empty set is a refusal, not a
-// silently successful no-op that leaves the document waiting on nobody.
+// TestRequestDocApprovalNeedsAReviewer: a document with no reviewer set
+// assigned is a refusal, not a silently successful no-op that leaves the
+// document waiting on nobody.
 func TestRequestDocApprovalNeedsAReviewer(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	d := draftSpecForReview(t, h, token, "proj", "req-empty", 64)
 
-	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token,
-		model.RequestApprovalInput{})
+	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token, nil)
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
@@ -169,8 +189,8 @@ func TestListApprovalsServesBothEntityKinds(t *testing.T) {
 	}
 	seedAwaitingPRApproval(t, st, "acme/site#71", "Fix the thing")
 	d := draftSpecForReview(t, h, token, "proj", "queue-doc", 65)
-	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token,
-		model.RequestApprovalInput{Reviewers: []string{"bob"}})
+	setReviewers(t, h, token, d.ID, []string{"bob"})
+	rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("request status = %d, body %s", rr.Code, rr.Body.String())
 	}

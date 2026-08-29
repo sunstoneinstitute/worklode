@@ -17,26 +17,25 @@ import (
 )
 
 // requestDocApproval handles POST /api/v1/docs/{id}/request-approval: opens
-// one awaiting lane per named reviewer on the document's current version
-// (025 §7.3). Re-requesting at the same version adds only the lanes that are
-// missing, so a caller adding a reviewer sends the whole set again.
+// one awaiting lane per reviewer in the document's durable reviewer set
+// (025 §7.3, assigned separately via POST /api/v1/docs/{id}/reviewers —
+// WL-359) on its current version. Re-requesting at the same version adds
+// only the lanes that are missing, so a caller who has just added a
+// reviewer can simply run this again.
 //
 // The response is the document, as submitDoc's is: what the caller cannot
 // derive locally is the version the lanes were opened against, and the
-// document carries it.
+// document carries it. Takes no body: there is nothing left for a caller to
+// name once the reviewer set lives in storage.
 //
 // No dedicated metric. Like every other document verb this goes through
 // RecordDocEvent, so its outcomes land on
-// worklode_doc_operations_total{op="request_approval"}, and the reviewer-name
-// refusal is a 422 on http_requests_total's {route, code}.
+// worklode_doc_operations_total{op="request_approval"}, and the
+// no-reviewers-assigned refusal is a 422 on http_requests_total's
+// {route, code}.
 func (s *server) requestDocApproval(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
 	if !ok {
-		return
-	}
-	var req model.RequestApprovalInput
-	if err := readJSON(w, r, &req); err != nil {
-		writeBodyErr(w, err)
 		return
 	}
 	d, err := s.st.GetDoc(r.Context(), id)
@@ -50,13 +49,39 @@ func (s *server) requestDocApproval(w http.ResponseWriter, r *http.Request) {
 	// one — harmless: the reviewer set is re-requested per version anyway,
 	// and no gate keys off it yet.
 	version := d.Version
-	if err := s.recordDocEvent(w, r, "request_approval", "doc.approval_requested", id, req,
+	if err := s.recordDocEvent(w, r, "request_approval", "doc.approval_requested", id, nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return store.RequestDocApproval(tx, now, id, version, req.Reviewers)
+			return store.RequestDocApproval(tx, now, id, version)
 		}); err != nil {
 		return
 	}
 	writeJSON(w, http.StatusOK, d)
+}
+
+// setDocReviewers handles POST /api/v1/docs/{id}/reviewers: replaces the
+// document's durable reviewer set wholesale (025 §7.3, WL-359) — the owner
+// or an admin's call, same authority as transferDocOwner checks. Unlike
+// request-approval this opens no approval lanes itself; it only changes what
+// the next request-approval call reads.
+func (s *server) setDocReviewers(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.SetDocReviewersInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	if err := s.recordDocEvent(w, r, "set_reviewers", "doc.reviewers_changed", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.SetDocReviewers(tx, now, id, actorID, req.Reviewers, eventID)
+		}); err != nil {
+		return
+	}
+	s.writeDoc(w, r, id)
 }
 
 // listApprovals handles GET /api/v1/approvals: the awaiting queue (029 §7.1)

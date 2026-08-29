@@ -40,6 +40,18 @@ type Doc struct {
 	// Tombstone carries the delete record (044 §2) and is nil on a live
 	// document. See Task.Tombstone.
 	Tombstone *Tombstone `json:"tombstone,omitempty"`
+	// Reviewers is the durable reviewer set 025 §7.3 assigns to this
+	// document (WL-359) — independent of any one revision, unlike the
+	// per-revision approvals RequestDocApproval opens against it. Populated
+	// only by GetDoc: a ListDocs row leaves it nil, since joining it onto
+	// every row would turn a corpus-wide list into an N+1 query for a field
+	// almost nothing there needs.
+	Reviewers []string `json:"reviewers,omitempty"`
+	// ReviewersAwaiting is the subset of Reviewers who have not yet approved
+	// (or requested changes on) this document's current version — §7.3's
+	// "who still owes a review on this document" as a query. Same
+	// GetDoc-only population as Reviewers.
+	ReviewersAwaiting []string `json:"reviewers_awaiting,omitempty"`
 }
 
 // DocSection is one addressable section of a spec or ADR (025 §3). Plans have
