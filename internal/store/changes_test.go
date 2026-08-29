@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -175,6 +176,25 @@ func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
 func TestTaskIDFromBodyGeneralPrefix(t *testing.T) {
 	if got := TaskIDFromBody("Worklode-Task: SW-12\nother"); got != "SW-12" {
 		t.Errorf("TaskIDFromBody = %q, want SW-12", got)
+	}
+}
+
+func TestTaskIDsFromBody(t *testing.T) {
+	cases := []struct {
+		body string
+		want []string
+	}{
+		{"Worklode-Task: HDB-42", []string{"HDB-42"}},
+		{"Worklode-Task: WL-1\nWorklode-Task: WL-2\nWorklode-Task: WL-3", []string{"WL-1", "WL-2", "WL-3"}},
+		{"some text\nWorklode-Task: HDB-7\nmore text", []string{"HDB-7"}},
+		{"no marker here", nil},
+		{"", nil},
+	}
+	for _, c := range cases {
+		got := TaskIDsFromBody(c.body)
+		if !slices.Equal(got, c.want) {
+			t.Errorf("TaskIDsFromBody(%q) = %v, want %v", c.body, got, c.want)
+		}
 	}
 }
 
