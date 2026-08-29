@@ -977,7 +977,7 @@ func newTaskSubmitCmd() *cobra.Command {
 }
 
 func newTaskDoneCmd() *cobra.Command {
-	return newTaskTransitionCmd("done <id>", "Mark a task merged (in_review -> merged)",
+	return newTaskTransitionCmd("done <id>", "Mark a task merged from any pre-merge state",
 		true, (*cli.Client).DoneTask)
 }
 
