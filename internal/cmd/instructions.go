@@ -51,10 +51,12 @@ const agentsBlock = agentsBlockBegin + `
 ## Worklode
 
 This repository is tracked by Worklode (` + "`lode`" + `). Work is entered by
-claiming a task, which also creates the worktree the work happens in:
+claiming a task:
 
-- ` + "`lode next`" + ` claims the highest-ranked ready task and creates its worktree.
-- ` + "`lode task claim <id>`" + ` claims one specific task instead.
+- ` + "`lode next [id]`" + ` claims the highest-ranked ready task, or the one
+  named, and creates the worktree the work happens in.
+- ` + "`lode task claim <id>`" + ` leases a task to a worktree that already
+  exists — run it from inside that worktree, not the main checkout.
 - ` + "`lode resume <dir>`" + ` re-enters a worktree that already exists.
 - ` + "`lode status`" + ` reports the current worktree's task and lease.
 
