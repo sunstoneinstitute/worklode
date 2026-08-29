@@ -50,6 +50,22 @@ var ActingRels = []string{"covers", "defers", "requires", "blocks", "wasDerivedF
 // direction stored; only who typed it moves.
 var StoredRels = append(slices.Clone(ActingRels), "blockedBy")
 
+// InverseOf maps each inverse-only spelling — the ones StoredRels excludes
+// because they merely restate an acting relation the other end is expected
+// to declare (025 §14.2) — to the acting relation it restates. `blockedBy`
+// is not here: unlike these three, it writes a real row of its own
+// (StoredRels), rather than depending on the other end declaring anything.
+//
+// A consumer checking "did the other end actually declare this back" reads
+// this map once rather than special-casing three keys (WL-375); a fourth
+// inverse-only field added later (refListRelOrder/anchorRelOrder growing a
+// row) is added here in the same change, and that check inherits it.
+var InverseOf = map[string]string{
+	"isRequiredBy": "requires",
+	"amendedBy":    "amends",
+	"isReplacedBy": "replaces",
+}
+
 // refListRelOrder is the fixed order Refs walks the RefList fields, acting
 // spelling before its inverse.
 var refListRelOrder = []struct {

@@ -23,6 +23,11 @@ import (
 // `requires: 001-alpha.md` on the plan and `isRequiredBy: <plan>` on the spec —
 // and the same key on a spec (alpha requires beta) sits beside it as the
 // control that is known to wire.
+//
+// beta's `isRequiredBy` also names gamma, which declares no `requires` back
+// (WL-375): a one-sided inverse, resolving to neither an edge nor silence —
+// it is reported (unresolvedRef.oneSided), which is the property this test
+// asserts of every reference regardless of which of the three ways it lands.
 func roundTripCorpus() map[string]string {
 	return map[string]string{
 		"specs/001-alpha.md": `---
@@ -50,6 +55,7 @@ Alpha's only section.
 status: draft
 isRequiredBy:
   - 001-alpha.md
+  - 003-gamma.md
 amendedBy:
   "#sec-2":
     - 001-alpha.md#sec-1
@@ -176,6 +182,31 @@ func TestDocImportRoundTrip(t *testing.T) {
 		}
 	})
 
+	// WL-375: beta's isRequiredBy names gamma, and gamma declares no requires
+	// back. Neither end stores an edge for it — unlike a dangling reference,
+	// there is nothing to keep verbatim, since the target document is real —
+	// but it is still named, so it cannot vanish silently.
+	t.Run("a one-sided inverse reference is reported and stores no edge", func(t *testing.T) {
+		if !strings.Contains(stderr, "002-beta: 003-gamma.md") {
+			t.Errorf("stderr = %q, want the one-sided inverse spelling named", stderr)
+		}
+		if !strings.Contains(stderr, "1 one-sided inverse reference(s)") {
+			t.Errorf("stderr = %q, want the one-sided summary line", stderr)
+		}
+		beta := importedDoc(t, c, "002-beta")
+		gamma := importedDoc(t, c, "003-gamma")
+		for _, e := range append(append([]model.DocEdge{}, beta.Edges...), beta.EdgesIn...) {
+			if e.ToSlug == "003-gamma" {
+				t.Errorf("beta edges = %+v: no beta<->gamma edge should exist for the one-sided isRequiredBy", beta.Edges)
+			}
+		}
+		for _, e := range append(append([]model.DocEdge{}, gamma.Edges...), gamma.EdgesIn...) {
+			if e.ToSlug == "002-beta" {
+				t.Errorf("gamma edges = %+v: no beta<->gamma edge should exist for the one-sided isRequiredBy", gamma.Edges)
+			}
+		}
+	})
+
 	t.Run("re-importing changes neither body nor edges", func(t *testing.T) {
 		before := readBackCorpus(t, c, files)
 		out, err := runLode(t, "doc", "import", "--project", "proj", "--docs", dir)
@@ -269,42 +300,4 @@ func sameEdges(a, b []model.DocEdge) bool {
 		}
 	}
 	return true
-}
-
-// TestDocImportDropsAOneSidedInverseSpelling pins the one shape the round-trip
-// property above forbids and the import still does: an inverse spelling whose
-// acting end declares nothing back.
-//
-// The store records ActingRels plus `blockedBy` (store.frontmatterEdges), on
-// the reasoning that `isRequiredBy` is a restatement of the other document's
-// `requires` (025 §14.2) — true when the other document declares it, and
-// nothing checks that it did. So this reference becomes neither an edge nor a
-// report, which is exactly the third outcome WL-370 exists to forbid.
-//
-// It is pinned here rather than folded into roundTripCorpus so the gap is
-// visible without a red suite, and so fixing it fails this test and names the
-// task. Fix is WL-375: when it lands, delete this test and move the shape into
-// the fixture.
-func TestDocImportDropsAOneSidedInverseSpelling(t *testing.T) {
-	dir := writeCorpus(t, map[string]string{
-		"specs/001-target.md": "---\nstatus: draft\n---\n\n# Target\n",
-		"plans/2026-02-01-one-sided.md": "---\nstatus: draft\n" +
-			"isRequiredBy: 001-target.md\n---\n\n# One sided\n",
-	})
-	_, c := lifecycleTestServer(t)
-	setupProject(t, c)
-
-	stdout, stderr, err := runLodeOutErr(t, "doc", "import", "--project", "proj", "--docs", dir)
-	if err != nil {
-		t.Fatalf("doc import: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
-	}
-	d := importedDoc(t, c, "2026-02-01-one-sided")
-	if len(d.Edges) != 0 || len(d.EdgesIn) != 0 {
-		t.Fatalf("edges = %+v / %+v: WL-375 is fixed — delete this test and put the "+
-			"one-sided inverse spelling in roundTripCorpus", d.Edges, d.EdgesIn)
-	}
-	if strings.Contains(stderr, "001-target.md") {
-		t.Fatalf("stderr = %q: the reference is reported now — WL-375 is fixed, and the "+
-			"round-trip property covers this shape", stderr)
-	}
 }
