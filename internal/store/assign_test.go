@@ -90,6 +90,7 @@ func TestAssignTaskHappyPath(t *testing.T) {
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
 	}
+	seedParticipant(t, s, "horndb", "bob", "member", false)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	if err := assignTask(t, s, taskTestNow, task.ID, "bob"); err != nil {
@@ -175,6 +176,7 @@ func TestAssignmentChangesRecordPreviousAssignee(t *testing.T) {
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
 	}
+	seedParticipant(t, s, "horndb", "bob", "member", false)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
 	// unassigned -> stig: old is the empty string, not a missing key.
@@ -287,6 +289,7 @@ func TestStartTaskAssignedToSomeoneElse(t *testing.T) {
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
 	}
+	seedParticipant(t, s, "horndb", "bob", "member", false)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	if err := assignTask(t, s, taskTestNow, task.ID, "bob"); err != nil {
 		t.Fatalf("AssignTask: %v", err)
@@ -413,6 +416,7 @@ func TestListTasksFilterByAssignee(t *testing.T) {
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
 	}
+	seedParticipant(t, s, "horndb", "bob", "member", false)
 	mine := createTask(t, s, taskTestNow, defaultTaskInput())
 	bobs := createTask(t, s, taskTestNow, defaultTaskInput())
 	// unassigned has no assignee at all — it must be excluded from the
@@ -437,5 +441,36 @@ func TestListTasksFilterByAssignee(t *testing.T) {
 		if task.ID == unassigned.ID || task.ID == bobs.ID {
 			t.Fatalf("ListTasks{Assignee: stig} leaked %s, which is not stig's", task.ID)
 		}
+	}
+}
+
+// TestAssignTaskNonCrewMember covers the Crew gate on assignment (spec 029
+// §6.1): a task belongs to someone on its project's Crew, so both AssignTask
+// and StartTask — which assigns as it starts — refuse an outsider, and
+// neither leaves a trace on the task.
+func TestAssignTaskNonCrewMember(t *testing.T) {
+	s := openTaskStore(t)
+	if err := s.CreateActor(t.Context(), "outsider", "human", "Outsider", false); err != nil {
+		t.Fatalf("CreateActor outsider: %v", err)
+	}
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	err := assignTask(t, s, taskTestNow, task.ID, "outsider")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("assign to a non-crew actor: want ErrInvalidInput, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "crew") {
+		t.Fatalf("message must name the crew: %v", err)
+	}
+	if _, err := startTask(t, s, taskTestNow, task.ID, "outsider"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("start by a non-crew actor: want ErrInvalidInput, got %v", err)
+	}
+
+	got, err := s.GetTask(t.Context(), task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Assignee != "" || got.State != "ready" {
+		t.Fatalf("after refused assign/start: assignee=%q state=%q, want empty/ready", got.Assignee, got.State)
 	}
 }

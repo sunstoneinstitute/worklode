@@ -15,6 +15,7 @@ import (
 func TestAssignDefaultsToCaller(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Assign me", "priority": "high", "kind": "feature",
 	})
@@ -32,10 +33,12 @@ func TestAssignDefaultsToCaller(t *testing.T) {
 func TestAssignExplicitBody(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Assign to bob", "priority": "high", "kind": "feature",
 	})
 	secondActor(t, st, "bob")
+	store.SeedCrewForTests(t, st, "proj", "bob")
 
 	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
 	if rr.Code != http.StatusOK {
@@ -50,6 +53,7 @@ func TestAssignExplicitBody(t *testing.T) {
 func TestUnassign(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Unassign me", "priority": "high", "kind": "feature",
 	})
@@ -75,6 +79,7 @@ func TestUnassign(t *testing.T) {
 func TestStartAutoAssignsNoLease(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Start me", "priority": "high", "kind": "feature",
 	})
@@ -100,10 +105,12 @@ func TestStartAutoAssignsNoLease(t *testing.T) {
 func TestStartAssignedToAnother(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Bob's task", "priority": "high", "kind": "feature",
 	})
 	secondActor(t, st, "bob")
+	store.SeedCrewForTests(t, st, "proj", "bob")
 	setup := doReq(t, h, "POST", "/api/v1/tasks/WL-1/assign", token, map[string]any{"assignee": "bob"})
 	if setup.Code != http.StatusOK {
 		t.Fatalf("setup assign status = %d, body %s", setup.Code, setup.Body.String())
@@ -123,6 +130,7 @@ func TestStartAssignedToAnother(t *testing.T) {
 func TestStop(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Stop me", "priority": "high", "kind": "feature",
 	})
@@ -144,6 +152,7 @@ func TestStop(t *testing.T) {
 func TestStopClaimedTask(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Leased", "priority": "high", "kind": "feature",
 	})
@@ -170,6 +179,7 @@ func TestStopClaimedTask(t *testing.T) {
 func TestPatchSubmitForReview(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Submit me", "priority": "high", "kind": "feature",
 	})
@@ -196,6 +206,7 @@ func TestPatchSubmitForReview(t *testing.T) {
 func TestHumanLifecycle(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Full human lifecycle", "priority": "high", "kind": "feature",
 	})

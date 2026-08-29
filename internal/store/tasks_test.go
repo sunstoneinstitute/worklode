@@ -37,6 +37,9 @@ func openTaskStore(t *testing.T) *Store {
 	if err := s.CreateActor(ctx, "stig", "human", "Stig", false); err != nil {
 		t.Fatalf("CreateActor: %v", err)
 	}
+	// Assignment requires Crew membership (see requireCrewMember), so the
+	// fixture actor leads the fixture project.
+	seedParticipant(t, s, "horndb", "stig", "member", true)
 	return s
 }
 

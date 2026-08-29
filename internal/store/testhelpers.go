@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -471,5 +472,27 @@ func AwaitCommitHorizon(t *testing.T, s *Store) {
 				"(a long transaction elsewhere on the instance is holding it back)", got, marker)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// crewSeedSeq keeps the event external ids SeedCrewForTests writes unique
+// within a test binary, since RecordEvent dedupes on (source, external_id).
+var crewSeedSeq atomic.Int64
+
+// SeedCrewForTests puts each actor on projectID's Crew as a plain member,
+// through the same AddParticipant path production uses. Assignment requires
+// Crew membership (see requireCrewMember), so every test that assigns or
+// starts work — in this package and in internal/api, internal/cli and
+// internal/cmd — needs the roster seeded first.
+func SeedCrewForTests(t *testing.T, s *Store, projectID string, actorIDs ...string) {
+	t.Helper()
+	for _, id := range actorIDs {
+		ext := fmt.Sprintf("seed-crew-%d", crewSeedSeq.Add(1))
+		if _, _, err := s.RecordEvent(context.Background(), "cli", ext, "crew.member_added", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return AddParticipant(tx, s.nowFn(), projectID, id, "member", false, false, "", eventID)
+			}); err != nil {
+			t.Fatalf("seed crew member %s on project %s: %v", id, projectID, err)
+		}
 	}
 }

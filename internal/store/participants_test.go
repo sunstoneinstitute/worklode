@@ -239,6 +239,7 @@ func TestOpenWorkOwnedBy(t *testing.T) {
 	if err := s.CreateActor(ctx, "ada", "human", "Ada Lovelace", false); err != nil {
 		t.Fatalf("CreateActor ada: %v", err)
 	}
+	seedParticipant(t, s, "p1", "ada", "member", false)
 
 	openAssigned := createTask(t, s, taskTestNow, TaskInput{
 		ProjectID: "p1", Title: "open, assigned to ada", Body: "b",

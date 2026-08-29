@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // taskListIDs runs `lode task list` with the given extra args and returns the
@@ -390,6 +391,7 @@ func TestTaskAssignUnassign(t *testing.T) {
 	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("create actor bob: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "alice", "bob")
 	task := createTestTask(t, c, "Assignable task")
 
 	// No --to: assigns to the caller (alice, per lifecycleTestServer).
@@ -417,8 +419,9 @@ func TestTaskAssignUnassign(t *testing.T) {
 }
 
 func TestTaskStartStopSubmit(t *testing.T) {
-	_, c := lifecycleTestServer(t)
+	st, c := lifecycleTestServer(t)
 	setupProject(t, c)
+	store.SeedCrewForTests(t, st, "proj", "alice")
 	task := createTestTask(t, c, "Lease-free task")
 
 	// start assigns the caller (unassigned task) and moves it to in_progress.
@@ -473,6 +476,7 @@ func TestTaskListAssigneeFilterAndRendering(t *testing.T) {
 	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("create actor bob: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "alice", "bob")
 	mine := createTestTask(t, c, "Alice's task")
 	bobs := createTestTask(t, c, "Bob's task")
 	if _, err := runLode(t, "task", "assign", mine.ID); err != nil {
