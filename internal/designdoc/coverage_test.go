@@ -28,7 +28,7 @@ func buildIndex(t *testing.T, planFiles map[string]string) *designdoc.PlanIndex 
 	if err != nil {
 		t.Fatalf("LoadSyncCorpus: %v", err)
 	}
-	return designdoc.NewPlanIndex(docs)
+	return designdoc.NewPlanIndex(docs, "")
 }
 
 // checkSection asserts one Section() call: outcome, the covering-plan list
@@ -388,7 +388,7 @@ func TestNewPlanIndexIgnoresNonPlanDocs(t *testing.T) {
 		Status: "accepted",
 		Source: []byte("---\nstatus: accepted\ncovers: " + specSec1 + "#sec-1\n---\n# S\n\nBody.\n"),
 	}
-	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{specDoc})
+	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{specDoc}, "")
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Unplanned, nil)
 }
 
@@ -407,7 +407,7 @@ func TestSectionCoveringSortedByPath(t *testing.T) {
 		}
 	}
 	docs := []designdoc.CorpusDoc{mk("z.md"), mk("a.md"), mk("m.md")}
-	ix := designdoc.NewPlanIndex(docs)
+	ix := designdoc.NewPlanIndex(docs, "")
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Full, []designdoc.CoveringPlan{
 		{Path: "docs/plans/a.md", Status: "accepted", Level: "full"},
 		{Path: "docs/plans/m.md", Status: "accepted", Level: "full"},
@@ -454,9 +454,48 @@ func TestSectionAbsoluteCorpusRoot(t *testing.T) {
 		t.Fatalf("spec.Path = %q, want absolute (test setup didn't reproduce the bug scenario)", spec.Path)
 	}
 
-	ix := designdoc.NewPlanIndex(docs)
+	ix := designdoc.NewPlanIndex(docs, "")
 	checkSection(t, ix, spec.Path, "sec-1", designdoc.Full,
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+}
+
+// shorthandFixture builds the spec+plan pair WL-409's tests share, exactly
+// the way docTodoCorpus builds a CorpusDoc from the backbone (CorpusDocFromBody,
+// not LoadSyncCorpus): a spec numbered 25, and a plan covering it by the
+// <KEY>-<TYPE>-<n> shorthand.
+func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
+	t.Helper()
+	spec, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("spec", "example"), "spec", 25,
+		[]byte("---\nstatus: accepted\n---\n# Spec\n\n## 1. One {#sec-1}\n\nBody.\n"))
+	if err != nil {
+		t.Fatalf("spec: %v", err)
+	}
+	plan, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("plan", "a"), "plan", 1,
+		[]byte("---\nstatus: accepted\ncovers: WL-SPEC-25#sec-1\n---\n# A\n\nBody.\n"))
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	return []designdoc.CorpusDoc{spec, plan}
+}
+
+// TestSectionShorthandCoversResolves reproduces WL-409: a plan's covers
+// entry written as the <KEY>-<TYPE>-<n> shorthand names a spec that never
+// lives in the plan's own directory, so normalizeRef's old bare-filename
+// guess ("docs/plans/WL-SPEC-25") could never match it. With a project key,
+// the fallback resolves the shorthand the same way ResolveRef does for
+// `lode show`, and the section reports covered rather than unplanned.
+func TestSectionShorthandCoversResolves(t *testing.T) {
+	ix := designdoc.NewPlanIndex(shorthandFixture(t), "WL")
+	checkSection(t, ix, "docs/specs/example.md", "sec-1", designdoc.Full,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+}
+
+// Without a project key (every caller before WL-409, and every offline
+// caller), the shorthand fallback declines rather than guessing one: the
+// section reports exactly as it did before the fallback existed.
+func TestSectionShorthandCoversNeedsProjectKey(t *testing.T) {
+	ix := designdoc.NewPlanIndex(shorthandFixture(t), "")
+	checkSection(t, ix, "docs/specs/example.md", "sec-1", designdoc.Unplanned, nil)
 }
 
 // A bare filename reaches the same claims as the repo-relative form: it
@@ -516,7 +555,7 @@ func TestSectionPlanDirContainingSpecsSubstringDoesNotMisnormalise(t *testing.T)
 	if err != nil {
 		t.Fatalf("LoadSyncCorpus: %v", err)
 	}
-	ix := designdoc.NewPlanIndex(docs)
+	ix := designdoc.NewPlanIndex(docs, "")
 	checkSection(t, ix, specSec1, "sec-1", designdoc.Full,
 		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
 }
@@ -597,7 +636,7 @@ func TestSectionAbsolutePathAndLeadingSlashRefBothResolve(t *testing.T) {
 		t.Fatalf("spec.Path = %q, want absolute (test setup didn't reproduce the scenario)", specPath)
 	}
 
-	ix := designdoc.NewPlanIndex(docs)
+	ix := designdoc.NewPlanIndex(docs, "")
 	want := []designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}}
 	checkSection(t, ix, specPath, "sec-1", designdoc.Full, want)
 	checkSection(t, ix, "/"+specSec1, "sec-1", designdoc.Full, want)

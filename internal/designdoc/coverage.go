@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // PlanningOutcome is where one spec section sits, per 026 §2.1, relative to
@@ -147,21 +149,44 @@ type PlanIndex struct {
 	// planDir rather than assumed, so a relocated corpus (025 §16.1) keys
 	// documents and the claims naming them the same way.
 	specCanon, planCanon string
+
+	// projectKey and the three fields below back normalizeRef's fallback
+	// resolution (WL-409): a covers/defers target is always in a *different*
+	// corpus from its referring plan, so when a bare reference does not name a
+	// document at its home-relative guess, it is retried as a number, slug, or
+	// <KEY>-<TYPE>-<n> shorthand against every document in the corpus — the
+	// same forms ResolveRef resolves for `lode show`. projectKey is "" when
+	// the caller has none (offline callers, and every existing test): the
+	// fallback then declines every shorthand rather than guessing a project.
+	projectKey    string
+	resolveDocs   []model.Doc     // synthetic candidates for ResolveRef, ID = index into resolvePaths
+	resolvePaths  []string        // resolveDocs[i]'s corpus-relative Path
+	resolveByPath map[string]bool // every document's corpus-relative Path, for the "guess already matches" check
 }
 
 // NewPlanIndex indexes docs for Section queries: every plan document's
 // coverage claims, plus (from any spec/ADR docs present) the spec-corpus
 // directory a bare or absolute specPath resolves against. Non-plan documents
-// otherwise contribute nothing — this task's predicate only walks plan-side
-// `covers` claims.
-func NewPlanIndex(docs []CorpusDoc) *PlanIndex {
+// otherwise contribute nothing to the claims themselves — this task's
+// predicate only walks plan-side `covers` claims — but every document, of
+// every kind, feeds the number/slug/shorthand resolver normalizeRef falls
+// back to (WL-409).
+//
+// projectKey is the current repo's project key ("WL"), or "" when the caller
+// has none (every offline caller, and every existing caller before WL-409):
+// a covers/defers entry written as a <KEY>-<TYPE>-<n> shorthand then never
+// resolves, exactly as before this existed, rather than resolving against a
+// project the caller cannot actually vouch for.
+func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 	ix := &PlanIndex{
-		claims: make(map[sectionKey][]claim),
-		defers: make(map[sectionKey][]deferral),
-		status: make(map[string]string),
+		claims:     make(map[sectionKey][]claim),
+		defers:     make(map[sectionKey][]deferral),
+		status:     make(map[string]string),
+		projectKey: projectKey,
 	}
 	ix.specDir, ix.planDir = corpusDirs(docs)
 	ix.specCanon, ix.planCanon = canonDirs(ix.specDir, ix.planDir)
+	ix.buildResolver(docs)
 	for _, d := range docs {
 		if d.Kind != "plan" {
 			continue
@@ -177,12 +202,12 @@ func NewPlanIndex(docs []CorpusDoc) *PlanIndex {
 				// §4.3) — neither contributes to any section's index entry.
 				continue
 			}
-			key := sectionKey{spec: normalizeRef(rawTarget, home), anchor: anchor}
+			key := sectionKey{spec: ix.normalizeRef(rawTarget, home), anchor: anchor}
 			ix.claims[key] = append(ix.claims[key], claim{
 				plan:             plan,
 				status:           d.Status,
 				level:            entry.Coverage,
-				fullCoverageWith: normalizeList(entry.FullCoverageWith, home),
+				fullCoverageWith: ix.normalizeList(entry.FullCoverageWith, home),
 			})
 		}
 		for _, entry := range planDeferralEntries(d) {
@@ -194,11 +219,11 @@ func NewPlanIndex(docs []CorpusDoc) *PlanIndex {
 				// is already valid.
 				continue
 			}
-			key := sectionKey{spec: normalizeRef(rawTarget, home), anchor: anchor}
+			key := sectionKey{spec: ix.normalizeRef(rawTarget, home), anchor: anchor}
 			ix.defers[key] = append(ix.defers[key], deferral{
 				plan:   plan,
 				status: d.Status,
-				owner:  normalizeRef(entry.To, home),
+				owner:  ix.normalizeRef(entry.To, home),
 			})
 		}
 	}
@@ -315,20 +340,36 @@ func underDir(p, dir string) (rel string, ok bool) {
 	return filepath.ToSlash(p[len(prefix):]), true
 }
 
-// normalizeRef resolves one §4 reference against home, the referring plan's
-// own corpus-relative directory ("docs/plans"): a bare filename (no "/") is
-// home-relative, and a "./" or "../"-prefixed reference is resolved against
-// home and cleaned. Both mirror scripts/secmeta.py's resolve_ref, which
-// implements only the bare-filename arm — 026 review round 2 ruled that the
-// port should not replicate that gap, filing it there as a follow-up
-// instead so the two reconverge. An already corpus-relative reference
-// ("docs/specs/...", "docs/plans/...") is returned unchanged.
-func normalizeRef(ref, home string) string {
+// normalizeRef resolves one §4 reference against home, the referring
+// document's own corpus-relative directory ("docs/plans"): a "./" or
+// "../"-prefixed reference is resolved against home and cleaned, and an
+// already corpus-relative reference ("docs/specs/...", "docs/plans/...") is
+// returned unchanged. Both mirror scripts/secmeta.py's resolve_ref — 026
+// review round 2 ruled the port should not replicate its bare-filename-only
+// gap, filing it there as a follow-up instead so the two reconverge.
+//
+// A bare reference (no "/") is tried home-relative first — correct for a
+// same-corpus reference, `requires` and `amends` naming another document
+// right beside the referring one — and only when that guess names no
+// document actually in the corpus is it retried as a number, slug, or
+// <KEY>-<TYPE>-<n> shorthand against every document (WL-409): a covers or
+// defers target is always a spec, which never lives in a plan's own
+// directory, so the home-relative guess can never be right for it. On any
+// resolveShorthand failure the guess stands unchanged, exactly as before
+// this fallback existed — a typo reads as an unplanned section, not an error
+// (026 review round 2).
+func (ix *PlanIndex) normalizeRef(ref, home string) string {
 	if ref == "" {
 		return ref
 	}
 	if !strings.Contains(ref, "/") {
-		return home + "/" + ref
+		guess := home + "/" + ref
+		if !ix.resolveByPath[guess] {
+			if resolved, ok := ix.resolveShorthand(ref); ok {
+				return resolved
+			}
+		}
+		return guess
 	}
 	// §4: a repo-relative reference's leading "/" is optional —
 	// "docs/specs/x.md" and "/docs/specs/x.md" are the same reference.
@@ -340,15 +381,65 @@ func normalizeRef(ref, home string) string {
 }
 
 // normalizeList applies normalizeRef to every entry.
-func normalizeList(refs []string, home string) []string {
+func (ix *PlanIndex) normalizeList(refs []string, home string) []string {
 	if len(refs) == 0 {
 		return nil
 	}
 	out := make([]string, len(refs))
 	for i, r := range refs {
-		out[i] = normalizeRef(r, home)
+		out[i] = ix.normalizeRef(r, home)
 	}
 	return out
+}
+
+// buildResolver indexes every document in the corpus — of every kind, not
+// only plans — by its own number, slug and kind, so normalizeRef's fallback
+// can call ResolveRef against them the same way `lode show` resolves a
+// number, slug or shorthand reference. resolveDocs[i]'s ID is i itself, so a
+// resolved model.Doc maps straight back to resolvePaths[i] with no separate
+// lookup.
+func (ix *PlanIndex) buildResolver(docs []CorpusDoc) {
+	ix.resolveDocs = make([]model.Doc, 0, len(docs))
+	ix.resolvePaths = make([]string, 0, len(docs))
+	ix.resolveByPath = make(map[string]bool, len(docs))
+	for _, d := range docs {
+		canon, dir := ix.specCanon, ix.specDir
+		if d.Kind == "plan" {
+			canon, dir = ix.planCanon, ix.planDir
+		}
+		p := resolveDoc(d.Path, canon, dir)
+		ix.resolveByPath[p] = true
+		ix.resolveDocs = append(ix.resolveDocs, model.Doc{
+			ID: int64(len(ix.resolvePaths)), Kind: d.Kind, Number: d.Number,
+			Slug: strings.TrimSuffix(path.Base(d.Path), ".md"),
+		})
+		ix.resolvePaths = append(ix.resolvePaths, p)
+	}
+}
+
+// resolveShorthand resolves ref — a bare reference that named no document in
+// the corpus at its home-relative guess — as a document number, slug or
+// <KEY>-<TYPE>-<n> shorthand, against every document buildResolver indexed.
+// false on any failure (no project key, not found, ambiguous, wrong kind,
+// NO-SPEC): normalizeRef's guess stands unchanged in every such case, so a
+// genuine miss degrades exactly as it did before this fallback existed.
+//
+// ResolveRef's bare-number and bare-slug forms match across the whole corpus
+// with no project scoping — safe here because a covers/defers target is
+// conventionally either a path or the shorthand (never a bare slug: 026
+// review round 2's authoring guidance reserves that form for a same-corpus
+// reference, which already resolves via the home-relative guess above and
+// never reaches here) — so in practice only the shorthand form, which is
+// key-scoped, is ever exercised through this path.
+func (ix *PlanIndex) resolveShorthand(ref string) (string, bool) {
+	if ix.projectKey == "" {
+		return "", false
+	}
+	doc, _, err := ResolveRef(ix.resolveDocs, ix.projectKey, ref)
+	if err != nil {
+		return "", false
+	}
+	return ix.resolvePaths[doc.ID], true
 }
 
 // Section returns the 026 §2.1 outcome for one spec section, addressed by a
