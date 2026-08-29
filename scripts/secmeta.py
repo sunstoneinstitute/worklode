@@ -61,8 +61,12 @@ DEFAULT_ROOTS = (SPECS, PLANS)
 STATUSES = {"draft", "accepted", "superseded"}
 EFFECTIVE = {"accepted", "superseded"}
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-# <PROJECTKEY>-SPEC|ADR-<n>[#sec-<anchor>] (014 section 11.3), plus the colon form.
-SHORTHAND = re.compile(r"^[A-Za-z][\w-]*[-:](SPEC|ADR)-(\d+)(#sec-[\w.]+)?$", re.I)
+# <PROJECTKEY>-SPEC|ADR|PLAN-<n>[#sec-<anchor>] (014 section 11.3), plus the
+# colon form. PLAN mirrors internal/designdoc/resolve.go's shorthandPattern
+# (WL-404) -- the two must stay in sync, since a plan-to-plan blocks/requires
+# reference resolves live via that pattern and is git-side validated by this
+# one.
+SHORTHAND = re.compile(r"^[A-Za-z][\w-]*[-:](SPEC|ADR|PLAN)-(\d+)(#sec-[\w.]+)?$", re.I)
 # Spec 0 is reserved: "this plan has no governing spec". It names no file on
 # purpose, so it resolves to nothing and that is not a defect. Spelt without a
 # project key -- "no spec" is not one project's spec 0, it is the absence of a
