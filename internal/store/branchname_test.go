@@ -8,8 +8,11 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
+// The tests in this file are not t.Parallel(): SetBranchTemplate mutates a
+// process-global (the active branch template and its derived regex) that
+// every test here reads or writes, so running them concurrently races.
+
 func TestSetBranchTemplateValid(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	cases := []struct{ name, tmpl, want string }{
 		{"default", "", "WL-7-fix-the-thing"},
@@ -38,7 +41,6 @@ func TestSetBranchTemplateValid(t *testing.T) {
 // checks that BranchTemplate() (and TaskIDFromRef, at least once) still
 // reflect that good template rather than the rejected one or the default.
 func TestSetBranchTemplateRejects(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	const goodTmpl = "lode/{{ .id }}-{{ .slug }}"
 	if err := SetBranchTemplate(goodTmpl); err != nil {
@@ -95,7 +97,6 @@ func TestSetBranchTemplateRejects(t *testing.T) {
 // trustworthy: whatever the template, a branch it renders must parse back to
 // the id it was rendered from.
 func TestBranchRoundTrip(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	tmpls := []string{
 		DefaultBranchTemplate,
@@ -128,7 +129,6 @@ func TestBranchRoundTrip(t *testing.T) {
 // that would render an illegal branch. BranchFor must run .projectId (like
 // .slug) through SlugifyTitle before rendering.
 func TestBranchForSanitizesProjectID(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate("{{ .projectId }}/{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
@@ -148,7 +148,6 @@ func TestBranchForSanitizesProjectID(t *testing.T) {
 }
 
 func TestTaskIDFromRefRejects(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
@@ -165,7 +164,6 @@ func TestTaskIDFromRefRejects(t *testing.T) {
 }
 
 func TestDerivedPatternEscapesLiterals(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate("a.b-{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
@@ -180,7 +178,6 @@ func TestDerivedPatternEscapesLiterals(t *testing.T) {
 }
 
 func TestBranchTemplateReportsCurrent(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate("lode/{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
@@ -195,7 +192,6 @@ func TestBranchTemplateReportsCurrent(t *testing.T) {
 // .slug) so a missed substitution for .projectId or .kind would also be
 // caught.
 func TestDerivedPatternHasNoSentinel(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate("{{ .kind }}/{{ .projectId }}/{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
