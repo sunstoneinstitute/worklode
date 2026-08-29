@@ -181,6 +181,36 @@ func TestLocalMergeIgnoresUntouchedBranch(t *testing.T) {
 	}
 }
 
+// TestLocalMergeIgnoresBranchRebasedOntoTheIncomingCommit reproduces WL-358:
+// a still-empty task branch gets rebased onto an unrelated commit that then
+// lands on the default branch in this same event (ordinary practice when a
+// worktree's base has drifted from origin). Its tip becomes exactly the new
+// HEAD, so it is never behind prev (prev predates the unrelated commit) and
+// is trivially an ancestor of HEAD — the prev-only guard could not tell this
+// apart from a real landing.
+func TestLocalMergeIgnoresBranchRebasedOntoTheIncomingCommit(t *testing.T) {
+	b := newMergeBackbone(t, []map[string]any{
+		{"id": "WL-9", "branch": "WL-9-never-started", "state": "in_progress"},
+	})
+	r := newMergeRepo(t)
+	r.git("branch", "WL-9-never-started") // created, never committed to
+	r.git("checkout", "-b", "unrelated")
+	r.commit("other.txt", "someone else\n", "an unrelated PR")
+	r.git("checkout", "WL-9-never-started")
+	r.git("rebase", "unrelated") // still empty; tip now matches the incoming commit
+	// origin/main already has the incoming commit, as it would after the
+	// fetch half of `git pull --ff-only` — the case this guard exists for.
+	r.git("update-ref", "refs/remotes/origin/main", "unrelated")
+	r.git("checkout", "main")
+	r.git("merge", "--ff-only", "unrelated")
+
+	runGitHook(t, "post-merge", r.root)
+
+	if n := b.reportCount(); n != 0 {
+		t.Fatalf("reports = %d, want 0: WL-9 has no commits of its own, only a rebased tip", n)
+	}
+}
+
 // TestLocalMergeDoesNotReportOnTheNextCommit: the same guard makes the
 // handler self-limiting. An ordinary commit after a merge must not re-report
 // what the merge already reported.
