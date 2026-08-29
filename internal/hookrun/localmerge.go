@@ -89,7 +89,7 @@ func handleLocalMerge(ctx context.Context, opts Options, dir string) {
 	// project, and a branch that is gone cannot be probed anyway (a merge
 	// whose branch was already deleted falls back to the webhook).
 	local := localBranches(root)
-	probe := &mergeProbe{opts: opts, root: root, prev: prev}
+	probe := &mergeProbe{opts: opts, root: root, prev: prev, def: def}
 	var landed []string
 	for _, t := range resp.Tasks {
 		if t.Branch == "" || !local[t.Branch] {
@@ -123,6 +123,7 @@ type mergeProbe struct {
 	opts   Options
 	root   string
 	prev   string          // the commit HEAD was at before this event
+	def    string          // the repo's default branch name, e.g. "main"
 	landed map[string]bool // patch ids added by this event; see landedPatches
 	loaded bool
 }
@@ -141,12 +142,27 @@ type mergeProbe struct {
 //     squash, where N commits collapsed into one and nothing matches
 //     commit-for-commit.
 //
-// The prev test is what keeps a freshly created, still-empty task branch from
-// being read as delivered. Such a branch points at a commit that was already
-// on the default branch, so every merge would otherwise report every idle
-// worktree's task as merged. Excluding what prev already contained also makes
-// the handler self-limiting: the commit after a merge does not re-report it.
+// hasNoOwnCommits guards against a still-empty task branch, whether it has
+// sat untouched since creation or was rebased onto an incoming commit during
+// this very event — ordinary practice whenever a worktree's base has drifted
+// from origin. Either way its tip ends up contained in origin's default
+// branch without branch itself having contributed anything: a real local
+// merge is what this handler exists to catch (repos with no webhook, so
+// nothing has reached origin yet), so any commit of branch's own shows up as
+// ahead of origin here, landed or not. A repo with no origin/def to compare
+// against (never fetched) answers false, leaving the ancestry checks below as
+// the only guard, same as before this existed.
+func (p *mergeProbe) hasNoOwnCommits(branch string) bool {
+	count, ok := gitexec.Line(p.root, "rev-list", "--count", "origin/"+p.def+".."+branch)
+	return ok && count == "0"
+}
+
+// The prev test excludes what prev already contained, which makes the
+// handler self-limiting: the commit after a merge does not re-report it.
 func (p *mergeProbe) landedNow(branch string) bool {
+	if p.hasNoOwnCommits(branch) {
+		return false // nothing of branch's own has landed anywhere
+	}
 	if gitexec.OK(p.root, "merge-base", "--is-ancestor", branch, p.prev) {
 		return false // already delivered before this event
 	}
