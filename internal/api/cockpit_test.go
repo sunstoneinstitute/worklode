@@ -350,6 +350,7 @@ func TestProjectCockpitOwnerAndDelegate(t *testing.T) {
 	if err := st.CreateActor(ctx, "agent-one", "agent", "Agent One", false); err != nil {
 		t.Fatalf("create actor agent-one: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "dana")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Owned and delegated", "priority": "medium", "kind": "feature",
 	})
@@ -419,6 +420,7 @@ func TestProjectCockpitMissingDisplayNameFallsBackToID(t *testing.T) {
 	if err := st.CreateActor(ctx, "svc-1", "human", "", false); err != nil {
 		t.Fatalf("create actor svc-1: %v", err)
 	}
+	store.SeedCrewForTests(t, st, "proj", "svc-1")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "No display name", "priority": "medium", "kind": "feature",
 	})
@@ -503,6 +505,7 @@ func TestProjectCockpitUserReportedHumanStart(t *testing.T) {
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	erinToken := seedActor(t, st, "erin", "human", "Erin", false)
+	store.SeedCrewForTests(t, st, "proj", "erin")
 	createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Human-started", "priority": "medium", "kind": "feature",
 	})

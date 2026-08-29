@@ -23,25 +23,59 @@ func requireActor(tx *sql.Tx, actorID string) error {
 	return nil
 }
 
-// lockTaskOwnership reads a task's state and assignee under a row lock, the
-// opening move of every ownership change in this file. A missing task is
-// ErrNotFound.
-func lockTaskOwnership(tx *sql.Tx, id string) (state, assignee string, err error) {
+// lockTaskOwnership reads a task's project, state and assignee under a row
+// lock, the opening move of every ownership change in this file. The project
+// comes along because requireCrewMember needs it and the row is already
+// being read. A missing task is ErrNotFound.
+func lockTaskOwnership(tx *sql.Tx, id string) (project, state, assignee string, err error) {
 	err = tx.QueryRow(
-		`SELECT state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
-	).Scan(&state, &assignee)
+		`SELECT project_id, state, COALESCE(assignee, '') FROM tasks WHERE id = $1 FOR UPDATE`, id,
+	).Scan(&project, &state, &assignee)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", fmt.Errorf("task %s: %w", id, ErrNotFound)
+		return "", "", "", fmt.Errorf("task %s: %w", id, ErrNotFound)
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("lock task %s: %w", id, err)
+		return "", "", "", fmt.Errorf("lock task %s: %w", id, err)
 	}
-	return state, assignee, nil
+	return project, state, assignee, nil
+}
+
+// requireCrewMember refuses to hand a task to an actor who holds no Crew row
+// on the task's project (spec 029 §6.1): work belongs to the people on the
+// investigation, and an assignee who is not one of them cannot be reached by
+// the roster, the removal guard, or the responsibility listing.
+//
+// FOR SHARE is what makes RemoveParticipant's open-work guard race-safe.
+// That guard reads tasks inside its own transaction, and assignment writes
+// no row it contends on, so before this lock two transactions could commit
+// at the same instant and leave a removed non-member owning open work. Both
+// sides now touch the member's project_participants rows — RemoveParticipant
+// takes FOR UPDATE on them — so one waits for the other: a removal that goes
+// second sees the new assignment, and an assignment that goes second finds
+// the rows gone and is refused here.
+func requireCrewMember(tx *sql.Tx, projectID, actorID string) error {
+	var one int
+	err := tx.QueryRow(
+		`SELECT 1 FROM project_participants
+		  WHERE project_id = $1 AND actor_id = $2
+		  LIMIT 1
+		    FOR SHARE`,
+		projectID, actorID,
+	).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("actor %s is not on project %s's crew: add them to the crew first: %w",
+			actorID, projectID, ErrInvalidInput)
+	}
+	if err != nil {
+		return fmt.Errorf("check crew membership of %s on project %s: %w", actorID, projectID, err)
+	}
+	return nil
 }
 
 // AssignTask sets taskID's assignee to assignee inside the given
 // transaction, recording provenance via LogChange. assignee must name an
-// existing actor (ErrNotFound otherwise); a missing task is also
+// existing actor (ErrNotFound otherwise) who is on the task project's Crew
+// (ErrInvalidInput otherwise, see requireCrewMember); a missing task is also
 // ErrNotFound. A task with children, or one in a closed state (see
 // deliveredStateSet), cannot be assigned (ErrInvalidInput) — a container's
 // ownership follows its children, and a closed task has nothing left to own.
@@ -50,8 +84,11 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 		return err
 	}
 
-	state, prev, err := lockTaskOwnership(tx, id)
+	project, state, prev, err := lockTaskOwnership(tx, id)
 	if err != nil {
+		return err
+	}
+	if err := requireCrewMember(tx, project, assignee); err != nil {
 		return err
 	}
 	container, err := hasChildren(tx, id)
@@ -83,7 +120,7 @@ func AssignTask(tx *sql.Tx, now time.Time, id, assignee string, eventID int64) e
 // (e.g. left over from before the task took children) must not be blocked by
 // the very fact that needs cleaning up. A missing task is ErrNotFound.
 func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
-	state, prev, err := lockTaskOwnership(tx, id)
+	_, state, prev, err := lockTaskOwnership(tx, id)
 	if err != nil {
 		return err
 	}
@@ -105,7 +142,9 @@ func UnassignTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 // without taking a lease: a human owns the task by assignment instead.
 // actorID must name an existing actor (ErrNotFound otherwise, the same check
 // AssignTask makes — without it an unknown actor would surface as a raw
-// tasks.assignee foreign-key violation and poison the caller's transaction).
+// tasks.assignee foreign-key violation and poison the caller's transaction)
+// and be on the task project's Crew (ErrInvalidInput otherwise, see
+// requireCrewMember) — starting a task assigns it, so it is an assignment.
 // If the task is unassigned, actorID is assigned to it first (recorded via
 // LogChange); if it is already assigned to someone else, StartTask refuses
 // with ErrInvalidInput rather than silently reassigning. A task with
@@ -119,8 +158,11 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 		return "", err
 	}
 
-	state, assignee, err := lockTaskOwnership(tx, id)
+	project, state, assignee, err := lockTaskOwnership(tx, id)
 	if err != nil {
+		return "", err
+	}
+	if err := requireCrewMember(tx, project, actorID); err != nil {
 		return "", err
 	}
 	container, err := hasChildren(tx, id)
@@ -178,7 +220,7 @@ func StartTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) (st
 // Release instead (ErrInvalidInput) — StopTask never touches a lease. A
 // missing task is ErrNotFound.
 func StopTask(tx *sql.Tx, now time.Time, id, actorID string, eventID int64) error {
-	state, assignee, err := lockTaskOwnership(tx, id)
+	_, state, assignee, err := lockTaskOwnership(tx, id)
 	if err != nil {
 		return err
 	}
