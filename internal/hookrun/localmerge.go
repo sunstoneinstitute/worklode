@@ -10,10 +10,23 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// mergeCandidateStates are the task states a landed commit can advance. They
-// mirror the from-states store.ResolveDelivery acts on: a draft has no branch
-// worth probing, and a task already at a delivered state has nothing to gain.
-var mergeCandidateStates = []string{"ready", "in_progress", "in_review"}
+// mergeCandidateStates are the task states a landed commit can advance. A
+// draft has no branch worth probing, and a task already at a delivered state
+// has nothing to gain.
+//
+// in_progress is deliberately excluded (WL-379), unlike the from-states
+// store.ResolveDelivery itself acts on for a webhook-sourced merge: that
+// case is a real GitHub PR merge event, external evidence a lease-aware
+// handler correlates to one task. This handler runs in the main clone,
+// where — its own doc comment on handleLocalMerge says so — there is no
+// lease to check, triggered by an ordinary git pull or merge any actor on
+// the machine can make. Reporting an in_progress task as landed on pure git
+// ancestry, with no way to tell "empty branch, false positive" apart from
+// "someone else is mid-edit in that task's worktree right now", risks
+// overriding a lease it cannot see. ready has no active worker to override,
+// and in_review already means the task's own worker called it done —
+// exactly the floor this handler needs before trusting local ancestry.
+var mergeCandidateStates = []string{"ready", "in_review"}
 
 // maxMergeCandidates bounds how many branches one event probes, and so how
 // many tasks one report can name (the server caps the same number). The local
