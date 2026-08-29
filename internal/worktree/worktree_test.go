@@ -366,6 +366,26 @@ func TestMainRootBareCloneFallsBackToOwnRoot(t *testing.T) {
 	}
 }
 
+// IsMain is the primitive currentWorktreeIdentity guards claim with
+// (WL-383): the main checkout must read true, a linked worktree false.
+func TestIsMain(t *testing.T) {
+	dir := initGitRepo(t)
+	if isMain, ok := worktree.IsMain(dir); !ok || !isMain {
+		t.Fatalf("IsMain(main checkout) = %v, %v; want true, true", isMain, ok)
+	}
+
+	wt := addWorktreeUnderBase(t, dir, "WL-1-x")
+	if isMain, ok := worktree.IsMain(wt); !ok || isMain {
+		t.Fatalf("IsMain(linked worktree) = %v, %v; want false, true", isMain, ok)
+	}
+}
+
+func TestIsMainOutsideGit(t *testing.T) {
+	if _, ok := worktree.IsMain(t.TempDir()); ok {
+		t.Fatalf("IsMain outside a git worktree: ok = true, want false")
+	}
+}
+
 func TestGitDir(t *testing.T) {
 	dir := initGitRepo(t)
 	root, ok := worktree.Root(dir)

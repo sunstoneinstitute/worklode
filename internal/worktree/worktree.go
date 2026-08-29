@@ -221,6 +221,22 @@ func Root(dir string) (string, bool) {
 	return gitexec.Line(dir, "rev-parse", "--show-toplevel")
 }
 
+// IsMain reports whether dir sits in the repository's main checkout rather
+// than a worktree linked in alongside it (`git worktree add`). The main
+// checkout is the one whose own git dir doubles as the repository's common
+// git dir; a linked worktree's git dir is a subdirectory of the common dir
+// instead, so the two never match there. ok=false outside a repo, or if git
+// answers neither rev-parse call — a caller should then treat dir as unknown
+// rather than assume either answer.
+func IsMain(dir string) (isMain, ok bool) {
+	common, ok1 := gitexec.Line(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	gitDir, ok2 := gitexec.Line(dir, "rev-parse", "--absolute-git-dir")
+	if !ok1 || !ok2 {
+		return false, false
+	}
+	return filepath.Clean(common) == filepath.Clean(gitDir), true
+}
+
 // MainRoot walks up from dir to the root of the *main* worktree — the
 // checkout that owns the shared git directory — rather than to dir's own
 // worktree root. In the main checkout the two are the same; inside a linked

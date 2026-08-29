@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // taskListIDs runs `lode task list` with the given extra args and returns the
@@ -864,5 +866,64 @@ func TestTaskEditSendsSecrets(t *testing.T) {
 	}
 	if !strings.Contains(gotBody, `"secrets":null`) {
 		t.Errorf("unrelated edit sent %q; want a null secrets field", gotBody)
+	}
+}
+
+// TestTaskClaimRefusesMainCheckout guards WL-383: claiming from the main
+// checkout used to bind the lease straight to the clone path — a lease
+// `lode resume`/`lode status` can never resolve back to a task worktree, and
+// a second claim from the same place then collides with it.
+func TestTaskClaimRefusesMainCheckout(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Fix the thing")
+
+	root := initGitRepo(t)
+	t.Chdir(root)
+
+	out, err := runLode(t, "task", "claim", task.ID)
+	if err == nil {
+		t.Fatalf("lode task claim from the main checkout succeeded, want refusal\noutput: %s", out)
+	}
+	for _, want := range []string{"main checkout", "lode next", "--worktree"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+// TestTaskClaimFromLinkedWorktreeBindsLease is the case that must keep
+// working: claiming from inside a worktree that already exists (by hand, or
+// from an earlier `lode next`) binds the lease to that worktree, not to the
+// main checkout it lives under.
+func TestTaskClaimFromLinkedWorktreeBindsLease(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Fix the thing")
+
+	root := initGitRepo(t)
+	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-fix")
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", dir, "-b", task.ID+"-fix").CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	t.Chdir(dir)
+
+	out, err := runLode(t, "task", "claim", task.ID)
+	if err != nil {
+		t.Fatalf("lode task claim: %v\noutput: %s", err, out)
+	}
+
+	detail, _, err := c.GetTask(context.Background(), task.ID)
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if detail.Lease == nil || detail.Lease.Worktree == "" {
+		t.Fatalf("task lease = %+v, want a bound worktree", detail.Lease)
+	}
+	if _, statErr := os.Stat(detail.Lease.Worktree); statErr == nil {
+		t.Fatalf("lease.Worktree = %q looks like a bare filesystem path, want <hostname>:<path>", detail.Lease.Worktree)
+	}
+	if !strings.HasSuffix(detail.Lease.Worktree, dir) {
+		t.Fatalf("lease.Worktree = %q, want it to name the linked worktree %q, not the main checkout", detail.Lease.Worktree, dir)
 	}
 }
