@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -486,33 +487,52 @@ func docForApproval(t *testing.T, s *Store, slug string, number int) *model.Doc 
 	})
 }
 
+// assignDocReviewers runs SetDocReviewers through RecordDocEvent, the way
+// the API will, as "stig" — docForApproval's CreatedBy, so the default owner
+// (025 §7.3's authority for this call).
+func assignDocReviewers(t *testing.T, s *Store, docID int64, reviewers []string) {
+	t.Helper()
+	_, _, err := s.RecordDocEvent(t.Context(), "set_reviewers", "cli",
+		fmt.Sprintf("doc-reviewers-%d", docEventSeq.Add(1)), "doc.reviewers_changed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return SetDocReviewers(tx, taskTestNow, docID, "stig", reviewers, eventID)
+		})
+	if err != nil {
+		t.Fatalf("assign reviewers %v to doc %d: %v", reviewers, docID, err)
+	}
+}
+
 // TestRequestDocApprovalOpensOneLanePerReviewer is 025 §7.3's reviewer set:
-// every assigned reviewer gets an own awaiting row on the same revision.
-// Migration 0038's key allowed only one row per revision, so this is the case
-// 0057 exists for. Re-running must stay a no-op, which is what proves the
-// widened ON CONFLICT list still infers the index.
+// every assigned reviewer gets an own awaiting row on the same revision, and
+// stays assigned across a later revision — WL-359's durable set, read fresh
+// each call rather than named by the caller. Migration 0038's key allowed
+// only one row per revision, so this is also the case 0057 exists for.
+// Re-running must stay a no-op, which is what proves the widened ON
+// CONFLICT list still infers the index.
 func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "ada", "human", "Ada", false); err != nil {
 		t.Fatal(err)
 	}
 	doc := docForApproval(t, s, "025-lanes", 25)
+	assignDocReviewers(t, s, doc.ID, []string{"stig", "ada"})
 
 	tx, err := s.db.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	reviewers := []string{"stig", "ada"}
-	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1, reviewers); err != nil {
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1); err != nil {
 		t.Fatal(err)
 	}
 	// Twice: the requirement is materialized on every doc event that reads
 	// the reviewer set, so duplicate calls must not duplicate lanes.
-	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1, reviewers); err != nil {
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1); err != nil {
 		t.Fatal(err)
 	}
-	// A newer revision is a separate set of lanes, not a reuse of these.
-	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 2, []string{"stig"}); err != nil {
+	// A newer revision is a separate set of lanes, not a reuse of these —
+	// but the same durable reviewer set as before, since nothing reassigned
+	// it.
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 2); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -534,6 +554,7 @@ func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 		"stig@1": DocEntityID(doc.ID),
 		"ada@1":  DocEntityID(doc.ID),
 		"stig@2": DocEntityID(doc.ID),
+		"ada@2":  DocEntityID(doc.ID),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("lanes = %v, want %v", got, want)
@@ -559,6 +580,7 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 		t.Fatal(err)
 	}
 	doc := docForApproval(t, s, "026-queue", 26)
+	assignDocReviewers(t, s, doc.ID, []string{"stig"})
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -568,7 +590,7 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 		PREntityID(pr.Repo, pr.Number), "sha1", nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1, []string{"stig"}); err != nil {
+	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
