@@ -422,7 +422,13 @@ no planning action begins before the spec is accepted.
 ### 8.1 Intake
 
 Ideas enter a standing **intake project** at Discovery — one system of record from
-the first pitch. Capture requires only a title and description. An AI
+the first pitch. Capture requires only a title and description. A pitch's
+description can be as rough as a note or as complete as answering what question it
+addresses, how it aligns with the Sunstone 30, and what data is already known to
+help answer it — plus, optionally, how the pitcher imagines telling it. None of
+these are separate stored fields: they are prose in the same description. An idea
+drafted with LLM help is not exempt from scrutiny — the pitcher, not any AI used to
+draft it, is responsible for fact-checking its claims before capture. An AI
 Threat↔Intervention analysis may also group and deduplicate related findings into an
 unowned pitch; a named human must adopt it before Selection begins.
 
