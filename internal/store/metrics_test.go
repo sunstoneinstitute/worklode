@@ -13,6 +13,7 @@ import (
 // TestWithMetricsRegisters asserts WithMetrics registers the store's
 // instruments: the DB pool collector and the active-lease collector.
 func TestWithMetricsRegisters(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := OpenTestStore(t, WithMetrics(reg))
 	if s.metrics == nil {
@@ -37,6 +38,7 @@ func TestWithMetricsRegisters(t *testing.T) {
 
 // TestClaimOutcomeMapping asserts the sentinel-error → label mapping.
 func TestClaimOutcomeMapping(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		err  error
 		want string
@@ -56,6 +58,7 @@ func TestClaimOutcomeMapping(t *testing.T) {
 // TestStoreMetricsNilSafe asserts a store opened without WithMetrics (nil
 // storeMetrics) records nothing and does not panic.
 func TestStoreMetricsNilSafe(t *testing.T) {
+	t.Parallel()
 	var m *storeMetrics
 	m.claim("claim", "ok")
 	m.renew("ok")
@@ -72,6 +75,7 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 // TestLeaseMetricsCounters drives claim/renew/release/expire through a store
 // with metrics attached and asserts the counters.
 func TestLeaseMetricsCounters(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -136,6 +140,7 @@ func TestLeaseMetricsCounters(t *testing.T) {
 // TestClaimNextMetrics: an empty ready set records claim_next/none; a
 // successful pickup records claim_next/ok (plus its internal claim/ok).
 func TestClaimNextMetrics(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -168,6 +173,7 @@ func TestClaimNextMetrics(t *testing.T) {
 // TestClaimNextDryRunRecordsNothing: a dry run is a read, not a claim
 // attempt, so it must not touch the claim counters.
 func TestClaimNextDryRunRecordsNothing(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -186,6 +192,7 @@ func TestClaimNextDryRunRecordsNothing(t *testing.T) {
 // ClaimPendingInstructionsForActor through a store with metrics attached and
 // asserts the op/outcome counters plus the delivered-count counter.
 func TestInstructionMetrics(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -238,6 +245,7 @@ func TestInstructionMetrics(t *testing.T) {
 // asserts the metric carries only the outcome label: never a project or
 // task id, which would be unbounded.
 func TestProjectWorkReadMetrics(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)

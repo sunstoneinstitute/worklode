@@ -65,6 +65,7 @@ func evidence(kind, id, state string, at time.Time) model.ArtifactEvidence {
 // address for the same entity leaves one routing target, so a create path
 // that runs twice cannot double-route a delivery.
 func TestDeclareArtifactIsIdempotent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	d, err := createDeliverable(s, DeliverableInput{ProjectID: "horndb", Name: "casualties"})
 	if err != nil {
@@ -86,6 +87,7 @@ func TestDeclareArtifactIsIdempotent(t *testing.T) {
 // in_progress one stays; a doc drops out only at superseded, because an
 // accepted spec is still the live declaration.
 func TestOpenDeclarationsForArtifactPerKindOpenness(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "sunstoneinstitute/horndb", "merged")
 
@@ -139,6 +141,7 @@ func TestOpenDeclarationsForArtifactPerKindOpenness(t *testing.T) {
 // document — on create and again on a body edit — and declarations are
 // additive: an edit that drops the key undeclares nothing.
 func TestDocFrontmatterDeclaresArtifact(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	doc := mustCreateDoc(t, s, DocInput{
@@ -184,6 +187,7 @@ func TestDocFrontmatterDeclaresArtifact(t *testing.T) {
 // contract promises: the address is matched byte for byte, so a differently
 // cased or schemed spelling is a different artifact.
 func TestOpenDeclarationsForArtifactMatchesExactly(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	d, err := createDeliverable(s, DeliverableInput{ProjectID: "horndb", Name: "casualties"})
 	if err != nil {
@@ -212,6 +216,7 @@ func TestOpenDeclarationsForArtifactMatchesExactly(t *testing.T) {
 // incidental: the projection correlates the two, so evidence about an address
 // this deliverable never declared does not surface here (asserted at the end).
 func TestReportedStateIsTheNewestEvidence(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	d, err := createDeliverable(s, DeliverableInput{
@@ -268,6 +273,7 @@ func TestReportedStateIsTheNewestEvidence(t *testing.T) {
 // TestInsertArtifactEvidenceDedupesPerEvent pins the UNIQUE key: one event
 // files at most one row per entity, so replaying a delivery is a no-op.
 func TestInsertArtifactEvidenceDedupesPerEvent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	d, err := createDeliverable(s, DeliverableInput{ProjectID: "horndb", Name: "casualties"})
 	if err != nil {
@@ -295,6 +301,7 @@ func TestInsertArtifactEvidenceDedupesPerEvent(t *testing.T) {
 // declared address comes back on the deliverable, the reported state stays
 // empty until an emitter reports, and then it is the newest evidence.
 func TestCreateDeliverableDeclaresArtifact(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	d, err := createDeliverable(s, DeliverableInput{

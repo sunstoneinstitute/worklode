@@ -12,6 +12,7 @@ import (
 // wins; every loser gets ErrLeased; the task ends in_progress with exactly
 // one active lease. (spec 004 acceptance criterion 4)
 func TestClaimRace(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())

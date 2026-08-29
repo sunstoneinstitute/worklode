@@ -28,6 +28,7 @@ func seedDeliveryTask(t *testing.T, s *Store) string {
 }
 
 func TestMainCommitsAndLanding(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	now := time.Now()
@@ -95,6 +96,7 @@ func TestMainCommitsAndLanding(t *testing.T) {
 }
 
 func TestMainSHAForID(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	now := time.Now()
 
@@ -118,6 +120,7 @@ func TestMainSHAForID(t *testing.T) {
 }
 
 func TestMainSHAForIDUnknownIsEmpty(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 
 	tx, err := s.db.Begin()
@@ -136,6 +139,7 @@ func TestMainSHAForIDUnknownIsEmpty(t *testing.T) {
 }
 
 func TestLandedMainIDNoCommits(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	tx, err := s.db.Begin()
@@ -154,6 +158,7 @@ func TestLandedMainIDNoCommits(t *testing.T) {
 // never fail the delivery transaction. The load-bearing assertion is the
 // second one — the transaction must still be usable afterward.
 func TestInsertTaskCommitUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	now := time.Now()
@@ -185,6 +190,7 @@ func TestInsertTaskCommitUnknownTask(t *testing.T) {
 }
 
 func TestEnvDeployFrontier(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	now := time.Now()
@@ -265,6 +271,7 @@ func TestEnvDeployFrontier(t *testing.T) {
 }
 
 func TestReleaseFrontier(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	now := time.Now()
@@ -298,6 +305,7 @@ func TestReleaseFrontier(t *testing.T) {
 // TestSetReleaseFrontierIsForwardOnly: re-cutting a tag onto a newer commit
 // advances that tag's row; a stale re-publish never moves it back.
 func TestSetReleaseFrontierIsForwardOnly(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	now := time.Now()
@@ -364,6 +372,7 @@ func TestSetReleaseFrontierIsForwardOnly(t *testing.T) {
 // — ConfirmedFrontier's own SELECT and attachDeployFacts' widened one — route
 // through this, so the rule cannot drift between them.
 func TestConfirmedFrontierFrom(t *testing.T) {
+	t.Parallel()
 	id := func(n int64) sql.NullInt64 { return sql.NullInt64{Int64: n, Valid: true} }
 	var none sql.NullInt64
 
@@ -401,6 +410,7 @@ func TestConfirmedFrontierFrom(t *testing.T) {
 func ptrTo[T any](v T) *T { return &v }
 
 func TestNormalizeEnvironment(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"dev": "dev", "test": "dev", "development": "dev", "staging": "dev",
 		"prod": "prod", "production": "prod", "Production": "prod",
@@ -439,6 +449,7 @@ func deliveryEventID(t *testing.T, tx *sql.Tx) int64 {
 }
 
 func TestResolveDeliveryFullFlow(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -511,6 +522,7 @@ func TestResolveDeliveryFullFlow(t *testing.T) {
 // hop the facts support: ready -> merged -> deployed_dev -> deployed_prod,
 // each a separate legal transition with its own state_log row.
 func TestResolveDeliveryOutOfOrderCatchUp(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	now := time.Now()
@@ -554,6 +566,7 @@ func TestResolveDeliveryOutOfOrderCatchUp(t *testing.T) {
 }
 
 func TestResolveDeliveryReleased(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -588,6 +601,7 @@ func TestResolveDeliveryReleased(t *testing.T) {
 }
 
 func TestResolveDeliveryNeverAdvancesDraft(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -618,6 +632,7 @@ func TestResolveDeliveryNeverAdvancesDraft(t *testing.T) {
 // TestResolveDeliveryReleaseIgnoredForServiceRepo: with done_state=merged a
 // release event must not move the task to released.
 func TestResolveDeliveryReleaseIgnoredForServiceRepo(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s) // done_state defaults to 'merged'
 	now := time.Now()
@@ -650,6 +665,7 @@ func TestResolveDeliveryReleaseIgnoredForServiceRepo(t *testing.T) {
 // deploy would strand it one hop short of its done_state forever. A prod
 // deploy on such a repo must not advance the task past deployed_dev.
 func TestResolveDeliveryProdIgnoredForReleaseRepo(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -703,6 +719,7 @@ func TestResolveDeliveryProdIgnoredForReleaseRepo(t *testing.T) {
 // merged (or deployed) is ordinary work. Leases end on release, abandon,
 // reopen, or the expiry sweep.
 func TestResolveDeliveryKeepsActiveLease(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -776,6 +793,7 @@ func permutations(xs []string) [][]string {
 // push by minutes here, and the next deploy of the repo re-records the
 // frontier, so the affected tasks catch up then).
 func TestResolveDeliveryArrivalOrder(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	now := time.Now()
@@ -840,6 +858,7 @@ func TestResolveDeliveryArrivalOrder(t *testing.T) {
 // treat it as a no-op, not an error, per InsertTaskCommit's contract that a
 // correlation miss must never fail a delivery.
 func TestResolveDeliveryIgnoresUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	now := time.Now()
 	tx, err := s.db.Begin()
@@ -854,6 +873,7 @@ func TestResolveDeliveryIgnoresUnknownTask(t *testing.T) {
 }
 
 func TestRepoDoneState(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	tx, err := s.db.Begin()
@@ -880,6 +900,7 @@ func TestRepoDoneState(t *testing.T) {
 }
 
 func TestTasksBelowFrontier(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	seedDeliveryTask(t, s)
 	ctx := context.Background()
@@ -945,6 +966,7 @@ func TestTasksBelowFrontier(t *testing.T) {
 // still on main after a reopen, so without clearing them the next resolve
 // snaps the task straight back to its former delivered state.
 func TestClearTaskCommitsVoidsDelivery(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	now := time.Now()

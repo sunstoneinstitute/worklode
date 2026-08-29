@@ -43,6 +43,7 @@ func defaultRuntimeEvent() RuntimeEvent {
 }
 
 func TestInsertRuntimeEventResolvesArtifact(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 	a := Artifact{
 		Kind:      "docker_image",
@@ -86,6 +87,7 @@ func TestInsertRuntimeEventResolvesArtifact(t *testing.T) {
 }
 
 func TestInsertRuntimeEventNoArtifactMatch(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 	re := defaultRuntimeEvent()
 	re.Image = "registry.example.com/sunstone/unknown:v9.9.9"
@@ -107,6 +109,7 @@ func TestInsertRuntimeEventNoArtifactMatch(t *testing.T) {
 }
 
 func TestInsertRuntimeEventExplicitArtifactIDNotOverridden(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 	a := Artifact{
 		Kind:      "docker_image",
@@ -153,6 +156,7 @@ func TestInsertRuntimeEventExplicitArtifactIDNotOverridden(t *testing.T) {
 }
 
 func TestListRuntimeEventsClusterFilterAndOrder(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 
 	re1 := defaultRuntimeEvent()
@@ -204,6 +208,7 @@ func TestListRuntimeEventsClusterFilterAndOrder(t *testing.T) {
 }
 
 func TestListRuntimeEventsNullColumns(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 
 	// workload/image/message are nullable TEXT; a row with NULLs (e.g. a
@@ -230,6 +235,7 @@ func TestListRuntimeEventsNullColumns(t *testing.T) {
 }
 
 func TestListRuntimeEventsDefaultLimit(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 	for i := 0; i < 55; i++ {
 		re := defaultRuntimeEvent()
@@ -250,6 +256,7 @@ func TestListRuntimeEventsDefaultLimit(t *testing.T) {
 // TestRuntimeEventsForArtifacts covers the bulk reader: one query answers
 // every artifact id, and each group matches RuntimeEventsForArtifact.
 func TestRuntimeEventsForArtifacts(t *testing.T) {
+	t.Parallel()
 	s := openRuntimeStore(t)
 
 	firstID, err := createArtifact(t, s, Artifact{

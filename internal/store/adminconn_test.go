@@ -6,6 +6,7 @@ import "testing"
 // open+ping+close per test — that handshake was ~8-26ms of pure waste on
 // each of the ~1200 OpenTestStore calls across the suite.
 func TestAdminConnIsSharedAcrossTests(t *testing.T) {
+	t.Parallel()
 	first := adminConnForTest(t)
 
 	// A subtest whose cleanup runs before we use the pool again: the shared

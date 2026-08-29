@@ -37,6 +37,7 @@ func seedParticipant(t *testing.T, s *Store, projectID, actorID, role string, is
 }
 
 func TestProjectsForActor(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -80,6 +81,7 @@ func TestProjectsForActor(t *testing.T) {
 // TestProjectsForActorEmpty pins the "empty slice, not an error" contract
 // for an actor on no projects.
 func TestProjectsForActorEmpty(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -97,6 +99,7 @@ func TestProjectsForActorEmpty(t *testing.T) {
 }
 
 func TestListParticipants(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -170,6 +173,7 @@ func TestListParticipants(t *testing.T) {
 // id)) would merge his two rows into one and lose one of the roles, which
 // is exactly the bug this test exists to catch.
 func TestListParticipantsAllProjects(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -230,6 +234,7 @@ func TestListParticipantsAllProjects(t *testing.T) {
 // only a task that is both assigned to the actor and still open (state not
 // in deliveredStateSet) counts as owned work blocking removal.
 func TestOpenWorkOwnedBy(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -289,6 +294,7 @@ func addParticipant(t *testing.T, s *Store, projectID, actor, role string, lead 
 }
 
 func TestAddParticipant(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -380,6 +386,7 @@ func TestAddParticipant(t *testing.T) {
 // is mutually exclusive with lead, at most one per project, and read back as
 // a virtual "acting-lead" entry folded into Roles rather than a stored role.
 func TestAddParticipantDeputy(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -470,6 +477,7 @@ func removeParticipant(t *testing.T, s *Store, projectID, actor, by string) erro
 // order the rules fire: an unknown member, the lead, open work owned by the
 // member, and the removal itself clearing every role row at once.
 func TestRemoveParticipantGuard(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -566,6 +574,7 @@ func TestRemoveParticipantGuard(t *testing.T) {
 // 0046's CHECK constraint together (WL-297): a role added to one and not the
 // other would let the store admit what Postgres refuses, or vice versa.
 func TestParticipantRolesMatchMigration(t *testing.T) {
+	t.Parallel()
 	data, err := os.ReadFile(filepath.Join(MigrationsDirForTests(), "0046_participant_role_check.up.sql"))
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
@@ -611,6 +620,7 @@ func addDeputyTo(t *testing.T, s *Store, projectID, actor, role string) error {
 // WL-338: the deputy sorts right after the lead, ahead of ordinary members
 // whose added_at would otherwise place them earlier.
 func TestListParticipantsSortsDeputyAfterLead(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 

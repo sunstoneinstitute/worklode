@@ -13,6 +13,7 @@ import (
 // constraints spec 021 §1 relies on: the CHECK that a task_blobs row must be
 // referenced somehow, and RESTRICT on the blobs foreign key.
 func TestBlobsSchema(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -79,6 +80,7 @@ func seedTask(t *testing.T, s *Store, id string) error {
 // the existing row rather than erroring or duplicating -- the dedup the
 // upload handler relies on.
 func TestInsertBlobIdempotent(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	hash := "ab" + strings.Repeat("c", 62)
@@ -116,6 +118,7 @@ func TestInsertBlobIdempotent(t *testing.T) {
 // embedded tracks the body exactly, and a row that ends up neither embedded
 // nor attached is deleted rather than left to violate the CHECK.
 func TestReconcileEmbedded(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := seedTask(t, s, "WL-1"); err != nil {
@@ -158,6 +161,7 @@ func TestReconcileEmbedded(t *testing.T) {
 // TestAttachSurvivesBodyEdit is the declared half: an attached blob is not
 // in the body, so reconciliation must not touch it.
 func TestAttachSurvivesBodyEdit(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := seedTask(t, s, "WL-2"); err != nil {
@@ -219,6 +223,7 @@ func mustListHashes(t *testing.T, s *Store, taskID string) []string {
 // row matching neither, so the detach vanished silently and the blob stayed
 // pinned against GC forever.
 func TestDetachBlobRacesBodyEdit(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := seedTask(t, s, "WL-3"); err != nil {
@@ -274,6 +279,7 @@ func TestDetachBlobRacesBodyEdit(t *testing.T) {
 // TestAttachBlobKeepsFilename: filename is optional on attach, so a later
 // attach that omits it must keep the name an earlier one recorded.
 func TestAttachBlobKeepsFilename(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := seedTask(t, s, "WL-4"); err != nil {
@@ -309,6 +315,7 @@ func TestAttachBlobKeepsFilename(t *testing.T) {
 // blob is held back (the upload path writes the object before the row, per
 // spec 021 §5), and a referenced blob is never listed or deletable.
 func TestUnreferencedBlobs(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := seedTask(t, s, "WL-9"); err != nil {
@@ -358,6 +365,7 @@ func TestUnreferencedBlobs(t *testing.T) {
 }
 
 func TestAttachBlobUnknownHash(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := seedTask(t, s, "WL-5"); err != nil {
