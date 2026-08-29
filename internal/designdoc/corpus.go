@@ -43,6 +43,13 @@ type CorpusDoc struct {
 	FrontmatterJSON json.RawMessage // the YAML header re-encoded as JSON
 	Sections        []SectionMeta   // empty for plans (025 §9)
 	Edges           []EdgeMeta
+	// Number is this document's own corpus number — the <n> a <KEY>-<TYPE>-<n>
+	// shorthand or a bare-number reference names it by (026 §3-4) — 0 when
+	// unknown. Loaded from a spec/ADR's filename (both loaders can read it: it
+	// leads the filename); a plan loaded from local files carries 0, since 029
+	// §4's plan sequence is a backbone fact no plan file records anywhere. A
+	// plan loaded from the backbone (CorpusDocFromBody) carries its real one.
+	Number int
 }
 
 // LoadSyncCorpus loads specDir as SPEC/ADR documents and planDir as PLAN
@@ -141,19 +148,22 @@ func CorpusDir(kind string) string {
 
 // CorpusDocFromBody builds a CorpusDoc from a document body held in memory —
 // the copy the backbone serves — rather than from a file. docPath is the
-// corpus path its references are written against (see CorpusPath) and kind is
-// "spec", "adr" or "plan".
+// corpus path its references are written against (see CorpusPath), kind is
+// "spec", "adr" or "plan", and number is the document's own backbone number
+// (model.Doc.Number) — the one fact CorpusDocFromBody cannot recover from
+// docPath or body alone, since a shorthand-form reference needs it and
+// neither the corpus path nor the frontmatter carries it (WL-409).
 //
 // It derives everything LoadSyncCorpus does except Ordinal, which is a
 // corpus-position fact no single document carries: the backbone assigns
 // document identity itself, so nothing reading from it needs one.
-func CorpusDocFromBody(docPath, kind string, body []byte) (CorpusDoc, error) {
+func CorpusDocFromBody(docPath, kind string, number int, body []byte) (CorpusDoc, error) {
 	name := path.Base(docPath)
 	doc, cd, err := docFromSource(name, body)
 	if err != nil {
 		return CorpusDoc{}, err
 	}
-	cd.Path, cd.Kind = docPath, kind
+	cd.Path, cd.Kind, cd.Number = docPath, kind, number
 	if kind == "plan" {
 		// Sections deliberately unset: plans carry none (025 §9).
 		cd.Edges = append(cd.Edges, planEdges(doc.Frontmatter)...)
@@ -198,6 +208,7 @@ func loadSpecOrADR(dir, name string) (CorpusDoc, error) {
 		return CorpusDoc{}, fmt.Errorf("%s: no leading number", name)
 	}
 	cd.Ordinal = strconv.Itoa(n)
+	cd.Number = n
 	sections, err := sectionMetas(doc, name)
 	if err != nil {
 		return CorpusDoc{}, err
