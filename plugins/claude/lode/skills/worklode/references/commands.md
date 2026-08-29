@@ -198,7 +198,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task delete` — Delete a task: hide a row that should not have existed
   Flags: --justification
 - `lode task detach` — Remove an attached blob from a task
-- `lode task done` — Mark a task merged (in_review -> merged)
+- `lode task done` — Mark a task merged from any pre-merge state
 - `lode task duplicate` — Mark a task as a duplicate of the canonical task for the same request
   Flags: --of
 - `lode task edit` — Edit a task's title, body, concern, priority, or needs-decomposition flag, or declare an artifact it is verified by
