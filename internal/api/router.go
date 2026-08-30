@@ -143,6 +143,8 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/tasks":               guardedAny(permTaskRead),
 	"GET /api/v1/tasks/{id}":          guardedBound(permTaskRead),
 	"GET /api/v1/tasks/{id}/brief":    guardedBound(permTaskRead),
+	"GET /api/v1/blockers":            guarded(permTaskRead),
+	"GET /api/v1/tasks/{id}/blockers": guardedBound(permTaskRead),
 	"GET /api/v1/tasks/{id}/cost":     guardedBound(permTaskRead),
 	"GET /api/v1/tasks/{id}/timeline": guardedBound(permTaskRead),
 	// A task's blob references (spec 021 §3). Listing is a task read; both

@@ -48,6 +48,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskUndeleteCmd(),
 		newTaskTokenCmd(),
 		newTaskBlockCmd(),
+		newTaskBlockersCmd(),
 		newTaskUnblockCmd(),
 		newTaskParentCmd(),
 		newTaskUnparentCmd(),
@@ -1063,6 +1064,61 @@ func newTaskBlockCmd() *cobra.Command {
 		"Record that another task blocks this one",
 		"by", "id of the blocking task (required)",
 		"%s is now blocked by %s", (*cli.Client).Block)
+}
+
+// newTaskBlockersCmd is `lode task blockers [id]`: the transitive blocker
+// tree. `lode task brief` names what holds a task one hop deep; this follows
+// each of those down to the tasks nothing holds, which are the ones actually
+// claimable.
+//
+// Without an id it prints the whole scope's forest — one tree per blocked
+// task nothing else in scope already lists as a blocker — which is the
+// project-wide view `lode board` gives one hop deep.
+func newTaskBlockersCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "blockers [id]",
+		Short: "Show what transitively blocks a task, or every blocked task in scope, as a tree",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if len(args) == 0 {
+				f, raw, err := c.BlockerForest(cmd.Context(), sc.Project)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				cli.BlockerForestRender(cmd.OutOrStdout(), f)
+				return nil
+			}
+			id, err := resolveTaskIDInScope(cmd.Context(), args[0], c, sc)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.BlockerTree(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.BlockerTreeRender(cmd.OutOrStdout(), t)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "show one project's blocked tasks")
+	return cmd
 }
 
 func newTaskBriefCmd() *cobra.Command {

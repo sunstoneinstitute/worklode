@@ -604,6 +604,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/tasks", s.listTasks)
 	r.api("GET /api/v1/tasks/{id}", s.getTask)
 	r.api("GET /api/v1/tasks/{id}/brief", s.taskBrief)
+	r.api("GET /api/v1/blockers", s.getBlockers)
+	r.api("GET /api/v1/tasks/{id}/blockers", s.getTaskBlockers)
 	r.api("GET /api/v1/tasks/{id}/cost", s.getTaskCost)
 	r.api("PATCH /api/v1/tasks/{id}", s.patchTask)
 	r.api("PUT /api/v1/tasks/{id}/skills", s.setTaskSkills)
