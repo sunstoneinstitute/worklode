@@ -223,22 +223,44 @@ func (s *Store) openBlockers(ctx context.Context, taskID string) ([]model.Task, 
 // task the claim path refuses — including a blocking plan still draft, whose
 // unminted set leaves openBlockers nothing to name.
 func (s *Store) blockingPlans(ctx context.Context, taskID string) ([]model.DocRef, error) {
+	byTask, err := s.blockingPlansFor(ctx, []string{taskID})
+	if err != nil {
+		return nil, err
+	}
+	return byTask[taskID], nil
+}
+
+// blockingPlansFor is the bulk form of blockingPlans, keyed by task id: a
+// surface reporting the plans holding many tasks would otherwise issue one
+// query per task. Tasks no plan holds are absent from the map; ids is
+// empty-safe. Ordering within each slice matches blockingPlans.
+func (s *Store) blockingPlansFor(ctx context.Context, ids []string) (map[string][]model.DocRef, error) {
+	out := map[string][]model.DocRef{}
+	if len(ids) == 0 {
+		return out, nil
+	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT DISTINCT bd.id, bd.slug, bd.title, bd.status
+		`SELECT DISTINCT dep.id, bd.id, bd.slug, bd.title, bd.status
 		   FROM tasks dep
 		   JOIN doc_edges de ON de.type = 'blocks' AND de.to_doc = dep.plan_doc
 		   JOIN docs bd ON bd.id = de.from_doc
-		  WHERE dep.id = $1
+		  WHERE dep.id = ANY($1)
 		    AND `+planUnfinished("bd")+`
-		  ORDER BY bd.id`, taskID)
+		  ORDER BY dep.id, bd.id`, ids)
 	if err != nil {
-		return nil, fmt.Errorf("blocking plans of %s: %w", taskID, err)
+		return nil, fmt.Errorf("blocking plans of %v: %w", ids, err)
 	}
-	return collectRows(rows, fmt.Sprintf("blocking plans of %s", taskID), func(r rowScanner) (model.DocRef, error) {
+	defer rows.Close()
+	for rows.Next() {
+		var task string
 		var ref model.DocRef
-		if err := r.Scan(&ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
-			return model.DocRef{}, err
+		if err := rows.Scan(&task, &ref.ID, &ref.Slug, &ref.Title, &ref.Status); err != nil {
+			return nil, fmt.Errorf("scan blocking plan: %w", err)
 		}
-		return ref, nil
-	})
+		out[task] = append(out[task], ref)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("blocking plans of %v: %w", ids, err)
+	}
+	return out, nil
 }

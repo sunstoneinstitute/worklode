@@ -175,6 +175,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --alt, --no-embed
 - `lode task block` — Record that another task blocks this one
   Flags: --by
+- `lode task blockers` — Show what transitively blocks a task, or every blocked task in scope, as a tree
+  Flags: --project, --repo
 - `lode task brief` — Fetch a task's brief: body, branch, open blockers, and active lease
 - `lode task claim` — Lease a task to the current worktree and move it to in_progress
   Flags: --dry-run, --kind, --next, --project, --repo, --strict-focus, --ttl, --worktree
