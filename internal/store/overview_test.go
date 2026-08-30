@@ -12,6 +12,7 @@ import (
 )
 
 func TestTaskPRs(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -44,6 +45,7 @@ func TestTaskPRs(t *testing.T) {
 }
 
 func TestAllBlockEdges(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -69,6 +71,7 @@ func TestAllBlockEdges(t *testing.T) {
 // task enters the overview's critical path, and AllBlockEdges disagrees with
 // BlockingFanOut on the same screen.
 func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := context.Background()
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -101,6 +104,7 @@ func TestAllBlockEdgesExcludesDeletedEndpoints(t *testing.T) {
 // of them a private pipeline again shows up here. It is not an independent
 // check of the ranking; rankTasks' own tests are that.
 func TestFrontierMirrorsClaimNextOrder(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := context.Background()
 
@@ -143,6 +147,7 @@ func TestFrontierMirrorsClaimNextOrder(t *testing.T) {
 }
 
 func TestAllArtifactsByID(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	a := defaultArtifact()
 
@@ -165,6 +170,7 @@ func TestAllArtifactsByID(t *testing.T) {
 }
 
 func TestAllReleaseFrontiersAndHasMainCommit(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 
 	tx, err := s.db.Begin()
@@ -207,6 +213,7 @@ func TestAllReleaseFrontiersAndHasMainCommit(t *testing.T) {
 // to a different repo is not a match (main_commits is UNIQUE (repo, sha), so
 // a sha alone is not a key), and empty input issues no query at all.
 func TestKnownMainCommits(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	ctx := context.Background()
 

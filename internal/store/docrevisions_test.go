@@ -16,6 +16,7 @@ import (
 // ListDocVersions/GetDocVersion serve the archived and the current version
 // off that split.
 func TestDocVersionsPlanBodyEdit(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "version-plan", Body: planMintBody, CreatedBy: "stig",
@@ -69,6 +70,7 @@ func TestDocVersionsPlanBodyEdit(t *testing.T) {
 // TestDocVersionsRevisionAccept: landing a revision snapshots the accepted
 // version it replaces (025 §4.5).
 func TestDocVersionsRevisionAccept(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -106,6 +108,7 @@ func TestDocVersionsRevisionAccept(t *testing.T) {
 // bump docs.version (025 §7), and the snapshot sits inside the
 // version-bumping branches only (025 §4.5) — so it must not run here.
 func TestDocVersionsDraftEditNoSnapshot(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 92, Slug: "092-x", Body: specBody, CreatedBy: "stig",
@@ -128,6 +131,7 @@ func TestDocVersionsDraftEditNoSnapshot(t *testing.T) {
 // TestDocReviseOpensOneCandidate: a revision copies the accepted body to edit,
 // and a second open revision is refused (025 §7.2, one candidate per doc).
 func TestDocReviseOpensOneCandidate(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
@@ -152,6 +156,7 @@ func TestDocReviseOpensOneCandidate(t *testing.T) {
 
 // TestDocRevisePlanRejected: plans are edited in place (025 §9), never revised.
 func TestDocRevisePlanRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody,
@@ -170,6 +175,7 @@ func TestDocRevisePlanRejected(t *testing.T) {
 // TestDocReviseDraftRejected: a draft is edited in place — there is no
 // accepted version to revise against.
 func TestDocReviseDraftRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -183,6 +189,7 @@ func TestDocReviseDraftRejected(t *testing.T) {
 // TestDocUpdateRevision: the candidate body is editable, and a malformed one
 // is refused before it can reach the accept gate.
 func TestDocUpdateRevision(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -211,6 +218,7 @@ func TestDocUpdateRevision(t *testing.T) {
 
 // TestDocUpdateRevisionWithoutOpenRevision: nothing to edit is ErrNotFound.
 func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
@@ -226,6 +234,7 @@ func TestDocUpdateRevisionWithoutOpenRevision(t *testing.T) {
 // owner to the creator, so stig is the owner throughout and ada is the
 // proposer.
 func TestDocDiscardRevisionStanding(t *testing.T) {
+	t.Parallel()
 	t.Run("author", func(t *testing.T) {
 		s := openDocStore(t)
 		doc := mustAcceptedSpec(t, s, "025-x")
@@ -273,6 +282,7 @@ func TestDocDiscardRevisionStanding(t *testing.T) {
 // point of a discard is that the next ReviseDoc succeeds immediately rather
 // than hitting ErrRevisionExists. The accepted version is untouched by either.
 func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
@@ -311,6 +321,7 @@ func TestDocDiscardRevisionFreesTheSlot(t *testing.T) {
 // TestDocDiscardRevisionWithoutOpenRevision: nothing to withdraw is
 // ErrNotFound, for the owner as much as for anyone.
 func TestDocDiscardRevisionWithoutOpenRevision(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
@@ -323,6 +334,7 @@ func TestDocDiscardRevisionWithoutOpenRevision(t *testing.T) {
 // revision opened has nothing left to land, and says so at the edit rather
 // than at the accept gate.
 func TestDocUpdateRevisionOnSupersededDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -344,6 +356,7 @@ func TestDocUpdateRevisionOnSupersededDoc(t *testing.T) {
 // since it opened can no longer be edited or landed, so withdrawing it must
 // still work — otherwise the row is unremovable.
 func TestDocDiscardRevisionOnSupersededDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -363,6 +376,7 @@ func TestDocDiscardRevisionOnSupersededDoc(t *testing.T) {
 // the discard is a hard delete, so the state_log row is the only surviving
 // copy of the withdrawn text.
 func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -396,6 +410,7 @@ func TestDocDiscardRevisionLogsTheWithdrawnBody(t *testing.T) {
 // survives into draft (025 §7.2) — an anchor the accepted version published
 // may not disappear.
 func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -426,6 +441,7 @@ func TestDocAcceptRevisionRejectsRemovedPublishedAnchor(t *testing.T) {
 // number and sec-2 reads as removed. Its twin below covers the form that does
 // reach rule 3.
 func TestDocAcceptRevisionRejectsRenumber(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -449,6 +465,7 @@ func TestDocAcceptRevisionRejectsRenumber(t *testing.T) {
 // keeping its anchor passes lintAnchors — which only compares a number it has
 // — and so reaches rule 3 as an actual renumber, "2" to "".
 func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -473,6 +490,7 @@ func TestDocAcceptRevisionRejectsDroppedNumber(t *testing.T) {
 // An unpublished anchor on an accepted document is what a corpus import
 // leaves behind, and dropping one is legal.
 func TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if _, err := s.db.ExecContext(t.Context(),
@@ -505,6 +523,7 @@ func TestDocAcceptRevisionAllowsUnpublishedAnchorRemoval(t *testing.T) {
 // last_revised_in stamped on exactly the changed anchor, the insert published
 // from this version, and the candidate row consumed.
 func TestDocAcceptRevision(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -555,6 +574,7 @@ func TestDocAcceptRevision(t *testing.T) {
 // It also checks the rebuilt rows' own columns, since they are written from
 // parallel arrays where a transposition would silently swap headings.
 func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
@@ -590,6 +610,7 @@ func TestDocAcceptRevisionStampsEveryChangedSection(t *testing.T) {
 // every coverage claim against sec-2 falsely fresh — the silent-staleness half
 // of 025 §6 rule 5.
 func TestDocAcceptRevisionStampsAnchorlessSubheadingEdit(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-subheading",
@@ -624,6 +645,7 @@ func TestDocAcceptRevisionStampsAnchorlessSubheadingEdit(t *testing.T) {
 // TestDocAcceptRevisionWrongActorForbidden: the revision accept is gated like
 // the first one.
 func TestDocAcceptRevisionWrongActorForbidden(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 	if err := reviseDoc(t, s, doc.ID, "ada"); err != nil {
@@ -640,6 +662,7 @@ func TestDocAcceptRevisionWrongActorForbidden(t *testing.T) {
 
 // TestDocAcceptRevisionWithoutOpenRevision: nothing to accept is ErrNotFound.
 func TestDocAcceptRevisionWithoutOpenRevision(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
@@ -652,6 +675,7 @@ func TestDocAcceptRevisionWithoutOpenRevision(t *testing.T) {
 // to land. Both other statuses are refused, whatever left a candidate row
 // behind.
 func TestDocAcceptRevisionWrongStatus(t *testing.T) {
+	t.Parallel()
 	for _, status := range []string{"draft", "superseded"} {
 		t.Run(status, func(t *testing.T) {
 			s := openDocStore(t)
@@ -675,6 +699,7 @@ func TestDocAcceptRevisionWrongStatus(t *testing.T) {
 // TestDocAcceptRevisionSupersedesReplacedDoc: a replaces edge added by the
 // revision takes effect when the revision lands, not before.
 func TestDocAcceptRevisionSupersedesReplacedDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,

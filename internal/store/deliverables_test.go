@@ -51,6 +51,7 @@ func deliverableStore(t *testing.T) *Store {
 // is COW-DEL-1 and the numbering is independent of the task counter and of
 // every other project.
 func TestCreateDeliverableAllocatesPerProjectOrdinals(t *testing.T) {
+	t.Parallel()
 	s := deliverableStore(t)
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, "atlas", "Atlas", "ATL"); err != nil {
@@ -82,6 +83,7 @@ func TestCreateDeliverableAllocatesPerProjectOrdinals(t *testing.T) {
 // 029 §3.1 allows, trimmed, plus the creator and timestamps — and that a
 // re-read returns the same record.
 func TestCreateDeliverableStoresFields(t *testing.T) {
+	t.Parallel()
 	s := deliverableStore(t)
 	ctx := context.Background()
 	if err := s.UpsertHumanActor(ctx, "kari", "Kari Nordmann", false, "", "", nil); err != nil {
@@ -131,6 +133,7 @@ func TestCreateDeliverableStoresFields(t *testing.T) {
 // unknown project are refused, and that neither burns an ordinal — the next
 // good create still gets COW-DEL-1.
 func TestCreateDeliverableRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	s := deliverableStore(t)
 
 	if _, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "   "}); !errors.Is(err, ErrInvalidInput) {
@@ -152,6 +155,7 @@ func TestCreateDeliverableRejectsBadInput(t *testing.T) {
 // TestListDeliverables checks declaration order, project scoping, and that an
 // unknown or empty project yields an empty slice rather than an error.
 func TestListDeliverables(t *testing.T) {
+	t.Parallel()
 	s := deliverableStore(t)
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, "atlas", "Atlas", "ATL"); err != nil {

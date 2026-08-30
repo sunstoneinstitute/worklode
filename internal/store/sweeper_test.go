@@ -12,6 +12,7 @@ import (
 // TestSweepLeasesCountsRuns asserts the loop reclaims an expired lease and
 // counts the tick under result="ok".
 func TestSweepLeasesCountsRuns(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -51,6 +52,7 @@ func TestSweepLeasesCountsRuns(t *testing.T) {
 // result="error" and does not end the loop. The store's pool is closed, so
 // every ExpireLeases call fails.
 func TestSweepLeasesCountsErrors(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -80,6 +82,7 @@ func TestSweepLeasesCountsErrors(t *testing.T) {
 // a live pool) and never as a wrapped context.Canceled — matching on the
 // error's shape would count shutdown as a failed sweep.
 func TestSweepLeasesIgnoresASweepTornDownByShutdown(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -111,6 +114,7 @@ func TestSweepLeasesIgnoresASweepTornDownByShutdown(t *testing.T) {
 // exist at zero before the sweeper has ticked, so an alert expression sees 0
 // rather than no-data.
 func TestNewStoreMetricsPreInitialisesSweeperSeries(t *testing.T) {
+	t.Parallel()
 	m := newStoreMetrics(prometheus.NewRegistry())
 	for _, result := range []string{"ok", "error"} {
 		if got := testutil.ToFloat64(m.sweeperRuns.WithLabelValues(result)); got != 0 {

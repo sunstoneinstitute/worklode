@@ -16,6 +16,7 @@ import (
 // refuses to accept — PlanTasks's error surfaces as ErrInvalidInput, and an
 // accepted plan with no tasks must never exist (025 §9.2).
 func TestDocAcceptPlanRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody, CreatedBy: "stig",
@@ -36,6 +37,7 @@ func TestDocAcceptPlanRejected(t *testing.T) {
 // actor — and nothing above them: no child_of edge is written for any of
 // them.
 func TestDocAcceptPlanMintsTasks(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
@@ -110,6 +112,7 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 // after, the count equals the definition count; a second accept of the same
 // body mints nothing, so the set can never double-mint (025 §9.2 AC2).
 func TestDocAcceptPlanInvariant(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "invariant-plan", Body: planMintBody, CreatedBy: "stig",
@@ -148,6 +151,7 @@ func TestDocAcceptPlanInvariant(t *testing.T) {
 // existing blockedCondition — no new machinery here, and no plan-to-plan gate
 // (that is a later task).
 func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "blocked-plan", Body: planMintBody, CreatedBy: "stig",
@@ -219,6 +223,7 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 // task's declared blockedBy is wired even though its blocker was minted by the
 // first accept.
 func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "remint-plan", Body: planMintBody, CreatedBy: "stig",
@@ -284,6 +289,7 @@ func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
 // declaration — prose rewritten under an existing one — leaves the re-accept
 // with nothing to mint, and that is a success rather than an error (025 §9.2).
 func TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "noop-plan", Body: planMintBody, CreatedBy: "stig",
@@ -325,6 +331,7 @@ func TestDocAcceptPlanReAcceptWithoutNewDeclarationsIsNoOp(t *testing.T) {
 // (025 §9.2 — withdrawing work is a task transition, and re-acceptance leaves
 // existing rows alone).
 func TestDocAcceptPlanReAcceptNeverRemintsDeletedTask(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "withdrawn-plan", Body: planMintBody, CreatedBy: "stig",
@@ -352,6 +359,7 @@ func TestDocAcceptPlanReAcceptNeverRemintsDeletedTask(t *testing.T) {
 // the write rather than surfacing as drift at the next accept (025 §9.2). The
 // body does not move.
 func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "drift-plan", Body: planMintBody, CreatedBy: "stig",
@@ -386,6 +394,7 @@ func TestDocUpdateBodyMintedPlanRequiresReadableTasks(t *testing.T) {
 // a time, and an accepted plan that minted nothing is §9.2's historical
 // import; neither has a task set to drift from.
 func TestDocUpdateBodyUnmintedPlanTasksUnchecked(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	draft := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "draft-plan", Body: planMintBody, CreatedBy: "stig",
@@ -409,6 +418,7 @@ func TestDocUpdateBodyUnmintedPlanTasksUnchecked(t *testing.T) {
 // which is what lets the acceptance event of §15.3, keyed on IRI and version,
 // tell a re-accept after an edit from a retry of the same accept.
 func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "versioned-plan", Body: planMintBody, CreatedBy: "stig",
@@ -445,6 +455,7 @@ func TestDocUpdateBodyPlanBumpsVersion(t *testing.T) {
 // are disambiguated, so the partial unique index can be created and no
 // existing row is lost.
 func TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles(t *testing.T) {
+	t.Parallel()
 	s := OpenUnmigratedTestStore(t)
 	if err := s.Migrate(migrationsThrough(t, 42)); err != nil {
 		t.Fatalf("migrate through 0042: %v", err)
@@ -515,6 +526,7 @@ func TestPlanTaskKeyBackfillDisambiguatesDuplicateTitles(t *testing.T) {
 // designdoc.PlanTasks refuses to accept, wrapped as ErrInvalidInput, and its
 // status stays draft — the status flip and the mint never run.
 func TestDocAcceptPlanParseFailureRefusesAndStaysDraft(t *testing.T) {
+	t.Parallel()
 	frontmatter := "---\nstatus: draft\n---\n\n# A plan\n\n"
 	cases := map[string]string{
 		"no tasks section": frontmatter + "No tasks here.\n",
@@ -602,6 +614,7 @@ Do it.
 // TestDocAcceptPlanWrongActorForbidden: acceptance is the owner's act,
 // exactly as for a spec (025 §7); a forbidden accept mints nothing.
 func TestDocAcceptPlanWrongActorForbidden(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "gated-plan", Body: planMintBody, CreatedBy: "stig",
@@ -624,6 +637,7 @@ func TestDocAcceptPlanWrongActorForbidden(t *testing.T) {
 // it after the accepting transaction commits; this exercises that method
 // directly, the pattern TestDocOperationsMetric above uses for docOp.
 func TestDocPlanTasksMintedMetric(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -641,6 +655,7 @@ func TestDocPlanTasksMintedMetric(t *testing.T) {
 // TestDocPlanTasksMintedMetricNilSafe: a store opened without WithMetrics
 // records nothing.
 func TestDocPlanTasksMintedMetricNilSafe(t *testing.T) {
+	t.Parallel()
 	var m *storeMetrics
 	m.planTasksMinted(3)
 }
@@ -649,6 +664,7 @@ func TestDocPlanTasksMintedMetricNilSafe(t *testing.T) {
 // with exactly the anchors no accepted plan's covers edge names, in document
 // order, alongside its total section count.
 func TestDocNeedsPlanningReportsUncoveredSections(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustAcceptedSpec(t, s, "025-x")
 	coveringPlan(t, s, "plan-a", true, "025-x#sec-1")
@@ -676,6 +692,7 @@ func TestDocNeedsPlanningReportsUncoveredSections(t *testing.T) {
 // accepted plan takes the spec out of the set, and two plans naming the same
 // section is legal and unremarked (026 §2.1).
 func TestDocNeedsPlanningFullyCoveredSpecOmitted(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	coveringPlan(t, s, "plan-a", true, "025-x#sec-1", "025-x#sec-2")
@@ -690,6 +707,7 @@ func TestDocNeedsPlanningFullyCoveredSpecOmitted(t *testing.T) {
 // TestDocNeedsPlanningDraftSpecNotOwedPlanning: 026 §2.1 — a draft spec is not
 // yet a planning gap.
 func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -704,6 +722,7 @@ func TestDocNeedsPlanningDraftSpecNotOwedPlanning(t *testing.T) {
 // TestDocNeedsPlanningDraftPlanDoesNotCover: 026 §2.1 — a draft plan has not
 // yet undertaken work, so its covers edges discharge nothing.
 func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	coveringPlan(t, s, "plan-a", false, "025-x#sec-1", "025-x#sec-2", "025-x#sec-2.1")
@@ -719,6 +738,7 @@ func TestDocNeedsPlanningDraftPlanDoesNotCover(t *testing.T) {
 // fragment names no section, so it discharges none (026 §2.1 — it cannot say
 // which present section it undertakes and would silently claim future ones).
 func TestDocNeedsPlanningWholeDocumentEdgeCoversNothing(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	coveringPlan(t, s, "plan-a", true, "025-x")
@@ -734,6 +754,7 @@ func TestDocNeedsPlanningWholeDocumentEdgeCoversNothing(t *testing.T) {
 // to no document (026 §4.3), so it lands in to_external and contributes
 // nothing — no special case needed. The plan itself is never a planning gap.
 func TestDocNeedsPlanningNoSpecSentinelCoversNothing(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	coveringPlan(t, s, "plan-a", true, "NO-SPEC")
@@ -751,6 +772,7 @@ func TestDocNeedsPlanningNoSpecSentinelCoversNothing(t *testing.T) {
 // TestDocNeedsPlanningScopesToProject: an empty project answers over every
 // project; a named one narrows to it.
 func TestDocNeedsPlanningScopesToProject(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := s.db.ExecContext(t.Context(),
 		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
@@ -779,6 +801,7 @@ func TestDocNeedsPlanningScopesToProject(t *testing.T) {
 // TestDocNeedsPlanningFullCoverageDischarges: an accepted plan claiming a
 // section `full` discharges it; the sections no plan names stay unplanned.
 func TestDocNeedsPlanningFullCoverageDischarges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "full"})
@@ -794,6 +817,7 @@ func TestDocNeedsPlanningFullCoverageDischarges(t *testing.T) {
 // with no fullCoverageWith set closes nothing, so the section stays a
 // "partial" gap (026 §2.1).
 func TestDocNeedsPlanningPartialWithNoClosureIsPartialGap(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
@@ -809,6 +833,7 @@ func TestDocNeedsPlanningPartialWithNoClosureIsPartialGap(t *testing.T) {
 // naming an accepted plan that itself covers the same section `full` closes
 // the claim, discharging the section (026 §2.1).
 func TestDocNeedsPlanningPartialClosedByFullSiblingDischarges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-1", level: "full"})
@@ -828,6 +853,7 @@ func TestDocNeedsPlanningPartialClosedByFullSiblingDischarges(t *testing.T) {
 // closes the claim (026 §2.1 asks only that it "contribute full or partial",
 // not that its own claim be closed).
 func TestDocNeedsPlanningPartialClosedByPartialSiblingDischarges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
@@ -845,6 +871,7 @@ func TestDocNeedsPlanningPartialClosedByPartialSiblingDischarges(t *testing.T) {
 // TestDocNeedsPlanningPartialClosureIgnoresDraftSibling: fullCoverageWith is
 // checked, never taken on trust — a draft sibling closes nothing (026 §2.1).
 func TestDocNeedsPlanningPartialClosureIgnoresDraftSibling(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	sibling := levelledPlan(t, s, "plan-sibling", false, coverageRef{ref: "025-x#sec-1", level: "full"})
@@ -864,6 +891,7 @@ func TestDocNeedsPlanningPartialClosureIgnoresDraftSibling(t *testing.T) {
 // qualifying sibling does not close the claim when a second sibling, named
 // alongside it, is still a draft.
 func TestDocNeedsPlanningPartialClosureRequiresEveryNamedSibling(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	accepted := levelledPlan(t, s, "plan-sibling-accepted", true,
@@ -886,6 +914,7 @@ func TestDocNeedsPlanningPartialClosureRequiresEveryNamedSibling(t *testing.T) {
 // sibling that itself claims `none` contributes nothing to the closure (026
 // §2.1).
 func TestDocNeedsPlanningPartialClosureIgnoresNoneSibling(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-1", level: "none"})
@@ -905,6 +934,7 @@ func TestDocNeedsPlanningPartialClosureIgnoresNoneSibling(t *testing.T) {
 // different one of the spec's sections closes nothing for this one, even
 // though it discharges its own (026 §2.1).
 func TestDocNeedsPlanningPartialClosureIgnoresSiblingCoveringDifferentSection(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	sibling := levelledPlan(t, s, "plan-sibling", true, coverageRef{ref: "025-x#sec-2", level: "full"})
@@ -923,6 +953,7 @@ func TestDocNeedsPlanningPartialClosureIgnoresSiblingCoveringDifferentSection(t 
 // fullCoverageWith entry this project cannot resolve is, by definition,
 // unresolvable and closes nothing (026 §2.1).
 func TestDocNeedsPlanningPartialClosureIgnoresUnresolvableReference(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	levelledPlan(t, s, "plan-main", true, coverageRef{
@@ -940,6 +971,7 @@ func TestDocNeedsPlanningPartialClosureIgnoresUnresolvableReference(t *testing.T
 // naming it claims `none` for is "bound-only" — acknowledged but not planned
 // (026 §2.1).
 func TestDocNeedsPlanningNoneOnlyIsBoundOnlyGap(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
@@ -955,6 +987,7 @@ func TestDocNeedsPlanningNoneOnlyIsBoundOnlyGap(t *testing.T) {
 // `partial` claim and another's `full` claim on the same section together
 // discharge it (026 §2.1's outcome table).
 func TestDocNeedsPlanningPartialByOneFullByAnotherDischarges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "partial"})
@@ -971,6 +1004,7 @@ func TestDocNeedsPlanningPartialByOneFullByAnotherDischarges(t *testing.T) {
 // dominates `none` — one plan claiming `none` does not demote a section
 // another plan claims `partial` down to "bound-only" (026 §2.1).
 func TestDocNeedsPlanningNoneByOneAndPartialByAnotherIsPartialGap(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "none"})
@@ -988,6 +1022,7 @@ func TestDocNeedsPlanningNoneByOneAndPartialByAnotherIsPartialGap(t *testing.T) 
 // accepted and then carried out (025 §9), so its full claim still discharges
 // the section it covered.
 func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	plan := levelledPlan(t, s, "plan-a", true, coverageRef{ref: "025-x#sec-1", level: "full"})
@@ -1006,6 +1041,7 @@ func TestDocNeedsPlanningSupersededPlanDischarges(t *testing.T) {
 // entry reports the section "deferred" with its owner's slug; a section no
 // plan names at all stays "unplanned" (026 §2.1, §5.3).
 func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1025,6 +1061,7 @@ func TestDocNeedsPlanningDeferredSectionReportsOwner(t *testing.T) {
 // a deferral says who is owed the rest, not merely that the section was read
 // (026 §2.1's precedence: partial > deferred > bound-only > unplanned).
 func TestDocNeedsPlanningDeferredOutranksBoundOnly(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1045,6 +1082,7 @@ func TestDocNeedsPlanningDeferredOutranksBoundOnly(t *testing.T) {
 // aggregates them deterministically, comma-joined without a space — the CLI
 // joins anchors with spaces, so a spaced separator would split the token.
 func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1068,6 +1106,7 @@ func TestDocNeedsPlanningTwoDeferralOwnersAggregated(t *testing.T) {
 // — once a second accepted plan covers the section `full`, it disappears
 // from the gaps the same as any other discharged section (026 §2.1).
 func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1087,6 +1126,7 @@ func TestDocNeedsPlanningDeferralDeliveredByCoveringPlan(t *testing.T) {
 // `partial` by one plan and deferred by another reports "partial" — partial
 // outranks deferred in 026 §2.1's precedence.
 func TestDocNeedsPlanningPartialWithDeferralReportsPartial(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1105,6 +1145,7 @@ func TestDocNeedsPlanningPartialWithDeferralReportsPartial(t *testing.T) {
 // TestDocNeedsPlanningDraftPlanDeferralIgnored: a draft plan has not yet
 // undertaken work, so its defers entries classify nothing (026 §2.1).
 func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1124,6 +1165,7 @@ func TestDocNeedsPlanningDraftPlanDeferralIgnored(t *testing.T) {
 // deferral stands, being spent does not deliver a handoff the plan never
 // made.
 func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	mustCreateDoc(t, s, DocInput{
@@ -1143,6 +1185,7 @@ func TestDocNeedsPlanningSupersededPlanDeferralCounts(t *testing.T) {
 // project cannot resolve is reported verbatim, the same fallback
 // fullCoverageWith uses (026 §2.1, §5.3).
 func TestDocNeedsPlanningDeferralOwnerExternalVerbatim(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	deferringPlan(t, s, "plan-a", true, []deferralRef{{spec: "025-x#sec-1", to: "999-nowhere-owner.md"}})
@@ -1157,6 +1200,7 @@ func TestDocNeedsPlanningDeferralOwnerExternalVerbatim(t *testing.T) {
 // TestDocNeedsExecutionOpenTask: an accepted plan with any non-closed task in
 // its set is pending work.
 func TestDocNeedsExecutionOpenTask(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
@@ -1173,6 +1217,7 @@ func TestDocNeedsExecutionOpenTask(t *testing.T) {
 // TestDocNeedsExecutionAllTasksClosed: once every task in the set is closed —
 // delivered or abandoned, taskClosed's notion — the plan drops out.
 func TestDocNeedsExecutionAllTasksClosed(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
@@ -1199,6 +1244,7 @@ func TestDocNeedsExecutionAllTasksClosed(t *testing.T) {
 
 // TestDocNeedsExecutionDraftPlanOmitted: a draft plan has undertaken nothing.
 func TestDocNeedsExecutionDraftPlanOmitted(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "mint-plan", Body: planMintBody, CreatedBy: "stig",
@@ -1213,6 +1259,7 @@ func TestDocNeedsExecutionDraftPlanOmitted(t *testing.T) {
 // with no task set are the importer's spent plans, which are not pending work
 // — the deliberate departure from 025 §18's "unminted or unfinished".
 func TestDocNeedsExecutionUnmintedAcceptedPlanOmitted(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "spent-plan", Status: "accepted", CreatedBy: "stig",
@@ -1227,6 +1274,7 @@ func TestDocNeedsExecutionUnmintedAcceptedPlanOmitted(t *testing.T) {
 // TestDocNeedsExecutionScopesToProjectAndKind: accepted specs never appear,
 // and a project narrows the set.
 func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustAcceptedSpec(t, s, "025-x")
 	doc := mustCreateDoc(t, s, DocInput{
@@ -1249,6 +1297,7 @@ func TestDocNeedsExecutionScopesToProjectAndKind(t *testing.T) {
 // TestDocBareSupersededNoReplacesEdge: a superseded spec with no replaces
 // edge naming it at all is reported in full, anchors in document order.
 func TestDocBareSupersededNoReplacesEdge(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1278,6 +1327,7 @@ func TestDocBareSupersededNoReplacesEdge(t *testing.T) {
 // replaces edge discharges every section of the document it names, even
 // though the successor never names one of them by anchor.
 func TestDocBareSupersededDocumentLevelEdgeExplainsWholeDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1299,6 +1349,7 @@ func TestDocBareSupersededDocumentLevelEdgeExplainsWholeDoc(t *testing.T) {
 // replaces edge naming each of the superseded document's anchors leaves
 // nothing unexplained.
 func TestDocBareSupersededSectionEdgesExplainEverySection(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1321,6 +1372,7 @@ func TestDocBareSupersededSectionEdgesExplainEverySection(t *testing.T) {
 // section-scoped edge names are reported; Sections stays the document's full
 // count.
 func TestDocBareSupersededSomeSectionsExplained(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1347,6 +1399,7 @@ func TestDocBareSupersededSomeSectionsExplained(t *testing.T) {
 // TestDocBareSupersededOnlySupersededDocsReported: an accepted and a draft
 // document are never reported, whatever edges name them.
 func TestDocBareSupersededOnlySupersededDocsReported(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-accepted", Body: specBody,
@@ -1368,6 +1421,7 @@ func TestDocBareSupersededOnlySupersededDocsReported(t *testing.T) {
 // nothing — the superseded document it would have named is still reported in
 // full.
 func TestDocBareSupersededExternalEdgeDoesNotExplain(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1391,6 +1445,7 @@ func TestDocBareSupersededExternalEdgeDoesNotExplain(t *testing.T) {
 // TestDocBareSupersededScopesToProject: an empty project answers over every
 // project; a named one narrows to it.
 func TestDocBareSupersededScopesToProject(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := s.db.ExecContext(t.Context(),
 		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
@@ -1418,6 +1473,7 @@ func TestDocBareSupersededScopesToProject(t *testing.T) {
 // TestDocBareSupersededPlanNeverReported: a plan carries no sections (025
 // §9), so it can never appear here even when superseded.
 func TestDocBareSupersededPlanNeverReported(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "old-plan", CreatedBy: "stig", Status: "superseded",
@@ -1434,6 +1490,7 @@ func TestDocBareSupersededPlanNeverReported(t *testing.T) {
 // "" answers both a superseded spec and a superseded ADR, "spec" or "adr"
 // answers only its own.
 func TestDocBareSupersededKindNarrows(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old-spec", Body: specBody,
@@ -1462,6 +1519,7 @@ func TestDocBareSupersededKindNarrows(t *testing.T) {
 // its sections. That leaves the other two sections bare, reachable through
 // the real accept path rather than a fixture that sets Status directly.
 func TestDocBareSupersededViaAcceptPath(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,

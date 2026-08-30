@@ -356,6 +356,7 @@ func insertDoc(t *testing.T, s *Store, kind string, number any, slug string) (in
 }
 
 func TestDocSchemaSpecRow(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -372,6 +373,7 @@ func TestDocSchemaSpecRow(t *testing.T) {
 // 0037 split by kind is now one rule for the whole corpus, so a plan row is an
 // ordinary numbered row.
 func TestDocSchemaPlanRowCarriesANumber(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -387,6 +389,7 @@ func TestDocSchemaPlanRowCarriesANumber(t *testing.T) {
 // The schema half of 029 §4: no document goes without a number, whatever its
 // kind and whichever writer went around the store.
 func TestDocSchemaNumberIsRequiredForEveryKind(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"spec", "adr", "plan"} {
 		t.Run(kind, func(t *testing.T) {
 			s := openTestStore(t)
@@ -407,6 +410,7 @@ func TestDocSchemaNumberIsRequiredForEveryKind(t *testing.T) {
 // 0052 replaced the partial index with a plain one once the column stopped
 // being nullable.
 func TestDocSchemaPlanNumberIsUniquePerProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -423,6 +427,7 @@ func TestDocSchemaPlanNumberIsUniquePerProject(t *testing.T) {
 }
 
 func TestDocSchemaDuplicateProjectKindNumberViolatesUnique(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -441,6 +446,7 @@ func TestDocSchemaDuplicateProjectKindNumberViolatesUnique(t *testing.T) {
 // TestDocUpdateBodyDraftSpec: a draft spec's body is editable and its
 // sections are rebuilt from the new source.
 func TestDocUpdateBodyDraftSpec(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -470,6 +476,7 @@ func TestDocUpdateBodyDraftSpec(t *testing.T) {
 // distinguishable updated_at values (WL-285) rather than collapsing into an
 // update with no observable trace.
 func TestDocUpdateBodySameSecondIsDistinguishable(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -513,6 +520,7 @@ func TestDocUpdateBodySameSecondIsDistinguishable(t *testing.T) {
 // keeps its published flag and last_revised_in — those are accept-time facts,
 // not source facts.
 func TestDocUpdateBodyPreservesSectionState(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -543,6 +551,7 @@ func TestDocUpdateBodyPreservesSectionState(t *testing.T) {
 // TestDocUpdateBodyAcceptedSpecRejected: an accepted spec is revised, never
 // edited in place (025 §9).
 func TestDocUpdateBodyAcceptedSpecRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody,
@@ -561,6 +570,7 @@ func TestDocUpdateBodyAcceptedSpecRejected(t *testing.T) {
 // TestDocUpdateBodyAcceptedPlanAllowed: plans stay freely mutable at any
 // status (025 §9, AC6).
 func TestDocUpdateBodyAcceptedPlanAllowed(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody,
@@ -582,6 +592,7 @@ func TestDocUpdateBodyAcceptedPlanAllowed(t *testing.T) {
 
 // TestDocUpdateBodyNotFound covers the unknown-id path.
 func TestDocUpdateBodyNotFound(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := updateDocBody(t, s, 9999, planBody); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
@@ -590,6 +601,7 @@ func TestDocUpdateBodyNotFound(t *testing.T) {
 
 // TestDocGetAndList covers the two read paths and DocFilter's three selectors.
 func TestDocGetAndList(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -641,6 +653,7 @@ func TestDocGetAndList(t *testing.T) {
 // TestDocOperationsMetric: RecordDocEvent records the op and its outcome, and
 // carries no unbounded label.
 func TestDocOperationsMetric(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -701,6 +714,7 @@ func TestDocOperationsMetric(t *testing.T) {
 
 // TestDocMetricsNilSafe: a store opened without WithMetrics records nothing.
 func TestDocMetricsNilSafe(t *testing.T) {
+	t.Parallel()
 	var m *storeMetrics
 	m.docOp("create", nil)
 	m.docOp("update", errors.New("boom"))
@@ -710,6 +724,7 @@ func TestDocMetricsNilSafe(t *testing.T) {
 // mutable at accepted (025 §9), so a body edit that drops the frontmatter key
 // must not erase the acceptance date.
 func TestDocUpdateBodyKeepsIssued(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "plan", Slug: "a-plan", CreatedBy: "stig", Status: "accepted",
@@ -857,6 +872,7 @@ Inserted body.
 // TestDocAcceptDraftSpec: the owner's accept flips the status, freezes the
 // published anchor set, and lands in the state log.
 func TestDocAcceptDraftSpec(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -892,6 +908,7 @@ func TestDocAcceptDraftSpec(t *testing.T) {
 
 // TestDocAcceptWrongActorForbidden: acceptance is the owner's act (025 §7).
 func TestDocAcceptWrongActorForbidden(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -911,6 +928,7 @@ func TestDocAcceptWrongActorForbidden(t *testing.T) {
 
 // TestDocAcceptAlreadyAccepted: accept is a draft-only transition.
 func TestDocAcceptAlreadyAccepted(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustAcceptedSpec(t, s, "025-x")
 
@@ -968,6 +986,7 @@ func snapshotTask(t *testing.T, s *Store, id string) taskSnapshot {
 // through eventbus.Emit instead of RecordDocEvent (025 §15.3), so accept and
 // submit stay counted with every other document verb.
 func TestRecordDocOpMetric(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	reg := prometheus.NewRegistry()
 	s.metrics = newStoreMetrics(reg)
@@ -987,6 +1006,7 @@ func TestRecordDocOpMetric(t *testing.T) {
 // alone — 025 §7's ladder runs draft -> accepted -> superseded, and a draft
 // jumped straight to superseded would be reachable by no verb here.
 func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1040,6 +1060,7 @@ func TestDocAcceptSupersedesReplacedDoc(t *testing.T) {
 // TestDocAcceptSectionScopedReplacesDoesNotSupersede: section-level
 // supersession stays derived (025 §3.3), so it flips no document.
 func TestDocAcceptSectionScopedReplacesDoesNotSupersede(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -1066,6 +1087,7 @@ func TestDocAcceptSectionScopedReplacesDoesNotSupersede(t *testing.T) {
 // TestDocAcceptRejectsTooDeepAnchor: the depth limit is evaluated at
 // publication (025 §6 rule 6), so a first accept enforces it too.
 func TestDocAcceptRejectsTooDeepAnchor(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	deep := "---\nstatus: draft\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
 		"### 1.1 Sub {#sec-1.1}\n\nb\n\n#### 1.1.1 Deeper {#sec-1.1.1}\n\nc\n"
@@ -1085,6 +1107,7 @@ func TestDocAcceptRejectsTooDeepAnchor(t *testing.T) {
 // TestDocAcceptAllowsAnchorAtTheDepthLimit: level 3 is addressable; only
 // deeper headings are content within their nearest anchored ancestor.
 func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	body := "---\nstatus: draft\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
 		"### 1.1 Sub {#sec-1.1}\n\nb\n"
@@ -1099,6 +1122,7 @@ func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
 
 // TestDocAcceptNotFound covers the unknown-id path.
 func TestDocAcceptNotFound(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, _, err := acceptDoc(t, s, 9999, "stig"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
@@ -1145,6 +1169,7 @@ Oldest first.
 // accepted documents flips and logs all of them, not just the first — the
 // flip is one UPDATE ... RETURNING over the target set.
 func TestDocAcceptSupersedesEveryReplacedDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	var replaced []int64
 	for _, spec := range []struct {
@@ -1187,6 +1212,7 @@ func TestDocAcceptSupersedesEveryReplacedDoc(t *testing.T) {
 // TestDocListSections: the reader the detail endpoint serves returns a spec's
 // sections in document order, and nothing at all for a plan (025 §9).
 func TestDocListSections(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -1466,6 +1492,7 @@ func docStatus(t *testing.T, s *Store, id int64) string {
 // DocBySubjectIRI resolves each back to its row. An unknown IRI is
 // ErrNotFound.
 func TestDocIRIRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 
@@ -1525,6 +1552,7 @@ func TestDocIRIRoundTrip(t *testing.T) {
 // defect; this test is the record. When §11's writer lands, or a new type
 // joins docEdgeInverse, update the want list deliberately.
 func TestDocEdgeTypesWithoutWriter(t *testing.T) {
+	t.Parallel()
 	var unwritten []string
 	for typ := range docEdgeInverse {
 		if !slices.Contains(designdoc.ActingRels, typ) {
@@ -1555,6 +1583,7 @@ func seedDocsTask(t *testing.T, s *Store, id string) {
 // naming no task leaves it unset rather than failing, and a create naming a
 // task that does not exist is refused with a message pointing at the field.
 func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	seedDocsTask(t, s, "P1-1")
 

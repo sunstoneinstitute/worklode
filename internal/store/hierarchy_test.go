@@ -19,6 +19,7 @@ import (
 // exhaustive, so anything outside the six kinds of 025 §10 — including a
 // plausible-sounding container kind — fails at the database.
 func TestKindCheckRejectsUnknownKinds(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	for _, kind := range []string{"container", "saga"} {
 		bad := defaultTaskInput()
@@ -37,6 +38,7 @@ func TestKindCheckRejectsUnknownKinds(t *testing.T) {
 // TestSingleParentIndex checks that the partial unique index rejects a second
 // child_of edge out of one task, whichever parent it points at.
 func TestSingleParentIndex(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	parentA := createTask(t, s, taskTestNow, containerInput())
@@ -62,6 +64,7 @@ func TestSingleParentIndex(t *testing.T) {
 // project-scoped the way child_of is, and it confers no parent-hood — the
 // origin gains no children and no roll-up.
 func TestAddEdgeFollowUpTo(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	origin := createTask(t, s, taskTestNow, defaultTaskInput())
 	followUp := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -93,6 +96,7 @@ func TestAddEdgeFollowUpTo(t *testing.T) {
 // absorbs nothing — the canonical task gains no children and no roll-up, and
 // the duplicate gains no parent (004 §1.3, "No absorption").
 func TestAddEdgeDuplicateOf(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	canonical := createTask(t, s, taskTestNow, defaultTaskInput())
 	dupe := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -124,6 +128,7 @@ func TestAddEdgeDuplicateOf(t *testing.T) {
 // duplicate of at most one canonical task, whichever task the second edge
 // points at.
 func TestSingleCanonicalIndex(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	dupe := createTask(t, s, taskTestNow, defaultTaskInput())
 	canonicalA := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -148,6 +153,7 @@ func TestSingleCanonicalIndex(t *testing.T) {
 // independent uniqueness: one task may be both a follow-up to one task and a
 // duplicate of another, since the indexes are partial on distinct types.
 func TestDuplicateOfIsNotSingleOrigin(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	subject := createTask(t, s, taskTestNow, defaultTaskInput())
 	origin := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -171,6 +177,7 @@ func TestDuplicateOfIsNotSingleOrigin(t *testing.T) {
 // endpoint is ErrNotFound naming that endpoint, and when both are missing it
 // is the from end that is named.
 func TestAddEdgeMissingEndpoint(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	real := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -200,6 +207,7 @@ func TestAddEdgeMissingEndpoint(t *testing.T) {
 // TestSingleOriginIndex pins the partial unique index: a task has at most one
 // origin, whichever task the second edge points at.
 func TestSingleOriginIndex(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	followUp := createTask(t, s, taskTestNow, defaultTaskInput())
 	originA := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -226,6 +234,7 @@ func TestSingleOriginIndex(t *testing.T) {
 // duplicates (legal under 0005) migrates cleanly instead of aborting with a
 // unique violation.
 func TestUpMigrationDedupsDuplicateParentEdges(t *testing.T) {
+	t.Parallel()
 	s := OpenUnmigratedTestStore(t)
 	if err := s.Migrate(migrationsThrough(t, 5)); err != nil {
 		t.Fatalf("migrate through 0005: %v", err)
@@ -333,6 +342,7 @@ func containerInput() TaskInput {
 // TestAddEdgeAcceptsOrdinaryParent pins 029 §2's change to checkHierarchy:
 // any ordinary task may be a parent, and the edge is what makes it one.
 func TestAddEdgeAcceptsOrdinaryParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -350,6 +360,7 @@ func TestAddEdgeAcceptsOrdinaryParent(t *testing.T) {
 }
 
 func TestAddEdgeRejectsSecondParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
 	parentA := createTask(t, s, taskTestNow, containerInput())
@@ -369,6 +380,7 @@ func TestAddEdgeRejectsSecondParent(t *testing.T) {
 }
 
 func TestAddEdgeRejectsCrossProject(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateProject(t.Context(), "other", "Other", "OTH"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
@@ -385,6 +397,7 @@ func TestAddEdgeRejectsCrossProject(t *testing.T) {
 }
 
 func TestAddEdgeEnforcesDepthCap(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, containerInput())
@@ -407,6 +420,7 @@ func TestAddEdgeEnforcesDepthCap(t *testing.T) {
 // TestAddEdgeDepthCapCountsSubtree checks that adopting a task that already
 // has children counts the whole resulting chain, not just the new edge.
 func TestAddEdgeDepthCapCountsSubtree(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	top := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, containerInput())
@@ -429,6 +443,7 @@ func TestAddEdgeDepthCapCountsSubtree(t *testing.T) {
 // TestAddEdgeStillRejectsCycles checks the pre-existing cycle guard survives
 // the rewrite: a parent cannot become a child of its own descendant.
 func TestAddEdgeStillRejectsCycles(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, containerInput())
@@ -447,6 +462,7 @@ func TestAddEdgeStillRejectsCycles(t *testing.T) {
 // query and still reports depth 1: width alone must not be mistaken for
 // depth.
 func TestDescendantDepthWideFanOut(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, containerInput())
 	for i := 0; i < 25; i++ {
@@ -475,6 +491,7 @@ func TestDescendantDepthWideFanOut(t *testing.T) {
 // direct inserts (bypassing AddEdge, which would refuse a chain this deep)
 // so the walk has a level to stop short of.
 func TestDescendantDepthStopsAtCap(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	top := createTask(t, s, taskTestNow, containerInput())
 	n1 := createTask(t, s, taskTestNow, containerInput())
@@ -508,6 +525,7 @@ func TestDescendantDepthStopsAtCap(t *testing.T) {
 }
 
 func TestChildProgress(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	var kids []*model.Task
@@ -549,6 +567,7 @@ func TestChildProgress(t *testing.T) {
 // child whose repo gates on released has not finished delivering, so it must
 // not be counted closed until it is released.
 func TestChildProgressPerRepoDoneState(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/app", "released")
 
@@ -581,6 +600,7 @@ func TestChildProgressPerRepoDoneState(t *testing.T) {
 }
 
 func TestChildProgressNoChildren(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	got, err := s.ChildProgress(t.Context(), container.ID)
@@ -593,6 +613,7 @@ func TestChildProgressNoChildren(t *testing.T) {
 }
 
 func TestParentOf(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -620,6 +641,7 @@ func TestParentOf(t *testing.T) {
 // TestParentMap covers both the scoped (projectID != "") and unscoped
 // (projectID == "") branches, across two projects.
 func TestParentMap(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateProject(t.Context(), "other", "Other", "OTH"); err != nil {
 		t.Fatalf("CreateProject: %v", err)
@@ -659,6 +681,7 @@ func TestParentMap(t *testing.T) {
 }
 
 func TestListTasksFilterParentAndHasChildren(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -703,6 +726,7 @@ func taskIDs(tasks []model.Task) []string {
 // ranked pickup set even when it is ready, unblocked, and top-ranked by every
 // other factor. Its child is draft, so only the plain task is a candidate.
 func TestParentNeverInReadySet(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	in := containerInput()
 	in.Priority = "critical"
@@ -728,6 +752,7 @@ func TestParentNeverInReadySet(t *testing.T) {
 // a legal transition for a task with children (it is the roll-up trigger), so
 // Claim needs its own guard beyond the ready-set exclusion (004 §6.1).
 func TestClaimRejectsParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent, _ := parentWithChildren(t, s, 1)
 	_, err := s.Claim(t.Context(), parent.ID, "stig", "wt-1", time.Hour)
@@ -739,6 +764,7 @@ func TestClaimRejectsParent(t *testing.T) {
 // TestClaimAllowsChildlessTask is the other half of the inferred-container
 // rule: without children the same task is an ordinary, claimable one.
 func TestClaimAllowsChildlessTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, containerInput())
 	if _, err := s.Claim(t.Context(), task.ID, "stig", "wt-1", time.Hour); err != nil {
@@ -751,6 +777,7 @@ func TestClaimAllowsChildlessTask(t *testing.T) {
 // (in_review -> merged) reports the roll-up rule rather than a from-state
 // mismatch. The guard keys off the children, not a kind (029 §2).
 func TestContainerForbiddenStates(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent, _ := parentWithChildren(t, s, 1)
 	if got := stateOf(t, s, parent.ID); got != "ready" {
@@ -779,6 +806,7 @@ func TestContainerForbiddenStates(t *testing.T) {
 // TestChildlessTaskReachesDeliveryStates is the other half: the same states
 // are legal for a task with no children, so the guard is not a blanket ban.
 func TestChildlessTaskReachesDeliveryStates(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, containerInput())
 	walkTo(t, s, task.ID, "in_review")
@@ -791,6 +819,7 @@ func TestChildlessTaskReachesDeliveryStates(t *testing.T) {
 // commit and deploy facts attributed to it is left alone: a container has no
 // commit of its own (004 §6.4).
 func TestResolveDeliveryIgnoresParents(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, _ := parentWithChildren(t, s, 1)
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "delivery", nil,
@@ -831,6 +860,7 @@ func closedKids(states ...string) []childState {
 }
 
 func TestContainerTarget(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		children []childState
@@ -869,6 +899,7 @@ func TestContainerTarget(t *testing.T) {
 // child is actually released. Roll-up and progress must never disagree about
 // which children are done.
 func TestResolveHierarchyPerRepoDoneState(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/app", "released")
 
@@ -927,6 +958,7 @@ func stateOf(t *testing.T, s *Store, id string) string {
 // TestRollUpForward: the first child to start moves the container off ready, and
 // the last child to close moves it to merged.
 func TestRollUpForward(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, kids := parentWithChildren(t, s, 2)
 
@@ -957,6 +989,7 @@ func TestRollUpForward(t *testing.T) {
 // TestRollUpZeroChildren: a task with no children never moves. It is an
 // ordinary task and stays where it is (004 §6.5).
 func TestRollUpZeroChildren(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "rollup", nil,
@@ -972,6 +1005,7 @@ func TestRollUpZeroChildren(t *testing.T) {
 }
 
 func TestRollUpAllAbandoned(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, kids := parentWithChildren(t, s, 2)
 	for _, k := range kids {
@@ -985,6 +1019,7 @@ func TestRollUpAllAbandoned(t *testing.T) {
 }
 
 func TestRollUpMixedAbandonedAndDelivered(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, kids := parentWithChildren(t, s, 2)
 	walkTo(t, s, kids[0].ID, "merged")
@@ -999,6 +1034,7 @@ func TestRollUpMixedAbandonedAndDelivered(t *testing.T) {
 // TestRollUpReopen: a child returning to ready puts a closed container back to
 // ready. Asymmetric roll-up produces boards that lie.
 func TestRollUpReopen(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, kids := parentWithChildren(t, s, 1)
 	walkTo(t, s, kids[0].ID, "merged")
@@ -1016,6 +1052,7 @@ func TestRollUpReopen(t *testing.T) {
 // TestRollUpAttribution: the parent's state_log row carries the child's event
 // id, so the timeline explains itself with no synthetic event.
 func TestRollUpAttribution(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, kids := parentWithChildren(t, s, 1)
 
@@ -1043,6 +1080,7 @@ func TestRollUpAttribution(t *testing.T) {
 // TestRollUpDepth2Recursion: a subtask closing resolves its task, which
 // resolves the container, in one transaction.
 func TestRollUpDepth2Recursion(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, containerInput())
@@ -1067,6 +1105,7 @@ func TestRollUpDepth2Recursion(t *testing.T) {
 // edge, so a merged container whose child reopens while another stays closed
 // routes through ready, the only edge out of a closed state.
 func TestRollUpReopenRoutesThroughReady(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container, kids := parentWithChildren(t, s, 2)
 	walkTo(t, s, kids[0].ID, "merged")
@@ -1097,6 +1136,7 @@ func decompose(t *testing.T, s *Store, id string, titles []string) ([]model.Task
 }
 
 func TestDecompose(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	in := defaultTaskInput()
 	in.Kind = "bug"
@@ -1194,6 +1234,7 @@ func TestDecompose(t *testing.T) {
 // row claiming true -> false there would be a lie. The child_of edges are the
 // record that the split happened.
 func TestDecomposeLogsTheFlagOnlyWhenSet(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	if _, err := decompose(t, s, parent.ID, []string{"A"}); err != nil {
@@ -1213,6 +1254,7 @@ func TestDecomposeLogsTheFlagOnlyWhenSet(t *testing.T) {
 }
 
 func TestDecomposeRejectsLeasedTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	if _, err := s.Claim(t.Context(), parent.ID, "stig", "wt-1", time.Hour); err != nil {
@@ -1225,6 +1267,7 @@ func TestDecomposeRejectsLeasedTask(t *testing.T) {
 }
 
 func TestDecomposeRejectsEmptyAndBlankTitles(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	if _, err := decompose(t, s, parent.ID, nil); !errors.Is(err, ErrInvalidInput) {
@@ -1241,6 +1284,7 @@ func TestDecomposeRejectsEmptyAndBlankTitles(t *testing.T) {
 // depth guard is deleted and the rejection instead comes from AddEdge's
 // checkHierarchy, which would produce a different ErrInvalidInput message.
 func TestDecomposeRespectsDepthCap(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -1265,6 +1309,7 @@ func TestDecomposeRespectsDepthCap(t *testing.T) {
 // oversized task, not for re-splitting a container. A parent that already has
 // children must be rejected — add more with AddEdge instead.
 func TestDecomposeRejectsTaskWithChildren(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent, _ := parentWithChildren(t, s, 1)
 	_, err := decompose(t, s, parent.ID, []string{"A"})
@@ -1276,6 +1321,7 @@ func TestDecomposeRejectsTaskWithChildren(t *testing.T) {
 // TestDecomposeRejectsDeliveredTask pins the doc comment's claim that
 // Decompose rejects from the delivery states a container can never occupy.
 func TestDecomposeRejectsDeliveredTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	walkTo(t, s, parent.ID, "in_review")
@@ -1289,6 +1335,7 @@ func TestDecomposeRejectsDeliveredTask(t *testing.T) {
 // call: a merged parent's fresh, all-draft children roll it back to ready
 // rather than leaving it stuck in a state its new children contradict.
 func TestDecomposeRollsMergedParentToReady(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	walkTo(t, s, parent.ID, "merged")
@@ -1304,6 +1351,7 @@ func TestDecomposeRollsMergedParentToReady(t *testing.T) {
 // TestDecomposeUnknownParent pins ErrNotFound for a parent id that doesn't
 // exist.
 func TestDecomposeUnknownParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	_, err := decompose(t, s, "HDB-999", []string{"A"})
 	if !errors.Is(err, ErrNotFound) {
@@ -1316,6 +1364,7 @@ func TestDecomposeUnknownParent(t *testing.T) {
 // each carries the same roll-up ChildProgress computes, and the children come
 // back with them whatever their state.
 func TestTaskTree(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	top := createTask(t, s, taskTestNow, containerInput())
 	done := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -1358,6 +1407,7 @@ func TestTaskTree(t *testing.T) {
 // their children are — otherwise the progress counts and the rows under a
 // parent would describe different sets.
 func TestTaskTreeStatesNarrowContainersNotChildren(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	kid := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -1389,6 +1439,7 @@ func TestTaskTreeStatesNarrowContainersNotChildren(t *testing.T) {
 // its children whatever the task's own parentage, and an unknown id is
 // ErrNotFound rather than an empty tree.
 func TestTaskTreeRoot(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	top := createTask(t, s, taskTestNow, containerInput())
 	mid := createTask(t, s, taskTestNow, containerInput())
@@ -1420,6 +1471,7 @@ func TestTaskTreeRoot(t *testing.T) {
 // for every parent at once, keyed by parent, with the closedness flag
 // ListTasks fills in and no row for a parent with no children.
 func TestChildrenOfIsBulk(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	a := createTask(t, s, taskTestNow, containerInput())
 	b := createTask(t, s, taskTestNow, containerInput())

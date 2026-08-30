@@ -66,6 +66,7 @@ func waitForBlockedBackend(t *testing.T, s *Store) {
 // against the newly committed row: with `AND triage_state = 'new'` it matches
 // nothing and fails; without it, it silently overwrites the winner's outcome.
 func TestTriageLostUpdate(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ winner, loser string }{
 		{"dismiss", "promote"},
 		{"promote", "link"},
@@ -170,6 +171,7 @@ func TestTriageLostUpdate(t *testing.T) {
 // created behind. Whether the losers fail on the read or on the guarded UPDATE
 // depends on timing — TestTriageLostUpdate pins the second case down.
 func TestPromoteIssueRace(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {

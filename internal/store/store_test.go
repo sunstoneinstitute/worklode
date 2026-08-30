@@ -37,6 +37,7 @@ var wantTables = []string{
 }
 
 func TestMigrateAppliesMigrations(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 
 	rows, err := s.db.Query(
@@ -66,6 +67,7 @@ func TestMigrateAppliesMigrations(t *testing.T) {
 }
 
 func TestMigrateIdempotent(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t) // first Migrate happened here
 	if err := s.Migrate(MigrationsDirForTests()); err != nil {
 		t.Fatalf("second Migrate: %v", err)
@@ -73,6 +75,7 @@ func TestMigrateIdempotent(t *testing.T) {
 }
 
 func TestMigrateRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t) // up happened here
 	if err := s.MigrateDown(MigrationsDirForTests()); err != nil {
 		t.Fatal(err)
@@ -91,6 +94,7 @@ func TestMigrateRoundTrip(t *testing.T) {
 // (testhelpers.go) used to work around by reaching into newMigrate/m.Close()
 // directly instead of going through Store.Migrate().
 func TestMigrateReleasesDedicatedConnection(t *testing.T) {
+	t.Parallel()
 	admin := adminConnForTest(t)
 	dbName := randomDBName(t, "wl_test_leak_")
 	if _, err := admin.Exec("CREATE DATABASE " + sqlIdent(dbName)); err != nil {

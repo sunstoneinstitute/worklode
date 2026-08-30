@@ -75,6 +75,7 @@ func defaultPR(taskID string) PullRequest {
 }
 
 func TestTaskIDFromRef(t *testing.T) {
+	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
@@ -101,6 +102,7 @@ func TestTaskIDFromRef(t *testing.T) {
 }
 
 func TestTaskIDFromRefCustomTemplate(t *testing.T) {
+	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate("lode/{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
@@ -132,6 +134,7 @@ func TestTaskIDFromRefCustomTemplate(t *testing.T) {
 }
 
 func TestTaskIDFromBody(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		body string
 		want string
@@ -161,6 +164,7 @@ func TestTaskIDFromBody(t *testing.T) {
 }
 
 func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
+	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
@@ -174,6 +178,7 @@ func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
 }
 
 func TestTaskIDFromBodyGeneralPrefix(t *testing.T) {
+	t.Parallel()
 	if got := TaskIDFromBody("Worklode-Task: SW-12\nother"); got != "SW-12" {
 		t.Errorf("TaskIDFromBody = %q, want SW-12", got)
 	}
@@ -199,6 +204,7 @@ func TestTaskIDsFromBody(t *testing.T) {
 }
 
 func TestUpsertPRCorrelatesViaRef(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -221,6 +227,7 @@ func TestUpsertPRCorrelatesViaRef(t *testing.T) {
 }
 
 func TestUpsertPRCorrelatesViaBody(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -237,6 +244,7 @@ func TestUpsertPRCorrelatesViaBody(t *testing.T) {
 }
 
 func TestUpsertPRNoMatch(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 
 	pr := defaultPR("nope")
@@ -251,6 +259,7 @@ func TestUpsertPRNoMatch(t *testing.T) {
 }
 
 func TestUpsertPRReferencesNonexistentTaskStaysNil(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 
 	pr := defaultPR("HDB-999")
@@ -264,6 +273,7 @@ func TestUpsertPRReferencesNonexistentTaskStaysNil(t *testing.T) {
 }
 
 func TestUpsertPRUpdateKeepsTaskID(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -306,6 +316,7 @@ func TestUpsertPRUpdateKeepsTaskID(t *testing.T) {
 // delivery carrying an older updated_at must not overwrite newer facts, which
 // is how a replayed pull_request.opened used to regress a merged PR (WL-198).
 func TestUpsertPRNonRegressing(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -381,6 +392,7 @@ func TestUpsertPRNonRegressing(t *testing.T) {
 // updated_at column existed: unknown sorts as -infinity, so the first
 // timestamped event applies rather than the row freezing forever.
 func TestUpsertPRLegacyNullTimestampYields(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -407,6 +419,7 @@ func TestUpsertPRLegacyNullTimestampYields(t *testing.T) {
 // TestUpsertCIRunNonRegressing covers the guard on ci_runs.updated_at: a
 // stale in_progress delivery must not regress a completed run.
 func TestUpsertCIRunNonRegressing(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 
 	t1 := changesTestNow
@@ -462,6 +475,7 @@ func TestUpsertCIRunNonRegressing(t *testing.T) {
 // TestExistingPRNumbers covers the read import uses before upserting, so it
 // can report new rows separately from updated ones.
 func TestExistingPRNumbers(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -498,6 +512,7 @@ func TestExistingPRNumbers(t *testing.T) {
 }
 
 func TestGetPRNotFound(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	if _, err := s.GetPR(t.Context(), "sunstoneinstitute/demo", 999); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetPR unknown: want ErrNotFound, got %v", err)
@@ -505,6 +520,7 @@ func TestGetPRNotFound(t *testing.T) {
 }
 
 func TestPRsForTask(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	otherTask := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -538,6 +554,7 @@ func TestPRsForTask(t *testing.T) {
 }
 
 func TestUpsertCIRunIdempotent(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	r := CIRun{
 		Repo:      "sunstoneinstitute/demo",
@@ -582,6 +599,7 @@ func TestUpsertCIRunIdempotent(t *testing.T) {
 }
 
 func TestUpsertReviewIdempotent(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 	rv := Review{
 		Repo:        "sunstoneinstitute/demo",
@@ -622,6 +640,7 @@ func TestUpsertReviewIdempotent(t *testing.T) {
 // TestCIRunsForSHAs covers the bulk reader: one query answers every
 // (repo, head_sha) key, and each group matches what CIRunsForSHA returns.
 func TestCIRunsForSHAs(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 
 	run := func(repo, sha, workflow string, offset time.Duration) CIRun {
@@ -678,6 +697,7 @@ func TestCIRunsForSHAs(t *testing.T) {
 // TestReviewsForPRs covers the bulk reader: one query answers every
 // (repo, number) key, and each group matches what ReviewsForPR returns.
 func TestReviewsForPRs(t *testing.T) {
+	t.Parallel()
 	s := openChangesStore(t)
 
 	review := func(repo string, number int64, reviewer string, offset time.Duration) Review {

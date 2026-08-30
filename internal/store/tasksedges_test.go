@@ -7,6 +7,7 @@ import (
 )
 
 func TestChildOfCycleRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	// t1, t2, and t3 each stand in as a child_of parent below; since 029 §2
@@ -35,6 +36,7 @@ func TestChildOfCycleRejected(t *testing.T) {
 }
 
 func TestAddEdgeDuplicateRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -49,6 +51,7 @@ func TestAddEdgeDuplicateRejected(t *testing.T) {
 }
 
 func TestAddEdgeSelfRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -60,6 +63,7 @@ func TestAddEdgeSelfRejected(t *testing.T) {
 }
 
 func TestAddEdgeUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -72,6 +76,7 @@ func TestAddEdgeUnknownTask(t *testing.T) {
 }
 
 func TestRemoveEdgeAndListEdges(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -115,6 +120,7 @@ func TestRemoveEdgeAndListEdges(t *testing.T) {
 }
 
 func TestListEdgesForTasks(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -186,6 +192,7 @@ func TestListEdgesForTasks(t *testing.T) {
 }
 
 func TestListEdgesForTasksEmpty(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 

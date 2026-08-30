@@ -9,6 +9,7 @@ import (
 )
 
 func TestProjectionCheckpointRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 
@@ -25,6 +26,7 @@ func TestProjectionCheckpointRoundTrip(t *testing.T) {
 }
 
 func TestDirtyProjects(t *testing.T) {
+	t.Parallel()
 	s := outboxStore(t) // from outbox_test.go: projects alpha and beta
 	ctx := t.Context()
 	a := makeTask(t, s, "d1", "alpha", "first")
@@ -117,6 +119,7 @@ func TestDirtyProjects(t *testing.T) {
 // stay stale until its next event. Checkpointing only through the commit
 // horizon holds the watermark below both, so alpha is still dirty afterwards.
 func TestDirtyProjectsKeepsWatermarkBehindOpenTransaction(t *testing.T) {
+	t.Parallel()
 	s := outboxStore(t)
 	ctx := t.Context()
 
@@ -179,6 +182,7 @@ func TestDirtyProjectsKeepsWatermarkBehindOpenTransaction(t *testing.T) {
 }
 
 func TestProjectionFailuresRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := outboxStore(t) // projects alpha and beta
 	ctx := t.Context()
 

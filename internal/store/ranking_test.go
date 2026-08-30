@@ -12,6 +12,7 @@ import (
 )
 
 func TestBlockingFanOutChainAndBranch(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -50,6 +51,7 @@ func TestBlockingFanOutChainAndBranch(t *testing.T) {
 // child_of), and only the CTE's UNION dedup keeps the recursion finite. A
 // UNION ALL regression would hang here instead of returning.
 func TestBlockingFanOutCycleTerminates(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -74,6 +76,7 @@ func TestBlockingFanOutCycleTerminates(t *testing.T) {
 }
 
 func TestBlockingFanOutDiamond(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -129,6 +132,7 @@ func rankIDs(tasks []model.Task) []string {
 // fan-out. Default order is critical-first; --strict-focus drops that and
 // sorts T3 (critical but off-focus) by its own concern rank instead.
 func TestRankTasksWorkedExample(t *testing.T) {
+	t.Parallel()
 	focus := []string{"security", "completeness"}
 	t1 := rankTask("HDB-1", "high", "completeness", rankTestNow)
 	t2 := rankTask("HDB-2", "high", "security", rankTestNow)
@@ -160,6 +164,7 @@ func TestRankTasksWorkedExample(t *testing.T) {
 // TestRankTasksDeterministic pins spec acceptance 7: identical input always
 // yields identical output, run repeatedly.
 func TestRankTasksDeterministic(t *testing.T) {
+	t.Parallel()
 	focus := []string{"security", "completeness"}
 	in := []rankInput{
 		{Task: rankTask("HDB-1", "high", "completeness", rankTestNow), Focus: focus, FanOut: 5},
@@ -181,6 +186,7 @@ func TestRankTasksDeterministic(t *testing.T) {
 // TestRankTasksTiebreakCreatedAt pins the created_at asc tiebreak: two
 // otherwise-identical candidates sort by which was created first.
 func TestRankTasksTiebreakCreatedAt(t *testing.T) {
+	t.Parallel()
 	older := rankTestNow
 	newer := rankTestNow.Add(time.Hour)
 	in := []rankInput{
@@ -197,6 +203,7 @@ func TestRankTasksTiebreakCreatedAt(t *testing.T) {
 // TestRankTasksTiebreakNumericID pins the numeric-id tiebreak: HDB-9 must
 // sort before HDB-10 (a plain string compare would get this backwards).
 func TestRankTasksTiebreakNumericID(t *testing.T) {
+	t.Parallel()
 	in := []rankInput{
 		{Task: rankTask("HDB-10", "high", "", rankTestNow), FanOut: 0},
 		{Task: rankTask("HDB-9", "high", "", rankTestNow), FanOut: 0},
@@ -213,6 +220,7 @@ func TestRankTasksTiebreakNumericID(t *testing.T) {
 // example never isolates this key, so a direction flip would otherwise
 // survive the suite.)
 func TestRankTasksFanOutDirection(t *testing.T) {
+	t.Parallel()
 	in := []rankInput{
 		{Task: rankTask("HDB-1", "high", "", rankTestNow), FanOut: 2},
 		{Task: rankTask("HDB-2", "high", "", rankTestNow), FanOut: 7},
@@ -225,6 +233,7 @@ func TestRankTasksFanOutDirection(t *testing.T) {
 }
 
 func TestNumericTaskIDGeneralPrefix(t *testing.T) {
+	t.Parallel()
 	if numericTaskID("SW-9") != 9 {
 		t.Errorf("numericTaskID(SW-9) = %d, want 9", numericTaskID("SW-9"))
 	}
@@ -299,6 +308,7 @@ func workedExampleFixture(t *testing.T, s *Store) (t1, t2, t3, t4, t5 *model.Tas
 // TestClaimNextWorkedExampleDefault pins spec acceptance 2: the default
 // (critical-first) key over the worked-example fixture claims T3.
 func TestClaimNextWorkedExampleDefault(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	t1, t2, t3, t4, t5 := workedExampleFixture(t, s)
@@ -321,6 +331,7 @@ func TestClaimNextWorkedExampleDefault(t *testing.T) {
 // --strict-focus (a fresh fixture, since the default test above already
 // claimed T3), the top-ranked task is T2.
 func TestClaimNextWorkedExampleStrictFocus(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	_, t2, _, _, _ := workedExampleFixture(t, s)
@@ -339,6 +350,7 @@ func TestClaimNextWorkedExampleStrictFocus(t *testing.T) {
 // off-focus ready tasks available, ClaimNext still claims one rather than
 // reporting none-ready.
 func TestClaimNextSoftFocusNeverIdles(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	if err := s.SetProjectFocus(ctx, "horndb", []string{"security"}); err != nil {
@@ -368,6 +380,7 @@ func TestClaimNextSoftFocusNeverIdles(t *testing.T) {
 // different kind must not shadow the top-ranked candidate of the requested
 // kind.
 func TestClaimNextKindFilter(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 
@@ -395,6 +408,7 @@ func TestClaimNextKindFilter(t *testing.T) {
 // TestClaimNextKindFilterNoMatch pins the empty-result shape: a kind filter
 // that matches nothing behaves like an empty ready set, not an error.
 func TestClaimNextKindFilterNoMatch(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	createTask(t, s, claimNextTestNow, defaultTaskInput()) // kind "feature"
@@ -409,6 +423,7 @@ func TestClaimNextKindFilterNoMatch(t *testing.T) {
 }
 
 func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, claimNextTestNow, defaultTaskInput())
@@ -432,6 +447,7 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 // scheduling. A follow-up is claimable while its origin is wide open, which is
 // exactly what separates it from blocks.
 func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	origin := createTask(t, s, claimNextTestNow, defaultTaskInput())
@@ -465,6 +481,7 @@ func TestClaimNextIgnoresFollowUpTo(t *testing.T) {
 // not scheduling. Marking a task a duplicate neither blocks nor closes it —
 // closing it is a separate, deliberate act.
 func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	canonical := createTask(t, s, claimNextTestNow, defaultTaskInput())
@@ -498,6 +515,7 @@ func TestClaimNextIgnoresDuplicateOf(t *testing.T) {
 // TestClaimNextDryRun pins spec acceptance: --dry-run returns the top
 // candidate without leasing it or touching task state.
 func TestClaimNextDryRun(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 	_, _, t3, _, _ := workedExampleFixture(t, s)
@@ -583,6 +601,7 @@ func inReadySet(t *testing.T, s *Store, taskID string) bool {
 // all close — no edge removal and no event, because the predicate is live
 // (025 §9.3).
 func TestPlanBlockedReadySetReleasesWhenBlockerCloses(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
@@ -626,6 +645,7 @@ func TestPlanBlockedReadySetReleasesWhenBlockerCloses(t *testing.T) {
 // calls an unminted set unfinished, so the edge holds until the blocking plan
 // is accepted and its tasks close.
 func TestPlanBlockedByDraftPlan(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
@@ -654,6 +674,7 @@ func TestPlanBlockedByDraftPlan(t *testing.T) {
 // TestPlanBlockedIgnoresTasksWithoutPlan: the gate reads a task's plan_doc, so
 // a task no plan authored is never plan-blocked.
 func TestPlanBlockedIgnoresTasksWithoutPlan(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-f", planTaskBody("", "Plan F"))
@@ -678,6 +699,7 @@ func TestPlanBlockedIgnoresTasksWithoutPlan(t *testing.T) {
 // rule). A closed intermediate still connects its open dependents to the
 // root, but finished work lends no weight.
 func TestBlockingFanOutCountsOnlyOpenTasks(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 

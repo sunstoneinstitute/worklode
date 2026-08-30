@@ -45,6 +45,7 @@ func seedEvent(t *testing.T, tx *sql.Tx) int64 {
 // GitHub still moves the task to merged, through the same three store calls
 // the default-branch push webhook makes.
 func TestRecordLocalMergeAdvances(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 
@@ -61,6 +62,7 @@ func TestRecordLocalMergeAdvances(t *testing.T) {
 // webhook, or the same clone reporting twice — changes nothing and says so.
 // This is the healthy steady state, not an error.
 func TestRecordLocalMergeDuplicate(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 
@@ -89,6 +91,7 @@ func TestRecordLocalMergeDuplicate(t *testing.T) {
 // error — a laptop's guess about which branches landed must not fail the
 // whole report, nor abort the transaction the way an FK violation would.
 func TestRecordLocalMergeUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 
@@ -108,6 +111,7 @@ func TestRecordLocalMergeUnknownTask(t *testing.T) {
 // separate source value — the log must say a laptop asserted this, not a
 // signed webhook.
 func TestRecordLocalMergeSourceIsLocalMerge(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 	recordMerge(t, s, "acme/app", "abc1", []string{taskID})
@@ -125,6 +129,7 @@ func TestRecordLocalMergeSourceIsLocalMerge(t *testing.T) {
 // TestRecordLocalMergeRepeatedTaskID: a caller naming the same task twice in
 // one report gets one row and one outcome, not two.
 func TestRecordLocalMergeRepeatedTaskID(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	taskID := seedDeliveryTask(t, s)
 

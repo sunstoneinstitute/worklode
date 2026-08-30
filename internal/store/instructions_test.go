@@ -9,6 +9,7 @@ import (
 )
 
 func TestEnqueueInstruction(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -29,6 +30,7 @@ func TestEnqueueInstruction(t *testing.T) {
 }
 
 func TestEnqueueInstructionUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if _, err := s.EnqueueInstruction(t.Context(), "HDB-999", "stig", "body"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("enqueue instruction on unknown task err = %v, want ErrNotFound", err)
@@ -36,6 +38,7 @@ func TestEnqueueInstructionUnknownTask(t *testing.T) {
 }
 
 func TestEnqueueInstructionDeletedTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -54,6 +57,7 @@ func TestEnqueueInstructionDeletedTask(t *testing.T) {
 }
 
 func TestEnqueueInstructionUnknownActor(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -68,6 +72,7 @@ func TestEnqueueInstructionUnknownActor(t *testing.T) {
 // rows are marked so a second claim finds nothing, and rows on a task the
 // actor does not lease are left untouched.
 func TestClaimPendingInstructionsForActor(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	if err := s.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
@@ -125,6 +130,7 @@ func TestClaimPendingInstructionsForActor(t *testing.T) {
 // TestClaimPendingInstructionsForActorOrder asserts delivery order is sorted
 // by id, since RETURNING order is unspecified.
 func TestClaimPendingInstructionsForActorOrder(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/wt-a")
@@ -167,6 +173,7 @@ func countPendingInstructions(t *testing.T, s *Store, taskID string) int {
 // actor against the same leased task's pending instructions: every row is
 // delivered exactly once, with no duplicates and none left behind.
 func TestClaimPendingInstructionsRace(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/wt-a")

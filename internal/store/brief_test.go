@@ -10,6 +10,7 @@ import (
 )
 
 func TestBrief(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -61,6 +62,7 @@ func TestBrief(t *testing.T) {
 }
 
 func TestBriefNoBlockersNoLease(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -84,6 +86,7 @@ func TestBriefNoBlockersNoLease(t *testing.T) {
 // is not valid integer input, so the query used to error (surfacing as a 500
 // on the task-brief read path) instead of ordering blockers numerically.
 func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -119,6 +122,7 @@ func TestBriefOpenBlockersMultiCharKey(t *testing.T) {
 }
 
 func TestBriefNotFound(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	if _, err := s.Brief(t.Context(), "HDB-999", BriefOptions{Skills: true}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("Brief unknown task: err = %v, want ErrNotFound", err)
@@ -129,6 +133,7 @@ func TestBriefNotFound(t *testing.T) {
 // resolves with content, the unknown one produces a warning instead of
 // failing the brief.
 func TestBriefResolvesPins(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -158,6 +163,7 @@ func TestBriefResolvesPins(t *testing.T) {
 // can no longer reach now that both task write paths normalize: the API's
 // recommend endpoint passes caller-supplied pins straight through.
 func TestResolvePinsDedupes(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
@@ -180,6 +186,7 @@ func TestResolvePinsDedupes(t *testing.T) {
 // a plugin-qualified pin against an unqualified registry name falls back to
 // the segment after the colon.
 func TestResolvePinsAfterColonFallback(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("test-driven-development", "h1")); err != nil {
@@ -203,6 +210,7 @@ func TestResolvePinsAfterColonFallback(t *testing.T) {
 // fallback and must yield that skill once, not twice with its whole content
 // duplicated in the brief.
 func TestResolvePinsDedupesOnResolvedName(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
@@ -224,6 +232,7 @@ func TestResolvePinsDedupesOnResolvedName(t *testing.T) {
 // TestResolvePinsDedupesTwoQualifiedPins: the same after-colon fallback maps
 // two differently-qualified pins onto one registry row.
 func TestResolvePinsDedupesTwoQualifiedPins(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("x", "h1")); err != nil {
@@ -245,6 +254,7 @@ func TestResolvePinsDedupesTwoQualifiedPins(t *testing.T) {
 // TestResolvePinsExactBeatsFallback: a pin that matches a qualified registry
 // name exactly resolves to it directly and never consults the fallback.
 func TestResolvePinsExactBeatsFallback(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("superpowers:writing-plans", "h1")); err != nil {
@@ -266,6 +276,7 @@ func TestResolvePinsExactBeatsFallback(t *testing.T) {
 // TestResolvePinsUnknownBothWarns: a pin absent under both its own name and
 // its after-colon suffix warns exactly as an unqualified miss does today.
 func TestResolvePinsUnknownBothWarns(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 
@@ -284,6 +295,7 @@ func TestResolvePinsUnknownBothWarns(t *testing.T) {
 // TestResolvePinsNoColonNoFallback: a pin with no colon has no suffix to
 // fall back to, so a miss just warns.
 func TestResolvePinsNoColonNoFallback(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 
@@ -303,6 +315,7 @@ func TestResolvePinsNoColonNoFallback(t *testing.T) {
 // after-colon suffix as a registry name literally — it must not match a
 // differently-qualified registry row that happens to share the suffix.
 func TestResolvePinsFallbackOnlyOnUnqualifiedNames(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("b:x", "h1")); err != nil {
@@ -324,6 +337,7 @@ func TestResolvePinsFallbackOnlyOnUnqualifiedNames(t *testing.T) {
 // TestResolvePinsFallbackDeletedSkill: a fallback hit on a soft-deleted skill
 // behaves exactly like an exact-match hit on one — content plus warning.
 func TestResolvePinsFallbackDeletedSkill(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("test-driven-development", "h1")); err != nil {
@@ -350,6 +364,7 @@ func TestResolvePinsFallbackDeletedSkill(t *testing.T) {
 // omit the output. Renaming the skills table away makes any pin lookup fail
 // outright, so a brief that still succeeds provably never ran one.
 func TestBriefWithoutSkillsSkipsTheQuery(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
@@ -381,6 +396,7 @@ func TestBriefWithoutSkillsSkipsTheQuery(t *testing.T) {
 // TestBriefNoPins guards the bounded-queries contract: no pins, no extra
 // query, and the fields stay empty rather than nil-panicking a caller.
 func TestBriefNoPins(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -398,6 +414,7 @@ func TestBriefNoPins(t *testing.T) {
 // still resolves with its content: a brief must never break because a skill
 // was withdrawn from its source repo.
 func TestBriefResolvesDeletedPin(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -425,6 +442,7 @@ func TestBriefResolvesDeletedPin(t *testing.T) {
 }
 
 func TestBriefParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	container := createTask(t, s, taskTestNow, containerInput())
 	child := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -457,6 +475,7 @@ func TestBriefParent(t *testing.T) {
 // before this task's plan (025 §9.3), so an agent handed a refused task can
 // see what is holding it.
 func TestBriefPlanBlockers(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
@@ -488,6 +507,7 @@ func TestBriefPlanBlockers(t *testing.T) {
 // TestBriefBlockedByDraftPlan: a draft blocking plan has minted no task, so
 // the brief has no blocker to name and reports the plan itself instead.
 func TestBriefBlockedByDraftPlan(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))
@@ -513,6 +533,7 @@ func TestBriefBlockedByDraftPlan(t *testing.T) {
 // ReconcileEmbedded, as a body edit would produce) and one attached (via
 // AttachBlob) -- with their reference-graph flags and metadata intact.
 func TestBriefBlobs(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 

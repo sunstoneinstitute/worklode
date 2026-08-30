@@ -19,6 +19,7 @@ func countLiveTaskTokens(t *testing.T, s *Store, taskID string) int {
 }
 
 func TestTaskTokenAuthenticatesWithBinding(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, *now, defaultTaskInput())
@@ -49,6 +50,7 @@ func TestTaskTokenAuthenticatesWithBinding(t *testing.T) {
 }
 
 func TestTaskTokenRevokedWhenLeaseCloses(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, *now, defaultTaskInput())
@@ -72,6 +74,7 @@ func TestTaskTokenRevokedWhenLeaseCloses(t *testing.T) {
 }
 
 func TestTaskTokenRevokedWhenLeaseExpires(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, *now, defaultTaskInput())
@@ -96,6 +99,7 @@ func TestTaskTokenRevokedWhenLeaseExpires(t *testing.T) {
 }
 
 func TestTaskTokenExtendedByRenew(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, *now, defaultTaskInput())
@@ -128,6 +132,7 @@ func TestTaskTokenExtendedByRenew(t *testing.T) {
 }
 
 func TestEnsureActorIdempotent(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	for range 2 {
