@@ -14,6 +14,7 @@ import (
 )
 
 func TestCreateAndListProjects(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 
 	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
@@ -145,6 +146,7 @@ func projectCost(t *testing.T, h http.Handler, token, path string) projectCostBo
 // the empty cost window a project with no recorded usage has, and 404 on an
 // unknown id.
 func TestGetProject(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	if err := st.AddRepo(context.Background(), "proj", "acme/widgets"); err != nil {
@@ -181,6 +183,7 @@ func TestGetProject(t *testing.T) {
 
 // TestGetProjectCostWindow covers the from/to bounds on the cost window.
 func TestGetProjectCostWindow(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	endSessionWithUsage(t, st, h, token, []map[string]any{sonnetUsagePrevDay, sonnetUsage})
 
@@ -226,6 +229,7 @@ func TestGetProjectCostWindow(t *testing.T) {
 // TestAddRepoDoneState covers the optional done_state field on POST
 // /api/v1/projects/{id}/repos.
 func TestAddRepoDoneState(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
 	if rr.Code != http.StatusCreated {
@@ -266,6 +270,7 @@ func TestAddRepoDoneState(t *testing.T) {
 
 // TestPatchRepoDoneState covers PATCH /api/v1/repos/{owner}/{name}.
 func TestPatchRepoDoneState(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
 	if rr.Code != http.StatusCreated {
@@ -310,6 +315,7 @@ func TestPatchRepoDoneState(t *testing.T) {
 // back on success, an invalid concern entry is 422, and a missing project is
 // 404.
 func TestPatchProjectFocus(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
 	if rr.Code != http.StatusCreated {
@@ -366,6 +372,7 @@ func patchCockpitCards(t *testing.T, h http.Handler, token, id string) pinnedFoc
 // via the cockpit), an empty focus_note/decision_title clears each, and a body
 // carrying only a companion field (no trigger) is a 422.
 func TestPatchProjectCuratedCards(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	if err := st.CreateActor(context.Background(), "stig", "human", "Stig Bakken", true); err != nil {
@@ -435,6 +442,7 @@ func TestPatchProjectCuratedCards(t *testing.T) {
 }
 
 func TestCreateProjectValidation(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	for name, body := range map[string]map[string]any{
 		"missing id":   {"name": "n"},
@@ -450,6 +458,7 @@ func TestCreateProjectValidation(t *testing.T) {
 }
 
 func TestCreateProjectKeyValidation(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	// missing key
 	rr := doReq(t, h, "POST", "/api/v1/projects", token,
@@ -487,6 +496,7 @@ func TestCreateProjectKeyValidation(t *testing.T) {
 }
 
 func TestCreateActorAndTokenLifecycle(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 
 	rr := doReq(t, h, "POST", "/api/v1/actors", token, map[string]any{
@@ -544,6 +554,7 @@ func TestCreateActorAndTokenLifecycle(t *testing.T) {
 // privilege escalation) while admin tokens pass, and that non-gated
 // endpoints stay open to non-admins.
 func TestAdminGatedEndpoints(t *testing.T) {
+	t.Parallel()
 	st, h, adminToken := newTestServer(t)
 	ctx := context.Background()
 	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
@@ -613,6 +624,7 @@ func TestAdminGatedEndpoints(t *testing.T) {
 // unlike inbox_import_test.go's fixtures, which call s.importInbox directly
 // and so never exercise the guard.
 func TestImportRouteRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 
@@ -628,6 +640,7 @@ func TestImportRouteRequiresAdmin(t *testing.T) {
 // TestCreateActorAdminFlag checks the admin flag round-trips through POST
 // /api/v1/actors into the store.
 func TestCreateActorAdminFlag(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/actors", token, map[string]any{
 		"id": "root", "kind": "human", "display_name": "Root", "admin": true,
@@ -648,6 +661,7 @@ func TestCreateActorAdminFlag(t *testing.T) {
 }
 
 func TestInboxListPromoteDismiss(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	if err := st.AddRepo(context.Background(), "proj", "acme/widgets"); err != nil {
@@ -724,6 +738,7 @@ func TestInboxListPromoteDismiss(t *testing.T) {
 }
 
 func TestInboxPromoteValidation(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/inbox/promote", token, map[string]any{
 		"repo": "acme/widgets", "number": 1, "priority": "nonsense", "kind": "bug",
@@ -734,6 +749,7 @@ func TestInboxPromoteValidation(t *testing.T) {
 }
 
 func TestBoard(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -854,6 +870,7 @@ func TestBoard(t *testing.T) {
 // via mapStoreErr — is impractical to force through the public API and is
 // covered by code-path match with getTask.
 func TestBoardInProgressWithoutLease(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Reopened", "priority": "high", "kind": "bug"})
@@ -901,6 +918,7 @@ func TestBoardInProgressWithoutLease(t *testing.T) {
 }
 
 func TestBoardUnknownProject(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/board?project=nosuch", token, nil)
 	if rr.Code != http.StatusNotFound {
@@ -914,6 +932,7 @@ func TestBoardUnknownProject(t *testing.T) {
 // never lands under the wrong project, and a project with no tasks still
 // gets an entry with empty buckets rather than being dropped.
 func TestBoardAcrossProjectsGroupsCorrectly(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proja")
 	createProject(t, st, "projb")
@@ -964,6 +983,7 @@ func TestBoardAcrossProjectsGroupsCorrectly(t *testing.T) {
 }
 
 func TestGetTaskIncludesLease(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Leased", "priority": "high", "kind": "feature"})

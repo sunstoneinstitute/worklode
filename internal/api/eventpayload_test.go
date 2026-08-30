@@ -32,6 +32,7 @@ func decodePayload(t *testing.T, payload []byte) map[string]any {
 // store.AttributeEventToTask inside the same transaction (tasks.go). The
 // pre-existing request fields must survive that merge.
 func TestEventPayloadTaskCreated(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -54,6 +55,7 @@ func TestEventPayloadTaskCreated(t *testing.T) {
 // counterpart for the "web" source (webform.go's recordFormTask), which also
 // merges "task" in via AttributeEventToTask after the id is minted.
 func TestEventPayloadTaskCreatedFromWeb(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -78,6 +80,7 @@ func TestEventPayloadTaskCreatedFromWeb(t *testing.T) {
 // merges "task" into the EditTaskInput payload alongside the fields the patch
 // set.
 func TestEventPayloadTaskUpdated(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -101,6 +104,7 @@ func TestEventPayloadTaskUpdated(t *testing.T) {
 
 // TestEventPayloadTaskSkillsSet covers PUT /api/v1/tasks/{id}/skills.
 func TestEventPayloadTaskSkillsSet(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -127,6 +131,7 @@ func TestEventPayloadTaskSkillsSet(t *testing.T) {
 // TestEventPayloadTaskDecomposed covers POST /api/v1/tasks/{id}/decompose:
 // "task" names the parent, not any of the minted children.
 func TestEventPayloadTaskDecomposed(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -154,6 +159,7 @@ func TestEventPayloadTaskDecomposed(t *testing.T) {
 // task.created, the minted id is attributed after the fact
 // (store.AttributeEventToTask in admin.go).
 func TestEventPayloadIssuePromoted(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -180,6 +186,7 @@ func TestEventPayloadIssuePromoted(t *testing.T) {
 // merged in via recordTaskEvent alongside the pre-existing "task_id" field
 // LinkInput already carries (admin.go).
 func TestEventPayloadIssueLinked(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -212,6 +219,7 @@ func TestEventPayloadIssueLinked(t *testing.T) {
 
 // TestEventPayloadTaskDeleted covers DELETE /api/v1/tasks/{id}.
 func TestEventPayloadTaskDeleted(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -232,6 +240,7 @@ func TestEventPayloadTaskDeleted(t *testing.T) {
 
 // TestEventPayloadTaskDone covers POST /api/v1/tasks/{id}/done.
 func TestEventPayloadTaskDone(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -252,6 +261,7 @@ func TestEventPayloadTaskDone(t *testing.T) {
 
 // TestEventPayloadTaskAbandoned covers POST /api/v1/tasks/{id}/abandon.
 func TestEventPayloadTaskAbandoned(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -272,6 +282,7 @@ func TestEventPayloadTaskAbandoned(t *testing.T) {
 
 // TestEventPayloadTaskAssigned covers POST /api/v1/tasks/{id}/assign.
 func TestEventPayloadTaskAssigned(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{

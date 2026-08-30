@@ -145,6 +145,7 @@ func acceptedSpec(t *testing.T, h http.Handler, token, project, slug string, num
 }
 
 func TestCreateDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -179,6 +180,7 @@ func TestCreateDoc(t *testing.T) {
 // TestCreateDocAutoAssignsNumber: 025 §14.3 — a spec/ADR created with no
 // Number gets the next free one for its (project, kind) rather than a 422.
 func TestCreateDocAutoAssignsNumber(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -201,6 +203,7 @@ func TestCreateDocAutoAssignsNumber(t *testing.T) {
 // honored like a spec's or ADR's — the rare override — and the project's
 // counter advances past it so a later auto-assign never retraces it.
 func TestCreateDocPlanWithExplicitNumberReservesIt(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -223,6 +226,7 @@ func TestCreateDocPlanWithExplicitNumberReservesIt(t *testing.T) {
 // ordinary actor holds no doc.import. The field is declared so the refusal can
 // name it rather than silently dropping it.
 func TestCreateDocRejectsStatus(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 	bobToken := docActor(t, st, "bob")
@@ -243,6 +247,7 @@ func TestCreateDocRejectsStatus(t *testing.T) {
 // status is honoured — and creating a spec accepted must establish everything
 // the accept gate would have, its anchors published at version 1.
 func TestCreateDocAtAcceptedForAnImporter(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -286,6 +291,7 @@ func TestCreateDocAtAcceptedForAnImporter(t *testing.T) {
 // resolved to nothing at create time becomes a real edge once its target
 // exists, and nothing else about the document moves.
 func TestReplaceDocEdges(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -353,6 +359,7 @@ func TestReplaceDocEdges(t *testing.T) {
 // so a document's own edge listing previously understated what its
 // frontmatter asserted (WL-291).
 func TestDocDetailEdgesIncludeCompletedWith(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -418,6 +425,7 @@ defers:
 // TestCreateDocRejectsParseDefect: an anchor defect makes a section
 // unaddressable, so the document never lands — and the 422 names the anchor.
 func TestCreateDocRejectsParseDefect(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -434,6 +442,7 @@ func TestCreateDocRejectsParseDefect(t *testing.T) {
 }
 
 func TestCreateDocRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -478,6 +487,7 @@ func TestCreateDocRejectsBadInput(t *testing.T) {
 // TestCreateDocDuplicateSlugConflicts: the identity rules of 025 §5 reach the
 // caller as a 409 naming the collision, not as a raw database error.
 func TestCreateDocDuplicateSlugConflicts(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	in := model.CreateDocInput{
@@ -496,6 +506,7 @@ func TestCreateDocDuplicateSlugConflicts(t *testing.T) {
 }
 
 func TestListDocs(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")
@@ -552,6 +563,7 @@ func TestListDocs(t *testing.T) {
 // listing of the corpus. The route sits in front of GET /api/v1/docs/{id} and
 // must not be read as an id.
 func TestResolveDocRef(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")
@@ -600,6 +612,7 @@ func TestResolveDocRef(t *testing.T) {
 // and no list consumer reads the markdown, so the list projection carries none
 // of it. GET /api/v1/docs/{id} is where a body comes from.
 func TestListDocsOmitsBodies(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -641,6 +654,7 @@ func TestListDocsOmitsBodies(t *testing.T) {
 // reconstruct from the body alone — the section rows with their accept-time
 // state, and the edges in both directions.
 func TestGetDocDetail(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -693,6 +707,7 @@ func TestGetDocDetail(t *testing.T) {
 }
 
 func TestGetDocNotFound(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -712,6 +727,7 @@ func TestGetDocNotFound(t *testing.T) {
 // (025 §9), so editing its body snapshots the version it leaves before
 // serving the new one.
 func TestDocVersions(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -773,6 +789,7 @@ func TestDocVersions(t *testing.T) {
 // handler's own guard rather than reaching pgx's parameter encoder, which
 // fails the query and would otherwise surface as a 500.
 func TestGetDocVersionRejectsInt32Overflow(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -785,6 +802,7 @@ func TestGetDocVersionRejectsInt32Overflow(t *testing.T) {
 }
 
 func TestDocsRequireAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	if rr := doReq(t, h, "GET", "/api/v1/docs", "", nil); rr.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", rr.Code)
@@ -794,6 +812,7 @@ func TestDocsRequireAuth(t *testing.T) {
 // TestUpdateDocBody: a draft spec and a plan at any status are edited in
 // place; an accepted spec is revised instead, and the refusal says so.
 func TestUpdateDocBody(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -844,6 +863,7 @@ func TestUpdateDocBody(t *testing.T) {
 // another authenticated actor is refused with 403 — an authorization refusal
 // about this document, not about the endpoint.
 func TestAcceptDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	bobToken := docActor(t, st, "bob")
@@ -895,6 +915,7 @@ func TestAcceptDoc(t *testing.T) {
 // declaration that had no row; re-accepting the same version again mints
 // nothing and still answers 200 with the document.
 func TestReAcceptPlanMintsAddedDeclaration(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -995,6 +1016,7 @@ Do the third thing.
 // carries no "tasks" key at all, so the response stays byte-identical to
 // before this field existed.
 func TestAcceptPlanReturnsMintedTasks(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1034,6 +1056,7 @@ func TestAcceptPlanReturnsMintedTasks(t *testing.T) {
 // TestDocRevisionLifecycle walks 025 §7.2 over HTTP: open a candidate, edit
 // it, be refused for a violation, fix it, land it.
 func TestDocRevisionLifecycle(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	spec := acceptedSpec(t, h, token, "proj", "025-x", 25)
@@ -1119,6 +1142,7 @@ func TestDocRevisionLifecycle(t *testing.T) {
 //
 // The token identity is alice, who is the spec's owner; bob proposes.
 func TestDocRevisionDiscard(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	bobToken := docActor(t, st, "bob")
@@ -1184,6 +1208,7 @@ func TestDocRevisionDiscard(t *testing.T) {
 // (edited in place), a plan (edited in place), and a document with no open
 // candidate.
 func TestDocRevisionRefusals(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	bobToken := docActor(t, st, "bob")
@@ -1219,6 +1244,7 @@ func TestDocRevisionRefusals(t *testing.T) {
 // --- cockpit pages -----------------------------------------------------------
 
 func TestDocsPage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
@@ -1247,6 +1273,7 @@ func TestDocsPage(t *testing.T) {
 }
 
 func TestDocPage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
@@ -1300,6 +1327,7 @@ func TestDocPage(t *testing.T) {
 // DBForTests seam other packages already use for this (e.g.
 // internal/hooks/github_test.go).
 func TestDocPageDegradesWithoutVersions(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
@@ -1322,6 +1350,7 @@ func TestDocPageDegradesWithoutVersions(t *testing.T) {
 // superseded and version 2 current, and only the superseded one shows the
 // "back to current" banner.
 func TestDocVersionPage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1365,6 +1394,7 @@ func TestDocVersionPage(t *testing.T) {
 // TestDocPageVersionQuery covers /docs/<ref>?v=<n>: the same version page as
 // /docs/versions/{id}/{n}, reached through the canonical KEY-KIND-n URL.
 func TestDocPageVersionQuery(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1403,6 +1433,7 @@ func TestDocPageVersionQuery(t *testing.T) {
 // TestGetDocVersionRejectsInt32Overflow (WL-345 I1): docVersionPage guards
 // the same int4 column and must refuse the same way.
 func TestDocVersionPageRejectsInt32Overflow(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -1466,6 +1497,7 @@ func listDocs(t *testing.T, h http.Handler, token, query string) model.DocListRe
 // TestListDocsNeedsPlanning: the selector answers accepted specs with an
 // uncovered section, and carries the gap detail alongside the documents.
 func TestListDocsNeedsPlanning(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
@@ -1495,6 +1527,7 @@ func TestListDocsNeedsPlanning(t *testing.T) {
 // TestListDocsNeedsExecution: the selector answers accepted plans with an open
 // task, and carries no planning-gap detail.
 func TestListDocsNeedsExecution(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
@@ -1516,6 +1549,7 @@ func TestListDocsNeedsExecution(t *testing.T) {
 // status, so a contradicting filter is refused rather than answered with an
 // empty list, which would read as "nothing to plan" (026 §2.1).
 func TestListDocsSelectorConflicts(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1546,6 +1580,7 @@ func TestListDocsSelectorConflicts(t *testing.T) {
 // TestListDocsSelectorRedundantFiltersAllowed: the implied kind and status may
 // be restated — only a contradiction is an error.
 func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
@@ -1560,6 +1595,7 @@ func TestListDocsSelectorRedundantFiltersAllowed(t *testing.T) {
 // nothing explains — 025 §6 rule 2 — and carries the gap detail, not the
 // planning-gap shape, alongside it.
 func TestListDocsBareSuperseded(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	old := seedDoc(t, st, store.DocInput{
@@ -1624,6 +1660,7 @@ func eventsOfType(t *testing.T, h http.Handler, token, typ string) []any {
 // makes a retry idempotent at the log — and not as the dotted doc.accepted the
 // other document verbs still write.
 func TestAcceptDocEmitsTypedEvent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1677,6 +1714,7 @@ func TestAcceptDocEmitsTypedEvent(t *testing.T) {
 // an event, not a status": the log gains a wl:DocumentSubmitted row and the
 // document itself does not move at all.
 func TestSubmitDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1745,6 +1783,7 @@ func TestSubmitDoc(t *testing.T) {
 // caller's worktree task records it, and a create carrying none is a document
 // with no authoring task rather than a refusal (migration 0044).
 func TestCreateDocRecordsAuthoringTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1812,6 +1851,7 @@ func TestCreateDocRecordsAuthoringTask(t *testing.T) {
 // document, so the API stamps it onto every doc a client renders as a ref
 // (WL-336). Without it the CLI degrades to the unqualified "SPEC-25".
 func TestDocResponsesCarryTheProjectKey(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -1847,6 +1887,7 @@ func TestDocResponsesCarryTheProjectKey(t *testing.T) {
 // resolves — the <KEY>-<TYPE>-<n> shorthand included — not just id and exact
 // slug, or no single ref form works across the doc surfaces.
 func TestResolveDocRefFullGrammar(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")

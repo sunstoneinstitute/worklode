@@ -13,6 +13,7 @@ import (
 // reported_state stays empty — nothing has reported yet, and the deliverable
 // itself never claims a state (§3.2).
 func TestCreateDeliverableWithArtifact(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -50,6 +51,7 @@ func TestCreateDeliverableWithArtifact(t *testing.T) {
 // nothing else. A catalog address is not a browser link, so schemes the URL
 // field refuses are legal here.
 func TestCreateDeliverableArtifactBounds(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 

@@ -20,6 +20,7 @@ import (
 )
 
 func TestObserveSkillSync(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -59,6 +60,7 @@ func TestObserveSkillSync(t *testing.T) {
 }
 
 func TestObserveAssignment(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -83,11 +85,13 @@ func TestObserveAssignment(t *testing.T) {
 // (as tests in this package do) does not panic when a handler calls
 // observeAssignment.
 func TestObserveAssignmentNilSafe(t *testing.T) {
+	t.Parallel()
 	s := &server{}
 	s.observeAssignment("assign")
 }
 
 func TestCockpitOutcome(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		err  error
@@ -112,6 +116,7 @@ func TestCockpitOutcome(t *testing.T) {
 // pre-initialisation, gatherable with zero observations) as soon as
 // initMetrics runs.
 func TestObserveCockpitProjectionRegistersMetric(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -134,6 +139,7 @@ func TestObserveCockpitProjectionRegistersMetric(t *testing.T) {
 // TestObserveCockpitProjection covers the three outcomes across both
 // surfaces, with no id label present anywhere.
 func TestObserveCockpitProjection(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -161,6 +167,7 @@ func TestObserveCockpitProjection(t *testing.T) {
 // initMetrics (as tests in this package do) does not panic when a handler
 // calls observeCockpitProjection.
 func TestObserveCockpitProjectionNilSafe(t *testing.T) {
+	t.Parallel()
 	s := &server{}
 	s.observeCockpitProjection("api", nil)
 }
@@ -170,6 +177,7 @@ func TestObserveCockpitProjectionNilSafe(t *testing.T) {
 // (asset/ok) — the three cases the plan calls out — plus registration and
 // bounded labels with no project or task id anywhere.
 func TestObserveNavigation(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -212,11 +220,13 @@ func TestObserveNavigation(t *testing.T) {
 // (as tests in this package do) does not panic when a handler calls
 // observeNavigation.
 func TestObserveNavigationNilSafe(t *testing.T) {
+	t.Parallel()
 	s := &server{}
 	s.observeNavigation("home", "ok")
 }
 
 func TestObserveHomeRender(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -267,11 +277,13 @@ func TestObserveHomeRender(t *testing.T) {
 // (as tests in this package do) does not panic when homePage calls
 // observeHomeRender.
 func TestObserveHomeRenderNilSafe(t *testing.T) {
+	t.Parallel()
 	s := &server{}
 	s.observeHomeRender(homeModeOpen)
 }
 
 func TestObserveListExpansion(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -291,6 +303,7 @@ func TestObserveListExpansion(t *testing.T) {
 // horizon is stuck". It reads at scrape time, and a failed read must surface
 // as a scrape error rather than as a plausible zero.
 func TestEventHorizonCollector(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(&eventHorizonCollector{
 		horizonID: func(context.Context) (int64, error) { return 4711, nil },
@@ -318,6 +331,7 @@ worklode_event_log_horizon_id 4711
 // The collector is registered only when the server has a store, so the
 // storeless *server the tests in this package build still initialises metrics.
 func TestEventHorizonCollectorSkippedWithoutStore(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -334,6 +348,7 @@ func TestEventHorizonCollectorSkippedWithoutStore(t *testing.T) {
 }
 
 func TestRecordLocalMerge(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -352,6 +367,7 @@ func TestRecordLocalMerge(t *testing.T) {
 // TestRecordLocalMergeNilSafe: handlers call this on a server a test may have
 // built without initMetrics.
 func TestRecordLocalMergeNilSafe(t *testing.T) {
+	t.Parallel()
 	(&server{}).recordLocalMerge(store.LocalMergeAdvanced)
 }
 
@@ -359,6 +375,7 @@ func TestRecordLocalMergeNilSafe(t *testing.T) {
 // pre-initialised to zero (044 §6 wants justification_required legible as a
 // flat zero, not as no-data), and observeDelete increments the named one.
 func TestObserveDeleteCounts(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -400,6 +417,7 @@ func TestObserveDeleteCounts(t *testing.T) {
 // already-deleted row (ErrInvalidInput) is an error, keeping 044 §6's outcome
 // set to the four values it names.
 func TestDeleteOutcomeClassifies(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		err  error
@@ -419,6 +437,7 @@ func TestDeleteOutcomeClassifies(t *testing.T) {
 // TestObserveDeleteNilSafe: the handlers call it on a server a test may have
 // built without initMetrics.
 func TestObserveDeleteNilSafe(t *testing.T) {
+	t.Parallel()
 	(&server{}).observeDelete(entityTask, opDelete, deleteOK)
 }
 
@@ -428,6 +447,7 @@ func TestObserveDeleteNilSafe(t *testing.T) {
 // registration finishes — from NewServer, not from inside registerRoutes, where
 // a route added below the call would silently lose its zero-series.
 func TestRegisterRoutesLeavesNavMetricsUninitialised(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -467,6 +487,7 @@ func countNavSeries(t *testing.T, g prometheus.Gatherer) int {
 }
 
 func TestOverviewOutcome(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		err  error
@@ -491,6 +512,7 @@ func TestOverviewOutcome(t *testing.T) {
 // request — except no_graph on the three backbone-authoritative reads, which
 // cannot return ErrNoGraph and must not carry a permanently flat series.
 func TestObserveOverviewRead(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -529,6 +551,7 @@ func TestObserveOverviewRead(t *testing.T) {
 }
 
 func TestDeriveOutcome(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		res  model.DeriveResult
@@ -556,6 +579,7 @@ func TestDeriveOutcome(t *testing.T) {
 // pair is pre-initialised so an instance nobody has run the derivers on reads
 // as a flat zero rather than as no-data.
 func TestObserveDeriveRun(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -589,6 +613,7 @@ func TestObserveDeriveRun(t *testing.T) {
 // TestObserveOverviewNilSafe checks a *server built without initMetrics (as
 // tests in this package do) does not panic on either new instrument.
 func TestObserveOverviewNilSafe(t *testing.T) {
+	t.Parallel()
 	s := &server{}
 	s.observeOverviewRead(readDrift, overviewNoGraph)
 	s.observeDeriveRun(deriveDeploy, deriveWritten)

@@ -36,6 +36,7 @@ func seedSkill(t *testing.T, st *store.Store, name, description string) {
 }
 
 func TestSkillsEndpoints(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	seedSkill(t, st, "debugging", "Systematic debugging loop")
@@ -129,6 +130,7 @@ func TestSkillsEndpoints(t *testing.T) {
 // vector from a fake embeddings endpoint, a skill embedded with the same
 // vector, and both the text and task_id request shapes.
 func TestRecommendWithProvider(t *testing.T) {
+	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))

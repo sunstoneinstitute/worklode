@@ -69,6 +69,7 @@ func storeEventsOfType(t *testing.T, st *store.Store, typ string, want int) []st
 // /api/v1/events: type, since, after and limit, plus the newest-last
 // ordering (025 §18). Any authenticated actor may read it.
 func TestListEventsFilters(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 
 	seedEvent(t, st, "le-1", func(tx *sql.Tx, _ int64) error { return nil })
@@ -142,6 +143,7 @@ func TestListEventsFilters(t *testing.T) {
 // holder_pid alongside the durable offsets, and that any authenticated actor
 // may read it.
 func TestListEventSubscribers(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	ctx := context.Background()
 	if err := st.EnsureEventSubscriber(ctx, "les-sub"); err != nil {
@@ -182,6 +184,7 @@ func TestListEventSubscribers(t *testing.T) {
 // /api/v1/event-subscribers/{name}/seek: admin-only, 404 on an unknown
 // name, and 200 with the updated row on success.
 func TestSeekEventSubscriber(t *testing.T) {
+	t.Parallel()
 	st, h, adminToken := newTestServer(t)
 	ctx := context.Background()
 	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)

@@ -55,6 +55,7 @@ func seedSkillDirect(t *testing.T, st *store.Store, name, description string) *s
 // directly, covering the not-found and soft-deleted warnings and the rule
 // that a pinned name never also appears in matches.
 func TestRecommendationPins(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -135,6 +136,7 @@ func TestRecommendationPins(t *testing.T) {
 // all, so a name that is both pinned and a vector match (above) is contrasted
 // against the un-pinned case.
 func TestRecommendationNoPins(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -170,6 +172,7 @@ func TestRecommendationNoPins(t *testing.T) {
 // deleting the 0.35 default, the range check, the EmbeddingModel
 // requirement, or the appAuth requirement all left the api suite green.
 func TestNewServerSkillsConfig(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 
 	cases := []struct {
@@ -216,6 +219,7 @@ func TestNewServerSkillsConfig(t *testing.T) {
 // the old space in place forever. At a different dimension they make every
 // query error, and nothing would have cleared them.
 func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	ctx := context.Background()
 	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
@@ -251,6 +255,9 @@ func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
 // Redirecting githubAPIBase at a local server keeps the whole flow local and
 // fast; the hit counter proves the boot sync actually ran through the
 // redirect rather than skipping the network call entirely.
+//
+// Not t.Parallel(): it mutates the package-level githubAPIBase, which other
+// tests (e.g. appauth_test.go) read (WL-438).
 func TestNewServerSkillsSourcesWithGitHubApp(t *testing.T) {
 	st := store.OpenTestStore(t)
 
@@ -293,6 +300,7 @@ func TestNewServerSkillsSourcesWithGitHubApp(t *testing.T) {
 // threshold. (1,0) and (cosθ,sinθ) are both unit vectors, so their cosine
 // similarity is exactly cosθ, independent of pgvector's own normalization.
 func TestDefaultSkillScoreFloor(t *testing.T) {
+	t.Parallel()
 	cosVector := func(cos float64) []float32 {
 		return []float32{float32(cos), float32(math.Sqrt(1 - cos*cos))}
 	}
@@ -367,6 +375,7 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 // must still return the pin's inline content, an empty match list, and a
 // warning.
 func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
 
@@ -415,6 +424,7 @@ func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
 // maximum. Falling back to the default instead made --limit 50 return fewer
 // matches than --limit 20, which is the one answer that cannot be right.
 func TestSkillMatchesLimitClamped(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	ctx := context.Background()
 	for i := 0; i < maxSkillLimit+5; i++ {
@@ -468,6 +478,7 @@ func seedMixedDimensionCorpus(t *testing.T, st *store.Store) {
 // rather than 500. The brief path shares skillMatches, so a 500 here would
 // mean nobody could get a brief either.
 func TestRecommendationPinsSurviveMatchQueryFailure(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
 	seedMixedDimensionCorpus(t, st)
@@ -528,6 +539,7 @@ func tarballOf(t *testing.T, root string, files map[string]string) []byte {
 // real work done by the successful one must survive in the response rather
 // than being thrown away behind a bare 502.
 func TestSyncSkillsPartialFailure(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	goodTarball := tarballOf(t, "acme-good-sha1", map[string]string{
 		"skills/tdd/SKILL.md": "---\nname: tdd\ndescription: Red-green-refactor discipline\n---\n\nBody.",
@@ -596,6 +608,7 @@ func TestSyncSkillsPartialFailure(t *testing.T) {
 // precisely the one nobody is watching a response for, so it gets the higher
 // level, not the lower one.
 func TestSyncOnceLogsFailureAtError(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	var logbuf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&logbuf, nil))
@@ -619,6 +632,7 @@ func TestSyncOnceLogsFailureAtError(t *testing.T) {
 // runSkillSync's drain loop, so it has to consume the flag itself — otherwise
 // the push is dropped, and on a quiet repo the next trigger may be a restart.
 func TestSyncSkillsCoalescesPendingPush(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	tb := tarballOf(t, "acme-p-aaa111", map[string]string{
 		"skills/tdd/SKILL.md": "---\nname: tdd\ndescription: Red-green-refactor discipline\n---\n\nBody.",
@@ -670,6 +684,7 @@ func TestSyncSkillsCoalescesPendingPush(t *testing.T) {
 // logged server-side, not leaked — see mapStoreErr's "logged, not leaked"
 // convention).
 func TestSyncSkillsTotalFailure(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	fetch := func(ctx context.Context, repo, ref string) ([]byte, error) {
 		return nil, fmt.Errorf("fetch %s: simulated failure with a secret token abc123", repo)
@@ -698,6 +713,7 @@ func TestSyncSkillsTotalFailure(t *testing.T) {
 // the admin endpoint fail fast with 409, not block for up to
 // skillSyncTimeout and then surface a 502 that looks like a GitHub problem.
 func TestSyncSkillsConflictWhenSyncRunning(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	s := &server{
 		st:           st,
@@ -724,6 +740,7 @@ func TestSyncSkillsConflictWhenSyncRunning(t *testing.T) {
 // second call while one is in flight must return immediately instead of
 // queueing behind it, and must never call Fetch.
 func TestRunSkillSyncCoalescesConcurrentCalls(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	s := &server{
 		st:           st,
@@ -754,6 +771,7 @@ func TestRunSkillSyncCoalescesConcurrentCalls(t *testing.T) {
 // server built without skill sources must not panic or block when the
 // webhook/boot trigger calls runSkillSync.
 func TestRunSkillSyncNoopWithoutSyncer(t *testing.T) {
+	t.Parallel()
 	s := &server{log: slog.Default()}
 
 	done := make(chan struct{})
@@ -775,6 +793,7 @@ func TestRunSkillSyncNoopWithoutSyncer(t *testing.T) {
 // otherwise new content pushed mid-sync is never re-checked until the next
 // trigger (which may not come, on a quiet repo) or a restart.
 func TestRunSkillSyncReRunsTriggerThatArrivesMidFlight(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 
 	var fetchCalls int32
@@ -839,6 +858,7 @@ func TestRunSkillSyncReRunsTriggerThatArrivesMidFlight(t *testing.T) {
 // in-flight background sync instead of leaving it to run for up to
 // skillSyncTimeout past shutdown.
 func TestRunSkillSyncAbortsWhenBackgroundContextCancelled(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
 

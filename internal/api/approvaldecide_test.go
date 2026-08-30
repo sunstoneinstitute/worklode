@@ -86,6 +86,7 @@ func assertUntouched(t *testing.T, st *store.Store, id int64) {
 // as stale as the token — neither reaches the handler, and neither moves the
 // row.
 func TestDecideApprovalRefusesBearerAndOpenSubjects(t *testing.T) {
+	t.Parallel()
 	// Open instance: the authOpen subject clears webGuard but not requireSession.
 	st, h, _ := newTestServer(t)
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#7", "Fix the widget")
@@ -117,6 +118,7 @@ func TestDecideApprovalRefusesBearerAndOpenSubjects(t *testing.T) {
 // approves, the row is resolved and attributed to them, and the mutation
 // leaves exactly one event.
 func TestDecideApprovalBySessionResolves(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	seeded := seedPRApproval(t, st, prApprovalSeed{
@@ -172,6 +174,7 @@ func TestDecideApprovalBySessionResolves(t *testing.T) {
 // what keeps this from passing for the wrong reason — the same row is
 // decidable by somebody else.
 func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	seeded := seedPRApproval(t, st, prApprovalSeed{
 		EntityID: "acme/site#12", Title: "My own change", Author: "danah",
@@ -203,6 +206,7 @@ func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
 // person whose groups do not include the approval's required role is
 // refused, and one whose groups do include it is not.
 func TestDecideApprovalRefusesUnqualifiedRole(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	seeded := seedPRApproval(t, st, prApprovalSeed{
 		EntityID: "acme/site#13", Title: "Needs a reviewer", RequiredRole: "crew-backbone",
@@ -234,6 +238,7 @@ func TestDecideApprovalRefusesUnqualifiedRole(t *testing.T) {
 // row is a conflict rather than an overwrite: ResolveApproval has no state
 // guard of its own, so this is the check that has to hold.
 func TestDecideApprovalConflictsOnResolvedRow(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#14", "Decide me once")
 	session := sessionFor(t, h, iss, map[string]any{
@@ -256,6 +261,7 @@ func TestDecideApprovalConflictsOnResolvedRow(t *testing.T) {
 // TestDecideApprovalRejectsUnknownDecision checks a decision outside the
 // three the form offers is rejected before anything is written.
 func TestDecideApprovalRejectsUnknownDecision(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#15", "Not frobnicable")
 	session := sessionFor(t, h, iss, map[string]any{
@@ -273,6 +279,7 @@ func TestDecideApprovalRejectsUnknownDecision(t *testing.T) {
 // TestDecideApprovalRefusesCrossOrigin checks the CSRF gate: a submission a
 // browser reports as cross-site is refused even carrying a valid session.
 func TestDecideApprovalRefusesCrossOrigin(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#16", "Not from here")
 	session := sessionFor(t, h, iss, map[string]any{
@@ -292,6 +299,7 @@ func TestDecideApprovalRefusesCrossOrigin(t *testing.T) {
 // one series per decision and outcome, pre-initialised to zero, and that the
 // resolved and refused paths land on the labels they claim.
 func TestApprovalDecisionMetric(t *testing.T) {
+	t.Parallel()
 	st, h, admin, iss := newOIDCServerWithAdmin(t)
 	gated := seedPRApproval(t, st, prApprovalSeed{
 		EntityID: "acme/site#21", Title: "Reviewer only", RequiredRole: "crew-backbone",
@@ -341,6 +349,7 @@ func TestApprovalDecisionMetric(t *testing.T) {
 // the route serves: a plain POST form of native submit buttons, pointed at
 // this row's id, keyboard-operable with no JavaScript (032 §10).
 func TestReviewsPageRendersDecideForm(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#31", "Decide me")
 

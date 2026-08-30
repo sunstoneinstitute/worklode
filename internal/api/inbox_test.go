@@ -9,6 +9,7 @@ import (
 )
 
 func TestListInboxProjectFilter(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "alpha", "AL", "acme/alpha-app")
 	mapRepo(t, h, token, "beta", "BE", "acme/beta-app")
@@ -34,6 +35,7 @@ func TestListInboxProjectFilter(t *testing.T) {
 }
 
 func TestLinkInbox(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -68,6 +70,7 @@ func TestLinkInbox(t *testing.T) {
 }
 
 func TestLinkInboxUnknownTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -87,6 +90,7 @@ func TestLinkInboxUnknownTask(t *testing.T) {
 }
 
 func TestPromoteDraft(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -110,6 +114,7 @@ func TestPromoteDraft(t *testing.T) {
 // it, that a rejected promote writes nothing. There is no kind-specific rule
 // beyond that gate.
 func TestPromoteRejectsInvalidKind(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -131,6 +136,7 @@ func TestPromoteRejectsInvalidKind(t *testing.T) {
 }
 
 func TestPromoteUnderParent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -160,6 +166,7 @@ func TestPromoteUnderParent(t *testing.T) {
 }
 
 func TestPromoteUnknownParentIs404(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")
@@ -192,6 +199,7 @@ func TestPromoteUnknownParentIs404(t *testing.T) {
 // spec-004 invariants (one project, one parent, no cycle, depth cap) still
 // reject through the ErrInvalidInput -> 422 mapping.
 func TestPromoteUnderOrdinaryParent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")

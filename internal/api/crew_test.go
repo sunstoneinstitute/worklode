@@ -46,6 +46,7 @@ type crewPayload struct {
 // just the one just added), the role defaults to "member", and the event the
 // write is recorded under is spec 029 §8.4's crew.member_added.
 func TestAddCrewMemberAPI(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada", "bob")
@@ -124,6 +125,7 @@ func TestAddCrewMemberAPI(t *testing.T) {
 // TestAddCrewMemberAPIRefusals covers every way an add is refused, and that
 // each one is counted as "rejected" rather than as a fault.
 func TestAddCrewMemberAPIRefusals(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada", "bob")
@@ -182,6 +184,7 @@ func TestAddCrewMemberAPIRefusals(t *testing.T) {
 // submit lands the member and 303s back to the roster, and the write is
 // recorded under the same event type from the "web" surface.
 func TestAddCrewMemberForm(t *testing.T) {
+	t.Parallel()
 	st, h, admin, _ := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada")
@@ -222,6 +225,7 @@ func TestAddCrewMemberForm(t *testing.T) {
 // roster page with the message and everything that was typed — nothing
 // typed is lost, and the refusal is not dressed up as an error page.
 func TestAddCrewMemberFormRejected(t *testing.T) {
+	t.Parallel()
 	st, h, admin, _ := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada")
@@ -284,6 +288,7 @@ func TestAddCrewMemberFormRejected(t *testing.T) {
 // TestAddCrewMemberFormCrossOrigin checks the write route is same-origin
 // only, like the cockpit's other forms.
 func TestAddCrewMemberFormCrossOrigin(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada")
@@ -326,6 +331,7 @@ func seedCrewTask(t *testing.T, h http.Handler, token, project, actor, title str
 // rules fire: open work refuses with the items named, the lead is never
 // removable, and a clean removal drops every role the member held.
 func TestRemoveCrewMemberAPI(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada", "bob")
@@ -425,6 +431,7 @@ func TestRemoveCrewMemberAPI(t *testing.T) {
 // to the roster, and the write is the same one the API makes, recorded from
 // the "web" surface.
 func TestRemoveCrewMemberForm(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada", "bob")
@@ -479,6 +486,7 @@ func TestRemoveCrewMemberForm(t *testing.T) {
 // owns open work comes back as the roster with that work listed and linked,
 // so the person can go and reassign or close it.
 func TestRemoveCrewMemberFormBlocked(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada", "bob")
@@ -541,6 +549,7 @@ func TestRemoveCrewMemberFormBlocked(t *testing.T) {
 // roster comes back lead-first, each member's roles sorted, the empty case is
 // an empty list (never null), and an unknown project 404s.
 func TestListCrewMembersAPI(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "empty")
@@ -605,6 +614,7 @@ func TestListCrewMembersAPI(t *testing.T) {
 // TestRemoveCrewMemberFormCrossOrigin checks the removal route is same-origin
 // only, like every other cockpit form.
 func TestRemoveCrewMemberFormCrossOrigin(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada")
@@ -643,6 +653,7 @@ func validCrewRole(role string) bool {
 // the acting-lead virtual role, and a refused submit keeps the checkbox
 // state.
 func TestAddCrewMemberFormDeputy(t *testing.T) {
+	t.Parallel()
 	st, h, _, _ := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	seedCrewActors(t, st, "ada")

@@ -152,6 +152,7 @@ func decodeInto(t *testing.T, rr *httptest.ResponseRecorder, v any) {
 }
 
 func TestHealthzNoAuth(t *testing.T) {
+	t.Parallel()
 	_, admin := newTestServerAdmin(t)
 	rr := doReq(t, admin, "GET", "/healthz", "", nil)
 	if rr.Code != http.StatusOK {
@@ -165,6 +166,7 @@ func TestHealthzNoAuth(t *testing.T) {
 // /healthz and /metrics live on the admin handler only; the public handler
 // (the one behind the ingress) must not serve them.
 func TestHealthzAndMetricsNotOnPublicHandler(t *testing.T) {
+	t.Parallel()
 	main, _ := newTestServerAdmin(t)
 	for _, path := range []string{"/healthz", "/metrics"} {
 		rr := doReq(t, main, "GET", path, "", nil)
@@ -175,6 +177,7 @@ func TestHealthzAndMetricsNotOnPublicHandler(t *testing.T) {
 }
 
 func TestAPIRequiresAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	for name, token := range map[string]string{
 		"missing token": "",
@@ -193,6 +196,7 @@ func TestAPIRequiresAuth(t *testing.T) {
 }
 
 func TestAPIRejectsMalformedAuthHeader(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	req := httptest.NewRequest("GET", "/api/v1/tasks", nil)
 	req.Header.Set("Authorization", "Token "+token) // not Bearer
@@ -204,6 +208,7 @@ func TestAPIRejectsMalformedAuthHeader(t *testing.T) {
 }
 
 func TestBootstrapAdmin(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	ctx := context.Background()
 
@@ -234,6 +239,7 @@ func TestBootstrapAdmin(t *testing.T) {
 }
 
 func TestBootstrapAdminRejectsMalformedToken(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	ctx := context.Background()
 	for name, tok := range map[string]string{
@@ -256,6 +262,7 @@ func TestBootstrapAdminRejectsMalformedToken(t *testing.T) {
 }
 
 func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	ctx := context.Background()
 	if err := st.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
@@ -271,6 +278,7 @@ func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
 }
 
 func TestOversizedBody413(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	// A syntactically valid JSON body just over the 1 MiB cap.
 	body := []byte(`{"title":"` + strings.Repeat("a", 1<<20) + `"}`)
@@ -287,6 +295,7 @@ func TestOversizedBody413(t *testing.T) {
 }
 
 func TestMetricsEndpoint(t *testing.T) {
+	t.Parallel()
 	main, admin := newTestServerAdmin(t)
 	// Generate at least one recorded request on the public handler first (an
 	// unauthenticated API call is fine — it still passes through the metrics
@@ -310,6 +319,7 @@ func TestMetricsEndpoint(t *testing.T) {
 // store and the server, the way serve.go does, and asserts the domain
 // families appear on the admin /metrics alongside the HTTP ones.
 func TestMetricsEndpointDomainFamilies(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	st := store.OpenTestStore(t, store.WithMetrics(reg))
 	main, admin, err := api.NewServer(st, api.Config{Metrics: reg})
@@ -343,6 +353,7 @@ func TestMetricsEndpointDomainFamilies(t *testing.T) {
 // that survives the GitHub App OAuth client (dormant, spec 001 §9.3), not the
 // login flow that was removed.
 func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	_, _, err := api.NewServer(st, api.Config{
 		GitHubClientID:     "cid",
@@ -357,6 +368,7 @@ func TestNewServerRejectsMalformedPublicURL(t *testing.T) {
 }
 
 func TestNewServerRejectsBadTokenEncKey(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	_, _, err := api.NewServer(st, api.Config{
 		GitHubClientID:     "cid",
@@ -379,6 +391,7 @@ func (c failingCollector) Collect(ch chan<- prometheus.Metric) {
 
 // A failing collector must not take the whole scrape down with it.
 func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(failingCollector{prometheus.NewDesc("worklode_probe", "test", nil, nil)})
 	main, admin, err := api.NewServer(newTestStore(t), api.Config{Metrics: reg})

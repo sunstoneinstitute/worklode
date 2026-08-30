@@ -10,6 +10,7 @@ import (
 )
 
 func TestSelectMode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		in   modeFacts
@@ -35,6 +36,7 @@ func TestSelectMode(t *testing.T) {
 // lease machinery enforces it); every other cli-sourced event is
 // user-reported (a human or agent typed a command).
 func TestStateEvidence(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		source, eventType string
 		hasEvent          bool
@@ -62,6 +64,7 @@ func TestStateEvidence(t *testing.T) {
 // replacing underscores with spaces (which would render "user_reported" as
 // "User reported" instead of "User-reported").
 func TestEvidenceCategoryLabel(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		cat  evidenceCategory
 		want string
@@ -94,6 +97,7 @@ func stubActors(actors map[string]*store.Actor) func(string) (*store.Actor, erro
 // entirely different facts (Task.Assignee vs. an unreleased lease) and must
 // never collapse into each other.
 func TestMapWorkItemOwnerAndDelegate(t *testing.T) {
+	t.Parallel()
 	resolve := stubActors(map[string]*store.Actor{
 		"dana":      {ID: "dana", Kind: "human", DisplayName: "Dana"},
 		"agent-one": {ID: "agent-one", Kind: "agent", DisplayName: "Agent One"},
@@ -118,6 +122,7 @@ func TestMapWorkItemOwnerAndDelegate(t *testing.T) {
 // TestMapWorkItemHumanLeaseIsNotDelegate asserts a human (or service) lease
 // holder is never surfaced as a delegate — only an agent lease qualifies.
 func TestMapWorkItemHumanLeaseIsNotDelegate(t *testing.T) {
+	t.Parallel()
 	resolve := stubActors(map[string]*store.Actor{
 		"bob": {ID: "bob", Kind: "human", DisplayName: "Bob"},
 	})
@@ -138,6 +143,7 @@ func TestMapWorkItemHumanLeaseIsNotDelegate(t *testing.T) {
 // TestMapWorkItemMissingDisplayNameFallsBackToID asserts an actor with no
 // display name renders its id instead — never an empty owner/delegate name.
 func TestMapWorkItemMissingDisplayNameFallsBackToID(t *testing.T) {
+	t.Parallel()
 	resolve := stubActors(map[string]*store.Actor{
 		"svc-1": {ID: "svc-1", Kind: "human", DisplayName: ""},
 	})
@@ -169,6 +175,7 @@ func notFoundActors() func(string) (*store.Actor, error) {
 // TestBuildPinnedFocusUnsetIsNil asserts a project with no focus note yields a
 // nil pinned-focus card, never a dummy record — the "nil when unset" contract.
 func TestBuildPinnedFocusUnsetIsNil(t *testing.T) {
+	t.Parallel()
 	got, err := buildPinnedFocus(&store.Project{}, stubActors(nil))
 	if err != nil {
 		t.Fatalf("buildPinnedFocus: %v", err)
@@ -181,6 +188,7 @@ func TestBuildPinnedFocusUnsetIsNil(t *testing.T) {
 // TestBuildPinnedFocusResolvedActor asserts a pinned-by that resolves to an
 // actor carries the actor's id and display name (not the bare id).
 func TestBuildPinnedFocusResolvedActor(t *testing.T) {
+	t.Parallel()
 	at := time.Date(2026, 8, 11, 9, 0, 0, 0, time.UTC)
 	resolve := stubActors(map[string]*store.Actor{
 		"stig": {ID: "stig", Kind: "human", DisplayName: "Stig Bakken"},
@@ -204,6 +212,7 @@ func TestBuildPinnedFocusResolvedActor(t *testing.T) {
 // the projection — covering both the (nil, nil) and (nil, ErrNotFound) shapes
 // resolveActor can return for an unknown pinner.
 func TestBuildPinnedFocusUnresolvedFallback(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		resolve func(string) (*store.Actor, error)
@@ -231,6 +240,7 @@ func TestBuildPinnedFocusUnresolvedFallback(t *testing.T) {
 // TestBuildPinnedFocusNoPinner asserts a note with an empty pinned-by yields a
 // card with a nil PinnedBy — a note can stand without a named pinner.
 func TestBuildPinnedFocusNoPinner(t *testing.T) {
+	t.Parallel()
 	got, err := buildPinnedFocus(&store.Project{FocusNote: "Solo note"}, notFoundActors())
 	if err != nil {
 		t.Fatalf("buildPinnedFocus: %v", err)
@@ -246,6 +256,7 @@ func TestBuildPinnedFocusNoPinner(t *testing.T) {
 // TestBuildNextDecision asserts the next-decision card is nil when unset and
 // carries title/accountable/readiness when a title is set.
 func TestBuildNextDecision(t *testing.T) {
+	t.Parallel()
 	if got := buildNextDecision(&store.Project{}); got != nil {
 		t.Errorf("next decision = %#v, want nil for an unset title", got)
 	}
@@ -262,6 +273,7 @@ func TestBuildNextDecision(t *testing.T) {
 // TestMapWorkItemNoAssigneeNoLease asserts an untouched task has neither
 // owner nor delegate, and its evidence is declared (no backing event).
 func TestMapWorkItemNoAssigneeNoLease(t *testing.T) {
+	t.Parallel()
 	item, err := mapWorkItem(store.ProjectWorkFact{
 		Task: model.Task{ID: "WL-1", Title: "Untouched", State: "ready"},
 	}, false, stubActors(nil))
@@ -284,6 +296,7 @@ func TestMapWorkItemNoAssigneeNoLease(t *testing.T) {
 // concern names that plan, even when it is still draft and has minted no
 // task to name. See cockpit_rank_test.go for det-v1's fuller coverage.
 func TestRankSecondaryConcernsNamesBlockingPlan(t *testing.T) {
+	t.Parallel()
 	f := store.ProjectWorkFact{
 		Task: model.Task{ID: "WL-2", State: "ready"},
 		BlockingPlans: []model.DocRef{

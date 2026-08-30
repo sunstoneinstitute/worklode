@@ -6,6 +6,7 @@ import (
 )
 
 func TestSessionRoundTrip(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signSession(secret, "alice", now.Add(time.Hour))
@@ -17,6 +18,7 @@ func TestSessionRoundTrip(t *testing.T) {
 }
 
 func TestSessionRejectsTamper(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signSession(secret, "alice", now.Add(time.Hour))
@@ -33,6 +35,7 @@ func TestSessionRejectsTamper(t *testing.T) {
 }
 
 func TestSessionRejectsExpired(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signSession(secret, "alice", now.Add(time.Hour))
@@ -44,6 +47,7 @@ func TestSessionRejectsExpired(t *testing.T) {
 }
 
 func TestOAuthStateRoundTrip(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signOAuthState(secret, oauthState{
@@ -59,6 +63,7 @@ func TestOAuthStateRoundTrip(t *testing.T) {
 }
 
 func TestOAuthStateRejectsExpired(t *testing.T) {
+	t.Parallel()
 	const secret = "s3cr3t"
 	now := time.Unix(1_700_000_000, 0)
 	cookie := signOAuthState(secret, oauthState{
@@ -70,6 +75,7 @@ func TestOAuthStateRejectsExpired(t *testing.T) {
 }
 
 func TestSafeNext(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ in, want string }{
 		{"/", "/"},
 		{"/tasks/WL-1", "/tasks/WL-1"},
@@ -88,6 +94,7 @@ func TestSafeNext(t *testing.T) {
 }
 
 func TestCLIIntentRoundTrip(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(2000, 0)
 	secret := "s3cr3t"
 	want := cliIntent{Redirect: "http://localhost:54321/", State: "abc", Exp: now.Add(cliCodeTTL).Unix()}

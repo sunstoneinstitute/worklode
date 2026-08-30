@@ -14,21 +14,28 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// SetStreamPollInterval shortens the stream's poll interval for one test and
-// restores it afterwards. Exported from a package-internal test file so the
+// SetStreamPollInterval shortens the stream's poll interval for the rest of
+// this test binary's run. Exported from a package-internal test file so the
 // external api_test package can reach an unexported knob without the knob
 // becoming part of the server's configuration surface.
+//
+// It does not restore the previous value on Cleanup: every caller in
+// eventstream_test.go asks for the same fast interval, and under
+// t.Parallel() several of them are set concurrently, so a save-and-restore
+// pattern raced — whichever test finished first put the default (or another
+// test's snapshot) back while its siblings were still mid-stream, starving
+// their poll loop and producing a spurious "no stream message" timeout
+// (WL-438). No test depends on the production default being restored, so the
+// simplest fix is to only ever move the interval down and leave it there.
 func SetStreamPollInterval(t *testing.T, d time.Duration) {
 	t.Helper()
-	old := streamPollInterval.Swap(int64(d))
-	t.Cleanup(func() { streamPollInterval.Store(old) })
+	streamPollInterval.Store(int64(d))
 }
 
 // SetStreamHeartbeatInterval is SetStreamPollInterval for the heartbeat.
 func SetStreamHeartbeatInterval(t *testing.T, d time.Duration) {
 	t.Helper()
-	old := streamHeartbeatInterval.Swap(int64(d))
-	t.Cleanup(func() { streamHeartbeatInterval.Store(old) })
+	streamHeartbeatInterval.Store(int64(d))
 }
 
 // TestStreamPageSizeWithinStoreCap pins the dependency streamHead's
@@ -39,6 +46,7 @@ func SetStreamHeartbeatInterval(t *testing.T, d time.Duration) {
 // assertion in eventstream.go is the real guard; this test is what names the
 // failure if someone deletes it.
 func TestStreamPageSizeWithinStoreCap(t *testing.T) {
+	t.Parallel()
 	if streamPageSize > store.MaxEventListLimit {
 		t.Fatalf("streamPageSize = %d exceeds store.MaxEventListLimit = %d: "+
 			"streamHead would read every page as short and stop at the first",
@@ -50,6 +58,7 @@ func TestStreamPageSizeWithinStoreCap(t *testing.T) {
 // TestEventStreamTypeCannotInjectFrames: whatever an event type contains, the
 // frame it produces has exactly the four lines a frame has.
 func TestWriteEventFrameStripsLineBreaks(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	err := writeEventFrame(&buf, store.Event{
 		ID:      7,
@@ -76,6 +85,7 @@ func TestWriteEventFrameStripsLineBreaks(t *testing.T) {
 // reported as an encoding fault and not as the client hanging up — the
 // handler branches on it to decide whether anything gets logged.
 func TestWriteEventFrameReportsEncodeFailure(t *testing.T) {
+	t.Parallel()
 	err := writeEventFrame(io.Discard, store.Event{ID: 9, Type: "bad", Payload: []byte(`{"unterminated`)})
 	if !errors.Is(err, errEncodeEvent) {
 		t.Fatalf("writeEventFrame with an invalid payload = %v, want errEncodeEvent", err)
@@ -83,6 +93,7 @@ func TestWriteEventFrameReportsEncodeFailure(t *testing.T) {
 }
 
 func TestObserveEventStream(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	s := &server{}
 	s.initMetrics(reg)
@@ -112,6 +123,7 @@ func TestObserveEventStream(t *testing.T) {
 // package follows: a *server built directly by a test, without initMetrics,
 // must not panic.
 func TestObserveEventStreamNilSafe(t *testing.T) {
+	t.Parallel()
 	s := &server{}
 	s.observeEventStreamOpen()
 	s.observeEventStreamClose()

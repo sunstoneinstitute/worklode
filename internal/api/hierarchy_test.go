@@ -19,6 +19,7 @@ func createContainer(t *testing.T, h http.Handler, token, project, title string)
 // at the HTTP edge (025 §10): container-ness is inferred from child_of edges, so
 // validKinds admits nothing structural and the create is a 422.
 func TestCreateTaskRejectsContainerKind(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -31,6 +32,7 @@ func TestCreateTaskRejectsContainerKind(t *testing.T) {
 }
 
 func TestCreateTaskWithParent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Container")
@@ -58,6 +60,7 @@ func TestCreateTaskWithParent(t *testing.T) {
 // TestCreateTaskWithUnknownParentCreatesNothing checks the single-transaction
 // promise: a rejected parent must not leave an unparented child behind.
 func TestCreateTaskWithUnknownParentCreatesNothing(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -76,6 +79,7 @@ func TestCreateTaskWithUnknownParentCreatesNothing(t *testing.T) {
 }
 
 func TestTaskDetailProgress(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Container")
@@ -101,6 +105,7 @@ func TestTaskDetailProgress(t *testing.T) {
 // ordinary task may be a parent, so what used to be a 422 ("parent must be an
 // container") is now the supported way to file a child.
 func TestCreateTaskUnderOrdinaryParent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	plain := createTaskViaAPI(t, h, token, map[string]any{
@@ -130,6 +135,7 @@ func TestCreateTaskUnderOrdinaryParent(t *testing.T) {
 // TestEdgeValidation. This also proves the transaction rolls back on a 422,
 // not just on the 404 TestCreateTaskWithUnknownParentCreatesNothing covers.
 func TestCrossProjectParentIsUnprocessable(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")
@@ -150,6 +156,7 @@ func TestCrossProjectParentIsUnprocessable(t *testing.T) {
 }
 
 func TestListTasksByParentAndHasChildren(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Container")
@@ -178,6 +185,7 @@ func TestListTasksByParentAndHasChildren(t *testing.T) {
 // answers with every root container, its roll-up, and its children, so a
 // client never issues a child list per container.
 func TestListTasksTree(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Container")
@@ -232,6 +240,7 @@ func TestListTasksTree(t *testing.T) {
 // containers a tree reports, never which of their children it lists: the
 // progress counts and the listed children must describe the same set.
 func TestListTasksTreeChildrenIgnoreStateFilter(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Container")

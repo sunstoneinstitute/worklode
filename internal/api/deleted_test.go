@@ -40,6 +40,7 @@ func deleteBoth(t *testing.T, f *deleteFixture, justification string) {
 // can review it later, and before this page the only way to read it was the
 // CLI or the API.
 func TestDeletedPageShowsTombstones(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceProd)
 	const why = "Imported twice; this is the copy nobody worked."
 	deleteBoth(t, f, why)
@@ -74,6 +75,7 @@ func TestDeletedPageShowsTombstones(t *testing.T) {
 // TestDeletedPageEmptyIsHonest: a project with nothing deleted says so per
 // list rather than rendering an empty table or a fabricated row.
 func TestDeletedPageEmptyIsHonest(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	main := mainContent(t, doReq(t, f.h, "GET", "/projects/proj/deleted", "", nil).Body.String())
@@ -87,6 +89,7 @@ func TestDeletedPageEmptyIsHonest(t *testing.T) {
 // the CLI calls: the task leaves the page, comes back into the live list, and
 // the caller is 303'd so a reload never restores twice.
 func TestDeletedPageRestoresTask(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	deleteBoth(t, f, "noise")
 
@@ -113,6 +116,7 @@ func TestDeletedPageRestoresTask(t *testing.T) {
 // TestDeletedPageRestoresDoc is the document half. The two are separate
 // routes because they carry separate permissions (044 §5).
 func TestDeletedPageRestoresDoc(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	deleteBoth(t, f, "noise")
 
@@ -135,6 +139,7 @@ func TestDeletedPageRestoresDoc(t *testing.T) {
 // or was never named belongs back on the list with the reason — re-reading
 // the list is what answers it — not on an error page.
 func TestRestoreRefusalRerendersPage(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	deleteBoth(t, f, "noise")
 
@@ -172,6 +177,7 @@ func TestRestoreRefusalRerendersPage(t *testing.T) {
 // restores first. The second gets the reason and a list that no longer shows
 // the row, rather than a 500.
 func TestRestoreAlreadyRestoredIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	deleteBoth(t, f, "noise")
 	form := url.Values{"task": {f.task}}
@@ -190,6 +196,7 @@ func TestRestoreAlreadyRestoredIsRefused(t *testing.T) {
 // POSTs and carry the same same-origin lock every other cockpit form does,
 // which is the one that still holds on an instance serving no session cookie.
 func TestRestoreRefusesCrossOrigin(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	deleteBoth(t, f, "noise")
 
@@ -212,6 +219,7 @@ func TestRestoreRefusesCrossOrigin(t *testing.T) {
 // counter spec 044 §6 defines — under the same op="undelete" the API path
 // records — and the form-submission counter every cockpit write records.
 func TestRestoreMetrics(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	deleteBoth(t, f, "noise")
 

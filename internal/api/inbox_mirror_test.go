@@ -54,6 +54,7 @@ func mirrorTestServer(t *testing.T) (*server, *blobstore.Fake, string) {
 }
 
 func TestMirrorRewritesAllowedHost(t *testing.T) {
+	t.Parallel()
 	s, fake, origin := mirrorTestServer(t)
 	// Point the guard at the stub instead of githubusercontent.com.
 	s.mirrorFetcherForTest = testFetcher()
@@ -84,6 +85,7 @@ func TestMirrorRewritesAllowedHost(t *testing.T) {
 // mirrored body beats a failed promote, and the renderer drops the leftover
 // rather than turning it into a beacon.
 func TestMirrorLeavesBlockedTarget(t *testing.T) {
+	t.Parallel()
 	s, fake, _ := mirrorTestServer(t)
 	body := "![x](http://169.254.169.254/latest/meta-data)\n"
 	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
@@ -98,6 +100,7 @@ func TestMirrorLeavesBlockedTarget(t *testing.T) {
 // escapes — so the host allowlist is what refuses. It is checked before any
 // DNS lookup, so this makes no network call.
 func TestMirrorLeavesDisallowedHost(t *testing.T) {
+	t.Parallel()
 	s, fake, _ := mirrorTestServer(t)
 	body := "![x](https://evil.example/p.png)\n"
 	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
@@ -109,6 +112,7 @@ func TestMirrorLeavesDisallowedHost(t *testing.T) {
 }
 
 func TestMirrorNoImagesIsIdentity(t *testing.T) {
+	t.Parallel()
 	s, _, _ := mirrorTestServer(t)
 	body := "no images here\n\n```\n![fake](https://x.example/y.png)\n```\n"
 	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
@@ -120,6 +124,7 @@ func TestMirrorNoImagesIsIdentity(t *testing.T) {
 // screenshot referenced twice, or served from two URLs, is one object. Both
 // references still get rewritten.
 func TestMirrorDedupesIdenticalBytes(t *testing.T) {
+	t.Parallel()
 	s, fake, origin := mirrorTestServer(t)
 	s.mirrorFetcherForTest = testFetcher()
 
@@ -145,6 +150,7 @@ func TestMirrorDedupesIdenticalBytes(t *testing.T) {
 // attacker-supplied content and still render as a broken image; left alone,
 // the remote reference renders as nothing (spec 021 §8).
 func TestMirrorSkipsNonImage(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	fake := blobstore.NewFake()
 	s := &server{st: st, blobs: fake, log: testLogger(t)}
@@ -167,6 +173,7 @@ func TestMirrorSkipsNonImage(t *testing.T) {
 // TestMirrorUnconfiguredIsIdentity: an instance with no bucket promotes
 // bodies unchanged rather than failing the promote.
 func TestMirrorUnconfiguredIsIdentity(t *testing.T) {
+	t.Parallel()
 	s := &server{log: testLogger(t)}
 	body := "![x](https://user-images.githubusercontent.com/1/a.png)\n"
 	if got := s.mirrorRemoteImages(context.Background(), "acme/widgets", body); got != body {
@@ -178,6 +185,7 @@ func TestMirrorUnconfiguredIsIdentity(t *testing.T) {
 // case: two references to the same bytes (one stored, one deduplicated) and
 // one the guard refuses.
 func TestMirrorMetrics(t *testing.T) {
+	t.Parallel()
 	s, _, origin := mirrorTestServer(t)
 	s.initMetrics(prometheus.NewRegistry())
 	s.mirrorFetcherForTest = testFetcher()
@@ -208,6 +216,7 @@ func TestMirrorMetrics(t *testing.T) {
 // maxMirroredImages mirrors exactly the cap's worth; the rest keep their
 // original URL, the same fate as any other per-image failure.
 func TestMirrorCapsReferencesPerBody(t *testing.T) {
+	t.Parallel()
 	s, fake, origin := mirrorTestServer(t)
 	s.initMetrics(prometheus.NewRegistry())
 	s.mirrorFetcherForTest = testFetcher()
@@ -311,9 +320,10 @@ func mirrorTokenServer(t *testing.T, app *githubauth.AppAuth) *server {
 // test. Production's scope is mirrorTokenScopes' own value, which
 // TestMirrorTokenStaysOffOtherHosts exercises unchanged.
 //
-// It writes a package-level var, so a caller must not be parallel; no test in
-// this package is. Restoring it in Cleanup is what keeps the tests that assert
-// against the production value honest.
+// It writes a package-level var, so a caller must not be t.Parallel() (its
+// three callers below are the exception to this file's — and the package's —
+// otherwise-parallel tests, WL-438). Restoring it in Cleanup is what keeps
+// the tests that assert against the production value honest.
 func aimAtTestHost(t *testing.T) {
 	t.Helper()
 	saved := mirrorTokenScopes
@@ -346,6 +356,7 @@ func TestMirrorSendsInstallationToken(t *testing.T) {
 // credential. Deliberately runs against the production value of
 // mirrorTokenScopes.
 func TestMirrorTokenStaysOffOtherHosts(t *testing.T) {
+	t.Parallel()
 	s := mirrorTokenServer(t, mirrorTokenApp(t, false))
 	origin := newMirrorAuthOrigin(t)
 
