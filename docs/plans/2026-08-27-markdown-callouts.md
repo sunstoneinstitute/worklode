@@ -63,10 +63,11 @@ rules; no spec governs markdown flavour.
   `class` matching `\Acallout callout-(note|tip|important|warning|caution)\z`
   on `aside`, and `class` matching `\Acallout-title\z` on `p`. No other
   element gains `class`; nothing gains `style`. The page CSP is untouched.
-- **Colour tokens:** `warning` reuses `--warn`; `tip` reuses `--ok`. Three
-  new foreground tokens are minted in all four theme blocks: `--info`
-  (note, blue range), `--imp` (important, purple range), `--danger`
-  (caution, red range). Each is held to 4.5:1 against both `--surface` and
+- **Colour tokens:** `warning` reuses `--warn`; `tip` reuses `--ok`; `note`
+  reuses the existing `--info` (already minted in all four theme blocks,
+  used today by `.chip.info`/`.mode-name` — not new). Two new foreground
+  tokens are minted in all four theme blocks: `--imp` (important, purple
+  range), `--danger` (caution, red range). Each is held to 4.5:1 against both `--surface` and
   `--surface-2` in both themes via new `textPairs` rows — the test picks
   the final values, not this plan. Callout bodies stay `--ink` on the
   existing surfaces; the kind is carried by the title word and the coloured
@@ -174,10 +175,10 @@ The bulk of the work, test-first:
    `danger`, each against `surface` and `surface-2`, in both themes (the
    table is theme-agnostic; two rows per token). Red until the tokens
    exist and clear.
-2. `internal/ui/styles/app.tailwind.css`: mint `--info`, `--imp`,
-   `--danger` in all four theme blocks (values chosen to pass step 1 —
-   iterate against the test, the same loop the §10 audit tokens went
-   through), then the component rules in the `.prose` section:
+2. `internal/ui/styles/app.tailwind.css`: mint `--imp`, `--danger` in all
+   four theme blocks (`--info` already exists — reuse it) (values chosen
+   to pass step 1 — iterate against the test, the same loop the §10 audit
+   tokens went through), then the component rules in the `.prose` section:
 
    ```css
    .prose .callout{border:1px solid var(--line);border-left:3px solid var(--callout-c,var(--line-2));border-radius:9px;padding:9px 13px;margin:0 0 12px;background:var(--surface-2)}
