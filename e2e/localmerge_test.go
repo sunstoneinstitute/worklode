@@ -76,8 +76,14 @@ func TestLocalMergeReportEndToEnd(t *testing.T) {
 	}
 	t.Setenv("PATH", dist+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	// Two claimed tasks, one of whose branches will land in the clone.
+	// Two claimed tasks, one of whose branches will land in the clone. The
+	// reporter only advances ready/in_review tasks (WL-379): the landed one
+	// must reach in_review — its worker calling done — before its branch is
+	// merged, or the local-ancestry probe has nothing to trust.
 	landedID, landedBranch := claimForMerge(t, ctx, agent, "Land the widget", "e2e-merge-wt-1")
+	if _, _, err := agent.SubmitTask(ctx, landedID); err != nil {
+		t.Fatalf("submit task %s: %v", landedID, err)
+	}
 	unlandedID, unlandedBranch := claimForMerge(t, ctx, agent, "Still in progress", "e2e-merge-wt-2")
 
 	// A clone with work on both branches, but only one of them merged.
