@@ -32,7 +32,7 @@ Unchanged, and deliberately so:
 
 | Concern | Why it needs nothing |
 |---|---|
-| Leases and worktrees | `lode next` creates a worktree under `.worktrees/` in a sandbox exactly as on a laptop. One code path, one lease model, one binding shape for the sweeper, `resume` and `status` to understand. |
+| Leases and worktrees | `lode worktree next` creates a worktree under `.worktrees/` in a sandbox exactly as on a laptop. One code path, one lease model, one binding shape for the sweeper, `resume` and `status` to understand. |
 | Heartbeat | Commits are the heartbeat, carried to the API by the git hooks the image installed. A sandbox that dies lets its lease expire, which is already the intended behaviour rather than a gap. |
 | Token plumbing | `LODE_SERVER` and `LODE_TOKEN` already override both the config file and the keychain, so the absence of a keychain is a non-event. |
 | Skills | 016's lazy fetch links `<worktree>/.agents/skills/<name>` per task. 008 §17.3 already states the intent: a container that never ran `lode install` still gets exactly the skills its task named. |
@@ -157,7 +157,7 @@ deployment supplies the enforcement.
 
 ### 4.1 The entry point is the CLI, not the plugin {#sec-4.1}
 
-A sandbox session starts work with `lode next --json` and works the worktree it returns.
+A sandbox session starts work with `lode worktree next --json` and works the worktree it returns.
 
 The `/lode:*` commands are not available to it. Enabling `lode@worklode` in `.claude/settings.json`
 is not installing it (008 §17); a fresh checkout needs a plugin install **and a session restart**
@@ -255,7 +255,7 @@ Four seams keep that true, and each is load-bearing today rather than speculativ
 | Image selection | The tag the checkout implies (§3.2) | The same tag, resolved server-side |
 | Provisioning | `bootstrap.sh` | The same script, unchanged |
 | Token acquisition | `LODE_TOKEN` in the environment (§4.3) | A minted task-scoped token in the same variable |
-| Entry point | `lode next --json` | The same command, with the task id supplied |
+| Entry point | `lode worktree next --json` | The same command, with the task id supplied |
 
 Nothing here requires dispatch to exist. The point is that when it arrives, no part of §4 is
 rewritten to accommodate it.
@@ -271,7 +271,7 @@ section records the outcome and what would reopen it.
 task-scoped checkout and no lease lifecycle, so it substitutes for none of §1's unchanged concerns,
 and it keeps execution history in its own database — a second owner of facts the backbone owns.
 What this seam needs from an executor — start a container from the tag the checkout implies, inject
-the environment, run `lode next --json`, let it exit — is a Kubernetes `Job`.
+the environment, run `lode worktree next --json`, let it exit — is a Kubernetes `Job`.
 
 `kubernetes-sigs/agent-sandbox` (`docs/research/agent-sandbox-evaluation.md`) is the right shape —
 a pod-lifecycle controller storing no more state than a `Job` does — and its measured warm-pool

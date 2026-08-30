@@ -11,7 +11,7 @@
 # worker's tree fast-forwarded to origin/main, which means an edit to the
 # skill reaches every worker on its next respawn.
 #
-# Usage: supervisor.sh <window> [lode next filter flags...]
+# Usage: supervisor.sh <window> [lode worktree next filter flags...]
 #   e.g. supervisor.sh gha-chore1 --project worklode --kind chore
 #
 # The window names the worker, and its working tree is derived from it rather

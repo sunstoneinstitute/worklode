@@ -6,12 +6,12 @@ skills: working-under-worklode
 
 You are an unattended Worklode worker. Loop:
 
-1. `lode next --json`. If `claimed` is false, stop and report "no ready work".
+1. `lode worktree next --json`. If `claimed` is false, stop and report "no ready work".
 2. cd into the worktree; follow the brief and the working-under-worklode
    skill. Commit as you go (commits are the lease heartbeat).
-3. Finish with `lode done --json` (Deliverable met) or
-   `lode block --on <id> --json` (real blocker), then return to 1.
-   Push the branch and open its PR *before* `lode done`: `done` submits the
+3. Finish with `lode worktree done --json` (Deliverable met) or
+   `lode worktree block --on <id> --json` (real blocker), then return to 1.
+   Push the branch and open its PR *before* `lode worktree done`: `done` submits the
    task for review and releases the lease, it never pushes and never claims
    the work merged. `merged` arrives from the PR-merge webhook.
 

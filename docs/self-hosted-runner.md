@@ -354,7 +354,7 @@ propagation that populates each task worktree's `settings.local.json` is gated
 on *its own root* having been installed, and every agent's root is now its own
 worktree. `internal/worktree`'s
 `TestTaskIDIsFalseForAWorktreeOutsideTheBase` pins the CLI behaviour this rests
-on: `lode next`'s "already inside a worktree" guard is a question about the
+on: `lode worktree next`'s "already inside a worktree" guard is a question about the
 path — exactly one segment below `.worktrees` — not about being the main
 checkout, so it runs happily in `agents/<id>`.
 

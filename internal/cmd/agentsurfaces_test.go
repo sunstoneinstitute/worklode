@@ -348,7 +348,7 @@ func TestCheckInvocation(t *testing.T) {
 		wantFail bool
 	}{
 		{"lode", false},
-		{"lode next --json", false},
+		{"lode worktree next --json", false},
 		{"lode task add --title \"use --force here\" --kind bug", false},
 		{"lode secrets exec -- <command> [args...]", false},
 		{"lode task block <part-N-id> --by <part-N-1-id>", false},
@@ -368,7 +368,7 @@ func TestCheckInvocation(t *testing.T) {
 		{"lode task add --kind=spec", true},
 		{"lode doc list --kind design", true},
 		{"lode task treee", true},
-		{"lode next --jsonn", true},
+		{"lode worktree next --jsonn", true},
 		{"lode task add --titel x", true},
 	}
 	for _, c := range cases {
@@ -380,18 +380,18 @@ func TestCheckInvocation(t *testing.T) {
 }
 
 func TestFindInvocations(t *testing.T) {
-	body := "Run `lode next` first.\n" +
+	body := "Run `lode worktree next` first.\n" +
 		"```bash\n" +
 		"$ lode task add --title \"x\" \\\n" +
 		"    --kind bug\n" +
 		"```\n" +
-		"Prose saying lode next should not match.\n"
+		"Prose saying lode worktree next should not match.\n"
 
 	got := findInvocations("f.md", body)
 	if len(got) != 2 {
 		t.Fatalf("got %d invocations, want 2: %+v", len(got), got)
 	}
-	if got[0].text != "lode next" {
+	if got[0].text != "lode worktree next" {
 		t.Errorf("span: got %q", got[0].text)
 	}
 	if got[1].text != `lode task add --title "x" --kind bug` {

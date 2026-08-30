@@ -42,7 +42,7 @@ common case cannot give.
 
 Since that revert, exit purges **never**, and the code silently diverges from
 an accepted spec section. The gap it leaves is the abandoned worktree: one
-that is not removed, not `lode done`, not `lode block` — those paths all
+that is not removed, not `lode worktree done`, not `lode worktree block` — those paths all
 purge — but simply left sitting while its lease expires. The server-side
 lease sweeper cannot reach a laptop keystore, so live credentials persist on
 the machine indefinitely.
@@ -89,7 +89,7 @@ Three rules carry the design:
 
 Ordering: 017's rule that the purge is local-only and "runs before any
 backbone call" belongs to the **unconditional** triggers — worktree removal,
-`lode done`, `lode block` — where the worktree's life is ending and the purge
+`lode worktree done`, `lode worktree block` — where the worktree's life is ending and the purge
 must happen regardless of connectivity. On exit the purge is conditional *on*
 a backbone answer by design, so it necessarily follows one; a purge skipped
 for lack of an answer is deferred to the next trigger, not lost.

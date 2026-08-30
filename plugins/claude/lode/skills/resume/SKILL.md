@@ -8,8 +8,8 @@ allowed-tools: Bash(lode *) Bash(git *)
 
 Invocation arguments: $ARGUMENTS
 
-Run `lode resume --json`, adding only a worktree directory if those arguments
-name one. `lode resume` takes at most one positional argument, so anything else
+Run `lode worktree resume --json`, adding only a worktree directory if those arguments
+name one. `lode worktree resume` takes at most one positional argument, so anything else
 the user typed is context for the work, not command input — never pass it to
 the command; carry it into the task instead and mention you did.
 

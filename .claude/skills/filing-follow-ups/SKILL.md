@@ -33,7 +33,7 @@ step 2 even when the fix looks easy.
 
 ```bash
 lode task add --title "<the defect, not the area>" --kind bug --priority high \
-  --follow-up-to "$(lode status --json | jq -r .task.id)" \
+  --follow-up-to "$(lode worktree status --json | jq -r .task.id)" \
   --body-file - <<'EOF'
 What is wrong, where it lives (file:line, spec §), what was ruled out, and why
 it was deferred rather than fixed here.
@@ -41,7 +41,7 @@ EOF
 ```
 
 Outside a task worktree, drop the `--follow-up-to` line entirely — `lode
-status --json` prints prose there, not JSON, so the substitution yields
+worktree status --json` prints prose there, not JSON, so the substitution yields
 garbage rather than failing. Write the body to the standard of an existing `docs/follow-ups.md`
 entry: dense, self-contained, readable by someone who was not in this session.
 

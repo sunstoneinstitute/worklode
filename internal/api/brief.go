@@ -57,8 +57,9 @@ func toBriefJSON(b *store.Brief) model.Brief {
 func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// skills=false is for callers that want the task row or the lease and
-	// nothing else (lode status, the pre-renew fetch in lode resume). It skips
-	// pin resolution, the inlined bodies, and the embedding round trip.
+	// nothing else (lode worktree status, the pre-renew fetch in lode worktree
+	// resume). It skips pin resolution, the inlined bodies, and the embedding
+	// round trip.
 	withSkills := r.URL.Query().Get("skills") != "false"
 	b, err := s.st.Brief(r.Context(), id, store.BriefOptions{Skills: withSkills})
 	if err != nil {

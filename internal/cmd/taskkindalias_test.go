@@ -42,7 +42,7 @@ func TestWarnDeprecatedTaskKind(t *testing.T) {
 // updating this list fails loudly instead of silently skipping the warning.
 var taskKindCommands = []string{
 	"lode inbox promote",
-	"lode next",
+	"lode worktree next",
 	"lode task add",
 	"lode task claim",
 	"lode task edit",

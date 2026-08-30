@@ -213,7 +213,7 @@ func initGitRepo(t *testing.T) string {
 
 // setupLeasedWorktree creates a project, a task, its .worktrees/<branch>
 // worktree, and a lease bound to that worktree's real identity (mirroring
-// `lode next`).
+// `lode worktree next`).
 // Creating the project is idempotent so a test can call this more than once
 // against the same server to put several tasks under one project.
 func setupLeasedWorktree(t *testing.T, c *cli.Client, root, title string) (taskID, wtDir, identity string) {

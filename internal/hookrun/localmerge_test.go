@@ -163,7 +163,7 @@ func TestLocalMergeReportsSquash(t *testing.T) {
 }
 
 // TestLocalMergeIgnoresUntouchedBranch is the false-delivery guard. `lode
-// next` creates a branch at the default branch's tip, so an idle worktree's
+// worktree next` creates a branch at the default branch's tip, so an idle worktree's
 // branch is an ancestor of HEAD from the moment it exists. Without the
 // "not already in the previous commit" test, every merge would report every
 // idle task as delivered.
