@@ -142,6 +142,7 @@ func storedDoneState(t *testing.T, st *store.Store, repo string) string {
 }
 
 func TestAddRepoDiscoversDoneState(t *testing.T) {
+	t.Parallel()
 	f := &fakeGitHubApp{envs: []string{"dev", "production"}}
 	st, post := addRepoServer(t, f.start(t))
 
@@ -164,6 +165,7 @@ func TestAddRepoDiscoversDoneState(t *testing.T) {
 // An explicit done_state is the caller's decision; discovery must not run at
 // all, let alone overwrite it.
 func TestAddRepoExplicitDoneStateSkipsDiscovery(t *testing.T) {
+	t.Parallel()
 	f := &fakeGitHubApp{envs: []string{"production"}}
 	st, post := addRepoServer(t, f.start(t))
 
@@ -182,6 +184,7 @@ func TestAddRepoExplicitDoneStateSkipsDiscovery(t *testing.T) {
 // Discovery never gates the mapping: a broken GitHub leaves the repo mapped at
 // the default terminal state and the request successful.
 func TestAddRepoDiscoveryFailureStillMapsRepo(t *testing.T) {
+	t.Parallel()
 	f := &fakeGitHubApp{fail: true}
 	st, post := addRepoServer(t, f.start(t))
 
@@ -210,6 +213,7 @@ func TestAddRepoDiscoveryFailureStillMapsRepo(t *testing.T) {
 // githubauth's own 10s per-request client timeout so that outer bound cannot
 // stand in for this one.
 func TestAddRepoDiscoveryTimeoutBoundsHang(t *testing.T) {
+	t.Parallel()
 	block := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
@@ -242,6 +246,7 @@ func TestAddRepoDiscoveryTimeoutBoundsHang(t *testing.T) {
 
 // Without an app configured, addRepo behaves exactly as before.
 func TestAddRepoWithoutAppAuthKeepsDefault(t *testing.T) {
+	t.Parallel()
 	st, post := addRepoServer(t, nil)
 	rr := post(map[string]any{"repo": "acme/widgets"})
 	if rr.Code != http.StatusCreated {
@@ -253,6 +258,7 @@ func TestAddRepoWithoutAppAuthKeepsDefault(t *testing.T) {
 }
 
 func TestNewAppAuthDisabledWhenUnconfigured(t *testing.T) {
+	t.Parallel()
 	for name, cfg := range map[string]Config{
 		"nothing set": {},
 		"id only":     {GitHubAppID: "12345"},
@@ -271,6 +277,7 @@ func TestNewAppAuthDisabledWhenUnconfigured(t *testing.T) {
 }
 
 func TestNewAppAuthConfigured(t *testing.T) {
+	t.Parallel()
 	got, err := newAppAuth(Config{GitHubAppID: "12345", GitHubAppPrivateKey: appTestKeyPEM(t)})
 	if err != nil {
 		t.Fatalf("newAppAuth: %v", err)
@@ -288,6 +295,7 @@ func TestNewAppAuthConfigured(t *testing.T) {
 
 // A bad key is a startup error, and the message must not echo the key itself.
 func TestNewAppAuthBadKeyErrorDoesNotLeakKey(t *testing.T) {
+	t.Parallel()
 	secret := "-----BEGIN RSA PRIVATE KEY-----\nc3VwZXItc2VjcmV0LW1hdGVyaWFs\n-----END RSA PRIVATE KEY-----\n"
 	_, err := newAppAuth(Config{GitHubAppID: "12345", GitHubAppPrivateKey: secret})
 	if err == nil {
@@ -301,6 +309,7 @@ func TestNewAppAuthBadKeyErrorDoesNotLeakKey(t *testing.T) {
 // NewServer must refuse to start with an unusable app key rather than silently
 // running without discovery.
 func TestNewServerRejectsBadAppKey(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	_, _, err := NewServer(st, Config{GitHubAppID: "12345", GitHubAppPrivateKey: "not a pem"})
 	if err == nil {
@@ -309,6 +318,7 @@ func TestNewServerRejectsBadAppKey(t *testing.T) {
 }
 
 func TestAddRepoWarnsOnMissingEventSubscription(t *testing.T) {
+	t.Parallel()
 	app := (&fakeGitHubApp{events: []string{"push", "pull_request"}}).start(t)
 	_, post := addRepoServer(t, app)
 
@@ -331,6 +341,7 @@ func TestAddRepoWarnsOnMissingEventSubscription(t *testing.T) {
 // A GitHub that fails the subscription check must not gate the mapping: same
 // posture as discoverDoneState. No warnings is the correct, silent outcome.
 func TestAddRepoSubscriptionCheckFailureStillMapsRepoNoWarnings(t *testing.T) {
+	t.Parallel()
 	app := (&fakeGitHubApp{fail: true}).start(t)
 	_, post := addRepoServer(t, app)
 
@@ -444,6 +455,7 @@ func doctorRepoNames(n int) []string {
 // number of waves rather than the number of repos. Sequentially these would
 // take repos×delay; the ceiling asserts they did not.
 func TestReposDoctorAppCheckIsConcurrentAndSingleCall(t *testing.T) {
+	t.Parallel()
 	const repos = 24
 	const delay = 100 * time.Millisecond
 	probe := &installationProbe{delay: delay}
@@ -491,6 +503,7 @@ func TestReposDoctorAppCheckIsConcurrentAndSingleCall(t *testing.T) {
 // GitHub's 404 is the one answer that means "not installed"; anything else
 // leaves the question open and must report unchecked, not absent.
 func TestReposDoctorAppCheckDistinguishesNotInstalledFromUnchecked(t *testing.T) {
+	t.Parallel()
 	probe := &installationProbe{notFound: map[string]bool{"acme/missing": true}}
 	doctor := doctorServer(t, probe.start(t), []string{"acme/ok", "acme/missing"})
 
@@ -513,6 +526,10 @@ func TestReposDoctorAppCheckDistinguishesNotInstalledFromUnchecked(t *testing.T)
 // A GitHub that never answers must not hold the doctor response open for
 // repo-count × per-call timeout: the whole check phase shares one budget, and
 // repos it does not reach report unchecked (nil) rather than not-installed.
+//
+// Not t.Parallel(): it mutates the package-level appCheckBudget, which other
+// doctor tests in this file and reconcile_test.go rely on at its default
+// (WL-438).
 func TestReposDoctorAppCheckBudgetBoundsHang(t *testing.T) {
 	prev := appCheckBudget
 	appCheckBudget = 300 * time.Millisecond

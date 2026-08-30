@@ -44,6 +44,7 @@ description = "hzdev cluster access"
 `
 
 func TestSecretsCatalogRequiresAuth(t *testing.T) {
+	t.Parallel()
 	h, _ := newSecretsTestServer(t, testCatalog)
 	rec := doReq(t, h, http.MethodGet, "/api/v1/secrets/catalog", "", nil)
 	if rec.Code != http.StatusUnauthorized {
@@ -55,6 +56,7 @@ func TestSecretsCatalogRequiresAuth(t *testing.T) {
 }
 
 func TestSecretsCatalogServed(t *testing.T) {
+	t.Parallel()
 	h, token := newSecretsTestServer(t, testCatalog)
 	rec := doReq(t, h, http.MethodGet, "/api/v1/secrets/catalog", token, nil)
 	if rec.Code != http.StatusOK {
@@ -77,6 +79,7 @@ func TestSecretsCatalogServed(t *testing.T) {
 }
 
 func TestSecretsCatalogUnconfigured(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t) // no SecretsCatalogPath
 	rec := doReq(t, h, http.MethodGet, "/api/v1/secrets/catalog", token, nil)
 	if rec.Code != http.StatusNotFound {
@@ -89,6 +92,7 @@ func TestSecretsCatalogUnconfigured(t *testing.T) {
 // that has not provisioned the catalog item — and must read as 404, not as a
 // server fault.
 func TestSecretsCatalogMissingFile(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	ctx := context.Background()
 	if err := st.CreateActor(ctx, "alice", "human", "Alice", true); err != nil {
@@ -110,6 +114,7 @@ func TestSecretsCatalogMissingFile(t *testing.T) {
 }
 
 func TestSecretsMaterializedEvent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
 		map[string]string{"id": "secevt", "name": "SecEvt", "key": "SV"})
@@ -162,6 +167,7 @@ func TestSecretsMaterializedEvent(t *testing.T) {
 }
 
 func TestSecretsMaterializedRejectsNonNames(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
 		map[string]string{"id": "secrej", "name": "SecRej", "key": "SR"})

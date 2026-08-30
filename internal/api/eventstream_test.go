@@ -263,6 +263,7 @@ func recordStreamEvent(t *testing.T, st *store.Store, extID, typ string, payload
 // is admin-only (permEventStream) while the bounded GET /api/v1/events beside
 // it is not, and a refusal is a plain JSON error, never a stream.
 func TestEventStreamGuard(t *testing.T) {
+	t.Parallel()
 	f := newStreamTestServer(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -308,6 +309,7 @@ func TestEventStreamGuard(t *testing.T) {
 // malformed after is refused before any stream byte is written, matching
 // GET /api/v1/events.
 func TestEventStreamRejectsBadCursor(t *testing.T) {
+	t.Parallel()
 	f := newStreamTestServer(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -343,6 +345,7 @@ func TestEventStreamRejectsBadCursor(t *testing.T) {
 // HMAC-signed buys the right to record an event, not the right to author
 // frames in someone else's connection.
 func TestEventStreamTypeCannotInjectFrames(t *testing.T) {
+	t.Parallel()
 	api.SetStreamPollInterval(t, 20*time.Millisecond)
 	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
 	f := newStreamTestServer(t)
@@ -388,6 +391,7 @@ func TestEventStreamTypeCannotInjectFrames(t *testing.T) {
 // statusWriter instead of reaching the real net/http flusher, nothing would
 // arrive here until the handler returned, which it never does.
 func TestEventStreamDeliversLive(t *testing.T) {
+	t.Parallel()
 	api.SetStreamPollInterval(t, 20*time.Millisecond)
 	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
 	f := newStreamTestServer(t)
@@ -433,6 +437,7 @@ func TestEventStreamDeliversLive(t *testing.T) {
 // Last-Event-ID reconnect header and the ?after= query parameter. Both are
 // exclusive: resuming at 3 starts at 4, not at 3 and not at the head.
 func TestEventStreamResumesExactly(t *testing.T) {
+	t.Parallel()
 	api.SetStreamPollInterval(t, 20*time.Millisecond)
 	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
 	f := newStreamTestServer(t)
@@ -475,6 +480,7 @@ func TestEventStreamResumesExactly(t *testing.T) {
 // TestEventStreamTypeFilter covers ?type=: an event of another type recorded
 // first must not appear before the matching one recorded after it.
 func TestEventStreamTypeFilter(t *testing.T) {
+	t.Parallel()
 	api.SetStreamPollInterval(t, 20*time.Millisecond)
 	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
 	f := newStreamTestServer(t)
@@ -497,6 +503,7 @@ func TestEventStreamTypeFilter(t *testing.T) {
 // the request ends the handler promptly and nothing outlives it, which the
 // active-streams gauge returning to zero is the observable proof of.
 func TestEventStreamClientDisconnect(t *testing.T) {
+	t.Parallel()
 	api.SetStreamPollInterval(t, 20*time.Millisecond)
 	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
 	f := newStreamTestServer(t)
@@ -529,6 +536,7 @@ func TestEventStreamClientDisconnect(t *testing.T) {
 // caught in the same window, losing a webhook delivery that GitHub will never
 // retry.
 func TestEventStreamEndsOnShutdown(t *testing.T) {
+	t.Parallel()
 	api.SetStreamPollInterval(t, 20*time.Millisecond)
 	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
 	bg, sigterm := context.WithCancel(context.Background())

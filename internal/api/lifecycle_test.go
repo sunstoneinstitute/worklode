@@ -45,6 +45,7 @@ func moveTo(t *testing.T, st *store.Store, taskID, from, to string) {
 }
 
 func TestSlugifyTitle(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in, want string
 	}{
@@ -72,6 +73,13 @@ func TestSlugifyTitle(t *testing.T) {
 // reaches the branch both claim endpoints hand out. The claim-next leg is
 // what pins the wire field down: under a default-template server the CLI's
 // fallback reconstruction is indistinguishable from the server's branch.
+//
+// Not t.Parallel(): NewServer installs Config.BranchTemplate via the same
+// process-global store.SetBranchTemplate that internal/store's
+// branchname_test.go guards, and this is the one test in the package that
+// installs a non-default template — every other test's NewServer call resets
+// it to default, which would otherwise race this test's own assertion
+// (WL-438).
 func TestClaimBranchTemplate(t *testing.T) {
 	t.Cleanup(func() { store.SetBranchTemplate("") })
 	st := newTestStore(t)
@@ -112,6 +120,7 @@ func TestClaimBranchTemplate(t *testing.T) {
 }
 
 func TestNewServerRejectsBadBranchTemplate(t *testing.T) {
+	t.Parallel()
 	t.Cleanup(func() { store.SetBranchTemplate("") })
 	st := newTestStore(t)
 	for _, tmpl := range []string{"{{ .slug }}", "{{ .id ", "{{ .id }} {{ .slug }}"} {
@@ -122,6 +131,7 @@ func TestNewServerRejectsBadBranchTemplate(t *testing.T) {
 }
 
 func TestClaim(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -157,6 +167,7 @@ func TestClaim(t *testing.T) {
 }
 
 func TestClaimConflict(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -190,6 +201,7 @@ func TestClaimConflict(t *testing.T) {
 }
 
 func TestClaimErrors(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
@@ -222,6 +234,7 @@ func TestClaimErrors(t *testing.T) {
 }
 
 func TestRenewRelease(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Work", "priority": "high", "kind": "feature"})
@@ -266,6 +279,7 @@ func TestRenewRelease(t *testing.T) {
 }
 
 func TestDone(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Ship it", "priority": "high", "kind": "feature"})
@@ -295,6 +309,7 @@ func TestDone(t *testing.T) {
 // admin UI change, a CMS edit — has no webhook to report a delivery, so a
 // manual done is its only close.
 func TestDoneWithoutReview(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "From ready", "priority": "high", "kind": "chore"})
@@ -330,6 +345,7 @@ func TestDoneWithoutReview(t *testing.T) {
 // legalTransitions is the whole gate. A draft has not been published, and a
 // task already closed has nowhere left to go.
 func TestDoneBadStates(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Still a draft", "priority": "high", "kind": "feature", "draft": true})
@@ -357,6 +373,7 @@ func TestDoneBadStates(t *testing.T) {
 }
 
 func TestAbandon(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "From ready", "priority": "low", "kind": "chore"})
@@ -426,6 +443,7 @@ func lastEventType(t *testing.T, st *store.Store) string {
 // ranking, exercised in depth at the store level) and returns it in the
 // spec-02 pick shape, with the task actually moved to in_progress.
 func TestClaimNext(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -480,6 +498,7 @@ func TestClaimNext(t *testing.T) {
 
 // TestClaimNextNoReadyTask covers the empty-ready-set response shape.
 func TestClaimNextNoReadyTask(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{"worktree": "host:/wt-1"})
 	if rr.Code != http.StatusOK {
@@ -494,6 +513,7 @@ func TestClaimNextNoReadyTask(t *testing.T) {
 // TestClaimNextMissingWorktree covers the 400 guard: worktree is required
 // unless dry_run is set.
 func TestClaimNextMissingWorktree(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Needs worktree", "priority": "high", "kind": "feature"})
@@ -507,6 +527,7 @@ func TestClaimNextMissingWorktree(t *testing.T) {
 // TestClaimNextDryRun covers the dry-run response shape: the top candidate
 // is returned but nothing is claimed or leased.
 func TestClaimNextDryRun(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Preview me", "priority": "high", "kind": "feature"})
@@ -543,6 +564,7 @@ func TestClaimNextDryRun(t *testing.T) {
 // ranking runs, so a higher-ranked task of a different kind does not shadow
 // the top-ranked candidate of the requested kind.
 func TestClaimNextKindFilter(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -570,6 +592,7 @@ func TestClaimNextKindFilter(t *testing.T) {
 
 // TestClaimNextInvalidKind covers the 422 guard on an unrecognized kind.
 func TestClaimNextInvalidKind(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Needs a valid kind", "priority": "high", "kind": "feature"})
@@ -583,6 +606,7 @@ func TestClaimNextInvalidKind(t *testing.T) {
 }
 
 func TestReopen(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Done then reopened", "priority": "high", "kind": "feature"})
@@ -683,6 +707,7 @@ func TestReopen(t *testing.T) {
 // reopenTask: every state past merged reopens to ready. The delivery states
 // have no HTTP endpoint yet, so the task is walked there through the store.
 func TestReopenFromDeliveryStates(t *testing.T) {
+	t.Parallel()
 	paths := map[string][][2]string{
 		"deployed_dev":  {{"merged", "deployed_dev"}},
 		"deployed_prod": {{"merged", "deployed_dev"}, {"deployed_dev", "deployed_prod"}},
@@ -728,6 +753,7 @@ func TestReopenFromDeliveryStates(t *testing.T) {
 // task straight back to deployed_prod — and closes the fresh lease of
 // whoever re-claimed it.
 func TestReopenVoidsDelivery(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{

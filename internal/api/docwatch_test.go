@@ -166,6 +166,7 @@ func (f *docWatchFixture) wantActions(t *testing.T, rule, outcome string, want f
 }
 
 func TestDocWatchMintsReviewOnSubmit(t *testing.T) {
+	t.Parallel()
 	f := newDocWatchFixture(t)
 
 	if got := f.handle(t, f.submitted(t, 1)); got != eventbus.OutcomeApplied {
@@ -203,6 +204,7 @@ func TestDocWatchMintsReviewOnSubmit(t *testing.T) {
 // the second run's RecordEvent hits (source, external_id) and skips apply
 // before any guard is consulted.
 func TestDocWatchRedeliveryMintsOnce(t *testing.T) {
+	t.Parallel()
 	f := newDocWatchFixture(t)
 	ev := f.submitted(t, 1)
 
@@ -243,6 +245,7 @@ func TestDocWatchRedeliveryMintsOnce(t *testing.T) {
 // open, and mint again once it closes — because sections accepted since the
 // last plan do need planning.
 func TestDocWatchSuppressionCycle(t *testing.T) {
+	t.Parallel()
 	f := newDocWatchFixture(t)
 
 	f.handle(t, f.accepted(t, 1))
@@ -286,6 +289,7 @@ func TestDocWatchSuppressionCycle(t *testing.T) {
 // TestDocWatchIgnoresVendorEvents: the log's dotted population is not RDF
 // (025 §15.2) and no rule speaks about it, so it is acked untouched.
 func TestDocWatchIgnoresVendorEvents(t *testing.T) {
+	t.Parallel()
 	f := newDocWatchFixture(t)
 
 	id, _, err := f.st.RecordEvent(t.Context(), "github", "delivery-1", "push",
@@ -313,6 +317,7 @@ func TestDocWatchIgnoresVendorEvents(t *testing.T) {
 // retries it head-of-line, which is right while the row is merely not
 // visible yet; a genuinely deleted document is `lode event seek`'s problem.
 func TestDocWatchUnknownSubjectIsAnError(t *testing.T) {
+	t.Parallel()
 	f := newDocWatchFixture(t)
 
 	ev := f.emit(t, eventbus.DocumentSubmitted{

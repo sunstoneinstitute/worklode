@@ -17,6 +17,7 @@ import (
 // pipeline a stored body renders through: markdown becomes HTML, and markup
 // the sanitizer strips from stored bodies is stripped here too.
 func TestPreviewRendersSanitizedMarkdown(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	rr := doForm(t, h, "/preview",
@@ -43,6 +44,7 @@ func TestPreviewRendersSanitizedMarkdown(t *testing.T) {
 // TestDictateUnconfigured pins the degraded posture: no provider key means
 // no microphone on the forms and a 503 from the endpoint.
 func TestDictateUnconfigured(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -67,6 +69,7 @@ func TestDictateUnconfigured(t *testing.T) {
 // ElevenLabs: the clip goes out as multipart with the model and key, the
 // transcription comes back as JSON, and a provider failure is a 502.
 func TestDictateProxiesToProvider(t *testing.T) {
+	t.Parallel()
 	var gotKey, gotModel string
 	var fail bool
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -143,6 +146,7 @@ func TestDictateProxiesToProvider(t *testing.T) {
 // TestDeliverableFormUsesMarkdownInput pins that the second form swapped its
 // textarea for the component too.
 func TestDeliverableFormUsesMarkdownInput(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 

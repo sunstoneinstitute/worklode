@@ -60,6 +60,7 @@ func setReviewers(t *testing.T, h http.Handler, token string, docID int64, revie
 // TestRequestDocApprovalOpensOneLanePerReviewer: 025 §7.3's reviewer set is
 // several open rows on one revision, not one row with several names.
 func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -118,6 +119,7 @@ func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 // add a reviewer — via SetDocReviewers (WL-359) — and simply run request
 // again.
 func TestRequestDocApprovalIsIdempotentAndAdditive(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -147,6 +149,7 @@ func TestRequestDocApprovalIsIdempotentAndAdditive(t *testing.T) {
 // moved here from request-approval (WL-359): the set is validated once, at
 // assignment, not again at every request.
 func TestSetDocReviewersUnknownActor(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	d := draftSpecForReview(t, h, token, "proj", "rev-unknown", 63)
@@ -168,6 +171,7 @@ func TestSetDocReviewersUnknownActor(t *testing.T) {
 // assigned is a refusal, not a silently successful no-op that leaves the
 // document waiting on nobody.
 func TestRequestDocApprovalNeedsAReviewer(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	d := draftSpecForReview(t, h, token, "proj", "req-empty", 64)
@@ -182,6 +186,7 @@ func TestRequestDocApprovalNeedsAReviewer(t *testing.T) {
 // cockpit's /reviews page renders — a pull request and a document side by
 // side, each carrying its own title.
 func TestListApprovalsServesBothEntityKinds(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	if err := st.CreateActor(context.Background(), "bob", "human", "Bob", false); err != nil {
@@ -231,6 +236,7 @@ func TestListApprovalsServesBothEntityKinds(t *testing.T) {
 // bearer token would defeat that, so the absence is asserted rather than
 // merely intended.
 func TestNoDecideRouteOnTheJSONAPI(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	seeded := seedAwaitingPRApproval(t, st, "acme/site#72", "Fix the other thing")
 

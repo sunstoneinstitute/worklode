@@ -23,6 +23,7 @@ func mapRepo(t *testing.T, h http.Handler, token, project, key, repo string) {
 }
 
 func TestResolveRemoteFindsProject(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	mapRepo(t, h, token, "worklode", "WL", "sunstoneinstitute/worklode")
 
@@ -50,6 +51,7 @@ func TestResolveRemoteFindsProject(t *testing.T) {
 }
 
 func TestResolveRemoteUnmapped(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodGet,
 		"/api/v1/projects/resolve?remote="+url.QueryEscape("git@github.com:acme/nope.git"), token, nil)
@@ -59,6 +61,7 @@ func TestResolveRemoteUnmapped(t *testing.T) {
 }
 
 func TestResolveRemoteInvalid(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	for _, remote := range []string{"", "worklode", "https://github.com/a/b/c"} {
 		rec := doReq(t, h, http.MethodGet,
@@ -70,6 +73,7 @@ func TestResolveRemoteInvalid(t *testing.T) {
 }
 
 func TestResolveRemoteRequiresAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	rec := doReq(t, h, http.MethodGet,
 		"/api/v1/projects/resolve?remote=a%2Fb", "", nil)

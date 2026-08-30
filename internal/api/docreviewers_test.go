@@ -19,6 +19,7 @@ import (
 // whoever the new set does not name — GetDoc's Reviewers is the whole
 // current set, never a union of every set ever assigned.
 func TestSetDocReviewers(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t) // token's actor is alice, admin=true
 	createProject(t, st, "proj")
 	bobToken := docActor(t, st, "bob")
@@ -75,6 +76,7 @@ func TestSetDocReviewers(t *testing.T) {
 // current version — resolved lanes and other reviewers' still-open lanes do
 // not appear for someone who already has.
 func TestDocReviewersAwaitingNarrowsToOpenLanes(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	docActor(t, st, "bob")
