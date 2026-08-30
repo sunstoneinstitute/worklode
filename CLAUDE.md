@@ -125,7 +125,7 @@ confirmation that needs a time uses `cli.LocalTime`, and cell formatters
 (`cli.Money`, `cli.HumanTokens`, `cli.DocNumber`, `cli.KeySuffix`) are shared,
 never re-derived. What legitimately renders in `internal/cmd` is output over
 values that never cross the API: `lode doc import`'s dry run over walked corpus
-files, `lode-hook`'s list of hook names, `lode next`'s no-work guidance.
+files, `lode-hook`'s list of hook names, `lode worktree next`'s no-work guidance.
 `internal/cmd/renderrule_test.go` catches the two tells a view has drifted back
 — a hand-built tabwriter, a hand-formatted timestamp — but it is a tripwire,
 not the rule; this paragraph is.
@@ -192,7 +192,7 @@ keep new state on the right side of that split.
   doesn't persist, so `worktree_dir` is the durable setting. A worktree's task
   id is read via `worktree.Layout.TaskID` (`internal/worktree`), which needs
   `extensions.worktreeConfig` in the repo's own local config — `lode install`
-  and `lode next` both set it.
+  and `lode worktree next` both set it.
 - **Integrating a diverged `main` is a rebase, never a merge.** When local
   `main` is ahead and `origin/main` has also moved, `git pull --rebase` before
   pushing; a merge commit created only to absorb remote commits is noise in the

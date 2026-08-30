@@ -1,1 +1,2 @@
-CLAUDE.md
+@CLAUDE.md
+@CLAUDE.local.md
