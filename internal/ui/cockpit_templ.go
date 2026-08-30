@@ -29,7 +29,7 @@ import templruntime "github.com/a-h/templ/runtime"
 //
 // Mode B has no repositories panel and no ranking-focus list — the prototype
 // shows neither, and both facts read better where they are already contracted
-// (the JSON cockpit; `lode next` acts on the ranking focus). CockpitView
+// (the JSON cockpit; `lode worktree next` acts on the ranking focus). CockpitView
 // therefore does not carry them at all (WL-164), so "populated but never
 // rendered" cannot recur here: adding either panel means adding the field
 // back deliberately, alongside markup that reads it.

@@ -43,7 +43,7 @@ Every pre-merged state can also go to `abandoned`; `merged`/`deployed_dev`/
 | Transition | Driven by |
 |---|---|
 | `draft → ready` | You: `lode task ready` |
-| `ready → in_progress` | You: `lode task claim` / `lode next` |
+| `ready → in_progress` | You: `lode task claim` / `lode worktree next` |
 | `in_progress → ready` | You: `lode task stop` / `lode task release` |
 | `in_progress → in_review` | **Webhook.** A GitHub `pull_request` `opened`/`ready_for_review` event on an `in_progress` task. Also reachable by hand via rework's inverse. |
 | `in_review → in_progress` | You: `lode task rework` (changes requested) |

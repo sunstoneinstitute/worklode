@@ -13,4 +13,4 @@ minor in-scope obstacles). If it is not a genuine blocker, say so and stop.
 If the blocker is a task that already exists, note its id. If it does not exist
 yet, create it first with `lode task add …` and use the new task's id.
 
-Then run `lode block --on <blocker-id> --json`, report the result to the user.
+Then run `lode worktree block --on <blocker-id> --json`, report the result to the user.

@@ -909,7 +909,7 @@ func TestDocAnchorsMissingFile(t *testing.T) {
 }
 
 // TestDocNewRecordsWorktreeTask walks the whole chain 025 §12 needs: `lode
-// next` binds a worktree to a task, and a `lode doc new` run from inside that
+// worktree next` binds a worktree to a task, and a `lode doc new` run from inside that
 // worktree records the binding on the document. The CLI reads the task the
 // same way every other worktree-aware command does, so claiming into a
 // worktree is the only setup a document author does.
@@ -920,8 +920,8 @@ func TestDocNewRecordsWorktreeTask(t *testing.T) {
 
 	root := initGitRepo(t)
 	t.Chdir(root)
-	if out, err := runLode(t, "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode next: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
+		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
 	}
 	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-write-the-spec"))
 

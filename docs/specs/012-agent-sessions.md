@@ -79,7 +79,7 @@ the tool's own identifier (a UUID for Claude Code), namespaced by `agent`
 because nothing guarantees two tools won't collide.
 
 The unique key is **per lease**, not global. A lease can expire mid-session and
-be re-claimed by the same live session — `lode resume` does exactly this — and
+be re-claimed by the same live session — `lode worktree resume` does exactly this — and
 that must produce a second row, not a constraint violation.
 
 Concurrent open sessions on one lease are permitted (no partial unique index).

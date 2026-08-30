@@ -323,7 +323,7 @@ func GitDir(root string) (string, error) {
 // worktrees unless the *local* repo config (not global — verified: a
 // global-only setting is silently ignored for this check) already has the
 // extension enabled. `lode install` calls this once per repo, and `lode
-// next` calls it again defensively right before creating a worktree, so
+// worktree next` calls it again defensively right before creating a worktree, so
 // stamping works even in a repo nobody ran `lode install` in.
 //
 // It refuses to act on a bare repository or one with core.worktree set.

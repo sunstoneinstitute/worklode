@@ -244,7 +244,7 @@ guard total: a path *inside* a worktree is not itself a worktree root, and the
 handlers that need to accept one resolve it through `worktree.Root` first.
 
 Id resolution — question 2 alone — reads the worktree's own git config,
-`git config --worktree --get worklode.task-id`, which `lode next` stamps at
+`git config --worktree --get worklode.task-id`, which `lode worktree next` stamps at
 creation time, and falls back to the first `[A-Z][A-Z0-9]*-[0-9]+` in the
 segment. The fallback is a substring match rather than a whole-segment match,
 so it holds for templates that render the id adjacent to other text
@@ -302,9 +302,9 @@ recorded in the backbone still names the old `<host>:<path>` identity, and
 while that lease is live, `cli.ReacquireOrRenew` (`internal/cli/client.go`)
 compares it against the new identity, finds no match, and falls to its
 `default` case — "actively leased to a different worktree; refusing to
-resume" (a warning from the hook, a hard error from `lode resume`). No CLI
+resume" (a warning from the hook, a hard error from `lode worktree resume`). No CLI
 command rebinds an *existing* worktree's lease; `RebindWorktree` is called
-only from `lode next` (`internal/cmd/lifecycle.go`), which binds a lease at
+only from `lode worktree next` (`internal/cmd/lifecycle.go`), which binds a lease at
 the moment a worktree is first created. So the stale identity does not
 "rebind on the next resume" — it has to be cleared first. Four steps, in
 order:
@@ -313,7 +313,7 @@ order:
 2. `git branch -m <old-branch> <new-branch>`
 3. `lode task release <id>` — required: the lease is still live and still
    names the old path, so a naive resume is refused rather than rebinding.
-4. `lode resume <new>` — with no lease held, this re-claims and binds to the
+4. `lode worktree resume <new>` — with no lease held, this re-claims and binds to the
    new identity.
 
 ### 7.2 PR and push correlation across the cutover
@@ -432,8 +432,8 @@ Notes:
   rendered branch) and the client only answers "is this branch's work in HEAD now, and was it not in
   the commit before?". Ancestry answers a true merge or fast-forward; a patch-id walk answers a
   squash. Rebase is out of scope, preserving neither SHAs nor, reliably, patch ids.
-  The "not in the previous commit" half is load-bearing rather than an optimization: `lode next`
-  creates a branch at the default branch's tip, so an idle worktree's branch is already an ancestor
+  The "not in the previous commit" half is load-bearing rather than an optimization:
+  `lode worktree next` creates a branch at the default branch's tip, so an idle worktree's branch is already an ancestor
   of HEAD, and without it every merge would report every idle task as delivered.
 - **A merge whose branch is already gone falls back to the webhook.** The probe needs the branch to
   exist locally. Merging and deleting in one breath is fine — `post-merge` runs first — but a report
@@ -882,7 +882,7 @@ the ingest boundary keeps one storage shape. No harness-specific table.
 
 > Pending `051-codex-and-amp-bindings-as-built.md#sec-5` (not yet effective)
 
-> **Amended by ADR 051 §5.** The managed block leads with `lode next`, which
+> **Amended by ADR 051 §5.** The managed block leads with `lode worktree next`, which
 > claims the top-ranked ready task and creates its worktree; `lode task claim
 > <id>` is named second, as the way to claim a specific task.
 

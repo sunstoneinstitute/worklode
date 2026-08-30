@@ -310,7 +310,7 @@ func uninstallAgentHooks(h harness.Harness, dir, scope string, statusLine bool) 
 // Enabling the worktree config extension is an enhancement to task-id
 // stamping, not a prerequisite for the hooks: a repo where it cannot be
 // enabled (a bare clone, say) still gets its pre-commit and agent hooks, so a
-// failure there warns and continues rather than aborting the run. `lode next`
+// failure there warns and continues rather than aborting the run. `lode worktree next`
 // treats the same failure the same way.
 func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope string) (installResult, error) {
 	var res installResult

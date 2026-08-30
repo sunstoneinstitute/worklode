@@ -21,7 +21,7 @@ const (
 // Markdown writes body to w, styled when w is an interactive terminal and raw
 // otherwise.
 //
-// Raw is the right default off-TTY, not a degraded one: `lode next` and
+// Raw is the right default off-TTY, not a degraded one: `lode worktree next` and
 // `lode task brief` are read by agents and piped into other tools, and both
 // want the markdown source rather than ANSI escapes and reflowed lines.
 func Markdown(w io.Writer, body string) {

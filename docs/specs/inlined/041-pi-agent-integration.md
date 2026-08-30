@@ -123,7 +123,7 @@ shared source is justified only after stable common fragments are demonstrated
 in both renderings.
 
 After session start, every command, and `agent_settled`, the extension runs
-`lode status --json` and renders a compact task key/title plus lease and
+`lode worktree status --json` and renders a compact task key/title plus lease and
 heartbeat health using `ctx.ui.setStatus("lode", value)`. The status is a
 Pi-owned footer item, not a `lode statusline` subprocess binding. It is
 guarded by `ctx.hasUI`; print and JSON modes still perform lifecycle hooks but
@@ -144,7 +144,7 @@ rather than assumes, these seams:
 4. how local package paths behave in linked Worklode worktrees, including
    project trust and Pi reload/update behavior;
 5. whether Pi skill names or command names collide with project resources; and
-6. the latency and failure behaviour of a `lode status --json` refresh in Pi's
+6. the latency and failure behaviour of a `lode worktree status --json` refresh in Pi's
    TUI, RPC, print, and JSON modes.
 
 Each result becomes either an implementation test, a documented degradation,

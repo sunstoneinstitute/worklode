@@ -164,7 +164,7 @@ costs on a cold node in a real cluster.
 **Synthesis: 038 §8's open cold-start problem is genuinely answered by warm pools,
 and by nothing else in the `Job` toolbox.** But read the 12 ms precisely: it is
 the time to *own a running pod*, not the time until an agent is working. The repo
-clone, `bootstrap.sh`, and `lode next` all still lie ahead, and on a real task
+clone, `bootstrap.sh`, and `lode worktree next` all still lie ahead, and on a real task
 those dominate everything measured here. Warm pools remove the image pull. They do
 not remove the setup, unless a pool is pre-seeded per project — which multiplies
 pools by projects and is not something the controller helps with.

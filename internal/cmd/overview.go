@@ -212,7 +212,7 @@ func runDeriveServer(cmd *cobra.Command) error {
 }
 
 // newOverviewCmd wires `lode overview` — the one-screen roll-up. `lode
-// status` is a different view and stays as it is.
+// worktree status` is a different view and stays as it is.
 func newOverviewCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
