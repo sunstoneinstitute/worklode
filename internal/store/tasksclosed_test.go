@@ -9,6 +9,7 @@ import (
 // TestClosedTaskIDsAbandoned pins that an abandoned task is closed regardless
 // of any repo mapping (taskClosed's first disjunct).
 func TestClosedTaskIDsAbandoned(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -32,6 +33,7 @@ func TestClosedTaskIDsAbandoned(t *testing.T) {
 // pins Closed false on a fresh ready task, which would pass even if GetTask
 // never touched the field.
 func TestGetTaskSetsClosed(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -52,6 +54,7 @@ func TestGetTaskSetsClosed(t *testing.T) {
 // TestClosedTaskIDsReadyNotClosed pins that a freshly created ready task is
 // not closed.
 func TestClosedTaskIDsReadyNotClosed(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -71,6 +74,7 @@ func TestClosedTaskIDsReadyNotClosed(t *testing.T) {
 // repo's done_state, and the same state is still open where the repo gates
 // higher (004 §1.3).
 func TestClosedTaskIDsPerRepoDoneState(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		doneState string
 		state     string
@@ -106,6 +110,7 @@ func TestClosedTaskIDsPerRepoDoneState(t *testing.T) {
 // circuits before any database round trip: a cancelled context would fail any
 // real query, so a nil error here proves none was issued.
 func TestClosedTaskIDsEmptyReturnsEmptyMapNoQuery(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -123,6 +128,7 @@ func TestClosedTaskIDsEmptyReturnsEmptyMapNoQuery(t *testing.T) {
 // abandoned task and a task at its repo's done_state are closed, a ready
 // task is not.
 func TestListTasksSetsClosed(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 

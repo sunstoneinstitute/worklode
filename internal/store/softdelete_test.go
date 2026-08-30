@@ -80,6 +80,7 @@ func deleteChanges(t *testing.T, s *Store, kind, id string) []map[string]string 
 }
 
 func TestDeleteTaskTombstonesClosesLeaseAndLogs(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -121,6 +122,7 @@ func TestDeleteTaskTombstonesClosesLeaseAndLogs(t *testing.T) {
 }
 
 func TestDeleteTaskTwiceIsInvalidInput(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -133,6 +135,7 @@ func TestDeleteTaskTwiceIsInvalidInput(t *testing.T) {
 }
 
 func TestDeleteTaskUnknownIsNotFound(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := deleteTask(t, s, "HDB-999", "stig", "nope"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("DeleteTask on unknown task: got %v, want ErrNotFound", err)
@@ -140,6 +143,7 @@ func TestDeleteTaskUnknownIsNotFound(t *testing.T) {
 }
 
 func TestUndeleteTaskRestores(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -172,6 +176,7 @@ func TestUndeleteTaskRestores(t *testing.T) {
 }
 
 func TestUndeleteLiveTaskIsInvalidInput(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	if err := undeleteTask(t, s, task.ID); !errors.Is(err, ErrInvalidInput) {
@@ -180,6 +185,7 @@ func TestUndeleteLiveTaskIsInvalidInput(t *testing.T) {
 }
 
 func TestListTasksHidesDeletedAndDeletedFilterShowsOnlyThem(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	live := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -210,6 +216,7 @@ func TestListTasksHidesDeletedAndDeletedFilterShowsOnlyThem(t *testing.T) {
 }
 
 func TestProjectWorkFactsHideDeletedTaskAndParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -242,6 +249,7 @@ func TestProjectWorkFactsHideDeletedTaskAndParent(t *testing.T) {
 }
 
 func TestClaimNextSkipsDeletedTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	gone := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -271,6 +279,7 @@ func TestClaimNextSkipsDeletedTask(t *testing.T) {
 }
 
 func TestClaimDeletedTaskIsNotFound(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -283,6 +292,7 @@ func TestClaimDeletedTaskIsNotFound(t *testing.T) {
 }
 
 func TestDeletedBlockerDoesNotBlock(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -322,6 +332,7 @@ func TestDeletedBlockerDoesNotBlock(t *testing.T) {
 }
 
 func TestDeletedChildDoesNotMakeAContainer(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -357,6 +368,7 @@ func TestDeletedChildDoesNotMakeAContainer(t *testing.T) {
 }
 
 func TestDeleteDocTombstonesAndLogs(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 	doc := mustCreateDoc(t, s, DocInput{
@@ -387,6 +399,7 @@ func TestDeleteDocTombstonesAndLogs(t *testing.T) {
 }
 
 func TestDeleteDocTwiceIsInvalidInputAndUnknownIsNotFound(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -404,6 +417,7 @@ func TestDeleteDocTwiceIsInvalidInputAndUnknownIsNotFound(t *testing.T) {
 }
 
 func TestUndeleteDocRestoresAndLiveIsInvalidInput(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 	doc := mustCreateDoc(t, s, DocInput{
@@ -431,6 +445,7 @@ func TestUndeleteDocRestoresAndLiveIsInvalidInput(t *testing.T) {
 }
 
 func TestListDocsHidesDeletedAndDeletedFilterShowsOnlyThem(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 	live := mustCreateDoc(t, s, DocInput{
@@ -470,6 +485,7 @@ func TestListDocsHidesDeletedAndDeletedFilterShowsOnlyThem(t *testing.T) {
 // answers false. Folding "deleted" into taskClosed would put "closed": true on
 // the wire for a row that never even reached ready.
 func TestDeletedTaskClosedIsStateOnly(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -511,6 +527,7 @@ func TestDeletedTaskClosedIsStateOnly(t *testing.T) {
 // TestListTasksHasChildrenIgnoresDeletedChildren keeps the list filter's
 // container predicate in step with hasChildren, which the claim path uses.
 func TestListTasksHasChildrenIgnoresDeletedChildren(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -545,6 +562,7 @@ func TestListTasksHasChildrenIgnoresDeletedChildren(t *testing.T) {
 // task would come back from undelete with no lease, invisible to the expiry
 // sweeper and unclaimable.
 func TestDeleteInProgressTaskReturnsItToReady(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -575,6 +593,7 @@ func TestDeleteInProgressTaskReturnsItToReady(t *testing.T) {
 // roll-up, so without an explicit re-resolve a parent would keep the state its
 // now-hidden child put it in.
 func TestDeleteChildReResolvesParent(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent := createTask(t, s, taskTestNow, defaultTaskInput())
 	started := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -627,6 +646,7 @@ func taskState(t *testing.T, s *Store, id string) string {
 // deleting and re-creating, which an unconditional unique index would refuse
 // with a collision against a row the operator cannot see.
 func TestDeletedDocReleasesSlugAndNumber(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 	in := DocInput{
@@ -668,6 +688,7 @@ func TestDeletedDocReleasesSlugAndNumber(t *testing.T) {
 // is a preference, not a filter — with no live rival the tombstone still
 // resolves, which is what keeps an undelete addressable by ref.
 func TestDeletedDocStillResolvesWhenNothingReplacedIt(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -688,6 +709,7 @@ func TestDeletedDocStillResolvesWhenNothingReplacedIt(t *testing.T) {
 // 044 §4 says a tombstone stops. It must not rewrite a hidden document's edges
 // or log an `edges` change against it.
 func TestRepointExternalEdgesSkipsDeletedDocs(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 
@@ -723,6 +745,7 @@ func TestRepointExternalEdgesSkipsDeletedDocs(t *testing.T) {
 // TestSupersedeReplacedDocsSkipsDeletedTarget: accepting a live successor must
 // not flip a tombstoned target to superseded or log against it.
 func TestSupersedeReplacedDocsSkipsDeletedTarget(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	ctx := t.Context()
 	old := mustCreateDoc(t, s, DocInput{

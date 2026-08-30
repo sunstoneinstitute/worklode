@@ -26,6 +26,7 @@ func recordGitHubEvent(t *testing.T, s *Store, externalID, typ, payload string) 
 }
 
 func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -96,6 +97,7 @@ func TestMarkEventAppliedAndUnappliedQuery(t *testing.T) {
 // able to bound it — and the bound has to keep the oldest-first order, or a
 // batched replay would skip events instead of resuming after them.
 func TestUnappliedEventsLimit(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -134,6 +136,7 @@ func eventIDs(evs []Event) []int64 {
 }
 
 func TestPollCandidates(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {
@@ -258,6 +261,7 @@ func TestPollCandidates(t *testing.T) {
 }
 
 func TestRepoIngestionHealth(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, "demo", "Demo", "WL"); err != nil {

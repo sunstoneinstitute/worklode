@@ -143,6 +143,7 @@ func isBlocked(t *testing.T, s *Store, taskID string) bool {
 }
 
 func TestCreateTaskSequentialIDsAndDefaults(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -239,6 +240,7 @@ func pushBranchCommit(t *testing.T, s *Store, taskID, repo, sha string) {
 // TestCreateTaskAboutDoc verifies AboutDoc round-trips through CreateTask and
 // GetTask, and that a task created without one reads back 0 (025 §15.4).
 func TestCreateTaskAboutDoc(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	seedDocsProject(t, s)
 
@@ -277,6 +279,7 @@ func TestCreateTaskAboutDoc(t *testing.T) {
 // matching kind referencing the doc is found; a different kind referencing
 // the same doc is not; once the matching task closes, the query finds none.
 func TestOpenTaskForDoc(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	seedDocsProject(t, s)
@@ -326,6 +329,7 @@ func TestOpenTaskForDoc(t *testing.T) {
 }
 
 func TestGetTaskNotFound(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	_, err := s.GetTask(t.Context(), "HDB-999")
@@ -335,6 +339,7 @@ func TestGetTaskNotFound(t *testing.T) {
 }
 
 func TestCreateTaskConcern(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	in := defaultTaskInput()
@@ -360,6 +365,7 @@ func TestCreateTaskConcern(t *testing.T) {
 }
 
 func TestCreateTaskNoConcern(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -377,6 +383,7 @@ func TestCreateTaskNoConcern(t *testing.T) {
 }
 
 func TestCreateTaskInvalidConcernRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	in := defaultTaskInput()
@@ -396,6 +403,7 @@ func TestCreateTaskInvalidConcernRejected(t *testing.T) {
 // the same body is fine on a task with a different (or no) concern, and a
 // basename-derived alt on a usability task still goes through.
 func TestCreateTaskUsabilityRejectsEmptyAlt(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	emptyAlt := "before\n\n![](/blob/" + strings.Repeat("a", 64) + ")\n\nafter\n"
 
@@ -453,6 +461,7 @@ func strPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool { return &b }
 
 func TestUpdateTaskFieldsConcernAndNeedsDecomposition(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -529,6 +538,7 @@ func TestUpdateTaskFieldsConcernAndNeedsDecomposition(t *testing.T) {
 // enforces: a task carries a title for its whole life, so an update must not
 // be able to blank one out.
 func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	in := defaultTaskInput()
 	task := createTask(t, s, taskTestNow, in)
@@ -563,6 +573,7 @@ func TestUpdateTaskFieldsRejectsBlankTitle(t *testing.T) {
 // already-set usability concern, so the lint reads the task's current
 // concern rather than only the one passed to this call.
 func TestUpdateTaskFieldsUsabilityRejectsEmptyAlt(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	in := defaultTaskInput()
 	in.Concern = "usability"
@@ -601,6 +612,7 @@ func TestUpdateTaskFieldsUsabilityRejectsEmptyAlt(t *testing.T) {
 // Both paths now share normalizePins, and an over-cap list is rejected rather
 // than truncated behind the caller's back.
 func TestCreateTaskNormalizesPins(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	in := defaultTaskInput()
@@ -661,6 +673,7 @@ func rawSkills(t *testing.T, s *Store, id string) string {
 }
 
 func TestTaskSkills(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -749,6 +762,7 @@ func TestTaskSkills(t *testing.T) {
 // entry silently mangles the alias-qualified SELECT list it builds for
 // readyCandidates, surfacing only as a SQLSTATE 42601 deep inside ClaimNext.
 func TestTaskColumnsEntriesAreCommaFree(t *testing.T) {
+	t.Parallel()
 	for _, c := range strings.Split(taskColumns, ", ") {
 		if strings.ContainsAny(c, "(),") {
 			t.Fatalf("taskColumns entry %q contains a call expression or comma; "+
@@ -758,6 +772,7 @@ func TestTaskColumnsEntriesAreCommaFree(t *testing.T) {
 }
 
 func TestTaskSecretsRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if err := s.CreateProject(ctx, "secproj", "Secrets", "SE"); err != nil {
@@ -805,6 +820,7 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 }
 
 func TestTaskSecretsRejectsBadName(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := t.Context()
 	if err := s.CreateProject(ctx, "secproj2", "Secrets2", "SF"); err != nil {
@@ -835,6 +851,7 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 // the constraint's own definition is read back and compared, so the two are
 // pinned in both directions.
 func TestKindCheckConstraintMatchesGeneratedKinds(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 
 	var def string

@@ -7,6 +7,7 @@ import (
 )
 
 func TestSkillEmbeddingsRecommend(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -67,6 +68,7 @@ func TestSkillEmbeddingsRecommend(t *testing.T) {
 // mismatched vector lengths would insert happily and then break every
 // cosine query over the whole table. Reject before writing anything.
 func TestReplaceSkillEmbeddingsMixedDimensions(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -98,6 +100,7 @@ func TestReplaceSkillEmbeddingsMixedDimensions(t *testing.T) {
 // above every real score in Postgres, so one degenerate chunk would rank
 // first for every query forever.
 func TestReplaceSkillEmbeddingsZeroNorm(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -121,6 +124,7 @@ func TestReplaceSkillEmbeddingsZeroNorm(t *testing.T) {
 // the query side: a zero query vector would otherwise score every skill
 // NaN and return the whole corpus in arbitrary order.
 func TestRecommendSkillsZeroNormQuery(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -143,6 +147,7 @@ func TestRecommendSkillsZeroNormQuery(t *testing.T) {
 // TestRecommendSkillsInvalidLimit guards limit<=0, which would otherwise
 // reach Postgres as a raw, unclassified "LIMIT must not be negative" error.
 func TestRecommendSkillsInvalidLimit(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -158,6 +163,7 @@ func TestRecommendSkillsInvalidLimit(t *testing.T) {
 // through to the query, not just accepted: with three matching skills and
 // limit=2, only the two best-scoring should come back.
 func TestRecommendSkillsLimitTruncates(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -186,6 +192,7 @@ func TestRecommendSkillsLimitTruncates(t *testing.T) {
 // way to wipe a skill's embeddings entirely, not just an incidental no-op:
 // the sync engine uses it when a skill's chunks all disappear.
 func TestReplaceSkillEmbeddingsNilClears(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -213,6 +220,7 @@ func TestReplaceSkillEmbeddingsNilClears(t *testing.T) {
 // or duplicated. WITH ORDINALITY is 1-based, so an off-by-one here would
 // shift every chunk index by one.
 func TestReplaceSkillEmbeddingsKeepsChunkOrder(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -261,6 +269,7 @@ func TestReplaceSkillEmbeddingsKeepsChunkOrder(t *testing.T) {
 // a live skill that was never embedded must not appear in results
 // (LEFT JOIN would incorrectly surface it with a null score).
 func TestRecommendSkillsSkipsSkillWithoutEmbeddings(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -285,6 +294,7 @@ func TestRecommendSkillsSkipsSkillWithoutEmbeddings(t *testing.T) {
 }
 
 func TestVectorLiteral(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   []float32
 		want string
@@ -307,6 +317,7 @@ func TestVectorLiteral(t *testing.T) {
 // TestClearAllSkillEmbeddings covers the provider-change path: every vector
 // in the table is invalidated at once, whatever skill it belongs to.
 func TestClearAllSkillEmbeddings(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 

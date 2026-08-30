@@ -20,6 +20,7 @@ func testSkillUpsert(name, hash string) SkillUpsert {
 }
 
 func TestUpsertSkillLifecycle(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -105,6 +106,7 @@ func TestUpsertSkillLifecycle(t *testing.T) {
 // Callers (sync engine with no skills left upstream) pass nil, and it must
 // soft-delete every live skill from that repo rather than erroring.
 func TestSoftDeleteSkillsExceptNilKeep(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -136,6 +138,7 @@ func TestSoftDeleteSkillsExceptNilKeep(t *testing.T) {
 // the only thing stopping a sync of one repo from soft-deleting skills that
 // belong to a different repo.
 func TestSoftDeleteSkillsExceptScopesToSourceRepo(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -166,6 +169,7 @@ func TestSoftDeleteSkillsExceptScopesToSourceRepo(t *testing.T) {
 }
 
 func TestUpsertSkillEmptyContentHash(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -180,6 +184,7 @@ func TestUpsertSkillEmptyContentHash(t *testing.T) {
 }
 
 func TestGetSkillNotFound(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -193,6 +198,7 @@ func TestGetSkillNotFound(t *testing.T) {
 // reverting to an earlier content hash must not lose either version row, and
 // must still report changed=true.
 func TestUpsertSkillContentRevert(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -239,6 +245,7 @@ func TestUpsertSkillContentRevert(t *testing.T) {
 // sees: live skills with no vectors at all, carrying the text needed to
 // embed them without a second query.
 func TestSkillsMissingEmbeddings(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 

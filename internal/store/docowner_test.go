@@ -13,6 +13,7 @@ import (
 // (migration 0058). It composes with Project and Kind rather than replacing
 // them, and an owner with no documents returns an empty list, not an error.
 func TestDocFilterByOwner(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := s.db.ExecContext(context.Background(),
 		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
@@ -73,6 +74,7 @@ func TestDocFilterByOwner(t *testing.T) {
 // (025 §7.3), which lands as a doc.owner_changed event and a state_log entry
 // naming the old and new owner.
 func TestDocTransferOwner(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -109,6 +111,7 @@ func TestDocTransferOwner(t *testing.T) {
 // not own (025 §7.3) — the mechanism a document whose owner left the org is
 // rescued through.
 func TestDocTransferOwnerAdminNotOwner(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if err := s.CreateActor(t.Context(), "root", "human", "root", true); err != nil {
 		t.Fatalf("create admin actor: %v", err)
@@ -141,6 +144,7 @@ func nullDocOwner(t *testing.T, s *Store, id int64) {
 // owner-match branch by accident — the same defense checkDocOwner and
 // checkRevisionDiscarder both keep.
 func TestDocTransferOwnerEmptyActorForbidden(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -157,6 +161,7 @@ func TestDocTransferOwnerEmptyActorForbidden(t *testing.T) {
 // document with no owner — the rescue path 025 §7.3 exists for, and the one
 // the empty-actorID defense above must not break.
 func TestDocTransferOwnerAdminRescuesOwnerlessDoc(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if err := s.CreateActor(t.Context(), "root", "human", "root", true); err != nil {
 		t.Fatalf("create admin actor: %v", err)
@@ -178,6 +183,7 @@ func TestDocTransferOwnerAdminRescuesOwnerlessDoc(t *testing.T) {
 // TestDocTransferOwnerThirdPartyForbidden: neither the owner nor an admin
 // refuses with ErrForbidden.
 func TestDocTransferOwnerThirdPartyForbidden(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -196,6 +202,7 @@ func TestDocTransferOwnerThirdPartyForbidden(t *testing.T) {
 // the document is a legal no-op, not a refusal — Task 5's bulk transfer loops
 // this endpoint over many documents and relies on re-runs being safe.
 func TestDocTransferOwnerSelfNoop(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -221,6 +228,7 @@ func TestDocTransferOwnerSelfNoop(t *testing.T) {
 // (owner REFERENCES actors), surfaced as ErrInvalidInput naming the field
 // rather than a raw constraint failure.
 func TestDocTransferOwnerUnknownActor(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	doc := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",

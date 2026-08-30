@@ -13,6 +13,7 @@ import (
 // calls (each from a distinct worktree, same actor) yields exactly M
 // distinct winners, the rest report Claimed:false, and no call errors.
 func TestClaimNextNoCollisionUnderContention(t *testing.T) {
+	t.Parallel()
 	s := openClaimNextStore(t)
 	ctx := t.Context()
 

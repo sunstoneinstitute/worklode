@@ -34,6 +34,7 @@ func seedQualified(t *testing.T, st *Store, qualifier, name string) {
 // each is separately reachable by its qualified name. Under the old
 // UNIQUE (name) constraint the second sync lost outright.
 func TestTwoPluginsShipOneSkillName(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	ctx := context.Background()
 	seedQualified(t, st, "superpowers", "brainstorming")
@@ -54,6 +55,7 @@ func TestTwoPluginsShipOneSkillName(t *testing.T) {
 // picking one: silently handing the task whichever row sorted first is the
 // failure mode the qualifier exists to end.
 func TestBareNameAmbiguousReportsCandidates(t *testing.T) {
+	t.Parallel()
 	reg := prometheus.NewRegistry()
 	st := OpenTestStore(t, WithMetrics(reg))
 	ctx := context.Background()
@@ -77,6 +79,7 @@ func TestBareNameAmbiguousReportsCandidates(t *testing.T) {
 // Qualifying is only required once a name is ambiguous, so every pin and
 // invocation written before this change keeps working.
 func TestBareNameResolvesWhileUnique(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	seedQualified(t, st, "superpowers", "brainstorming")
 
@@ -93,6 +96,7 @@ func TestBareNameResolvesWhileUnique(t *testing.T) {
 // the authoring guide documents resolves against the registry, with no
 // "pinned skill not found" warning.
 func TestQualifiedPinResolvesWithoutWarning(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	seedQualified(t, st, "superpowers", "test-driven-development")
 
@@ -113,6 +117,7 @@ func TestQualifiedPinResolvesWithoutWarning(t *testing.T) {
 // by the segment after its first colon — the rule that kept plan pins working
 // before any plugin was a source, and that must keep working now.
 func TestPinFallsBackToSuffixForUnsyncedPlugin(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	seedQualified(t, st, "sunstone", "test-driven-development")
 
@@ -132,6 +137,7 @@ func TestPinFallsBackToSuffixForUnsyncedPlugin(t *testing.T) {
 // An ambiguous pin warns and names the candidates rather than resolving to
 // one of them, so a brief never quietly carries a skill nobody chose.
 func TestResolvePinsWarnsOnAmbiguity(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	seedQualified(t, st, "superpowers", "brainstorming")
 	seedQualified(t, st, "lode", "brainstorming")
@@ -152,6 +158,7 @@ func TestResolvePinsWarnsOnAmbiguity(t *testing.T) {
 // A skill withdrawn from its source repo must not make a live same-named one
 // ambiguous: the live one is the only thing a bare pin could mean.
 func TestDeletedSkillDoesNotMakeLiveOneAmbiguous(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	ctx := context.Background()
 	seedQualified(t, st, "superpowers", "brainstorming")
@@ -173,6 +180,7 @@ func TestDeletedSkillDoesNotMakeLiveOneAmbiguous(t *testing.T) {
 // A skill has no identity without a qualifier: storing one would collapse the
 // qualified name back to the bare one this change replaced.
 func TestUpsertSkillRequiresQualifier(t *testing.T) {
+	t.Parallel()
 	st := OpenTestStore(t)
 	_, _, err := st.UpsertSkill(context.Background(), SkillUpsert{
 		Name: "tdd", Description: "d", SourceRepo: "acme/p", SourcePath: "skills/tdd",
@@ -190,6 +198,7 @@ func TestUpsertSkillRequiresQualifier(t *testing.T) {
 // not have, so the backfill is the source repo's last segment — a placeholder
 // the first sync after deploy corrects.
 func TestSkillQualifierBackfillOnPopulatedRegistry(t *testing.T) {
+	t.Parallel()
 	s := OpenUnmigratedTestStore(t)
 	if err := s.Migrate(migrationsThrough(t, 38)); err != nil {
 		t.Fatalf("migrate through 0038: %v", err)

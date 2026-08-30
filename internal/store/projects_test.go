@@ -13,6 +13,7 @@ import (
 )
 
 func TestCreateAndGetProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -33,6 +34,7 @@ func TestCreateAndGetProject(t *testing.T) {
 }
 
 func TestGetProjectNotFound(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -43,6 +45,7 @@ func TestGetProjectNotFound(t *testing.T) {
 }
 
 func TestListProjects(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -68,6 +71,7 @@ func TestListProjects(t *testing.T) {
 }
 
 func TestSetProjectFocusRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -90,6 +94,7 @@ func TestSetProjectFocusRoundTrip(t *testing.T) {
 }
 
 func TestSetProjectFocusEmpty(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -123,6 +128,7 @@ func TestSetProjectFocusEmpty(t *testing.T) {
 }
 
 func TestSetProjectFocusMissingProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -133,6 +139,7 @@ func TestSetProjectFocusMissingProject(t *testing.T) {
 }
 
 func TestSetProjectFocusInvalidEntry(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -155,6 +162,7 @@ func TestSetProjectFocusInvalidEntry(t *testing.T) {
 }
 
 func TestPinProjectFocusRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -214,6 +222,7 @@ func TestPinProjectFocusRoundTrip(t *testing.T) {
 }
 
 func TestPinProjectFocusMissingProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -224,6 +233,7 @@ func TestPinProjectFocusMissingProject(t *testing.T) {
 }
 
 func TestSetProjectNextDecisionRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -282,6 +292,7 @@ func TestSetProjectNextDecisionRoundTrip(t *testing.T) {
 }
 
 func TestSetProjectNextDecisionMissingProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -292,6 +303,7 @@ func TestSetProjectNextDecisionMissingProject(t *testing.T) {
 }
 
 func TestAddRepoAndProjectForRepo(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -312,6 +324,7 @@ func TestAddRepoAndProjectForRepo(t *testing.T) {
 }
 
 func TestProjectForRepoUnmapped(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -322,6 +335,7 @@ func TestProjectForRepoUnmapped(t *testing.T) {
 }
 
 func TestAddRepoDuplicateSameProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -339,6 +353,7 @@ func TestAddRepoDuplicateSameProject(t *testing.T) {
 }
 
 func TestAddRepoDuplicateDifferentProject(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -359,6 +374,7 @@ func TestAddRepoDuplicateDifferentProject(t *testing.T) {
 }
 
 func TestListRepos(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -391,6 +407,7 @@ func TestListRepos(t *testing.T) {
 }
 
 func TestSetRepoDoneState(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -447,6 +464,7 @@ func repoDoneState(t *testing.T, s *Store, repo string) string {
 }
 
 func TestPerProjectTaskNumbering(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
@@ -485,6 +503,7 @@ func TestPerProjectTaskNumbering(t *testing.T) {
 }
 
 func TestCreateProjectDuplicateKey(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 	if err := s.CreateProject(ctx, "a", "A", "WL"); err != nil {
@@ -509,6 +528,7 @@ func mustExtID(t *testing.T) string {
 // TestListReposForProjects covers the bulk reader: one query answers every
 // project id, and each group matches what ListRepos returns.
 func TestListReposForProjects(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 

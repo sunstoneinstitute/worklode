@@ -88,6 +88,7 @@ func recordStateEvent(t *testing.T, s *Store, source, externalID, taskID string,
 // child, and the parent itself (medium priority, blocked by a task in
 // project-b — 'blocks' edges are not project-scoped, unlike child_of).
 func TestListProjectWorkFacts(t *testing.T) {
+	t.Parallel()
 	s := openProjectWorkStore(t)
 	ctx := t.Context()
 
@@ -169,6 +170,7 @@ func TestListProjectWorkFacts(t *testing.T) {
 // TestListProjectWorkFactsAllProjects asserts projectID == "" returns tasks
 // from every project, not just one.
 func TestListProjectWorkFactsAllProjects(t *testing.T) {
+	t.Parallel()
 	s := openProjectWorkStore(t)
 	ctx := t.Context()
 
@@ -192,6 +194,7 @@ func TestListProjectWorkFactsAllProjects(t *testing.T) {
 // never transitioned has StateEvent == nil (there is no state_log row for
 // it at all, so the lateral join's LIMIT 1 yields no row).
 func TestListProjectWorkFactsNewTaskHasNoStateEvent(t *testing.T) {
+	t.Parallel()
 	s := openProjectWorkStore(t)
 	ctx := t.Context()
 
@@ -212,6 +215,7 @@ func TestListProjectWorkFactsNewTaskHasNoStateEvent(t *testing.T) {
 // controlled timestamp bypassing LogChange's time.Now() stamp), isolating
 // the id tie-break: the row inserted second always has the higher id.
 func TestListProjectWorkFactsNewestStateWins(t *testing.T) {
+	t.Parallel()
 	s := openProjectWorkStore(t)
 	ctx := t.Context()
 
@@ -237,6 +241,7 @@ func TestListProjectWorkFactsNewestStateWins(t *testing.T) {
 // moves to a closed state (taskClosed) no longer counts as an open
 // blocker.
 func TestListProjectWorkFactsClosedBlockerDisappears(t *testing.T) {
+	t.Parallel()
 	s := openProjectWorkStore(t)
 	ctx := t.Context()
 
@@ -273,6 +278,7 @@ func TestListProjectWorkFactsClosedBlockerDisappears(t *testing.T) {
 // TestListProjectWorkFactsReleasedLeaseAbsent asserts a released lease does
 // not surface as the task's Lease.
 func TestListProjectWorkFactsReleasedLeaseAbsent(t *testing.T) {
+	t.Parallel()
 	s := openProjectWorkStore(t)
 	ctx := t.Context()
 
@@ -299,6 +305,7 @@ func TestListProjectWorkFactsReleasedLeaseAbsent(t *testing.T) {
 // open tasks — the ready set, Claim and the board must not disagree about what
 // is pickable.
 func TestListProjectWorkFactsPlanBlocked(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-b", planTaskBody("", "Plan B"))
@@ -337,6 +344,7 @@ func TestListProjectWorkFactsPlanBlocked(t *testing.T) {
 // an unminted task set, so it holds with no task to name. The fact carries the
 // blocking plan itself, so Blocked() still agrees with Claim.
 func TestListProjectWorkFactsBlockedByDraftPlan(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	blocked := mintReadyPlan(t, s, "plan-d", planTaskBody("", "Plan D"))

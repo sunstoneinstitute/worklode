@@ -168,6 +168,7 @@ func projectOverheadRollupRows(t *testing.T, s *Store, projectID string) []rollu
 // TestEndAgentSessionRecordsPricedUsage walks one bucket all the way through:
 // stored detail, session roll-up, project rollup, and ProjectCost.
 func TestEndAgentSessionRecordsPricedUsage(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -228,6 +229,7 @@ func TestEndAgentSessionRecordsPricedUsage(t *testing.T) {
 // transcript is cumulative, so a second report carries absolute totals. Adding
 // them would inflate every long session by its own history.
 func TestEndAgentSessionReplacesUsage(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -266,6 +268,7 @@ func TestEndAgentSessionReplacesUsage(t *testing.T) {
 // heartbeat carries a running total, so a later one must replace the earlier
 // one exactly as a clean end does — and the project rollup must follow.
 func TestTouchAgentSessionRecordsUsage(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -316,6 +319,7 @@ func TestTouchAgentSessionRecordsUsage(t *testing.T) {
 // A caller may report the same (day, model, speed) twice. The row must be
 // merged before pricing, so its stored amount covers all of its tokens.
 func TestSessionUsageMergesDuplicateBuckets(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
@@ -333,6 +337,7 @@ func TestSessionUsageMergesDuplicateBuckets(t *testing.T) {
 
 // One session routinely mixes models at several-fold different rates.
 func TestSessionUsagePricesEachModelSeparately(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 
@@ -361,6 +366,7 @@ func TestSessionUsagePricesEachModelSeparately(t *testing.T) {
 
 // A session that runs past midnight must split its cost across both days.
 func TestSessionUsageSplitsAcrossDays(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -418,6 +424,7 @@ func TestSessionUsageSplitsAcrossDays(t *testing.T) {
 // A model with no rate on file is unpriced, which is deliberately distinct
 // from free: its amount stays NULL and its tokens surface as unpriced.
 func TestSessionUsageRecordsUnpricedModel(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -471,6 +478,7 @@ func TestSessionUsageRecordsUnpricedModel(t *testing.T) {
 
 // Two sessions on different tasks of the same project land in one rollup row.
 func TestProjectDailyCostAggregatesSessions(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	first := usageSession(t, s, "host:/.worktrees/one", "sess-1")
 	second := usageSession(t, s, "host:/.worktrees/two", "sess-2")
@@ -491,6 +499,7 @@ func TestProjectDailyCostAggregatesSessions(t *testing.T) {
 // A nil Buckets means "no breakdown reported"; an empty non-nil one means
 // "this session billed nothing", and must clear what was recorded.
 func TestEndAgentSessionNilBucketsKeepsUsageEmptyClearsIt(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -538,6 +547,7 @@ func TestEndAgentSessionNilBucketsKeepsUsageEmptyClearsIt(t *testing.T) {
 }
 
 func TestSessionUsageRejectsInvalidBuckets(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		bucket SessionUsageBucket
@@ -578,6 +588,7 @@ func TestSessionUsageRejectsInvalidBuckets(t *testing.T) {
 // Reporting usage is lease-holder-only, the same probe-resistant policy as the
 // rest of the agent-session API.
 func TestEndAgentSessionUsageRejectsNonHolder(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -636,6 +647,7 @@ func assertRollupRows(t *testing.T, got, want []rollupRow) {
 // usage becomes one day/currency row and total, and Sessions counts the one
 // session that billed it.
 func TestTaskCostReportsUsage(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -668,6 +680,7 @@ func TestTaskCostReportsUsage(t *testing.T) {
 // Two sessions on the same task on the same day fold into one row, but each
 // still counts toward Sessions.
 func TestTaskCostFoldsSameDaySessions(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -703,6 +716,7 @@ func TestTaskCostFoldsSameDaySessions(t *testing.T) {
 // An unknown task id is an error, not a silent zero: it is the guard against
 // reporting nothing for a typo'd id.
 func TestTaskCostUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	_, err := s.TaskCost(t.Context(), "WL-9999", false, time.Time{}, time.Time{})
 	if !errors.Is(err, ErrNotFound) {
@@ -713,6 +727,7 @@ func TestTaskCostUnknownTask(t *testing.T) {
 // A task that exists but has never had a billed session reports an empty
 // report and zero sessions, not an error.
 func TestTaskCostNoSessions(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -732,6 +747,7 @@ func TestTaskCostNoSessions(t *testing.T) {
 // includeChildren widens the scope to its child_of descendants — including a
 // grandchild, which a non-recursive single-hop query would miss.
 func TestTaskCostIncludeChildren(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	parent := leaseForTest(t, s, "host:/.worktrees/parent")
@@ -779,6 +795,7 @@ func TestTaskCostIncludeChildren(t *testing.T) {
 
 // from/to clip which days count, on both the report and the session count.
 func TestTaskCostWindow(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -829,6 +846,7 @@ func TestTaskCostWindow(t *testing.T) {
 // A model with no rate on file lands its tokens in UnpricedTokens rather than
 // being billed at zero.
 func TestTaskCostUnpricedTokens(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -861,6 +879,7 @@ func TestTaskCostUnpricedTokens(t *testing.T) {
 // The load-bearing case: overhead usage is a cumulative transcript total, so
 // a second report must replace the first, never accumulate on top of it.
 func TestReportProjectSessionUsageReplacesNotAccumulates(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -891,6 +910,7 @@ func TestReportProjectSessionUsageReplacesNotAccumulates(t *testing.T) {
 }
 
 func TestReportProjectSessionUsageUnknownProject(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	err := s.ReportProjectSessionUsage(t.Context(), "no-such-project", "claude-code", "sess-1",
 		map[string][]SessionUsageBucket{"": {{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}}})
@@ -902,6 +922,7 @@ func TestReportProjectSessionUsageUnknownProject(t *testing.T) {
 // An unknown agent or an empty external session id are rejected before any
 // project lookup or write, per spec 052 §5.
 func TestReportProjectSessionUsageRejectsInvalidInput(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	buckets := []SessionUsageBucket{{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Input: 1}}}
@@ -915,6 +936,7 @@ func TestReportProjectSessionUsageRejectsInvalidInput(t *testing.T) {
 }
 
 func TestProjectCostCombinesTaskAndOverheadOnSameDay(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-task")
@@ -948,6 +970,7 @@ func TestProjectCostCombinesTaskAndOverheadOnSameDay(t *testing.T) {
 // surface as a row. A plain (inner) join would drop it silently, which is
 // the common "pure orchestration day" this feature exists to stop losing.
 func TestProjectCostDayWithOverheadOnlyNoTaskUsage(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -992,6 +1015,7 @@ func TestProjectCostDayWithOverheadOnlyNoTaskUsage(t *testing.T) {
 // literal must still render at CostDay.Cost's six-fractional-digit shape,
 // not the bare "0" a same-scale numeric zero would give.
 func TestProjectCostOverheadCostIsSixDigitsWithNoOverheadUsage(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-task")
@@ -1024,6 +1048,7 @@ func TestProjectCostOverheadCostIsSixDigitsWithNoOverheadUsage(t *testing.T) {
 // day so the rollup is rebuilt to nothing for it, not left stale. Task 7's
 // hook path re-reports transcripts that can shrink to cover fewer days.
 func TestReportProjectSessionUsageDropsRollupForDayNoLongerReported(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -1063,6 +1088,7 @@ func TestReportProjectSessionUsageDropsRollupForDayNoLongerReported(t *testing.T
 // recorded must not leak into a task's report, which must carry the zero
 // overhead shape rather than an empty string.
 func TestTaskCostUnaffectedByProjectOverhead(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-task")
@@ -1100,6 +1126,7 @@ func TestTaskCostUnaffectedByProjectOverhead(t *testing.T) {
 // summed together — CostReport's contract has no conversion rate to do that
 // with.
 func TestTaskCostMultipleCurrencies(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -1144,6 +1171,7 @@ func TestTaskCostMultipleCurrencies(t *testing.T) {
 // while its lease was held comes back as overhead once the lease is gone.
 // Both sides then hold the same tokens, and ProjectCost sums the two.
 func TestProjectCostDoesNotDoubleCountUsageMovedToOverhead(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -1177,6 +1205,7 @@ func TestProjectCostDoesNotDoubleCountUsageMovedToOverhead(t *testing.T) {
 // removing the duplicate: a task's own turns bill to its agent session, the
 // remainder bills to overhead, and the total is what the transcript held.
 func TestReportProjectSessionUsageSplitsWithoutDuplicating(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -1211,6 +1240,7 @@ func TestReportProjectSessionUsageSplitsWithoutDuplicating(t *testing.T) {
 // overhead row must be released as the task row takes them, or the day
 // doubles just as it did the other way round.
 func TestReportProjectSessionUsageMovesOverheadBackToATask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := usageSession(t, s, "host:/.worktrees/one", "sess-1")
@@ -1246,6 +1276,7 @@ func TestReportProjectSessionUsageMovesOverheadBackToATask(t *testing.T) {
 // for cannot be billed, but the tokens were still spent: they land in
 // overhead rather than being dropped (spec 052 §3).
 func TestReportProjectSessionUsageUnreachableTaskBillsToOverhead(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 

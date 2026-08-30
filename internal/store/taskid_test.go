@@ -6,6 +6,7 @@ import (
 )
 
 func TestCompareTaskIDs(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		a, b string
 		want int // sign of the expected result
@@ -32,6 +33,7 @@ func TestCompareTaskIDs(t *testing.T) {
 }
 
 func TestSortTaskIDs(t *testing.T) {
+	t.Parallel()
 	ids := []string{"WL-10", "SW-2", "WL-9", "SW-10", "WL-1", "SW-1"}
 	SortTaskIDs(ids)
 	want := []string{"SW-1", "SW-2", "SW-10", "WL-1", "WL-9", "WL-10"}
@@ -41,6 +43,7 @@ func TestSortTaskIDs(t *testing.T) {
 }
 
 func TestCompareTaskIDsMalformed(t *testing.T) {
+	t.Parallel()
 	// Well-formed ids sort before malformed ones.
 	if CompareTaskIDs("WL-1", "bogus") >= 0 {
 		t.Errorf("well-formed WL-1 should sort before malformed 'bogus'")

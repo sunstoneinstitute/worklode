@@ -8,6 +8,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
+// The tests in this file are not t.Parallel(): SetBranchTemplate mutates a
+// process-global (the active branch template and its derived regex) that
+// every test here reads or writes, so running them concurrently races.
+
 func TestSetBranchTemplateValid(t *testing.T) {
 	t.Cleanup(func() { SetBranchTemplate("") })
 	cases := []struct{ name, tmpl, want string }{

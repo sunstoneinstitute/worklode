@@ -8,6 +8,7 @@ import (
 // An absent row is the normal first-boot state — no provider has been used
 // yet — so it reads back as the empty string rather than as an error.
 func TestEmbeddingProviderIDUnset(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 
 	got, err := s.EmbeddingProviderID(context.Background())
@@ -20,6 +21,7 @@ func TestEmbeddingProviderIDUnset(t *testing.T) {
 }
 
 func TestSetEmbeddingProviderID(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	ctx := context.Background()
 

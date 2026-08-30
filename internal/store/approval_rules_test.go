@@ -7,6 +7,7 @@ import (
 )
 
 func TestDecisionState(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		decision, state string
 		ok              bool
@@ -27,6 +28,7 @@ func TestDecisionState(t *testing.T) {
 }
 
 func TestQualifiedForRole(t *testing.T) {
+	t.Parallel()
 	role := func(s string) *string { return &s }
 
 	cases := []struct {
@@ -50,6 +52,7 @@ func TestQualifiedForRole(t *testing.T) {
 }
 
 func TestIsSelfApproval(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name            string
 		author, decider string

@@ -53,6 +53,7 @@ func defaultArtifact() Artifact {
 }
 
 func TestCreateArtifactUpsertReturnsSameID(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	a := defaultArtifact()
 
@@ -98,6 +99,7 @@ func TestCreateArtifactUpsertReturnsSameID(t *testing.T) {
 // existing row's id — the guarded DO UPDATE returns no row, so that id comes
 // from the fallback SELECT (WL-198).
 func TestCreateArtifactNonRegressing(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 
 	newDigest := "sha256:newer"
@@ -155,6 +157,7 @@ func TestCreateArtifactNonRegressing(t *testing.T) {
 }
 
 func TestArtifactsBySourceSHA(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	a1 := defaultArtifact()
 	a2 := defaultArtifact()
@@ -189,6 +192,7 @@ func TestArtifactsBySourceSHA(t *testing.T) {
 }
 
 func TestFindArtifactByImage(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	a := defaultArtifact()
 	a.Name = "registry.example.com/sunstone/demo"
@@ -226,6 +230,7 @@ func defaultDeployment() Deployment {
 }
 
 func TestUpsertDeploymentInsertAndUpdate(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	d := defaultDeployment()
 
@@ -286,6 +291,7 @@ func TestUpsertDeploymentInsertAndUpdate(t *testing.T) {
 }
 
 func TestUpsertDeploymentNilArtifactIDPreservesLink(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 
 	artifactID, err := createArtifact(t, s, defaultArtifact())
@@ -328,6 +334,7 @@ func TestUpsertDeploymentNilArtifactIDPreservesLink(t *testing.T) {
 }
 
 func TestListDeploymentsFilter(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	dProd := defaultDeployment()
 	dDev := defaultDeployment()
@@ -375,6 +382,7 @@ func artifactIDBySourceSHA(t *testing.T, s *Store, sha string) *int64 {
 }
 
 func TestArtifactIDBySourceSHANoneFound(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	got := artifactIDBySourceSHA(t, s, "nonexistent")
 	if got != nil {
@@ -383,6 +391,7 @@ func TestArtifactIDBySourceSHANoneFound(t *testing.T) {
 }
 
 func TestArtifactIDBySourceSHANewestWins(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	a1 := defaultArtifact()
 	id1, err := createArtifact(t, s, a1)
@@ -423,6 +432,7 @@ func artifactByDigest(t *testing.T, s *Store, digest string) *Artifact {
 }
 
 func TestArtifactByDigest(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	digest := "sha256:feed00"
 	a := defaultArtifact()
@@ -438,6 +448,7 @@ func TestArtifactByDigest(t *testing.T) {
 }
 
 func TestArtifactByDigestNoneFound(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	got := artifactByDigest(t, s, "sha256:absent")
 	if got != nil {
@@ -463,6 +474,7 @@ func deploymentStatus(t *testing.T, s *Store, environment, targetKind, targetNam
 }
 
 func TestDeploymentStatusNoneFound(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	got := deploymentStatus(t, s, "prod", "flux_kustomization", "demo/demo")
 	if got != "" {
@@ -471,6 +483,7 @@ func TestDeploymentStatusNoneFound(t *testing.T) {
 }
 
 func TestDeploymentStatusFound(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	d := defaultDeployment()
 	d.Status = "failed"
@@ -484,6 +497,7 @@ func TestDeploymentStatusFound(t *testing.T) {
 }
 
 func TestArtifactsBySourceSHAKindOrder(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 	a := defaultArtifact()
 	id, err := createArtifact(t, s, a)
@@ -505,6 +519,7 @@ func TestArtifactsBySourceSHAKindOrder(t *testing.T) {
 // TestArtifactsBySourceSHAs covers the bulk reader: one query answers every
 // sha, and each group matches what ArtifactsBySourceSHA returns.
 func TestArtifactsBySourceSHAs(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 
 	a1 := defaultArtifact()
@@ -550,6 +565,7 @@ func TestArtifactsBySourceSHAs(t *testing.T) {
 // TestDeploymentsForArtifacts covers the bulk reader: one query answers every
 // artifact id, and each group matches what DeploymentsForArtifact returns.
 func TestDeploymentsForArtifacts(t *testing.T) {
+	t.Parallel()
 	s := openArtifactsStore(t)
 
 	first := defaultArtifact()

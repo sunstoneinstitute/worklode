@@ -12,6 +12,7 @@ import (
 var tokenPattern = regexp.MustCompile(`^wl_[0-9a-f]{40}$`)
 
 func TestCreateAndGetActor(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -36,6 +37,7 @@ func TestCreateAndGetActor(t *testing.T) {
 // CreateActor is a plain INSERT and fails the second time, so a server that
 // asserts its service identity at every start needs this instead.
 func TestEnsureServiceActorIsIdempotent(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -59,6 +61,7 @@ func TestEnsureServiceActorIsIdempotent(t *testing.T) {
 // a service identity has no external source of truth to re-sync from, so a
 // second call must not rewrite a display name an operator changed.
 func TestEnsureServiceActorLeavesAnExistingRowAlone(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -79,6 +82,7 @@ func TestEnsureServiceActorLeavesAnExistingRowAlone(t *testing.T) {
 }
 
 func TestGetActorNotFound(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -89,6 +93,7 @@ func TestGetActorNotFound(t *testing.T) {
 }
 
 func TestCreateTokenRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -130,6 +135,7 @@ func TestCreateTokenRoundTrip(t *testing.T) {
 }
 
 func TestAuthenticateSuccess(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -151,6 +157,7 @@ func TestAuthenticateSuccess(t *testing.T) {
 }
 
 func TestAuthenticateUnknownToken(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -161,6 +168,7 @@ func TestAuthenticateUnknownToken(t *testing.T) {
 }
 
 func TestAuthenticateRevoked(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -183,6 +191,7 @@ func TestAuthenticateRevoked(t *testing.T) {
 }
 
 func TestAuthenticateExpired(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -213,6 +222,7 @@ func TestAuthenticateExpired(t *testing.T) {
 }
 
 func TestCreateTokenNoExpiry(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -236,6 +246,7 @@ func TestCreateTokenNoExpiry(t *testing.T) {
 }
 
 func TestRevokeTokenByHash(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -259,6 +270,7 @@ func TestRevokeTokenByHash(t *testing.T) {
 }
 
 func TestUpsertHumanActor(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -298,6 +310,7 @@ func TestUpsertHumanActor(t *testing.T) {
 // first upsert with a github_username persists it, and a later login without
 // the attribute clears it back to NULL (round-tripped as "").
 func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -330,6 +343,7 @@ func TestUpsertHumanActorSyncsGitHubExpectation(t *testing.T) {
 // stays the sole authority (spec 029 §6.2) — exactly like the admin flag and
 // expected GitHub login.
 func TestUpsertHumanActorStoresIdentityClaims(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 

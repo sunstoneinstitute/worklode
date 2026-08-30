@@ -16,6 +16,7 @@ import (
 )
 
 func TestDocSchemaBlocksEdgeWithAnchorViolatesCheck(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -42,6 +43,7 @@ func TestDocSchemaBlocksEdgeWithAnchorViolatesCheck(t *testing.T) {
 }
 
 func TestDocSchemaCoversEdgeSucceeds(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -67,6 +69,7 @@ func TestDocSchemaCoversEdgeSucceeds(t *testing.T) {
 // TestResolveDocRef covers the ref grammar the doc verbs take: an id, a slug,
 // a slug nobody holds, and a slug two projects hold.
 func TestResolveDocRef(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -110,6 +113,7 @@ func TestResolveDocRef(t *testing.T) {
 // that stopped at the live rows could not name it (044 §4). A live document
 // with that slug still wins.
 func TestResolveDocRefFallsBackToTombstones(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	gone := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -145,6 +149,7 @@ func TestResolveDocRefFallsBackToTombstones(t *testing.T) {
 // real edge once its target exists. Nothing authored moves — and unlike
 // UpdateDocBody it runs at accepted, because no anchor is being restated.
 func TestReplaceDocEdges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	// Accepted at creation, the state the importer puts a spent plan in.
@@ -207,6 +212,7 @@ func TestReplaceDocEdges(t *testing.T) {
 // the covers edge, and only the partial entry writes a
 // doc_coverage_completed_with row (026 §2.1, §5).
 func TestDocCoverageLevels(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -267,6 +273,7 @@ covers:
 // this project cannot resolve lands verbatim in to_external, to_doc NULL —
 // unresolvable, it closes nothing (026 §2.1).
 func TestDocCoverageFullCoverageWithUnresolved(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -304,6 +311,7 @@ covers:
 // rows' positions stay a contiguous 0-based rank rather than skipping the
 // dropped entry's index.
 func TestDocCoverageFullCoverageWithBlankEntryKeepsPositionsContiguous(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -342,6 +350,7 @@ covers:
 // only meaningful on a partial entry (026 §5.1); beside full it is dropped
 // rather than written.
 func TestDocCoverageFullCoverageWithBesideFullWritesNoRows(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -379,6 +388,7 @@ covers:
 // TestDocCoverageBareStringIsFull: a bare-string covers entry has no level
 // to author, so it stores full — the decoder's default (026 §5.1).
 func TestDocCoverageBareStringIsFull(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -400,6 +410,7 @@ func TestDocCoverageBareStringIsFull(t *testing.T) {
 // doc_coverage_completed_with from the new source with no orphaned or
 // duplicated rows, the same as it rebuilds doc_edges.
 func TestDocCoverageRewriteReplacesCompletedWith(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -478,6 +489,7 @@ covers:
 // the same spec section at different levels contradict each other (026
 // §2.1), so the write is refused rather than silently picking one.
 func TestDocCoverageSameSectionTwiceRejectsDifferentLevels(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -507,6 +519,7 @@ covers:
 // same spec section at the same level are one edge, same as any other
 // repeated resolved target.
 func TestDocCoverageSameSectionTwiceSameLevelDeduped(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -536,6 +549,7 @@ covers:
 // closures are the same class of contradiction as two different levels (026
 // §2.1), so the write is refused rather than silently keeping one.
 func TestDocCoverageSameSectionTwicePartialRejectsDifferentClosures(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -573,6 +587,7 @@ covers:
 // not the raw reference, matching why the row itself dedupes on the resolved
 // target (026 §2.1).
 func TestDocCoverageSameSectionTwicePartialSameClosureDeduped(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -611,6 +626,7 @@ covers:
 // full/partial/none must never reach the CHECK constraint as a raw Postgres
 // error — it is ErrInvalidInput at the write.
 func TestDocCoverageUnknownLevelRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -641,6 +657,7 @@ covers:
 // NULL, plus one doc_coverage_completed_with row resolving to the owner (026
 // §5.3).
 func TestDocDefersCreatesEdgeAndOwner(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -695,6 +712,7 @@ defers:
 // TestDocDefersOnSpecRejected: defers is plan-only — a spec defers nothing,
 // it is what work is deferred *from* (026 §5.3).
 func TestDocDefersOnSpecRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6,
@@ -726,6 +744,7 @@ Scope body.
 // carries no #sec-N fragment is refused, not tolerated-and-ignored the way a
 // whole-document covers claim is (026 §5.3).
 func TestDocDefersMissingFragmentRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -757,6 +776,7 @@ defers:
 // uncovered section, which needs no syntax — omitting `to` is refused (026
 // §5.3).
 func TestDocDefersEmptyOwnerRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -784,6 +804,7 @@ defers:
 // section — a `to` carrying a #sec-N fragment is refused, matching
 // secmeta.py's check rather than silently stripping the fragment (026 §5.3).
 func TestDocDefersOwnerWithFragmentRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -810,6 +831,7 @@ defers:
 // TestDocDefersToItselfRejected: a plan deferring a section to itself has
 // confused deferral with coverage; refused (026 §5.3).
 func TestDocDefersToItselfRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -837,6 +859,7 @@ defers:
 // different owners is a contradiction the frontmatter cannot mean, refused
 // the way conflicting covers levels are (026 §5.3, §5.1).
 func TestDocDefersSameSectionTwoOwnersRejected(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -873,6 +896,7 @@ defers:
 // TestDocDefersIdenticalEntryTwiceDeduped: the same entry twice is one edge,
 // not an error (026 §5.3).
 func TestDocDefersIdenticalEntryTwiceDeduped(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -907,6 +931,7 @@ defers:
 // reference lands verbatim in to_external, same as a covers typo — it reads
 // as an unplanned section rather than an error (026 §5.3).
 func TestDocDefersUnresolvableSpecLandsInExternal(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6,
@@ -935,6 +960,7 @@ defers:
 // TestDocSchemaDefersEdgeSucceeds: migration 0045 admits 'defers' to
 // doc_edges' type CHECK.
 func TestDocSchemaDefersEdgeSucceeds(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -960,6 +986,7 @@ func TestDocSchemaDefersEdgeSucceeds(t *testing.T) {
 // TestDocSchemaBogusEdgeTypeViolatesCheck: doc_edges_type_check still refuses
 // a type outside the admitted set (migration 0045 only adds 'defers' to it).
 func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	seedDocsProject(t, s)
 
@@ -989,6 +1016,7 @@ func TestDocSchemaBogusEdgeTypeViolatesCheck(t *testing.T) {
 // the referring document's own corpus: the key must be a real project's, and
 // the type token is verified against the target's kind rather than trusted.
 func TestDocResolveRefShorthand(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -1033,6 +1061,7 @@ requires:
 // number carry no corpus and stay same-project, landing in to_external when
 // only another project holds the target.
 func TestDocResolveRefShorthandCrossesProjects(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := s.db.ExecContext(t.Context(),
 		`INSERT INTO projects (id, name, key) VALUES ('cms','CMS','CMS')`); err != nil {
@@ -1080,6 +1109,7 @@ requires:
 // document shorthand, which resolves on the project key alone (025 §14.3), so
 // the projects_key_format CHECK rejects them as keys.
 func TestProjectKeySpecAndADRReserved(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	for _, key := range []string{"SPEC", "ADR"} {
 		_, err := s.db.ExecContext(t.Context(),
@@ -1103,6 +1133,7 @@ func TestProjectKeySpecAndADRReserved(t *testing.T) {
 // TestDocResolveRefBareNumberAmbiguous: a project may hold a spec 25 and an
 // ADR 25. A bare number cannot say which, so it resolves to neither.
 func TestDocResolveRefBareNumberAmbiguous(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-spec", Body: specBody, CreatedBy: "stig",
@@ -1136,6 +1167,7 @@ func TestDocResolveRefBareNumberAmbiguous(t *testing.T) {
 // would turn "025-…-2.md" into an edge to spec 025 — a wrong edge is worse
 // than an unresolved one.
 func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -1162,6 +1194,7 @@ func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 // Every resolved far end also carries the other document's project, slug, kind
 // and number, so a reader can name it; an unresolved reference carries none.
 func TestDocListEdgesBothDirections(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -1236,6 +1269,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 // document by project and slug (the Obsidian mirror's doc wikilinks, WL-284)
 // would otherwise silently assume the near end's project for either.
 func TestDocListEdgesResolvesFarProject(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := s.db.ExecContext(t.Context(),
 		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
@@ -1285,6 +1319,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 // Checked in both directions: the plan's own covers/defers row, and the
 // spec's inbound isCoveredBy/isDeferredBy reading of that same row.
 func TestDocListEdgesIncludesCompletedWith(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustAcceptedSpec(t, s, "025-x")
 	owner := mustCreateDoc(t, s, DocInput{
@@ -1348,6 +1383,7 @@ func TestDocListEdgesIncludesCompletedWith(t *testing.T) {
 // admits must have an inverse, or reading a document's inbound edges states
 // the relation backwards. One edge of each type, read from the far end.
 func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	from := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-from", Body: specBody, CreatedBy: "stig",
@@ -1395,6 +1431,7 @@ func TestDocListEdgesInverseCoversEveryType(t *testing.T) {
 // and the row it writes is byte-for-byte the one part 2's `blocks:` would
 // have written (025 §5, WL-143).
 func TestDocBlockedByWritesTheSameRowAsBlocks(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	// Forward: the earlier plan first, the later plan naming it.
@@ -1435,6 +1472,7 @@ func TestDocBlockedByWritesTheSameRowAsBlocks(t *testing.T) {
 // .declared_by), not by where it points from. Dropping the key drops the row;
 // rewriting the blocking plan does not.
 func TestDocBlockedByIsOwnedByItsAuthor(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	early := mustCreateDoc(t, s, DocInput{
@@ -1468,6 +1506,7 @@ func TestDocBlockedByIsOwnedByItsAuthor(t *testing.T) {
 // ordering is the same fact twice, not a contradiction. It stays one row —
 // the unique index is the arbiter — and the later writer owns it.
 func TestDocBlocksDeclaredFromBothEndsIsOneRow(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	early := mustCreateDoc(t, s, DocInput{
@@ -1493,6 +1532,7 @@ func TestDocBlocksDeclaredFromBothEndsIsOneRow(t *testing.T) {
 // self-block, no cycle. Reading them off the row rather than off the author is
 // what keeps the two spellings from disagreeing about what is legal.
 func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	mustCreateDoc(t, s, DocInput{
@@ -1575,6 +1615,7 @@ func TestDocEdgesRejectBadBlockedByEnds(t *testing.T) {
 // documents (025 §5). An end that is not a plan, or a reference this project
 // cannot resolve to one, is ErrInvalidInput rather than a dead edge.
 func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	mustCreateDoc(t, s, DocInput{
@@ -1633,6 +1674,7 @@ func TestDocEdgesRejectBlocksBetweenNonPlans(t *testing.T) {
 // the plan would block itself, and while the plan is draft the unminted-set
 // arm blocks too. It is refused at write time (025 §5).
 func TestDocEdgesRejectSelfBlockingPlan(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	_, err := createDoc(t, s, DocInput{
@@ -1653,6 +1695,7 @@ func TestDocEdgesRejectSelfBlockingPlan(t *testing.T) {
 // stay mutable at any status, so it is the write that closes the cycle that
 // has to refuse it, and the refusal names the cycle (WL-144).
 func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	// a blocks b blocks c, written back to front so every reference resolves.
@@ -1696,6 +1739,7 @@ func TestDocEdgesRejectBlocksCycleBetweenPlans(t *testing.T) {
 // re-convergence. A plan reachable by two distinct paths is an ordinary DAG
 // and every task in it can still close.
 func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	last := mustCreateDoc(t, s, DocInput{
@@ -1736,6 +1780,7 @@ func TestDocEdgesAllowConvergingBlocks(t *testing.T) {
 // going stale "some other way": ReplaceDocEdges is the only pass left that
 // re-reads its frontmatter, and it owes the cascade the other two paths owe.
 func TestReplaceDocEdgesSupersedesReplacedTarget(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	successor := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
@@ -1782,6 +1827,7 @@ func TestReplaceDocEdgesSupersedesReplacedTarget(t *testing.T) {
 // row's two ends move (025 §5, WL-143). No database: this is the translation
 // itself.
 func TestFrontmatterEdgesBlockedByBecomesInverseBlocks(t *testing.T) {
+	t.Parallel()
 	doc, err := designdoc.Parse([]byte(
 		"---\nstatus: draft\nblocks: plan-three\nblockedBy: plan-one\n---\n\n# Plan two\n"))
 	if err != nil {
