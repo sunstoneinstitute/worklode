@@ -10,6 +10,7 @@ import (
 // TestGetTaskCost covers the 200 shape: a task with recorded usage reports
 // its sessions and cost, scoped to itself when children is not requested.
 func TestGetTaskCost(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := endSessionWithUsage(t, st, h, token, []map[string]any{sonnetUsagePrevDay, sonnetUsage})
 
@@ -38,6 +39,7 @@ func TestGetTaskCost(t *testing.T) {
 
 // TestGetTaskCostNotFound covers 404 for an unknown task id.
 func TestGetTaskCostNotFound(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/tasks/nosuch/cost", token, nil)
 	if rr.Code != http.StatusNotFound {
@@ -48,6 +50,7 @@ func TestGetTaskCostNotFound(t *testing.T) {
 // TestGetTaskCostBadParams covers 400 on a malformed from and a malformed
 // children value.
 func TestGetTaskCostBadParams(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)
 
@@ -66,6 +69,7 @@ func TestGetTaskCostBadParams(t *testing.T) {
 // flag set: a container task's own sessions are empty, but its child's usage
 // shows up once children is requested.
 func TestGetTaskCostChildren(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	parent := createTaskViaAPI(t, h, token, map[string]any{

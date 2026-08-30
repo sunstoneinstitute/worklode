@@ -14,6 +14,7 @@ import (
 // rather than through the handler because reaching runServerDerivers needs a
 // configured GitHub App as well as a graph client.
 func TestDeriveFailureStatusBlamesTheRightParty(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		err  error

@@ -73,6 +73,7 @@ func newOIDCServerAdmin(t *testing.T) http.Handler {
 // Keycloak rejects, making the web UI unloggable while the CLI flow keeps
 // working.
 func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	iss := oidctest.NewIssuer(t)
 
@@ -94,6 +95,7 @@ func TestNewServerRequiresPublicURLWhenOIDC(t *testing.T) {
 // setting: the org-membership guard that used to gate the GitHub login flow
 // is gone along with that flow (spec 001 §3).
 func TestNewServerAcceptsGitHubWithoutOrg(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	iss := oidctest.NewIssuer(t)
 	_, _, err := api.NewServer(st, api.Config{
@@ -111,6 +113,7 @@ func TestNewServerAcceptsGitHubWithoutOrg(t *testing.T) {
 }
 
 func TestOIDCConfig(t *testing.T) {
+	t.Parallel()
 	_, h, iss := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "GET", "/auth/oidc/config", "", nil)
 	if rr.Code != http.StatusOK {
@@ -123,6 +126,7 @@ func TestOIDCConfig(t *testing.T) {
 }
 
 func TestOIDCConfig404WhenUnconfigured(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t) // no OIDC
 	rr := doReq(t, h, "GET", "/auth/oidc/config", "", nil)
 	if rr.Code != http.StatusNotFound {
@@ -131,6 +135,7 @@ func TestOIDCConfig404WhenUnconfigured(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeMintsToken(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "bob",
@@ -170,6 +175,7 @@ func TestOIDCTokenExchangeMintsToken(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 
@@ -205,6 +211,7 @@ func TestOIDCTokenExchangeAdminSyncsOnAndOff(t *testing.T) {
 // login carrying github_username sets it, and a later login without the
 // claim clears it back to empty while still succeeding (201).
 func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 
@@ -242,6 +249,7 @@ func TestOIDCTokenExchangeSyncsGitHubUsername(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRequiresUserRole(t *testing.T) {
+	t.Parallel()
 	_, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "dan", "name": "Dan", "groups": []string{"other"},
@@ -253,6 +261,7 @@ func TestOIDCTokenExchangeRequiresUserRole(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRejectsMissingIDToken(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newOIDCServer(t, api.Config{})
 	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{})
 	if rr.Code != http.StatusBadRequest {
@@ -261,6 +270,7 @@ func TestOIDCTokenExchangeRejectsMissingIDToken(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeActorKindConflict(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 
@@ -288,6 +298,7 @@ func TestOIDCTokenExchangeActorKindConflict(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRejectsExpired(t *testing.T) {
+	t.Parallel()
 	_, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "eve", "groups": []string{"user"},
@@ -300,6 +311,7 @@ func TestOIDCTokenExchangeRejectsExpired(t *testing.T) {
 }
 
 func TestOIDCTokenExchangeRejectsWrongAudience(t *testing.T) {
+	t.Parallel()
 	_, h, iss := newOIDCServer(t, api.Config{})
 	raw := iss.SignToken(t, map[string]any{
 		"preferred_username": "frank", "groups": []string{"user"},
@@ -312,6 +324,7 @@ func TestOIDCTokenExchangeRejectsWrongAudience(t *testing.T) {
 }
 
 func TestOIDCTokenExchange404WhenUnconfigured(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t) // no OIDC
 	rr := doReq(t, h, "POST", "/auth/oidc/token", "", map[string]string{"id_token": "x"})
 	if rr.Code != http.StatusNotFound {

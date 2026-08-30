@@ -6,6 +6,7 @@ import (
 )
 
 func TestDecomposeEndpoint(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	parent := createTaskViaAPI(t, h, token, map[string]any{
@@ -37,6 +38,7 @@ func TestDecomposeEndpoint(t *testing.T) {
 }
 
 func TestDecomposeEndpointRejectsEmptyList(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	parent := createTaskViaAPI(t, h, token, map[string]any{
@@ -51,6 +53,7 @@ func TestDecomposeEndpointRejectsEmptyList(t *testing.T) {
 }
 
 func TestDecomposeEndpointRejectsLeasedTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	parent := createTaskViaAPI(t, h, token, map[string]any{
@@ -73,6 +76,7 @@ func TestDecomposeEndpointRejectsLeasedTask(t *testing.T) {
 // rejection of re-splitting a container: a task that already has children is
 // rejected with 422 — add more children with the edges endpoint instead.
 func TestDecomposeEndpointRejectsTaskWithChildren(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	parent := createTaskViaAPI(t, h, token, map[string]any{

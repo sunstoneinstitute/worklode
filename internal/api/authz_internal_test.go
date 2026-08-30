@@ -28,6 +28,7 @@ func userSubject() Subject {
 // been added to the table yet. Fail-closed is the difference between a policy
 // and a suggestion.
 func TestDecideDefaultDeny(t *testing.T) {
+	t.Parallel()
 	for _, sub := range []Subject{adminSubject(), userSubject(), {}} {
 		d := Decide(Request{Subject: sub, Permission: Permission("task.teleport")})
 		if d.Allowed {
@@ -43,6 +44,7 @@ func TestDecideDefaultDeny(t *testing.T) {
 // authenticated actor works the tracker, admin-only permissions need the
 // admin role, and an anonymous subject gets nothing.
 func TestDecideRoles(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct {
 		name    string
 		sub     Subject
@@ -79,6 +81,7 @@ func TestDecideRoles(t *testing.T) {
 // out administration. A future admin-only web route has to fail closed on an
 // instance where anyone can reach the port.
 func TestOpenSubjectIsNeverAdmin(t *testing.T) {
+	t.Parallel()
 	sub := openSubject()
 	if sub.HasRole(RoleAdmin) {
 		t.Fatal("the open-deployment subject holds the admin role")
@@ -95,6 +98,7 @@ func TestOpenSubjectIsNeverAdmin(t *testing.T) {
 // carries. It is derived from the policy rather than written per route, so
 // this is what keeps every admin route saying the same thing.
 func TestAdminOnlyDenialWording(t *testing.T) {
+	t.Parallel()
 	for _, perm := range []Permission{
 		permProjectAdmin, permActorAdmin, permSkillAdmin, permInboxAdmin, permDocImport,
 	} {
@@ -114,6 +118,7 @@ func TestAdminOnlyDenialWording(t *testing.T) {
 // permission in the policy guards at least one route. Either kind of drift
 // leaves a rule that looks enforced and is not.
 func TestEveryGuardedPermissionIsGranted(t *testing.T) {
+	t.Parallel()
 	used := map[Permission]bool{}
 	for pattern, g := range routeGuards {
 		if g.perm == permPublic {
@@ -137,6 +142,7 @@ func TestEveryGuardedPermissionIsGranted(t *testing.T) {
 // editing this list, in a diff, on purpose — it cannot happen by forgetting a
 // wrapper.
 func TestPublicRoutesAreAnExplicitList(t *testing.T) {
+	t.Parallel()
 	want := []string{
 		"GET /.well-known/lode-login",
 		"GET /assets/",
@@ -174,6 +180,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 // a signature. The three signed webhooks and the two login-flow POSTs are the
 // enumerated exceptions, each of which authenticates by other means.
 func TestNoWriteRouteIsPublic(t *testing.T) {
+	t.Parallel()
 	signedOrLogin := map[string]bool{
 		"POST /hooks/github":    true, // HMAC
 		"POST /hooks/flux":      true, // HMAC
@@ -195,6 +202,7 @@ func TestNoWriteRouteIsPublic(t *testing.T) {
 // asserting it in a comment: registering a route the table does not name
 // panics, so an unguarded endpoint cannot reach production.
 func TestRouterRejectsUndeclaredRoute(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -211,6 +219,7 @@ func TestRouterRejectsUndeclaredRoute(t *testing.T) {
 // TestRouterRejectsPublicWithoutReason checks the other half: a route may be
 // unauthenticated, but not silently so.
 func TestRouterRejectsPublicWithoutReason(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("a public route with no stated reason did not panic")
@@ -228,6 +237,7 @@ func TestRouterRejectsPublicWithoutReason(t *testing.T) {
 // route claims is reported, because a rule nothing enforces reads like a
 // guard to the next person who greps for it.
 func TestUnusedGuardsAreReported(t *testing.T) {
+	t.Parallel()
 	rt := newRouter(&server{}, http.NewServeMux())
 	err := rt.checkComplete()
 	if err == nil {
@@ -245,6 +255,7 @@ func TestUnusedGuardsAreReported(t *testing.T) {
 // — this is a check on Via, not on role, so an admin token does not pass
 // either.
 func TestRequireSession(t *testing.T) {
+	t.Parallel()
 	for _, via := range []authMethod{authNone, authToken, authSession, authOpen} {
 		t.Run(string(via), func(t *testing.T) {
 			s := &server{log: slog.Default()}
@@ -283,6 +294,7 @@ func TestRequireSession(t *testing.T) {
 // requireSession guards against is the actor row's, not something this
 // mapping adds on top.
 func TestSubjectFromActorGroups(t *testing.T) {
+	t.Parallel()
 	groups := []string{"crew-backbone", "org-admins"}
 	sub := subjectFromActor(&store.Actor{ID: "dana", Kind: "human", Groups: groups}, authSession)
 	if !slices.Equal(sub.Groups, groups) {

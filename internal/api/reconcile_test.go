@@ -11,6 +11,7 @@ import (
 )
 
 func TestWhoami(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 
 	rec := doReq(t, h, http.MethodGet, "/api/v1/whoami", token, nil)
@@ -31,6 +32,7 @@ func TestWhoami(t *testing.T) {
 }
 
 func TestWhoamiRequiresAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	if rec := doReq(t, h, http.MethodGet, "/api/v1/whoami", "", nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no token: %d; want 401", rec.Code)
@@ -41,6 +43,7 @@ func TestWhoamiRequiresAuth(t *testing.T) {
 // admin-only — a non-admin token must still get 200 with admin: false, not
 // 403.
 func TestWhoamiNonAdmin(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	nonAdmin := makeNonAdminToken(t, st, h, token)
 
@@ -62,6 +65,7 @@ func TestWhoamiNonAdmin(t *testing.T) {
 }
 
 func TestReposDoctor(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	mapRepo(t, h, token, "demo", "WL", "acme/app")
 
@@ -109,6 +113,7 @@ func TestReposDoctor(t *testing.T) {
 // TestReposDoctorStale: a mapped repo with no deliveries at all is stale —
 // the signal that sends an operator to lode reconcile.
 func TestReposDoctorStale(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	mapRepo(t, h, token, "demo", "WL", "acme/silent")
 
@@ -130,6 +135,7 @@ func TestReposDoctorStale(t *testing.T) {
 }
 
 func TestReposDoctorRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	nonAdmin := makeNonAdminToken(t, st, h, token)
 	if rec := doReq(t, h, http.MethodGet, "/api/v1/repos/doctor", nonAdmin, nil); rec.Code != http.StatusForbidden {
@@ -138,6 +144,7 @@ func TestReposDoctorRequiresAdmin(t *testing.T) {
 }
 
 func TestReconcileReplaysIgnoredEvents(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	// Delivery recorded before mapping...
 	seedGitHubEvent(t, st, "d-1", "issues.opened.ignored", `{
@@ -173,6 +180,7 @@ func TestReconcileReplaysIgnoredEvents(t *testing.T) {
 }
 
 func TestReconcileValidation(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	cases := []struct {
 		name string
@@ -194,6 +202,7 @@ func TestReconcileValidation(t *testing.T) {
 }
 
 func TestReconcileRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	nonAdmin := makeNonAdminToken(t, st, h, token)
 	if rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", nonAdmin, map[string]any{}); rec.Code != http.StatusForbidden {
@@ -206,6 +215,7 @@ func TestReconcileRequiresAdmin(t *testing.T) {
 // behavior itself is covered in internal/reconcile; this asserts the wiring
 // branch only.
 func TestReconcilePollSkippedWithoutApp(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodPost, "/api/v1/reconcile", token, map[string]any{"dry_run": true})
 	if rec.Code != http.StatusOK {

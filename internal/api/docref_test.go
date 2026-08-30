@@ -15,6 +15,7 @@ import (
 // document's page, tier-2 style for a foreign-key shorthand, and answers 404
 // for what nothing resolves.
 func TestDocRefRedirect(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -49,6 +50,7 @@ func TestDocRefRedirect(t *testing.T) {
 // rendered body carries no frontmatter and its plain-text references are
 // links; a resolved relation link carries its #fragment.
 func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createDocViaAPI(t, h, token, model.CreateDocInput{

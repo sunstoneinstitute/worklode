@@ -24,6 +24,7 @@ func runtimeEventBody() map[string]any {
 }
 
 func TestRuntimeEventsRequireAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/runtime-events", "", runtimeEventBody())
 	if rr.Code != http.StatusUnauthorized {
@@ -32,6 +33,7 @@ func TestRuntimeEventsRequireAuth(t *testing.T) {
 }
 
 func TestRuntimeEventsValidation(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 
 	t.Run("bad kind", func(t *testing.T) {
@@ -63,6 +65,7 @@ func TestRuntimeEventsValidation(t *testing.T) {
 }
 
 func TestRuntimeEventsCreateAndDeduplicate(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 
 	// A docker_image artifact matching the reported image name:tag — the

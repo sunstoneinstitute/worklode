@@ -22,6 +22,7 @@ func mintTaskToken(t *testing.T, h http.Handler, token, taskID string, body any)
 }
 
 func TestMintTaskTokenDefaults(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T", "priority": "high", "kind": "feature"})
@@ -52,6 +53,7 @@ func TestMintTaskTokenDefaults(t *testing.T) {
 }
 
 func TestMintTaskTokenRefusals(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	task := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "T", "priority": "high", "kind": "feature"})
@@ -76,6 +78,7 @@ func TestMintTaskTokenRefusals(t *testing.T) {
 // TestTaskTokenScope is the 001 §2.1 narrowing: a task-scoped token reaches
 // its own task's routes and the unbound worker surface, and nothing else.
 func TestTaskTokenScope(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	mine := createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Mine", "priority": "high", "kind": "feature"})["id"].(string)
@@ -123,6 +126,7 @@ func TestTaskTokenScope(t *testing.T) {
 }
 
 func TestTaskTokenMetric(t *testing.T) {
+	t.Parallel()
 	st, main, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	id := createTaskViaAPI(t, main, token, map[string]any{"project": "proj", "title": "T", "priority": "high", "kind": "feature"})["id"].(string)

@@ -14,6 +14,7 @@ import (
 // rather than replacing them, and an owner with no documents returns an
 // empty list, not a 404.
 func TestListDocsByOwner(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t) // token's actor is alice
 	createProject(t, st, "proj")
 	docActor(t, st, "bob")
@@ -63,6 +64,7 @@ func TestListDocsByOwner(t *testing.T) {
 // actor, request — rather than the previous_owner/owner keys 025 §15.2
 // originally proposed before this endpoint existed.
 func TestTransferDocOwner(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t) // token's actor is alice, admin=true
 	createProject(t, st, "proj")
 	bobToken := docActor(t, st, "bob")

@@ -12,6 +12,7 @@ import (
 )
 
 func TestBlobGCDryRunDeletesNothing(t *testing.T) {
+	t.Parallel()
 	_, h, token, fake := newTestServerBlobs(t)
 	postBlob(t, h, token, "", pngBytes) // unreferenced, but fresh
 
@@ -38,6 +39,7 @@ func TestBlobGCDryRunDeletesNothing(t *testing.T) {
 }
 
 func TestBlobGCCollects(t *testing.T) {
+	t.Parallel()
 	_, h, token, fake := newTestServerBlobs(t)
 	postBlob(t, h, token, "", pngBytes)
 
@@ -62,6 +64,7 @@ func TestBlobGCCollects(t *testing.T) {
 // uploaded blob keeps its row and its object, the freshly written orphan
 // object survives, and only the object aged past 24h is collected.
 func TestBlobGCDefaultGraceSparesRecent(t *testing.T) {
+	t.Parallel()
 	_, h, token, fake := newTestServerBlobs(t)
 	hash := uploadedHash(t, h, token, pngBytes) // unreferenced, but fresh
 
@@ -117,6 +120,7 @@ func TestBlobGCDefaultGraceSparesRecent(t *testing.T) {
 }
 
 func TestBlobGCRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	st, h, _, _ := newTestServerBlobs(t)
 	if err := st.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -132,6 +136,7 @@ func TestBlobGCRequiresAdmin(t *testing.T) {
 }
 
 func TestBlobGCUnconfigured(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t) // no blob store attached
 	rec := doReq(t, h, http.MethodPost, "/api/v1/blobs/gc", token, map[string]any{"dry_run": true})
 	if rec.Code != http.StatusNotImplemented {
@@ -143,6 +148,7 @@ func TestBlobGCUnconfigured(t *testing.T) {
 // the run's actual mode and what each sweep found — a dry run and an apply
 // are both 200, so http_requests_total cannot tell them apart.
 func TestBlobGCMetrics(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	st := newTestStore(t)
 	token := seedActor(t, st, "alice", "human", "Alice", true)

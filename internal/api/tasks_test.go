@@ -88,6 +88,7 @@ func createTaskViaAPI(t *testing.T, h http.Handler, token string, body map[strin
 }
 
 func TestCreateTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -120,6 +121,7 @@ func TestCreateTask(t *testing.T) {
 }
 
 func TestCreateTaskDraft(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	got := createTaskViaAPI(t, h, token, map[string]any{
@@ -133,6 +135,7 @@ func TestCreateTaskDraft(t *testing.T) {
 // TestCreateTaskWithConcern verifies the concern field round-trips into the
 // store and back out through model.Task.
 func TestCreateTaskWithConcern(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	got := createTaskViaAPI(t, h, token, map[string]any{
@@ -161,6 +164,7 @@ func TestCreateTaskWithConcern(t *testing.T) {
 }
 
 func TestCreateTaskValidation(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -186,6 +190,7 @@ func TestCreateTaskValidation(t *testing.T) {
 }
 
 func TestGetTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -225,6 +230,7 @@ func TestGetTask(t *testing.T) {
 // on the task-detail response, so `lode task show` can render them without a
 // second request.
 func TestGetTaskIncludesAgentSessions(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)
 
@@ -252,6 +258,7 @@ func TestGetTaskIncludesAgentSessions(t *testing.T) {
 // TestGetTaskUnleasedHasNoAgentSessions checks a task with no active lease
 // carries no agent_sessions field at all, not an empty array.
 func TestGetTaskUnleasedHasNoAgentSessions(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -269,6 +276,7 @@ func TestGetTaskUnleasedHasNoAgentSessions(t *testing.T) {
 }
 
 func TestListTasksFilters(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "proj2")
@@ -313,6 +321,7 @@ func TestListTasksFilters(t *testing.T) {
 // (025 §9.2); an ordinary task no plan authored omits the key entirely —
 // its absence is the correct answer, not a zero value.
 func TestGetTaskShowsPlanDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	minted := mintedPlanTasks(t, h, token)
@@ -345,6 +354,7 @@ func TestGetTaskShowsPlanDoc(t *testing.T) {
 // plan's minted task set — the query that is the plan's task set (§1). A
 // non-numeric plan_doc is a named 400, not a silently empty result.
 func TestListTasksFilterByPlanDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	minted := mintedPlanTasks(t, h, token)
@@ -371,6 +381,7 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 // "about_doc" (025 §15.4); an ordinary task with none omits the key
 // entirely — its absence is the correct answer, not a zero value.
 func TestGetTaskShowsAboutDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	doc := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -404,6 +415,7 @@ func TestGetTaskShowsAboutDoc(t *testing.T) {
 // the tasks referencing that document; a non-numeric about_doc is a named
 // 400, not a silently empty result — mirroring TestListTasksFilterByPlanDoc.
 func TestListTasksFilterByAboutDoc(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	doc := createDocViaAPI(t, h, token, model.CreateDocInput{
@@ -442,6 +454,7 @@ func TestListTasksFilterByAboutDoc(t *testing.T) {
 }
 
 func TestPatchTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -508,6 +521,7 @@ func TestPatchTask(t *testing.T) {
 // idempotently), an invalid list is refused, and a declaration for an
 // unknown task rolls back with the 404.
 func TestPatchTaskDeclaresArtifacts(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -570,6 +584,7 @@ func TestPatchTaskDeclaresArtifacts(t *testing.T) {
 // TestPatchTaskConcern covers the concern/needs_decomposition PATCH
 // extension, checking both the response body and the stored row.
 func TestPatchTaskConcern(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -621,6 +636,7 @@ func TestPatchTaskConcern(t *testing.T) {
 }
 
 func TestPatchTaskState(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -669,6 +685,7 @@ func TestPatchTaskState(t *testing.T) {
 }
 
 func TestPatchTaskStateCombinesWithFields(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -700,6 +717,7 @@ func TestPatchTaskStateCombinesWithFields(t *testing.T) {
 }
 
 func TestEdges(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
@@ -764,6 +782,7 @@ func TestEdges(t *testing.T) {
 }
 
 func TestEdgesFromDirection(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Child", "priority": "low", "kind": "feature"})
@@ -793,6 +812,7 @@ func TestEdgesFromDirection(t *testing.T) {
 }
 
 func TestEdgeValidation(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "A", "priority": "low", "kind": "chore"})
@@ -822,6 +842,7 @@ func TestEdgeValidation(t *testing.T) {
 // TestCreateTaskWithSkills verifies "skills" on the create request persists
 // and round-trips through the response and a subsequent GET.
 func TestCreateTaskWithSkills(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -848,6 +869,7 @@ func TestCreateTaskWithSkills(t *testing.T) {
 // wiring, not just the write), that an empty list clears existing pins
 // (rather than merging), and the 404 for an unknown task.
 func TestSetTaskSkills(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	created := createTaskViaAPI(t, h, token, map[string]any{
@@ -929,6 +951,7 @@ func TestSetTaskSkills(t *testing.T) {
 // back, and a stale internal/ns/gen.go by internal/ns's
 // TestTaskKindsMatchTurtle, which re-reads ns/concept.ttl independently.
 func TestTaskKindsAgreeAcrossSources(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -947,6 +970,7 @@ func TestTaskKindsAgreeAcrossSources(t *testing.T) {
 // the same transaction as the insert, so there is no window where the follow-up
 // exists without its origin.
 func TestCreateTaskWithFollowUpTo(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -978,6 +1002,7 @@ func TestCreateTaskWithFollowUpTo(t *testing.T) {
 // TestCreateTaskUnknownFollowUpTo checks the named 404, so it cannot be
 // confused with the project lookup's.
 func TestCreateTaskUnknownFollowUpTo(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	rr := doReq(t, h, "POST", "/api/v1/tasks", token, map[string]any{
@@ -995,6 +1020,7 @@ func TestCreateTaskUnknownFollowUpTo(t *testing.T) {
 // TestEdgeEndpointAcceptsFollowUpTo checks the generic edge endpoint, both
 // directions of the request shape and the delete.
 func TestEdgeEndpointAcceptsFollowUpTo(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1020,6 +1046,7 @@ func TestEdgeEndpointAcceptsFollowUpTo(t *testing.T) {
 // the fourth type — there is no dedicated duplicate route — and that the
 // second canonical is refused by the partial unique index.
 func TestEdgeEndpointAcceptsDuplicateOf(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	for _, title := range []string{"Canonical", "Duplicate", "Other canonical"} {
@@ -1069,6 +1096,7 @@ func TestEdgeEndpointAcceptsDuplicateOf(t *testing.T) {
 // that its message names every accepted type, so the four spellings cannot
 // drift apart.
 func TestEdgeEndpointRejectsUnknownType(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	for _, title := range []string{"One", "Two"} {
@@ -1093,6 +1121,7 @@ func TestEdgeEndpointRejectsUnknownType(t *testing.T) {
 // read back the server-authoritative branch name so the client never has to
 // render one itself.
 func TestListTasksByRepoAndBranch(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createProject(t, st, "other")
@@ -1138,6 +1167,7 @@ func TestListTasksByRepoAndBranch(t *testing.T) {
 // not a timestamp is refused rather than silently ignored — an ignored one
 // would look like a working incremental sync while returning everything.
 func TestListTasksUpdatedSince(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Fix the thing", "priority": "high", "kind": "feature"})
@@ -1210,6 +1240,7 @@ type listDetailRow struct {
 // order is preserved, and that worklode_list_expansions_total{tasks,detail}
 // increments only on the expanded request.
 func TestListTasksDetailExpansion(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	token := seedActor(t, st, "alice", "human", "Alice", true)
 	h, admin, err := api.NewServer(st, api.Config{})
@@ -1317,6 +1348,7 @@ func TestListTasksDetailExpansion(t *testing.T) {
 // get-task edge/blocked projections drifting apart: both read the same
 // store facts and must agree.
 func TestListTasksDetailMatchesGetTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
@@ -1359,6 +1391,7 @@ func TestListTasksDetailMatchesGetTask(t *testing.T) {
 }
 
 func TestTaskSecretsOverAPI(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
 		map[string]string{"id": "secapi", "name": "Sec", "key": "SA"})
@@ -1419,6 +1452,7 @@ func TestTaskSecretsOverAPI(t *testing.T) {
 }
 
 func TestTaskSecretsRejectsBadNames(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rec := doReq(t, h, http.MethodPost, "/api/v1/projects", token,
 		map[string]string{"id": "secbad", "name": "SecBad", "key": "SB"})
@@ -1445,6 +1479,7 @@ func TestTaskSecretsRejectsBadNames(t *testing.T) {
 // the creation gate's validation, alias normalisation, and a change-log
 // entry through the normal event path.
 func TestPatchTaskKind(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{

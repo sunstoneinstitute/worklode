@@ -13,6 +13,7 @@ import (
 // TestAssignDefaultsToCaller covers POST .../assign with no body: the caller
 // becomes the assignee.
 func TestAssignDefaultsToCaller(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -31,6 +32,7 @@ func TestAssignDefaultsToCaller(t *testing.T) {
 
 // TestAssignExplicitBody covers POST .../assign with an explicit assignee.
 func TestAssignExplicitBody(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -51,6 +53,7 @@ func TestAssignExplicitBody(t *testing.T) {
 
 // TestUnassign covers POST .../unassign clearing the assignee.
 func TestUnassign(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -77,6 +80,7 @@ func TestUnassign(t *testing.T) {
 // TestStartAutoAssignsNoLease covers POST .../start: the task moves to
 // in_progress, auto-assigning the caller, without taking a lease row.
 func TestStartAutoAssignsNoLease(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -103,6 +107,7 @@ func TestStartAutoAssignsNoLease(t *testing.T) {
 // TestStartAssignedToAnother covers POST .../start on a task already assigned
 // to someone else: 422.
 func TestStartAssignedToAnother(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -128,6 +133,7 @@ func TestStartAssignedToAnother(t *testing.T) {
 // TestStop covers POST .../stop moving an assigned, lease-free in_progress
 // task back to ready.
 func TestStop(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -150,6 +156,7 @@ func TestStop(t *testing.T) {
 // so the task is first assigned to the caller and then claimed (which
 // re-transitions ready -> in_progress and takes a lease).
 func TestStopClaimedTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -177,6 +184,7 @@ func TestStopClaimedTask(t *testing.T) {
 // TestPatchSubmitForReview covers PATCH state=in_review, legal only from
 // in_progress.
 func TestPatchSubmitForReview(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")
@@ -204,6 +212,7 @@ func TestPatchSubmitForReview(t *testing.T) {
 // TestHumanLifecycle covers the full lease-free human path: assign -> start
 // -> submit (PATCH in_review) -> done, ending merged.
 func TestHumanLifecycle(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	store.SeedCrewForTests(t, st, "proj", "alice")

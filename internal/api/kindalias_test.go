@@ -13,6 +13,7 @@ import (
 // and returns "design", and counts the alias use on
 // worklode_task_kind_alias_uses_total.
 func TestCreateTaskAliasesDeprecatedKind(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 
@@ -45,6 +46,7 @@ func TestCreateTaskAliasesDeprecatedKind(t *testing.T) {
 // existing validKinds check, and that an unrecognized kind never bumps the
 // alias counter.
 func TestCreateTaskUnknownKindStays422(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 
@@ -74,6 +76,7 @@ func TestCreateTaskUnknownKindStays422(t *testing.T) {
 // "spec" the same way the JSON API does, and counts the alias use on the
 // web_form surface.
 func TestCreateTaskFromFormAliasesDeprecatedKind(t *testing.T) {
+	t.Parallel()
 	st, h, admin, _ := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 
@@ -103,6 +106,7 @@ func TestCreateTaskFromFormAliasesDeprecatedKind(t *testing.T) {
 // tasks migration 0025 rewrote, rather than an empty set, and counts the
 // alias use on the list surface.
 func TestListTasksByDeprecatedKind(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -133,6 +137,7 @@ func TestListTasksByDeprecatedKind(t *testing.T) {
 // TestClaimNextAliasesDeprecatedKind proves claim-next's kind filter accepts
 // "spec" and picks a design task.
 func TestClaimNextAliasesDeprecatedKind(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -172,6 +177,7 @@ func TestClaimNextAliasesDeprecatedKind(t *testing.T) {
 // TestPromoteInboxAliasesDeprecatedKind proves promote-inbox accepts "spec",
 // creates a design task, and counts the alias use on the promote surface.
 func TestPromoteInboxAliasesDeprecatedKind(t *testing.T) {
+	t.Parallel()
 	st, h, admin, token := newTestServerWithAdmin(t)
 	mapRepo(t, h, token, "proj", "PR", "acme/widgets")
 	seedIssue(t, st, "acme/widgets", 1, "an issue")

@@ -17,6 +17,7 @@ import (
 // TestDocSelectorFromValid: the three derived selectors accept no filter, or
 // one that restates what they imply.
 func TestDocSelectorFromValid(t *testing.T) {
+	t.Parallel()
 	for name, query := range map[string]string{
 		"needs_planning alone":                     "needs_planning=true",
 		"needs_planning restates kind and status":  "needs_planning=true&kind=spec&status=accepted",
@@ -42,6 +43,7 @@ func TestDocSelectorFromValid(t *testing.T) {
 // refused rather than silently answered with an empty list. More than one
 // derived selector at once is refused the same way, whichever pair.
 func TestDocSelectorFromConflicts(t *testing.T) {
+	t.Parallel()
 	for name, c := range map[string]struct{ query, want string }{
 		"needs_planning and needs_execution":  {"needs_planning=true&needs_execution=true", "disjoint"},
 		"needs_planning with draft":           {"needs_planning=true&status=draft", "status=accepted"},
@@ -70,6 +72,7 @@ func TestDocSelectorFromConflicts(t *testing.T) {
 // docView is where a regression would land — and a nil cache is the shape a
 // test-built *server carries.
 func TestDocViewRendersBody(t *testing.T) {
+	t.Parallel()
 	v := docView(nil, mdrender.ProjectKeys{}, &model.DocDetail{
 		Doc: model.Doc{
 			ID:   25,

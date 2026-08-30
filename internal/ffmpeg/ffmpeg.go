@@ -28,6 +28,12 @@ import (
 // as "this deployment has no posters", never as an upload failure.
 var ErrUnavailable = errors.New("ffmpeg is not installed")
 
+// BinaryName is the ffmpeg binary Poster resolves via exec.LookPath. It is a
+// name by default so production behavior is unchanged, but tests can point
+// it at an absolute path to stub the binary without mutating PATH — which
+// t.Setenv forbids inside a parallel test (WL-438).
+var BinaryName = "ffmpeg"
+
 // PosterMediaType is what Poster returns and what the caller stores those
 // bytes under. It is also what http.DetectContentType sniffs them as, so a
 // poster blob is indistinguishable from a JPEG someone uploaded by hand.
@@ -55,7 +61,7 @@ const maxStderrBytes = 4 << 10
 // moov-atom-at-the-end MP4 at all. Piping one in would either fail on those
 // files or buffer 100 MiB to make them work.
 func Poster(ctx context.Context, path string) ([]byte, error) {
-	bin, err := exec.LookPath("ffmpeg")
+	bin, err := exec.LookPath(BinaryName)
 	if err != nil {
 		return nil, ErrUnavailable
 	}

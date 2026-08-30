@@ -27,6 +27,7 @@ func getPage(t *testing.T, h http.Handler, path string) *httptest.ResponseRecord
 // real image, that a hostile body is neutered on the way, and that the page
 // carries the Content-Security-Policy that backs all of it up (spec 021 §8).
 func TestTaskPageRendersMarkdown(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	createProject(t, st, "proj")
 
@@ -93,6 +94,7 @@ func TestTaskPageRendersMarkdown(t *testing.T) {
 // object storage, and a redirect target is matched against the source list by
 // origin, so an embedded image loads only if the CSP names that origin.
 func TestTaskPageCSPNamesTheBlobOrigin(t *testing.T) {
+	t.Parallel()
 	const origin = "https://hel1.your-objectstorage.com"
 	st, h, token := newTestServerWithConfig(t, api.Config{
 		WebOpen:          true,
@@ -120,6 +122,7 @@ func TestTaskPageCSPNamesTheBlobOrigin(t *testing.T) {
 // about the task, not page furniture — a task with no blobs must not render
 // an empty one.
 func TestTaskPageWithoutAttachmentsOmitsTheCard(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	createProject(t, st, "proj")
 	created := createTaskViaAPI(t, h, token, map[string]any{

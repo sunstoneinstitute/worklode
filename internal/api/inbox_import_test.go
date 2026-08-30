@@ -89,6 +89,7 @@ func countEvents(t *testing.T, st *store.Store) int {
 }
 
 func TestImportPopulatesInbox(t *testing.T) {
+	t.Parallel()
 	app := importGitHub(t, []map[string]any{openIssue(1, "first"), openIssue(2, "second")}, nil)
 	st, post := importServer(t, app)
 
@@ -113,6 +114,7 @@ func TestImportPopulatesInbox(t *testing.T) {
 }
 
 func TestImportIsIdempotent(t *testing.T) {
+	t.Parallel()
 	app := importGitHub(t, []map[string]any{openIssue(1, "first")}, nil)
 	_, post := importServer(t, app)
 
@@ -128,6 +130,7 @@ func TestImportIsIdempotent(t *testing.T) {
 }
 
 func TestImportDryRunWritesNothing(t *testing.T) {
+	t.Parallel()
 	app := importGitHub(t, []map[string]any{openIssue(1, "first")}, nil)
 	st, post := importServer(t, app)
 
@@ -202,6 +205,7 @@ func importGitHubAlwaysFullIssues(t *testing.T, base time.Time) *githubauth.AppA
 // exact timestamp a caller must pass to --since to resume: the newest
 // updated_at among everything fetched this run.
 func TestImportTruncatedReportsNewestUpdatedAt(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	app := importGitHubAlwaysFullIssues(t, base)
 	_, post := importServer(t, app)
@@ -230,6 +234,7 @@ func TestImportTruncatedReportsNewestUpdatedAt(t *testing.T) {
 // field is meaningless (and must not be printed as a bogus --since) when the
 // import already reached the end.
 func TestImportUntruncatedOmitsNewestUpdatedAt(t *testing.T) {
+	t.Parallel()
 	app := importGitHub(t, []map[string]any{openIssue(1, "first")}, nil)
 	_, post := importServer(t, app)
 
@@ -328,6 +333,7 @@ func importGitHubShortIssuesFullPulls(t *testing.T, base time.Time) *githubauth.
 // past unfetched issues (they're older than the PR) and silently dropped
 // them on the next run.
 func TestImportTruncatedIssuesNewestExcludesLaterPR(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	wantNewest := base.Add(time.Duration(importMaxPages*importPageSize-1) * time.Second)
 	prUpdatedAt := wantNewest.Add(time.Hour)
@@ -371,6 +377,7 @@ func TestImportTruncatedIssuesNewestExcludesLaterPR(t *testing.T) {
 // PR list has no server-side since filter to resume with, so the cursor
 // (which is issues-only) must not be set just because something truncated.
 func TestImportPRsTruncateIssuesDoNot(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	app := importGitHubShortIssuesFullPulls(t, base)
 	_, post := importServer(t, app)
@@ -403,6 +410,7 @@ func TestImportPRsTruncateIssuesDoNot(t *testing.T) {
 }
 
 func TestImportRejectsUnmappedRepo(t *testing.T) {
+	t.Parallel()
 	app := importGitHub(t, nil, nil)
 	_, post := importServer(t, app)
 	rr := post(map[string]any{"repo": "acme/unmapped", "state": "open"})
@@ -412,6 +420,7 @@ func TestImportRejectsUnmappedRepo(t *testing.T) {
 }
 
 func TestImportWithoutAppReturns503(t *testing.T) {
+	t.Parallel()
 	st := store.OpenTestStore(t)
 	s := &server{st: st, cfg: Config{}, log: slog.Default(), appAuth: nil}
 	req := httptest.NewRequest("POST", "/api/v1/inbox/import",
@@ -424,6 +433,7 @@ func TestImportWithoutAppReturns503(t *testing.T) {
 }
 
 func TestImportDoesNotClobberPromotedRow(t *testing.T) {
+	t.Parallel()
 	app := importGitHub(t, []map[string]any{openIssue(1, "renamed upstream")}, nil)
 	st, post := importServer(t, app)
 	ctx := context.Background()
@@ -506,6 +516,7 @@ func countTaskCommits(t *testing.T, st *store.Store, taskID string) int {
 // sharper fence — from there any child transition at all, not just one to a
 // closed state, changes the container's target state.
 func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
+	t.Parallel()
 	// The pulls fixture below must embed a real task id in head.ref for the
 	// PR to correlate (see store.UpsertPR / store.TaskIDFromRef), and that id
 	// has to exist before importGitHub bakes the fixture into its fake
@@ -635,6 +646,7 @@ func TestImportOfMergedPRLeavesTaskStateAlone(t *testing.T) {
 // derives Merged from the same raw value). Import must not store that zero
 // time as merged_at, matching the webhook path's guard.
 func TestImportClosedUnmergedPRStoresNoMergedAt(t *testing.T) {
+	t.Parallel()
 	pulls := []map[string]any{{
 		"number": 1, "title": "closed without merge", "state": "closed",
 		"html_url": "https://gh/pr/1", "created_at": "2026-01-01T00:00:00Z",
@@ -670,6 +682,7 @@ func TestImportClosedUnmergedPRStoresNoMergedAt(t *testing.T) {
 // store.DecideApproval — is what catches a fix that sets Author but leaves
 // it unused, or a passing GetPR check that hides a still-broken decide path.
 func TestImportSetsPRAuthorEnablingSelfApprovalRefusal(t *testing.T) {
+	t.Parallel()
 	st0 := store.OpenTestStore(t)
 	ctx := context.Background()
 	if err := st0.CreateProject(ctx, "proj", "Proj", "PR"); err != nil {

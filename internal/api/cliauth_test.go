@@ -18,6 +18,7 @@ import (
 )
 
 func TestCLICodeStoreMintRedeem(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1000, 0)
 	s := newCLICodeStore(func() time.Time { return now })
 
@@ -40,6 +41,7 @@ func TestCLICodeStoreMintRedeem(t *testing.T) {
 }
 
 func TestCLICodeStoreWrongStateAndExpiry(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1000, 0)
 	s := newCLICodeStore(func() time.Time { return now })
 	code, _ := s.mint("a", "right")
@@ -62,6 +64,7 @@ func TestCLICodeStoreWrongStateAndExpiry(t *testing.T) {
 }
 
 func TestFinishLoginCLIBranch(t *testing.T) {
+	t.Parallel()
 	s := &server{cfg: Config{SessionSecret: "sek"}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/callback?code=x&state=y", nil)
@@ -94,6 +97,7 @@ func TestFinishLoginCLIBranch(t *testing.T) {
 }
 
 func TestCLILoginValidatesLoopback(t *testing.T) {
+	t.Parallel()
 	s := &server{cfg: Config{SessionSecret: "sek"}, oidc: &oidc.Verifier{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	bad := []string{
@@ -136,6 +140,7 @@ func TestCLILoginValidatesLoopback(t *testing.T) {
 // the loopback check does not apply to it (spec 001 §8.7). Everything else about
 // the request is unchanged — a state is still required.
 func TestCLILoginManualMode(t *testing.T) {
+	t.Parallel()
 	s := &server{cfg: Config{SessionSecret: "sek"}, oidc: &oidc.Verifier{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	rr := httptest.NewRecorder()
@@ -182,6 +187,7 @@ func TestCLILoginManualMode(t *testing.T) {
 // On a manual intent finishLogin renders the code instead of redirecting, and
 // that code redeems for a token exactly as the loopback one does.
 func TestFinishLoginManualRendersRedeemableCode(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1000, 0)
 	s := &server{cfg: Config{SessionSecret: "sek"}, cliCodes: newCLICodeStore(func() time.Time { return now })}
 
@@ -232,6 +238,7 @@ func TestFinishLoginManualRendersRedeemableCode(t *testing.T) {
 // A cookie minted before Mode existed has an empty Mode and must still mean
 // loopback, so a login in flight across a server upgrade completes.
 func TestFinishLoginEmptyModeIsLoopback(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1000, 0)
 	s := &server{cfg: Config{SessionSecret: "sek"}, cliCodes: newCLICodeStore(func() time.Time { return now })}
 
@@ -253,6 +260,7 @@ func TestFinishLoginEmptyModeIsLoopback(t *testing.T) {
 // OIDC is unconfigured, even if the dormant GitHub App OAuth client (s.gh,
 // spec 001 §9.3) is set — it never gates login.
 func TestCLILoginRequiresOIDC(t *testing.T) {
+	t.Parallel()
 	s := &server{cfg: Config{SessionSecret: "sek"}, gh: &githubauth.Client{}, cliCodes: newCLICodeStore(func() time.Time { return time.Unix(1000, 0) })}
 
 	rr := httptest.NewRecorder()
@@ -278,6 +286,7 @@ func newStoreT(t *testing.T) *store.Store {
 }
 
 func TestCLITokenRejectsUnknownCode(t *testing.T) {
+	t.Parallel()
 	st := newStoreT(t)
 	s := &server{st: st, log: slog.Default(), cliCodes: newCLICodeStore(st.Now)}
 	req := httptest.NewRequest(http.MethodPost, "/auth/cli/token", strings.NewReader(`{"code":"nope","state":"s"}`))
@@ -289,6 +298,7 @@ func TestCLITokenRejectsUnknownCode(t *testing.T) {
 }
 
 func TestCLITokenHappyPath(t *testing.T) {
+	t.Parallel()
 	st := newStoreT(t)
 	if err := st.CreateActor(context.Background(), "github:7", "human", "Bob", false); err != nil {
 		t.Fatalf("create actor: %v", err)
@@ -316,6 +326,7 @@ func TestCLITokenHappyPath(t *testing.T) {
 }
 
 func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
+	t.Parallel()
 	s := &server{} // no oidc, no gh
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/lode-login", nil)
 	rr := httptest.NewRecorder()
@@ -326,6 +337,7 @@ func TestWellKnownLogin404WhenNoProvider(t *testing.T) {
 }
 
 func TestWellKnownLoginReportsProviders(t *testing.T) {
+	t.Parallel()
 	iss := oidctest.NewIssuer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

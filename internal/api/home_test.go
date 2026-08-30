@@ -14,6 +14,7 @@ import (
 // a ready task with an open blocker is Blocked rather than Ready, and a
 // done task appears in no bucket. Order within each bucket is preserved.
 func TestBucketWorkFacts(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		{Task: model.Task{ID: "WL-1", State: "in_progress"}},
 		{Task: model.Task{ID: "WL-2", State: "in_review"}},
@@ -62,6 +63,7 @@ func TestBucketWorkFacts(t *testing.T) {
 // TestLastActivity checks the newest Task.UpdatedAt across facts of any
 // state (done included), and the zero time for an empty slice.
 func TestLastActivity(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
@@ -98,6 +100,7 @@ func TestLastActivity(t *testing.T) {
 // TestAssembleHomeFacts exercises the pure projection deciding which
 // projects get a card and with what facts, per task-3-brief.md.
 func TestAssembleHomeFacts(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
 
 	member := store.Project{ID: "proj-member", Name: "Member Project"}
@@ -260,6 +263,7 @@ func cardIDs(cards []ui.HomeCard) []string {
 // assembleHomeFacts per task-4-brief.md: tier, the exact signal strings, the
 // role badge, crew-initial truncation, and the sort order.
 func TestHomeCardsOrderAndSignals(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 8, 14, 12, 0, 0, 0, time.UTC)
 
 	factsAt := func(at time.Time) []store.ProjectWorkFact {
