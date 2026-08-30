@@ -15,6 +15,12 @@ type BoardTask struct {
 	Task
 	Parent string  `json:"parent,omitempty"`
 	Holder *Holder `json:"holder,omitempty"`
+	// BlockedBy names what holds this task: each open blocker task by id,
+	// then the slug of any unfinished plan ordered before its plan.
+	BlockedBy []string `json:"blocked_by,omitempty"`
+	// Blocking names the tasks this task is holding up, the reverse of
+	// their BlockedBy.
+	Blocking []string `json:"blocking,omitempty"`
 }
 
 // BoardProject is one project's four state buckets on the board.

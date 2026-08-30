@@ -34,18 +34,15 @@ func BoardRender(w io.Writer, board model.BoardResponse) {
 		// Blocked and ready tasks are never claimed, so a HOLDER column would
 		// be all dashes; show the task kind there instead. In progress tasks
 		// get both: HOLDER to see who's on it, KIND to see what it is.
-		for _, b := range []struct {
-			label  string
-			tasks  []model.BoardTask
-			holder bool
-			kind   bool
-		}{
-			{"IN PROGRESS", p.InProgress, true, true},
-			{"IN REVIEW", p.InReview, true, false},
-			{"BLOCKED", p.Blocked, false, true},
-			{"READY", p.Ready, false, true},
+		for _, b := range []boardBucket{
+			{label: "IN PROGRESS", tasks: p.InProgress, holder: true, kind: true},
+			{label: "IN REVIEW", tasks: p.InReview, holder: true},
+			{label: "BLOCKED", tasks: p.Blocked, kind: true, depHeader: "BLOCKED BY",
+				dep: func(t model.BoardTask) []string { return t.BlockedBy }},
+			{label: "READY", tasks: p.Ready, kind: true, depHeader: "BLOCKING",
+				dep: func(t model.BoardTask) []string { return t.Blocking }},
 		} {
-			boardSection(w, b.label, b.tasks, b.holder, b.kind)
+			boardSection(w, b)
 		}
 	}
 	if board.RecentFailures != nil {
@@ -69,9 +66,34 @@ func BoardRender(w io.Writer, board model.BoardResponse) {
 	}
 }
 
-func boardSection(w io.Writer, label string, tasks []model.BoardTask, hasHolders, hasKind bool) {
+// boardBucket is one state bucket of the board and the columns it shows:
+// holder and kind, plus the dependency column that names the other side of
+// the blocker edges (what a blocked task waits on, what a ready task holds
+// up). dep is nil for a bucket with no such column.
+type boardBucket struct {
+	label     string
+	tasks     []model.BoardTask
+	holder    bool
+	kind      bool
+	depHeader string
+	dep       func(model.BoardTask) []string
+}
+
+func boardSection(w io.Writer, b boardBucket) {
+	label, tasks, hasHolders, hasKind := b.label, b.tasks, b.holder, b.kind
 	if len(tasks) == 0 {
 		return
+	}
+	// The dependency column is dropped when no row in the bucket has one:
+	// most ready tasks block nothing, and a column of dashes is noise.
+	hasDeps := false
+	if b.dep != nil {
+		for _, t := range tasks {
+			if len(b.dep(t)) > 0 {
+				hasDeps = true
+				break
+			}
+		}
 	}
 	pos := make(map[string]int, len(tasks))
 	for i, t := range tasks {
@@ -114,6 +136,9 @@ func boardSection(w io.Writer, label string, tasks []model.BoardTask, hasHolders
 	if hasKind {
 		cols = append(cols, holderColumn("KIND"))
 	}
+	if hasDeps {
+		cols = append(cols, column{header: b.depHeader, wrap: wrapWords, min: minHolderWidth})
+	}
 	tbl := newTable(cols...)
 	now := time.Now()
 	for _, r := range rows {
@@ -132,6 +157,13 @@ func boardSection(w io.Writer, label string, tasks []model.BoardTask, hasHolders
 		}
 		if hasKind {
 			row = append(row, t.Kind)
+		}
+		if hasDeps {
+			deps := "-"
+			if d := b.dep(t); len(d) > 0 {
+				deps = strings.Join(d, ", ")
+			}
+			row = append(row, deps)
 		}
 		tbl.add(row...)
 	}

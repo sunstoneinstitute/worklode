@@ -982,6 +982,50 @@ func TestBoardAcrossProjectsGroupsCorrectly(t *testing.T) {
 	}
 }
 
+// TestBoardNamesBothSidesOfABlockerEdge asserts the board carries the blocker
+// edge in both directions: the blocked task names what holds it, and the
+// blocker, still ready, names what it holds up.
+func TestBoardNamesBothSidesOfABlockerEdge(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Blocker", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Stuck", "priority": "high", "kind": "feature"})
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/edges", token, map[string]any{"to": "WL-2", "type": "blocks"})
+	if rr.Code != http.StatusCreated && rr.Code != http.StatusOK {
+		t.Fatalf("add edge status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/board?project=proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("board status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	type boardTask struct {
+		ID        string   `json:"id"`
+		BlockedBy []string `json:"blocked_by"`
+		Blocking  []string `json:"blocking"`
+	}
+	var body struct {
+		Projects []struct {
+			Ready   []boardTask `json:"ready"`
+			Blocked []boardTask `json:"blocked"`
+		} `json:"projects"`
+	}
+	decodeInto(t, rr, &body)
+	if len(body.Projects) != 1 {
+		t.Fatalf("board = %+v", body.Projects)
+	}
+	p := body.Projects[0]
+	if len(p.Blocked) != 1 || p.Blocked[0].ID != "WL-2" ||
+		len(p.Blocked[0].BlockedBy) != 1 || p.Blocked[0].BlockedBy[0] != "WL-1" {
+		t.Fatalf("blocked = %+v, want WL-2 blocked_by [WL-1]", p.Blocked)
+	}
+	if len(p.Ready) != 1 || p.Ready[0].ID != "WL-1" ||
+		len(p.Ready[0].Blocking) != 1 || p.Ready[0].Blocking[0] != "WL-2" {
+		t.Fatalf("ready = %+v, want WL-1 blocking [WL-2]", p.Ready)
+	}
+}
+
 func TestGetTaskIncludesLease(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
