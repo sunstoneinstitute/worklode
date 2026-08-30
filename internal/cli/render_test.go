@@ -1054,3 +1054,39 @@ func TestApprovalTableNamesWhoItAwaits(t *testing.T) {
 		}
 	}
 }
+
+// TestBoardShowsBlockerColumns checks the two sides of a blocker edge: a
+// blocked row names what holds it, a ready row names what it holds up, and a
+// ready bucket where nothing blocks anything grows no column of dashes.
+func TestBoardShowsBlockerColumns(t *testing.T) {
+	render := func(b model.BoardProject) string {
+		var buf bytes.Buffer
+		BoardRender(&buf, model.BoardResponse{Projects: []model.BoardProject{b}})
+		return buf.String()
+	}
+	got := render(model.BoardProject{
+		ID: "proj", Name: "Proj",
+		Ready: []model.BoardTask{{
+			Task:     model.Task{ID: "WL-1", Title: "Blocker", Priority: "medium", Kind: "task"},
+			Blocking: []string{"WL-2"},
+		}},
+		Blocked: []model.BoardTask{{
+			Task:      model.Task{ID: "WL-2", Title: "Stuck", Priority: "medium", Kind: "task"},
+			BlockedBy: []string{"WL-1", "0042-some-plan"},
+		}},
+	})
+	if !strings.Contains(got, "BLOCKED BY") || !strings.Contains(got, "WL-1, 0042-some-plan") {
+		t.Fatalf("blocked row does not name its blockers:\n%s", got)
+	}
+	if !strings.Contains(got, "BLOCKING") || !strings.Contains(got, "WL-2") {
+		t.Fatalf("ready row does not name what it blocks:\n%s", got)
+	}
+
+	quiet := render(model.BoardProject{
+		ID: "proj", Name: "Proj",
+		Ready: []model.BoardTask{{Task: model.Task{ID: "WL-3", Title: "Free", Priority: "medium", Kind: "task"}}},
+	})
+	if strings.Contains(quiet, "BLOCKING") {
+		t.Fatalf("ready bucket with no blocker edges still has the column:\n%s", quiet)
+	}
+}
