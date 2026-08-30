@@ -415,6 +415,36 @@ func TestSectionCoveringSortedByPath(t *testing.T) {
 	})
 }
 
+// TestSectionNumberedAliasResolvesToKnownSlug (WL-404): a spec whose live
+// corpus identity dropped its leading number (docs/authoring-design-docs.md's
+// own examples, and scripts/secmeta.py's on-disk check, still write the
+// numbered git filename) is still found when a plan's covers entry names it
+// that way — the plan-committed reference and the backbone's slug-derived
+// identity are allowed to diverge in only that one respect.
+func TestSectionNumberedAliasResolvesToKnownSlug(t *testing.T) {
+	spec := designdoc.CorpusDoc{Kind: "spec", Path: "docs/specs/per-project-workflows.md"}
+	plan := designdoc.CorpusDoc{
+		Kind: "plan", Path: "docs/plans/a.md", Status: "accepted",
+		Source: []byte("---\nstatus: accepted\ncovers: docs/specs/045-per-project-workflows.md#sec-1\n---\n# A\n\nBody.\n"),
+	}
+	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{spec, plan}, "")
+	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Full,
+		[]designdoc.CoveringPlan{{Path: "docs/plans/a.md", Status: "accepted", Level: "full"}})
+}
+
+// TestSectionNumberedAliasRequiresAKnownDocument (WL-404): the numbered form
+// is rewritten only when stripping its prefix names a document the corpus
+// actually holds — a reference that merely starts with digits and matches
+// nothing is a plain unresolved reference, not this alias.
+func TestSectionNumberedAliasRequiresAKnownDocument(t *testing.T) {
+	plan := designdoc.CorpusDoc{
+		Kind: "plan", Path: "docs/plans/a.md", Status: "accepted",
+		Source: []byte("---\nstatus: accepted\ncovers: docs/specs/045-per-project-workflows.md#sec-1\n---\n# A\n\nBody.\n"),
+	}
+	ix := designdoc.NewPlanIndex([]designdoc.CorpusDoc{plan}, "")
+	checkSection(t, ix, "docs/specs/per-project-workflows.md", "sec-1", designdoc.Unplanned, nil)
+}
+
 // TestSectionAbsoluteCorpusRoot loads a real spec+plan corpus rooted at an
 // absolute path (as designdoc.FindCorpus would hand LoadSyncCorpus), so
 // every CorpusDoc.Path is absolute. Section must still find the plan a
