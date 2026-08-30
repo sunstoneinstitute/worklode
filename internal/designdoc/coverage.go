@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -187,6 +188,20 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 	ix.specDir, ix.planDir = corpusDirs(docs)
 	ix.specCanon, ix.planCanon = canonDirs(ix.specDir, ix.planDir)
 	ix.buildResolver(docs)
+
+	// knownSpecs is every spec/ADR document's own live corpus identity —
+	// built once so a covers/defers reference written against an old
+	// numbered filename (WL-404) can be recognised as the same document a
+	// plan-free slug now names, without ever guessing at a document the
+	// corpus does not actually hold.
+	knownSpecs := make(map[string]bool, len(docs))
+	for _, d := range docs {
+		if d.Kind == "plan" {
+			continue
+		}
+		knownSpecs[resolveDoc(d.Path, ix.specCanon, ix.specDir)] = true
+	}
+
 	for _, d := range docs {
 		if d.Kind != "plan" {
 			continue
@@ -202,7 +217,8 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 				// §4.3) — neither contributes to any section's index entry.
 				continue
 			}
-			key := sectionKey{spec: ix.normalizeRef(rawTarget, home), anchor: anchor}
+			target := resolveNumberedAlias(ix.normalizeRef(rawTarget, home), knownSpecs)
+			key := sectionKey{spec: target, anchor: anchor}
 			ix.claims[key] = append(ix.claims[key], claim{
 				plan:             plan,
 				status:           d.Status,
@@ -219,7 +235,8 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 				// is already valid.
 				continue
 			}
-			key := sectionKey{spec: ix.normalizeRef(rawTarget, home), anchor: anchor}
+			target := resolveNumberedAlias(ix.normalizeRef(rawTarget, home), knownSpecs)
+			key := sectionKey{spec: target, anchor: anchor}
 			ix.defers[key] = append(ix.defers[key], deferral{
 				plan:   plan,
 				status: d.Status,
@@ -440,6 +457,40 @@ func (ix *PlanIndex) resolveShorthand(ref string) (string, bool) {
 		return "", false
 	}
 	return ix.resolvePaths[doc.ID], true
+}
+
+// numberPrefixPattern is the leading "<digits>-" a numbered corpus filename
+// carries (WL-404) — "045-per-project-workflows.md" — even once a spec's
+// backbone slug has dropped the number 025 §17 minted its ordinal from.
+var numberPrefixPattern = regexp.MustCompile(`^\d+-`)
+
+// resolveNumberedAlias recognises ref as a numbered-filename alias of a spec
+// or ADR the corpus already holds under the number-stripped slug that is its
+// live identity: docs/authoring-design-docs.md's own examples, and the only
+// form scripts/secmeta.py's on-disk check accepts, still write a numbered
+// spec by its git filename, while the document's `covers:`-matching identity
+// is the slug the backbone assigned it (WL-404).
+//
+// ref is returned unchanged when it is already a known identity (the common
+// case — most specs' slugs still carry their number), or when stripping its
+// basename's number prefix names no document the corpus actually holds:
+// resolving that case anyway would risk matching two unrelated documents
+// that share nothing but leading digits, exactly what resolveDocRef's own
+// number-form guard (internal/store/docedges.go) refuses for the same
+// reason at write time.
+func resolveNumberedAlias(ref string, known map[string]bool) string {
+	if known[ref] {
+		return ref
+	}
+	dir, base := path.Split(ref)
+	loc := numberPrefixPattern.FindStringIndex(base)
+	if loc == nil {
+		return ref
+	}
+	if alias := dir + base[loc[1]:]; known[alias] {
+		return alias
+	}
+	return ref
 }
 
 // Section returns the 026 §2.1 outcome for one spec section, addressed by a

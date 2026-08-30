@@ -156,6 +156,24 @@ class PlanCoverageTest(unittest.TestCase):
     def test_qualified_coverage_requires_section_fragment(self):
         self.assert_error("spec: docs/specs/s.md\n    coverage: full", "names no section")
 
+    def test_plan_shorthand_in_blocked_by_is_unresolved_not_an_error(self):
+        # WL-404: PLAN must be accepted by SHORTHAND exactly like SPEC/ADR
+        # already are, since internal/designdoc/resolve.go's shorthandPattern
+        # (the live resolver) accepts it and the two must stay in sync.
+        result = run_secmeta({"docs/specs/s.md": SPEC,
+                              "docs/plans/a.md": """\
+---
+status: accepted
+covers:
+  - docs/specs/s.md#sec-1
+blockedBy:
+  - WL-PLAN-11
+---
+# Plan
+"""})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("WL-PLAN-11 names another project", result.stderr)
+
     def test_scalar_bare_whole_document_is_reported_without_breaking_legacy_plans(self):
         result = run_secmeta({"docs/specs/s.md": SPEC,
                               "docs/plans/a.md": "---\nstatus: accepted\ncovers: docs/specs/s.md\n---\n# Plan\n"})
