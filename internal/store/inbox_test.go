@@ -85,6 +85,7 @@ func defaultIssue() model.Issue {
 }
 
 func TestUpsertIssueInsertAndUpdate(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -141,6 +142,7 @@ func TestUpsertIssueInsertAndUpdate(t *testing.T) {
 // out-of-order or replayed delivery carrying an older updated_at must not
 // overwrite newer facts (WL-198).
 func TestUpsertIssueNonRegressing(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	t1 := inboxTestNow
 	t2 := inboxTestNow.Add(time.Hour)
@@ -187,6 +189,7 @@ func onlyIssue(t *testing.T, s *Store) model.Issue {
 }
 
 func TestUpsertIssueDoesNotClobberAfterPromote(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -224,6 +227,7 @@ func TestUpsertIssueDoesNotClobberAfterPromote(t *testing.T) {
 }
 
 func TestPromoteIssue(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -265,6 +269,7 @@ func TestPromoteIssue(t *testing.T) {
 }
 
 func TestPromoteIssueRequiresNew(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -292,6 +297,7 @@ func TestPromoteIssueRequiresNew(t *testing.T) {
 }
 
 func TestPromoteIssueNotFound(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	if _, err := promoteIssue(t, s, inboxTestNow, "sunstoneinstitute/demo", 999, defaultTaskInput(), nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("promote unknown issue: want ErrNotFound, got %v", err)
@@ -299,6 +305,7 @@ func TestPromoteIssueNotFound(t *testing.T) {
 }
 
 func TestDismissIssue(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -320,6 +327,7 @@ func TestDismissIssue(t *testing.T) {
 // badge reads the count, the inbox page reads the rows, and the two must not
 // disagree about how many issues are untriaged.
 func TestCountIssues(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	ctx := t.Context()
 
@@ -365,6 +373,7 @@ func TestCountIssues(t *testing.T) {
 }
 
 func TestDismissIssueNotFound(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	if err := dismissIssue(t, s, "sunstoneinstitute/demo", 999); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("dismiss unknown issue: want ErrNotFound, got %v", err)
@@ -372,6 +381,7 @@ func TestDismissIssueNotFound(t *testing.T) {
 }
 
 func TestDismissIssueRequiresNew(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -386,6 +396,7 @@ func TestDismissIssueRequiresNew(t *testing.T) {
 }
 
 func TestLinkIssueAttachesExistingTask(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -423,6 +434,7 @@ func TestLinkIssueAttachesExistingTask(t *testing.T) {
 }
 
 func TestLinkIssueRejectsAlreadyTriaged(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -451,6 +463,7 @@ func TestLinkIssueRejectsAlreadyTriaged(t *testing.T) {
 }
 
 func TestLinkIssueRejectsAlreadyPromoted(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -481,6 +494,7 @@ func TestLinkIssueRejectsAlreadyPromoted(t *testing.T) {
 }
 
 func TestLinkIssueRejectsMissingTask(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {
@@ -493,6 +507,7 @@ func TestLinkIssueRejectsMissingTask(t *testing.T) {
 }
 
 func TestListIssuesFilter(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 
 	newIssue := defaultIssue()
@@ -548,6 +563,7 @@ func TestListIssuesFilter(t *testing.T) {
 }
 
 func TestListIssuesProjectFilter(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	ctx := t.Context()
 
@@ -593,6 +609,7 @@ func TestListIssuesProjectFilter(t *testing.T) {
 // TestExistingIssueNumbers covers the read import uses before upserting, so
 // it can report new rows separately from updated ones.
 func TestExistingIssueNumbers(t *testing.T) {
+	t.Parallel()
 	s := openInboxStore(t)
 	is := defaultIssue()
 	if err := upsertIssue(t, s, is); err != nil {

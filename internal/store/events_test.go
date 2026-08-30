@@ -49,6 +49,7 @@ func pollReadEventBatch(t *testing.T, ctx context.Context, s *Store, name string
 }
 
 func TestRecordEventIdempotent(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -85,6 +86,7 @@ func TestRecordEventIdempotent(t *testing.T) {
 }
 
 func TestRecordEventAppliesStateInSameTx(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -109,6 +111,7 @@ func TestRecordEventAppliesStateInSameTx(t *testing.T) {
 }
 
 func TestLogChange(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -153,6 +156,7 @@ func TestLogChange(t *testing.T) {
 // and leaves the row awaiting replay (applied_at NULL), a redelivery re-runs
 // the apply, and an applied event stays a no-op.
 func TestRecordEventThenApplyKeepsRowOnApplyFailure(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -208,6 +212,7 @@ func TestRecordEventThenApplyKeepsRowOnApplyFailure(t *testing.T) {
 }
 
 func TestRecordEventWithID(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -261,6 +266,7 @@ func TestRecordEventWithID(t *testing.T) {
 }
 
 func TestGetEvent(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -286,6 +292,7 @@ func TestGetEvent(t *testing.T) {
 // advances, and never delivers A (id 1). The horizon delivers neither
 // until A's transaction is finished, then both, in id order.
 func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
@@ -338,6 +345,7 @@ func TestReadEventBatchHonoursCommitHorizon(t *testing.T) {
 // IDENTITY column does not roll back). ReadEventBatch must step past it
 // rather than stalling forever waiting for an id that will never commit.
 func TestReadEventBatchSkipsAbortedHole(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
@@ -382,6 +390,7 @@ func TestReadEventBatchSkipsAbortedHole(t *testing.T) {
 // TestAckEventsMonotonic affects zero rows too, and must stay a nil error —
 // the two cases are only distinguishable inside the statement.
 func TestAckEventsUnknownSubscriber(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -402,6 +411,7 @@ func TestAckEventsUnknownSubscriber(t *testing.T) {
 }
 
 func TestAckEventsMonotonic(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
@@ -459,6 +469,7 @@ func TestAckEventsMonotonic(t *testing.T) {
 }
 
 func TestSubscriberLockExclusive(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -523,6 +534,7 @@ func advisoryLockHolderPID(t *testing.T, ctx context.Context, s *Store, name str
 // holds it — so this checks the actual holder in pg_locks is the same
 // backend pid before and after the churn.
 func TestSubscriberLockSurvivesPoolChurn(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -577,6 +589,7 @@ func TestSubscriberLockSurvivesPoolChurn(t *testing.T) {
 // way. This checks the backend actually disconnects: its pg_stat_activity
 // row must disappear, not merely go idle.
 func TestSubscriberLockReleaseDiscardsSession(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -619,6 +632,7 @@ func TestSubscriberLockReleaseDiscardsSession(t *testing.T) {
 }
 
 func TestResetEventReadRedeliversUnacked(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "sub"); err != nil {
@@ -657,6 +671,7 @@ func TestResetEventReadRedeliversUnacked(t *testing.T) {
 // shared, so an unconsumed subscriber lags by the whole log while a caught-up
 // one lags by nothing.
 func TestEventSubscriberLags(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	for _, name := range []string{"docs", "watcher"} {
@@ -722,6 +737,7 @@ func TestEventSubscriberLags(t *testing.T) {
 // is what makes a held-back horizon visible. It is 0 on an empty log, and
 // polls up to the last recorded id for the cluster-wide reason above.
 func TestEventLogHorizonID(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -783,6 +799,7 @@ func pollListEvents(t *testing.T, ctx context.Context, s *Store, f EventFilter, 
 // last_read_offset: an in-flight transaction's row must not appear even
 // though a later-committed row already has.
 func TestListEventsHonoursCommitHorizon(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -837,6 +854,7 @@ func TestListEventsHonoursCommitHorizon(t *testing.T) {
 // TestListEventsFilters covers type, since, after and the default/cap-200
 // limit in one pass: each filter narrows a shared seeded set independently.
 func TestListEventsFilters(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 
@@ -907,6 +925,7 @@ func TestListEventsFilters(t *testing.T) {
 // confirming holder_pid tracks the live lock and goes back to 0 once it is
 // released. See TestEventSubscriberStatusesReportsLag for the lag column.
 func TestEventSubscriberStatusesReportsHolder(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "status-sub"); err != nil {
@@ -970,6 +989,7 @@ func TestEventSubscriberStatusesReportsHolder(t *testing.T) {
 // fully-acked, so a wrong GREATEST bound or a sign error in the subtraction
 // would fail here rather than pass silently behind an unchecked field.
 func TestEventSubscriberStatusesReportsLag(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "lag-sub"); err != nil {
@@ -1032,6 +1052,7 @@ func TestEventSubscriberStatusesReportsLag(t *testing.T) {
 // a following ReadEventBatch redeliver from there, and seeking an unknown
 // name reports ErrNotFound.
 func TestSeekEventSubscriberRedeliversAndRejectsUnknown(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 	if err := s.EnsureEventSubscriber(ctx, "seek-sub"); err != nil {
@@ -1088,6 +1109,7 @@ func TestSeekEventSubscriberRedeliversAndRejectsUnknown(t *testing.T) {
 // to learn its lock is gone (an idle_session_timeout, a pooler reap, a
 // pg_terminate_backend). It must report the loss, not a healthy pool.
 func TestSubscriberLockHealthyDetectsLostSession(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := context.Background()
 

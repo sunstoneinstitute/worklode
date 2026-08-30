@@ -86,6 +86,7 @@ func stopTask(t *testing.T, s *Store, now time.Time, id, actorID string) error {
 }
 
 func TestAssignTaskHappyPath(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
@@ -106,6 +107,7 @@ func TestAssignTaskHappyPath(t *testing.T) {
 }
 
 func TestAssignTaskMissingActor(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -123,6 +125,7 @@ func TestAssignTaskMissingActor(t *testing.T) {
 }
 
 func TestAssignTaskTerminalStateRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	walkTo(t, s, task.ID, "merged")
@@ -133,6 +136,7 @@ func TestAssignTaskTerminalStateRejected(t *testing.T) {
 }
 
 func TestAssignTaskWithChildrenRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	parent, _ := parentWithChildren(t, s, 1)
 
@@ -142,6 +146,7 @@ func TestAssignTaskWithChildrenRejected(t *testing.T) {
 }
 
 func TestAssignTaskUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	if err := assignTask(t, s, taskTestNow, "HDB-999", "stig"); !errors.Is(err, ErrNotFound) {
@@ -150,6 +155,7 @@ func TestAssignTaskUnknownTask(t *testing.T) {
 }
 
 func TestUnassignTaskClears(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	if err := assignTask(t, s, taskTestNow, task.ID, "stig"); err != nil {
@@ -172,6 +178,7 @@ func TestUnassignTaskClears(t *testing.T) {
 // for the three write paths: without "old", a reassignment loses who held the
 // task before, and the web timeline degrades to "assignee set to ...".
 func TestAssignmentChangesRecordPreviousAssignee(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
@@ -206,6 +213,7 @@ func TestAssignmentChangesRecordPreviousAssignee(t *testing.T) {
 // TestStartTaskAutoAssignRecordsEmptyOld covers StartTask's auto-assign path,
 // the third LogChange call site.
 func TestStartTaskAutoAssignRecordsEmptyOld(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -223,6 +231,7 @@ func TestStartTaskAutoAssignRecordsEmptyOld(t *testing.T) {
 // TestUnassignTaskTerminalStateRejected also pins the verb in the message:
 // it read "cannot assign" while the caller was unassigning.
 func TestUnassignTaskTerminalStateRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	walkTo(t, s, task.ID, "merged")
@@ -237,6 +246,7 @@ func TestUnassignTaskTerminalStateRejected(t *testing.T) {
 }
 
 func TestUnassignTaskUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	if err := unassignTask(t, s, taskTestNow, "HDB-999"); !errors.Is(err, ErrNotFound) {
@@ -245,6 +255,7 @@ func TestUnassignTaskUnknownTask(t *testing.T) {
 }
 
 func TestStartTaskAutoAssigns(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -268,6 +279,7 @@ func TestStartTaskAutoAssigns(t *testing.T) {
 }
 
 func TestStartTaskAlreadyAssignedToCaller(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	if err := assignTask(t, s, taskTestNow, task.ID, "stig"); err != nil {
@@ -285,6 +297,7 @@ func TestStartTaskAlreadyAssignedToCaller(t *testing.T) {
 }
 
 func TestStartTaskAssignedToSomeoneElse(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
@@ -302,6 +315,7 @@ func TestStartTaskAssignedToSomeoneElse(t *testing.T) {
 }
 
 func TestStartTaskBlockedRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
 	blocked := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -316,6 +330,7 @@ func TestStartTaskBlockedRejected(t *testing.T) {
 }
 
 func TestStartTaskUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	if _, err := startTask(t, s, taskTestNow, "HDB-999", "stig"); !errors.Is(err, ErrNotFound) {
@@ -324,6 +339,7 @@ func TestStartTaskUnknownTask(t *testing.T) {
 }
 
 func TestStartTaskUnknownActor(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 
@@ -338,6 +354,7 @@ func TestStartTaskUnknownActor(t *testing.T) {
 // deliveredStateSet check, a merged task would instead fail Transition's
 // from-state check with ErrBadTransition.
 func TestStartTaskTerminalStateRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	walkTo(t, s, task.ID, "merged")
@@ -348,6 +365,7 @@ func TestStartTaskTerminalStateRejected(t *testing.T) {
 }
 
 func TestStopTaskHappyPath(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	task := createTask(t, s, taskTestNow, defaultTaskInput())
 	if _, err := startTask(t, s, taskTestNow, task.ID, "stig"); err != nil {
@@ -361,6 +379,7 @@ func TestStopTaskHappyPath(t *testing.T) {
 }
 
 func TestStopTaskNonAssigneeRejected(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)
@@ -384,6 +403,7 @@ func TestStopTaskNonAssigneeRejected(t *testing.T) {
 // just the sentinel) is what makes that provable; errors.Is alone can't tell
 // this apart from the earlier guard.
 func TestStopTaskWhileLeasedRejected(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 	if err := assignTask(t, s, leaseTestNow, task.ID, "stig"); err != nil {
@@ -404,6 +424,7 @@ func TestStopTaskWhileLeasedRejected(t *testing.T) {
 }
 
 func TestStopTaskUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	if err := stopTask(t, s, taskTestNow, "HDB-999", "stig"); !errors.Is(err, ErrNotFound) {
@@ -412,6 +433,7 @@ func TestStopTaskUnknownTask(t *testing.T) {
 }
 
 func TestListTasksFilterByAssignee(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "bob", "human", "Bob", false); err != nil {
 		t.Fatalf("CreateActor bob: %v", err)

@@ -25,6 +25,7 @@ func mustBegin(t *testing.T, s *Store) *sql.Tx {
 }
 
 func TestInsertAwaitingApprovalIsIdempotent(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
@@ -54,6 +55,7 @@ func TestInsertAwaitingApprovalIsIdempotent(t *testing.T) {
 }
 
 func TestApprovalResolveApprovedClosesOpenLookup(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
@@ -73,6 +75,7 @@ func TestApprovalResolveApprovedClosesOpenLookup(t *testing.T) {
 }
 
 func TestApprovalResolveChangesRequestedStaysOpen(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
@@ -96,6 +99,7 @@ func TestApprovalResolveChangesRequestedStaysOpen(t *testing.T) {
 }
 
 func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
@@ -151,6 +155,7 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 }
 
 func TestGetApproval(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	now := time.Now().UTC()
 
@@ -183,6 +188,7 @@ func TestGetApproval(t *testing.T) {
 }
 
 func TestSetRequiredActor(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
@@ -227,6 +233,7 @@ func TestSetRequiredActor(t *testing.T) {
 }
 
 func TestActorIDForGitHubLogin(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 	if err := s.UpsertHumanActor(t.Context(), "octo-1", "Octocat", false, "Octocat", "", nil); err != nil {
 		t.Fatal(err)
@@ -251,6 +258,7 @@ func TestActorIDForGitHubLogin(t *testing.T) {
 }
 
 func TestPREntityID(t *testing.T) {
+	t.Parallel()
 	got := PREntityID("sunstoneinstitute/worklode", 41)
 	want := "sunstoneinstitute/worklode#41"
 	if got != want {
@@ -259,6 +267,7 @@ func TestPREntityID(t *testing.T) {
 }
 
 func TestApprovalsAwaiting(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t) // project "horndb" (key HDB), actor "stig"
 	ctx := t.Context()
 	if err := s.CreateProject(ctx, "acme", "Acme", "ACM"); err != nil {
@@ -363,6 +372,7 @@ func TestApprovalsAwaiting(t *testing.T) {
 }
 
 func TestListAwaitingApprovals(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, taskTestNow, TaskInput{
@@ -510,6 +520,7 @@ func assignDocReviewers(t *testing.T, s *Store, docID int64, reviewers []string)
 // Re-running must stay a no-op, which is what proves the widened ON
 // CONFLICT list still infers the index.
 func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	if err := s.CreateActor(t.Context(), "ada", "human", "Ada", false); err != nil {
 		t.Fatal(err)
@@ -565,6 +576,7 @@ func TestRequestDocApprovalOpensOneLanePerReviewer(t *testing.T) {
 // doc reaches its project directly, with no task between. The inner joins the
 // PR-only query used would have dropped the doc row entirely.
 func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, taskTestNow, TaskInput{

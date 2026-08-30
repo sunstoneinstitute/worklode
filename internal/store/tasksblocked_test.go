@@ -8,6 +8,7 @@ import (
 )
 
 func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -63,6 +64,7 @@ func TestBlocksEdgeAndBlockedTaskIDs(t *testing.T) {
 // task page uses against the map form the lists use. Both render the same
 // "blocked" chip, so a page and a list must never disagree about one task.
 func TestIsTaskBlockedAgreesWithBlockedTaskIDs(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -110,6 +112,7 @@ func TestIsTaskBlockedAgreesWithBlockedTaskIDs(t *testing.T) {
 // leaves it unblocking. Narrowing that back to merged-or-abandoned would make
 // these dependents block again.
 func TestBlockedTaskIDsDeliveredBlocker(t *testing.T) {
+	t.Parallel()
 	for _, state := range []string{"deployed_dev", "deployed_prod", "released"} {
 		t.Run(state, func(t *testing.T) {
 			s := openTaskStore(t)
@@ -138,6 +141,7 @@ func TestBlockedTaskIDsDeliveredBlocker(t *testing.T) {
 }
 
 func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -159,6 +163,7 @@ func TestBlockedTaskIDsAbandonedBlocker(t *testing.T) {
 // closed in a repo that gates on merged and still open in one that gates on
 // released.
 func TestBlockedTaskIDsPerRepoDoneState(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		doneState string
 		state     string
@@ -215,6 +220,7 @@ func TestBlockedTaskIDsPerRepoDoneState(t *testing.T) {
 // work landed in two repos is closed only once it satisfies the strictest of
 // them. Landing in a merged-gated repo does not release the release-gated one.
 func TestBlockedTaskIDsMultiRepoBlocker(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/lib", "merged")
 	mapRepo(t, s, "horndb", "acme/app", "released")
@@ -244,6 +250,7 @@ func TestBlockedTaskIDsMultiRepoBlocker(t *testing.T) {
 // and is therefore closed at merged in every repo — including one whose
 // mapping gates on released.
 func TestBlockedTaskIDsContainerBlocker(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/app", "released")
 
@@ -269,6 +276,7 @@ func TestBlockedTaskIDsContainerBlocker(t *testing.T) {
 // no project maps takes DefaultDoneState, so the blocker closes at merged
 // rather than blocking forever on a done_state nobody configured.
 func TestBlockedTaskIDsUnmappedRepoBlocker(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	blocker := createTask(t, s, taskTestNow, defaultTaskInput())
@@ -291,6 +299,7 @@ func TestBlockedTaskIDsUnmappedRepoBlocker(t *testing.T) {
 // blocker's dependents forever, since ResolveDelivery walks the same
 // task_commits ⋈ main_commits join and would never advance the task either.
 func TestBlockedTaskIDsUnlandedCommitBlocker(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/app", "released")
 	mapRepo(t, s, "horndb", "acme/lib", "merged")
@@ -315,6 +324,7 @@ func TestBlockedTaskIDsUnlandedCommitBlocker(t *testing.T) {
 // barred from every state past merged (containerForbiddenStates), so gating it
 // on a release-based repo would block its dependents forever.
 func TestBlockedTaskIDsContainerWithOwnCommits(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/app", "released")
 
@@ -341,6 +351,7 @@ func TestBlockedTaskIDsContainerWithOwnCommits(t *testing.T) {
 // --done-state` on a repo that started cutting releases is the expected path,
 // and a task already at deployed_prod has no legal transition left.
 func TestBlockedTaskIDsDoneStateFlipAfterDelivery(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "horndb", "acme/app", "deployed_prod")
 
@@ -371,6 +382,7 @@ func TestBlockedTaskIDsDoneStateFlipAfterDelivery(t *testing.T) {
 // is what the deliberately project-unscoped repo join has to tolerate:
 // 'blocks' edges are not project-scoped.
 func TestOpenBlockersPerRepoDoneState(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	mapRepo(t, s, "otherproj", "acme/app", "released")
 

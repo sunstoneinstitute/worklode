@@ -42,6 +42,7 @@ func makeTask(t *testing.T, s *Store, extID, project, title string) *model.Task 
 }
 
 func TestCreateTaskWritesStateLog(t *testing.T) {
+	t.Parallel()
 	s := outboxStore(t)
 	task := makeTask(t, s, "e1", "alpha", "outbox on create")
 
@@ -55,6 +56,7 @@ func TestCreateTaskWritesStateLog(t *testing.T) {
 }
 
 func TestEdgeChangesWriteStateLogForBothTasks(t *testing.T) {
+	t.Parallel()
 	s := outboxStore(t)
 	a := makeTask(t, s, "e2", "alpha", "blocker")
 	b := makeTask(t, s, "e3", "alpha", "blocked")

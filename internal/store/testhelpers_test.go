@@ -10,6 +10,7 @@ import (
 // OpenTestStore's template-clone path has the same schema a full migration
 // run produces (see wantTables in store_test.go).
 func TestOpenTestStoreClonesFullSchema(t *testing.T) {
+	t.Parallel()
 	s := OpenTestStore(t)
 
 	rows, err := s.db.Query(
@@ -42,6 +43,7 @@ func TestOpenTestStoreClonesFullSchema(t *testing.T) {
 // OpenTestStore calls, though both cloned from the same template, produce
 // independent databases: writes in one are invisible in the other.
 func TestOpenTestStoreDatabasesAreIndependent(t *testing.T) {
+	t.Parallel()
 	s1 := OpenTestStore(t)
 	s2 := OpenTestStore(t)
 
@@ -73,6 +75,7 @@ func TestOpenTestStoreDatabasesAreIndependent(t *testing.T) {
 // directory changes, or an edited migration would silently reuse a
 // template built from the old contents.
 func TestTemplateNameForMigrationsReflectsContent(t *testing.T) {
+	t.Parallel()
 	realDir := MigrationsDirForTests()
 	realName, err := templateNameForMigrations(realDir)
 	if err != nil {
@@ -110,6 +113,7 @@ func TestTemplateNameForMigrationsReflectsContent(t *testing.T) {
 // single process ask Postgres for the template at most once; every later
 // call must reuse the process-local cache instead of re-checking.
 func TestTemplateBuiltOnce(t *testing.T) {
+	t.Parallel()
 	for i := 0; i < 5; i++ {
 		OpenTestStore(t)
 	}

@@ -49,6 +49,7 @@ func wantPayload(t *testing.T, s *Store, typ string, want map[string]any) {
 }
 
 func TestClaimEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 
@@ -61,6 +62,7 @@ func TestClaimEventNamesTask(t *testing.T) {
 }
 
 func TestRenewEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := leaseForTest(t, s, "hel01:/wt/one")
 
@@ -71,6 +73,7 @@ func TestRenewEventNamesTask(t *testing.T) {
 }
 
 func TestReleaseEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := leaseForTest(t, s, "hel01:/wt/one")
 
@@ -81,6 +84,7 @@ func TestReleaseEventNamesTask(t *testing.T) {
 }
 
 func TestRebindLeaseEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := leaseForTest(t, s, "hel01:/wt/one")
 
@@ -93,6 +97,7 @@ func TestRebindLeaseEventNamesTask(t *testing.T) {
 }
 
 func TestExpireLeaseEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	lease := leaseForTest(t, s, "hel01:/wt/one")
 
@@ -108,6 +113,7 @@ func TestExpireLeaseEventNamesTask(t *testing.T) {
 }
 
 func TestAgentSessionStartedEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := leaseForTest(t, s, "hel01:/wt/one")
 
@@ -121,6 +127,7 @@ func TestAgentSessionStartedEventNamesTask(t *testing.T) {
 }
 
 func TestAgentSessionEndedEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	lease := leaseForTest(t, s, "hel01:/wt/one")
 
@@ -138,6 +145,7 @@ func TestAgentSessionEndedEventNamesTask(t *testing.T) {
 }
 
 func TestEnqueueInstructionEventNamesTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 
@@ -151,6 +159,7 @@ func TestEnqueueInstructionEventNamesTask(t *testing.T) {
 // id does not exist when RecordEvent marshals the payload, so apply merges
 // it into the row it just inserted, in the same transaction.
 func TestAttributeEventToTask(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 

@@ -16,6 +16,7 @@ import (
 )
 
 func TestTransitionLegal(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	cases := []struct{ from, to string }{
@@ -63,6 +64,7 @@ func TestTransitionLegal(t *testing.T) {
 }
 
 func TestTransitionIllegal(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	cases := []struct{ from, to string }{
@@ -88,6 +90,7 @@ func TestTransitionIllegal(t *testing.T) {
 }
 
 func TestTransitionWrongCurrentState(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	task := createTask(t, s, taskTestNow, defaultTaskInput()) // state: ready
@@ -106,6 +109,7 @@ func TestTransitionWrongCurrentState(t *testing.T) {
 }
 
 func TestTransitionUnknownTask(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	err := transition(t, s, taskTestNow, "HDB-999", "ready", "in_progress")
@@ -115,6 +119,7 @@ func TestTransitionUnknownTask(t *testing.T) {
 }
 
 func TestTransitionWritesStateLogAndBumpsUpdatedAt(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 
 	created := taskTestNow
@@ -174,6 +179,7 @@ func TestTransitionWritesStateLogAndBumpsUpdatedAt(t *testing.T) {
 // leave assign.go's state-only guards and taskClosed disagreeing on what
 // "delivered" means.
 func TestDeliveredStateSetCoversDeliveryRanks(t *testing.T) {
+	t.Parallel()
 	want := append(slices.Sorted(maps.Keys(deliveryRanks)), "abandoned")
 	slices.Sort(want)
 	if got := slices.Sorted(maps.Keys(deliveredStateSet)); !slices.Equal(got, want) {
@@ -187,6 +193,7 @@ func TestDeliveredStateSetCoversDeliveryRanks(t *testing.T) {
 // with no move left to make. Every ranked state must therefore be able to
 // reach any strictly higher-ranked one.
 func TestDeliveryRanksMatchLegalTransitions(t *testing.T) {
+	t.Parallel()
 	for from, fromRank := range deliveryRanks {
 		for to, toRank := range deliveryRanks {
 			if toRank <= fromRank {
@@ -207,6 +214,7 @@ func TestDeliveryRanksMatchLegalTransitions(t *testing.T) {
 // not an enum in ns/concept.ttl — so this test is what keeps the duplicate
 // honest. docs/follow-ups.md flagged exactly this drift.
 func TestTaskStateShapeMatchesStateMachine(t *testing.T) {
+	t.Parallel()
 	shapes, err := os.ReadFile(filepath.Join("..", "..", "ns", "shapes.ttl"))
 	if err != nil {
 		t.Fatalf("read ns/shapes.ttl: %v", err)

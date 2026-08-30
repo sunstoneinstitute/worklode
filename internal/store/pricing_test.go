@@ -27,6 +27,7 @@ var opusRates = ModelPrice{
 var sixFractionDigits = regexp.MustCompile(`^\d+\.\d{6}$`)
 
 func TestModelPriceCost(t *testing.T) {
+	t.Parallel()
 	// A price whose five rates are equal and tiny: each class alone rounds to
 	// nothing, so the case only comes out right if the products are summed
 	// before the single divide.
@@ -130,6 +131,7 @@ func TestModelPriceCost(t *testing.T) {
 }
 
 func TestFormatMicrosParseMicrosRoundTrip(t *testing.T) {
+	t.Parallel()
 	amounts := []string{
 		"0.000000",
 		"0.000001",
@@ -154,6 +156,7 @@ func TestFormatMicrosParseMicrosRoundTrip(t *testing.T) {
 }
 
 func TestParseMicrosAcceptsShortForms(t *testing.T) {
+	t.Parallel()
 	// Postgres renders numeric(_,6) with all six digits, but a hand-written
 	// rate or a trimmed value must still parse to the same micro-units.
 	tests := []struct {
@@ -181,6 +184,7 @@ func TestParseMicrosAcceptsShortForms(t *testing.T) {
 }
 
 func TestParseMicrosRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	// Anything the micro-unit representation cannot hold exactly is an error
 	// rather than a silent truncation to zero.
 	for _, in := range []string{"0.1234567", "abc", "1.2.3", "1,5", "12 34", "1e6"} {
@@ -193,6 +197,7 @@ func TestParseMicrosRejectsBadInput(t *testing.T) {
 }
 
 func TestMicroAmountSumsExactly(t *testing.T) {
+	t.Parallel()
 	// A float64 accumulator drifts on all three of these: 0.1+0.2 is not 0.3,
 	// ten 0.07s are not 0.7, and a thousand 0.001s are not 1.
 	thousandth := make([]string, 1000)
@@ -236,6 +241,7 @@ func TestMicroAmountSumsExactly(t *testing.T) {
 }
 
 func TestMicroAmountRejectsBadAmount(t *testing.T) {
+	t.Parallel()
 	var m microAmount
 	if err := m.add("not-a-number"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("add of garbage: got %v, want ErrInvalidInput", err)
@@ -243,6 +249,7 @@ func TestMicroAmountRejectsBadAmount(t *testing.T) {
 }
 
 func TestNormalizeSpeed(t *testing.T) {
+	t.Parallel()
 	tests := []struct{ in, want string }{
 		{"", SpeedStandard}, // vendor omits the field on a standard turn
 		{"standard", SpeedStandard},
@@ -268,6 +275,7 @@ func day(y int, m time.Month, d int) time.Time {
 // claude-sonnet-5 rows: introductory $2/$10 until 2026-09-01, $3/$15 after.
 // A July session must not be repriced by a September rate.
 func TestModelPriceForEffectiveDating(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -307,6 +315,7 @@ func TestModelPriceForEffectiveDating(t *testing.T) {
 }
 
 func TestModelPriceForDatedSnapshotFallsBackToAlias(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -327,6 +336,7 @@ func TestModelPriceForDatedSnapshotFallsBackToAlias(t *testing.T) {
 }
 
 func TestModelPriceForUnknownIsNilNotZero(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -346,6 +356,7 @@ func TestModelPriceForUnknownIsNilNotZero(t *testing.T) {
 }
 
 func TestModelPriceForSpeedIsASeparateSKU(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 	d := day(2026, 7, 19)
@@ -385,6 +396,7 @@ func TestModelPriceForSpeedIsASeparateSKU(t *testing.T) {
 }
 
 func TestUpsertModelPrice(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 	from := day(2026, 7, 1)
@@ -457,6 +469,7 @@ func TestUpsertModelPrice(t *testing.T) {
 }
 
 func TestUpsertModelPriceValidation(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 	valid := ModelPrice{Model: "vendor-x-2", EffectiveFrom: day(2026, 7, 1)}
@@ -482,6 +495,7 @@ func TestUpsertModelPriceValidation(t *testing.T) {
 // Total is the sum of all five classes — the coverage figure, never a
 // billable quantity.
 func TestTokenCountsTotalAndAdd(t *testing.T) {
+	t.Parallel()
 	a := TokenCounts{Input: 1, CacheWrite5m: 2, CacheWrite1h: 4, CacheRead: 8, Output: 16}
 	if got := a.Total(); got != 31 {
 		t.Fatalf("Total: got %d, want 31", got)
@@ -497,6 +511,7 @@ func TestTokenCountsTotalAndAdd(t *testing.T) {
 // multiple of its base input rate. The failure this catches is an operator
 // editing one class by hand and misplacing a zero.
 func TestSeededModelPricesFollowCacheMultipliers(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 
 	rows, err := s.db.Query(
@@ -539,6 +554,7 @@ func TestSeededModelPricesFollowCacheMultipliers(t *testing.T) {
 // TestFormatMicrosPadsBelowOne pins the leading-zero padding path directly:
 // an amount under 1.0 has fewer digits than the fraction needs.
 func TestFormatMicrosPadsBelowOne(t *testing.T) {
+	t.Parallel()
 	for _, tt := range []struct{ in, want string }{
 		{"0.000001", "0.000001"},
 		{"0.010000", "0.010000"},

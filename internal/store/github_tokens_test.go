@@ -6,6 +6,7 @@ import (
 )
 
 func TestGitHubUserTokenRoundTrip(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 
@@ -37,6 +38,7 @@ func TestGitHubUserTokenRoundTrip(t *testing.T) {
 }
 
 func TestGetGitHubUserTokenNotFound(t *testing.T) {
+	t.Parallel()
 	s := openTestStore(t)
 	ctx := t.Context()
 

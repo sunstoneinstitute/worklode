@@ -10,6 +10,7 @@ import (
 )
 
 func TestListTasksFiltersAndOrdering(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -92,6 +93,7 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 // tasks minted from one plan document — the query that is the plan's task
 // set (025 §9.2, §1). A task with no plan_doc is unaffected either way.
 func TestListTasksFilterByPlanDoc(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	seedDocsProject(t, s)
@@ -162,6 +164,7 @@ func TestListTasksFilterByPlanDoc(t *testing.T) {
 // TestListTasksFilterByAboutDoc mirrors TestListTasksFilterByPlanDoc:
 // TaskFilter.AboutDoc narrows to exactly the tasks referencing one document.
 func TestListTasksFilterByAboutDoc(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 	seedDocsProject(t, s)
@@ -230,6 +233,7 @@ func TestListTasksFilterByAboutDoc(t *testing.T) {
 // client (the Obsidian mirror) re-asks for what changed since the highest
 // updated_at it has seen, and gets that boundary row back with it.
 func TestListTasksFilterByUpdatedSince(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 
@@ -269,6 +273,7 @@ func TestListTasksFilterByUpdatedSince(t *testing.T) {
 // the project id, so the repo it is in must be a usable key for "which tasks
 // could this merge advance".
 func TestListTasksByRepo(t *testing.T) {
+	t.Parallel()
 	s := openTaskStore(t)
 	ctx := t.Context()
 

@@ -52,6 +52,7 @@ func mustState(t *testing.T, s *Store, taskID, want string) {
 }
 
 func TestClaimExactlyOnce(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -92,6 +93,7 @@ func TestClaimExactlyOnce(t *testing.T) {
 }
 
 func TestClaimSecondWorktreeSameTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -110,6 +112,7 @@ func TestClaimSecondWorktreeSameTask(t *testing.T) {
 }
 
 func TestClaimSameWorktreeSecondTask(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task1 := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -145,6 +148,7 @@ func TestClaimSameWorktreeSecondTask(t *testing.T) {
 // scoping the index by actor is what stops one of them seeing "worktree
 // already holds an active lease" for a task nobody on their machine claimed.
 func TestClaimSameWorktreePathDifferentActors(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	if err := s.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
@@ -172,6 +176,7 @@ func TestClaimSameWorktreePathDifferentActors(t *testing.T) {
 // scope: rebinding onto a path another actor holds is allowed, onto one the
 // rebinding actor already holds is not.
 func TestRebindWorktreeDifferentActors(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	if err := s.CreateActor(ctx, "bob", "human", "Bob", false); err != nil {
@@ -202,6 +207,7 @@ func TestRebindWorktreeDifferentActors(t *testing.T) {
 }
 
 func TestClaimRequiresReady(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -236,6 +242,7 @@ func TestClaimRequiresReady(t *testing.T) {
 }
 
 func TestClaimUnknownTaskOrActor(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -250,6 +257,7 @@ func TestClaimUnknownTaskOrActor(t *testing.T) {
 }
 
 func TestRenewRelease(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	if err := s.CreateActor(ctx, "bob", "agent", "Bob", false); err != nil {
@@ -342,6 +350,7 @@ func TestRenewRelease(t *testing.T) {
 // TestLeaseEventTypesPastTense pins the recorded event types for the lease
 // lifecycle: past tense ("lease.claimed"), matching every other event type.
 func TestLeaseEventTypesPastTense(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -370,6 +379,7 @@ func TestLeaseEventTypesPastTense(t *testing.T) {
 }
 
 func TestRebindLeaseWorktree(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	if err := s.CreateActor(ctx, "bob", "agent", "Bob", false); err != nil {
@@ -428,6 +438,7 @@ func TestRebindLeaseWorktree(t *testing.T) {
 }
 
 func TestSweeper(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
@@ -512,6 +523,7 @@ func TestSweeper(t *testing.T) {
 // per-lease events must yield exactly one lease.expired event per lease,
 // with the swept counts summing to the number of expired leases.
 func TestSweeperConcurrentReplicas(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 

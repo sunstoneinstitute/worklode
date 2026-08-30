@@ -16,6 +16,7 @@ import (
 // the H1, whose issued comes from the frontmatter, and whose anchored
 // sections mirror the source in document order.
 func TestDocCreateSpec(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	doc := mustCreateDoc(t, s, DocInput{
@@ -68,6 +69,7 @@ func TestDocCreateSpec(t *testing.T) {
 // the next free one for (project, kind), and it climbs on each subsequent
 // create rather than colliding.
 func TestDocCreateAutoAssignsNumber(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	first := mustCreateDoc(t, s, DocInput{
@@ -103,6 +105,7 @@ func TestDocCreateAutoAssignsNumber(t *testing.T) {
 // TestDocCreateAutoAssignsNumberPerKind: spec and ADR draw from separate
 // sequences within the same project, per 025 §14.3's "own" per-kind count.
 func TestDocCreateAutoAssignsNumberPerKind(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	spec := mustCreateDoc(t, s, DocInput{
@@ -120,6 +123,7 @@ func TestDocCreateAutoAssignsNumberPerKind(t *testing.T) {
 // rows; a reference this project can resolve points at the doc, one it
 // cannot lands verbatim in to_external; inverse keys write nothing.
 func TestDocCreateResolvesEdges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	spec := mustCreateDoc(t, s, DocInput{
@@ -160,6 +164,7 @@ func TestDocCreateResolvesEdges(t *testing.T) {
 // subject anchor becomes from_anchor and "." means document-level. The
 // inverse spellings write nothing — one row read backward is the inverse.
 func TestDocCreateResolvesAnchorMapEdges(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	target := mustCreateDoc(t, s, DocInput{
@@ -211,6 +216,7 @@ y
 // TestDocCreatePlanHasNoSections: plans carry no anchors and no section rows
 // (025 §9), even when their body has headings.
 func TestDocCreatePlanHasNoSections(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	plan := mustCreateDoc(t, s, DocInput{
@@ -232,6 +238,7 @@ func TestDocCreatePlanHasNoSections(t *testing.T) {
 // and the project's counter advances past it so a later auto-assign never
 // retraces it.
 func TestDocCreatePlanWithExplicitNumberReservesIt(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	reserved := mustCreateDoc(t, s, DocInput{
@@ -252,6 +259,7 @@ func TestDocCreatePlanWithExplicitNumberReservesIt(t *testing.T) {
 // TestDocCreateDefaultsOwnerToCreator: the accept gate is owner-only, so
 // a NULL owner would make the document unacceptable.
 func TestDocCreateDefaultsOwnerToCreator(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	doc := mustCreateDoc(t, s, DocInput{
@@ -274,6 +282,7 @@ func TestDocCreateDefaultsOwnerToCreator(t *testing.T) {
 // leave the same state AcceptDoc would, or an imported document would be
 // accepted with every anchor unpublished.
 func TestDocCreateAcceptedPublishesSections(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	doc := mustCreateDoc(t, s, DocInput{
@@ -297,6 +306,7 @@ func TestDocCreateAcceptedPublishesSections(t *testing.T) {
 // TestDocCreateAcceptedRejectsTooDeepAnchor: the 025 §6.1 depth gate runs at
 // publication, so creating straight at accepted must run it too.
 func TestDocCreateAcceptedRejectsTooDeepAnchor(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	deep := "---\nstatus: accepted\nissued: 2026-08-01\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
 		"### 1.1 Sub {#sec-1.1}\n\nb\n\n#### 1.1.1 Deeper {#sec-1.1.1}\n\nc\n"
@@ -316,6 +326,7 @@ func TestDocCreateAcceptedRejectsTooDeepAnchor(t *testing.T) {
 // TestDocCreateRejectsAnchorDefects: a spec whose anchors are ambiguous or
 // disagree with their numbers is unaddressable, so it never lands.
 func TestDocCreateRejectsAnchorDefects(t *testing.T) {
+	t.Parallel()
 	for name, body := range map[string]string{
 		"duplicate anchor": "---\nstatus: draft\n---\n\n# T\n\n## 1. A {#sec-1}\n\nx\n\n## 2. B {#sec-1}\n\ny\n",
 		"anchor disagrees": "---\nstatus: draft\n---\n\n# T\n\n## 1. A {#sec-9}\n\nx\n",
@@ -334,6 +345,7 @@ func TestDocCreateRejectsAnchorDefects(t *testing.T) {
 
 // TestDocCreateTitleFallsBackToSlug: a body with no H1 still needs a title.
 func TestDocCreateTitleFallsBackToSlug(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	doc := mustCreateDoc(t, s, DocInput{
@@ -349,6 +361,7 @@ func TestDocCreateTitleFallsBackToSlug(t *testing.T) {
 // one frontmatter are one edge. Deduping on the reference text would let both
 // through and abort a legal document on doc_edges_unique.
 func TestDocCreateDedupesEdgesByResolvedTarget(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	spec := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -390,6 +403,7 @@ requires:
 // TestDocCreateSkipsEmptyRefs: a coverage entry qualified with a level but no
 // spec names no target, so it writes no edge — never one with to_external ”.
 func TestDocCreateSkipsEmptyRefs(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	body := "---\nstatus: draft\ncovers:\n  - coverage: partial\n---\n\n# Plan\n"
 
@@ -404,6 +418,7 @@ func TestDocCreateSkipsEmptyRefs(t *testing.T) {
 // TestDocCreateDuplicateIsErrDocExists: both unique indexes map onto one
 // sentinel, so the API can answer 409 without decoding pgconn.
 func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	base := DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
@@ -429,6 +444,7 @@ func TestDocCreateDuplicateIsErrDocExists(t *testing.T) {
 // declaring both leaves plan-one blocking it and plan-two blocking plan-three.
 // One direction is still all that is stored.
 func TestDocCreateWritesPlanBlocksEdge(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 
 	one := mustCreateDoc(t, s, DocInput{
@@ -461,6 +477,7 @@ func TestDocCreateWritesPlanBlocksEdge(t *testing.T) {
 // document at the status it actually reached does not leave the document it
 // replaces claiming to be current too (WL-133).
 func TestDocCreateAcceptedSupersedesReplaced(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	old := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 6, Slug: "006-old", Body: specBody,
@@ -482,6 +499,7 @@ func TestDocCreateAcceptedSupersedesReplaced(t *testing.T) {
 // the target arrives and runs the missed cascade there, which is what makes
 // the outcome independent of import order (WL-133, on WL-130's mechanism).
 func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	successor := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
@@ -518,6 +536,7 @@ func TestDocCreateAcceptedSupersedesReplacedOutOfOrder(t *testing.T) {
 // accepted-at-create one, and not the one repointExternalEdges runs when the
 // edge resolves late.
 func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
+	t.Parallel()
 	t.Run("at create", func(t *testing.T) {
 		s := openDocStore(t)
 		old := mustCreateDoc(t, s, DocInput{
@@ -563,6 +582,7 @@ func TestDocCreateAcceptedLeavesDraftTargetAlone(t *testing.T) {
 // still draft, so nothing moves until that document's own accept. (At create
 // the guard is structural: a draft create never reaches the cascade.)
 func TestDocCreateDraftReplacerSupersedesNothing(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	successor := mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25, Slug: "025-new", CreatedBy: "stig",
@@ -588,6 +608,7 @@ func TestDocCreateDraftReplacerSupersedesNothing(t *testing.T) {
 // project's unresolved references that name it, so the two creation orders
 // end in the same edge set.
 func TestDocCreateRepointsExternalEdges(t *testing.T) {
+	t.Parallel()
 	newSpec := func(t *testing.T, s *Store) *model.Doc {
 		t.Helper()
 		return mustCreateDoc(t, s, DocInput{
@@ -638,6 +659,7 @@ func TestDocCreateRepointsExternalEdges(t *testing.T) {
 // stored unresolved, collapse onto one edge per (target, anchor) when the
 // target arrives — the re-point would otherwise collide with doc_edges_unique.
 func TestDocCreateRepointDedupesSpellings(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	// Bare filename, a path to it, the bare corpus number and 025 §14.3's
 	// shorthand, plus two spellings carrying the same anchor.
@@ -684,6 +706,7 @@ requires:
 // resolveDocRef does — same project only — so a document elsewhere naming the
 // same filename keeps its verbatim reference.
 func TestDocCreateRepointIsProjectScoped(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	if _, err := s.db.ExecContext(t.Context(),
 		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
@@ -715,6 +738,7 @@ func TestDocCreateRepointIsProjectScoped(t *testing.T) {
 // closes nothing (026 §2.1), so it is re-pointed the same way, in place — the
 // (edge_id, position) key does not move.
 func TestDocCreateRepointsCoverageClosure(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	mustCreateDoc(t, s, DocInput{
 		Project: "p1", Kind: "spec", Number: 25,
@@ -766,6 +790,7 @@ covers:
 // but here it lives in another document's frontmatter, so the lower-id row wins
 // and this create succeeds rather than wedging an import on an unrelated defect.
 func TestDocCreateRepointCollapsesDisagreeingCoverage(t *testing.T) {
+	t.Parallel()
 	s := openDocStore(t)
 	body := `---
 status: draft

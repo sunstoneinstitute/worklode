@@ -51,6 +51,7 @@ func leaseForTest(t *testing.T, s *Store, worktree string) *Lease {
 }
 
 func TestAgentSessionsSchema(t *testing.T) {
+	t.Parallel()
 	t.Run("cost_currency defaults to USD", func(t *testing.T) {
 		s, _ := openLeaseStore(t)
 		lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -125,6 +126,7 @@ func TestAgentSessionsSchema(t *testing.T) {
 }
 
 func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -184,6 +186,7 @@ func TestTouchAgentSessionStartsThenHeartbeats(t *testing.T) {
 }
 
 func TestTouchAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -208,6 +211,7 @@ func TestTouchAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
 }
 
 func TestTouchAgentSessionEmptyVersionIsNull(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -229,6 +233,7 @@ func TestTouchAgentSessionEmptyVersionIsNull(t *testing.T) {
 }
 
 func TestAgentSessionNotFound(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -242,6 +247,7 @@ func TestAgentSessionNotFound(t *testing.T) {
 // TestAgentSessionsForLease checks the list is scoped to one lease, ordered
 // oldest-started-first, and empty (not an error) for a lease with none.
 func TestAgentSessionsForLease(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -281,6 +287,7 @@ func TestAgentSessionsForLease(t *testing.T) {
 }
 
 func TestEndAgentSessionStampsEndedAtAndUsage(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -321,6 +328,7 @@ func TestEndAgentSessionStampsEndedAtAndUsage(t *testing.T) {
 }
 
 func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -354,6 +362,7 @@ func TestEndAgentSessionCurrencyAndUnknownSession(t *testing.T) {
 }
 
 func TestEndAgentSessionRejectsMalformedCostAmount(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -375,6 +384,7 @@ func TestEndAgentSessionRejectsMalformedCostAmount(t *testing.T) {
 }
 
 func TestEndAgentSessionRepeatCloseWithoutReopenIsNotFound(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -393,6 +403,7 @@ func TestEndAgentSessionRepeatCloseWithoutReopenIsNotFound(t *testing.T) {
 }
 
 func TestEndAgentSessionCurrencyOnlyLeavesCostAmountNil(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -415,6 +426,7 @@ func TestEndAgentSessionCurrencyOnlyLeavesCostAmountNil(t *testing.T) {
 }
 
 func TestEndAgentSessionAfterReopenStoresSecondClose(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -468,6 +480,7 @@ func TestEndAgentSessionAfterReopenStoresSecondClose(t *testing.T) {
 }
 
 func TestTouchAgentSessionReopensClosedSession(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -525,6 +538,7 @@ func openSessions(t *testing.T, s *Store, leaseID int64) int {
 }
 
 func TestReleaseClosesOpenAgentSessions(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -544,6 +558,7 @@ func TestReleaseClosesOpenAgentSessions(t *testing.T) {
 }
 
 func TestExpiryClosesOpenAgentSessions(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -568,6 +583,7 @@ func TestExpiryClosesOpenAgentSessions(t *testing.T) {
 }
 
 func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -594,6 +610,7 @@ func TestCloseActiveLeaseClosesOpenAgentSessions(t *testing.T) {
 // only touches still-open sessions: a session already ended keeps the
 // ended_at value EndAgentSession stamped, not the later close time.
 func TestLeaseCloseKeepsOriginalEndedAt(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -627,6 +644,7 @@ func TestLeaseCloseKeepsOriginalEndedAt(t *testing.T) {
 // scopes to the closing lease only: an open session on an unrelated lease
 // survives.
 func TestLeaseCloseLeavesOtherLeaseSessionsOpen(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	leaseA := leaseForTest(t, s, "host:/.worktrees/one")
@@ -655,6 +673,7 @@ func TestLeaseCloseLeavesOtherLeaseSessionsOpen(t *testing.T) {
 // released, an inserting TouchAgentSession call on that task must fail
 // closed, not create a session that reads as live on a dead lease.
 func TestTouchAgentSessionAfterReleaseIsNotFoundAndCreatesNoRow(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -684,6 +703,7 @@ func TestTouchAgentSessionAfterReleaseIsNotFoundAndCreatesNoRow(t *testing.T) {
 // this test drives directly, so it runs several iterations to raise the odds
 // of exercising both orderings rather than asserting on one.
 func TestTouchAgentSessionInsertRaceWithLeaseClose(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 
@@ -714,6 +734,7 @@ func TestTouchAgentSessionInsertRaceWithLeaseClose(t *testing.T) {
 // the Go-side mirror (model.KnownAgents) must allow it or Touch fails before or
 // after reaching Postgres.
 func TestAgentSessionAcceptsCopilot(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -724,6 +745,7 @@ func TestAgentSessionAcceptsCopilot(t *testing.T) {
 }
 
 func TestOpenAgentSessionsForProject(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	one := leaseForTest(t, s, "host:/.worktrees/one")
@@ -768,6 +790,7 @@ func TestOpenAgentSessionsForProject(t *testing.T) {
 // A page that says what is running now must not count a session the agent
 // already finished.
 func TestOpenAgentSessionsForProjectExcludesEndedSessions(t *testing.T) {
+	t.Parallel()
 	s, _ := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
@@ -792,6 +815,7 @@ func TestOpenAgentSessionsForProjectExcludesEndedSessions(t *testing.T) {
 // under a session can leave one unstamped. Reporting that as running would be
 // a lie on a page whose whole job is to say what is running now.
 func TestOpenAgentSessionsForProjectExcludesReleasedLeases(t *testing.T) {
+	t.Parallel()
 	s, now := openLeaseStore(t)
 	ctx := t.Context()
 	lease := leaseForTest(t, s, "host:/.worktrees/one")
