@@ -192,8 +192,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
   /* min-width:0 stops the flex row and the name flooring at min-content, and
    * overflow-wrap breaks a long unbroken project name, so neither re-widens
    * the column. The drawer-toggle button reserves right-hand room. */
-  .proj-head{display:flex;align-items:baseline;gap:10px;padding:0 34px 8px 0;min-width:0}
+  .proj-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 34px 8px 0;min-width:0}
   .proj-name{margin:0;font-size:16px;min-width:0;overflow-wrap:anywhere}
+  /* the head is a baseline row here, so the pill's block margin would misalign it */
+  .mode-name{margin-top:0}
 
   /* ---- global nav -> five links + More ---- */
   nav.global{padding:0 8px;gap:0;flex-wrap:wrap}
@@ -241,11 +243,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .copyrow .btn{width:auto;padding:9px 18px;flex:0 0 auto}
 .code-block{flex:1 1 auto;min-width:0;display:flex;align-items:center;overflow-wrap:anywhere;background:var(--surface-2);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;user-select:all}
 
-.mode-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.mode-banner .mode-name{font-size:12px;font-weight:700;letter-spacing:.02em;padding:5px 10px;border-radius:7px;background:var(--info-bg);color:var(--info);display:flex;align-items:center;gap:7px}
-.mode-banner .mode-name.ok{background:var(--ok-bg);color:var(--ok)}
-.mode-banner .mode-name .tg{font-size:10px;background:var(--surface);border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.85}
-.mode-banner .sub{color:var(--ink-3);font-size:12.5px}
+/* Operating-mode pill, in the project sidebar under the key. help cursor marks
+   the title tooltip that carries the mode basis. */
+.mode-name{font-size:12px;font-weight:700;letter-spacing:.02em;padding:5px 10px;border-radius:7px;background:var(--info-bg);color:var(--info);display:inline-flex;align-items:center;gap:7px;margin-top:10px;cursor:help}
+.mode-name.ok{background:var(--ok-bg);color:var(--ok)}
 
 /* stage stepper */
 .stepper{display:flex;align-items:center;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 6px;box-shadow:var(--shadow-sm);overflow-x:auto}

@@ -237,8 +237,6 @@ type CockpitView struct {
 	CanonicalURL      string
 	NewTaskURL        string
 	Project           CockpitProject
-	ModeName          string
-	ModeBasis         string
 	PinnedFocus       *CockpitFocus
 	NextDecision      *CockpitDecision
 	Work              CockpitWork
@@ -263,10 +261,17 @@ type CockpitFocus struct {
 
 // CockpitProject is the project identity shown in the cockpit and the
 // project-scoped sidebar.
+//
+// ModeName/ModeBasis carry the cockpit's operating mode, which the sidebar
+// renders as a pill under the project key. Only the cockpit sets them; the
+// other project pages leave them empty and the sidebar renders no pill, so the
+// mode fact has one home rather than one per page that shows it.
 type CockpitProject struct {
-	ID   string
-	Name string
-	Key  string
+	ID        string
+	Name      string
+	Key       string
+	ModeName  string
+	ModeBasis string
 }
 
 // CockpitWork holds the cockpit's four work buckets.
