@@ -83,10 +83,10 @@ columns are restated unchanged (Pi's delivery is amended separately by spec
 | `WorktreeEnter` | `PostToolUse:EnterWorktree` | — | — | — | — |
 | `PreCommit` | (git hook) | (git hook) | (git hook) | (git hook) | (git hook) |
 
-## 5. Work is entered through `lode next` first
+## 5. Work is entered through `lode worktree next` first
 
 008 §17.7 says the managed `AGENTS.md` block states "that work is entered
-through `lode task claim`". The block that shipped leads with `lode next` —
+through `lode task claim`". The block that shipped leads with `lode worktree next` —
 which claims the top-ranked ready task *and* creates its worktree, what an
 agent with no brief actually needs — and names `lode task claim <id>` second,
 as the way to claim a specific task. The block matches the intent; the spec's

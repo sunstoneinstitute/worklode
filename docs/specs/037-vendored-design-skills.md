@@ -227,7 +227,7 @@ conversation, never an invocation.
 Everything else in both plugins, including the execution-loop skills
 (`executing-plans`, `subagent-driven-development`, `using-git-worktrees`,
 `finishing-a-development-branch`) whose branch and task-state ownership
-overlaps `lode next`/`done` and `working-under-worklode`. Deciding whether they
+overlaps `lode worktree next`/`done` and `working-under-worklode`. Deciding whether they
 are redundant or complementary needs the lode-first authoring path to exist
 first; until then they are neither vendored nor suppressed.
 

@@ -8,10 +8,10 @@ allowed-tools: Bash(lode *) Bash(git *)
 
 Invocation arguments: $ARGUMENTS
 
-Run `lode next --json`, adding only the parts of those arguments that are
+Run `lode worktree next --json`, adding only the parts of those arguments that are
 genuine CLI input: an optional task id, `--project <key>`, `--kind <kind>`,
 `--strict-focus`.
-`lode next` takes at most one positional argument, so anything else the user
+`lode worktree next` takes at most one positional argument, so anything else the user
 typed is context for the work, not command input — never pass it to the
 command; carry it into the task instead and mention you did.
 

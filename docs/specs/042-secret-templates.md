@@ -190,7 +190,7 @@ templated entry contributes:
   the template locally is what keeps `lode secrets exec` offline — exec never
   fetches the catalog. The template is catalog-sensitivity data in a 0600
   file already holding vault-adjacent names; no value ever enters it.
-  Re-materialization (`lode resume`) refreshes it, so a catalog template edit
+  Re-materialization (`lode worktree resume`) refreshes it, so a catalog template edit
   propagates the same way a `ref` edit does.
 
 ## 4. Rendering & execution {#sec-4}
@@ -243,8 +243,8 @@ unlinks each rendered file recorded in the manifest (by absolute path, so
 `--task` purges from anywhere) alongside the keystore items; when purge runs
 bound to a worktree it also removes that worktree's `.worklode/secrets/`
 directory, catching a file a worktree move stranded before any exec re-rendered
-and re-recorded it. Purge already rides every release path — `lode done`,
-`lode block`, worktree removal, exit hooks. The residual exposure is a 0600
+and re-recorded it. Purge already rides every release path — `lode worktree done`,
+`lode worktree block`, worktree removal, exit hooks. The residual exposure is a 0600
 file, on the operator's own single-user machine, inside a directory git
 ignores, for exactly the window the same task's credentials sit in the local
 keystore. Unlike those items — ciphertext at rest in the macOS keychain and
@@ -264,10 +264,10 @@ Amends 017 §6 with the templated-entry rows; every 017 row still applies.
 |---|---|
 | `template` names a missing ConfigMap key, placeholder set ≠ `cred.` set, template not valid UTF-8, or an item-name collision (§2) | Catalog read fails server-side: 500 + log naming the entry. Claims degrade per 017 ("catalog unavailable"); the fix is an admin PR. |
 | A `cred.*` value exceeds the OS keystore cap at pack | `lode secrets pack` fails naming the item — 017's original oversized-value failure, reappearing because the value was mis-modelled as a credential. The fix is catalog modelling: what exceeds the cap is scaffolding around a smaller secret (§1). |
-| Credential item missing from keystore at exec | Existing 017 row: exit non-zero naming it; the skill directs `lode block`, never a workaround. |
+| Credential item missing from keystore at exec | Existing 017 row: exit non-zero naming it; the skill directs `lode worktree block`, never a workaround. |
 | Rendered-file write fails (permissions, disk) | Exec exits non-zero naming the path; block signal, not a retry loop. |
 | Two entries export the same `env` name for one task | Exec exits non-zero naming both entries; fix is the task's declaration or the catalog. |
-| Manifest predates this spec (no template recorded) | Templated entry is reported unmaterialized; `lode resume` re-runs the ceremony. |
+| Manifest predates this spec (no template recorded) | Templated entry is reported unmaterialized; `lode worktree resume` re-runs the ceremony. |
 
 ## 6. Acceptance criteria {#sec-6}
 

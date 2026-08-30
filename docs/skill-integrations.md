@@ -272,7 +272,7 @@ the backbone would bypass the reviewed corpus rather than replace it.
 **The flow to rewire.** brainstorming → writing-plans → executing-plans /
 subagent-driven-development, plus using-git-worktrees, requesting-code-review
 and finishing-a-development-branch, which assume ownership of the branch
-lifecycle `lode next`/`done` already owns.
+lifecycle `lode worktree next`/`done` already owns.
 
 **Deliverables:**
 
@@ -285,7 +285,7 @@ lifecycle `lode next`/`done` already owns.
   `## Tasks` contract that plan acceptance mints from, and deferring to the
   existing `lode:splitting-specs-into-plans` skill for series.
 - **Vendored `executing-plans`**, with its plan-file ledger replaced by task
-  state — `lode next`/`done` already hold it. Check first whether the existing
+  state — `lode worktree next`/`done` already hold it. Check first whether the existing
   `lode-worker` agent and `working-under-worklode` skill make this redundant.
 - ~~**Retire the `docs/superpowers` symlink**~~ — done in WL-147, ahead of the
   corpus cutover rather than with it.

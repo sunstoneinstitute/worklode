@@ -88,7 +88,7 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 			consented = nil
 			// Only a human's "no" is recorded. An auto-decline (no terminal,
 			// --json) records nothing anywhere, so the declared names stay
-			// unsatisfied and a later `lode resume` in a terminal re-runs the
+			// unsatisfied and a later `lode worktree resume` in a terminal re-runs the
 			// ceremony instead of skipping it forever.
 			if asked {
 				declined = entryNames(consentSet)
@@ -118,7 +118,7 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 	}
 
 	if _, err := opLookPathFunc(); err != nil {
-		fmt.Fprintln(errw, "secrets: 1Password CLI not found — install `op`, sign in, then `lode resume` to materialize")
+		fmt.Fprintln(errw, "secrets: 1Password CLI not found — install `op`, sign in, then `lode worktree resume` to materialize")
 		return
 	}
 
@@ -134,7 +134,7 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 	// feedback, not data: it goes to stderr so a `--json` caller's stdout
 	// carries nothing but the JSON document it is about to print.
 	if err := opRunFunc(dir, envFile, taskID, names, declined, errw, errw); err != nil {
-		fmt.Fprintf(errw, "secrets: materialization failed: %v — signed in to op? `lode resume` re-runs the ceremony\n", err)
+		fmt.Fprintf(errw, "secrets: materialization failed: %v — signed in to op? `lode worktree resume` re-runs the ceremony\n", err)
 		return
 	}
 	if err := c.RecordSecretsMaterialized(ctx, taskID, names); err != nil {
@@ -153,9 +153,9 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 // Nobody is asked when there is no operator to ask: a `--json` caller is a
 // machine by definition (and under a pty-wrapped unattended runner a prompt
 // would hang forever, with the task already claimed), and stdin that is a
-// non-terminal file is an agent-run `lode next`. Both answer "no" with
+// non-terminal file is an agent-run `lode worktree next`. Both answer "no" with
 // asked=false — a deferral, not a decision, which the caller must not persist
-// — and `lode resume` in a terminal re-runs the ceremony.
+// — and `lode worktree resume` in a terminal re-runs the ceremony.
 func consentToSecrets(cmd *cobra.Command, entries []secrets.Entry) (consented, asked bool) {
 	errw := cmd.ErrOrStderr()
 	fmt.Fprintln(errw, "This task declares secrets:")
@@ -164,7 +164,7 @@ func consentToSecrets(cmd *cobra.Command, entries []secrets.Entry) (consented, a
 	}
 	f, isFile := cmd.InOrStdin().(*os.File)
 	if jsonOut(cmd) || (isFile && !term.IsTerminal(int(f.Fd()))) {
-		fmt.Fprintln(errw, "secrets: no operator to ask — deferred, not declined; `lode resume` in a terminal materializes them")
+		fmt.Fprintln(errw, "secrets: no operator to ask — deferred, not declined; `lode worktree resume` in a terminal materializes them")
 		return false, false
 	}
 	fmt.Fprint(errw, "Materialize into the OS keystore for unattended use? [y/N] ")
@@ -184,7 +184,7 @@ func consentToSecrets(cmd *cobra.Command, entries []secrets.Entry) (consented, a
 // declared name was either materialized or explicitly declined.
 //
 // No manifest is never satisfied, even for a task declaring nothing: `lode
-// next` packs the baseline set regardless of declaration, so after a purge, on
+// worktree next` packs the baseline set regardless of declaration, so after a purge, on
 // a second machine, or when a baseline entry joined the catalog since the
 // claim, there is real work for the ceremony to do. Re-running it costs
 // nothing when there isn't — it no-ops silently on an unreachable catalog or

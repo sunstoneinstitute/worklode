@@ -1,9 +1,9 @@
 // worker.go: `lode worker` — what an unattended worker loop needs beyond the
 // lifecycle pair in lifecycle.go. Today that is `listen`: block until the
 // backbone holds work this worker could claim, so a supervisor can sleep
-// instead of spinning on `lode next`.
+// instead of spinning on `lode worktree next`.
 //
-// `listen` asks the same question `lode next` asks, through the same endpoint
+// `listen` asks the same question `lode worktree next` asks, through the same endpoint
 // with DryRun set, rather than reconstructing "is there ready work" from a
 // task list. Ranking, focus, blocked-ness and every other eligibility rule
 // live server-side (spec 005); a list filter here would be a second, drifting
@@ -52,9 +52,9 @@ func newWorkerListenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "listen",
 		Short: "Wait until there is work this worker could claim, then report it",
-		Long: "Polls the claim path in dry-run mode and reports the task `lode next` " +
+		Long: "Polls the claim path in dry-run mode and reports the task `lode worktree next` " +
 			"would pick, without claiming it. Blocks until there is one.\n\n" +
-			"The filter flags are exactly those `lode next` takes, so one filter " +
+			"The filter flags are exactly those `lode worktree next` takes, so one filter " +
 			"can drive both a listener and the loop it wakes.\n\n" +
 			"Without --once it keeps watching, printing a line each time the pick " +
 			"changes — the same pick sitting unclaimed is not reprinted. With " +
@@ -87,7 +87,7 @@ func newWorkerListenCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "watch this project")
 	cmd.Flags().StringVar(&kind, "kind", "", "only wake for this kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false,
-		"restrict the watch to the project's focus concerns only, the way lode next --strict-focus does")
+		"restrict the watch to the project's focus concerns only, the way lode worktree next --strict-focus does")
 	cmd.Flags().DurationVar(&interval, "interval", 5*time.Minute, "how often to ask (e.g. 30s, 5m)")
 	cmd.Flags().BoolVar(&once, "once", false, "exit 0 on the first pick instead of watching")
 	return cmd

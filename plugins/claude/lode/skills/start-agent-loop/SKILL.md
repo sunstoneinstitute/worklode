@@ -10,13 +10,13 @@ Invocation arguments: $ARGUMENTS
 
 Start a @lode-worker-agent with the instructions below:
 
-Run `lode next --json`, adding only the invocation arguments that are among:
+Run `lode worktree next --json`, adding only the invocation arguments that are among:
 
 - `--project <key>`
 - `--kind <kind>`
 - `--strict-focus`
 
-`lode next` takes at most one positional argument, so anything else the user
+`lode worktree next` takes at most one positional argument, so anything else the user
 typed is context for the work, not command input — never pass it to the
 command; pass it on to the subagent instead, and mention you did.
 

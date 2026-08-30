@@ -252,14 +252,14 @@ func newSecretsExecCmd() *cobra.Command {
 			}
 			m, ok := secrets.LoadManifest(taskID)
 			if !ok || len(m.Materialized) == 0 {
-				return fmt.Errorf("no secrets materialized for %s; `lode resume` runs the ceremony", taskID)
+				return fmt.Errorf("no secrets materialized for %s; `lode worktree resume` runs the ceremony", taskID)
 			}
 			injected := make([]string, 0, len(m.Materialized))
 			for _, name := range m.Materialized {
 				v, err := secrets.Fetch(taskID, name)
 				if err != nil {
 					return fmt.Errorf("secret %s is not in the keystore — do not retry or "+
-						"work around; `lode block` with reason missing-secret", name)
+						"work around; `lode worktree block` with reason missing-secret", name)
 				}
 				injected = append(injected, name+"="+v)
 			}
