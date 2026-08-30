@@ -113,6 +113,12 @@ func TestLocalMergeReportsTrueMerge(t *testing.T) {
 	if !strings.Contains(q, "state=ready") || !strings.Contains(q, "state=in_review") {
 		t.Fatalf("list query %q does not scope by open states", q)
 	}
+	// WL-379: in_progress is excluded from the candidate states — this
+	// handler runs lease-unaware in the main clone, so an in_progress task
+	// (someone else's active worktree) must not be probed at all.
+	if strings.Contains(q, "state=in_progress") {
+		t.Fatalf("list query %q includes in_progress, which this lease-unaware handler must not probe", q)
+	}
 }
 
 // TestLocalMergeReportsFastForward: a fast-forward leaves no merge commit,
@@ -140,7 +146,7 @@ func TestLocalMergeReportsFastForward(t *testing.T) {
 // post-merge.
 func TestLocalMergeReportsSquash(t *testing.T) {
 	b := newMergeBackbone(t, []map[string]any{
-		{"id": "WL-2", "branch": "WL-2-squash-me", "state": "in_progress"},
+		{"id": "WL-2", "branch": "WL-2-squash-me", "state": "in_review"},
 	})
 	r := newMergeRepo(t)
 	r.git("checkout", "-b", "WL-2-squash-me")
@@ -164,7 +170,7 @@ func TestLocalMergeReportsSquash(t *testing.T) {
 func TestLocalMergeIgnoresUntouchedBranch(t *testing.T) {
 	b := newMergeBackbone(t, []map[string]any{
 		{"id": "WL-1", "branch": "WL-1-real-work", "state": "in_review"},
-		{"id": "WL-9", "branch": "WL-9-never-started", "state": "in_progress"},
+		{"id": "WL-9", "branch": "WL-9-never-started", "state": "in_review"},
 	})
 	r := newMergeRepo(t)
 	r.git("branch", "WL-9-never-started") // created, never committed to
@@ -318,7 +324,7 @@ func TestDefaultBranch(t *testing.T) {
 // on a branch with more than one commit is GitHub's default.
 func TestLocalMergeReportsMultiCommitSquash(t *testing.T) {
 	b := newMergeBackbone(t, []map[string]any{
-		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_progress"},
+		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_review"},
 	})
 	r := newMergeRepo(t)
 	r.git("checkout", "-b", "WL-3-two-commits")
@@ -341,7 +347,7 @@ func TestLocalMergeReportsMultiCommitSquash(t *testing.T) {
 // an ancestor of anything.
 func TestLocalMergeDoesNotReReportASquash(t *testing.T) {
 	b := newMergeBackbone(t, []map[string]any{
-		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_progress"},
+		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_review"},
 	})
 	r := newMergeRepo(t)
 	r.git("checkout", "-b", "WL-3-two-commits")
@@ -365,8 +371,8 @@ func TestLocalMergeDoesNotReReportASquash(t *testing.T) {
 // in by somebody else's squash landing in the same commit range.
 func TestLocalMergeIgnoresUnlandedBranchDuringSquash(t *testing.T) {
 	b := newMergeBackbone(t, []map[string]any{
-		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_progress"},
-		{"id": "WL-4", "branch": "WL-4-still-working", "state": "in_progress"},
+		{"id": "WL-3", "branch": "WL-3-two-commits", "state": "in_review"},
+		{"id": "WL-4", "branch": "WL-4-still-working", "state": "in_review"},
 	})
 	r := newMergeRepo(t)
 	r.git("checkout", "-b", "WL-4-still-working")
