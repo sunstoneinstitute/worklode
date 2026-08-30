@@ -64,8 +64,11 @@ func pages(t *testing.T) map[string]string {
 			}},
 		}),
 		"cockpit": Cockpit(CockpitView{
-			Page: PageProps{Title: "Worklode backbone"}, Project: proj,
-			ModeName: "operations", ModeBasis: "the project has active work and no pending launch decision",
+			Page: PageProps{Title: "Worklode backbone"}, Project: CockpitProject{
+				ID: proj.ID, Name: proj.Name, Key: proj.Key,
+				ModeName:  "operations",
+				ModeBasis: "the project has active work and no pending launch decision",
+			},
 			PinnedFocus:  &CockpitFocus{Note: "Land the cockpit accessibility work before the sandbox demo", PinnedBy: "Stig Bakken", PinnedAt: now},
 			NextDecision: &CockpitDecision{Title: "Whether the cockpit ships read-only for the first release", Accountable: "Stig Bakken", Readiness: "awaiting evidence"},
 			Work: CockpitWork{
@@ -315,6 +318,34 @@ func TestScrollContainersAreKeyboardReachable(t *testing.T) {
 	// The stage stepper scrolls inside itself too, and holds no link at all.
 	if !strings.Contains(rendered["cockpit"], `<div class="stepper" role="group" aria-label="Sunstone Way stages" tabindex="0">`) {
 		t.Error("cockpit: the stage stepper scrolls horizontally and must stay keyboard-focusable (WCAG 2.1.1)")
+	}
+}
+
+// TestModePillRendersInSidebar pins where the operating-mode pill lives and how
+// its basis is disclosed: in the project sidebar under the key, with the basis
+// as a title tooltip plus aria-label rather than a permanently visible line.
+// Pages that set no mode render no pill.
+func TestModePillRendersInSidebar(t *testing.T) {
+	rendered := pages(t)
+	head, _, ok := strings.Cut(rendered["cockpit"], `<main id="main-content"`)
+	if !ok {
+		t.Fatal("cockpit: no main landmark to split the sidebar on")
+	}
+	if !strings.Contains(head, `class="mode-name ok"`) {
+		t.Error("cockpit: the mode pill must render in the sidebar, before the main landmark")
+	}
+	basis := "the project has active work and no pending launch decision"
+	if !strings.Contains(head, `title="`+basis+`"`) {
+		t.Error("cockpit: the mode basis must be the pill's title tooltip, not visible body text")
+	}
+	if !strings.Contains(head, `aria-label="Operations mode: `+basis+`"`) {
+		t.Error("cockpit: the mode basis must also reach screen readers via aria-label")
+	}
+	if strings.Contains(rendered["cockpit"], `class="mode-banner"`) {
+		t.Error("cockpit: the mode banner was replaced by the sidebar pill and must not come back")
+	}
+	if strings.Contains(rendered["crew"], `class="mode-name`) {
+		t.Error("crew: a page that sets no mode must render no mode pill")
 	}
 }
 

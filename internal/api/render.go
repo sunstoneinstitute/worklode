@@ -210,9 +210,7 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 		Page:         ui.PageProps{Title: title},
 		CanonicalURL: c.CanonicalURL,
 		NewTaskURL:   "/projects/" + c.Project.ID + "/tasks/new",
-		Project:      cockpitProject(c.Project),
-		ModeName:     c.Mode.Name,
-		ModeBasis:    c.Mode.Basis.Summary,
+		Project:      cockpitProjectInMode(c.Project, c.Mode),
 		PinnedFocus:  cockpitFocus(c.PinnedFocus),
 		NextDecision: cockpitDecision(c.NextDecision),
 		Work: ui.CockpitWork{
@@ -478,9 +476,19 @@ func formOptionLabel(value string) string {
 }
 
 // cockpitProject maps the project identity, reused by the cockpit and the
-// project placeholder sidebar.
+// project placeholder sidebar. It leaves the mode empty, so those pages'
+// sidebars render no mode pill.
 func cockpitProject(p model.CockpitProject) ui.CockpitProject {
 	return ui.CockpitProject{ID: p.ID, Name: p.Name, Key: p.Key}
+}
+
+// cockpitProjectInMode is cockpitProject plus the operating mode, which only
+// the cockpit knows and only its sidebar renders.
+func cockpitProjectInMode(p model.CockpitProject, m model.CockpitMode) ui.CockpitProject {
+	v := cockpitProject(p)
+	v.ModeName = m.Name
+	v.ModeBasis = m.Basis.Summary
+	return v
 }
 
 // cockpitFocus maps the pinned-focus note, preserving nil (nothing pinned).
