@@ -728,6 +728,24 @@ func bucketWorkFacts(facts []store.ProjectWorkFact) workBuckets {
 	return b
 }
 
+// blockerNames lists what holds a task: its open blocker tasks by id, then
+// the slug of any unfinished plan ordered before its plan. A draft plan has
+// minted no task, so it names nothing in OpenBlockers and would otherwise
+// leave a blocked task with no visible reason.
+func blockerNames(f store.ProjectWorkFact) []string {
+	if !f.Blocked() {
+		return nil
+	}
+	names := make([]string, 0, len(f.OpenBlockers)+len(f.BlockingPlans))
+	for _, b := range f.OpenBlockers {
+		names = append(names, b.ID)
+	}
+	for _, p := range f.BlockingPlans {
+		names = append(names, p.Slug)
+	}
+	return names
+}
+
 // lastActivity returns the newest Task.UpdatedAt across facts (all states,
 // done included), or the zero time for an empty slice.
 func lastActivity(facts []store.ProjectWorkFact) time.Time {
@@ -787,6 +805,15 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 	for _, f := range facts {
 		byProject[f.Task.Project] = append(byProject[f.Task.Project], f)
 	}
+	// The reverse of the blocker edges, so a task can name what it holds up.
+	// Built across every fact rather than per project, since a blocker and
+	// its dependent can sit in different projects.
+	blocking := make(map[string][]string)
+	for _, f := range facts {
+		for _, b := range f.OpenBlockers {
+			blocking[b.ID] = append(blocking[b.ID], f.Task.ID)
+		}
+	}
 
 	resp := &model.BoardResponse{Projects: make([]model.BoardProject, 0, len(projects))}
 
@@ -807,6 +834,8 @@ func (s *server) assembleBoard(ctx context.Context, projectFilter string) (*mode
 				if holders && f.Lease != nil {
 					bt.Holder = &model.Holder{ActorID: f.Lease.ActorID, ExpiresAt: f.Lease.ExpiresAt}
 				}
+				bt.BlockedBy = blockerNames(f)
+				bt.Blocking = blocking[f.Task.ID]
 				out = append(out, bt)
 			}
 			return out
