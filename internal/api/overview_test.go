@@ -16,6 +16,7 @@ var overviewReadPaths = []string{
 }
 
 func TestOverviewEndpointsRequireAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	for _, path := range overviewReadPaths {
 		if rec := doReq(t, h, http.MethodGet, path, "", nil); rec.Code != http.StatusUnauthorized {
@@ -31,6 +32,7 @@ func TestOverviewEndpointsRequireAuth(t *testing.T) {
 // knowledge graph, so an instance with no Config.Graph says so rather than
 // pretending the org has neither violations nor gaps.
 func TestGraphBackedReadsWithoutGraphAre503(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t) // the test config carries no graph client
 	for _, path := range []string{"/api/v1/drift", "/api/v1/gaps"} {
 		if rec := doReq(t, h, http.MethodGet, path, token, nil); rec.Code != http.StatusServiceUnavailable {
@@ -44,6 +46,7 @@ func TestGraphBackedReadsWithoutGraphAre503(t *testing.T) {
 // instance with no graph configured. That is why NewServer always builds the
 // overview service instead of leaving it nil.
 func TestBackboneReadsAnswerWithoutGraph(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	for _, path := range []string{"/api/v1/frontier", "/api/v1/critical-path", "/api/v1/overview"} {
@@ -55,6 +58,7 @@ func TestBackboneReadsAnswerWithoutGraph(t *testing.T) {
 }
 
 func TestFrontierEndpointOrdersAndAnnotates(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -96,6 +100,7 @@ func TestFrontierEndpointOrdersAndAnnotates(t *testing.T) {
 // named graphs and spends GitHub App calls across every repo, so it is
 // permDeriveRun (admin), not the read permission the five GETs share.
 func TestDeriveEndpointRequiresAdmin(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	worker := seedActor(t, st, "worker", "agent", "Worker", false)
 
@@ -114,6 +119,7 @@ func TestDeriveEndpointRequiresAdmin(t *testing.T) {
 // TestDeriveWithoutGraphIs503: an admin on an instance with no graph endpoint
 // is refused for the deployment's reason, not their own.
 func TestDeriveWithoutGraphIs503(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t) // admin "alice", no graph client
 	rec := doReq(t, h, http.MethodPost, "/api/v1/derive", token, nil)
 	if rec.Code != http.StatusServiceUnavailable {
@@ -124,6 +130,7 @@ func TestDeriveWithoutGraphIs503(t *testing.T) {
 // TestOverviewRollWithoutGraph checks the roll-up reports the graph is off
 // rather than reporting zero drift, and still counts the backbone frontier.
 func TestOverviewRollWithoutGraph(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -150,6 +157,7 @@ func TestOverviewRollWithoutGraph(t *testing.T) {
 // critical path. Depth stays historical; criticality follows the open
 // subgraph (spec 007 §4's closed-task rule).
 func TestCriticalPathExcludesFinishedChains(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 

@@ -11,6 +11,7 @@ import (
 )
 
 func TestTaskBrief(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -71,6 +72,7 @@ func TestTaskBrief(t *testing.T) {
 }
 
 func TestTaskBriefNoLease(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -91,6 +93,7 @@ func TestTaskBriefNoLease(t *testing.T) {
 }
 
 func TestTaskBriefParent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Delivery lifecycle")
@@ -114,6 +117,7 @@ func TestTaskBriefParent(t *testing.T) {
 }
 
 func TestTaskBriefNoParent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -131,6 +135,7 @@ func TestTaskBriefNoParent(t *testing.T) {
 }
 
 func TestTaskBriefNotFound(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/tasks/WL-99/brief", token, nil)
 	if rr.Code != http.StatusNotFound {
@@ -139,6 +144,7 @@ func TestTaskBriefNotFound(t *testing.T) {
 }
 
 func TestRebindWorktree(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -177,6 +183,7 @@ func TestRebindWorktree(t *testing.T) {
 // --- brief skills section ---------------------------------------------
 
 func TestTaskBriefSkillsPinned(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
@@ -216,6 +223,7 @@ func TestTaskBriefSkillsPinned(t *testing.T) {
 // 13 renders against: the skills section is always present, with empty
 // arrays (never null) even when there is nothing to show.
 func TestTaskBriefSkillsEmptyWhenNoPinsNoEmbedder(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	task := createTaskViaAPI(t, h, token, map[string]any{
@@ -249,6 +257,7 @@ func TestTaskBriefSkillsEmptyWhenNoPinsNoEmbedder(t *testing.T) {
 // because a pinned skill was withdrawn upstream: content still comes back,
 // alongside a warning.
 func TestTaskBriefDeletedPinStillResolves(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
@@ -291,6 +300,7 @@ func TestTaskBriefDeletedPinStillResolves(t *testing.T) {
 // refactor kept the exclusion behavior: a pinned skill that would also match
 // by embedding must appear only under pinned, never duplicated into matches.
 func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
+	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
@@ -338,6 +348,7 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 // lode resume). It must skip the work, not just trim the output — no pin
 // resolution, no inlined bodies, and no embedding round trip.
 func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
+	t.Parallel()
 	var embedCalls atomic.Int32
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		embedCalls.Add(1)
@@ -386,6 +397,7 @@ func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
 // cosine query error; the brief is the gate on starting work, so it must
 // still serve pins with a warning rather than 500.
 func TestTaskBriefMatchQueryFailureDegrades(t *testing.T) {
+	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
@@ -433,6 +445,7 @@ func TestTaskBriefMatchQueryFailureDegrades(t *testing.T) {
 // behavior on the brief path: a provider failure must never turn a brief
 // fetch into a 5xx.
 func TestTaskBriefProviderFailureDegrades(t *testing.T) {
+	t.Parallel()
 	errSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

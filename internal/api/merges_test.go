@@ -38,6 +38,7 @@ func mergeResults(t *testing.T, body map[string]any) map[string]string {
 // TestReportMergeAdvancesTask: the whole feature. A merge that never reached
 // GitHub still closes the task.
 func TestReportMergeAdvancesTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedMergeRepo(t, st, "proj", "acme/app")
@@ -67,6 +68,7 @@ func TestReportMergeAdvancesTask(t *testing.T) {
 // TestReportMergeDuplicate: a second reporter of the same merge is the
 // healthy case, not an error.
 func TestReportMergeDuplicate(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedMergeRepo(t, st, "proj", "acme/app")
@@ -93,6 +95,7 @@ func TestReportMergeDuplicate(t *testing.T) {
 // can name a task this backbone has never heard of. That is a reported
 // outcome, not a 4xx — the rest of the report must still land.
 func TestReportMergeUnknownTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedMergeRepo(t, st, "proj", "acme/app")
@@ -114,6 +117,7 @@ func TestReportMergeUnknownTask(t *testing.T) {
 }
 
 func TestReportMergeValidation(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	seedMergeRepo(t, st, "proj", "acme/app")
@@ -139,6 +143,7 @@ func TestReportMergeValidation(t *testing.T) {
 }
 
 func TestReportMergeRequiresAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	rr := doReq(t, h, "POST", "/api/v1/merges", "", map[string]any{
 		"repo": "acme/app", "sha": "abc1234", "tasks": []string{"WL-1"},

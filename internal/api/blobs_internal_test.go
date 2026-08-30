@@ -11,6 +11,7 @@ import (
 // TestCheckSpoolWritable covers the probe without a store. The error must name
 // the path: it is all an operator gets from the crash loop.
 func TestCheckSpoolWritable(t *testing.T) {
+	t.Parallel()
 	if err := checkSpoolWritable(t.TempDir()); err != nil {
 		t.Fatalf("writable dir: %v", err)
 	}
@@ -32,6 +33,7 @@ func TestCheckSpoolWritable(t *testing.T) {
 // TestCheckSpoolWritableLeavesNothingBehind: the probe runs on every boot, so
 // a crash-looping pod must not fill its own spool volume.
 func TestCheckSpoolWritableLeavesNothingBehind(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	for range 3 {
 		if err := checkSpoolWritable(dir); err != nil {
@@ -52,6 +54,7 @@ func TestCheckSpoolWritableLeavesNothingBehind(t *testing.T) {
 // matters is that every one of them still parses back to exactly the name we
 // meant to serve, and that none of them can add a header.
 func TestContentDisposition(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		kind     string
@@ -111,6 +114,7 @@ func TestContentDisposition(t *testing.T) {
 // TestBlobURL: a reference addresses its blob by hash and carries its own
 // name, since the name is per-reference and the route is per-blob (021 §2).
 func TestBlobURL(t *testing.T) {
+	t.Parallel()
 	const hash = "9f2ac1"
 	if got := blobURL(hash, ""); got != "/blob/"+hash {
 		t.Fatalf("unnamed reference = %q, want the bare URL", got)

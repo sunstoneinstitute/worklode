@@ -20,6 +20,7 @@ func seedEvent(t *testing.T, st *store.Store, extID string, apply func(tx *sql.T
 }
 
 func TestTaskTimeline(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -225,6 +226,7 @@ func TestTaskTimeline(t *testing.T) {
 // "deployed" entries only for environments whose confirmed frontier covers
 // the landed commit, and the earliest release covering it.
 func TestTimelineDeliveryEntries(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -384,6 +386,7 @@ func entryAt(t *testing.T, i int, e map[string]any) time.Time {
 }
 
 func TestTaskTimelineNewTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{

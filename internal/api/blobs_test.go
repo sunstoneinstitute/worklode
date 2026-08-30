@@ -16,6 +16,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/blobstore"
+	"github.com/sunstoneinstitute/worklode/internal/ffmpeg"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -57,6 +58,7 @@ func uploadedHash(t *testing.T, h http.Handler, token string, body []byte) strin
 }
 
 func TestUploadBlob(t *testing.T) {
+	t.Parallel()
 	_, h, token, fake := newTestServerBlobs(t)
 
 	rec := postBlob(t, h, token, "application/octet-stream", pngBytes)
@@ -104,6 +106,7 @@ func TestUploadBlob(t *testing.T) {
 }
 
 func TestUploadBlobDedup(t *testing.T) {
+	t.Parallel()
 	_, h, token, fake := newTestServerBlobs(t)
 
 	first := postBlob(t, h, token, "", pngBytes)
@@ -138,6 +141,7 @@ func TestUploadBlobDedup(t *testing.T) {
 // before MaxBytesReader refuses it, so asserting at the real cap writes
 // 100 MiB to the spool dir on every `make test`.
 func TestUploadBlobTooLarge(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	_, h, token := newTestServerWithConfig(t, api.Config{
 		WebOpen: true, BlobStoreForTest: fake, MaxBlobBytesForTest: 1 << 10,
@@ -160,6 +164,7 @@ func TestUploadBlobTooLarge(t *testing.T) {
 }
 
 func TestUploadBlobUnconfigured(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t) // no blob store
 	rec := postBlob(t, h, token, "", pngBytes)
 	if rec.Code != http.StatusNotImplemented {
@@ -168,6 +173,7 @@ func TestUploadBlobUnconfigured(t *testing.T) {
 }
 
 func TestUploadBlobUnauthorized(t *testing.T) {
+	t.Parallel()
 	_, h, _, _ := newTestServerBlobs(t)
 	rec := postBlob(t, h, "", "", pngBytes)
 	if rec.Code != http.StatusUnauthorized {
@@ -176,6 +182,7 @@ func TestUploadBlobUnauthorized(t *testing.T) {
 }
 
 func TestUploadBlobEmpty(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 	rec := postBlob(t, h, token, "", nil)
 	if rec.Code != http.StatusUnprocessableEntity {
@@ -187,6 +194,7 @@ func TestUploadBlobEmpty(t *testing.T) {
 }
 
 func TestServeBlobRedirect(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 	hash := uploadedHash(t, h, token, pngBytes)
 
@@ -218,6 +226,7 @@ func TestServeBlobRedirect(t *testing.T) {
 }
 
 func TestServeBlobAttachmentDisposition(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 
 	// A text payload is not embeddable, so it must download.
@@ -252,6 +261,7 @@ func TestServeBlobAttachmentDisposition(t *testing.T) {
 // page load does. A 401 here would render a task page fine and break every
 // image on it.
 func TestServeBlobOpenOnAnOptedInInstance(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 	hash := uploadedHash(t, h, token, pngBytes)
 
@@ -268,6 +278,7 @@ func TestServeBlobOpenOnAnOptedInInstance(t *testing.T) {
 // instance serves no web surface at all, and the blob route is refused with
 // it. It must not be the one anonymous read path into a closed deployment.
 func TestServeBlobRefusedOnClosedInstance(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	_, h, token := newTestServerWithConfig(t, api.Config{BlobStoreForTest: fake})
 	hash := uploadedHash(t, h, token, pngBytes)
@@ -299,6 +310,7 @@ func TestServeBlobRefusedOnClosedInstance(t *testing.T) {
 // branch into "if err != nil { sub = s.webSubject(...) }" would pass them all
 // while opening exactly that hole.
 func TestServeBlobRejectsInvalidToken(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	st := newTestStore(t)
 	token := seedActor(t, st, "alice", "human", "Alice", true)
@@ -332,6 +344,7 @@ func TestServeBlobRejectsInvalidToken(t *testing.T) {
 // TestServeBlobUnconfigured covers serveBlob's 501: with no bucket wired up
 // the route is registered and reachable but has nothing to presign against.
 func TestServeBlobUnconfigured(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t) // no blob store
 	req := httptest.NewRequest(http.MethodGet, "/blob/"+strings.Repeat("e", 64), nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -346,6 +359,7 @@ func TestServeBlobUnconfigured(t *testing.T) {
 // TestServeBlobRequiresSessionWithProvider covers the configured-provider
 // case: an anonymous fetch is refused and a valid session cookie is honoured.
 func TestServeBlobRequiresSessionWithProvider(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	st, h, _ := newOIDCServer(t, api.Config{BlobStoreForTest: fake})
 	token := seedActor(t, st, "alice", "human", "Alice", true)
@@ -372,6 +386,7 @@ func TestServeBlobRequiresSessionWithProvider(t *testing.T) {
 // TestNewServerRejectsUnwritableSpoolDir pins the wiring of the boot-time
 // check: gated on blob storage being configured, and fatal when it is.
 func TestNewServerRejectsUnwritableSpoolDir(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	missing := filepath.Join(t.TempDir(), "not-mounted")
 
@@ -400,6 +415,7 @@ func TestNewServerRejectsUnwritableSpoolDir(t *testing.T) {
 }
 
 func TestServeBlobNotFound(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 	req := httptest.NewRequest(http.MethodGet, "/blob/"+strings.Repeat("e", 64), nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -415,6 +431,7 @@ func TestServeBlobNotFound(t *testing.T) {
 // and a deduplicated one, and between a served blob and a missing one, is
 // invisible in http_requests_total (all four are 200 or 404 alike).
 func TestBlobMetrics(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	st := newTestStore(t)
 	token := seedActor(t, st, "alice", "human", "Alice", true)
@@ -494,6 +511,7 @@ func servedDisposition(t *testing.T, h http.Handler, token, hash, rawQuery strin
 // The name arrives as a query parameter because task_blobs.filename is
 // per-reference while the route is per-blob.
 func TestServeBlobFilenameDisposition(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 	hash := uploadedHash(t, h, token, []byte("crash log line\n"))
 
@@ -533,6 +551,7 @@ func TestServeBlobFilenameDisposition(t *testing.T) {
 // inline-vs-attachment, so a caller-supplied name must not be able to move
 // it — including by naming a text blob something executable-looking.
 func TestServeBlobFilenameKeepsTheInlineToken(t *testing.T) {
+	t.Parallel()
 	_, h, token, _ := newTestServerBlobs(t)
 
 	img := uploadedHash(t, h, token, pngBytes)
@@ -552,21 +571,32 @@ var webmBytes = []byte{0x1A, 0x45, 0xDF, 0xA3, 0x01, 0x02, 0x03, 0x04}
 // jpegBytes is what the stub ffmpeg below emits as its extracted frame.
 var jpegBytes = []byte{0xFF, 0xD8, 0xFF, 0xE0, 'f', 'r', 'a', 'm', 'e'}
 
-// stubFFmpeg puts an ffmpeg on PATH that ignores its input and writes
-// jpegBytes, or — when ok is false — no ffmpeg at all. The real binary is in
-// the server image but not on the test runner, so the stub is what keeps the
-// upload path's poster half covered; internal/ffmpeg owns the round trip
-// against a real one.
+// stubFFmpeg points ffmpeg.BinaryName at a script that ignores its input and
+// writes jpegBytes, or — when ok is false — at a name that resolves nowhere.
+// The real binary is in the server image but not on the test runner, so the
+// stub is what keeps the upload path's poster half covered; internal/ffmpeg
+// owns the round trip against a real one.
+//
+// This mutates the ffmpeg package's global BinaryName, so the four tests
+// using it (TestUploadVideoExtractsPoster, TestUploadVideoTwiceKeepsThePoster,
+// TestUploadVideoWithoutFFmpeg, TestUploadImageHasNoPoster) stay serial, not
+// parallel — matching internal/store/branchname_test.go's precedent for
+// tests that share a mutable package-level global (WL-438).
 func stubFFmpeg(t *testing.T, ok bool) {
 	t.Helper()
-	dir := t.TempDir()
-	if ok {
-		script := "#!/bin/sh\nprintf '\\377\\330\\377\\340frame'\n"
-		if err := os.WriteFile(filepath.Join(dir, "ffmpeg"), []byte(script), 0o755); err != nil {
-			t.Fatalf("write stub: %v", err)
-		}
+	original := ffmpeg.BinaryName
+	t.Cleanup(func() { ffmpeg.BinaryName = original })
+	if !ok {
+		ffmpeg.BinaryName = "worklode-test-no-such-ffmpeg"
+		return
 	}
-	t.Setenv("PATH", dir)
+	dir := t.TempDir()
+	script := "#!/bin/sh\nprintf '\\377\\330\\377\\340frame'\n"
+	path := filepath.Join(dir, "ffmpeg")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+	ffmpeg.BinaryName = path
 }
 
 // uploadedBlob posts body and returns the decoded upload response.

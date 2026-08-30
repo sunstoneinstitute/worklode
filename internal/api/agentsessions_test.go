@@ -31,6 +31,7 @@ func claimedTask(t *testing.T, st *store.Store, h http.Handler, token string) st
 }
 
 func TestAgentSessionEndpoints(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)
 
@@ -140,6 +141,7 @@ func endSessionWithUsage(t *testing.T, st *store.Store, h http.Handler, token st
 // TestAgentSessionUsageBuckets covers the reported breakdown reaching the
 // project rollup priced, and an end that omits usage leaving it alone.
 func TestAgentSessionUsageBuckets(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := endSessionWithUsage(t, st, h, token, []map[string]any{sonnetUsagePrevDay, sonnetUsage})
 
@@ -186,6 +188,7 @@ func TestAgentSessionUsageBuckets(t *testing.T) {
 // TestAgentSessionEndRejectsMalformedUsage checks a bad bucket is a 400 and
 // is rejected whole: the session stays open and endable afterwards.
 func TestAgentSessionEndRejectsMalformedUsage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)
 	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/agent-session", token,
@@ -223,6 +226,7 @@ func TestAgentSessionEndRejectsMalformedUsage(t *testing.T) {
 // a heartbeat is priced into the project's cost without the session ever
 // ending, and a bad bucket is rejected there the same way it is on end.
 func TestAgentSessionTouchReportsUsage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)
 
@@ -267,6 +271,7 @@ func TestAgentSessionTouchReportsUsage(t *testing.T) {
 // TestReportProjectSessionUsage covers the happy path: usage reported with
 // no task to bill to lands in the project's cost report under Overhead.
 func TestReportProjectSessionUsage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -297,6 +302,7 @@ func TestReportProjectSessionUsage(t *testing.T) {
 // TestReportProjectSessionUsageUnknownProject404 covers the store's
 // ErrNotFound for an unknown project mapping onto a 404.
 func TestReportProjectSessionUsageUnknownProject404(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 
 	rr := doReq(t, h, "POST", "/api/v1/projects/no-such-project/session-usage", token,
@@ -313,6 +319,7 @@ func TestReportProjectSessionUsageUnknownProject404(t *testing.T) {
 // 400 for a malformed body: reportProjectSessionUsage routes each group through
 // the same toUsageBuckets validation the task-scoped endpoints use.
 func TestReportProjectSessionUsageRejectsMalformedUsage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -340,6 +347,7 @@ func TestReportProjectSessionUsageRejectsMalformedUsage(t *testing.T) {
 }
 
 func TestAgentSessionRejectsNonHolderAndBadAgent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	id := claimedTask(t, st, h, token)
 

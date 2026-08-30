@@ -121,6 +121,7 @@ func topbarRegion(t *testing.T, body string) string {
 // second header row rather than in the page's sidebar. The topbar itself keeps
 // only its brand and controls.
 func TestGlobalNavFollowsTopbar(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	header := topbarRegion(t, body)
@@ -142,12 +143,14 @@ func TestGlobalNavFollowsTopbar(t *testing.T) {
 // in the exact order docs/specs/032-project-cockpit.md §2 requires: Home,
 // Ideas, Intake, Projects, Work, Reviews, Deliveries, Knowledge.
 func TestGlobalNavOrder(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	assertOrder(t, body, ">Home<", ">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Reviews<", ">Deliveries<", ">Knowledge<")
 }
 
 func TestGlobalDestinations(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	// Knowledge lands on /docs, the document corpus (spec 032 §2's
@@ -171,6 +174,7 @@ func TestGlobalDestinations(t *testing.T) {
 // /docs marks Knowledge as the current page, and the spec's own spelling of
 // the URL still resolves.
 func TestKnowledgeIsTheDocumentCorpus(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
@@ -193,6 +197,7 @@ func TestKnowledgeIsTheDocumentCorpus(t *testing.T) {
 // destinations name their owning spec and render no form, button, or fake
 // state implying the workflow exists.
 func TestGlobalPlaceholdersAreHonest(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	for _, tt := range []struct {
@@ -225,6 +230,7 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 // seeded PR-kind approval shows its title and entity id, and the page still
 // carries exactly one aria-current="page" marker.
 func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	seedAwaitingPRApproval(t, st, "acme/site#7", "Fix the widget")
 
@@ -240,6 +246,7 @@ func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
 // TestReviewsPageEmptyIsHonest checks an empty queue states that honestly
 // rather than showing a fabricated record.
 func TestReviewsPageEmptyIsHonest(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
@@ -250,6 +257,7 @@ func TestReviewsPageEmptyIsHonest(t *testing.T) {
 // dormant HTMX asset — no CDN, no hx-* behavior (that's spec 032 §11) — and
 // that /assets/htmx.min.js is served unauthenticated like the other assets.
 func TestShellReferencesHTMX(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	if !strings.Contains(body, `src="/assets/htmx.min.js?v=`) {
@@ -265,6 +273,7 @@ func TestShellReferencesHTMX(t *testing.T) {
 // theme toggle: it renders the #theme button, references /assets/theme.js, and
 // that script is served unauthenticated like the other assets.
 func TestShellReferencesThemeToggle(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	if !strings.Contains(body, `id="theme"`) {
@@ -280,6 +289,7 @@ func TestShellReferencesThemeToggle(t *testing.T) {
 }
 
 func TestAssetsServedWithoutAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	for _, path := range []string{"/assets/app.css", "/assets/fonts/dm-sans-variable.ttf", "/assets/fonts/source-serif-4-variable.ttf", "/assets/fonts/dm-sans-OFL.txt", "/assets/fonts/source-serif-4-OFL.txt"} {
@@ -294,6 +304,7 @@ func TestAssetsServedWithoutAuth(t *testing.T) {
 }
 
 func TestShellFingerprintsStylesheet(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	const prefix = `href="/assets/app.css?v=`
@@ -316,6 +327,7 @@ func TestShellFingerprintsStylesheet(t *testing.T) {
 // it lives outside the embedded, served tree so un-minified build source is
 // never exposed; only the generated internal/ui/assets/app.css is served.
 func TestTailwindSourceNotServed(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	rr := doReq(t, h, "GET", "/assets/app.tailwind.css", "", nil)
@@ -329,6 +341,7 @@ func TestTailwindSourceNotServed(t *testing.T) {
 // docs/mockups/cockpit/index.html) — carries the brand palette, both the
 // light and dark token blocks, and a sample of the shell/component rules.
 func TestAppCSSContent(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 
 	rr := doReq(t, h, "GET", "/assets/app.css", "", nil)
@@ -361,6 +374,7 @@ func TestAppCSSContent(t *testing.T) {
 // aria-current="page". The task page and the new-task form name none (their
 // left column marks nothing), so they assert zero.
 func TestEveryPageRendersTheShell(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -421,6 +435,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 }
 
 func TestProjectSections(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -470,6 +485,7 @@ func TestProjectSections(t *testing.T) {
 // route does. The roster is seeded through the real write path, so what the
 // page shows is what a Crew add actually stores.
 func TestCrewPage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -524,6 +540,7 @@ func TestCrewPage(t *testing.T) {
 }
 
 func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -544,6 +561,7 @@ func TestProjectPageVariantQueryParamIgnored(t *testing.T) {
 // badge or a signal line — those claim a relationship an anonymous viewer
 // does not have.
 func TestHomePage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj1")
 	createProject(t, st, "proj2")
@@ -590,6 +608,7 @@ func TestHomePage(t *testing.T) {
 // other way round (pawait is the oldest, pmember the newest), so a page that
 // sorted by activity alone would render the exact reverse.
 func TestHomePageActorTiers(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	token := seedActor(t, st, "alice", "human", "Alice", true)
 
@@ -675,6 +694,7 @@ func TestHomePageActorTiers(t *testing.T) {
 // actor on no project, with nothing awaiting them, is told so and pointed at
 // the portfolio — never given a card for a project they are not on.
 func TestHomePageEmptyState(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	token := seedActor(t, st, "alice", "human", "Alice", true)
 	createProject(t, st, "proj1")
@@ -704,6 +724,7 @@ func TestHomePageEmptyState(t *testing.T) {
 }
 
 func TestWorkPageOrgBoard(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj1")
 	createProject(t, st, "proj2")
@@ -785,6 +806,7 @@ func TestWorkPageOrgBoard(t *testing.T) {
 }
 
 func TestTaskPage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -913,6 +935,7 @@ func TestTaskPage(t *testing.T) {
 // describe the SVG — for touch and screen readers, since a title attribute
 // alone is not reliably exposed on touch.
 func TestTaskPageTimelineTypeIsAnAccessibleIcon(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -945,6 +968,7 @@ func TestTaskPageTimelineTypeIsAnAccessibleIcon(t *testing.T) {
 // renders a source-native "Open source" link to that fact's own URL, marked
 // rel="noreferrer" — the timeline evidence Task 4 preserves.
 func TestTaskPageRendersSourceLink(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -978,6 +1002,7 @@ func TestTaskPageRendersSourceLink(t *testing.T) {
 // class of hostile URL) — same guarantee (never rendered verbatim), a
 // different library's placeholder token.
 func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1005,6 +1030,7 @@ func TestTaskPageEscapesHostileTimelineURL(t *testing.T) {
 }
 
 func TestTaskPageShowsProgress(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	container := createContainer(t, h, token, "proj", "Container")
@@ -1028,6 +1054,7 @@ func TestTaskPageShowsProgress(t *testing.T) {
 // render on the task page: the origin lists its follow-ups, the follow-up
 // names its origin.
 func TestTaskPageShowsFollowUps(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1055,6 +1082,7 @@ func TestTaskPageShowsFollowUps(t *testing.T) {
 // render on the task page: the canonical task lists its duplicates, the
 // duplicate names its canonical task.
 func TestTaskPageShowsDuplicates(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1088,6 +1116,7 @@ func TestTaskPageShowsDuplicates(t *testing.T) {
 // decode used to render a blank "edge set to " line. Both the add and the
 // remove must render a non-blank, non-generic summary naming both endpoints.
 func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1125,6 +1154,7 @@ func TestTaskPageRendersEdgeChangeSummary(t *testing.T) {
 }
 
 func TestProjectPage(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	if err := st.AddRepo(context.Background(), "proj", "acme/widgets"); err != nil {
@@ -1191,6 +1221,7 @@ func TestProjectPage(t *testing.T) {
 // via the "Agent One · on behalf of Dana" who-line — never the bare actor id,
 // never conflating the two roles.
 func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -1224,6 +1255,7 @@ func TestProjectPageOwnerAndDelegateCopy(t *testing.T) {
 // erroring, and the whole page stays read-only — spec 007's read surface has
 // no act to offer, so it must render no mutation affordance at all.
 func TestDriftPageRendersWithoutGraph(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	rec := doReq(t, h, http.MethodGet, "/drift", "", nil)
 	if rec.Code != http.StatusOK {
@@ -1241,6 +1273,7 @@ func TestDriftPageRendersWithoutGraph(t *testing.T) {
 // The task page shows the coding-agent sessions the backbone recorded against
 // the task's lease — what is actually working on it, not just who holds it.
 func TestTaskPageShowsAgentSessions(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1270,6 +1303,7 @@ func TestTaskPageShowsAgentSessions(t *testing.T) {
 // there is nowhere for one to hang — the card must not appear at all rather
 // than appear empty.
 func TestTaskPageOmitsAgentSessionsWhenUnheld(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -1288,6 +1322,7 @@ func TestTaskPageOmitsAgentSessionsWhenUnheld(t *testing.T) {
 // The project page answers "what is running across this project right now",
 // which a per-task page cannot.
 func TestProjectPageShowsAgentSessions(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{

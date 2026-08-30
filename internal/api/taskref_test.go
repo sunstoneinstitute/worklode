@@ -13,6 +13,7 @@ import (
 // that id as a link to its page, while an acronym of the same shape stays
 // text because its key is not a project key.
 func TestTaskPageLinksBareTaskIDs(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj") // key "WL"
 	createTaskViaAPI(t, h, token, map[string]any{

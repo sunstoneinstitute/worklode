@@ -67,6 +67,7 @@ func withSession(t *testing.T, h http.Handler, method, path, session string, bod
 // the message the policy derives, and is allowed on the ordinary ones. This
 // is the guarantee the permission each route declares now gives.
 func TestAPIDeniesWithoutPermission(t *testing.T) {
+	t.Parallel()
 	st, h, adminToken := newTestServer(t)
 	workerToken := seedActor(t, st, "worker", "agent", "Worker", false)
 	createProject(t, st, "proj")
@@ -122,6 +123,7 @@ func TestAPIDeniesWithoutPermission(t *testing.T) {
 // without the permission is 403 (do not bother). Conflating them is how
 // clients end up retrying a login they do not need.
 func TestAPIUnauthenticatedIs401(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	for _, path := range []string{"/api/v1/tasks", "/api/v1/projects", "/api/v1/board"} {
 		rr := doReq(t, h, "GET", path, "", nil)
@@ -136,6 +138,7 @@ func TestAPIUnauthenticatedIs401(t *testing.T) {
 // submits the creation form, and the write is attributed to their actor —
 // which is the thing webGuard resolving the session to an actor buys.
 func TestWebGuardAllowsLoggedInUser(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	ctx := context.Background()
 	createProject(t, st, "proj")
@@ -171,6 +174,7 @@ func TestWebGuardAllowsLoggedInUser(t *testing.T) {
 // an unauthenticated visitor to login rather than serving or 403ing — the
 // behaviour the policy path gives every session-gated page.
 func TestWebGuardRedirectsAnonymous(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")
 
@@ -190,6 +194,7 @@ func TestWebGuardRedirectsAnonymous(t *testing.T) {
 // longer exists is anonymous, not authorized. Without the actor lookup, a
 // revoked person kept a working session until the cookie expired.
 func TestWebGuardRejectsSessionForDeletedActor(t *testing.T) {
+	t.Parallel()
 	st, h, iss := newOIDCServer(t, api.Config{})
 	createProject(t, st, "proj")
 
@@ -218,6 +223,7 @@ func TestWebGuardRejectsSessionForDeletedActor(t *testing.T) {
 // anonymous subject. A 503 and not a 302: there is no login route to redirect
 // to when OIDC is unconfigured, so a redirect would be a lie.
 func TestOpenDeploymentRequiresOptIn(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServerWithConfig(t, api.Config{})
 	createProject(t, st, "proj")
 
@@ -233,6 +239,7 @@ func TestOpenDeploymentRequiresOptIn(t *testing.T) {
 // TestOpenDeploymentRefusesWrites: the creation forms sit behind the same
 // guard, so a closed instance must not accept an unattributable task either.
 func TestOpenDeploymentRefusesWrites(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServerWithConfig(t, api.Config{})
 	createProject(t, st, "proj")
 
@@ -250,6 +257,7 @@ func TestOpenDeploymentRefusesWrites(t *testing.T) {
 // deliberately — the cockpit serves and accepts writes, attributed to nobody
 // rather than to a fabricated actor.
 func TestOpenDeploymentOptedIn(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServerWithConfig(t, api.Config{WebOpen: true})
 	createProject(t, st, "proj")
 
@@ -274,6 +282,7 @@ func TestOpenDeploymentOptedIn(t *testing.T) {
 // must survive the refusal, or a closed instance cannot be logged into and
 // renders unstyled error pages.
 func TestPublicRoutesServeOnAClosedInstance(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServerWithConfig(t, api.Config{})
 	if rr := doReq(t, h, "GET", "/assets/app.css", "", nil); rr.Code != http.StatusOK {
 		t.Fatalf("GET /assets/app.css on a closed instance = %d, want 200", rr.Code)
@@ -283,6 +292,7 @@ func TestPublicRoutesServeOnAClosedInstance(t *testing.T) {
 // TestWebOpenIgnoredWhenProviderConfigured: the opt-in is about the *absence*
 // of a provider. With OIDC configured it must not weaken session enforcement.
 func TestWebOpenIgnoredWhenProviderConfigured(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newOIDCServer(t, api.Config{WebOpen: true})
 	createProject(t, st, "proj")
 	rr := doReq(t, h, "GET", "/projects/proj", "", nil)
@@ -294,6 +304,7 @@ func TestWebOpenIgnoredWhenProviderConfigured(t *testing.T) {
 // TestAuthzDecisionsCounted checks the decision counter is wired, so a denial
 // spike is visible without reading logs.
 func TestAuthzDecisionsCounted(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	main, admin, err := api.NewServer(st, api.Config{})
 	if err != nil {

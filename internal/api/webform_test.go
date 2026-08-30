@@ -51,6 +51,7 @@ func kindSelect(t *testing.T, main string) string {
 // and that every kind it offers is one the API would accept — the form and
 // validKinds cannot drift apart (025 §10).
 func TestNewTaskFormRenders(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -93,6 +94,7 @@ func TestNewTaskFormRenders(t *testing.T) {
 // the task lands with the submitted fields, and the response is a 303 to the
 // created task so a reload cannot create a second one.
 func TestCreateTaskFromFormCreatesAndRedirects(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -129,6 +131,7 @@ func TestCreateTaskFromFormCreatesAndRedirects(t *testing.T) {
 // TestCreateTaskFromFormDraft checks the draft checkbox lands the task
 // unclaimable rather than ready.
 func TestCreateTaskFromFormDraft(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -150,6 +153,7 @@ func TestCreateTaskFromFormDraft(t *testing.T) {
 // TestCreateTaskFromFormRejectsBadInput checks a rejected submit re-renders
 // the form at 422 with the message and everything typed, and writes nothing.
 func TestCreateTaskFromFormRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -194,6 +198,7 @@ func TestCreateTaskFromFormRejectsBadInput(t *testing.T) {
 // the message itself takes focus (internal/ui/forms.templ). Neither half is
 // worth much alone, which is why both are tested.
 func TestRejectedSubmitTitlesThePageAsAnError(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -231,6 +236,7 @@ func TestRejectedSubmitTitlesThePageAsAnError(t *testing.T) {
 // TestCreateFormRefusesCrossOrigin checks both creation forms refuse a
 // submission a browser marks as cross-site, and that nothing is written.
 func TestCreateFormRefusesCrossOrigin(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -267,6 +273,7 @@ func TestCreateFormRefusesCrossOrigin(t *testing.T) {
 // TestCreateFormAcceptsSameOrigin checks the origin guard lets a genuine
 // same-origin submission through, by both signals a browser sends.
 func TestCreateFormAcceptsSameOrigin(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -288,6 +295,7 @@ func TestCreateFormAcceptsSameOrigin(t *testing.T) {
 // placeholder: it offers the form, states honestly that nothing is declared,
 // and never claims a state for a deliverable.
 func TestDeliverablesPageEmptyState(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -317,6 +325,7 @@ func TestDeliverablesPageEmptyState(t *testing.T) {
 // ingest routes reports by (WL-254) — the response 303s back to the list, and
 // the list then shows it as Declared.
 func TestCreateDeliverableFromForm(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -354,6 +363,7 @@ func TestCreateDeliverableFromForm(t *testing.T) {
 // rules a person can trip, including the URL scheme guard that keeps a
 // javascript: address out of the stored row entirely.
 func TestCreateDeliverableFromFormRejectsBadInput(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -387,6 +397,7 @@ func TestCreateDeliverableFromFormRejectsBadInput(t *testing.T) {
 // TestDeliverableFormOffersNoStateControl pins spec 029 §3.2: the form asks
 // for a declaration, never for a state a person could assert.
 func TestDeliverableFormOffersNoStateControl(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -404,6 +415,7 @@ func TestDeliverableFormOffersNoStateControl(t *testing.T) {
 // TestCockpitLinksToNewTask checks the project Overview carries the
 // affordance that makes the cockpit writable at all.
 func TestCockpitLinksToNewTask(t *testing.T) {
+	t.Parallel()
 	st, h, _ := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -417,6 +429,7 @@ func TestCockpitLinksToNewTask(t *testing.T) {
 // validation and write path with: create, list, project scoping, and the
 // same rejections.
 func TestDeliverablesAPI(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 

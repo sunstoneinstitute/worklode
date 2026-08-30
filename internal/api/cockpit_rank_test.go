@@ -38,6 +38,7 @@ var fixedNow = time.Date(2026, 8, 22, 12, 0, 0, 0, time.UTC)
 // concern is WL-66 — WL-22 never appears as a named root, because a blocker
 // that is itself blocked is not a root (det-v1 §6).
 func TestRankSecondaryConcernsRootCauseChain(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		fact("WL-66", "high", "ready", -1),
 		fact("WL-22", "high", "ready", 2*24*time.Hour, ref("WL-66", "ready")),
@@ -57,6 +58,7 @@ func TestRankSecondaryConcernsRootCauseChain(t *testing.T) {
 // outranks one that only holds lower-priority tasks, and among equal best
 // priority, the root with the larger fan-out wins.
 func TestRankSecondaryConcernsOrdersByPriorityThenFanOut(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		// Root WL-66 transitively holds four tasks, best priority high.
 		fact("WL-66", "low", "ready", -1),
@@ -88,6 +90,7 @@ func TestRankSecondaryConcernsOrdersByPriorityThenFanOut(t *testing.T) {
 // component: among roots tied on best priority and fan-out, the one holding
 // the longer-blocked task ranks first.
 func TestRankSecondaryConcernsOldestBreaksFanOutTie(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		fact("WL-1", "high", "ready", -1),
 		fact("WL-2", "high", "ready", 24*time.Hour, ref("WL-1", "ready")), // held 1 day
@@ -106,6 +109,7 @@ func TestRankSecondaryConcernsOldestBreaksFanOutTie(t *testing.T) {
 // iteration (§9: "what we did not establish" flags untested ties, so this
 // pins the fallback rather than leaving it to chance).
 func TestRankSecondaryConcernsTotalOrderOnFullTie(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		fact("WL-9", "high", "ready", -1),
 		fact("WL-10", "high", "ready", 24*time.Hour, ref("WL-9", "ready")),
@@ -125,6 +129,7 @@ func TestRankSecondaryConcernsTotalOrderOnFullTie(t *testing.T) {
 // through, but det-v1 must not hang or panic on it) resolves deterministically
 // rather than recursing forever (§9).
 func TestRankSecondaryConcernsCycleTerminates(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		fact("WL-1", "high", "ready", time.Hour, ref("WL-2", "ready")),
 		fact("WL-2", "high", "ready", time.Hour, ref("WL-1", "ready")),
@@ -144,6 +149,7 @@ func TestRankSecondaryConcernsCycleTerminates(t *testing.T) {
 // TestRankSecondaryConcernsEmpty asserts a project with no ready-and-blocked
 // task returns an empty, non-nil slice (§9's "empty concern sets").
 func TestRankSecondaryConcernsEmpty(t *testing.T) {
+	t.Parallel()
 	got := rankSecondaryConcerns([]store.ProjectWorkFact{
 		fact("WL-1", "high", "ready", -1),
 		fact("WL-2", "high", "in_progress", -1),
@@ -158,6 +164,7 @@ func TestRankSecondaryConcernsEmpty(t *testing.T) {
 // (WL-280 brief / research note §5), for the note's own worked example:
 // WL-66 -> WL-22 -> {WL-23, WL-49 -> WL-50}.
 func TestRankSecondaryConcernsEvidenceLine(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		fact("WL-66", "low", "ready", -1),
 		fact("WL-22", "high", "ready", 7*24*time.Hour, ref("WL-66", "ready")),
@@ -188,6 +195,7 @@ func TestRankSecondaryConcernsEvidenceLine(t *testing.T) {
 // TestRankSecondaryConcernsClaimedRoot asserts a root with an active lease
 // reports "claimed" rather than "unclaimed" in its evidence header.
 func TestRankSecondaryConcernsClaimedRoot(t *testing.T) {
+	t.Parallel()
 	root := fact("WL-5", "high", "ready", -1)
 	root.Lease = &store.Lease{ActorID: "agent-1"}
 	facts := []store.ProjectWorkFact{
@@ -210,6 +218,7 @@ func TestRankSecondaryConcernsClaimedRoot(t *testing.T) {
 // since det-v1 has no further facts to chase it with — rather than being
 // dropped or panicking on the missing lookup.
 func TestRankSecondaryConcernsCrossProjectBlocker(t *testing.T) {
+	t.Parallel()
 	facts := []store.ProjectWorkFact{
 		fact("OTHER-1", "medium", "ready", time.Hour, ref("EXT-9", "in_progress")),
 	}
@@ -223,6 +232,7 @@ func TestRankSecondaryConcernsCrossProjectBlocker(t *testing.T) {
 // before a task's own plan (025 §9.3) becomes a plan root, distinct from the
 // task-root case, when it has minted no task to chase further.
 func TestRankSecondaryConcernsBlockingPlan(t *testing.T) {
+	t.Parallel()
 	f := fact("WL-2", "medium", "ready", time.Hour)
 	f.BlockingPlans = []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}}
 	got := rankSecondaryConcerns([]store.ProjectWorkFact{f}, fixedNow)

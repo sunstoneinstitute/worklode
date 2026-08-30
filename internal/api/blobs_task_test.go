@@ -13,6 +13,7 @@ import (
 // TestBodyReferenceReconciled asserts the embedded flag follows the body
 // across create and update -- the property GC depends on.
 func TestBodyReferenceReconciled(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -63,6 +64,7 @@ func TestBodyReferenceReconciled(t *testing.T) {
 // not create a dangling reference. The FK would reject it; assert the
 // handler turns that into a clean 422 rather than a 500.
 func TestBodyReferenceUnknownHash(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -80,6 +82,7 @@ func TestBodyReferenceUnknownHash(t *testing.T) {
 }
 
 func TestTaskBlobAttachDetach(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -144,6 +147,7 @@ func TestTaskBlobAttachDetach(t *testing.T) {
 // detach returning 204 both read as "this task has no such blob", which is a
 // different and wrong answer.
 func TestTaskBlobsUnknownTask(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -168,6 +172,7 @@ func TestTaskBlobsUnknownTask(t *testing.T) {
 // TestAttachBlobKeepsFilename: filename is optional on attach, so a second
 // attach that omits it must not blank the name the first one recorded.
 func TestAttachBlobKeepsFilename(t *testing.T) {
+	t.Parallel()
 	st, h, token, _ := newTestServerBlobs(t)
 	if err := st.CreateProject(t.Context(), "p", "P", "PP"); err != nil {
 		t.Fatalf("create project: %v", err)
@@ -210,6 +215,7 @@ func TestAttachBlobKeepsFilename(t *testing.T) {
 // form the store and the plain task-detail/list-blobs endpoints use: an
 // agent fetching a brief is not same-origin with the server (021 §10).
 func TestTaskBriefBlobsAreAbsolute(t *testing.T) {
+	t.Parallel()
 	fake := blobstore.NewFake()
 	st, h, token := newTestServerWithConfig(t, api.Config{
 		WebOpen: true, BlobStoreForTest: fake, PublicURL: "https://wl.example",
@@ -262,6 +268,7 @@ func TestTaskBriefBlobsAreAbsolute(t *testing.T) {
 // worklode_task_blob_refs_total under their own action label, and that the
 // unused label is still pre-initialised to zero rather than absent.
 func TestTaskBlobRefMetrics(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	token := seedActor(t, st, "alice", "human", "Alice", true)
 	fake := blobstore.NewFake()

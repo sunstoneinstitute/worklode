@@ -16,6 +16,7 @@ import (
 // null (never dummy records), and the mode is the declared-evidence
 // Operations basis (Part 1 stores no other lifecycle facts).
 func TestProjectCockpit(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -101,6 +102,7 @@ type pinnedFocusDecode struct {
 // focus whose pinner resolves to a real actor's display name, and a next
 // decision carrying its title/accountable/readiness.
 func TestProjectCockpitPinnedFocusAndDecision(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -144,6 +146,7 @@ func TestProjectCockpitPinnedFocusAndDecision(t *testing.T) {
 // seeded display name (no matching actor row) still surfaces as the pinner's
 // name — an unknown pinner must not blank out or fail the card.
 func TestProjectCockpitPinnedByUnresolvedName(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -170,6 +173,7 @@ func TestProjectCockpitPinnedByUnresolvedName(t *testing.T) {
 // route: a missing bearer token must 401, not fall through to an unmatched
 // route (404) or an anonymous read.
 func TestProjectCockpitRequiresAuth(t *testing.T) {
+	t.Parallel()
 	_, h, _ := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/projects/proj/cockpit", "", nil)
 	if rr.Code != http.StatusUnauthorized {
@@ -180,6 +184,7 @@ func TestProjectCockpitRequiresAuth(t *testing.T) {
 // TestProjectCockpitUnknownProject asserts GetProject's ErrNotFound maps to
 // 404 through mapStoreErr, same as every other project-scoped endpoint.
 func TestProjectCockpitUnknownProject(t *testing.T) {
+	t.Parallel()
 	_, h, token := newTestServer(t)
 	rr := doReq(t, h, "GET", "/api/v1/projects/nosuch/cockpit", token, nil)
 	if rr.Code != http.StatusNotFound {
@@ -191,6 +196,7 @@ func TestProjectCockpitUnknownProject(t *testing.T) {
 // into the ready work bucket with its declared fields intact and blocked
 // left false (it has no blocking edge).
 func TestProjectCockpitReadyTask(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -237,6 +243,7 @@ func TestProjectCockpitReadyTask(t *testing.T) {
 // a stored/editable health field, completion percentage, stage, or
 // variant-driven mode.
 func TestProjectCockpitForbidsLegacyKeys(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -259,6 +266,7 @@ func TestProjectCockpitForbidsLegacyKeys(t *testing.T) {
 // even read the query string, so this proves the negative rather than
 // merely assuming it.
 func TestProjectCockpitVariantQueryIgnored(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 
@@ -341,6 +349,7 @@ func getCockpit(t *testing.T, h http.Handler, token, project string) (cockpitWor
 // unreleased lease resolves as delegate — the closing-the-deferred-item
 // behavior Task 1 left provisional.
 func TestProjectCockpitOwnerAndDelegate(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -391,6 +400,7 @@ func TestProjectCockpitOwnerAndDelegate(t *testing.T) {
 // lease holder is real technical evidence but never surfaces as a delegate
 // or Crew member.
 func TestProjectCockpitHumanLeaseIsNotDelegate(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	bobToken := seedActor(t, st, "bob", "human", "Bob", false)
@@ -414,6 +424,7 @@ func TestProjectCockpitHumanLeaseIsNotDelegate(t *testing.T) {
 // TestProjectCockpitMissingDisplayNameFallsBackToID asserts an actor with an
 // empty display name renders its id as the owner's name rather than "".
 func TestProjectCockpitMissingDisplayNameFallsBackToID(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	ctx := context.Background()
@@ -442,6 +453,7 @@ func TestProjectCockpitMissingDisplayNameFallsBackToID(t *testing.T) {
 // open blocker lands in work.blocked (not work.ready) and its blocker
 // becomes a secondary concern.
 func TestProjectCockpitBlockedSecondaryConcerns(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -480,6 +492,7 @@ func TestProjectCockpitBlockedSecondaryConcerns(t *testing.T) {
 // TestProjectCockpitObservedGithubEvent asserts a github-sourced state event
 // classifies as observed evidence, regardless of the event's own type.
 func TestProjectCockpitObservedGithubEvent(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	createTaskViaAPI(t, h, token, map[string]any{
@@ -502,6 +515,7 @@ func TestProjectCockpitObservedGithubEvent(t *testing.T) {
 // TestProjectCockpitUserReportedHumanStart asserts a human /start (cli
 // task.started, not a lease event) classifies as user-reported evidence.
 func TestProjectCockpitUserReportedHumanStart(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	createProject(t, st, "proj")
 	erinToken := seedActor(t, st, "erin", "human", "Erin", false)

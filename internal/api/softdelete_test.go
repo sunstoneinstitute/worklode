@@ -91,6 +91,7 @@ var blankJustifications = map[string]any{
 // instance environment, because the request is well-formed and the same server
 // configured the other way would have taken it (044 §5).
 func TestDeleteProdRequiresJustification(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceProd)
 
 	for name, body := range blankJustifications {
@@ -117,6 +118,7 @@ func TestDeleteProdRequiresJustification(t *testing.T) {
 // A real justification is accepted, stored trimmed, and comes back on the
 // response together with the actor that deleted the row.
 func TestDeleteProdWithJustification(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceProd)
 
 	rr := doReq(t, f.h, "DELETE", f.taskPath(""), f.token,
@@ -148,6 +150,7 @@ func TestDeleteProdWithJustification(t *testing.T) {
 // A dev instance takes a bodyless delete and tombstones with an empty
 // justification: the environment gates the demand, not the mechanism (044 §3).
 func TestDeleteDevWithoutJustification(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	rr := doReq(t, f.h, "DELETE", f.taskPath(""), f.token, nil)
@@ -170,6 +173,7 @@ func TestDeleteDevWithoutJustification(t *testing.T) {
 // A justification given on a dev instance is stored exactly as one given on
 // prod (044 §3).
 func TestDeleteDevStoresGivenJustification(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	rr := doReq(t, f.h, "DELETE", f.taskPath(""), f.token,
@@ -186,6 +190,7 @@ func TestDeleteDevStoresGivenJustification(t *testing.T) {
 // justification: only the first half of the pair is worth making someone stop
 // and type (044 §3).
 func TestUndeleteRoundTrip(t *testing.T) {
+	t.Parallel()
 	for _, env := range []string{api.InstanceDev, api.InstanceProd} {
 		t.Run(env, func(t *testing.T) {
 			f := newDeleteFixture(t, env)
@@ -232,6 +237,7 @@ func TestUndeleteRoundTrip(t *testing.T) {
 // 422 here — not a silent success, because the tombstone it would overwrite
 // names someone else (044 §2).
 func TestDeleteTwiceIsRejected(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	if rr := doReq(t, f.h, "DELETE", f.taskPath(""), f.token, nil); rr.Code != http.StatusOK {
@@ -256,6 +262,7 @@ func TestDeleteTwiceIsRejected(t *testing.T) {
 }
 
 func TestDeleteUnknownIDIsNotFound(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	for name, path := range map[string]string{
@@ -313,6 +320,7 @@ func listDocIDs(t *testing.T, h http.Handler, token, query string) []int64 {
 // ?deleted=true is a switch, not an addition: it lists the tombstoned rows
 // instead of the live ones (044 §5).
 func TestListDeletedIsASwitch(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 	// A second task and document that stay live, so "hides the deleted one"
 	// is distinguishable from "returns nothing".
@@ -356,6 +364,7 @@ func TestListDeletedIsASwitch(t *testing.T) {
 // A non-boolean ?deleted= is named rather than read as off, the stance every
 // other boolean query parameter takes.
 func TestListDeletedRejectsNonBoolean(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	if rr := doReq(t, f.h, "GET", "/api/v1/tasks?deleted=maybe", f.token, nil); rr.Code != http.StatusBadRequest {
@@ -370,6 +379,7 @@ func TestListDeletedRejectsNonBoolean(t *testing.T) {
 // check already refuses a route the table does not name; this is the other
 // half — that the table entry is actually enforced on the wire.
 func TestDeleteRoutesRequireAuth(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	for _, tc := range []struct{ method, path string }{
@@ -389,6 +399,7 @@ func TestDeleteRoutesRequireAuth(t *testing.T) {
 // a hidden task cannot be worked, and the sweeper should not be left tending a
 // row nothing can see.
 func TestDeleteTaskClosesLease(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceDev)
 
 	rr := doReq(t, f.h, "POST", f.taskPath("/claim"), f.token, map[string]any{"worktree": "wt-1"})
@@ -407,6 +418,7 @@ func TestDeleteTaskClosesLease(t *testing.T) {
 // combination and counts the prod refusal as an outcome of the delete op
 // rather than as an absence of one (044 §6).
 func TestDeleteMetrics(t *testing.T) {
+	t.Parallel()
 	f := newDeleteFixture(t, api.InstanceProd)
 
 	doReq(t, f.h, "DELETE", f.taskPath(""), f.token, nil)                                           // justification_required
@@ -444,6 +456,7 @@ func TestDeleteMetrics(t *testing.T) {
 }
 
 func TestParseInstanceEnv(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"":     api.InstanceProd, // 039 §3: prod is the default nobody has to write down
 		"dev":  api.InstanceDev,
@@ -467,6 +480,7 @@ func TestParseInstanceEnv(t *testing.T) {
 // NewServer re-checks the environment, so an embedder that builds a Config in
 // Go cannot get an unset or bogus value past the boot (039 §3).
 func TestNewServerRejectsBadInstanceEnv(t *testing.T) {
+	t.Parallel()
 	st := newTestStore(t)
 	_, _, err := api.NewServer(st, api.Config{InstanceEnv: "staging"})
 	if err == nil {

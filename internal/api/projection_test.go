@@ -13,6 +13,7 @@ import (
 // the quarantine rows an operator can otherwise only reach with psql, and
 // that any authenticated actor may read them (permProjectionRead).
 func TestListProjectionFailures(t *testing.T) {
+	t.Parallel()
 	st, h, token := newTestServer(t)
 	ctx := context.Background()
 
