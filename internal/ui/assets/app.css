@@ -530,6 +530,7 @@ nav.global a.active .cnt {
   color: var(--ink-2);
   display: grid;
   place-items: center;
+  position: relative;
 }
 .iconbtn:hover {
   background: var(--surface-2);
@@ -537,6 +538,14 @@ nav.global a.active .cnt {
 .iconbtn svg {
   width: 17px;
   height: 17px;
+}
+.iconbtn .dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.dot-alert {
+  background: var(--danger);
 }
 .avatar {
   width: 32px;
