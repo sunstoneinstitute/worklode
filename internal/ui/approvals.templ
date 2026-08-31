@@ -13,7 +13,7 @@ import "strconv"
 
 templ Approvals(v ApprovalsView) {
 	@Page(v.Page) {
-		@globalShell(v.Page.ActiveGlobal) {
+		@globalShell() {
 			<h1>Reviews</h1>
 			if len(v.Rows) == 0 {
 				<p class="muted">No approvals are waiting.</p>

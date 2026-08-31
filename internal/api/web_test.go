@@ -77,6 +77,17 @@ func assertOneAriaCurrent(t *testing.T, body string) {
 	}
 }
 
+// assertNoAriaCurrent is the same invariant for a page that names no current
+// destination: Home, Reviews and Deliveries left the global list in spec 056
+// §1, so their own page marks nothing. Never two, and never one it cannot
+// justify.
+func assertNoAriaCurrent(t *testing.T, body string) {
+	t.Helper()
+	if got := strings.Count(body, `aria-current="page"`); got != 0 {
+		t.Errorf(`aria-current="page" count = %d, want 0 (this page is not a global destination)`, got)
+	}
+}
+
 // navMarkers turns nav landmark labels into their opening-tag markers, for an
 // ordered assertion.
 func navMarkers(labels []string) []string {
@@ -117,36 +128,39 @@ func topbarRegion(t *testing.T, body string) string {
 	return rest[:j]
 }
 
-// TestGlobalNavFollowsTopbar checks the global destinations render once in a
-// second header row rather than in the page's sidebar. The topbar itself keeps
-// only its brand and controls.
-func TestGlobalNavFollowsTopbar(t *testing.T) {
+// TestGlobalNavLivesInTheTopbar checks spec 056 §1's one navigation row: the
+// destinations render inside the top bar itself, between the brand — now a
+// link to / — and the actor controls, and no second nav row survives between
+// the header and the page shell.
+func TestGlobalNavLivesInTheTopbar(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
 	header := topbarRegion(t, body)
-	for _, want := range []string{`class="brand"`, `id="theme"`, `class="avatar"`} {
-		if !strings.Contains(header, want) {
-			t.Errorf("topbar missing %q", want)
-		}
-	}
-	if strings.Contains(header, "<nav") || strings.Contains(header, "<a ") {
-		t.Errorf("topbar still carries navigation:\n%s", header)
-	}
-	assertOrder(t, body, `</header>`, `<nav aria-label="Primary"`, ">Home<", ">Knowledge<", `<div class="shell" data-global="true">`, `<main id="main-content"`)
+	assertOrder(t, header,
+		`<a class="brand" href="/">`,
+		`<nav aria-label="Primary"`, ">Ideas<", ">Knowledge<", "</nav>",
+		`class="top-right"`, `id="theme"`, `class="avatar"`)
 	if got := strings.Count(body, `<nav aria-label="Primary"`); got != 1 {
 		t.Errorf("primary navigation count = %d, want 1", got)
 	}
+	assertOrder(t, body, `</header>`, `<div class="shell" data-global="true">`, `<main id="main-content"`)
 }
 
-// TestGlobalNavOrder checks the primary nav renders the eight destinations
-// in the exact order docs/specs/032-project-cockpit.md §2 requires: Home,
-// Ideas, Intake, Projects, Work, Reviews, Deliveries, Knowledge.
+// TestGlobalNavOrder checks the primary nav renders the five destinations in
+// the exact order docs/specs/056-nav-shell-and-cross-project-inbox.md §1
+// requires — Ideas, Intake, Projects, Work, Knowledge — and that Home,
+// Reviews and Deliveries left the list (§1 amends 032 §2's eight).
 func TestGlobalNavOrder(t *testing.T) {
 	t.Parallel()
 	_, h, _ := newTestServer(t)
 	body := doReq(t, h, "GET", "/", "", nil).Body.String()
-	assertOrder(t, body, ">Home<", ">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Reviews<", ">Deliveries<", ">Knowledge<")
+	assertOrder(t, body, ">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Knowledge<")
+	for _, gone := range []string{">Home<", ">Reviews<", ">Deliveries<"} {
+		if strings.Contains(topbarRegion(t, body), gone) {
+			t.Errorf("global nav still carries the retired destination %s", gone)
+		}
+	}
 }
 
 func TestGlobalDestinations(t *testing.T) {
@@ -163,7 +177,6 @@ func TestGlobalDestinations(t *testing.T) {
 			}
 			body := rr.Body.String()
 			assertShell(t, body)
-			assertOneAriaCurrent(t, body)
 			bodyContains(t, body, `<nav aria-label="Primary"`)
 		})
 	}
@@ -227,8 +240,8 @@ func TestGlobalPlaceholdersAreHonest(t *testing.T) {
 
 // TestReviewsPageListsAwaitingApprovals checks the Reviews destination is
 // the real awaiting-approvals queue (spec 029 §7.1), not a placeholder: a
-// seeded PR-kind approval shows its title and entity id, and the page still
-// carries exactly one aria-current="page" marker.
+// seeded PR-kind approval shows its title and entity id. The page marks no
+// current destination — Reviews left the global list in spec 056 §1.
 func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
 	t.Parallel()
 	st, h, _ := newTestServer(t)
@@ -239,8 +252,8 @@ func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
 		t.Fatalf("reviews page status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
-	bodyContains(t, body, "Fix the widget", "acme/site#7", `aria-current="page"`)
-	assertOneAriaCurrent(t, body)
+	bodyContains(t, body, "Fix the widget", "acme/site#7")
+	assertNoAriaCurrent(t, body)
 }
 
 // TestReviewsPageEmptyIsHonest checks an empty queue states that honestly
@@ -372,7 +385,8 @@ func TestAppCSSContent(t *testing.T) {
 // than only on Home), no nav landmark nested inside main content, and — on
 // every page that names a current destination — exactly one
 // aria-current="page". The task page and the new-task form name none (their
-// left column marks nothing), so they assert zero.
+// left column marks nothing), and neither do Home, Reviews and Deliveries,
+// which left the destination list in spec 056 §1; those assert zero.
 func TestEveryPageRendersTheShell(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -388,9 +402,9 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		navs       []string // every nav landmark's aria-label, in render order
 		hasCurrent bool
 	}{
-		{"/", global, true}, {"/intake", global, true},
+		{"/", global, false}, {"/ideas", global, true}, {"/intake", global, true},
 		{"/projects", global, true}, {"/work", global, true},
-		{"/reviews", global, true}, {"/deliveries", global, true},
+		{"/reviews", global, false}, {"/deliveries", global, false},
 		{"/docs", global, true},
 		{"/projects/proj", project, true}, {"/projects/proj/crew", project, true},
 		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
@@ -587,7 +601,7 @@ func TestHomePage(t *testing.T) {
 	}
 	body := rr.Body.String()
 	assertShell(t, body)
-	assertOneAriaCurrent(t, body)
+	assertNoAriaCurrent(t, body)
 	bodyContains(t, body, "<h1>Home</h1>")
 	if strings.Contains(body, "Current work") {
 		t.Errorf("open-mode Home still renders the retired board framing %q", "Current work")
@@ -671,7 +685,7 @@ func TestHomePageActorTiers(t *testing.T) {
 	}
 	body := rr.Body.String()
 	assertShell(t, body)
-	assertOneAriaCurrent(t, body)
+	assertNoAriaCurrent(t, body)
 	bodyContains(t, body, "<h1>Home</h1>")
 
 	main := mainContent(t, body)
@@ -714,7 +728,7 @@ func TestHomePageEmptyState(t *testing.T) {
 	}
 	body := rr.Body.String()
 	assertShell(t, body)
-	assertOneAriaCurrent(t, body)
+	assertNoAriaCurrent(t, body)
 
 	main := mainContent(t, body)
 	bodyContains(t, main, "You are not on any project yet.", `href="/projects"`, "Browse all projects")

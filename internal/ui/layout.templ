@@ -1,8 +1,8 @@
 package ui
 
 // layout.templ is the application shell every page renders through: the
-// document head, skip link, the sticky top bar (brand + theme toggle +
-// avatar — no navigation), the sticky global navigation row below it, and the
+// document head, skip link, the sticky top bar — brand link, global
+// navigation, theme toggle and avatar, one row (spec 056 §1) — and the
 // .shell each page's content fills via { children... }. Global pages have one
 // content column; project pages add a left sidebar for project-local
 // navigation. Both put the page's one <main id="main-content"> landmark after
@@ -13,12 +13,15 @@ package ui
 // substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
 // toggles data-theme on <html>, honoring the OS colour-scheme on first click.
 //
-// Below 880px nav.global and nav.local stay the exact same landmark elements
-// (never duplicated — TestGlobalNavOrder's assertOneAriaCurrent invariant is
-// "never zero, never two" for the whole document). The global row keeps its
-// five primary destinations and a "More" button; the three secondary ones
-// (Intake, Deliveries, Knowledge) expand below it. nav.local becomes a project
-// drawer. Flex `order` keeps spec 032 §2's DOM order while grouping the menu.
+// Below 880px the top bar wraps: brand and controls keep the first row and
+// nav.global takes a full-width row beneath them, so the narrow behaviour 032
+// §10 requires carries over in its new position. nav.global and nav.local stay
+// the exact same landmark elements (never duplicated — the aria-current
+// invariant is "never two for the whole document", and zero on a page that is
+// not a destination). The nav row keeps its three primary destinations and a
+// "More" button; the two secondary ones (Intake, Knowledge) expand below it.
+// nav.local becomes a project drawer. Flex `order` keeps spec 056 §1's DOM
+// order while grouping the menu.
 // nav.local hides entirely below 880px and reappears as a full sheet when the
 // project header's menu button opens it. Both toggles, plus the shared
 // backdrop, are wired by /assets/nav.js; open/closed state lives in one
@@ -48,12 +51,13 @@ templ Page(p PageProps) {
 		<body>
 			<a class="skip-link" href="#main-content">Skip to content</a>
 			<header class="topbar">
-				<div class="brand">
+				<a class="brand" href="/">
 					<span class="mark">
 						<img src={ assetURL("logo.svg") } alt=""/>
 					</span>
 					worklode
-				</div>
+				</a>
+				@primaryNav(p.ActiveGlobal)
 				<div class="top-right">
 					<button id="theme" type="button" class="iconbtn" aria-label="Toggle colour theme">
 						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>
@@ -109,7 +113,7 @@ templ navLink(href, label, key, active string) {
 }
 
 // globalLink renders one icon-and-label global-nav anchor, tiered "primary"
-// (one of the five links shown below 880px) or "secondary" (tucked under the
+// (one of the three links shown below 880px) or "secondary" (tucked under the
 // "More" control at that width — see layout.templ's header comment). The tier
 // class and the conditional "active" class must go through one templ.KV-joined class
 // expression, not two separate `class` attributes (unlike navLink, which
@@ -134,20 +138,14 @@ templ globalLink(href, label, key, active, tier string) {
 // topbar's existing inline SVGs) for each global destination and More.
 templ globalIcon(key string) {
 	switch key {
-		case "home":
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7"></path><path d="M6 10v9h12v-9"></path></svg>
 		case "ideas":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4"></path><path d="M12 3a6 6 0 0 0-3.2 11.1c.5.4.9 1 .9 1.7v.7h4.6v-.7c0-.7.4-1.3.9-1.7A6 6 0 0 0 12 3z"></path></svg>
 		case "intake":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z"></path><path d="M4 14h4l2 3h4l2-3h4"></path></svg>
 		case "work":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4.5 6l1 1 2-2M4.5 12l1 1 2-2M4.5 18l1 1 2-2"></path></svg>
-		case "reviews":
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l2.5 2.5L16 9.5"></path></svg>
 		case "projects":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path></svg>
-		case "deliveries":
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v13H4z"></path><path d="M8 7V4h8v3M8 13h8"></path></svg>
 		case "knowledge":
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22z"></path><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z"></path></svg>
 		case "more":
@@ -160,17 +158,18 @@ templ menuIcon() {
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
 }
 
-// primaryNav is the Primary nav landmark carrying the eight global
-// destinations in the exact order docs/specs/032-project-cockpit.md §2
-// requires (Home, Ideas, Intake, Projects, Work, Reviews, Deliveries,
-// Knowledge), marking the one matching active as both aria-current="page"
-// and .active. Every page renders it between the topbar and page shell, so
-// global navigation is reachable everywhere (spec 032 §2). Project-scoped
-// pages pass "" —
-// matching none of these — since their project-local nav carries the
-// current-page marker instead; every page sets aria-current="page" exactly
-// once. The trailing "More" button only shows below 880px (see this file's
-// header comment); it has no destination of its own.
+// primaryNav is the Primary nav landmark carrying the five global
+// destinations in the exact order
+// docs/specs/056-nav-shell-and-cross-project-inbox.md §1 requires (Ideas,
+// Intake, Projects, Work, Knowledge), marking the one matching active as both
+// aria-current="page" and .active. §1 amends spec 032 §2: Home, Reviews and
+// Deliveries left the list, keeping their routes and pages. Page renders this
+// inside the top bar, so global navigation is reachable everywhere from one
+// row. Project-scoped pages, and the pages that are no longer destinations,
+// pass "" — matching none of these; a project page's local nav carries the
+// current-page marker instead. No page ever marks aria-current="page" twice.
+// The trailing "More" button only shows below 880px (see this file's header
+// comment); it has no destination of its own.
 //
 // Knowledge lands on /docs: spec 032 §2 defines that destination as
 // "documents and graph-backed expert views", and the document corpus is the
@@ -178,15 +177,12 @@ templ menuIcon() {
 // there when they exist rather than taking a destination of their own.
 templ primaryNav(active string) {
 	<nav aria-label="Primary" class="global" id="global-nav">
-		@globalLink("/", "Home", "home", active, "primary")
 		@globalLink("/ideas", "Ideas", "ideas", active, "primary")
 		@globalLink("/intake", "Intake", "intake", active, "secondary")
 		@globalLink("/projects", "Projects", "projects", active, "primary")
 		@globalLink("/work", "Work", "work", active, "primary")
-		@globalLink("/reviews", "Reviews", "reviews", active, "primary")
-		@globalLink("/deliveries", "Deliveries", "deliveries", active, "secondary")
 		@globalLink("/docs", "Knowledge", "knowledge", active, "secondary")
-		<button type="button" class={ "tab-more", templ.KV("active", active == "intake" || active == "deliveries" || active == "knowledge") } id="more-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="global-nav">
+		<button type="button" class={ "tab-more", templ.KV("active", active == "intake" || active == "knowledge") } id="more-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="global-nav">
 			<span class="navicon" aria-hidden="true">
 				@globalIcon("more")
 			</span>
@@ -195,10 +191,11 @@ templ primaryNav(active string) {
 	</nav>
 }
 
-// globalShell wraps a global (non-project) page's content below the Primary
-// navigation row. Project pages use projectShell instead.
-templ globalShell(active string) {
-	@primaryNav(active)
+// globalShell wraps a global (non-project) page's content below the top bar.
+// The Primary nav landmark lives in the bar itself (Page), so this takes no
+// active key; a page names its destination through PageProps.ActiveGlobal.
+// Project pages use projectShell instead.
+templ globalShell() {
 	<div class="shell" data-global="true">
 		<main id="main-content" class="main" tabindex="-1">
 			<div class="canvas">
@@ -213,7 +210,6 @@ templ globalShell(active string) {
 // supply the content column themselves — a plain .canvas, or the cockpit's
 // .mode grid of canvas plus decision rail.
 templ projectShell(p CockpitProject, active string) {
-	@primaryNav("")
 	<div class="shell">
 		@sidebar(p, active)
 		<main id="main-content" class="main" tabindex="-1">
@@ -225,7 +221,7 @@ templ projectShell(p CockpitProject, active string) {
 // sidebar renders the project-scoped left column shared by the cockpit and the
 // project placeholder pages: the back-link, project header (name + key) and
 // project-local nav, with active marking the current local destination.
-// projectShell passes "" to the global nav so the page's single
+// A project page leaves PageProps.ActiveGlobal empty so its single
 // aria-current="page" belongs to the local destination; the two landmarks
 // remain distinct, labelled and visually separated.
 //

@@ -21,12 +21,13 @@ import (
 
 // PageProps carries the fields the Page shell needs on every page: the
 // document title and which primary-nav destination to mark aria-current.
-// ActiveGlobal drives the global navigation row's marking: one of "home", "intake",
-// "projects", "work", "reviews", "deliveries", "knowledge". It is left empty
-// on project-scoped pages, whose project-local nav carries the current-page
-// marker instead, and on pages with no current destination (the task page),
-// which mark nothing. Every page sets aria-current="page" exactly once,
-// never on both navs.
+// ActiveGlobal drives the top bar's navigation marking: one of "ideas",
+// "intake", "projects", "work", "knowledge" — spec 056 §1's five
+// destinations. It is left empty on project-scoped pages, whose project-local
+// nav carries the current-page marker instead, and on pages that name no
+// destination: the task page, and Home, Reviews and Deliveries, which kept
+// their routes when §1 took them off the list. No page ever sets
+// aria-current="page" twice, or on both navs.
 type PageProps struct {
 	Title        string
 	ActiveGlobal string

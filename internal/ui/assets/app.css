@@ -356,7 +356,7 @@ html,body {
   margin: 0;
 }
 html {
-  scroll-padding-top: 112px;
+  scroll-padding-top: 64px;
 }
 pre {
   overflow-x: auto;
@@ -428,6 +428,11 @@ button {
   font-size: 15px;
   letter-spacing: -.01em;
   white-space: nowrap;
+  color: var(--ink);
+  flex: 0 0 auto;
+}
+.brand:hover {
+  text-decoration: none;
 }
 .brand .mark {
   width: 26px;
@@ -443,16 +448,11 @@ button {
   object-fit: contain;
 }
 nav.global {
-  position: sticky;
-  top: 56px;
-  z-index: 29;
+  align-self: stretch;
   display: flex;
   align-items: stretch;
   gap: 4px;
-  min-height: 48px;
-  padding: 0 20px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  min-width: 0;
 }
 nav.global a {
   position: relative;
@@ -547,7 +547,7 @@ nav.global a.active .cnt {
   grid-template-columns: 236px minmax(0,1fr);
   max-width: 1440px;
   margin: 0 auto;
-  min-height: calc(100vh - 104px);
+  min-height: calc(100vh - 56px);
 }
 .shell[data-global] {
   grid-template-columns: minmax(0,1fr);
@@ -717,10 +717,29 @@ nav.local a .cnt {
   .mode-name {
     margin-top: 0;
   }
-  nav.global {
+  .topbar {
+    height: auto;
+    flex-wrap: wrap;
+    gap: 0 12px;
     padding: 0 8px;
+  }
+  html {
+    scroll-padding-top: 112px;
+  }
+  .brand {
+    height: 56px;
+    padding-left: 12px;
+  }
+  .top-right {
+    height: 56px;
+  }
+  nav.global {
+    order: 3;
+    flex: 0 0 100%;
+    align-self: auto;
     gap: 0;
     flex-wrap: wrap;
+    border-top: 1px solid var(--line);
   }
   nav.global .navicon {
     display: none;
@@ -744,9 +763,11 @@ nav.local a .cnt {
   nav.global a.tab-secondary.active::after {
     display: none;
   }
-  body[data-open-panel="more"] nav.global {
+  body[data-open-panel="more"] .topbar {
     z-index: 40;
     box-shadow: var(--shadow);
+  }
+  body[data-open-panel="more"] nav.global {
     max-height: 70vh;
     overflow-y: auto;
   }
