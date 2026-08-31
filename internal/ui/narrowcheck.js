@@ -194,8 +194,9 @@
     if (by) focus.push({ sel: selector(el), by: by, kind: "tab" });
   });
 
-  // In-page jumps (the skip link, the project nav's #work) land their target,
-  // not a control: the fix is scroll-padding-top clearing the sticky bar.
+  // In-page jumps (the skip link, a doc's #sec-N section links) land their
+  // target, not a control: the fix is scroll-padding-top clearing the sticky
+  // bar.
   window.scrollTo(0, 0);
   var jumps = Array.prototype.slice.call(document.querySelectorAll('a[href^="#"]'));
   var seenJump = {};

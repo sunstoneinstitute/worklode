@@ -611,7 +611,8 @@ func assertBoard(t *testing.T, ctx context.Context, agent *cli.Client) {
 // since the e2e server runs without a session — no board framing), Work
 // carries the project name and the crashloop failure (the org-wide board,
 // now the task-oriented destination — see docs/specs/032-project-cockpit.md
-// §2), and the task page loads.
+// §2), the project's own run board (032 §8) loads at its route, and the
+// task page loads.
 func assertWebPages(t *testing.T, baseURL, taskID string) {
 	t.Helper()
 	code, body := getPage(t, baseURL+"/")
@@ -639,6 +640,14 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 	}
 	if !strings.Contains(body, "CrashLoopBackOff") {
 		t.Fatalf("work page does not show the crashloop failure:\n%s", body)
+	}
+
+	code, body = getPage(t, baseURL+"/projects/demo/work")
+	if code != http.StatusOK {
+		t.Fatalf("GET /projects/demo/work: status = %d, want 200", code)
+	}
+	if !strings.Contains(body, "Work") {
+		t.Fatalf("project run board missing the Work heading:\n%s", body)
 	}
 
 	code, body = getPage(t, fmt.Sprintf("%s/tasks/%s", baseURL, taskID))
