@@ -606,13 +606,34 @@ func assertBoard(t *testing.T, ctx context.Context, agent *cli.Client) {
 	}
 }
 
+// primaryNavRegion returns the Primary nav landmark's markup, so destination
+// assertions don't false-positive on a project page's separate Project-nav
+// landmark (internal/ui/layout.templ's primaryNav vs. localNav).
+func primaryNavRegion(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `<nav aria-label="Primary"`)
+	if i < 0 {
+		t.Fatalf("body has no Primary nav landmark:\n%s", body)
+	}
+	rest := body[i:]
+	j := strings.Index(rest, "</nav>")
+	if j < 0 {
+		t.Fatalf("Primary nav not closed:\n%s", body)
+	}
+	return rest[:j]
+}
+
 // assertWebPages checks the read-only web UI renders: Home shows the shared
 // shell, its own heading, and the seeded project (open-mode degradation,
 // since the e2e server runs without a session — no board framing), Work
 // carries the project name and the crashloop failure (the org-wide board,
 // now the task-oriented destination — see docs/specs/032-project-cockpit.md
 // §2), the project's own run board (032 §8) loads at its route, and the
-// task page loads.
+// task page loads. It also proves spec 056 end to end: the shared shell's
+// top bar carries the inbox indicator, the Primary nav landmark lists
+// exactly the five destinations §1 shrank it to (Home, Reviews and
+// Deliveries left the list but keep their routes, checked below), and
+// `GET /inbox` itself renders (§3).
 func assertWebPages(t *testing.T, baseURL, taskID string) {
 	t.Helper()
 	code, body := getPage(t, baseURL+"/")
@@ -622,6 +643,7 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 	for _, want := range []string{
 		`<nav aria-label="Primary"`, `<main id="main-content"`, `href="/assets/app.css?v=`, // shared shell
 		"<h1>Home</h1>", "Demo", `href="/projects/`,
+		`href="/inbox" class="iconbtn" aria-label="Inbox"`, // 056 §4: the top bar's inbox indicator
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("home page missing %q:\n%s", want, body)
@@ -629,6 +651,33 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 	}
 	if strings.Contains(body, "Current work") {
 		t.Fatalf("home page still renders the retired board framing %q:\n%s", "Current work", body)
+	}
+
+	nav := primaryNavRegion(t, body)
+	for _, want := range []string{">Ideas<", ">Intake<", ">Projects<", ">Work<", ">Knowledge<"} {
+		if !strings.Contains(nav, want) {
+			t.Fatalf("primary nav missing destination %q:\n%s", want, nav)
+		}
+	}
+	for _, absent := range []string{">Home<", ">Reviews<", ">Deliveries<"} {
+		if strings.Contains(nav, absent) {
+			t.Fatalf("primary nav still lists retired destination %q:\n%s", absent, nav)
+		}
+	}
+
+	code, body = getPage(t, baseURL+"/inbox")
+	if code != http.StatusOK {
+		t.Fatalf("GET /inbox: status = %d, want 200", code)
+	}
+	if !strings.Contains(body, "<h1>Inbox</h1>") {
+		t.Fatalf("inbox page missing heading:\n%s", body)
+	}
+
+	for _, path := range []string{"/reviews", "/deliveries"} {
+		code, _ := getPage(t, baseURL+path)
+		if code != http.StatusOK {
+			t.Fatalf("GET %s: status = %d, want 200 (056 §1: routes unchanged)", path, code)
+		}
 	}
 
 	code, body = getPage(t, baseURL+"/work")
