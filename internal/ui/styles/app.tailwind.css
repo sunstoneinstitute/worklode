@@ -31,6 +31,7 @@
   --link:#266680; --accent:#B77B00; --accent-ink:#0E1937; --accent-line:#9A6700;
   --ok:#1E6F63; --ok-bg:#E4F1EE; --warn:#9A5410; --warn-bg:#FBEBDA;
   --crit:#A32836; --crit-bg:#F8E3E5; --info:#266680; --info-bg:#E2EEF2;
+  --imp:#5B3FA8; --danger:#B02A1E;
   --ev-decl:#5C6478; --ev-decl-bg:#ECEDF0; --ev-user:#2E5AA8; --ev-user-bg:#E6EDF9;
   --ev-obs:#1C6E80; --ev-obs-bg:#E0F0F4; --ev-rec:#8A5A12; --ev-rec-bg:#FBF0D6;
   --shadow:0 1px 2px rgba(14,25,55,.06),0 6px 20px rgba(14,25,55,.05);
@@ -43,6 +44,7 @@
   --link:#46C5DE; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#C9AD06;
   --ok:#5FD3C0; --ok-bg:#153A38; --warn:#F58221; --warn-bg:#3A2A16;
   --crit:#E5808C; --crit-bg:#3A1E24; --info:#46C5DE; --info-bg:#123243;
+  --imp:#B9A3F5; --danger:#F0989F;
   --ev-decl:#A6ACC0; --ev-decl-bg:#20294A; --ev-user:#8FB4F0; --ev-user-bg:#182647;
   --ev-obs:#6FD3E8; --ev-obs-bg:#123243; --ev-rec:#F2C64E; --ev-rec-bg:#33280F;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.28);
@@ -55,6 +57,7 @@
   --link:#266680; --accent:#B77B00; --accent-ink:#0E1937; --accent-line:#9A6700;
   --ok:#1E6F63; --ok-bg:#E4F1EE; --warn:#9A5410; --warn-bg:#FBEBDA;
   --crit:#A32836; --crit-bg:#F8E3E5; --info:#266680; --info-bg:#E2EEF2;
+  --imp:#5B3FA8; --danger:#B02A1E;
   --ev-decl:#5C6478; --ev-decl-bg:#ECEDF0; --ev-user:#2E5AA8; --ev-user-bg:#E6EDF9;
   --ev-obs:#1C6E80; --ev-obs-bg:#E0F0F4; --ev-rec:#8A5A12; --ev-rec-bg:#FBF0D6;
   --shadow:0 1px 2px rgba(14,25,55,.06),0 6px 20px rgba(14,25,55,.05);
@@ -67,6 +70,7 @@
   --link:#46C5DE; --accent:#FAD604; --accent-ink:#0E1937; --accent-line:#C9AD06;
   --ok:#5FD3C0; --ok-bg:#153A38; --warn:#F58221; --warn-bg:#3A2A16;
   --crit:#E5808C; --crit-bg:#3A1E24; --info:#46C5DE; --info-bg:#123243;
+  --imp:#B9A3F5; --danger:#F0989F;
   --ev-decl:#A6ACC0; --ev-decl-bg:#20294A; --ev-user:#8FB4F0; --ev-user-bg:#182647;
   --ev-obs:#6FD3E8; --ev-obs-bg:#123243; --ev-rec:#F2C64E; --ev-rec-bg:#33280F;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.28);
@@ -577,6 +581,19 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .prose pre{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;overflow-x:auto}
 .prose pre code{background:none;border:0;padding:0}
 .prose blockquote{margin-left:0;padding-left:12px;border-left:3px solid var(--line-2);color:var(--ink-2)}
+/* GitHub alert syntax (WL-415/416/417, plan doc 175): a blockquote whose
+ * first line is [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION] renders as
+ * an <aside class="callout callout-KIND"><p class="callout-title">. The
+ * --callout-c indirection keeps the five kinds to one rule set; each kind's
+ * title colour is held to 4.5:1 against --surface and --surface-2 in both
+ * themes by internal/ui/contrast_test.go's textPairs. */
+.prose .callout{border:1px solid var(--line);border-left:3px solid var(--callout-c,var(--line-2));border-radius:9px;padding:9px 13px;margin:0 0 12px;background:var(--surface-2)}
+.prose .callout-title{font-weight:600;margin:0 0 6px;color:var(--callout-c)}
+.prose .callout-note{--callout-c:var(--info)}
+.prose .callout-tip{--callout-c:var(--ok)}
+.prose .callout-important{--callout-c:var(--imp)}
+.prose .callout-warning{--callout-c:var(--warn)}
+.prose .callout-caution{--callout-c:var(--danger)}
 /* Embedded blob media is author-sized and unbounded — a 100 MiB screen
  * recording is in scope (spec 021 §5) — so it is constrained to the column
  * rather than allowed to set the page width. */
