@@ -594,6 +594,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .prose .callout-important{--callout-c:var(--imp)}
 .prose .callout-warning{--callout-c:var(--warn)}
 .prose .callout-caution{--callout-c:var(--danger)}
+/* <mark> (WL-432): --ink on --warn-bg clears 4.5:1 in both themes (held by
+ * textPairs), so no new token. Padding/radius carry the highlight meaning
+ * for forced-colors/greyscale, where the background tint alone would not. */
+.prose mark{background:var(--warn-bg);color:var(--ink);border-radius:3px;padding:0 3px}
 /* Embedded blob media is author-sized and unbounded — a 100 MiB screen
  * recording is in scope (spec 021 §5) — so it is constrained to the column
  * rather than allowed to set the page width. */
