@@ -20,6 +20,12 @@ import templruntime "github.com/a-h/templ/runtime"
 // templ's SafeURL sanitizer neutralizes an unsafe scheme into
 // "about:invalid#TemplFailedSanitizationURL" before it reaches the page (see
 // web_test.go's TestTaskPageEscapesHostileTimelineURL).
+//
+// It renders through projectShell — the same frame crew.templ and every
+// other project-scoped page use (spec 056 §2) — with local-nav active ""
+// since the task page is not itself one of the sidebar's destinations;
+// PageProps.ActiveGlobal stays unset too, so the page carries both nav
+// landmarks but marks neither current (web_test.go's assertNoAriaCurrent).
 func Task(v TaskView) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -65,14 +71,14 @@ func Task(v TaskView) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section class=\"card pad\"><h1>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"canvas\"><section class=\"card pad\"><h1>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 20, Col: 19}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 27, Col: 20}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -85,7 +91,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.Title)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 20, Col: 37}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 27, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -126,7 +132,7 @@ func Task(v TaskView) templ.Component {
 					var templ_7745c5c3_Var8 string
 					templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.State)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 25, Col: 70}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 32, Col: 71}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 					if templ_7745c5c3_Err != nil {
@@ -144,7 +150,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var9 string
 				templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.Priority)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 27, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 34, Col: 48}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 				if templ_7745c5c3_Err != nil {
@@ -157,7 +163,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var10 string
 				templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.Kind)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 28, Col: 43}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 35, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 				if templ_7745c5c3_Err != nil {
@@ -170,7 +176,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var11 templ.SafeURL
 				templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs("/projects/" + v.Task.Project)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 29, Col: 79}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 36, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 				if templ_7745c5c3_Err != nil {
@@ -183,7 +189,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.Project)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 29, Col: 98}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 36, Col: 99}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -196,7 +202,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var13 string
 				templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(v.Task.CreatedAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 31, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 38, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 				if templ_7745c5c3_Err != nil {
@@ -209,7 +215,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.CreatedBy)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 31, Col: 86}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 38, Col: 87}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -222,7 +228,7 @@ func Task(v TaskView) templ.Component {
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(v.Task.UpdatedAt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 31, Col: 132}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 38, Col: 133}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -240,7 +246,7 @@ func Task(v TaskView) templ.Component {
 					var templ_7745c5c3_Var16 string
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(v.Task.Assignee)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 33, Col: 57}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 40, Col: 58}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -259,7 +265,7 @@ func Task(v TaskView) templ.Component {
 					var templ_7745c5c3_Var17 string
 					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(v.Holder.ActorID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 36, Col: 52}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 43, Col: 53}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 					if templ_7745c5c3_Err != nil {
@@ -272,7 +278,7 @@ func Task(v TaskView) templ.Component {
 					var templ_7745c5c3_Var18 string
 					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(v.Holder.ExpiresAt))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 36, Col: 93}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 43, Col: 94}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 					if templ_7745c5c3_Err != nil {
@@ -301,7 +307,7 @@ func Task(v TaskView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, " <section class=\"card\"><div class=\"hd\"><h3>Body</h3></div><div class=\"bd prose\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<section class=\"card\"><div class=\"hd\"><h3>Body</h3></div><div class=\"bd prose\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -341,7 +347,7 @@ func Task(v TaskView) templ.Component {
 							var templ_7745c5c3_Var19 templ.SafeURL
 							templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(b.URL)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 70, Col: 25}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 77, Col: 26}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 							if templ_7745c5c3_Err != nil {
@@ -354,7 +360,7 @@ func Task(v TaskView) templ.Component {
 							var templ_7745c5c3_Var20 string
 							templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(b.Filename)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 70, Col: 40}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 77, Col: 41}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 							if templ_7745c5c3_Err != nil {
@@ -372,7 +378,7 @@ func Task(v TaskView) templ.Component {
 							var templ_7745c5c3_Var21 templ.SafeURL
 							templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(b.URL)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 72, Col: 25}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 79, Col: 26}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 							if templ_7745c5c3_Err != nil {
@@ -385,7 +391,7 @@ func Task(v TaskView) templ.Component {
 							var templ_7745c5c3_Var22 string
 							templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(b.Hash)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 72, Col: 49}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 79, Col: 50}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 							if templ_7745c5c3_Err != nil {
@@ -403,7 +409,7 @@ func Task(v TaskView) templ.Component {
 						var templ_7745c5c3_Var23 string
 						templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(b.MediaType)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 74, Col: 41}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 81, Col: 42}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 						if templ_7745c5c3_Err != nil {
@@ -416,7 +422,7 @@ func Task(v TaskView) templ.Component {
 						var templ_7745c5c3_Var24 string
 						templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(fmtBytes(b.Size))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 74, Col: 71}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 81, Col: 72}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 						if templ_7745c5c3_Err != nil {
@@ -432,7 +438,7 @@ func Task(v TaskView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, " <section class=\"card\"><div class=\"hd\"><h3>Edges</h3></div><div class=\"bd\"><ul>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<section class=\"card\"><div class=\"hd\"><h3>Edges</h3></div><div class=\"bd\"><ul>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -466,7 +472,7 @@ func Task(v TaskView) templ.Component {
 						var templ_7745c5c3_Var25 templ.SafeURL
 						templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinURLErrs("/tasks/" + id)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 94, Col: 33}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 101, Col: 34}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 						if templ_7745c5c3_Err != nil {
@@ -479,7 +485,7 @@ func Task(v TaskView) templ.Component {
 						var templ_7745c5c3_Var26 string
 						templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 94, Col: 40}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 101, Col: 41}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 						if templ_7745c5c3_Err != nil {
@@ -492,7 +498,7 @@ func Task(v TaskView) templ.Component {
 						var templ_7745c5c3_Var27 string
 						templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 94, Col: 51}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 101, Col: 52}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 						if templ_7745c5c3_Err != nil {
@@ -506,7 +512,7 @@ func Task(v TaskView) templ.Component {
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(v.Progress.Closed)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 96, Col: 48}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 103, Col: 49}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
@@ -519,7 +525,7 @@ func Task(v TaskView) templ.Component {
 					var templ_7745c5c3_Var29 string
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(v.Progress.Total)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 96, Col: 69}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 103, Col: 70}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -584,7 +590,7 @@ func Task(v TaskView) templ.Component {
 							var templ_7745c5c3_Var31 string
 							templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmtTime(row.At))
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 118, Col: 44}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 125, Col: 45}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 							if templ_7745c5c3_Err != nil {
@@ -605,7 +611,7 @@ func Task(v TaskView) templ.Component {
 							var templ_7745c5c3_Var32 string
 							templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(row.Summary)
 							if templ_7745c5c3_Err != nil {
-								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 120, Col: 27}
+								return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 127, Col: 28}
 							}
 							_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 							if templ_7745c5c3_Err != nil {
@@ -623,7 +629,7 @@ func Task(v TaskView) templ.Component {
 								var templ_7745c5c3_Var33 templ.SafeURL
 								templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinURLErrs(row.URL)
 								if templ_7745c5c3_Err != nil {
-									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 123, Col: 29}
+									return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 130, Col: 30}
 								}
 								_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 								if templ_7745c5c3_Err != nil {
@@ -650,13 +656,13 @@ func Task(v TaskView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</div></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</div></section></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = globalShell().Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = projectShell(v.Project, "").Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -703,7 +709,7 @@ func taskEdgeIDs(label string, ids []string) templ.Component {
 		var templ_7745c5c3_Var35 string
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 144, Col: 9}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 152, Col: 9}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {
@@ -727,7 +733,7 @@ func taskEdgeIDs(label string, ids []string) templ.Component {
 				var templ_7745c5c3_Var36 templ.SafeURL
 				templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinURLErrs("/tasks/" + id)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 149, Col: 28}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 157, Col: 28}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 				if templ_7745c5c3_Err != nil {
@@ -740,7 +746,7 @@ func taskEdgeIDs(label string, ids []string) templ.Component {
 				var templ_7745c5c3_Var37 string
 				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 149, Col: 35}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 157, Col: 35}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 				if templ_7745c5c3_Err != nil {
@@ -753,7 +759,7 @@ func taskEdgeIDs(label string, ids []string) templ.Component {
 				var templ_7745c5c3_Var38 string
 				templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(" ")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 149, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 157, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 				if templ_7745c5c3_Err != nil {
@@ -799,7 +805,7 @@ func taskEdgeID(label, id string) templ.Component {
 		var templ_7745c5c3_Var40 string
 		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 159, Col: 9}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 167, Col: 9}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 		if templ_7745c5c3_Err != nil {
@@ -822,7 +828,7 @@ func taskEdgeID(label, id string) templ.Component {
 			var templ_7745c5c3_Var41 templ.SafeURL
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinURLErrs("/tasks/" + id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 163, Col: 27}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 171, Col: 27}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
 			if templ_7745c5c3_Err != nil {
@@ -835,7 +841,7 @@ func taskEdgeID(label, id string) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 163, Col: 34}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 171, Col: 34}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -895,7 +901,7 @@ func timelineIcon(row TimelineRow) templ.Component {
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 182, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 190, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 		if templ_7745c5c3_Err != nil {
@@ -908,7 +914,7 @@ func timelineIcon(row TimelineRow) templ.Component {
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 182, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/task.templ`, Line: 190, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 		if templ_7745c5c3_Err != nil {
