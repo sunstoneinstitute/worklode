@@ -167,11 +167,26 @@ path:
 claude --channels server:lode --dangerously-load-development-channels
 ```
 
-There is no automation for either step, and that is deliberate for now
-rather than an oversight: `lode install` wires files a session reads
-(git hooks, agent settings, skill links), but nothing in worklode's own
-tooling is the thing that *spawns* `claude` in the first place — there is no
-existing launch point in this repo to hook the `.mcp.json` write or the
-launch flags into. Automating this is real follow-up work, gated on that
-launch point existing (or being decided) rather than on anything in this
-plan.
+Neither step belongs in `lode install`, which wires files a session *reads*
+— git hooks, agent settings, skill links — and never spawns anything. Both
+belong at whatever launches `claude`: the flags are launch flags, and
+`.mcp.json` has to exist before the session reads it.
+`.github/agent-host/supervisor.sh` is that launch point, and writing both
+there before it execs `claude` is early enough — early enough, too, for
+038 §4.2, whose build-time rule governs hooks rather than MCP servers.
+Automating the wiring is ordinary follow-up work.
+
+## Relationship to 038 §4.5
+
+038 §4.5 declines human-in-the-loop question routing for headless sessions,
+naming as one blocker that nothing delivers a human's answer back to a
+blocked worker process. This channel is that delivery path, built for a
+different purpose: it carries server-authored text into a live session, and
+would carry an answer unchanged.
+
+It does not discharge the section, so `covers` stays `NO-SPEC`. §4.5
+declines the work rather than commissioning it, and the question direction
+is still missing — a pending-question row, a surface to answer it, and a
+worker-side wait. This channel's at-most-once delivery is also a poorer fit
+there than it is here: losing a steering nudge costs a turn, losing an
+answer strands a worker. §4.5 now records what is left.
