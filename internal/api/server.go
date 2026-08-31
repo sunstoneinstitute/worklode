@@ -495,10 +495,12 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// apply the policy (webGuard); an unauthenticated visitor is sent to
 	// /auth/login, and when no login provider is configured the UI stays open
 	// as in v1 — as one named decision rather than a silent passthrough (see
-	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The eight
-	// global destinations (spec 032 §2) and the project-local destinations
-	// below each record one worklode_web_navigation_requests_total
-	// observation via navWrap.
+	// authOpen, and the open-UI follow-up in docs/follow-ups.md). The five
+	// global destinations (spec 056 §1, amending 032 §2) and the project-local
+	// destinations below each record one
+	// worklode_web_navigation_requests_total observation via navWrap; the
+	// routes Home, Reviews and Deliveries kept after leaving that list record
+	// theirs the same way.
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
 	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
 		"Low-friction idea capture, looser than and promotable into Intake, arrives with spec 032 §5.")))
@@ -528,7 +530,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
 	r.web("GET /work", s.navWrap("work", s.workPage))
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
-	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("deliveries", "Deliveries",
+	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("", "Deliveries",
 		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
 	// Knowledge is the document corpus: spec 032 §2 defines the destination
 	// as "documents and graph-backed expert views", and /docs is the half of

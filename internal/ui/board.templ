@@ -9,7 +9,7 @@ import "github.com/sunstoneinstitute/worklode/internal/model"
 
 templ Board(v BoardView) {
 	@Page(v.Page) {
-		@globalShell(v.Page.ActiveGlobal) {
+		@globalShell() {
 			<h1>Work</h1>
 			<p class="muted small">Inbox: { v.InboxCount } new issue{ pluralSuffix(v.InboxCount) }</p>
 			for _, proj := range v.Projects {

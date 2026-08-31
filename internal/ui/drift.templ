@@ -19,7 +19,7 @@ import (
 
 templ Drift(v DriftView) {
 	@Page(v.Page) {
-		@globalShell(v.Page.ActiveGlobal) {
+		@globalShell() {
 			<h1>Drift</h1>
 			<p class="muted small">The ready frontier and the estimate-free critical path come from the backbone; violations, stale intent and gaps come from the knowledge graph.</p>
 			@driftFrontier(v.Frontier)
