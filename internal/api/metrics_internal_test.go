@@ -282,6 +282,61 @@ func TestObserveHomeRenderNilSafe(t *testing.T) {
 	s.observeHomeRender(homeModeOpen)
 }
 
+func TestObserveRunBoardRender(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeRunBoardRender(runBoardRenderRendered)
+	s.observeRunBoardRender(runBoardRenderRendered)
+	s.observeRunBoardRender(runBoardRenderEmpty)
+
+	for _, tc := range []struct {
+		outcome string
+		want    float64
+	}{
+		{runBoardRenderRendered, 2},
+		{runBoardRenderEmpty, 1},
+	} {
+		if got := testutil.ToFloat64(s.runBoardRenders.WithLabelValues(tc.outcome)); got != tc.want {
+			t.Fatalf("runBoardRenders{outcome=%s} = %v, want %v", tc.outcome, got, tc.want)
+		}
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var outcomes []string
+	for _, mf := range mfs {
+		if mf.GetName() != "worklode_web_run_board_renders_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				outcomes = append(outcomes, l.GetName()+"="+l.GetValue())
+			}
+		}
+	}
+	// The label is bounded to exactly the two outcomes: never a project or
+	// task id.
+	want := []string{"outcome=empty", "outcome=rendered"}
+	slices.Sort(outcomes)
+	if !slices.Equal(outcomes, want) {
+		t.Fatalf("worklode_web_run_board_renders_total series = %v, want %v", outcomes, want)
+	}
+}
+
+// TestObserveRunBoardRenderNilSafe checks a *server built without
+// initMetrics (as tests in this package do) does not panic when
+// runBoardPage calls observeRunBoardRender.
+func TestObserveRunBoardRenderNilSafe(t *testing.T) {
+	t.Parallel()
+	s := &server{}
+	s.observeRunBoardRender(runBoardRenderEmpty)
+}
+
 func TestObserveListExpansion(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
