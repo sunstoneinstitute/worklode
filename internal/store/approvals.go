@@ -538,3 +538,116 @@ func (s *Store) ApprovalsAwaiting(ctx context.Context,
 		return c, err
 	})
 }
+
+// InboxReview is one open pr-kind approval as the cross-project inbox
+// consumes it (spec 056 §3.1).
+type InboxReview struct {
+	ApprovalID    int64
+	Project       string
+	EntityID      string // repo#number
+	Title, URL    string
+	AuthorLogin   string
+	RequiredActor *string
+	RequiredRole  *string
+	CreatedAt     time.Time
+}
+
+func scanInboxReview(row rowScanner) (*InboxReview, error) {
+	var r InboxReview
+	var project, title, url, author sql.NullString
+	err := row.Scan(&r.ApprovalID, &project, &r.EntityID, &title, &url, &author,
+		&r.RequiredActor, &r.RequiredRole, &r.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	r.Project = project.String
+	r.Title = title.String
+	r.URL = url.String
+	r.AuthorLogin = author.String
+	return &r, nil
+}
+
+// ListInboxReviews returns every open ('awaiting' | 'changes_requested')
+// pr-kind approval across all projects, oldest first, id tiebreak — the
+// membership scoping happens in the pure assembly (056 §3.3's
+// score-wide-filter-late rule applied uniformly). Join shape is
+// approvalEntityJoins/approvalProjectID, the same as ListAwaitingApprovals,
+// plus the PR's author column.
+func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT a.id, `+approvalProjectID+`, a.entity_id,
+		        coalesce(pr.title, ''), coalesce(pr.url, ''), coalesce(pr.author, ''),
+		        a.required_actor, a.required_role, a.created_at
+		 FROM approvals a
+		 `+approvalEntityJoins+`
+		 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
+		 ORDER BY a.created_at, a.id`)
+	if err != nil {
+		return nil, fmt.Errorf("list inbox reviews: %w", err)
+	}
+	return collectRows(rows, "list inbox reviews", byValue(scanInboxReview))
+}
+
+// HasInboxItems answers 056 §4's indicator: does at least one inbox item
+// exist for the actor. One statement of EXISTS branches, each commented
+// with the §3.2 bucket it answers, so this reader and ListInboxReviews plus
+// the pure assembly (internal/api's assembleInbox, over ListInboxReviews and
+// ListProjectWorkFacts) cannot silently diverge. Postgres evaluates an
+// EXISTS(... UNION ALL ...) lazily and stops at the first row produced, so
+// this never runs the full ranked query.
+func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS (
+			-- §3.2 bucket 1: reviews assigned to the actor
+			SELECT 1 FROM approvals a
+			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
+			   AND a.required_actor = $1
+
+			UNION ALL
+
+			-- §3.2 bucket 2: unassigned reviews in a project the actor leads
+			SELECT 1 FROM approvals a
+			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
+			 JOIN tasks t ON t.id = pr.task_id
+			 JOIN project_participants pp
+			   ON pp.project_id = t.project_id AND pp.actor_id = $1 AND pp.is_lead
+			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
+			   AND a.required_actor IS NULL
+
+			UNION ALL
+
+			-- §3.2 bucket 3: reviews the actor owns -- they authored the PR
+			-- and somebody else is the required reviewer
+			SELECT 1 FROM approvals a
+			 JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
+			 JOIN actors act ON act.id = $1
+			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
+			   AND pr.author IS NOT NULL AND act.expected_github_login IS NOT NULL
+			   AND lower(pr.author) = lower(act.expected_github_login)
+			   AND (a.required_actor IS NULL OR a.required_actor <> $1)
+
+			UNION ALL
+
+			-- §3.2 buckets 4-5: active-state work assigned to or created by
+			-- the actor
+			SELECT 1 FROM tasks t
+			 WHERE t.deleted_at IS NULL
+			   AND t.state IN ('ready', 'in_progress', 'in_review')
+			   AND (t.assignee = $1 OR t.created_by = $1)
+
+			UNION ALL
+
+			-- §3.2 bucket 6: other active-state work in a project the actor
+			-- is a member of
+			SELECT 1 FROM tasks t
+			 JOIN project_participants pp
+			   ON pp.project_id = t.project_id AND pp.actor_id = $1
+			 WHERE t.deleted_at IS NULL
+			   AND t.state IN ('ready', 'in_progress', 'in_review')
+		 )`, actorID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("has inbox items for %s: %w", actorID, err)
+	}
+	return exists, nil
+}
