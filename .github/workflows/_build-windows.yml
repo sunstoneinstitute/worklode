@@ -1,0 +1,78 @@
+name: build-windows
+
+# Reusable workflow: cross-compiles the three Windows user binaries, zips them,
+# and attaches the zip to the tag's GitHub Release. Called by release.yml (hand-pushed v*
+# tag) and promote-prod.yml (after promotion pushes its own v* tag). Both
+# callers feed the resulting sha256 into update-scoop-bucket.
+#
+# Pure-Go cross-compile on Ubuntu (CGO disabled) — no Windows runner needed.
+# The Release object is created by the bottle pipeline; this workflow is a
+# needs-dependent of build-bottles in both callers, so it only ever attaches an
+# asset to a Release that already exists (no concurrent-create race).
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: v* tag to build the Windows user binaries for (must already exist on the remote)
+        required: true
+        type: string
+    outputs:
+      amd64_sha256:
+        value: ${{ jobs.build.outputs.amd64_sha256 }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      amd64_sha256: ${{ steps.build.outputs.sha256 }}
+    steps:
+      - name: Checkout worklode at the release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          lfs: true
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Build and zip Windows user binaries
+        id: build
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          # Homebrew derives `version` from the v-tagged archive URL (leading v
+          # stripped); match that so `lode --version` reads the same on both
+          # channels.
+          VERSION="${TAG#v}"
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
+            -o lode.exe ./cmd/lode
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
+            -o lode-hook.exe ./cmd/lode-hook
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
+            -o lode-statusline.exe ./cmd/lode-statusline
+
+          ZIP="worklode_${VERSION}_windows_amd64.zip"
+          zip -q "$ZIP" lode.exe lode-hook.exe lode-statusline.exe
+          sha256=$(sha256sum "$ZIP" | awk '{print $1}')
+          {
+            echo "zip=${ZIP}"
+            echo "sha256=${sha256}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Attach zip to GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: ${{ steps.build.outputs.zip }}
+          fail_on_unmatched_files: true

@@ -41,7 +41,13 @@ re-rendered on the next sync even when the backbone data has not changed,
 because the `etag` covers the data and not the layout. Upgrading the plugin
 therefore rewrites every note in the mount root once.
 
-## Build and install
+## Install
+
+Every worklode release attaches this plugin's `main.js` and `manifest.json` to
+its GitHub Release. Drop both into `$VAULT/.obsidian/plugins/worklode/`, or
+point BRAT at `sunstoneinstitute/worklode`.
+
+## Build from source
 
 ```bash
 corepack enable pnpm          # once per machine; pnpm version comes from package.json

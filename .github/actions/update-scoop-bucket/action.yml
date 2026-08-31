@@ -20,7 +20,7 @@ inputs:
       so the credential outlives any individual's account.
     required: true
   amd64-sha:
-    description: sha256 of the lode_<version>_windows_amd64.zip release asset
+    description: sha256 of the worklode_<version>_windows_amd64.zip release asset
     required: true
 
 runs:
@@ -41,7 +41,7 @@ runs:
       run: |
         set -euo pipefail
         VERSION="${TAG#v}"
-        URL="https://github.com/${REPO}/releases/download/${TAG}/lode_${VERSION}_windows_amd64.zip"
+        URL="https://github.com/${REPO}/releases/download/${TAG}/worklode_${VERSION}_windows_amd64.zip"
         VERSION="$VERSION" URL="$URL" SHA256="$SHA256" \
           uv run .github/scoop/render-manifest.py \
             .github/scoop/worklode.json.template "$RUNNER_TEMP/worklode.json"
