@@ -1259,6 +1259,7 @@ docs/plans/2026-08-25-steering-instructions.md:
     lode-channel-serve: "## `lode channel serve`"
     lode-task-instruct-id-message: "## `lode task instruct <id> <message>`"
     wiring-a-session-up-today-is-manual: "## Wiring a session up today is manual"
+    relationship-to-038-45: "## Relationship to 038 §4.5"
 docs/plans/2026-08-27-markdown-callouts.md:
   sections:
     global-constraints: "## Global constraints"
