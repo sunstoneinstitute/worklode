@@ -1,0 +1,51 @@
+package ui
+
+// inbox.templ renders the cross-project inbox (GET /inbox, spec 056 §3):
+// what is waiting on the signed-in actor, in 056 §3.2's fixed bucket order.
+// Structurally the same shape as runboard.templ's groups — one
+// <section class="card"> per non-empty bucket, worklist rows (board.templ's
+// row shape, sans state chips: an inbox item carries none) linking their
+// href. It carries no ActiveGlobal key (spec 056 §1's five destinations
+// don't include it), so the shell's single aria-current="page" belongs to
+// nothing here, the same as Home. A nil view — no actor, or an actor with
+// nothing waiting — renders the honest "Nothing is waiting on you." line
+// rather than an empty heading.
+
+templ Inbox(v *InboxView) {
+	@Page(PageProps{Title: "Inbox"}) {
+		@globalShell() {
+			<h1>Inbox</h1>
+			if v == nil || len(v.Buckets) == 0 {
+				<p class="muted">Nothing is waiting on you.</p>
+			} else {
+				for _, b := range v.Buckets {
+					@inboxBucket(b)
+				}
+			}
+		}
+	}
+}
+
+// inboxBucket renders one §3.2 bucket: its heading and its items as
+// worklist rows.
+templ inboxBucket(b InboxBucket) {
+	<section class="card">
+		<div class="hd"><h3>{ b.Label }</h3></div>
+		<div class="bd wl">
+			for _, item := range b.Items {
+				@inboxRow(item)
+			}
+		</div>
+	</section>
+}
+
+// inboxRow renders one item: its link and its muted detail line (project,
+// age).
+templ inboxRow(item InboxItem) {
+	<div class="wlrow">
+		<div class="tl">
+			<div class="t"><a href={ item.Href }>{ item.Text }</a></div>
+			<div class="s">{ item.Detail }</div>
+		</div>
+	</div>
+}

@@ -333,6 +333,13 @@ type server struct {
 	// says whether the viewer landed on a board with any live work on it.
 	runBoardRenders *prometheus.CounterVec
 
+	// inboxRenders counts cross-project inbox page renders (GET /inbox, 056
+	// §3), by outcome (empty, rendered); see inbox.go's inboxPage and
+	// metrics.go's observeInboxRender. navWrap already counts the "inbox"
+	// destination by outcome — this one says whether the viewer had anything
+	// waiting on them.
+	inboxRenders *prometheus.CounterVec
+
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
 	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
 	// observeFormSubmission.
@@ -537,6 +544,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /dictate", s.dictate)
 	r.web("GET /projects/{id}/{section}", s.navWrap("project_section", s.projectSectionPage))
 	r.web("GET /work", s.navWrap("work", s.workPage))
+	r.web("GET /inbox", s.navWrap("inbox", s.inboxPage))
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("", "Deliveries",
 		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))

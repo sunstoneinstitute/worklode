@@ -25,9 +25,9 @@ import (
 // "intake", "projects", "work", "knowledge" — spec 056 §1's five
 // destinations. It is left empty on project-scoped pages, whose project-local
 // nav carries the current-page marker instead, and on pages that name no
-// destination: the task page, and Home, Reviews and Deliveries, which kept
-// their routes when §1 took them off the list. No page ever sets
-// aria-current="page" twice, or on both navs.
+// destination: the task page, Home, Reviews and Deliveries, which kept their
+// routes when §1 took them off the list, and the inbox (056 §3), which never
+// had one. No page ever sets aria-current="page" twice, or on both navs.
 type PageProps struct {
 	Title        string
 	ActiveGlobal string

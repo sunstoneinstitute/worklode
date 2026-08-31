@@ -10,6 +10,7 @@ package api
 
 import (
 	"cmp"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -17,6 +18,63 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
+
+// inboxPage handles GET /inbox (spec 056 §3): the cross-project inbox, what
+// is waiting on the signed-in actor across every project they belong to.
+// With no actor — LODE_WEB_OPEN, or no login provider configured — it
+// renders the honest signed-out empty state without fetching anything: no
+// items, nothing fabricated.
+func (s *server) inboxPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	sub := subjectFrom(r)
+	if sub.ActorID == "" {
+		s.observeInboxRender(inboxRenderEmpty)
+		s.renderWeb(w, r, http.StatusOK, "inbox page", ui.Inbox(nil))
+		return
+	}
+
+	actor, err := s.st.GetActor(ctx, sub.ActorID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	projects, err := s.st.ProjectsForActor(ctx, sub.ActorID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	reviews, err := s.st.ListInboxReviews(ctx)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	facts, err := s.st.ListProjectWorkFacts(ctx, "")
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	membership := make(map[string]bool, len(projects))
+	led := make(map[string]bool, len(projects))
+	for _, ap := range projects {
+		membership[ap.Project.ID] = true
+		if ap.IsLead {
+			led[ap.Project.ID] = true
+		}
+	}
+
+	view := assembleInbox(inboxInputs{
+		ActorID: sub.ActorID, ActorLogin: actor.ExpectedGitHubLogin,
+		Reviews: reviews, Facts: facts, Membership: membership, Led: led,
+		Now: s.st.Now(),
+	})
+	outcome := inboxRenderRendered
+	if view == nil {
+		outcome = inboxRenderEmpty
+	}
+	s.observeInboxRender(outcome)
+	s.renderWeb(w, r, http.StatusOK, "inbox page", ui.Inbox(view))
+}
 
 // inboxInputs is everything the inbox derivation reads, already fetched.
 // Reviews are every open pr-kind approval org-wide with its project, PR
