@@ -162,11 +162,28 @@ func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form stri
 // templ page renders through here, and a task body is untrusted markup
 // (spec 021 §8), so a page that skipped the policy would be the one that
 // needs it.
+//
+// It is also the one place spec 056 §4's inbox indicator is computed: when
+// the request names an actor, one HasInboxItems call decides the flag every
+// page's top bar reads via ui.WithInboxDot/inboxDot, before rendering. No
+// other call site computes it — that is what makes "once per request"
+// structural rather than a convention every handler has to remember. A store
+// error is logged and falls through to rendering without a dot; the
+// indicator must never fail a page.
 func (s *server) renderWeb(w http.ResponseWriter, r *http.Request, status int, page string, c templ.Component) {
+	ctx := r.Context()
+	if actorID := subjectFrom(r).ActorID; actorID != "" {
+		has, err := s.st.HasInboxItems(ctx, actorID)
+		if err != nil {
+			s.log.Error("check inbox items", "err", err)
+		} else {
+			ctx = ui.WithInboxDot(ctx, has)
+		}
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", s.contentSecurityPolicy())
 	w.WriteHeader(status)
-	if err := c.Render(r.Context(), w); err != nil {
+	if err := c.Render(ctx, w); err != nil {
 		s.log.Error("render "+page, "err", err)
 	}
 }

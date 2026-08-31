@@ -135,9 +135,13 @@ nav.global a .cnt{font-size:11px;font-weight:600;color:var(--ink-3);background:v
 nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:var(--warn-bg)}
 .top-right{display:flex;align-items:center;gap:12px;margin-left:auto}
 
-.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--control-line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center}
+.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--control-line);background:var(--surface);color:var(--ink-2);display:grid;place-items:center;position:relative}
 .iconbtn:hover{background:var(--surface-2)}
 .iconbtn svg{width:17px;height:17px}
+/* dot-alert (spec 056 §4): the inbox icon's has-items indicator, a
+ * red-toned variant of .dot positioned at the icon's corner. */
+.iconbtn .dot{position:absolute;top:6px;right:6px}
+.dot-alert{background:var(--danger)}
 .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#266680,#0E1937);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px;flex:0 0 auto}
 
 /* ---------- shell ---------- */
