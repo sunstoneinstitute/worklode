@@ -199,6 +199,7 @@ var textPairs = []struct{ fg, bg, where string }{
 	{"imp", "surface-2", ".prose .callout-important .callout-title"},
 	{"danger", "surface", ".prose .callout-caution .callout-title"},
 	{"danger", "surface-2", ".prose .callout-caution .callout-title"},
+	{"ink", "warn-bg", ".prose mark — highlighted text in a task body"},
 }
 
 func TestTextContrastMeetsAA(t *testing.T) {
