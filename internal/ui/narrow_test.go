@@ -393,7 +393,7 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{".dodrow.def{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere", "a deliverable's artifact address has no soft wrap opportunity in it (WCAG 1.4.10)"},
 		{"nav.global{align-self:stretch;display:flex;align-items:stretch", "the global destinations live inside the sticky top bar, filling its height (spec 056 §1)"},
 		{".topbar{height:auto;flex-wrap:wrap;gap:012px", "below 880px the top bar wraps so the destinations keep a row of their own, with no seam between the two"},
-		{"html{scroll-padding-top:112px}", "the wrapped two-row top bar is 105px tall below 880px, and an in-page jump must clear it (WCAG 2.4.11)"},
+		{"html{scroll-padding-top:112px;}", "the wrapped two-row top bar is 105px tall below 880px, and an in-page jump must clear it (WCAG 2.4.11)"},
 		{"nav.global{order:3;flex:00100%", "the wrapped destinations row spans the whole bar below 880px"},
 		{"nav.globala.tab-secondary{display:none;order:2;flex:00100%", "narrow layouts move secondary destinations under More"},
 		{".tab-more{display:flex;cursor:pointer", "narrow layouts expose the hidden destinations through More"},
