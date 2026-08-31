@@ -107,8 +107,41 @@ docker run -d --name gha-ci-postgres --restart=always \
   -p 127.0.0.1:15432:5432 \
   -e POSTGRES_PASSWORD=postgres \
   --health-cmd='pg_isready -U postgres' --health-interval=5s --health-timeout=5s --health-retries=10 \
-  pgvector/pgvector:pg17
+  pgvector/pgvector:pg17 postgres -c max_connections=400
 ```
+
+`max_connections=400` (WL-465): a single `make test` run against this
+container peaks around 120 concurrent connections (measured directly on
+hel01 — `SELECT count(*) FROM pg_stat_activity` polled through a full
+`make test`, TEST_POSTGRES_DSN pointed at :15432). The default 100, and
+even the 200 this instance had drifted to via an undocumented `ALTER
+SYSTEM` on the running container, leave no room for two `test / test`
+jobs landing within seconds of each other, which the shared-runner setup
+routinely produces — hence "sorry, too many clients already"
+(SQLSTATE 53300) failing unrelated tests on both jobs. 400 covers three
+peak-concurrent runs with headroom; hel01 has 251GB RAM and no memory
+limit on the container, so the extra connections cost nothing that
+matters here.
+
+**Applying this to the already-running container** needs a manual step —
+recreating it loses the anonymous data volume, which is fine (CI-only,
+each test creates/drops its own database, the migration template rebuilds
+on first use), but it's still a live-infrastructure change nothing here
+automates:
+
+```
+docker rm -f gha-ci-postgres
+docker run -d --name gha-ci-postgres --restart=always \
+  -p 127.0.0.1:15432:5432 \
+  -e POSTGRES_PASSWORD=postgres \
+  --health-cmd='pg_isready -U postgres' --health-interval=5s --health-timeout=5s --health-retries=10 \
+  pgvector/pgvector:pg17 postgres -c max_connections=400
+```
+
+Or, to keep the same container and volume: `ALTER SYSTEM SET
+max_connections = 400;` via `docker exec gha-ci-postgres psql -U postgres`,
+then `docker restart gha-ci-postgres` (`max_connections` needs a restart,
+not just a reload).
 
 Port 15432, not 5432 — hel01 already runs the project's own local-dev
 compose stack (`worklode-event-stream-postgres-1`) bound to
