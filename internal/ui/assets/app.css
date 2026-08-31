@@ -1865,6 +1865,20 @@ nav.local a .cnt {
   border-radius: 3px;
   padding: 0 3px;
 }
+.prose details {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 13px;
+  margin: 0 0 12px;
+  background: var(--surface-2);
+}
+.prose details[open] summary {
+  margin-bottom: 8px;
+}
+.prose summary {
+  cursor: pointer;
+  font-weight: 600;
+}
 .prose img,.prose video {
   max-width: 100%;
   height: auto;
