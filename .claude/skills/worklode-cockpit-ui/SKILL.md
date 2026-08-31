@@ -24,6 +24,57 @@ Pages render with `templ` components (`internal/ui/*.templ`, compiled to
 (`internal/ui/styles/app.tailwind.css` → `internal/ui/assets/app.css`) and a
 self-hosted, currently dormant HTMX. Both generated artifacts are committed.
 
+## Authoring rules
+
+**The data path.** `ui` renders view types and nothing else: `store row ->
+api DTO -> render.go mapper -> views.go type -> *.templ`. Adding a field
+means touching each link. A component never queries: if a template needs a
+fact it lacks, the fix is a field on the view type and a line in
+`render.go` — never an import of `internal/api` (a dependency cycle) and
+never a store call from a template. View types embed `internal/model`
+types only (ADR 036) — never `internal/store` ones — matching the
+dependency line above.
+
+**Honest empty states** — the rule the cockpit is built on, and the
+easiest to break by being helpful. A panel whose data is absent is
+omitted, not filled with a placeholder value. Never fabricate a count,
+status or record; where the backbone stores no fact the page says so
+(`cockpit.templ`'s `automationBoundary` renders "not configured" for the
+policy/budget the backbone doesn't have yet, and "none recorded" for no
+spend). An empty list gets an explicit line ("No active work.", "None"),
+never a silently empty container. If a design asks for something the store
+cannot answer, the answer is a `ui.PlaceholderView` naming the owning spec
+section (built in `render.go`), not an invented value.
+
+**When a new component is warranted.** Add one when the markup repeats
+across files, or when a template body no longer reads as a page outline.
+Two or three uses in one file is a local `templ` helper in that file (e.g.
+`boardBucket` in `board.templ`). Do not add one for a single wrapper with
+no logic. Lowercase the name unless `internal/api` renders it directly;
+exported names (`Task`, `RunBoard`, `Home`, ...) are the page entry
+points. A `switch` mapping a domain value to a class or label belongs in
+`views.go`/`ui.go`, not inline in a template.
+
+**Accessibility invariants.** Exactly one `aria-current="page"` per page:
+project-scoped pages leave `PageProps.ActiveGlobal` empty so the local nav
+carries it instead, and getting that wrong — zero, or two — is what
+`internal/api/web_test.go`'s `assertOneAriaCurrent`/`assertNoAriaCurrent`
+catch. The shell owns the skip link and `<main id="main-content">`; pages
+never emit a second `<main>`. Decorative SVG carries `aria-hidden="true"`;
+an icon that conveys meaning needs a label. Section landmarks take
+`aria-labelledby` pointing at their own heading id.
+
+**The `SafeURL` trap.** templ's sanitizer turns an unsafe scheme into
+`about:invalid#TemplFailedSanitizationURL` when a plain string is
+interpolated into `href`. That is why `TimelineRow.URL` (`task.templ`) is
+rendered as a string and not pre-wrapped in `templ.SafeURL` — wrapping it
+yourself asserts it is safe and skips the sanitizer
+(`TestTaskPageEscapesHostileTimelineURL` in `internal/api/web_test.go`
+pins it). Nav labels are emitted tight against their tags (`>Ideas<`, not
+`>\n  Ideas\n<`) so `internal/api/web_test.go`'s `assertOrder` and
+`>Home<`-style checks can match exact text markers — keep new nav markup
+to that convention.
+
 ## Dev loop
 
 Driven by the single `//go:generate` directive in `internal/ui/ui.go`:
