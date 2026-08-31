@@ -816,37 +816,39 @@ func Initials(name string) string {
 	return string(out)
 }
 
-// workRowWhoClass returns the .who avatar wrapper class for a work row: an
-// agent delegate holding the lease renders as ".who agent" (the AI badge
-// styling), everything else as a plain ".who".
-func workRowWhoClass(item WorkRow) string {
-	if item.Delegate != "" {
+// avatarClass returns the .who avatar wrapper class for an owner/delegate
+// pair: an agent delegate holding the lease renders as ".who agent" (the AI
+// badge styling), everything else as a plain ".who". Shared by
+// cockpit.templ's workRow and runboard.templ's runRow.
+func avatarClass(owner, delegate string) string {
+	if delegate != "" {
 		return "who agent"
 	}
 	return "who"
 }
 
-// workRowInitials returns the avatar initials for a work row: the delegated
-// agent's when one holds the lease, otherwise the human owner's, otherwise ""
-// (unassigned — a blank avatar, never invented).
-func workRowInitials(item WorkRow) string {
-	if item.Delegate != "" {
-		return Initials(item.Delegate)
+// avatarInitials returns the avatar initials for an owner/delegate pair: the
+// delegated agent's when one holds the lease, otherwise the human owner's,
+// otherwise "" (unassigned — a blank avatar, never invented).
+func avatarInitials(owner, delegate string) string {
+	if delegate != "" {
+		return Initials(delegate)
 	}
-	return Initials(item.Owner)
+	return Initials(owner)
 }
 
-// workRowActors renders a work row's who-line: the delegated agent acting on
-// behalf of the accountable owner, an agent with no recorded owner, a lone
-// human owner, or an honest "Unassigned" when neither is known.
-func workRowActors(item WorkRow) string {
+// actorsLine renders an owner/delegate pair's who-line: the delegated agent
+// acting on behalf of the accountable owner, an agent with no recorded
+// owner, a lone human owner, or an honest "Unassigned" when neither is
+// known.
+func actorsLine(owner, delegate string) string {
 	switch {
-	case item.Delegate != "" && item.Owner != "":
-		return item.Delegate + " · on behalf of " + item.Owner
-	case item.Delegate != "":
-		return item.Delegate + " · delegated agent"
-	case item.Owner != "":
-		return item.Owner + " · owner"
+	case delegate != "" && owner != "":
+		return delegate + " · on behalf of " + owner
+	case delegate != "":
+		return delegate + " · delegated agent"
+	case owner != "":
+		return owner + " · owner"
 	default:
 		return "Unassigned"
 	}
