@@ -54,6 +54,19 @@ var (
 	mediaType    = regexp.MustCompile(`(?i)\A(audio|video|image)/[a-z0-9.+-]{1,64}\z`)
 	langTag      = regexp.MustCompile(`\A[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*\z`)
 	mermaidClass = regexp.MustCompile(`\Amermaid\z`)
+
+	// calloutClass and calloutTitleClass are plan doc 175 task 2's addition
+	// to the policy: the only two class values buildPolicy allows, each
+	// scoped to one element, mirroring how sectionAnchor scopes id to
+	// headings. buildPolicy deliberately strips class globally (CSS is
+	// both a styling and an exfiltration vector); these two rules reopen it
+	// only for the exact markup callout.go emits, so an aside or p written
+	// with any other class value comes through with the attribute dropped.
+	// Anchored with \A and \z for the reason blobSrc gives: unanchored, the
+	// legal value plus trailing text ("callout callout-note extra") would
+	// also match.
+	calloutClass      = regexp.MustCompile(`\Acallout callout-(note|tip|important|warning|caution)\z`)
+	calloutTitleClass = regexp.MustCompile(`\Acallout-title\z`)
 )
 
 // linkHref is the only shape an a[href] may take: spec 021 section 8.1's three
@@ -209,6 +222,14 @@ func buildPolicy() *bluemonday.Policy {
 	// scoped to one element and one exact value, not a general reopening of
 	// class/style.
 	p.AllowAttrs("class").Matching(mermaidClass).OnElements("pre")
+
+	// callout.go's markup (plan doc 175, WL-415/WL-416): the aside and its
+	// title paragraph, and only those two exact class shapes. "aside" is
+	// already in AllowElements above (it predates this plan); what class
+	// stays stripped everywhere else keeps meaning "not a styling hook a
+	// body can choose its own value for."
+	p.AllowAttrs("class").Matching(calloutClass).OnElements("aside")
+	p.AllowAttrs("class").Matching(calloutTitleClass).OnElements("p")
 
 	// Media, pinned to blobs served by this server.
 	p.AllowAttrs("src").Matching(blobSrc).OnElements("img", "video", "source")
