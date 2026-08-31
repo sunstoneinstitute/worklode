@@ -172,6 +172,30 @@ type ApprovalRow struct {
 	Age               string
 }
 
+// --- inbox (spec 056 §3) -----------------------------------------------------
+
+// InboxView is the cross-project inbox at "/inbox": what is waiting on the
+// signed-in actor, in 056 §3.2's fixed bucket order. Only buckets that hold
+// something are present, so the page never renders an empty heading.
+type InboxView struct {
+	Page    PageProps
+	Buckets []InboxBucket
+}
+
+// InboxBucket is one §3.2 bucket: its heading and its items, already ranked.
+type InboxBucket struct {
+	Label string
+	Items []InboxItem
+}
+
+// InboxItem is one row: the text it shows, where it links, and a muted
+// detail line (project, age).
+type InboxItem struct {
+	Text   string
+	Href   string
+	Detail string
+}
+
 // --- task -------------------------------------------------------------------
 
 // TaskView is one task's detail page. Task/Holder/Progress/Attachments embed

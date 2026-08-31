@@ -68,12 +68,44 @@ type concernRoot struct {
 	children map[string][]store.ProjectWorkFact
 }
 
+// rankedRoot is one root cause after det-v1's scoring, with the two scores
+// the evidence sentence also reports. The cockpit renders these as
+// SecondaryConcerns; the inbox (056 §3.3) reads root.held to place a task in
+// its work buckets, which is why the ranking is exposed as roots and not
+// only as its rendered form.
+type rankedRoot struct {
+	root     *concernRoot
+	fanOut   int
+	oldestAt time.Time
+}
+
 // rankSecondaryConcerns builds the cockpit's SecondaryConcerns per det-v1: one
 // entry per root cause, ordered highest-signal first. Returns an empty (never
 // nil) slice when the project has no ready-and-blocked task (§9 — an empty
 // concern set is not an error case to special-case, just the natural result
 // of an empty held set).
 func rankSecondaryConcerns(facts []store.ProjectWorkFact, now time.Time) []model.SecondaryConcern {
+	ranked := rankConcernRoots(facts, now)
+	out := make([]model.SecondaryConcern, 0, len(ranked))
+	for _, s := range ranked {
+		out = append(out, model.SecondaryConcern{
+			Kind:  "blocker",
+			Title: rootTitle(s.root),
+			URL:   rootURL(s.root),
+			Evidence: model.EvidenceSummary{
+				Category: string(evidenceDeclared),
+				Summary:  rootEvidence(s.root, s.fanOut, s.oldestAt, now),
+			},
+		})
+	}
+	return out
+}
+
+// rankConcernRoots is det-v1 itself: find each ready-and-blocked task's root
+// causes, score every root by (best held priority, fan-out, oldest
+// blocked-since) with the root id as the final tiebreak, and return them
+// highest-signal first.
+func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) []rankedRoot {
 	factsByID := make(map[string]store.ProjectWorkFact, len(facts))
 	for _, f := range facts {
 		factsByID[f.Task.ID] = f
@@ -86,7 +118,7 @@ func rankSecondaryConcerns(facts []store.ProjectWorkFact, now time.Time) []model
 		}
 	}
 	if len(held) == 0 {
-		return []model.SecondaryConcern{}
+		return nil
 	}
 
 	roots := map[string]*concernRoot{}
@@ -156,17 +188,9 @@ func rankSecondaryConcerns(facts []store.ProjectWorkFact, now time.Time) []model
 		return cmp.Compare(a.root.ref.id, b.root.ref.id)
 	})
 
-	out := make([]model.SecondaryConcern, 0, len(stats))
+	out := make([]rankedRoot, 0, len(stats))
 	for _, s := range stats {
-		out = append(out, model.SecondaryConcern{
-			Kind:  "blocker",
-			Title: rootTitle(s.root),
-			URL:   rootURL(s.root),
-			Evidence: model.EvidenceSummary{
-				Category: string(evidenceDeclared),
-				Summary:  rootEvidence(s.root, s.fanOut, s.oldestAt, now),
-			},
-		})
+		out = append(out, rankedRoot{root: s.root, fanOut: s.fanOut, oldestAt: s.oldestAt})
 	}
 	return out
 }
