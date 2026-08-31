@@ -69,6 +69,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(runBoardRenderOutcomes, ", ") +
 			"). A rising \"empty\" share means projects are landing on a run board with no live work. Bounded by construction: no project or task id is a label here.",
 	}, []string{"outcome"})
+	s.inboxRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_inbox_renders_total",
+		Help: "Cross-project inbox page renders (GET /inbox, 056 §3), by outcome (" +
+			strings.Join(inboxRenderOutcomes, ", ") +
+			"). A rising \"empty\" share means people are landing on an inbox with nothing waiting on them. Bounded by construction: no actor or task id is a label here.",
+	}, []string{"outcome"})
 	s.authzDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_authz_decisions_total",
 		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
@@ -221,7 +227,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
@@ -274,6 +280,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// reads as a flat zero rather than as no-data.
 	for _, outcome := range runBoardRenderOutcomes {
 		s.runBoardRenders.WithLabelValues(outcome)
+	}
+	// Both inbox outcomes, so an instance where nobody has anything waiting
+	// on them reads as a flat zero rather than as no-data.
+	for _, outcome := range inboxRenderOutcomes {
+		s.inboxRenders.WithLabelValues(outcome)
 	}
 	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove",
 		formRestoreTask, formRestoreDoc} {
@@ -568,6 +579,26 @@ func (s *server) observeRunBoardRender(outcome string) {
 		return
 	}
 	s.runBoardRenders.WithLabelValues(outcome).Inc()
+}
+
+// The inbox's two render outcomes (see inbox.go's inboxPage), which are also
+// this metric's only label values: "empty" when assembleInbox found nothing
+// waiting (including the signed-out case, which never calls it), "rendered"
+// otherwise.
+const (
+	inboxRenderEmpty    = "empty"
+	inboxRenderRendered = "rendered"
+)
+
+var inboxRenderOutcomes = []string{inboxRenderEmpty, inboxRenderRendered}
+
+// observeInboxRender records one inbox page render, by outcome. Nil-safe:
+// tests build a *server directly without initMetrics.
+func (s *server) observeInboxRender(outcome string) {
+	if s.inboxRenders == nil {
+		return
+	}
+	s.inboxRenders.WithLabelValues(outcome).Inc()
 }
 
 // formOutcome classifies a creation-form error for the
