@@ -11,8 +11,10 @@
 # worker's tree fast-forwarded to origin/main, which means an edit to the
 # skill reaches every worker on its next respawn.
 #
-# Usage: supervisor.sh <window> [lode worktree next filter flags...]
+# Usage: supervisor.sh <window> [focus...]
 #   e.g. supervisor.sh gha-chore1 --project worklode --kind chore
+#        supervisor.sh gha-spec1 --project worklode 032
+#        supervisor.sh gha-unblock1 --project worklode unblock
 #
 # The window names the worker, and its working tree is derived from it rather
 # than configured separately: every worker gets its own linked worktree at
@@ -21,8 +23,9 @@
 # two agents in the same one would contend over all three.
 #
 # Everything after the window is substituted for $ARGUMENTS in the skill body,
-# so only flags the skill accepts belong there: --project, --kind,
-# --strict-focus.
+# so it takes whatever focus that skill resolves: the scope and filter flags
+# (--project, --repo, --kind, --strict-focus, --max), a spec or plan ref, a
+# task id, or one of its focus words (bugs, chores, unblock).
 set -euo pipefail
 
 AGENT_ROOT=${AGENT_ROOT:-/home/ghrunner/gha-agent}
