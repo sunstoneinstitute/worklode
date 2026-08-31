@@ -74,8 +74,11 @@ func defaultPR(taskID string) PullRequest {
 	}
 }
 
+// TestTaskIDFromRef, TestTaskIDFromRefCustomTemplate, and
+// TestTaskIDFromRefGeneralPrefix are not t.Parallel(): SetBranchTemplate
+// mutates a process-global (branchname_test.go's tests follow the same
+// rule, for the same reason).
 func TestTaskIDFromRef(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
@@ -102,7 +105,6 @@ func TestTaskIDFromRef(t *testing.T) {
 }
 
 func TestTaskIDFromRefCustomTemplate(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate("lode/{{ .id }}-{{ .slug }}"); err != nil {
 		t.Fatal(err)
@@ -164,7 +166,6 @@ func TestTaskIDFromBody(t *testing.T) {
 }
 
 func TestTaskIDFromRefGeneralPrefix(t *testing.T) {
-	t.Parallel()
 	t.Cleanup(func() { SetBranchTemplate("") })
 	if err := SetBranchTemplate(""); err != nil {
 		t.Fatal(err)
