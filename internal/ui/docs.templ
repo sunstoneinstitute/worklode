@@ -88,7 +88,7 @@ templ Doc(v DocView) {
 					<div class="bd">
 						@tableWrap("Versions") {
 							<table>
-								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Created at</th></tr>
+								<tr><th>Version</th><th>Title</th><th>Issued</th><th>Snapshot at</th></tr>
 								for _, ver := range v.Versions {
 									<tr>
 										<td class="mono"><a href={ docVersionURL(v.Doc.ID, ver.Version) }>{ ver.Version }</a></td>
@@ -175,7 +175,7 @@ templ DocVersion(v DocVersionView) {
 					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Doc.Project }>{ v.Doc.Project }</a></span>
 				</p>
 				<p class="muted small">
-					Created { fmtTime(v.Version.CreatedAt) }
+					Snapshot { fmtTime(v.Version.CreatedAt) }
 					if v.Version.Issued != "" {
 						{ " · issued " + v.Version.Issued }
 					}

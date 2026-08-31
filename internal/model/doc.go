@@ -70,20 +70,24 @@ type DocSection struct {
 // DocVersionSummary is one entry in a document's version list: a past or
 // current version's identity without its body.
 type DocVersionSummary struct {
-	Version   int       `json:"version"`
-	Title     string    `json:"title"`
-	Issued    string    `json:"issued"`
+	Version int    `json:"version"`
+	Title   string `json:"title"`
+	Issued  string `json:"issued"`
+	// CreatedAt is the version's true creation time for a superseded row,
+	// but docs.updated_at (drifts on status/supersession/soft-delete) for
+	// the current row (WL-346).
 	CreatedAt time.Time `json:"created_at"`
 }
 
 // DocVersion is the full content of one document version, current or
 // superseded.
 type DocVersion struct {
-	Doc       int64     `json:"doc"`
-	Version   int       `json:"version"`
-	Title     string    `json:"title"`
-	Body      string    `json:"body"`
-	Issued    string    `json:"issued"`
+	Doc     int64  `json:"doc"`
+	Version int    `json:"version"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	Issued  string `json:"issued"`
+	// CreatedAt: see DocVersionSummary.CreatedAt (WL-346).
 	CreatedAt time.Time `json:"created_at"`
 }
 
