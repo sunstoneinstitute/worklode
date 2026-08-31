@@ -1859,6 +1859,12 @@ nav.local a .cnt {
 .prose .callout-caution {
   --callout-c: var(--danger);
 }
+.prose mark {
+  background: var(--warn-bg);
+  color: var(--ink);
+  border-radius: 3px;
+  padding: 0 3px;
+}
 .prose img,.prose video {
   max-width: 100%;
   height: auto;
