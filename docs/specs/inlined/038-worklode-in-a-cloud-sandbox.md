@@ -229,23 +229,35 @@ watching. `AskUserQuestion` assumes exactly that audience, so a headless worker 
 genuine judgment call has no channel to ask one — it stalls against a UI nobody can see, or the
 model guesses.
 
-A spike (`docs/research/askuserquestion-mcp-redirect.md`) verified that Claude Code's own
-extension points can redirect an `AskUserQuestion` call to a worklode-controlled tool instead: a
-`PreToolUse` hook blocking the call and naming a replacement, or a plain prompt instruction, both
-held at 100% across 280 reps. The redirect mechanism is not the gap. Two things are: nothing
-delivers the human's actual answer back to a blocked worker process, and the redirect is a
-followed instruction, not an enforced guarantee.
+Two of the three pieces this seam needs now exist.
 
-**Declined for now, named trigger** — the pattern §2.1 and §5.1 already use. The trigger to
-revisit is the one §5.1 names for an external runtime: unattended sessions becoming common enough,
-via §5's dispatch seam or 032's agent pools, that stalling on an unanswerable question is a real
-cost rather than a hypothetical one. Building it means designing the answer-delivery channel
-first — a pending-question row, a cockpit or CLI surface to answer it, a wait/poll on worklode's
-side — which the spike deliberately did not attempt.
+**The redirect works.** A spike (`docs/research/askuserquestion-mcp-redirect.md`) verified that
+Claude Code's own extension points can redirect an `AskUserQuestion` call to a worklode-controlled
+tool instead: a `PreToolUse` hook blocking the call and naming a replacement, or a plain prompt
+instruction, both held at 100% across 280 reps. It stays a followed instruction, not an enforced
+guarantee.
 
-Given §4.2's precedent, the mechanism this seam would need — an MCP server exposing the
-replacement tool — has the identical constraint hooks already have here: baked into the image at
-build time, not registered mid-session.
+**Server-to-session delivery works.** `docs/plans/2026-08-25-steering-instructions.md` shipped
+`lode channel serve`: a local stdio MCP relay the session spawns as a child process, which polls
+the backbone over HTTPS and turns rows queued by `lode task instruct` into
+`notifications/claude/channel` lines inside the live session. It was built to steer a supervisor
+rather than to answer a question, but it is the same direction of travel and the same process
+would carry an answer. It also corrects an assumption this section made: the relay is registered
+by an `.mcp.json` entry in the checkout plus two launch flags, and a launcher that writes both
+before it execs the agent is early enough. §4.2's build-time rule governs *hooks*, which fire on
+`SessionStart`; it does not extend to MCP servers, and the launch flags are not the image's to
+supply in any case.
+
+**What is missing is the question direction**: a pending-question row the worker writes, a cockpit
+or CLI surface to answer it, and a worker-side wait that turns the answer back into the tool result
+`AskUserQuestion` expects. The relay's at-most-once delivery, an acceptable tradeoff for short
+human-paced steering text, also needs revisiting for an answer a worker is blocked on.
+
+**Still declined, same trigger** — the pattern §2.1 and §5.1 already use. The trigger to revisit is
+the one §5.1 names for an external runtime: unattended sessions becoming common enough, via §5's
+dispatch seam or 032's agent pools, that stalling on an unanswerable question is a real cost rather
+than a hypothetical one. A session with a human attached to it remotely is not that case — it has
+the audience `AskUserQuestion` assumes, and needs none of this.
 
 ## 5. Seams for backbone-initiated dispatch
 
