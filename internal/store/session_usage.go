@@ -726,6 +726,43 @@ func (s *Store) TaskCost(ctx context.Context, taskID string, includeChildren boo
 	return &TaskCost{CostReport: *report, Sessions: sessions}, nil
 }
 
+// TaskCostsForTasks returns per-currency cost totals for each of the given
+// tasks, keyed by task id. Same pricing join as TaskCost's window-less
+// path — agent session usage on the task's leases, priced by model_prices
+// — grouped by task and currency in SQL rather than fanned out per task.
+// A task with no priced usage has no entry. Never hardcode a rate.
+//
+// Only Currency and Cost are populated on the returned CostTotals: the board
+// this feeds renders no token breakdown, so Tokens/UnpricedTokens/Overhead*
+// are left zero-valued rather than adding a slimmer type.
+func (s *Store) TaskCostsForTasks(ctx context.Context, taskIDs []string) (map[string][]CostTotal, error) {
+	if len(taskIDs) == 0 {
+		return map[string][]CostTotal{}, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT l.task_id, u.cost_currency,
+		        SUM(u.cost_amount)::numeric(14,6)::text
+		   FROM agent_session_usage u
+		   JOIN agent_sessions s ON s.id = u.agent_session_id
+		   JOIN leases l ON l.id = s.lease_id
+		  WHERE l.task_id = ANY($1) AND u.cost_amount IS NOT NULL
+		  GROUP BY l.task_id, u.cost_currency
+		  ORDER BY l.task_id, u.cost_currency`, taskIDs)
+	if err != nil {
+		return nil, fmt.Errorf("read costs for %d tasks: %w", len(taskIDs), err)
+	}
+	return groupRows(rows, fmt.Sprintf("read costs for %d tasks", len(taskIDs)),
+		func(r rowScanner) (string, CostTotal, error) {
+			var taskID string
+			var t CostTotal
+			if err := r.Scan(&taskID, &t.Currency, &t.Cost); err != nil {
+				return "", CostTotal{}, err
+			}
+			return taskID, t, nil
+		})
+}
+
 // scanCostReport scans a usage_day/cost_currency query in the CostReport
 // column shape — used by both ProjectCost (from the project_daily_cost
 // rollup) and TaskCost (aggregated live from agent_session_usage) — into

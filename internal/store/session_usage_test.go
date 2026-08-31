@@ -874,6 +874,65 @@ func TestTaskCostUnpricedTokens(t *testing.T) {
 	}
 }
 
+// TestTaskCostsForTasks covers the bulk reader: one query answers every task
+// id, each task's totals match what TaskCost reports for it (the two paths
+// must not drift), a task with no priced usage has no entry, and the empty
+// input is a fast path that never touches the database.
+func TestTaskCostsForTasks(t *testing.T) {
+	t.Parallel()
+	s, _ := openLeaseStore(t)
+	ctx := t.Context()
+
+	leaseA := usageSession(t, s, "host:/.worktrees/a", "sess-a")
+	reportUsage(t, s, leaseA, "sess-a", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 1000}},
+	})
+	leaseB := usageSession(t, s, "host:/.worktrees/b", "sess-b")
+	reportUsage(t, s, leaseB, "sess-b", []SessionUsageBucket{
+		{Day: usageDay1, Model: "claude-sonnet-5", Tokens: TokenCounts{Output: 2000}},
+	})
+	unused := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	got, err := s.TaskCostsForTasks(ctx, []string{leaseA.TaskID, leaseB.TaskID, unused.ID})
+	if err != nil {
+		t.Fatalf("TaskCostsForTasks: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d tasks, want 2 (the task with no usage must be absent): %+v", len(got), got)
+	}
+	if _, ok := got[unused.ID]; ok {
+		t.Fatalf("task with no usage got an entry: %+v", got[unused.ID])
+	}
+
+	for _, lease := range []*Lease{leaseA, leaseB} {
+		want, err := s.TaskCost(ctx, lease.TaskID, false, time.Time{}, time.Time{})
+		if err != nil {
+			t.Fatalf("TaskCost %s: %v", lease.TaskID, err)
+		}
+		bulk, ok := got[lease.TaskID]
+		if !ok {
+			t.Fatalf("task %s missing from bulk result", lease.TaskID)
+		}
+		if len(bulk) != len(want.Totals) {
+			t.Fatalf("task %s: got %d currency totals, want %d", lease.TaskID, len(bulk), len(want.Totals))
+		}
+		for i, wt := range want.Totals {
+			if bulk[i].Currency != wt.Currency || bulk[i].Cost != wt.Cost {
+				t.Fatalf("task %s total %d: got %+v, want currency %s cost %s",
+					lease.TaskID, i, bulk[i], wt.Currency, wt.Cost)
+			}
+		}
+	}
+
+	empty, err := s.TaskCostsForTasks(ctx, nil)
+	if err != nil {
+		t.Fatalf("TaskCostsForTasks(nil): %v", err)
+	}
+	if empty == nil || len(empty) != 0 {
+		t.Fatalf("TaskCostsForTasks(nil): got %v, want empty non-nil map", empty)
+	}
+}
+
 // --- Project overhead usage -------------------------------------------
 
 // The load-bearing case: overhead usage is a cumulative transcript total, so
