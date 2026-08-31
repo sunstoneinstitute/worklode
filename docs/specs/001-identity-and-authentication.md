@@ -87,14 +87,35 @@ in per-handler checks.
 - Config removed: `LODE_GITHUB_ORG`, `LODE_GITHUB_ADMIN_TEAM`. The App no
   longer needs the Organization → Members: read permission.
 - Existing `github:<id>` actor rows are **merged** into the person's Keycloak
-  actor: every row referencing them (`tasks.created_by`, `tasks.assignee`,
-  `tokens.actor_id`, `github_user_tokens.actor_id`, `leases.actor_id`) is
-  repointed to the Keycloak actor id, then the GitHub row is deleted.
+  actor: every row referencing them is repointed to the Keycloak actor id,
+  then the duplicate row is deleted. The same procedure governs any later
+  duplicate-actor pair, such as the one `lode login` creates when a person
+  already has an actor under another id.
+
+  **The columns to repoint are enumerated from the Postgres catalog, never
+  from a list carried here.** A hand-kept list falls behind the schema, and
+  following a stale one leaves rows pointing at the deleted actor or aborts
+  partway on an `ON DELETE RESTRICT` constraint:
+
+  ```sql
+  SELECT c.conrelid::regclass AS tbl, a.attname AS col
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid
+                       AND a.attnum = ANY (c.conkey)
+   WHERE c.contype = 'f' AND c.confrelid = 'actors'::regclass;
+  ```
+
+  Repointing collides wherever a unique constraint covers the actor column
+  and both actors already appear. `project_participants` is the live case:
+  primary key `(project_id, actor_id, role)`, plus a partial unique index on
+  `(project_id, actor_id)` for the lead and deputy flags. The merge resolves
+  such a collision by dropping the duplicate row instead of repointing it.
+
   Worklode is in production with tasks and tokens referencing these rows, so
   the merge runs as a reviewed one-off SQL script against the production
   database with explicit human approval rather than as a schema migration.
-  The append-only event log keeps historical `github:<id>` ids as provenance
-  and is never rewritten.
+  The append-only event log keeps historical ids as provenance and is never
+  rewritten.
 
 ## 4. Keycloak realm configuration {#sec-4}
 
