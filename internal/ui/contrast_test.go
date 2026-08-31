@@ -185,6 +185,20 @@ var textPairs = []struct{ fg, bg, where string }{
 	{"crit", "crit-bg", ".chip.crit, .formerr"},
 	{"info", "info-bg", ".chip.info, .mode-name"},
 	{"accent-ink", "accent", ".chip.lead, .btn.primary, .decision .dh"},
+	// Callout title colours (WL-417, plan doc 175 task 3): each kind's title
+	// sits on the callout's own background (--surface-2) and, since a callout
+	// can nest inside another card, on --surface too. --ok/--warn/--info are
+	// already held above on their own -bg pairs; --imp and --danger are new.
+	{"ok", "surface", ".prose .callout-tip .callout-title"},
+	{"ok", "surface-2", ".prose .callout-tip .callout-title"},
+	{"warn", "surface", ".prose .callout-warning .callout-title"},
+	{"warn", "surface-2", ".prose .callout-warning .callout-title"},
+	{"info", "surface", ".prose .callout-note .callout-title"},
+	{"info", "surface-2", ".prose .callout-note .callout-title"},
+	{"imp", "surface", ".prose .callout-important .callout-title"},
+	{"imp", "surface-2", ".prose .callout-important .callout-title"},
+	{"danger", "surface", ".prose .callout-caution .callout-title"},
+	{"danger", "surface-2", ".prose .callout-caution .callout-title"},
 }
 
 func TestTextContrastMeetsAA(t *testing.T) {
