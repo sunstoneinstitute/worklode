@@ -9,7 +9,7 @@ package ui
 
 templ Home(v HomeView) {
 	@Page(v.Page) {
-		@globalShell(v.Page.ActiveGlobal) {
+		@globalShell() {
 			<h1>Home</h1>
 			if v.Mode == "empty" {
 				<p class="muted">You are not on any project yet. <a href="/projects">Browse all projects</a></p>

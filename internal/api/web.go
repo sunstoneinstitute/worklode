@@ -262,7 +262,7 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 	s.observeHomeRender(mode)
 
 	s.renderWeb(w, r, http.StatusOK, "home page", ui.Home(ui.HomeView{
-		Page:  ui.PageProps{Title: "worklode: home", ActiveGlobal: "home"},
+		Page:  ui.PageProps{Title: "worklode: home"},
 		Mode:  mode,
 		Cards: cards,
 	}))

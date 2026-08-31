@@ -12,7 +12,7 @@ import (
 func TestApprovalsQueueMixesKinds(t *testing.T) {
 	var b strings.Builder
 	err := Approvals(ApprovalsView{
-		Page: PageProps{Title: "Reviews", ActiveGlobal: "reviews"},
+		Page: PageProps{Title: "Reviews"},
 		Rows: []ApprovalRow{{
 			ID: 12, Kind: "PR", EntityID: "sunstoneinstitute/worklode#242",
 			Title: "Approvals for documents", URL: "https://github.com/x/y/pull/242",
