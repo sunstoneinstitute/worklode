@@ -357,6 +357,31 @@ func (s *Store) PRsForTask(ctx context.Context, taskID string) ([]PullRequest, e
 	return collectRows(rows, fmt.Sprintf("PRs for task %s", taskID), byValue(scanPR))
 }
 
+// OpenPRsForProject returns every open or merged pull request bound to a
+// task in projectID, newest UpdatedAt first. One query: pull_requests
+// filtered to the task ids in projectID via a tasks subquery — a plain join
+// would make state and updated_at ambiguous, since tasks has its own columns
+// of both names. Closed-unmerged PRs are out — the board shows the change
+// that is or became the task's delivery, not every attempt.
+func (s *Store) OpenPRsForProject(ctx context.Context, projectID string) ([]PullRequest, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+prColumns+` FROM pull_requests
+		 WHERE state IN ('open', 'merged')
+		   AND task_id IN (SELECT id FROM tasks WHERE project_id = $1)
+		 ORDER BY updated_at DESC`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("open prs for project %s: %w", projectID, err)
+	}
+	out, err := collectRows(rows, fmt.Sprintf("open prs for project %s", projectID), byValue(scanPR))
+	if err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = []PullRequest{}
+	}
+	return out, nil
+}
+
 // ciRunColumns is the SELECT list scanCIRun expects, in order.
 const ciRunColumns = `repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at`
 
