@@ -37,7 +37,7 @@ func renderHome(t *testing.T, v HomeView) string {
 
 func TestHomeActorMode(t *testing.T) {
 	body := renderHome(t, HomeView{
-		Page: PageProps{Title: "Home", ActiveGlobal: "home"},
+		Page: PageProps{Title: "Home"},
 		Mode: "actor",
 		Cards: []HomeCard{
 			{
@@ -79,7 +79,7 @@ func TestHomeActorMode(t *testing.T) {
 
 func TestHomeOpenModeOmitsRoleAndSignal(t *testing.T) {
 	body := renderHome(t, HomeView{
-		Page: PageProps{Title: "Home", ActiveGlobal: "home"},
+		Page: PageProps{Title: "Home"},
 		Mode: "open",
 		Cards: []HomeCard{
 			{ProjectID: "p1", Name: "Alpha", Key: "ALP", InProgress: 1, InReview: 0, Blocked: 0},
@@ -99,7 +99,7 @@ func TestHomeOpenModeOmitsRoleAndSignal(t *testing.T) {
 
 func TestHomeEmptyMode(t *testing.T) {
 	body := renderHome(t, HomeView{
-		Page: PageProps{Title: "Home", ActiveGlobal: "home"},
+		Page: PageProps{Title: "Home"},
 		Mode: "empty",
 	})
 	if !strings.Contains(body, "You are not on any project yet.") {
@@ -118,7 +118,7 @@ func TestHomeEmptyMode(t *testing.T) {
 
 func TestHomeOpenModeZeroProjects(t *testing.T) {
 	body := renderHome(t, HomeView{
-		Page: PageProps{Title: "Home", ActiveGlobal: "home"},
+		Page: PageProps{Title: "Home"},
 		Mode: "open",
 	})
 	if !strings.Contains(body, "No projects yet.") {

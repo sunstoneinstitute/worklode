@@ -75,9 +75,10 @@
 
 *{box-sizing:border-box}
 html,body{margin:0}
-/* The 56px topbar and 48px global navigation row are sticky, so in-page jumps
- * and focused controls need room above them (WCAG 2.4.11). */
-html{scroll-padding-top:112px}
+/* The 56px topbar is sticky and now carries the global navigation itself
+ * (spec 056 §1), so in-page jumps and focused controls need room above it,
+ * with headroom over its 57px border box (WCAG 2.4.11). */
+html{scroll-padding-top:64px}
 /* A <pre> holds text nobody can re-wrap — a stored document body, a code block
  * — so it scrolls inside itself rather than widening the page (WCAG 1.4.10
  * Reflow). .prose pre restates the same thing for the sanitised task body. */
@@ -98,19 +99,20 @@ button{font-family:inherit;cursor:pointer}
 .skip-link:focus{left:8px;top:8px}
 
 /* ---------- top bar ---------- */
+/* One navigation row (spec 056 §1): brand, global destinations, actor
+ * controls, all inside the single sticky bar. */
 .topbar{
   position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:20px;
   padding:0 20px;height:56px;background:var(--surface);border-bottom:1px solid var(--line);
 }
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap;color:var(--ink);flex:0 0 auto}
+.brand:hover{text-decoration:none}
 .brand .mark{width:26px;height:22px;display:grid;place-items:center;flex:0 0 auto}
 .brand .mark img{width:100%;height:100%;display:block;object-fit:contain}
-/* GitHub-style second header row: compact icon-and-label links with an active
- * underline. It remains the page's single Primary landmark at every width. */
-nav.global{
-  position:sticky;top:56px;z-index:29;display:flex;align-items:stretch;gap:4px;
-  min-height:48px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line)
-}
+/* GitHub-style tabs: compact icon-and-label links whose active underline sits
+ * on the bar's own bottom edge, which is why the nav stretches to the bar's
+ * full height. The page's single Primary landmark at every width. */
+nav.global{align-self:stretch;display:flex;align-items:stretch;gap:4px;min-width:0}
 nav.global a{
   position:relative;padding:0 10px;color:var(--ink-2);font-weight:500;white-space:nowrap;
   font-size:13.5px;display:flex;align-items:center;gap:7px
@@ -135,7 +137,7 @@ nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:v
 .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#266680,#0E1937);color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px;flex:0 0 auto}
 
 /* ---------- shell ---------- */
-.shell{display:grid;grid-template-columns:236px minmax(0,1fr);max-width:1440px;margin:0 auto;min-height:calc(100vh - 104px)}
+.shell{display:grid;grid-template-columns:236px minmax(0,1fr);max-width:1440px;margin:0 auto;min-height:calc(100vh - 56px)}
 .shell[data-global]{grid-template-columns:minmax(0,1fr)}
 .sidebar{border-right:1px solid var(--line);padding:20px 14px;background:var(--surface)}
 .backlink{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;
@@ -181,8 +183,9 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 @media(max-width:1080px){.mode.active{grid-template-columns:minmax(0,1fr)}}
 
 /* Below 880px the shell collapses to one column (spec 032 §10: reduced
- * columns, not a squeezed grid). The global row keeps five links plus More;
- * project-local navigation becomes a drawer. */
+ * columns, not a squeezed grid). The top bar wraps so the destinations keep a
+ * row of their own — three primary tabs plus More, which expands the two
+ * secondaries below the bar; project-local navigation becomes a drawer. */
 .tab-more{display:none}
 .drawer-toggle{display:none}
 .sheet-backdrop{display:none}
@@ -197,8 +200,15 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
   /* the head is a baseline row here, so the pill's block margin would misalign it */
   .mode-name{margin-top:0}
 
-  /* ---- global nav -> five links + More ---- */
-  nav.global{padding:0 8px;gap:0;flex-wrap:wrap}
+  /* ---- top bar wraps; global nav -> primary tabs + More ---- */
+  .topbar{height:auto;flex-wrap:wrap;gap:0 12px;padding:0 8px}
+  /* Two rows here (56px bar + the 48px destinations row, 105px with both
+   * borders), so an in-page jump needs more room above it than the one-row
+   * bar does (WCAG 2.4.11). */
+  html{scroll-padding-top:112px}
+  .brand{height:56px;padding-left:12px}
+  .top-right{height:56px}
+  nav.global{order:3;flex:0 0 100%;align-self:auto;gap:0;flex-wrap:wrap;border-top:1px solid var(--line)}
   nav.global .navicon{display:none}
   nav.global a.tab-secondary{
     display:none;order:2;flex:0 0 100%;min-height:44px;padding:0 16px;border-top:1px solid var(--line);
@@ -206,7 +216,8 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
   }
   nav.global a.tab-secondary.active{color:var(--ink);font-weight:600;background:var(--sunk)}
   nav.global a.tab-secondary.active::after{display:none}
-  body[data-open-panel="more"] nav.global{z-index:40;box-shadow:var(--shadow);max-height:70vh;overflow-y:auto}
+  body[data-open-panel="more"] .topbar{z-index:40;box-shadow:var(--shadow)}
+  body[data-open-panel="more"] nav.global{max-height:70vh;overflow-y:auto}
   body[data-open-panel="more"] nav.global a.tab-secondary{display:flex}
   nav.global a.tab-primary,nav.global .tab-more{
     order:1;flex:1 1 0;display:flex;align-items:center;justify-content:center;min-width:0;

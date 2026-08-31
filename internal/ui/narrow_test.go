@@ -170,7 +170,7 @@ func pages(t *testing.T) map[string]string {
 			GraphEnabled: true,
 		}),
 		"home": Home(HomeView{
-			Page: PageProps{Title: "Home", ActiveGlobal: "home"},
+			Page: PageProps{Title: "Home"},
 			Mode: "actor",
 			Cards: []HomeCard{
 				{ProjectID: "worklode", Name: "Worklode backbone", Key: "WL", RoleBadge: "Lead", Signal: "Three tasks are blocked on a decision only you can make", InProgress: 2, InReview: 1, Blocked: 1, CrewInitials: []string{"SB", "JD", "AK", "MP", "TL"}, CrewMore: 3, LastActivity: now},
@@ -223,7 +223,7 @@ func pages(t *testing.T) map[string]string {
 			}},
 		}),
 		"approvals": Approvals(ApprovalsView{
-			Page: PageProps{Title: "Reviews", ActiveGlobal: "reviews"},
+			Page: PageProps{Title: "Reviews"},
 			Rows: []ApprovalRow{{
 				ID: 12, Kind: "PR", EntityID: "sunstoneinstitute/worklode#242",
 				Title:  "Make the narrow-width reflow check runnable, so the WCAG fixes are measured",
@@ -383,7 +383,7 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 	flat := strings.Join(strings.Fields(b.String()), "")
 
 	for _, c := range []struct{ want, why string }{
-		{"scroll-padding-top:112px", "an in-page jump must clear both sticky header rows (WCAG 2.4.11)"},
+		{"scroll-padding-top:64px", "an in-page jump must clear the sticky top bar (WCAG 2.4.11)"},
 		{".tablewrap{overflow-x:auto", "a data table scrolls inside its own container (WCAG 1.4.10)"},
 		{".tablewrapth,.tablewraptd{padding:8px12px", "data-table cells need readable separation"},
 		{"pre{overflow-x:auto", "a stored document body cannot be re-wrapped, so it scrolls inside itself (WCAG 1.4.10)"},
@@ -391,7 +391,10 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{".wlrow.tl.t{white-space:normal", "a work row's title wraps below 880px instead of truncating to nothing (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere", "a work-row title holding an unbreakable identifier must break rather than widen the page (WCAG 1.4.10)"},
 		{".dodrow.def{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere", "a deliverable's artifact address has no soft wrap opportunity in it (WCAG 1.4.10)"},
-		{"nav.global{position:sticky;top:56px", "the global destinations stay in the second horizontal header row"},
+		{"nav.global{align-self:stretch;display:flex;align-items:stretch", "the global destinations live inside the sticky top bar, filling its height (spec 056 §1)"},
+		{".topbar{height:auto;flex-wrap:wrap;gap:012px", "below 880px the top bar wraps so the destinations keep a row of their own, with no seam between the two"},
+		{"html{scroll-padding-top:112px}", "the wrapped two-row top bar is 105px tall below 880px, and an in-page jump must clear it (WCAG 2.4.11)"},
+		{"nav.global{order:3;flex:00100%", "the wrapped destinations row spans the whole bar below 880px"},
 		{"nav.globala.tab-secondary{display:none;order:2;flex:00100%", "narrow layouts move secondary destinations under More"},
 		{".tab-more{display:flex;cursor:pointer", "narrow layouts expose the hidden destinations through More"},
 		{".dodrow.eva{display:flex;align-items:center;min-height:24px", "a deliverable's URL is a link on its own line, so it needs a 24px box (WCAG 2.5.8)"},

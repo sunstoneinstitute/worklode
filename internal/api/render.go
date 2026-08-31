@@ -118,7 +118,7 @@ func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsVie
 		out = append(out, row)
 	}
 	return ui.ApprovalsView{
-		Page: ui.PageProps{Title: "worklode: reviews", ActiveGlobal: "reviews"},
+		Page: ui.PageProps{Title: "worklode: reviews"},
 		Rows: out,
 	}
 }
@@ -255,7 +255,7 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.D
 // docsView maps the document corpus into the /docs index.
 func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 	v := ui.DocsView{
-		Page: ui.PageProps{Title: "worklode: documents"},
+		Page: ui.PageProps{Title: "worklode: documents", ActiveGlobal: "knowledge"},
 		Docs: make([]ui.DocRow, 0, len(docs)),
 	}
 	// Bodies are dropped for the same reason the JSON list drops them: the
@@ -278,7 +278,7 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 // md may be nil, which renders every body afresh; see the mdcache field.
 func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail) ui.DocView {
 	return ui.DocView{
-		Page: ui.PageProps{Title: "worklode: " + d.Slug},
+		Page: ui.PageProps{Title: "worklode: " + d.Slug, ActiveGlobal: "knowledge"},
 		Doc:  d.Doc,
 		// Rendered here rather than in ui for the reason taskView gives.
 		// DocBody rather than Body: a document's {#sec-N} headings are
@@ -301,7 +301,7 @@ func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail) 
 func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc, ver model.DocVersion, projectKey string) ui.DocVersionView {
 	docURL := docCanonicalURL(doc, projectKey)
 	return ui.DocVersionView{
-		Page:     ui.PageProps{Title: "worklode: " + doc.Slug + " v" + strconv.Itoa(ver.Version)},
+		Page:     ui.PageProps{Title: "worklode: " + doc.Slug + " v" + strconv.Itoa(ver.Version), ActiveGlobal: "knowledge"},
 		Doc:      doc,
 		Ref:      docRef(doc),
 		Version:  ver,

@@ -6,7 +6,7 @@ package ui
 
 templ Projects(v ProjectsView) {
 	@Page(v.Page) {
-		@globalShell(v.Page.ActiveGlobal) {
+		@globalShell() {
 			<h1>Projects</h1>
 			if len(v.Projects) == 0 {
 				<p class="muted">No projects yet.</p>

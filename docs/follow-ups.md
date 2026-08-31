@@ -717,11 +717,14 @@ while dogfooding it against the real corpus.
   because it belongs to 044 rather than to the cockpit spec. 032 §2 (or 044
   §5, which lists only the API and CLI surfaces) is owed an amendment naming
   it, so the destination list stops being a spec that the page contradicts.
+  Spec 056 §1 does not settle this: it amends 032 §2's *global* list only and
+  says project-local navigation is untouched.
 - `[P3]` **The Deleted page is per project and has no instance-wide view.** A
   document or task is always project-scoped, so nothing is unreachable, but
   reviewing every delete across an instance still means visiting each project.
   A global destination was out of WL-238's scope for the same reason the nav
-  item above is a deviation: it would be a second addition to 032 §2's list.
+  item above is a deviation: it would be an addition to a spec's destination
+  list — and after 056 §1 that list is five, deliberately shorter.
 
 ## From WL-284 — a doc note's edges (2026-08-23)
 
