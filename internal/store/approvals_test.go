@@ -647,3 +647,257 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 		t.Errorf("ApprovalsAwaiting = %+v, want horndb:1 (the doc lane)", counts)
 	}
 }
+
+// seedApprovalRow inserts one approvals row directly, committed against s.db
+// rather than an open tx -- ListInboxReviews and HasInboxItems both read
+// through s.db, and these fixtures need states (changes_requested, resolved)
+// and created_at values InsertAwaitingApproval's always-'awaiting'/now shape
+// cannot produce.
+func seedApprovalRow(t *testing.T, s *Store, entityKind, entityID, subjectRevision string,
+	requiredRole, requiredActor *string, state string, createdAt time.Time) int64 {
+	t.Helper()
+	var id int64
+	err := s.db.QueryRowContext(t.Context(),
+		`INSERT INTO approvals
+		   (entity_kind, entity_id, subject_revision, required_role, required_actor, state, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		entityKind, entityID, subjectRevision, requiredRole, requiredActor, state, createdAt,
+	).Scan(&id)
+	if err != nil {
+		t.Fatalf("seed approval %s %s: %v", entityKind, entityID, err)
+	}
+	return id
+}
+
+// TestListInboxReviews: 056 §3.1's org-wide read, oldest first, no
+// membership predicate (that lives in the pure assembly per §3.3).
+func TestListInboxReviews(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // project "horndb" (key HDB), actor "stig"
+	ctx := t.Context()
+	if err := s.CreateProject(ctx, "acme", "Acme", "ACM"); err != nil {
+		t.Fatal(err)
+	}
+
+	taskH := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "h", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+	taskA := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "acme", Title: "a", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+
+	prH := PullRequest{
+		Repo: "sunstoneinstitute/h", Number: 1, Title: "h pr", State: "open",
+		HeadRef: taskH.ID + "-fix", HeadSHA: "sha1",
+		URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		Author: "h-login",
+	}
+	if _, err := upsertPR(t, s, prH, ""); err != nil {
+		t.Fatal(err)
+	}
+	prA := PullRequest{
+		Repo: "sunstoneinstitute/a", Number: 1, Title: "a pr", State: "open",
+		HeadRef: taskA.ID + "-fix", HeadSHA: "sha2",
+		URL: "https://github.com/sunstoneinstitute/a/pull/1", OpenedAt: taskTestNow,
+		Author: "a-login",
+	}
+	if _, err := upsertPR(t, s, prA, ""); err != nil {
+		t.Fatal(err)
+	}
+	prClosed := PullRequest{
+		Repo: "sunstoneinstitute/h", Number: 2, Title: "closed pr", State: "open",
+		HeadRef: taskH.ID + "-old", HeadSHA: "sha3",
+		URL: "https://github.com/sunstoneinstitute/h/pull/2", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prClosed, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	role := "science-leads"
+	// prH's approval is the oldest (an hour before prA's) and carries a
+	// required_role lane instead of a required_actor.
+	seedApprovalRow(t, s, "pr", PREntityID(prH.Repo, prH.Number), "sha1",
+		&role, nil, "changes_requested", taskTestNow.Add(-time.Hour))
+	seedApprovalRow(t, s, "pr", PREntityID(prA.Repo, prA.Number), "sha2",
+		nil, nil, "awaiting", taskTestNow)
+	// Resolved -- must not appear.
+	seedApprovalRow(t, s, "pr", PREntityID(prClosed.Repo, prClosed.Number), "sha3",
+		nil, nil, "approved", taskTestNow)
+	// A doc-kind approval -- must not appear (entity_kind filter).
+	seedApprovalRow(t, s, "doc", "doc:999", "1", nil, nil, "awaiting", taskTestNow)
+
+	got, err := s.ListInboxReviews(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d rows, want 2 (only the two open pr approvals): %+v", len(got), got)
+	}
+	if got[0].EntityID != PREntityID(prH.Repo, prH.Number) || got[1].EntityID != PREntityID(prA.Repo, prA.Number) {
+		t.Fatalf("got entity ids %q, %q, want prH then prA (oldest first)",
+			got[0].EntityID, got[1].EntityID)
+	}
+	if got[0].Project != "horndb" || got[1].Project != "acme" {
+		t.Errorf("got projects %q, %q, want horndb, acme", got[0].Project, got[1].Project)
+	}
+	if got[0].AuthorLogin != "h-login" || got[1].AuthorLogin != "a-login" {
+		t.Errorf("got author logins %q, %q, want h-login, a-login", got[0].AuthorLogin, got[1].AuthorLogin)
+	}
+	if got[0].Title != "h pr" || got[0].URL != prH.URL {
+		t.Errorf("got title/url %q/%q, want %q/%q", got[0].Title, got[0].URL, "h pr", prH.URL)
+	}
+	if got[0].RequiredRole == nil || *got[0].RequiredRole != role {
+		t.Errorf("got[0].RequiredRole = %v, want %q", got[0].RequiredRole, role)
+	}
+	if got[0].RequiredActor != nil {
+		t.Errorf("got[0].RequiredActor = %v, want nil", got[0].RequiredActor)
+	}
+	if got[1].RequiredRole != nil || got[1].RequiredActor != nil {
+		t.Errorf("got[1] role/actor = %v/%v, want nil/nil", got[1].RequiredRole, got[1].RequiredActor)
+	}
+}
+
+// TestHasInboxItems: 056 §4's existence check, one subtest per branch the
+// brief names, each proving that branch alone (no other qualifying item for
+// the actor under test) rather than just an incidental true/false.
+func TestHasInboxItems(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty database", func(t *testing.T) {
+		t.Parallel()
+		s := OpenTestStore(t)
+		got, err := s.HasInboxItems(t.Context(), "nobody")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Error("got true, want false: nothing exists")
+		}
+	})
+
+	t.Run("assigned review", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig"
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "reviewer1", "human", "Reviewer One", false); err != nil {
+			t.Fatal(err)
+		}
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "stig",
+		})
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 1, Title: "pr", State: "open",
+			HeadRef: task.ID + "-fix", HeadSHA: "sha1",
+			URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		reviewer := "reviewer1"
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha1",
+			nil, &reviewer, "awaiting", taskTestNow)
+
+		// reviewer1 holds no project membership -- assignment alone must
+		// answer the check.
+		got, err := s.HasInboxItems(ctx, "reviewer1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got {
+			t.Error("got false, want true: reviewer1 is the review's required_actor")
+		}
+	})
+
+	t.Run("unassigned review in a led project", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig" leads it
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "creator2", "human", "Creator Two", false); err != nil {
+			t.Fatal(err)
+		}
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "creator2",
+		})
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 1, Title: "pr", State: "open",
+			HeadRef: task.ID + "-fix", HeadSHA: "sha1",
+			URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha1",
+			nil, nil, "awaiting", taskTestNow)
+
+		// stig neither created nor is assigned this task, and the review
+		// names no required_actor -- only the led-project bucket applies.
+		got, err := s.HasInboxItems(ctx, "stig")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got {
+			t.Error("got false, want true: stig leads horndb and the review is unassigned")
+		}
+	})
+
+	t.Run("non-member with nothing", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig" leads it
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "outsider", "human", "Outsider", false); err != nil {
+			t.Fatal(err)
+		}
+		// Noise: an active task and an assigned review, both stig's --
+		// outsider must still see nothing.
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "stig",
+		})
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 1, Title: "pr", State: "open",
+			HeadRef: task.ID + "-fix", HeadSHA: "sha1",
+			URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		stig := "stig"
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha1",
+			nil, &stig, "awaiting", taskTestNow)
+
+		got, err := s.HasInboxItems(ctx, "outsider")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Error("got true, want false: outsider is not a member, lead, assignee, creator, or reviewer of anything")
+		}
+	})
+
+	t.Run("active task the actor created", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig"
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "creator3", "human", "Creator Three", false); err != nil {
+			t.Fatal(err)
+		}
+		createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "creator3",
+		})
+
+		// creator3 holds no project membership -- authorship of the active
+		// task alone must answer the check.
+		got, err := s.HasInboxItems(ctx, "creator3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got {
+			t.Error("got false, want true: creator3 created an active task")
+		}
+	})
+}
