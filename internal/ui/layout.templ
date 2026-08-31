@@ -2,16 +2,23 @@ package ui
 
 // layout.templ is the application shell every page renders through: the
 // document head, skip link, the sticky top bar — brand link, global
-// navigation, theme toggle and avatar, one row (spec 056 §1) — and the
-// .shell each page's content fills via { children... }. Global pages have one
-// content column; project pages add a left sidebar for project-local
-// navigation. Both put the page's one <main id="main-content"> landmark after
-// every nav landmark, so "Skip to content" bypasses them all (WCAG 2.4.1).
-// Styled with the prototype design system (see
+// navigation, inbox icon, theme toggle and avatar, one row (spec 056 §1) —
+// and the .shell each page's content fills via { children... }. Global pages
+// have one content column; project pages add a left sidebar for
+// project-local navigation. Both put the page's one <main id="main-content">
+// landmark after every nav landmark, so "Skip to content" bypasses them all
+// (WCAG 2.4.1). Styled with the prototype design system (see
 // internal/ui/styles/app.tailwind.css): .topbar, nav.global, .shell,
 // .top-right/.iconbtn/.avatar. The self-hosted HTMX script tag is dormant
 // substrate (no hx-* behavior yet; spec 032 §11); the inline theme script
 // toggles data-theme on <html>, honoring the OS colour-scheme on first click.
+//
+// The inbox icon (spec 056 §4) links to /inbox on every page and carries a
+// small alert-toned dot when inboxDot(ctx) is true. ctx is a templ-provided
+// implicit, not a Go parameter of Page: renderWeb (internal/api/webform.go)
+// computes the has-items flag once per request, before rendering, and
+// carries it through the same context.Context Render already threads to
+// every nested component (internal/ui/context.go).
 //
 // Below 880px the top bar wraps: brand and controls keep the first row and
 // nav.global takes a full-width row beneath them, so the narrow behaviour 032
@@ -59,6 +66,12 @@ templ Page(p PageProps) {
 				</a>
 				@primaryNav(p.ActiveGlobal)
 				<div class="top-right">
+					<a href="/inbox" class="iconbtn" aria-label="Inbox">
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 2 6.5H4c.5-.5 2-2 2-6.5Z"></path><path d="M9.5 18.5a2.5 2.5 0 0 0 5 0"></path></svg>
+						if inboxDot(ctx) {
+							<span class="dot dot-alert"></span>
+						}
+					</a>
 					<button id="theme" type="button" class="iconbtn" aria-label="Toggle colour theme">
 						<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path></svg>
 					</button>
