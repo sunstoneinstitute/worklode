@@ -94,6 +94,44 @@ func gapSubject(g model.Gap) string {
 	return g.Repo
 }
 
+// --- run board (032 §8) ------------------------------------------------------
+
+// RunBoardView is a project's run board (032 §8): its live work grouped
+// into the spec's six fixed groups, rendered inside the project sidebar
+// frame like the other project-local destinations.
+type RunBoardView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	Groups       []RunGroupView
+}
+
+// RunGroupView is one §8 group in the spec's pinned order: its heading, the
+// rows in it, and how many more rows exist beyond the bound (always 0 for
+// Ready/Running/Waiting/Needs judgment, which are never bounded).
+type RunGroupView struct {
+	Label string
+	Rows  []RunRowView
+	More  int
+}
+
+// RunRowView is one task's row on the run board, every field pre-formatted
+// so the templ component stays dumb (see internal/api/runboard.go's
+// assembleRunBoard). Ready and terminal (Failed/Completed) rows carry only
+// TaskID/Title/TaskURL/Owner; Waiting rows also set Holds; Running and
+// Needs-judgment rows carry the full §8 fact list — Delegate, LeaseAge,
+// LastEvent, Costs, and the PR/check labels — left empty/nil rather than
+// invented when the underlying fact is absent.
+type RunRowView struct {
+	TaskID, Title, TaskURL string
+	Owner, Delegate        string
+	LeaseAge, LastEvent    string
+	Holds                  string
+	PRLabel, PRURL         string
+	CheckLabel             string
+	Costs                  []string
+}
+
 // --- projects portfolio -----------------------------------------------------
 
 // ProjectsView is the cross-project portfolio. It embeds model.Project rows
