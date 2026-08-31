@@ -54,3 +54,30 @@ func TestTaskPageRendersCallout(t *testing.T) {
 		t.Fatalf("callout rendered as a plain blockquote too:\n%s", body)
 	}
 }
+
+// TestTaskPageRendersDetailsAndMark is the same full-page-path regression as
+// TestTaskPageRendersCallout, for WL-433's .prose details/summary styling: a
+// task body with raw <details><summary> and <mark> HTML must still reach the
+// rendered page after mdrender's sanitiser, pinning the allowlist and the
+// stylesheet's subjects (.prose details, .prose summary, .prose mark)
+// together so a future allowlist change that would orphan those rules fails
+// this test instead of shipping silently.
+func TestTaskPageRendersDetailsAndMark(t *testing.T) {
+	t.Parallel()
+	task := &model.Task{ID: "WL-1", Project: "proj", Title: "t", Body: "<details><summary>More</summary>hidden</details>\n\n<mark>hot</mark>"}
+	view := taskView(nil, mdrender.ProjectKeys{}, task, ui.CockpitProject{}, false, nil, nil, nil)
+
+	var b strings.Builder
+	if err := ui.Task(view).Render(context.Background(), &b); err != nil {
+		t.Fatalf("render Task: %v", err)
+	}
+	body := b.String()
+	for _, want := range []string{
+		`<details><summary>More</summary>hidden</details>`,
+		`<mark>hot</mark>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("rendered task page missing %q:\n%s", want, body)
+		}
+	}
+}
