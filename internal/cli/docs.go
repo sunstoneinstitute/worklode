@@ -348,13 +348,14 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 }
 
 // DocVersionsTable prints one row per version of a document, newest first:
-// the `lode doc versions` view.
+// the `lode doc versions` view. SNAPSHOT AT is docs.updated_at for the
+// current row, not the version's true creation time (WL-346).
 func DocVersionsTable(w io.Writer, versions []model.DocVersionSummary) {
 	tbl := newTable(
 		column{header: "VERSION"},
 		titleColumn("TITLE"),
 		column{header: "ISSUED"},
-		column{header: "CREATED AT"},
+		column{header: "SNAPSHOT AT"},
 	)
 	for _, v := range versions {
 		tbl.add(strconv.Itoa(v.Version), v.Title, dash(v.Issued), LocalTime(v.CreatedAt))
@@ -371,7 +372,7 @@ func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
 	if v.Issued != "" {
 		fmt.Fprintf(w, "  issued:   %s\n", v.Issued)
 	}
-	fmt.Fprintf(w, "  created:  %s\n", LocalTime(v.CreatedAt))
+	fmt.Fprintf(w, "  snapshot: %s\n", LocalTime(v.CreatedAt))
 	if v.Version != current {
 		fmt.Fprintf(w, "  (not the current version; current is %d)\n", current)
 	}
