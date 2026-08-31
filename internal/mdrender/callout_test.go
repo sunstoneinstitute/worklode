@@ -129,3 +129,44 @@ func TestCalloutNesting(t *testing.T) {
 		}
 	})
 }
+
+// TestCalloutClassPattern pins calloutClass and calloutTitleClass (WL-416,
+// plan doc 175 task 2) directly, the same way TestSectionAnchorMatchesDesigndoc
+// pins sectionAnchor: both are anchored (\A...\z), so a value that is the
+// legal string plus anything else — a trailing word, a missing kind, wrong
+// case — must fail, not just an unrelated one.
+func TestCalloutClassPattern(t *testing.T) {
+	for _, kind := range []string{"note", "tip", "important", "warning", "caution"} {
+		if !calloutClass.MatchString("callout callout-" + kind) {
+			t.Errorf("calloutClass rejected the legal value for kind %q", kind)
+		}
+	}
+	for _, bad := range []string{
+		"callout callout-note extra", // trailing text past the anchor
+		"callout",                    // missing "callout-KIND"
+		"callout-note",               // missing the leading "callout "
+		"callout callout-NOTE",       // class values are case-sensitive
+		"callout callout-foo",        // unknown kind
+		" callout callout-note",      // leading whitespace
+		"callout callout-note ",      // trailing whitespace
+	} {
+		if calloutClass.MatchString(bad) {
+			t.Errorf("calloutClass accepted %q", bad)
+		}
+	}
+
+	if !calloutTitleClass.MatchString("callout-title") {
+		t.Error("calloutTitleClass rejected the legal value")
+	}
+	for _, bad := range []string{
+		"callout-title extra",
+		"callout",
+		"Callout-Title",
+		" callout-title",
+		"callout-title ",
+	} {
+		if calloutTitleClass.MatchString(bad) {
+			t.Errorf("calloutTitleClass accepted %q", bad)
+		}
+	}
+}
