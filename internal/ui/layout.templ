@@ -277,8 +277,7 @@ templ modePillIcon() {
 // localNav renders the eight project-local destinations in the exact order
 // docs/specs/032-project-cockpit.md §2 requires (Overview, Crew, Work,
 // Deliverables, Reviews, Decisions, Documents, Activity), marking the item
-// matching active as aria-current="page". The Work item links to the
-// overview's #work anchor and is never marked current.
+// matching active as aria-current="page".
 //
 // Deleted follows them, outside that order deliberately: it is spec 044's
 // tombstone review rather than one of 032 §2's destinations, and it is last
@@ -287,7 +286,7 @@ templ modePillIcon() {
 templ localNav(projectID, active string) {
 	@navLink("/projects/"+projectID, "Overview", "overview", active)
 	@navLink("/projects/"+projectID+"/crew", "Crew", "crew", active)
-	<a href={ "/projects/" + projectID + "#work" }>Work</a>
+	@navLink("/projects/"+projectID+"/work", "Work", "work", active)
 	@navLink("/projects/"+projectID+"/deliverables", "Deliverables", "deliverables", active)
 	@navLink("/projects/"+projectID+"/reviews", "Reviews", "reviews", active)
 	@navLink("/projects/"+projectID+"/decisions", "Decisions", "decisions", active)

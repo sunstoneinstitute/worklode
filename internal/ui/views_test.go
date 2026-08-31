@@ -190,3 +190,89 @@ func TestDeliverablesPageShowsTheReport(t *testing.T) {
 		t.Error("the page still says no emitter can report a deliverable state")
 	}
 }
+
+// TestRunBoard renders the run board with one row in every §8 group and
+// pins: the six group labels appear in the spec's fixed order; a Running
+// row's delegate, lease age, cost and check label render; a Waiting row
+// names its blocker; a bounded group's More renders "and N more"; and the
+// project-local Work nav item is marked current.
+func TestRunBoard(t *testing.T) {
+	var b strings.Builder
+	err := RunBoard(RunBoardView{
+		Page:    PageProps{Title: "Work"},
+		Project: CockpitProject{ID: "p", Name: "Project", Key: "P"},
+		Groups: []RunGroupView{
+			{Label: "Ready", Rows: []RunRowView{
+				{TaskID: "P-1", Title: "Ready task", TaskURL: "/tasks/P-1", Owner: "Ada"},
+			}},
+			{Label: "Running", Rows: []RunRowView{
+				{
+					TaskID: "P-2", Title: "Running task", TaskURL: "/tasks/P-2",
+					Owner: "Ada", Delegate: "claude-code", LeaseAge: "12m",
+					LastEvent: "in_progress 12m ago", Costs: []string{"USD 1.23"},
+					PRLabel: "#4 open", PRURL: "https://github.com/x/y/pull/4",
+					CheckLabel: "success",
+				},
+			}},
+			{Label: "Waiting", Rows: []RunRowView{
+				{TaskID: "P-3", Title: "Waiting task", TaskURL: "/tasks/P-3", Owner: "Ada", Holds: "P-9"},
+			}},
+			{Label: "Needs judgment", Rows: []RunRowView{
+				{TaskID: "P-4", Title: "Judgment task", TaskURL: "/tasks/P-4"},
+			}},
+			{Label: "Failed", Rows: []RunRowView{
+				{TaskID: "P-5", Title: "Failed task", TaskURL: "/tasks/P-5"},
+			}, More: 2},
+			{Label: "Completed", Rows: []RunRowView{
+				{TaskID: "P-6", Title: "Completed task", TaskURL: "/tasks/P-6"},
+			}},
+		},
+	}).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("render RunBoard: %v", err)
+	}
+	body := b.String()
+
+	last := -1
+	for _, label := range []string{"Ready", "Running", "Waiting", "Needs judgment", "Failed", "Completed"} {
+		idx := strings.Index(body, ">"+label+"<")
+		if idx == -1 {
+			t.Fatalf("missing group heading %q", label)
+		}
+		if idx <= last {
+			t.Errorf("group %q rendered out of the pinned §8 order", label)
+		}
+		last = idx
+	}
+
+	for _, want := range []string{
+		"claude-code", "12m", "USD 1.23", "success",
+		"P-9",
+		"and 2 more",
+		`aria-current="page"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page is missing %q", want)
+		}
+	}
+}
+
+// TestRunBoardEmpty pins the honest empty state: no groups means no group
+// headings, just the empty-board line.
+func TestRunBoardEmpty(t *testing.T) {
+	var b strings.Builder
+	err := RunBoard(RunBoardView{
+		Page:    PageProps{Title: "Work"},
+		Project: CockpitProject{ID: "p", Name: "Project", Key: "P"},
+	}).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("render RunBoard: %v", err)
+	}
+	body := b.String()
+	if !strings.Contains(body, "No work in this project yet.") {
+		t.Error("empty board is missing the empty-board line")
+	}
+	if strings.Contains(body, "<h3>") {
+		t.Error("empty board should render no group headings")
+	}
+}

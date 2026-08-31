@@ -1,0 +1,110 @@
+package ui
+
+// runboard.templ renders a project's run board (GET /projects/{id}/work,
+// spec 032 §8): its live work grouped into the spec's six fixed groups,
+// presented inside the same project sidebar frame as Crew and the cockpit
+// (crew.templ, cockpit.templ), with active key "work" so localNav marks
+// Work current. Each group is its own <section class="card"> with the group
+// label as heading and a count chip.
+//
+// Rows reuse the .wl worklist row shape and the owner-vs-delegate avatar
+// treatment cockpit.templ's workRow uses (avatarClass/avatarInitials/
+// actorsLine, internal/ui/views.go). Running and Needs-judgment rows carry
+// the full §8 active-item fact list — delegate, lease age, last event,
+// cost, PR and check — on the row's muted second line, the PR and check
+// labels linking back to the PR they came from; a Waiting row's second line
+// names what holds it instead. A bounded group (Failed, Completed) adds the
+// muted "and N more" line below its rows. An empty board says so honestly
+// rather than rendering nothing.
+
+import "strconv"
+import "strings"
+
+templ RunBoard(v RunBoardView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "work") {
+			<div class="canvas">
+				if len(v.Groups) == 0 {
+					<p class="muted">No work in this project yet.</p>
+				} else {
+					for _, g := range v.Groups {
+						@runGroup(g)
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// runGroup renders one §8 group: heading, a count chip (rows shown plus any
+// bounded-out More), its rows, and the "and N more" line when bounded.
+templ runGroup(g RunGroupView) {
+	<section class="card">
+		<div class="hd">
+			<h3>{ g.Label }</h3>
+			<div class="meta"><span class="chip plain">{ strconv.Itoa(len(g.Rows) + g.More) }</span></div>
+		</div>
+		<div class="bd wl">
+			for _, r := range g.Rows {
+				@runRow(r)
+			}
+			if g.More > 0 {
+				<p class="muted small">and { strconv.Itoa(g.More) } more</p>
+			}
+		</div>
+	</section>
+}
+
+// runRow renders one task's row: the owner/delegate avatar, the task link,
+// and the muted second line of active-item facts.
+templ runRow(r RunRowView) {
+	<div class="wlrow">
+		<div class={ avatarClass(r.Owner, r.Delegate) }>
+			<span class="avatar" aria-hidden="true">{ avatarInitials(r.Owner, r.Delegate) }</span>
+		</div>
+		<div class="tl">
+			<div class="t"><a href={ r.TaskURL }>{ r.TaskID } &mdash; { r.Title }</a></div>
+			@runRowFacts(r)
+		</div>
+	</div>
+}
+
+// runRowFacts is a run row's muted second line (.wlrow .tl .s): the
+// owner/delegate who-line, then whatever §8 facts the row carries — what
+// holds a Waiting row, an active row's lease age/last event/cost, and its PR
+// and check labels, both linking to the PR they came from (checks run
+// against the PR's head SHA, so it is their source too).
+templ runRowFacts(r RunRowView) {
+	<div class="s">
+		{ actorsLine(r.Owner, r.Delegate) }
+		if r.Holds != "" {
+			{ " · blocked by " + r.Holds }
+		}
+		if r.LeaseAge != "" {
+			{ " · lease " + r.LeaseAge }
+		}
+		if r.LastEvent != "" {
+			{ " · " + r.LastEvent }
+		}
+		if len(r.Costs) > 0 {
+			{ " · " + strings.Join(r.Costs, ", ") }
+		}
+		if r.PRLabel != "" {
+			{ " · " }
+			if r.PRURL != "" {
+				<a href={ r.PRURL }>{ r.PRLabel }</a>
+			} else {
+				{ r.PRLabel }
+			}
+		}
+		if r.CheckLabel != "" {
+			{ " · " }
+			if r.PRURL != "" {
+				<a href={ r.PRURL }>{ r.CheckLabel }</a>
+			} else {
+				{ r.CheckLabel }
+			}
+		}
+	</div>
+}

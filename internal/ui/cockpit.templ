@@ -125,12 +125,12 @@ templ pinnedFocus(f *CockpitFocus) {
 // the projection supplies; no per-row cost is stored, so no cost is shown.
 templ workRow(item WorkRow) {
 	<div class="wlrow">
-		<div class={ workRowWhoClass(item) }>
-			<span class="avatar" aria-hidden="true">{ workRowInitials(item) }</span>
+		<div class={ avatarClass(item.Owner, item.Delegate) }>
+			<span class="avatar" aria-hidden="true">{ avatarInitials(item.Owner, item.Delegate) }</span>
 		</div>
 		<div class="tl">
 			<div class="t"><a href={ item.URL }>{ item.ID } &mdash; { item.Title }</a></div>
-			<div class="s">{ workRowActors(item) }</div>
+			<div class="s">{ actorsLine(item.Owner, item.Delegate) }</div>
 		</div>
 		<div class="rt">
 			<span class={ "chip " + evidenceChip(item.EvidenceCategory) }><span class="cd" aria-hidden="true"></span>{ evidenceLabel(item.EvidenceCategory) }</span>

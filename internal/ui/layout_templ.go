@@ -993,8 +993,7 @@ func modePillIcon() templ.Component {
 // localNav renders the eight project-local destinations in the exact order
 // docs/specs/032-project-cockpit.md §2 requires (Overview, Crew, Work,
 // Deliverables, Reviews, Decisions, Documents, Activity), marking the item
-// matching active as aria-current="page". The Work item links to the
-// overview's #work anchor and is never marked current.
+// matching active as aria-current="page".
 //
 // Deleted follows them, outside that order deliberately: it is spec 044's
 // tombstone review rather than one of 032 §2's destinations, and it is last
@@ -1029,20 +1028,7 @@ func localNav(projectID, active string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<a href=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var41 templ.SafeURL
-		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinURLErrs("/projects/" + projectID + "#work")
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/layout.templ`, Line: 290, Col: 45}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "\">Work</a>")
+		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/work", "Work", "work", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
