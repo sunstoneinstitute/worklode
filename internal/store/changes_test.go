@@ -553,6 +553,77 @@ func TestPRsForTask(t *testing.T) {
 	}
 }
 
+// TestOpenPRsForProject covers the bulk project reader: one open PR and one
+// merged PR on tasks in the project, newest UpdatedAt first; a
+// closed-unmerged PR on a project task and an open PR on another project's
+// task are both excluded.
+func TestOpenPRsForProject(t *testing.T) {
+	t.Parallel()
+	s := openChangesStore(t)
+	ctx := t.Context()
+	taskA := createTask(t, s, taskTestNow, defaultTaskInput())
+	taskB := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := s.CreateProject(ctx, "other", "Other", "OTH"); err != nil {
+		t.Fatalf("CreateProject other: %v", err)
+	}
+	otherIn := defaultTaskInput()
+	otherIn.ProjectID = "other"
+	otherTask := createTask(t, s, taskTestNow, otherIn)
+
+	openA := defaultPR(taskA.ID)
+	openA.Number = 1
+	openA.UpdatedAt = changesTestNow
+
+	mergedB := defaultPR(taskB.ID)
+	mergedB.Number = 2
+	mergedB.State = "merged"
+	mergedB.UpdatedAt = changesTestNow.Add(2 * time.Hour)
+
+	closedA := defaultPR(taskA.ID)
+	closedA.Number = 3
+	closedA.State = "closed"
+	closedA.UpdatedAt = changesTestNow.Add(time.Hour)
+
+	openOther := defaultPR(otherTask.ID)
+	openOther.Number = 4
+	openOther.UpdatedAt = changesTestNow.Add(3 * time.Hour)
+
+	for _, pr := range []PullRequest{openA, mergedB, closedA, openOther} {
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatalf("upsert PR #%d: %v", pr.Number, err)
+		}
+	}
+
+	got, err := s.OpenPRsForProject(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("OpenPRsForProject: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("OpenPRsForProject: got %d PRs, want 2: %+v", len(got), got)
+	}
+	if got[0].Number != 2 || got[1].Number != 1 {
+		t.Fatalf("OpenPRsForProject order: got PR numbers [%d %d], want [2 1] (newest UpdatedAt first)", got[0].Number, got[1].Number)
+	}
+	if got[0].TaskID == nil || *got[0].TaskID != taskB.ID {
+		t.Fatalf("OpenPRsForProject[0].TaskID: got %v, want %s", got[0].TaskID, taskB.ID)
+	}
+	if got[1].TaskID == nil || *got[1].TaskID != taskA.ID {
+		t.Fatalf("OpenPRsForProject[1].TaskID: got %v, want %s", got[1].TaskID, taskA.ID)
+	}
+
+	if err := s.CreateProject(ctx, "empty-project", "Empty", "EMP"); err != nil {
+		t.Fatalf("CreateProject empty-project: %v", err)
+	}
+	noPRs, err := s.OpenPRsForProject(ctx, "empty-project")
+	if err != nil {
+		t.Fatalf("OpenPRsForProject(empty-project): %v", err)
+	}
+	if noPRs == nil || len(noPRs) != 0 {
+		t.Fatalf("OpenPRsForProject(empty-project): got %v, want empty non-nil slice", noPRs)
+	}
+}
+
 func TestUpsertCIRunIdempotent(t *testing.T) {
 	t.Parallel()
 	s := openChangesStore(t)
