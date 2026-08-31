@@ -234,6 +234,8 @@
   --crit-bg: #F8E3E5;
   --info: #266680;
   --info-bg: #E2EEF2;
+  --imp: #5B3FA8;
+  --danger: #B02A1E;
   --ev-decl: #5C6478;
   --ev-decl-bg: #ECEDF0;
   --ev-user: #2E5AA8;
@@ -269,6 +271,8 @@
     --crit-bg: #3A1E24;
     --info: #46C5DE;
     --info-bg: #123243;
+    --imp: #B9A3F5;
+    --danger: #F0989F;
     --ev-decl: #A6ACC0;
     --ev-decl-bg: #20294A;
     --ev-user: #8FB4F0;
@@ -304,6 +308,8 @@
   --crit-bg: #F8E3E5;
   --info: #266680;
   --info-bg: #E2EEF2;
+  --imp: #5B3FA8;
+  --danger: #B02A1E;
   --ev-decl: #5C6478;
   --ev-decl-bg: #ECEDF0;
   --ev-user: #2E5AA8;
@@ -338,6 +344,8 @@
   --crit-bg: #3A1E24;
   --info: #46C5DE;
   --info-bg: #123243;
+  --imp: #B9A3F5;
+  --danger: #F0989F;
   --ev-decl: #A6ACC0;
   --ev-decl-bg: #20294A;
   --ev-user: #8FB4F0;
@@ -1822,6 +1830,34 @@ nav.local a .cnt {
   padding-left: 12px;
   border-left: 3px solid var(--line-2);
   color: var(--ink-2);
+}
+.prose .callout {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--callout-c,var(--line-2));
+  border-radius: 9px;
+  padding: 9px 13px;
+  margin: 0 0 12px;
+  background: var(--surface-2);
+}
+.prose .callout-title {
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--callout-c);
+}
+.prose .callout-note {
+  --callout-c: var(--info);
+}
+.prose .callout-tip {
+  --callout-c: var(--ok);
+}
+.prose .callout-important {
+  --callout-c: var(--imp);
+}
+.prose .callout-warning {
+  --callout-c: var(--warn);
+}
+.prose .callout-caution {
+  --callout-c: var(--danger);
 }
 .prose img,.prose video {
   max-width: 100%;
