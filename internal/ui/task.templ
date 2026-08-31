@@ -12,124 +12,132 @@ package ui
 // templ's SafeURL sanitizer neutralizes an unsafe scheme into
 // "about:invalid#TemplFailedSanitizationURL" before it reaches the page (see
 // web_test.go's TestTaskPageEscapesHostileTimelineURL).
+//
+// It renders through projectShell — the same frame crew.templ and every
+// other project-scoped page use (spec 056 §2) — with local-nav active ""
+// since the task page is not itself one of the sidebar's destinations;
+// PageProps.ActiveGlobal stays unset too, so the page carries both nav
+// landmarks but marks neither current (web_test.go's assertNoAriaCurrent).
 
 templ Task(v TaskView) {
 	@Page(v.Page) {
-		@globalShell() {
-			<section class="card pad">
-				<h1>{ v.Task.ID }: { v.Task.Title }</h1>
-				<p>
-					if v.Blocked {
-						<span class="chip crit">blocked</span>
-					} else {
-						<span class={ "chip " + stateChip(v.Task.State) }>{ v.Task.State }</span>
+		@projectShell(v.Project, "") {
+			<div class="canvas">
+				<section class="card pad">
+					<h1>{ v.Task.ID }: { v.Task.Title }</h1>
+					<p>
+						if v.Blocked {
+							<span class="chip crit">blocked</span>
+						} else {
+							<span class={ "chip " + stateChip(v.Task.State) }>{ v.Task.State }</span>
+						}
+						<span class="chip plain">{ v.Task.Priority }</span>
+						<span class="chip plain">{ v.Task.Kind }</span>
+						<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>
+					</p>
+					<p class="muted small">Created { fmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { fmtTime(v.Task.UpdatedAt) }</p>
+					if v.Task.Assignee != "" {
+						<p class="muted small">Assigned to { v.Task.Assignee }</p>
 					}
-					<span class="chip plain">{ v.Task.Priority }</span>
-					<span class="chip plain">{ v.Task.Kind }</span>
-					<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>
-				</p>
-				<p class="muted small">Created { fmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { fmtTime(v.Task.UpdatedAt) }</p>
-				if v.Task.Assignee != "" {
-					<p class="muted small">Assigned to { v.Task.Assignee }</p>
-				}
-				if v.Holder != nil {
-					<p><strong>Held by:</strong> { v.Holder.ActorID } (expires { fmtTime(v.Holder.ExpiresAt) })</p>
-				}
-			</section>
-
-			if len(v.AgentSessions) > 0 {
-				<section class="card" aria-labelledby="agent-sessions-heading">
-					<div class="hd"><h3 id="agent-sessions-heading">Agent sessions</h3></div>
-					@agentSessionRows(v.AgentSessions)
+					if v.Holder != nil {
+						<p><strong>Held by:</strong> { v.Holder.ActorID } (expires { fmtTime(v.Holder.ExpiresAt) })</p>
+					}
 				</section>
-			}
 
-			<section class="card">
-				<div class="hd"><h3>Body</h3></div>
-				// BodyHTML is the one value this package emits unescaped. What
-				// makes that safe is internal/mdrender: the untrusted body is
-				// rendered permissively, then the OUTPUT HTML is reduced to an
-				// allowlist, so no element, attribute or URL scheme reaches
-				// this div that the sanitiser did not pass.
-				<div class="bd prose">
-					@templ.Raw(string(v.BodyHTML))
-				</div>
-				if hasMermaid(v.BodyHTML) {
-					@mermaidScripts()
+				if len(v.AgentSessions) > 0 {
+					<section class="card" aria-labelledby="agent-sessions-heading">
+						<div class="hd"><h3 id="agent-sessions-heading">Agent sessions</h3></div>
+						@agentSessionRows(v.AgentSessions)
+					</section>
 				}
-			</section>
 
-			if len(v.Attachments) > 0 {
 				<section class="card">
-					<div class="hd"><h3>Attachments</h3></div>
+					<div class="hd"><h3>Body</h3></div>
+					// BodyHTML is the one value this package emits unescaped. What
+					// makes that safe is internal/mdrender: the untrusted body is
+					// rendered permissively, then the OUTPUT HTML is reduced to an
+					// allowlist, so no element, attribute or URL scheme reaches
+					// this div that the sanitiser did not pass.
+					<div class="bd prose">
+						@templ.Raw(string(v.BodyHTML))
+					</div>
+					if hasMermaid(v.BodyHTML) {
+						@mermaidScripts()
+					}
+				</section>
+
+				if len(v.Attachments) > 0 {
+					<section class="card">
+						<div class="hd"><h3>Attachments</h3></div>
+						<div class="bd">
+							<ul class="attachments">
+								for _, b := range v.Attachments {
+									<li>
+										if b.Filename != "" {
+											<a href={ b.URL }>{ b.Filename }</a>
+										} else {
+											<a href={ b.URL } class="mono">{ b.Hash }</a>
+										}
+										<span class="meta">{ b.MediaType } &middot; { fmtBytes(b.Size) }</span>
+									</li>
+								}
+							</ul>
+						</div>
+					</section>
+				}
+
+				<section class="card">
+					<div class="hd"><h3>Edges</h3></div>
 					<div class="bd">
-						<ul class="attachments">
-							for _, b := range v.Attachments {
-								<li>
-									if b.Filename != "" {
-										<a href={ b.URL }>{ b.Filename }</a>
-									} else {
-										<a href={ b.URL } class="mono">{ b.Hash }</a>
+						<ul>
+							@taskEdgeIDs("Blocks", v.Blocks)
+							@taskEdgeIDs("Blocked by", v.BlockedBy)
+							@taskEdgeID("Parent", v.Parent)
+							<li>Children:
+								if len(v.Children) == 0 {
+									<span class="muted">none</span>
+								} else {
+									for _, id := range v.Children {
+										<a href={ "/tasks/" + id }>{ id }</a>{ " " }
 									}
-									<span class="meta">{ b.MediaType } &middot; { fmtBytes(b.Size) }</span>
-								</li>
-							}
+									<span class="muted">({ v.Progress.Closed }/{ v.Progress.Total } closed)</span>
+								}
+							</li>
+							@taskEdgeID("Follow-up to", v.FollowUpTo)
+							@taskEdgeIDs("Follow-ups", v.FollowUps)
+							@taskEdgeID("Duplicate of", v.DuplicateOf)
+							@taskEdgeIDs("Duplicates", v.Duplicates)
 						</ul>
 					</div>
 				</section>
-			}
 
-			<section class="card">
-				<div class="hd"><h3>Edges</h3></div>
-				<div class="bd">
-					<ul>
-						@taskEdgeIDs("Blocks", v.Blocks)
-						@taskEdgeIDs("Blocked by", v.BlockedBy)
-						@taskEdgeID("Parent", v.Parent)
-						<li>Children:
-							if len(v.Children) == 0 {
-								<span class="muted">none</span>
-							} else {
-								for _, id := range v.Children {
-									<a href={ "/tasks/" + id }>{ id }</a>{ " " }
-								}
-								<span class="muted">({ v.Progress.Closed }/{ v.Progress.Total } closed)</span>
+				<section class="card">
+					<div class="hd"><h3>Timeline</h3></div>
+					<div class="bd">
+						if len(v.Timeline) == 0 {
+							<p class="muted">No timeline entries yet.</p>
+						} else {
+							@tableWrap("Timeline") {
+								<table>
+									<tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
+									for _, row := range v.Timeline {
+										<tr>
+											<td class="mono">{ fmtTime(row.At) }</td>
+											<td>@timelineIcon(row)</td>
+											<td>{ row.Summary }</td>
+											<td>
+												if row.URL != "" {
+													<a href={ row.URL } rel="noreferrer">Open source</a>
+												}
+											</td>
+										</tr>
+									}
+								</table>
 							}
-						</li>
-						@taskEdgeID("Follow-up to", v.FollowUpTo)
-						@taskEdgeIDs("Follow-ups", v.FollowUps)
-						@taskEdgeID("Duplicate of", v.DuplicateOf)
-						@taskEdgeIDs("Duplicates", v.Duplicates)
-					</ul>
-				</div>
-			</section>
-
-			<section class="card">
-				<div class="hd"><h3>Timeline</h3></div>
-				<div class="bd">
-					if len(v.Timeline) == 0 {
-						<p class="muted">No timeline entries yet.</p>
-					} else {
-						@tableWrap("Timeline") {
-							<table>
-								<tr><th>When</th><th>Type</th><th>Summary</th><th>Source</th></tr>
-								for _, row := range v.Timeline {
-									<tr>
-										<td class="mono">{ fmtTime(row.At) }</td>
-										<td>@timelineIcon(row)</td>
-										<td>{ row.Summary }</td>
-										<td>
-											if row.URL != "" {
-												<a href={ row.URL } rel="noreferrer">Open source</a>
-											}
-										</td>
-									</tr>
-								}
-							</table>
 						}
-					}
-				</div>
-			</section>
+					</div>
+				</section>
+			</div>
 		}
 	}
 }

@@ -575,10 +575,11 @@ func cockpitCostTotals(c model.CostReport) []ui.CockpitCostTotal {
 // outgoing child_of names the parent while an incoming one names a child.
 //
 // md may be nil, which renders every body afresh; see the mdcache field.
-func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
+func taskView(md *mdrender.Cache, keys mdrender.ProjectKeys, t *model.Task, project ui.CockpitProject, blocked bool, entries []model.TimelineEntry, out, in []store.Edge) ui.TaskView {
 	view := ui.TaskView{
-		Page: ui.PageProps{Title: "worklode: " + t.ID},
-		Task: *t,
+		Page:    ui.PageProps{Title: "worklode: " + t.ID},
+		Project: project,
+		Task:    *t,
 		// Sanitising happens here rather than in ui: internal/ui is a
 		// stdlib + internal/model leaf and cannot import mdrender's
 		// goldmark/bluemonday dependencies (ADR 036 §3, CLAUDE.md).

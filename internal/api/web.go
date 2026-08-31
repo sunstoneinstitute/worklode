@@ -443,12 +443,20 @@ func (s *server) projectKeys(ctx context.Context) mdrender.ProjectKeys {
 // taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
 // body (rendered as sanitised markdown — see taskView), attachments, lease
 // holder (if any), edges, and the full timeline — built from the same
-// assembleTimeline used by GET /api/v1/tasks/{id}/timeline.
+// assembleTimeline used by GET /api/v1/tasks/{id}/timeline. It renders
+// through the project shell (spec 056 §2), so an unknown owning project
+// 404s the same way projectHeader's other callers do — though that should
+// never happen for a task whose project id came from the store itself.
 func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := r.PathValue("id")
 
 	t, entries, err := s.assembleTimeline(ctx, id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	project, err := s.projectHeader(ctx, t.Project)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
@@ -476,7 +484,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		refs[i].URL = blobURL(refs[i].Hash, refs[i].Filename)
 	}
 
-	view := taskView(s.mdcache, s.projectKeys(ctx), t, blocked, entries, out, in)
+	view := taskView(s.mdcache, s.projectKeys(ctx), t, project, blocked, entries, out, in)
 	view.Attachments = refs
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
