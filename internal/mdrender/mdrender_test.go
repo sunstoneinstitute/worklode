@@ -93,6 +93,14 @@ var hostileBodies = []struct {
 	{"src absolute remote blob", `<img src="https://evil.example/blob/` + validHash + `">`, []string{"evil.example"}},
 	{"src backslash", `<img src="\\evil.example\blob\` + validHash + `">`, []string{"evil.example"}},
 	{"src nul byte", "<img src=\"/blob/\x00" + validHash + "\">", []string{"/blob/"}},
+
+	// WL-416 (plan doc 175 task 2): the callout class allowlist is exactly
+	// two anchored rules, aside[class] and p[class]. These pin what an
+	// attacker could try to smuggle through it.
+	{"aside onclick stripped, class kept", `<aside class="callout callout-note" onclick="alert(1)">x</aside>`, []string{"onclick", "alert(1)"}},
+	{"aside invalid class stripped", `<aside class="evil">x</aside>`, []string{`class="evil"`, "evil"}},
+	{"div class stripped, rule is per-element", `<div class="callout">x</div>`, []string{`class="callout"`, "callout"}},
+	{"aside script stripped", `<aside><script>alert(1)</script></aside>`, []string{"<script", "alert(1)"}},
 }
 
 // TestHostileBodies is the load-bearing test. Task bodies are untrusted:
@@ -140,16 +148,36 @@ func TestSafeMarkupSurvives(t *testing.T) {
 		"- [ ] todo\n- [x] done\n\n" +
 		"<b>raw bold</b>\n\n" +
 		"[link](https://example.com)\n\n" +
-		"![shot](/blob/" + validHash + ")\n"
+		"![shot](/blob/" + validHash + ")\n\n" +
+		"> [!NOTE]\n> A note body.\n"
 	got := string(mdrender.Body(mdrender.ProjectKeys{}, body))
 	for _, want := range []string{
 		"<h1", "<strong>", "<code>", "<table", "<b>raw bold</b>",
 		`href="https://example.com"`, `rel="nofollow"`,
 		`src="/blob/` + validHash + `"`,
+		// WL-416 (plan doc 175 task 2): the [!NOTE] callout end to end —
+		// the aside and title classes must survive Body(), not just the
+		// pre-sanitiser renderer output callout_test.go pins.
+		`<aside class="callout callout-note">`,
+		`<p class="callout-title">Note</p>`,
+		"A note body.",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
+	}
+}
+
+// TestCalloutTitleClassSurvivesRaw pins a deliberate stance, not an
+// accident: p[class="callout-title"] is allowed wherever a body writes it,
+// not only where callout.go emits it. It is inert styling with no script or
+// URL sink behind it — the same stance buildPolicy already takes on other
+// cosmetic survivals like raw <b> — so a body cannot abuse the rule to gain
+// anything a legitimate callout title could not already do.
+func TestCalloutTitleClassSurvivesRaw(t *testing.T) {
+	got := string(mdrender.Body(mdrender.ProjectKeys{}, `<p class="callout-title">Not a real callout</p>`))
+	if !strings.Contains(got, `<p class="callout-title">Not a real callout</p>`) {
+		t.Fatalf("raw p.callout-title did not survive sanitising:\n%s", got)
 	}
 }
 
