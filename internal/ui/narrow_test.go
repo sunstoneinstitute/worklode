@@ -96,7 +96,8 @@ func pages(t *testing.T) map[string]string {
 			},
 		}),
 		"task": Task(TaskView{
-			Page: PageProps{Title: "WL-234"},
+			Page:    PageProps{Title: "WL-234"},
+			Project: proj,
 			Task: model.Task{
 				ID: "WL-234", Project: "worklode", Title: longTitle, Priority: "low", Kind: "chore",
 				State: "in_progress", Concern: "usability", CreatedBy: "stig", Assignee: "stig@sunstoneinstitute.ai",

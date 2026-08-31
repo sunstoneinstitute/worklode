@@ -178,7 +178,12 @@ type ApprovalRow struct {
 // internal/model types directly; the edge lists are task ids.
 type TaskView struct {
 	Page PageProps
-	Task model.Task
+	// Project is the task's owning project identity — id, name, key — the
+	// same lookup projectHeader makes for every other project-scoped page.
+	// The task page renders through projectShell with it (spec 056 §2), so
+	// it carries the project sidebar like every other project destination.
+	Project CockpitProject
+	Task    model.Task
 	// BodyHTML is Task.Body rendered from markdown and sanitised by
 	// internal/mdrender, which internal/api calls: ui may not import it (it
 	// imports goldmark and bluemonday, and ui is a stdlib+model leaf). It is

@@ -412,7 +412,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/projects/proj/deliverables", project, true},
 		{"/projects/proj/deliverables/new", project, true},
 		{"/projects/proj/tasks/new", project, false},
-		{"/tasks/WL-1", global, false},
+		{"/tasks/WL-1", project, false},
 	}
 	for _, page := range pages {
 		t.Run(page.path, func(t *testing.T) {
@@ -878,10 +878,13 @@ func TestTaskPage(t *testing.T) {
 		"docker_image reg/app 1.2.3", // artifact entry summary
 	)
 	assertShell(t, body)
-	bodyContains(t, body, `<nav aria-label="Primary"`)
-	if got := strings.Count(body, `aria-current="page"`); got != 0 {
-		t.Errorf(`aria-current count = %d, want 0 (no destination is current on a task page)`, got)
-	}
+	// The task page carries the project sidebar (spec 056 §2): both nav
+	// landmarks render, the project's name links to its Overview, and — since
+	// the task page is not itself one of the sidebar's destinations —
+	// neither nav marks a current page.
+	bodyContains(t, body, `<nav aria-label="Primary"`, `<nav aria-label="Project"`)
+	bodyContains(t, body, `<h2 class="proj-name">proj</h2>`, `<a href="/projects/proj"`, `>Overview<`)
+	assertNoAriaCurrent(t, body)
 	// WL-1 is leased but has no assignee: the "Assigned to" paragraph must
 	// not render for it.
 	if strings.Contains(body, "Assigned to") {
