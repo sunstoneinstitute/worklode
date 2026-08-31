@@ -62,7 +62,7 @@ jobs:
             -ldflags "-s -w -X github.com/sunstoneinstitute/worklode/internal/buildinfo.Version=${VERSION}" \
             -o lode-statusline.exe ./cmd/lode-statusline
 
-          ZIP="lode_${VERSION}_windows_amd64.zip"
+          ZIP="worklode_${VERSION}_windows_amd64.zip"
           zip -q "$ZIP" lode.exe lode-hook.exe lode-statusline.exe
           sha256=$(sha256sum "$ZIP" | awk '{print $1}')
           {

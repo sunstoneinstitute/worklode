@@ -61,6 +61,12 @@ jobs:
     with:
       tag: ${{ inputs.tag || github.ref_name }}
 
+  build-obsidian:
+    needs: build-bottles
+    uses: ./.github/workflows/_build-obsidian.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+
   scoop:
     needs: build-windows
     runs-on: ubuntu-latest

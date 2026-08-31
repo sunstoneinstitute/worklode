@@ -169,6 +169,12 @@ jobs:
     with:
       tag: ${{ needs.promote.outputs.tag }}
 
+  build-obsidian:
+    needs: [promote, build-bottles]
+    uses: ./.github/workflows/_build-obsidian.yml
+    with:
+      tag: ${{ needs.promote.outputs.tag }}
+
   # Same as homebrew above: promote-images's push doesn't trigger release.yml,
   # so the Scoop bucket update runs directly here too.
   scoop:
