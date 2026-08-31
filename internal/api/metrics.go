@@ -63,6 +63,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Home page renders, by mode (" + strings.Join(homeRenderModes, ", ") +
 			"). A rising \"empty\" share means people are landing on a Home with nothing on it, and a stuck \"open\" share on an instance that has a login provider means requests are arriving unauthenticated. Bounded by construction: no project or task id is a label here.",
 	}, []string{"mode"})
+	s.runBoardRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_run_board_renders_total",
+		Help: "Project run board page renders (GET /projects/{id}/work, 032 §8), by outcome (" +
+			strings.Join(runBoardRenderOutcomes, ", ") +
+			"). A rising \"empty\" share means projects are landing on a run board with no live work. Bounded by construction: no project or task id is a label here.",
+	}, []string{"outcome"})
 	s.authzDecisions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_authz_decisions_total",
 		Help: "Authorization decisions, by permission and outcome (allow, deny). A deny rate above zero on a permission nobody should be attempting is the signal worth alerting on.",
@@ -215,7 +221,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
 		s.localMerges,
@@ -263,6 +269,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// flat zero rather than as no-data.
 	for _, mode := range homeRenderModes {
 		s.homeRenders.WithLabelValues(mode)
+	}
+	// Both run board outcomes, so an instance with no live work anywhere
+	// reads as a flat zero rather than as no-data.
+	for _, outcome := range runBoardRenderOutcomes {
+		s.runBoardRenders.WithLabelValues(outcome)
 	}
 	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove",
 		formRestoreTask, formRestoreDoc} {
@@ -538,6 +549,25 @@ func (s *server) observeHomeRender(mode string) {
 		return
 	}
 	s.homeRenders.WithLabelValues(mode).Inc()
+}
+
+// The run board's two render outcomes (see runboard.go's runBoardPage),
+// which are also this metric's only label values: "empty" when
+// assembleRunBoard found nothing to group, "rendered" otherwise.
+const (
+	runBoardRenderEmpty    = "empty"
+	runBoardRenderRendered = "rendered"
+)
+
+var runBoardRenderOutcomes = []string{runBoardRenderEmpty, runBoardRenderRendered}
+
+// observeRunBoardRender records one project run board page render, by
+// outcome. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeRunBoardRender(outcome string) {
+	if s.runBoardRenders == nil {
+		return
+	}
+	s.runBoardRenders.WithLabelValues(outcome).Inc()
 }
 
 // formOutcome classifies a creation-form error for the

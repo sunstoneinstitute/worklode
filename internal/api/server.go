@@ -326,6 +326,13 @@ type server struct {
 	// Home the viewer got.
 	homeRenders *prometheus.CounterVec
 
+	// runBoardRenders counts project run board page renders (GET
+	// /projects/{id}/work, 032 §8), by outcome (empty, rendered); see
+	// runboard.go's runBoardPage and metrics.go's observeRunBoardRender.
+	// navWrap already counts the "work" destination by outcome — this one
+	// says whether the viewer landed on a board with any live work on it.
+	runBoardRenders *prometheus.CounterVec
+
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
 	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
 	// observeFormSubmission.
@@ -514,6 +521,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/crew", s.navWrap("crew", s.crewPage))
 	r.web("POST /projects/{id}/crew", s.navWrap("crew", s.addCrewMemberFromForm))
 	r.web("POST /projects/{id}/crew/remove", s.navWrap("crew", s.removeCrewMemberFromForm))
+	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
