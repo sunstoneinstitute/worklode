@@ -1,7 +1,11 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -245,3 +249,226 @@ func TestAssembleRunBoard(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// --- GET /projects/{id}/work (page-level, Postgres-backed) ------------------
+//
+// These tests live in package api (white-box), not package api_test: the
+// black-box page-test helpers (createProject, createTaskViaAPI, doReq,
+// newTestServer, ...) live in api_test files elsewhere in this directory,
+// which are a different compiled package this file cannot reach into. The
+// helpers below are the same shape, built from exported store functions and
+// NewServer directly.
+
+// rbTestServer opens a fresh migrated store and the web-open handler over
+// it — the run board page needs no bearer token, so no token is returned.
+func rbTestServer(t *testing.T) (*store.Store, http.Handler) {
+	t.Helper()
+	st := store.OpenTestStore(t)
+	h, _, err := NewServer(st, Config{WebOpen: true})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	return st, h
+}
+
+// rbGet issues a GET against h and returns the recorded response.
+func rbGet(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, path, nil))
+	return rr
+}
+
+// rbExtSeq returns a generator of unique event external ids for one test.
+func rbExtSeq(t *testing.T) func() string {
+	n := 0
+	return func() string {
+		n++
+		return fmt.Sprintf("%s-%d", t.Name(), n)
+	}
+}
+
+// rbCreateTask creates one ready task in projectID via the same path
+// CreateTask's own tests use: RecordEvent driving store.CreateTask.
+func rbCreateTask(t *testing.T, st *store.Store, ext func() string, now time.Time, projectID, title string) *model.Task {
+	t.Helper()
+	var task *model.Task
+	_, _, err := st.RecordEvent(context.Background(), "cli", ext(), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			task, err = store.CreateTask(tx, now, store.TaskInput{
+				ProjectID: projectID, Title: title, Priority: "medium", Kind: "feature",
+			}, eventID)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("create task %s: %v", title, err)
+	}
+	return task
+}
+
+// rbBlock records a "blocks" edge: blocker holds open work in front of
+// blocked (store.AddEdge's fromTask/toTask order — see project_work_test.go).
+func rbBlock(t *testing.T, st *store.Store, ext func() string, now time.Time, blocker, blocked string) {
+	t.Helper()
+	_, _, err := st.RecordEvent(context.Background(), "cli", ext(), "edge.add", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.AddEdge(tx, now, blocker, blocked, "blocks", eventID)
+		})
+	if err != nil {
+		t.Fatalf("block %s on %s: %v", blocked, blocker, err)
+	}
+}
+
+// rbTransition drives one legal state.Transition directly (bypassing the
+// claim/done lifecycle that would normally produce it) — the run board's
+// concern is what a task's current state renders as, not how it got there.
+func rbTransition(t *testing.T, st *store.Store, ext func() string, now time.Time, taskID, from, to string) {
+	t.Helper()
+	_, _, err := st.RecordEvent(context.Background(), "cli", ext(), "task.transition", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.Transition(tx, now, taskID, from, to, eventID)
+		})
+	if err != nil {
+		t.Fatalf("transition %s %s->%s: %v", taskID, from, to, err)
+	}
+}
+
+// TestRunBoardPage covers the full convergence: one project with a task in
+// every live group the page composes facts for — Ready, Waiting (blocked),
+// Running (claimed, an open agent session, priced usage), Needs judgment
+// (in_review, an open PR and a completed CI run), and Completed (merged) —
+// asserting each pinned group heading renders exactly once and the active
+// rows carry the facts assembleRunBoard attaches to them.
+func TestRunBoardPage(t *testing.T) {
+	t.Parallel()
+	st, h := rbTestServer(t)
+	ctx := context.Background()
+	ext := rbExtSeq(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	if err := st.CreateProject(ctx, "proj", "Project", "PRJ"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	rbCreateTask(t, st, ext, now, "proj", "Ready task")
+
+	blocker := rbCreateTask(t, st, ext, now, "proj", "Blocker task")
+	blocked := rbCreateTask(t, st, ext, now, "proj", "Blocked task")
+	rbBlock(t, st, ext, now, blocker.ID, blocked.ID)
+
+	if err := st.CreateActor(ctx, "agent-one", "agent", "Agent One", false); err != nil {
+		t.Fatalf("create actor agent-one: %v", err)
+	}
+	running := rbCreateTask(t, st, ext, now, "proj", "Running task")
+	if _, err := st.Claim(ctx, running.ID, "agent-one", "host:/wt-running", 0); err != nil {
+		t.Fatalf("claim running task: %v", err)
+	}
+	// 1e5 output tokens at claude-sonnet-5's seeded $10/MTok output rate
+	// (migration 0008) prices to exactly $1.00 — see agentsessions_test.go's
+	// sonnetUsagePrevDay, the same bucket shape.
+	if _, err := st.TouchAgentSession(ctx, running.ID, "agent-one", "claude-code", "2.1", "sess-1",
+		[]store.SessionUsageBucket{{Day: now, Model: "claude-sonnet-5", Tokens: store.TokenCounts{Output: 100_000}}}); err != nil {
+		t.Fatalf("touch agent session: %v", err)
+	}
+
+	judgment := rbCreateTask(t, st, ext, now, "proj", "Judgment task")
+	rbTransition(t, st, ext, now, judgment.ID, "ready", "in_progress")
+	rbTransition(t, st, ext, now, judgment.ID, "in_progress", "in_review")
+	const (
+		prRepo = "acme/widgets"
+		prSHA  = "sha-judgment"
+	)
+	_, _, err := st.RecordEvent(ctx, "github", ext(), "pull_request", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, _, err := store.UpsertPR(tx, store.PullRequest{
+				Repo: prRepo, Number: 42, Title: "Judgment task PR", State: "open",
+				HeadRef: judgment.ID + "-judgment-task", HeadSHA: prSHA,
+				URL: "https://github.com/" + prRepo + "/pull/42", OpenedAt: now,
+			}, "")
+			return err
+		})
+	if err != nil {
+		t.Fatalf("upsert PR: %v", err)
+	}
+	concl := "success"
+	_, _, err = st.RecordEvent(ctx, "github", ext(), "workflow_run", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpsertCIRun(tx, store.CIRun{
+				Repo: prRepo, HeadSHA: prSHA, Workflow: "ci", Status: "completed",
+				Conclusion: &concl, URL: "https://ci/1", StartedAt: now,
+			})
+		})
+	if err != nil {
+		t.Fatalf("upsert CI run: %v", err)
+	}
+
+	merged := rbCreateTask(t, st, ext, now, "proj", "Merged task")
+	rbTransition(t, st, ext, now, merged.ID, "ready", "merged")
+
+	rr := rbGet(t, h, "/projects/proj/work")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+
+	for _, label := range []string{"Ready", "Running", "Waiting", "Needs judgment", "Completed"} {
+		heading := "<h3>" + label + "</h3>"
+		if n := strings.Count(body, heading); n != 1 {
+			t.Errorf("heading %q count = %d, want 1:\n%s", heading, n, body)
+		}
+	}
+
+	if !strings.Contains(body, "claude-code v2.1") {
+		t.Error("Running row is missing the delegate label")
+	}
+	if !strings.Contains(body, "USD 1.00") {
+		t.Error("Running row is missing its priced cost")
+	}
+
+	if !strings.Contains(body, `href="https://github.com/`+prRepo+`/pull/42"`) {
+		t.Error("Needs-judgment row does not link the PR")
+	}
+	if !strings.Contains(body, "success") {
+		t.Error("Needs-judgment row does not show the CI conclusion")
+	}
+
+	completedAt := strings.Index(body, "<h3>Completed</h3>")
+	mergedAt := strings.Index(body, merged.ID)
+	if completedAt == -1 || mergedAt == -1 || mergedAt < completedAt {
+		t.Errorf("merged task %s does not appear under Completed", merged.ID)
+	}
+}
+
+// TestRunBoardPageEmpty covers a project with no tasks: 200, the honest
+// empty-board line, and no group heading rendered.
+func TestRunBoardPageEmpty(t *testing.T) {
+	t.Parallel()
+	st, h := rbTestServer(t)
+	if err := st.CreateProject(context.Background(), "empty", "Empty", "EMP"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	rr := rbGet(t, h, "/projects/empty/work")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "No work in this project yet.") {
+		t.Errorf("empty board line missing:\n%s", body)
+	}
+	if strings.Contains(body, "<h3>") {
+		t.Errorf("empty board rendered a group heading:\n%s", body)
+	}
+}
+
+// TestRunBoardPageUnknownProject covers the same 404 every project page
+// gives an unknown id (see projectPage).
+func TestRunBoardPageUnknownProject(t *testing.T) {
+	t.Parallel()
+	_, h := rbTestServer(t)
+	rr := rbGet(t, h, "/projects/nosuch/work")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}

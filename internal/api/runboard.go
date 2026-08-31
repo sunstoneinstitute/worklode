@@ -10,6 +10,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +19,88 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
+
+// runBoardPage handles GET /projects/{id}/work: the project's run board
+// (032 §8), crewPage-shaped. It loads the project header first (so an
+// unknown project 404s the same way every other project route does), then
+// every fact assembleRunBoard needs — work facts, open sessions, open PRs
+// and the CI runs on their head SHAs — and prices only the tasks that
+// classify into Running or Needs judgment, since those are the only groups
+// a cost line renders for (classify first, price the active set second, so
+// a project with no active work costs no TaskCostsForTasks query).
+func (s *server) runBoardPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	project, err := s.projectHeader(ctx, r.PathValue("id"))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	facts, err := s.st.ListProjectWorkFacts(ctx, project.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	sessions, err := s.st.OpenAgentSessionsForProject(ctx, project.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	prs, err := s.st.OpenPRsForProject(ctx, project.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	shas := make([]store.RepoSHA, 0, len(prs))
+	for _, pr := range prs {
+		shas = append(shas, store.RepoSHA{Repo: pr.Repo, SHA: pr.HeadSHA})
+	}
+	ci, err := s.st.CIRunsForSHAs(ctx, shas)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	var activeTaskIDs []string
+	for _, f := range facts {
+		if g := runGroupOf(f); g == runGroupRunning || g == runGroupJudgment {
+			activeTaskIDs = append(activeTaskIDs, f.Task.ID)
+		}
+	}
+	costs, err := s.st.TaskCostsForTasks(ctx, activeTaskIDs)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	board := assembleRunBoard(runBoardInputs{
+		Facts: facts, Sessions: sessions, PRs: prs, CI: ci, Costs: costs, Now: s.st.Now(),
+	})
+	outcome := runBoardRenderRendered
+	if board == nil {
+		outcome = runBoardRenderEmpty
+	}
+	s.observeRunBoardRender(outcome)
+	s.renderWeb(w, r, http.StatusOK, "run board page", ui.RunBoard(runBoardView(project, board)))
+}
+
+// runBoardView wraps assembleRunBoard's group list with the page shell
+// identity (title, canonical URL, project header) — assembleRunBoard has no
+// HTTP concerns and knows nothing of either, so this is the one place they
+// meet. A nil board (no task classifies into any group) renders as a
+// RunBoardView with no groups, which ui.RunBoard shows as the honest
+// empty-board line.
+func runBoardView(project ui.CockpitProject, board *ui.RunBoardView) ui.RunBoardView {
+	v := ui.RunBoardView{
+		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Work"},
+		CanonicalURL: "/projects/" + project.ID + "/work",
+		Project:      project,
+	}
+	if board != nil {
+		v.Groups = board.Groups
+	}
+	return v
+}
 
 // runGroup is 032 §8's grouping of live work, in the spec's own order.
 // runGroupNone marks a task the board excludes (draft: not execution yet).
