@@ -218,12 +218,13 @@ func writeUnresolved(cmd *cobra.Command, err error) error {
 	return printJSON(cmd, unresolvedResult{Unresolved: err.Error()})
 }
 
-// writeDocShow prints content as raw bytes, or, under --json, as
-// docShowResult with content set to exactly what the non-JSON path would
-// have printed.
+// writeDocShow prints content through cli.Markdown (raw off-TTY, ANSI-styled
+// on a terminal — including through --pager, since its writer reports the
+// real terminal's fd), or, under --json, as docShowResult with content set to
+// exactly what the non-JSON path would have printed.
 func writeDocShow(cmd *cobra.Command, doc model.Doc, section string, content []byte) error {
 	if !jsonOut(cmd) {
-		cmd.OutOrStdout().Write(content)
+		cli.Markdown(cmd.OutOrStdout(), string(content))
 		return nil
 	}
 	return printJSON(cmd, docShowResult{
