@@ -111,7 +111,7 @@ func TestReposDoctor(t *testing.T) {
 }
 
 // TestReposDoctorStale: a mapped repo with no deliveries at all is stale —
-// the signal that sends an operator to lode reconcile.
+// the signal that sends an operator to lode task reconcile.
 func TestReposDoctorStale(t *testing.T) {
 	t.Parallel()
 	_, h, token := newTestServer(t)

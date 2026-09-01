@@ -892,7 +892,7 @@ func TestReposDoctorRenderDistinguishesAppStates(t *testing.T) {
 		"unchecked (context deadline exceeded)",
 		"NOT INSTALLED (github app is not installed on this repo)",
 		"last event: never",
-		"STALE: no delivery since mapping — run `lode reconcile --repo acme/app`",
+		"STALE: no delivery since mapping — run `lode task reconcile --repo acme/app`",
 		"unmapped sender: acme/unmapped (2 events",
 	} {
 		if !strings.Contains(out, want) {

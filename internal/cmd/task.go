@@ -69,6 +69,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskAttachCmd(),
 		newTaskDetachCmd(),
 		newTaskInstructCmd(),
+		newReconcileCmd(),
 	)
 	return cmd
 }
