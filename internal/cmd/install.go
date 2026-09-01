@@ -680,17 +680,18 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 		}
 	}
 	if i := res.Instructions; i != nil {
+		blockIn := i.blockIn()
 		switch i.AgentsMD {
 		case instrCreated:
-			fmt.Fprintf(out, "%s: created with the Worklode block\n", agentsFile)
+			fmt.Fprintf(out, "%s: created with the Worklode block\n", blockIn)
 		case instrAdded:
-			fmt.Fprintf(out, "%s: added the Worklode block\n", agentsFile)
+			fmt.Fprintf(out, "%s: added the Worklode block\n", blockIn)
 		case instrUpdated:
-			fmt.Fprintf(out, "%s: refreshed the Worklode block\n", agentsFile)
+			fmt.Fprintf(out, "%s: refreshed the Worklode block\n", blockIn)
 		case instrUnchanged:
-			fmt.Fprintf(out, "%s: the Worklode block is already current\n", agentsFile)
+			fmt.Fprintf(out, "%s: the Worklode block is already current\n", blockIn)
 		default:
-			fmt.Fprintf(out, "%s: unexpected result %q\n", agentsFile, i.AgentsMD)
+			fmt.Fprintf(out, "%s: unexpected result %q\n", blockIn, i.AgentsMD)
 		}
 		switch i.ClaudeMD {
 		case instrCreated:
@@ -752,13 +753,14 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 		}
 	}
 	if i := res.Instructions; i != nil {
+		blockIn := i.blockIn()
 		switch i.AgentsMD {
 		case instrRemoved:
-			fmt.Fprintf(out, "%s: removed the Worklode block\n", agentsFile)
+			fmt.Fprintf(out, "%s: removed the Worklode block\n", blockIn)
 		case instrNone:
-			fmt.Fprintf(out, "%s: no Worklode block\n", agentsFile)
+			fmt.Fprintf(out, "%s: no Worklode block\n", blockIn)
 		default:
-			fmt.Fprintf(out, "%s: unexpected result %q\n", agentsFile, i.AgentsMD)
+			fmt.Fprintf(out, "%s: unexpected result %q\n", blockIn, i.AgentsMD)
 		}
 		switch i.ClaudeMD {
 		case instrRemoved:

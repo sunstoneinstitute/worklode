@@ -710,3 +710,56 @@ func TestReportInstallDistinguishesAddedFromRefreshed(t *testing.T) {
 		t.Fatalf("added report = %q", lines[instrAdded])
 	}
 }
+
+// An AGENTS.md that only @-imports other instruction files is a hub: appending
+// the block there would put it in a file Claude Code never reads, so it goes
+// into the imported CLAUDE.local.md instead — and stays there on refresh.
+func TestInstructionsFollowAgentsImports(t *testing.T) {
+	root := t.TempDir()
+	const hub = "@CLAUDE.md\n@CLAUDE.local.md\n"
+	writeFile(t, root, agentsFile, hub)
+	writeFile(t, root, "CLAUDE.md", "# Committed prose\n")
+	writeFile(t, root, claudeFile, "## Local notes\n")
+
+	res, err := ensureInstructions(root)
+	if err != nil {
+		t.Fatalf("ensure: %v", err)
+	}
+	if res.AgentsMD != instrAdded || res.ClaudeMD != instrSatisfied || res.BlockFile != claudeFile {
+		t.Fatalf("got %+v", res)
+	}
+	if got := readFile(t, filepath.Join(root, agentsFile)); got != hub {
+		t.Fatalf("hub was edited: %q", got)
+	}
+	if got := readFile(t, filepath.Join(root, "CLAUDE.md")); strings.Contains(got, agentsBlockBegin) {
+		t.Fatalf("block landed in committed prose: %q", got)
+	}
+	local := readFile(t, filepath.Join(root, claudeFile))
+	if !strings.Contains(local, agentsBlockBegin) || !strings.Contains(local, "Local notes") {
+		t.Fatalf("block not spliced into %s: %q", claudeFile, local)
+	}
+
+	// A stale block in the imported file is refreshed in place, not duplicated
+	// into the hub.
+	writeFile(t, root, claudeFile,
+		"## Local notes\n\n"+agentsBlockBegin+"\nstale\n"+agentsBlockEnd+"\n")
+	res, err = ensureInstructions(root)
+	if err != nil || res.AgentsMD != instrUpdated {
+		t.Fatalf("refresh: %+v %v", res, err)
+	}
+	if got := readFile(t, filepath.Join(root, claudeFile)); strings.Contains(got, "stale") {
+		t.Fatalf("stale block survived: %q", got)
+	}
+	if got := readFile(t, filepath.Join(root, agentsFile)); got != hub {
+		t.Fatalf("hub was edited on refresh: %q", got)
+	}
+
+	// Uninstall strips it from the same file and leaves the notes.
+	if res, err = removeInstructions(root); err != nil || res.AgentsMD != instrRemoved {
+		t.Fatalf("remove: %+v %v", res, err)
+	}
+	got := readFile(t, filepath.Join(root, claudeFile))
+	if strings.Contains(got, agentsBlockBegin) || !strings.Contains(got, "Local notes") {
+		t.Fatalf("uninstall left %s wrong: %q", claudeFile, got)
+	}
+}
