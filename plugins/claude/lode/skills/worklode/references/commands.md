@@ -197,7 +197,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status
 - `lode task parent` — File a task under a parent task
   Flags: --under
-- `lode task ready` — Publish a draft task (draft -> ready)
+- `lode task publish` — Publish a draft task (draft -> ready)
 - `lode task release` — Release the caller's lease on a task, returning it to ready
 - `lode task renew` — Extend the caller's lease on a task
   Flags: --ttl
