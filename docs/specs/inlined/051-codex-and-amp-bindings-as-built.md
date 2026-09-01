@@ -33,8 +33,8 @@ the row lists, and the codex adapter binds it
 (`lode hook session-end --harness codex`), so clean session shutdown is
 observed directly and nothing degrades to reconciliation. The paragraph's
 remaining caution stands: an accepted event name still does not imply uniform
-runtime coverage across Codex releases, and `lode doctor` verification against
-the installed version is still called for.
+runtime coverage across Codex releases, and `lode doctor` verification
+against the installed version is still needed.
 
 ## 2. Amp is a generated plugin, not a settings array
 
@@ -59,10 +59,10 @@ Through that plugin, Amp binds `SessionStart` to `session.start` and
 
 `tool.call`/`tool.result` are **deliberately unbound and stay that way**. Both
 are request events on Amp's agent critical path — a handler runs before the
-tool executes, and again before its result reaches the model — so binding them
-would put a `lode hook` subprocess between the agent and every tool call,
-dozens of times a turn, to report a heartbeat `agent.end` already reports.
-This is a decision, not a gap.
+tool executes, and again before its result reaches the model — so binding
+them would put a `lode hook` subprocess between the agent and every tool
+call, dozens of times a turn, just to report a heartbeat that `agent.end`
+already reports. This is a decision, not a gap.
 
 `SessionEnd` stays unbound for a different reason: Amp's Plugin API has no
 session-end event at all. That is Amp's ceiling, not an install falling short;
@@ -71,9 +71,9 @@ the git `pre-commit` heartbeat remains the coverage floor, exactly as 008
 
 ## 4. The event map, corrected
 
-008 §17.4's event map with the Codex and Amp columns as built; the other
-columns are restated unchanged (Pi's delivery is amended separately by spec
-041 §2):
+This is 008 §17.4's event map, with the Codex and Amp columns updated to what
+was actually built; the other columns are restated unchanged (Pi's delivery
+is amended separately by spec 041 §2):
 
 | Worklode event | Claude Code | Codex | Copilot | Amp | opencode / pi (shim) |
 |---|---|---|---|---|---|

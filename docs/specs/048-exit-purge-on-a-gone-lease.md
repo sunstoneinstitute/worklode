@@ -17,9 +17,9 @@ amends:
 ## 0. Decision {#sec-0}
 
 On `worktree-exit`, after closing the session's row, the hook asks the
-backbone whether the exited worktree's task still holds a live lease — one
+backbone whether the exited worktree's task still holds a live lease: one
 `GET /api/v1/tasks/<id>`, bounded by the hook's standard 2-second backbone
-budget — and purges the task's materialized secrets only on a **definite
+budget. It purges the task's materialized secrets only on a **definite
 "gone"**: the task exists and carries no lease, or the task no longer exists
 (404). Every other outcome — a live lease, a timeout, a transport failure, a
 5xx, an auth failure — keeps the secrets, and the hook exits successfully
@@ -34,12 +34,12 @@ a guess.
 017 §3 promises that stale keystore items "are removed by the next local hook
 that notices the lease is gone (resume, exit, or `lode doctor`)", and §4
 lists `ExitWorktree` among the purge triggers. The first implementation
-(WL-36) wired an **unconditional** purge into the exit hook and then removed
-it (`3d83856`): 012 §4 designs `ExitWorktree` for one session working several
+(WL-36) wired an **unconditional** purge into the exit hook, then removed it
+(`3d83856`). 012 §4 designs `ExitWorktree` for one session working several
 tasks in sequence, so at exit the lease is normally still held and the
-session can come back — an unconditional purge would cost a fresh consent and
-a fresh Touch ID on return, which the non-interactive session that is the
-common case cannot give.
+session can come back. An unconditional purge would cost a fresh consent and
+a fresh Touch ID on return — something the non-interactive session that is
+the common case cannot give.
 
 Since that revert, exit purges **never**, and the code silently diverges from
 an accepted spec section. The gap it leaves is the abandoned worktree: one
@@ -78,7 +78,7 @@ Three rules carry the design:
   nothing.
 - **A live lease keeps, whoever holds it.** No holder comparison: a re-claim
   after expiry binds a fresh worktree (normally on another machine), and
-  distinguishing "our lease" from "someone else's" buys nothing worth the
+  telling "our lease" apart from "someone else's" is not worth the
   complexity — the stale items still fall to this worktree's next
   gone-answered exit or to removal.
 - **The hook never fails its event.** The check shares the hook package's

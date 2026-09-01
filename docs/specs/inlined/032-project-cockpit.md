@@ -23,8 +23,8 @@ project canvas adapts to the governed state of the work.
 This spec owns the information architecture, lifecycle modes, primary actions,
 evidence disclosure, and first interactive release. It does not redefine the
 entities it presents. Research projects, intake, Crew membership, milestones,
-deliverables, and approvals come from 029; documents and plans come from 025;
-tasks, agent sessions, delivery facts, and escalation retain their existing
+deliverables, and approvals come from 029. Documents and plans come from 025.
+Tasks, agent sessions, delivery facts, and escalation retain their existing
 owners.
 
 The product and visual rationale is recorded in
@@ -80,14 +80,14 @@ primary destinations:
 When a project or candidate dossier is open, its left sidebar provides local
 navigation for Overview, Crew, Work, Deliverables, Reviews, Decisions, Documents,
 and Activity. Global and local navigation must remain visually and semantically
-distinct. The selected object has one canonical URL; browser back/forward and
+distinct. The selected object has one canonical URL. Browser back/forward and
 copying that URL must work across full-page and narrow layouts.
 
 ## 3. One cockpit with lifecycle modes
 
 The project route lands on the cockpit Overview. The shell and local navigation
-remain stable; the center canvas and decision rail select one of three modes from
-governed facts:
+remain stable. The center canvas and decision rail select one of three modes
+from governed facts:
 
 | Mode | Selection rule | Primary job |
 | --- | --- | --- |
@@ -95,7 +95,7 @@ governed facts:
 | **Approved launch** | Promotion created the project and no explicit Enter Research decision exists | Confirm accountability, outputs, review requirements, working surfaces, and automation authority |
 | **Operations** | The project lead entered Research, or the project is not an intake-promoted investigation | Coordinate focus, deliverables, reviews, delivery evidence, people, and agents |
 
-The prototype labels C, A, and B respectively name these modes only; they are
+The prototype labels C, A, and B respectively name these modes only. They are
 not persisted variants or user preferences. Promotion switches Editorial
 decision to Approved launch atomically. The project lead's explicit Enter
 Research decision switches Approved launch to Operations. Operations persists
@@ -117,8 +117,42 @@ not automatic transitions. The project lead confirms the transition and supplies
 reason when earlier work remains open. That work appears as carryover under its
 original milestone. Re-entering an earlier stage appends a transition with a reason,
 preserves history, and keeps the Operations cockpit. When required deliverables are
-terminal, the rail may recommend closure; the lead reviews unfinished work and
+terminal, the rail may recommend closure. The lead reviews unfinished work and
 explicitly closes the project and its active Crew.
+
+### 3.1 Stage due dates
+
+Review feedback on an early cockpit asked for the stage list itself to come
+from a per-project template. It does not: the stepper's five labels
+(Launch, Research, Report, Story + Some, Distribution) are a fixed,
+organization-wide compression of the seven shared Sunstone Way stages.
+Launch folds Discovery, Selection, and Editorial Evaluation, the three
+pre-Research stages §3's mode table already governs, and 029 §1's
+stage-derivation model already settles which of the four post-launch
+stages a project is in and how a lead moves it between them. A project
+does not get to reshape that vocabulary; reshaping it would mean two
+projects at "Research" meant different things.
+
+What is genuinely missing is a **due date**: an optional target the lead
+states for when work should reach a given stage, rendered under that
+stage's title as a smaller line ("Unset" when absent, a date otherwise),
+and settable by clicking it. A due date is a target, not a governed fact:
+setting or changing one is not a decision (025 §10), and 029 §1's derivation
+never reads it, so a late or absent target never blocks or recolors a
+transition. It is scoped per stage, not per decision, so it carries no
+history worth keeping: setting a new date simply replaces the old one.
+
+The stage identifier a due date is keyed on is the stepper's five-label
+set, not §1's four-slug decision vocabulary, so Launch, which precedes any
+recorded stage decision, can carry one too.
+
+Setting a due date is this page's second write affordance (the stage
+transition act, above, is its first): a plain form posting to the project,
+guarded the same way (`permWebWrite`), settable only by the project lead.
+The clickable "Unset"/date text is a focusable link opening that form, never
+a script-only inline editor. §10's "every drag, board, or timeline action
+has a form or menu equivalent" applies here just as it does to the stage
+transition itself.
 
 ## 4. Focus and the next decision
 
@@ -133,7 +167,7 @@ Every cockpit Overview presents at most one primary **next decision**. It names:
 
 Other concerns remain visible in a secondary list. They do not receive equal
 visual weight or create a dashboard of competing alerts. A project lead may pin
-any governed project object as the current focus with a short note; pinning
+any governed project object as the current focus with a short note. Pinning
 changes orientation and ranking display, not the object's state or authority.
 
 The cockpit never displays a project-completion percentage. Progress is the
@@ -219,16 +253,16 @@ data-science or engineering peer who is not the author. When the deliverable
 designates a newer commit, the previous approval stays attached to its exact
 revision and the newer candidate is visibly unreviewed.
 
-The methodology view binds exact analysis and dataset revisions; the report view
+The methodology view binds exact analysis and dataset revisions. The report view
 binds exact methodology, analysis, and evidence revisions. Both expose this as a
 review graph. For a possible downstream impact, the owner submits an impact note
 and a qualified prior approver confirms the existing approval or reopens it. A
 self-review exception is available only when policy permits it and a different
-authorized actor approves it before review; both facts appear beside the decision.
+authorized actor approves it before review. Both facts appear beside the decision.
 
 One review session may present several targets, including a spec and prepared
-plans, but it records a separate decision for each. Specs are always reviewed;
-plans and task-result review are optional. When a user elects to review plans,
+plans, but it records a separate decision for each. Specs are always reviewed.
+Plans and task-result review are optional. When a user elects to review plans,
 the session may offer review of resulting task outputs, normally PRs. Tasks do
 not acquire a review requirement merely because they exist.
 
@@ -240,8 +274,8 @@ name the exact version, actor, role, time, source, and any policy exception.
 
 Automation appears as scoped authority on the governed object, not as an
 assignee. Its control shows the effective rule in verbs and previews what the
-next relevant event will do. Instance configuration supplies named presets;
-users may choose among them and may change a policy later. Every automatic
+next relevant event will do. Instance configuration supplies named presets.
+Users may choose among them and may change a policy later. Every automatic
 action records the authorizing actor and effective policy version.
 
 The default presets are Manual, Planning assist, Execute accepted plans, and
@@ -254,10 +288,10 @@ Bounded autopilot. The surface preserves these invariants:
 - automatic execution acts only on eligible ready tasks within the saved bounds.
 
 The policy preview exposes the three hand-offs separately. On spec acceptance,
-025 mints the planning-decision task; policy decides whether it waits for a
+025 mints the planning-decision task. Policy decides whether it waits for a
 person or is delegated to a planning agent, and “no plan” remains an explicit
 human outcome. A planning agent may produce draft plans but never accept them.
-On plan acceptance, 025 mints the declared execution tasks; policy decides
+On plan acceptance, 025 mints the declared execution tasks. Policy decides
 whether they stay ready, receive suggested delegates, or dispatch automatically
 as they become eligible. Combining several targets in one review surface does
 not combine these decisions or their event records.
@@ -271,7 +305,7 @@ references), accountable user, and human gates that remain.
 The live run groups work into Ready, Running, Waiting, Needs judgment, Failed,
 and Completed. Each active item shows its owner, delegate, lease age, last
 durable event, cost, PR/check state, and next expected signal. Deterministic
-tool or infrastructure failures may retry within policy; ambiguous or semantic
+tool or infrastructure failures may retry within policy. Ambiguous or semantic
 failures pause the affected dependency branch. Independent authorized branches
 continue. Pause automation stops new dispatch without rewriting task state.
 
@@ -294,7 +328,7 @@ alerts are out of scope and remain in the operational alerting system.
 
 Opening Home never marks the brief consumed. An explicit **Reviewed through now**
 action advances the actor's event boundary to the displayed cutoff. Unresolved
-decisions remain in subsequent briefs; routine updates at or before the cutoff
+decisions remain in subsequent briefs. Routine updates at or before the cutoff
 collapse.
 
 ## 10. Accessibility and responsive behavior
@@ -319,7 +353,7 @@ narrow-width audit at 320, 375 and 768 CSS px and at 200% zoom fixed them:
   each table scrolls inside its own labelled, keyboard-focusable container
   rather than losing columns. Everything else reflows.
 - **Nothing is truncated to fit.** A row that cannot hold its content at a
-  narrow width stacks; it does not ellipsis away the text that identifies it.
+  narrow width stacks. It does not ellipsis away the text that identifies it.
 - **Visual order follows document order at every width.** A column that moves
   when the grid collapses moves in the document too, or it does not move: the
   decision rail therefore follows the work list on a phone rather than being
@@ -361,8 +395,8 @@ consequences:
   it must stand out from is the surface behind the control rather than the
   control's own fill — which is what lets one indicator serve every surface.
 - **A rejected form submit is announced by moving focus, not by a live
-  region.** A live region fires for a change to a document already on screen;
-  a rejected submit arrives as a whole new document, so the region announced
+  region.** A live region fires for a change to a document already on screen.
+  A rejected submit arrives as a whole new document, so the region announced
   nothing. The validation message takes focus on load and the page title is
   prefixed `Error:`.
 - **The light theme's accent is dark enough to bound a control.** The primary
@@ -376,14 +410,14 @@ consequences:
 
 1.3.1, 1.3.2, 1.4.3, 1.4.4, 1.4.10, 1.4.11, 1.4.12, 2.4.7, 2.4.11, 2.5.8 and
 4.1.2 have now been verified against the built pages, with no outstanding
-exception; 1.4.13 has no subject, because nothing in the cockpit appears on
+exception. 1.4.13 has no subject, because nothing in the cockpit appears on
 hover or focus.
 
 The rest of this section remains the target it says it is.
 
 The UI follows Sunstone's approved contrast-safe palette and typography. Visual
-style is not a source of domain meaning; icons, text, and state labels accompany
-colour.
+style is not a source of domain meaning. Icons, text, and state labels
+accompany colour.
 
 ## 11. First interactive release
 
@@ -428,9 +462,9 @@ its styling, and its future interactivity are produced.
   `html/template` shell.
 - **Styling — Tailwind CSS v4, standalone.** The stylesheet is generated by the
   Tailwind standalone CLI (CSS-first `@theme`; no Node.js, no PostCSS). §10's
-  approved palette and typography are expressed as `@theme` tokens; the variable
-  fonts remain self-hosted, and light/dark stays keyed on `prefers-color-scheme`
-  with a `[data-theme]` override. Shell rules that are not utility-shaped — skip
+  approved palette and typography are expressed as `@theme` tokens. The
+  variable fonts remain self-hosted, and light/dark stays keyed on
+  `prefers-color-scheme` with a `[data-theme]` override. Shell rules that are not utility-shaped — skip
   link, visible focus, minimum target size, the narrow-viewport column — remain
   hand-authored CSS.
 - **Interactivity — HTMX, self-hosted.** HTMX is embedded and served from the
@@ -441,7 +475,7 @@ Two properties hold across the toolchain. No Node.js runtime and no third-party
 CDN enter the build or the served page — every asset is self-hosted, as the
 fonts already are. Generated artifacts — templ's `*_templ.go` and the built
 stylesheet — are committed and marked generated, so `go build` and `go test`
-need none of these tools installed; CI regenerates and fails on drift.
+need none of these tools installed. CI regenerates and fails on drift.
 
 This section fixes the toolchain, not domain meaning: §10 continues to govern
 that colour is never the sole carrier of state.

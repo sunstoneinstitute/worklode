@@ -251,7 +251,7 @@ so it holds for templates that render the id adjacent to other text
 (`{{ .projectId }}-{{ .id }}`); the explicit field covers what no pattern can,
 a worktree renamed after creation to a name carrying no id at all.
 
-That the two questions have different costs is why they must stay separable: a
+The two questions have different costs, which is why they must stay separable: a
 subprocess per path is affordable only for paths that already cleared the
 guard, i.e. only for events already headed for a backbone call. Widening it to
 answer question 1 would put a `git config` invocation on every keystroke-level
@@ -554,7 +554,7 @@ walking `cwd` and ancestors to the repo root), Copilot CLI documents it, pi docu
 opencode reads it. **Claude Code does not** — it reads `~/.claude/skills/` and `.claude/skills/`
 only.
 
-That is the single highest-leverage fact in this spec: **one symlink of the Worklode skill store
+That is the single highest-value fact in this spec: **one symlink of the Worklode skill store
 into `~/.agents/skills/` serves four harnesses at once**, and Claude Code needs one more.
 
 ### 16.2 Skill and instruction delivery

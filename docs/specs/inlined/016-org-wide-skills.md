@@ -34,7 +34,7 @@ joined via `agent_sessions`), federation beyond a simple repo list, non-skill pl
 
 **Source of truth stays git.** Server config lists skill source repos (e.g. `claude-plugins`)
 with a ref and path globs (`plugins/*/skills/*/SKILL.md`, `skills/*/SKILL.md`). Authoring and
-review stay PR-based; Worklode is an index + distributor.
+review stay PR-based; Worklode only indexes and distributes the result.
 
 **Format:** the existing SKILL.md convention — frontmatter `name`/`description` + body, plus
 optional sibling files (`references/`, scripts). No new format; existing skills ingest as-is.
@@ -128,8 +128,8 @@ execution layer) is declared in a plan's task metadata and minted onto the task 
   → full re-embed on config change.
 - **Endpoint:** `POST /api/v1/skills/recommend` `{task_id | text, limit}` (`doc_iri` joins
   when spec 025 lands) → server assembles query text (task: title + description +
-  governing-spec excerpt — the brief's own material), embeds it, cosine top-k above a
-  server-side score floor. Returns
+  governing-spec excerpt — the brief's own material), embeds it, and keeps the top-k results
+  by cosine similarity above a server-side score floor. Returns
   `{pinned: [...], matches: [{name, description, version_hash, score}]}`; pins are never
   duplicated into matches.
 - **CLI:** `lode skills recommend [--task <id> | --file <path> | --text <s>] --json` — the

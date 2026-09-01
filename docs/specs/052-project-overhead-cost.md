@@ -157,8 +157,8 @@ any authenticated actor may report for any project it can name — the same
 breadth already accepted for `permCrewWrite` (023 §... — see
 `internal/api/authz.go`'s comment on that grant).
 
-**Whole-session scope is what makes the double count unrepresentable.** The
-client re-parses its full transcript and re-posts a running total on every
+**Whole-session scope is what makes a double count impossible to represent.**
+The client re-parses its full transcript and re-posts a running total on every
 heartbeat, and a turn's destination can change between two reports: a
 directory that resolved to a task while its lease was held resolves to
 overhead once the lease is gone. Replacing per destination — one key per
@@ -253,10 +253,10 @@ bill it to *this* project's overhead, where nothing ever removes it.
 Resolution is therefore gated on containment: the worktree root must sit under
 the repository the hook resolved — `Layout.RepoRootOf(root)`, the path above
 the base, or `root` itself for a main checkout — tested with
-`worktree.Contains`, which falls back to `EvalSymlinks` before calling a path
-foreign, because a wrong "foreign" discards real spend. Containment rather
-than equality, so a worktree created from inside another worktree still counts
-as this repository's.
+`worktree.Contains`, which falls back to `EvalSymlinks` before treating a
+path as foreign, because wrongly calling a path foreign discards real spend.
+Containment rather than equality, so a worktree created from inside another
+worktree still counts as this repository's.
 
 Dropping is the disposal **only** for a `cwd` that is provably another
 repository's. The empty-string bucket keeps its deliberate role for a `cwd`

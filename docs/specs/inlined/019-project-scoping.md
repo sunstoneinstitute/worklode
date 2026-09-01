@@ -208,7 +208,7 @@ supported way to fix a stale mapping; nobody should be told to `rm` a file.
 ### 4.3 Bare task numbers
 
 `lode task show 12` resolves to `WL-12` using the current project's key. One
-client-side choke point handles it for every id-taking command: an argument
+place in the client handles it for every id-taking command: an argument
 matching `^[0-9]+$` is prefixed with the resolved project's key, anything else
 is passed through untouched. Full ids keep working from anywhere, unscoped and
 unchecked — no cross-project warning, no refusal.

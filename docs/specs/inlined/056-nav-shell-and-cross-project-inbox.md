@@ -16,13 +16,13 @@
 ## 0. Purpose
 
 Spec 032 §2 gave the cockpit two stacked navigation rows and eight global
-destinations. In use, three of those destinations are places nobody navigates
-to on purpose — Home duplicates the brand's own landing behaviour, Reviews and
-Deliveries are single queries a person visits when something is waiting for
-them, which is a notification, not a destination. Meanwhile the one page that
-tells a person what is waiting for them across every project they belong to
-does not exist, and the task detail page loses the project sidebar the rest of
-the project surface keeps.
+destinations. In practice, nobody navigates to three of those destinations on
+purpose: Home duplicates what the brand link already does, and Reviews and
+Deliveries are single queries a person visits only when something is waiting
+for them — that is a notification, not a destination. Meanwhile no page tells
+a person what is waiting for them across every project they belong to, and the
+task detail page drops the project sidebar that every other project page
+keeps.
 
 This spec states three changes to the cockpit shell that answer to one idea:
 **one row of navigation, and one place that says what is blocked on you.**
@@ -50,8 +50,8 @@ Home, Reviews and Deliveries leave the destination list. This is a
 navigation-visibility change only: `/`, `/reviews` and `/deliveries` keep their
 routes, pages, and permissions, stay reachable by URL and by any link a page
 already renders, and `/` remains the post-login landing page 032 §9 defines.
-They leave the list because the shell now answers what they were being used to
-ask — `/` is one click on the brand, and Reviews and Deliveries are
+They leave the list because the shell now answers the question they were used
+for — `/` is one click on the brand, and Reviews and Deliveries are
 notifications, which §3 gives a home.
 
 The narrow-width behaviour 032 §10 requires carries over unchanged, in its new
@@ -137,14 +137,14 @@ is open to anyone or to a role; nobody is individually accountable for it, and
 the lead is who accountability falls to when it falls to nobody.
 
 The order is the spec's substance, not a layout preference. It descends from
-"blocked on this exact person" to "happening near this person": a review
-addressed to the actor stops one specific piece of work until they act, an
-unowned review in their project stops work until somebody acts and they are
-that somebody, a review of their own work is theirs to chase but not theirs to
-decide, and the work buckets are progressively further from a decision only
-they can make. This is 032 §4's rule — one primary next decision, everything
-else secondary — applied across a person's whole portfolio instead of within
-one project.
+"blocked on this exact person" to "happening near this person." A review
+addressed to the actor stops one specific piece of work until they act. An
+unowned review in their project stops work until somebody acts, and they are
+that somebody. A review of their own work is theirs to chase but not theirs to
+decide. The work buckets sit progressively further from a decision only they
+can make. This is 032 §4's rule — one primary next decision, everything else
+secondary — applied across a person's whole portfolio instead of within one
+project.
 
 ### 3.3 Ranking within the work buckets
 

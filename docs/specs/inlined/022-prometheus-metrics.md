@@ -77,7 +77,7 @@ When present it registers:
 | `worklode_lease_expiries_total` | counter | — |
 | `worklode_leases_active` | gauge (custom collector) | — |
 
-`outcome` on claims maps from the store's sentinel errors: `ok`, `leased` (ErrLeased),
+`outcome` on claims comes from the store's sentinel errors: `ok`, `leased` (ErrLeased),
 `blocked` (ErrBlocked), `not_found` (ErrNotFound), `none` (ClaimNext found no eligible
 task), `error` (anything else). Incremented inside `Claim` (`leases.go`), `ClaimNext`
 (`ranking.go`), `Renew`, `Release`. `ExpireLeases` (`leases.go`) adds the count it

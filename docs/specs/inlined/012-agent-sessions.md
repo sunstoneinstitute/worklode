@@ -77,7 +77,7 @@ Columns on `leases` would record only the newest session and leave per-session
 cost with nowhere to live.
 
 `agent`'s CHECK constraint mirrors the existing style of `events.source` and
-`actors.kind`, and admits the harnesses spec 008 §19 names; adding a tool is a
+`actors.kind`, and allows the harnesses spec 008 §19 names; adding a tool is a
 one-line migration. `external_session_id` is
 the tool's own identifier (a UUID for Claude Code), namespaced by `agent`
 because nothing guarantees two tools won't collide.
@@ -93,11 +93,12 @@ agents in one directory; it is harmless and not worth a constraint.
 Token and cost columns ship nullable and unpopulated. Nothing computes them in
 this cut; they are in the migration so the table is shaped right.
 
-**Superseded by migration `0008_session_cost`.** Two token columns turned out
-not to be a shape cost can be computed from: a vendor prices a prompt in four
-separate classes (uncached input, a cache write at each of two TTLs, and a
-cache read) at rates spanning 0.1x to 2x base input, and one session mixes
-models at several-fold different rates. These columns survive as the session's
+**Superseded by migration `0008_session_cost`.** The two token columns turned
+out to have the wrong shape to compute cost from: a vendor prices a prompt in
+four separate classes (uncached input, a cache write at each of two TTLs
+(time-to-live periods), and a cache read) at rates spanning 0.1x to 2x base
+input, and one session mixes models at several-fold different rates. These
+columns survive as the session's
 headline rollup — `input_tokens` is every prompt-side class summed — and the
 billable detail moved to `agent_session_usage`, keyed by (session, day, model,
 speed) and priced from the effective-dated `model_prices` table. See the

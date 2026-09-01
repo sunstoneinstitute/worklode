@@ -28,6 +28,15 @@ docs/specs/001-identity-and-authentication.md:
     sec-11: "## 11. Testing"
     sec-12: "## 12. Non-goals"
     sec-13: "## 13. Open questions"
+docs/specs/002-glossary.md:
+  sections:
+    sec-0: "## 0. Purpose & scope"
+    sec-1: "## 1. The execution backbone"
+    sec-2: "## 2. Design documents"
+    sec-3: "## 3. The knowledge graph"
+    sec-4: "## 4. Projects and people"
+    sec-5: "## 5. Groupings are queries, not rows"
+    sec-6: "## 6. Reading a cross-reference"
 docs/specs/004-execution-backbone.md:
   sections:
     sec-0: "## 0. Purpose & scope"
@@ -434,6 +443,7 @@ docs/specs/032-project-cockpit.md:
     sec-1: "## 1. Facts drive the interface"
     sec-2: "## 2. Application and project navigation"
     sec-3: "## 3. One cockpit with lifecycle modes"
+    sec-3.1: "### 3.1 Stage due dates"
     sec-4: "## 4. Focus and the next decision"
     sec-5: "## 5. Intake and promotion"
     sec-6: "## 6. People and agent presentation"

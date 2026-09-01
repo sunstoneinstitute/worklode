@@ -32,14 +32,14 @@ and `grep` returns nothing.
 **But the mirror-image failure is just as common here, and embeddings cause it.**
 The other half of what gets asked of this corpus is exact tokens: `child_of`,
 `LODE_BRANCH_TEMPLATE`, `WL-142`, `hnsw`, `wlc:TaskKind`. Dense retrieval is
-weakest precisely there — an identifier is a short, low-context string whose
+weakest exactly there. An identifier is a short, low-context string whose
 meaning is its spelling, and a 768-dimensional summary of "what this text is
-about" is the wrong instrument for finding it. Measured against a four-row
-fixture standing in for the corpus (§6.3), the query `child_of` ranked the
-section that actually defines `child_of` **third** on vector similarity alone,
-behind two sections that were merely about task hierarchy. Lexical search ranked
-it first. Neither retriever is adequate on its own, and which one fails is a
-property of the query, not of the corpus — so the system cannot pick one.
+about" is the wrong tool for finding it. Measured against a four-row fixture
+standing in for the corpus (§6.3), the query `child_of` ranked the section that
+actually defines `child_of` **third** on vector similarity alone, behind two
+sections that were merely about task hierarchy. Lexical search ranked it first.
+Neither retriever is adequate on its own. Which one fails depends on the query,
+not the corpus — so the system cannot just pick one.
 
 This spec therefore specifies **hybrid retrieval fused by reciprocal rank**
 (§6) as the search mechanism, not as a later enhancement. A dense-only index
@@ -115,28 +115,31 @@ Three things fall out of it, and only the first is obvious:
 2. **Changing model never means changing schema.** All three candidates can emit
    768: EmbeddingGemma natively, `text-embedding-3-*` via the `dimensions`
    request parameter, `gemini-embedding-001` via `output_dimensionality`. All
-   three are Matryoshka-trained, so a truncated-and-renormalised vector is a
-   real embedding rather than a lossy crop. A model swap re-embeds the corpus
-   (§8) and touches no migration.
+   three are Matryoshka-trained (trained so that a shorter prefix of the vector
+   is itself a valid, smaller embedding), so a truncated-and-renormalised vector
+   is a real embedding rather than a lossy crop. A model swap re-embeds the
+   corpus (§8) and touches no migration.
 3. **The typmod becomes a guard rather than a hazard.** 016's comment on
    `skill_embeddings` warns that mixed dimensions make cosine queries error at
    query time. With a typmod the mismatch is refused at `INSERT`, at the moment
    the wrong-shaped vector is produced, by the row that produced it.
 
-768 rather than 1536 because storage and index-build cost scale linearly in the
-width, recall differences at this corpus size are in the noise, and 768 is the
-largest width every candidate reaches natively or by truncation.
+768 rather than 1536, for three reasons: storage and index-build cost scale
+linearly with the width, recall differences at this corpus size are in the
+noise, and 768 is the largest width every candidate reaches natively or by
+truncation.
 
 ### 2.3 Default model: EmbeddingGemma-300M, self-hosted on CPU
 
-The requirement that the model be serviceable on CPU and the offer of hosted
-APIs pull in different directions, so name the tension: a hosted API needs no
-GPU *of ours*, but it is not a model we can run. Only open weights satisfy the
-requirement in the stronger sense, and this corpus argues for the stronger
-sense — it is the org's own specs, ADRs, plans, and task bodies, i.e. the
-written record of unreleased work. Indexing it means embedding all of it, which
-means sending all of it somewhere. That is a data-egress decision, and it is
-cheaper to not make it.
+The requirement that the model run on CPU and the option of a hosted API pull
+in different directions, so it's worth naming the tension directly. A hosted
+API needs no GPU *of ours*, but it still isn't a model we can run ourselves.
+Only open weights satisfy the requirement in that stronger sense — actually
+running the model, not just avoiding the GPU cost — and this corpus argues for
+the stronger sense. It is the org's own specs, ADRs, plans, and task bodies,
+i.e. the written record of unreleased work. Indexing it means embedding all of
+it, and embedding it through a hosted API means sending all of it somewhere.
+That is a data-egress decision, and it is cheaper to simply not make it.
 
 The default is therefore **`google/embeddinggemma-300m`**, served locally:
 
@@ -168,8 +171,8 @@ invalidates on change (§8), so this is a config decision, not a fork.
 
 `text-embedding-3-small` is the pragmatic hosted default: symmetric (no task
 prefixes), an 8192-token window that makes §4's chunk budget non-binding, and a
-price where the entire corpus costs well under a dollar to embed. Its cost is
-that it is unavailable to an air-gapped instance and unrunnable anywhere else.
+price where the entire corpus costs well under a dollar to embed. The tradeoff:
+it is unavailable to an air-gapped instance and cannot run anywhere else.
 
 `gemini-embedding-001` earns its place on multilingual coverage. It **must** be
 truncated to 768 and renormalised; its native 3072 is unindexable (§2.2).
@@ -288,13 +291,13 @@ titles are the highest-signal text in the tracker.
 
 ## 5. Storage
 
-One table for all three kinds, rather than three parallel tables. The
-alternative was considered and rejected: three tables means three near-identical
-store methods, three index pairs, and a cross-kind search that is a `UNION ALL`
-of ranked subqueries which then has to be re-ranked. One table means one query,
-and the referential integrity that a naive polymorphic key would lose is kept by
-giving each kind its own nullable FK column with a `CHECK` that exactly one is
-set.
+One table holds all three kinds, rather than three parallel tables. Three
+tables were considered and rejected: that would mean three near-identical
+store methods, three index pairs, and a cross-kind search built as a
+`UNION ALL` of ranked subqueries that then has to be re-ranked. One table
+means one query. A naive polymorphic key would lose referential integrity;
+instead each kind gets its own nullable FK column, with a `CHECK` constraint
+that exactly one is set.
 
 ```sql
 CREATE TABLE index_chunks (
@@ -364,12 +367,12 @@ CREATE INDEX index_chunks_embedding ON index_chunks
 CREATE INDEX index_chunks_tsv ON index_chunks USING gin (tsv);
 ```
 
-`skill_embeddings` is dropped by the same migration and its rows are not
-carried over — they are 016-width vectors from a possibly different model, so
-they are not comparable with anything this spec produces, and they carry none of
-the text the lexical arm needs. The corpus re-embeds on first convergence, which
-costs minutes on the sidecar. `embedding_config` survives unchanged; it is
-already exactly the right table for §8.
+`skill_embeddings` is dropped by the same migration, and its rows are not
+carried over. They are 016-width vectors from a possibly different model, so
+they are not comparable with anything this spec produces, and they carry none
+of the text the lexical arm needs. The corpus re-embeds on first convergence,
+which costs minutes on the sidecar. `embedding_config` survives unchanged; it
+is already exactly the right table for §8.
 
 ## 6. Retrieval: two arms, fused by rank
 
@@ -396,12 +399,13 @@ LIMIT $candidates          -- default 50, not the caller's limit
 reason: one strongly matching section should surface its document, and averaging
 punishes long documents for being long.
 
-**Pooling happens before ranking, and this is not cosmetic.** RRF gives every
-row in a ranked list a share of the score, so fusing *chunk* rankings would let a
-long document accumulate mass by placing eight mediocre chunks in the top 50 and
-outrank a short document that answered the question exactly once. Ranking
-subjects — for docs, `(doc_id, anchor)`, so one spec may return two sections as
-two results — is what keeps fusion honest.
+**Pooling happens before ranking, and that is not cosmetic.** RRF gives every
+row in a ranked list a share of the score. So fusing *chunk* rankings directly
+would let a long document accumulate mass by placing eight mediocre chunks in
+the top 50, letting it outrank a short document that answered the question
+exactly once. Ranking by subject instead — for docs, by `(doc_id, anchor)`, so
+one spec may still return two sections as two results — is what keeps fusion
+honest.
 
 The floor (default 0.35, from 016) is a **candidate filter on this arm only**,
 not a threshold on the final result. It has to be: after fusion the score is a
@@ -441,10 +445,10 @@ Under `simple` that same query does **not** match the prose and **does** match
 about children is worse than no lexical arm at all, because it pollutes the
 fused ranking with confident noise.
 
-The recall that stemming would have bought is not lost, it is **relocated**: it
-is the dense arm's entire job. That is the division of labour a hybrid system
-buys, and it is why the two arms should not be configured to do the same thing.
-The lexical arm exists to be *exact*.
+The recall that stemming would have bought is not lost. It is **relocated**: it
+becomes the dense arm's entire job. That is the division of labour a hybrid
+system buys, and it is why the two arms should not be configured to do the same
+thing. The lexical arm exists to be *exact*.
 
 Weights follow `setweight` in §5 — a header match (`A`) outranks a body match
 (`B`) under `ts_rank_cd`'s default weighting.
@@ -455,19 +459,20 @@ Weights follow `setweight` in §5 — a header match (`A`) outranks a body match
 score(s) = Σ_arms  w_arm / (k + rank_arm(s))          k = 60, w = 1.0 both arms
 ```
 
-Implemented as a `FULL OUTER JOIN` between the two candidate sets on the subject
-key, `coalesce`-ing the missing rank's contribution to zero, ordered by the sum,
-`LIMIT` the caller's limit.
+Implemented as a `FULL OUTER JOIN` between the two candidate sets, joined on
+the subject key. A missing rank's contribution is `coalesce`d to zero. Rows are
+ordered by the summed score, then cut to the caller's `LIMIT`.
 
-**Rank, not score, and that is the point.** Cosine similarity lives on roughly
-[0.2, 0.9] with a corpus-dependent spread; `ts_rank_cd` is unbounded and depends
-on term frequency and document length. There is no principled way to put them on
-one scale — min-max normalising per query is the usual attempt and it is
-unstable, because a query where every dense score is ~0.4 stretches noise across
-the whole range and lets the dense arm dominate on nothing. RRF discards the
-magnitudes and keeps only the ordering each arm is actually reliable about. `k =
-60` is the constant from the original formulation; its job is to flatten the head
-so that a rank-1 hit does not automatically beat the sum of two rank-2s.
+**Rank, not score — that is the point.** Cosine similarity lives on roughly
+[0.2, 0.9], and the spread depends on the corpus. `ts_rank_cd` is unbounded,
+and depends on term frequency and document length. There is no principled way
+to put the two on one scale. Min-max normalising per query is the usual
+attempt, and it is unstable: a query where every dense score is around 0.4
+stretches that noise across the whole range and lets the dense arm dominate on
+nothing. RRF sidesteps this by discarding the magnitudes and keeping only the
+ordering each arm is actually reliable about. `k = 60` is the constant from the
+original formulation. Its job is to flatten the head of the ranking, so a
+rank-1 hit does not automatically beat the sum of two rank-2 hits.
 
 Worked example, on the fixture that motivated §0 — query `child_of`:
 
@@ -484,17 +489,18 @@ mechanism and not a hand-tuned blend.
 
 ### 6.4 Filters, and an honest note on HNSW
 
-Kind and project filters apply inside both arms. The `project IS NULL` disjunct
-is what keeps org-wide skills visible from inside a project-scoped search (019).
+Kind and project filters apply inside both arms. The `project IS NULL` clause
+— the "or it's org-wide" half of the filter — is what keeps org-wide skills
+visible from inside a project-scoped search (019).
 
-pgvector applies the `WHERE` clause after the index walk, so a highly selective
-filter can return fewer than `$candidates` rows from the dense arm even when
-matches exist. At this corpus size the planner will often prefer an exact scan
-anyway and the question is moot; the lexical arm, being a GIN index over a
-`@@` predicate, does not have the problem at all. If and when it stops being
-moot the fix is `hnsw.iterative_scan`, not a redesign — noted here so the first
-person to see a short candidate set does not go looking for a bug in the
-ranking.
+pgvector applies the `WHERE` clause after walking the index, so a highly
+selective filter can return fewer than `$candidates` rows from the dense arm
+even when matches exist. At this corpus size the query planner will often
+choose an exact scan anyway, so the problem rarely shows up; the lexical arm,
+being a GIN index over a `@@` predicate, does not have the problem at all. If
+it does start showing up, the fix is `hnsw.iterative_scan`, not a redesign —
+noted here so the first person who sees a short candidate set does not go
+looking for a bug in the ranking.
 
 ## 7. Freshness: convergence, not hooks
 
@@ -511,9 +517,10 @@ crashed run, a failed provider call, or a row written by a path nobody
 remembered to instrument all resolve on the next pass, whereas a missed event is
 missed forever. It is **already the pattern** — `skillsync.embedMissing` does
 exactly this today and is the code being generalised. And the event vocabulary
-does not currently reach: `eventbus` knows `wl:DocumentSubmitted` and
-`wl:DocumentAccepted` and nothing about tasks (025 §15.2), so an event-driven
-indexer would need new event types before it could index a task at all.
+does not currently reach far enough: `eventbus` knows about
+`wl:DocumentSubmitted` and `wl:DocumentAccepted`, but nothing about tasks
+(025 §15.2). So an event-driven indexer would need new event types before it
+could index a task at all.
 
 The cost is latency — a task is searchable on the next pass, not the next
 instant. That is the right trade for a retrieval aid, and the event log remains
@@ -527,26 +534,28 @@ the lexical arm needs the rows (§11); it simply writes no vectors.
 
 ## 8. Provider change invalidates the vectors
 
-Unchanged in principle from 016 §2, widened in scope.
+This section is unchanged in principle from 016 §2, just widened in scope.
 `embedding_config.provider_id` records the space the stored vectors belong to.
 At startup, before the indexer embeds anything, the server compares the
 configured provider's `ID()` against the stored one; on a mismatch it clears
 **every** vector and records the new id. The next convergence pass rebuilds them.
 
 Because the chunk row now carries the lexical arm's text as well as the vector,
-invalidation nulls the `embedding` column rather than deleting the row — the
-text and its `tsv` are provider-independent and there is no reason to throw away
-a working lexical index because the embedding model changed. This makes the
-`embedding` column nullable; the dense arm already filters on similarity, so a
-null-vector row simply does not appear in its candidate set. **During a re-embed
-the instance therefore degrades to lexical-only rather than to nothing.**
+invalidation nulls the `embedding` column instead of deleting the row. The text
+and its `tsv` are provider-independent, so there is no reason to throw away a
+working lexical index just because the embedding model changed. This is also
+why the `embedding` column is nullable: the dense arm already filters on
+similarity, so a null-vector row simply does not appear in its candidate set.
+**During a re-embed the instance therefore degrades to lexical-only, not to
+nothing.**
 
 `skillsync.InvalidateOnProviderChange` generalises to all kinds and moves out of
 `skillsync` — it is no longer a skills concern.
 
-Clearing rather than filtering is deliberate: vectors from two models in one
-table are not merely stale, they are meaningless to compare, and a
-`WHERE provider_id = ...` predicate would make it possible to serve them.
+Clearing rather than filtering is deliberate. Vectors from two different
+models in one table are not merely stale — they are meaningless to compare —
+and a `WHERE provider_id = ...` predicate would make it possible to serve them
+anyway.
 
 ## 9. Surfaces
 
@@ -558,7 +567,7 @@ Returning the arm ranks is what makes a bad result diagnosable rather than
 merely disappointing. `kind` is repeatable; omitted means all three.
 
 `mode` is `hybrid` (default), `dense`, or `lexical`, and exists so the arms can
-be compared on a real query rather than argued about. It is a debugging affordance
+be compared on a real query rather than argued about. It is a debugging feature
 with a stable contract, not a tuning knob callers are expected to set.
 
 The route needs a `routeGuards` entry or `NewServer` refuses to boot
@@ -608,9 +617,10 @@ without log-diving.
 Two are worth alerting on. `worklode_index_subjects_stale` should return to zero
 every pass; a floor above zero means a subject fails to embed repeatedly.
 `worklode_search_arm_empty_total{arm="lexical"}` rising while the dense arm
-stays busy is the signature of a broken `tsv` — the failure mode this spec is
-most exposed to, because a lexical arm that quietly returns nothing degrades
-into exactly the dense-only system §0 rejects, and nothing else would notice.
+stays busy is the signature of a broken `tsv`. This is the failure mode this
+spec is most exposed to: a lexical arm that quietly returns nothing degrades
+the whole system into exactly the dense-only setup §0 rejects, and nothing
+else would notice.
 
 ## 11. Degraded operation
 

@@ -37,20 +37,21 @@ the execution backbone (004); the plugin (008); the data-platform deploy of the 
 
 Two edge layers over the **same** node set (Components, DesignDocs, Tasks, Deliverables from 006):
 
-- **Declared layer (intent).** Authored *with* a design doc, crit-reviewed while the doc is a
-  draft with an open review task (006 §9) and gated on that review's resolution before it counts
-  as declared intent. These are the edges a human/agent claims are true: "component A
+- **Declared layer (intent).** Authored *with* a design doc and reviewed while the doc is a
+  draft with an open review task (006 §9); an edge only counts as declared intent once that
+  review is resolved. These are the edges a human or agent claims are true: "component A
   *should* depend on B", "this Spec *governs* component C". Written by the design-authoring skill (008).
 - **Observed layer (reality).** Derived mechanically by the derivers below from code, PRs, and
   deploys. No human authors these; they are recomputed and overwritten on every run.
 
-**Drift = the set difference between the two layers, per predicate.** Every struggle-list item
-is a read over that diff — never a bespoke report, always a standing query.
+**Drift = the set difference between the two layers, per predicate.** Every item on that list
+is a read over the diff — never a custom report, always a standing query.
 
 ### 1.1 Representation: named graphs per source
 
-The KG is a named-graph quad store (006). We partition by source so each layer is independently
-recomputable and a re-run is an **atomic named-graph replace** (`PUT`, per 006):
+The KG (knowledge graph) is a named-graph quad store (006). We partition it by source so each
+layer can be recomputed on its own, and a re-run is an **atomic named-graph replace** (`PUT`,
+per 006):
 
 | Named graph | Layer | Written by |
 |---|---|---|
@@ -86,15 +87,16 @@ Its subjects are the repo's own components, so the sibling-union argument above 
 unchanged.
 
 *Concurrency (compare-and-swap disposition).* Per-repo partitioning — one writer per graph — is
-what makes the blind `PUT` sound; it does not require compare-and-swap. Two runs racing on the
+what makes the blind `PUT` safe; it does not need compare-and-swap. Two runs racing on the
 *same* graph (two pushes close together in one repo's CI; overlapping server runs) remain
 last-write-wins, and because every run recomputes the full document from its inputs, the surviving
 state is at worst one run stale and self-heals on the next run. `If-Match` CAS on
 `graphserver.PutGraph` (graph-server already honours it; tracked as a gated item in
 `docs/follow-ups.md`) stays a hardening follow-up, not a prerequisite of this spec.
 
-*(Alternative considered and rejected for v1: RDF-1.2 triple-term annotation tagging each edge
-with a `wl:layer` — heavier to query and to replace atomically than one graph per source.)*
+*(Alternative considered and rejected for v1: RDF (Resource Description Framework)-1.2
+triple-term annotation tagging each edge with a `wl:layer` — heavier to query and to replace
+atomically than one graph per source.)*
 
 ---
 
@@ -185,17 +187,17 @@ have no v1 source — are specified in 006 §2.1–§6.
 
 ## 3. Standing queries
 
-Two more standing queries arrive over the implements manifest (025 §11): document coverage, and a
+Two more standing queries come from the implements manifest (025 §11): document coverage, and a
 **stale-claim** query — a claim pinned at version `vN` is stale once the section it names has
 since been revised. The stale-claim query replaces the `dct:modified`-vs-task-closure query this
-spec previously ran here, an mtime heuristic that fired on typo fixes and missed semantic changes
-to a section nobody claimed; the unimplemented-specs query below is likewise re-pointed at the
-Component→Section edge instead of the Task→DesignDoc join.
+spec previously ran here, an mtime (file modification time) heuristic that fired on typo fixes
+and missed semantic changes to a section nobody claimed; the unimplemented-specs query below is
+likewise re-pointed at the Component→Section edge instead of the Task→DesignDoc join.
 
 Each is a SPARQL-shaped read over the graph. Sketches use `wl:` for vocabulary, `wlc:` for concept-
-scheme members, `g:` for the graph names above, and elide the IRI prefix boilerplate 006 defines.
-Layer comparison is expressed with
-`GRAPH` clauses; `UNION` across sibling `observed/*` graphs is implied where written as one graph.
+scheme members, `g:` for the graph names above, and omit the IRI prefix boilerplate 006 defines.
+Layer comparison is expressed with `GRAPH` clauses; `UNION` across sibling `observed/*` graphs is
+implied wherever the text treats them as one graph.
 
 ### 3.1 Architectural drift
 
@@ -254,7 +256,8 @@ SELECT ?section WHERE {
   FILTER NOT EXISTS { ?c wl:implements ?section . }
 }
 ```
-(`wl:status`'s SKOS scheme — ending at `superseded` — is defined in 006 §9.)
+(`wl:status`'s SKOS (Simple Knowledge Organization System) scheme — ending at `superseded` —
+is defined in 006 §9.)
 
 ### 3.4 The ready frontier — ready + unblocked tasks
 
@@ -290,9 +293,9 @@ cross-store **critical path** (below) over `blocks` + `dct:requires`; this enric
 
 ## 4. Critical path v1
 
-**Estimate-free.** No effort weights in v1 (effort estimation judged unlikely to add
+**Estimate-free.** No effort weights in v1 (effort estimation was judged unlikely to add
 signal). Criticality is proxied by two unit-weight graph measures over the combined dependency
-DAG whose edges are `dct:requires` (KG) **+** `blocks` (backbone):
+DAG (directed acyclic graph) whose edges are `dct:requires` (KG) **+** `blocks` (backbone):
 
 - **Chain depth** `depth(t)` = length of the longest unit-weight predecessor chain ending at `t`.
   Tasks on a longest chain form the **critical path**; `is_critical(t)` = `t` lies on such a chain.
@@ -382,8 +385,8 @@ Read-only by construction — the only ways to change the graph are authoring de
 1. ~~PR → Task join reliability~~ — **RESOLVED.** Tasks mirror **bidirectionally** to GitHub
    Issues (`wl:mirrors`, spec 006); a PR joins its Task the GitHub-native way — `Closes #N` in the
    PR body closes the mirrored Issue, and the `pr-affects` deriver resolves PR → Issue → Task
-   through it. No bespoke branch-name parse or enforced PR-body task ref needed; we piggyback on
-   how GitHub already models it. (Task↔Issue mirroring is a new requirement on 004/008.)
+   through it. No custom branch-name parsing or enforced PR-body task ref needed; we reuse how
+   GitHub already models it. (Task↔Issue mirroring is a new requirement on 004/008.)
 2. **Layer partition mechanism — confirm named graphs.** This spec commits to one named graph per
    source over RDF-1.2 edge annotation. 006 should ratify (or override) before implementation.
    (006 confirms these declared/observed source graphs are **orthogonal** to its per-Project
