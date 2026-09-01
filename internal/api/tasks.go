@@ -492,8 +492,8 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
-		req.NeedsDecomposition == nil && req.State == nil && req.Secrets == nil &&
-		req.Artifacts == nil && req.Kind == nil {
+		req.NeedsDecomposition == nil && req.HumanOnly == nil && req.State == nil &&
+		req.Secrets == nil && req.Artifacts == nil && req.Kind == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
@@ -540,7 +540,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.recordTaskEvent(r.Context(), "cli", "task.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.Kind); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{

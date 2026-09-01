@@ -382,11 +382,13 @@ func secretsJSON(names []string) ([]byte, error) {
 // still checked). concern follows special clearing rules: "" or "none" clears
 // it to NULL; any other value must be a valid concern. A blank title is
 // rejected, mirroring CreateTask: every task keeps a title for its whole life.
-// secretNames, when non-nil, replaces the whole tasks.secrets list. kind,
+// secretNames, when non-nil, replaces the whole tasks.secrets list.
+// humanOnly, when non-nil, sets or clears the flag that keeps a task out of
+// the ranked ready set (readyCandidates) without blocking a claim by id. kind,
 // when non-nil, retags the task (WL-101) — validated against validKinds
 // here as well as at the API gate, so no store caller can write a kind the
 // CHECK constraint would refuse with a raw error.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition *bool, kind *string) error {
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind *string) error {
 	if title != nil && strings.TrimSpace(*title) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
@@ -452,6 +454,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	if needsDecomposition != nil {
 		set("needs_decomposition", *needsDecomposition)
 	}
+	if humanOnly != nil {
+		set("human_only", *humanOnly)
+	}
 	if kind != nil {
 		set("kind", *kind)
 	}
@@ -474,9 +479,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // DEFAULT '[]'" (see migrations 0007 and 0024), so a bare cast is enough — no
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
 // 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
-// (migration 0034) are last for the same reason, and are all-null or all-set
-// together. prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification`
+// (migration 0034) are all-null or all-set together, and human_only
+// (migration 0060) is last for the same append-only reason.
+// prefixedTaskColumns below requires each entry to be comma-free.
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -495,7 +501,7 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var deletedBy, justification sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
-		&deletedAt, &deletedBy, &justification); err != nil {
+		&deletedAt, &deletedBy, &justification, &t.HumanOnly); err != nil {
 		return nil, err
 	}
 	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)

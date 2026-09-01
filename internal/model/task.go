@@ -6,20 +6,26 @@ import "time"
 // "" when the task is unassigned; Skills is never nil (the store guarantees
 // an empty slice, so the JSON reads [] rather than null).
 type Task struct {
-	ID                 string    `json:"id"`
-	Project            string    `json:"project"`
-	Title              string    `json:"title"`
-	Body               string    `json:"body"`
-	Priority           string    `json:"priority"`
-	Kind               string    `json:"kind"`
-	State              string    `json:"state"`
-	Concern            string    `json:"concern"`
-	NeedsDecomposition bool      `json:"needs_decomposition"`
-	CreatedBy          string    `json:"created_by"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
-	Skills             []string  `json:"skills"`
-	Assignee           string    `json:"assignee"`
+	ID                 string `json:"id"`
+	Project            string `json:"project"`
+	Title              string `json:"title"`
+	Body               string `json:"body"`
+	Priority           string `json:"priority"`
+	Kind               string `json:"kind"`
+	State              string `json:"state"`
+	Concern            string `json:"concern"`
+	NeedsDecomposition bool   `json:"needs_decomposition"`
+	// HumanOnly marks a task no unattended worker may pick up: ready to work,
+	// but only by a person (console-only steps like minting a cloud
+	// credential). It keeps the task out of the ranked ready set that
+	// `lode next` and the frontier share, while an explicit claim by id
+	// still succeeds — that is the escape hatch for the person doing it.
+	HumanOnly bool      `json:"human_only"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Skills    []string  `json:"skills"`
+	Assignee  string    `json:"assignee"`
 	// Branch is the server-authoritative task branch. It is derived from
 	// LODE_BRANCH_TEMPLATE, which only the server knows, so a client matching
 	// local refs to tasks reads it rather than rendering one (008 §3.1).
@@ -110,7 +116,9 @@ type EditTaskInput struct {
 	Priority           *string `json:"priority"`
 	Concern            *string `json:"concern"`
 	NeedsDecomposition *bool   `json:"needs_decomposition"`
-	State              *string `json:"state"`
+	// HumanOnly, when non-nil, sets or clears the no-unattended-pickup flag.
+	HumanOnly *bool   `json:"human_only"`
+	State     *string `json:"state"`
 	// Secrets, when non-nil, replaces the task's declared secret names
 	// wholesale (spec 017).
 	Secrets *[]string `json:"secrets"`
