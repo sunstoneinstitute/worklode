@@ -205,8 +205,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task set` — Set one field on a task, e.g. `lode task set state merged WL-5`
 - `lode task show` — Show a task's details: body, edges, blocked status, and lease holder
   Flags: --pager, --usage
-- `lode task skills` — Show or replace the task's pinned skills
-  Flags: --set
+- `lode task skills` — Show the task's pinned skills
 - `lode task start` — Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.
 - `lode task stop` — Put a started task back to ready; keeps the assignment.
 - `lode task submit` — Move your in-progress task to review.
