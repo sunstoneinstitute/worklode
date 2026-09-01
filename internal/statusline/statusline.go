@@ -37,6 +37,7 @@ const autoCompactBufferPct = 16.5
 const (
 	branchSymbol   = "⎇" // U+2387 alternate key, marks the git branch
 	worktreeSymbol = "⧉" // U+29C9 two joined squares, marks a linked worktree
+	resetSymbol    = "⧖" // U+29D6 white hourglass, marks a usage window's reset countdown
 )
 
 // Payload is the status-line JSON the harness writes to stdin. Both harnesses
@@ -47,6 +48,7 @@ type Payload struct {
 	Workspace     *WorkspaceInfo `json:"workspace"`
 	SessionID     string         `json:"session_id"`
 	ContextWindow *ContextWindow `json:"context_window"`
+	RateLimits    *RateLimits    `json:"rate_limits"`
 }
 
 // ModelInfo names the model driving the session.
@@ -63,6 +65,21 @@ type WorkspaceInfo struct {
 // ContextWindow carries the harness's own accounting of window occupancy.
 type ContextWindow struct {
 	RemainingPercentage *float64 `json:"remaining_percentage"`
+}
+
+// RateLimits carries the Claude.ai subscription usage the harness reports on
+// stdin (Claude Code ≥2.1.x) — present only for subscribers, and only once
+// the API has reported at least one window. Both windows are read straight
+// off the payload: unlike ContextWindow, nothing here needs a network call.
+type RateLimits struct {
+	FiveHour *RateLimitWindow `json:"five_hour"`
+	SevenDay *RateLimitWindow `json:"seven_day"`
+}
+
+// RateLimitWindow is one usage window (5-hour session or 7-day week).
+type RateLimitWindow struct {
+	UsedPercentage float64 `json:"used_percentage"`
+	ResetsAt       int64   `json:"resets_at"`
 }
 
 // Options is the ambient state rendering reads. Every field has a working
@@ -106,13 +123,14 @@ func Run(r io.Reader, w io.Writer, timeout time.Duration, opts Options) error {
 func Render(p *Payload, opts Options) string {
 	model := renderModel(p)
 	location := renderLocation(p, opts.Dir)
-	task := renderTask(configDir(opts.ConfigDir), p.SessionID)
-	ctx := renderContext(p, opts.TempDir)
+	cfgDir := configDir(opts.ConfigDir)
+	task := renderTask(cfgDir, p.SessionID)
+	usage := renderUsage(p, opts.TempDir, cfgDir)
 
 	if task != "" {
-		return fmt.Sprintf("\x1b[2m%s\x1b[0m │ \x1b[1m%s\x1b[0m │ \x1b[2m%s\x1b[0m%s", model, task, location, ctx)
+		return fmt.Sprintf("\x1b[2m%s\x1b[0m │ \x1b[1m%s\x1b[0m │ \x1b[2m%s\x1b[0m%s", model, task, location, usage)
 	}
-	return fmt.Sprintf("\x1b[2m%s\x1b[0m │ \x1b[2m%s\x1b[0m%s", model, location, ctx)
+	return fmt.Sprintf("\x1b[2m%s\x1b[0m │ \x1b[2m%s\x1b[0m%s", model, location, usage)
 }
 
 // errTimeout reports that no payload arrived in time.
@@ -307,12 +325,103 @@ func renderTask(dir, session string) string {
 	return ""
 }
 
-// renderContext returns the context-usage segment — a ten-segment meter and a
-// percentage, coloured by how close the session is to compaction — and writes
-// the same numbers to the bridge file.
-func renderContext(p *Payload, tempDir string) string {
-	if p.ContextWindow == nil || p.ContextWindow.RemainingPercentage == nil {
+// renderUsage returns the usage segment: context, session, and weekly
+// percentages as coloured numbers (C:12% S:56% ⧖2h3m W:24% ⧖1d2h3m) rather
+// than a bar, so all three fit in the width the bar alone used to need. Each
+// field drops out independently — a payload can carry context_window
+// without rate_limits (a harness below Claude Code 2.1.x, or a
+// non-subscription account), or the reverse. Only the rate-limit windows
+// carry a reset countdown; context has no fixed reset schedule.
+func renderUsage(p *Payload, tempDir, configDir string) string {
+	dark := themeIsDark(configDir)
+	now := time.Now()
+	var fields []string
+	if used, ok := contextUsedPercent(p, tempDir); ok {
+		fields = append(fields, usageField("C", used, dark))
+	}
+	if p.RateLimits != nil {
+		if w := p.RateLimits.FiveHour; w != nil {
+			fields = append(fields, usageField("S", int(math.Round(w.UsedPercentage)), dark)+resetSuffix(w.ResetsAt, now))
+		}
+		if w := p.RateLimits.SevenDay; w != nil {
+			fields = append(fields, usageField("W", int(math.Round(w.UsedPercentage)), dark)+resetSuffix(w.ResetsAt, now))
+		}
+	}
+	if len(fields) == 0 {
 		return ""
+	}
+	return " " + strings.Join(fields, " ")
+}
+
+// resetSuffix renders the dimmed "⧖2h3m" countdown following a usage
+// field, or "" once formatResetIn drops out.
+func resetSuffix(resetsAt int64, now time.Time) string {
+	in := formatResetIn(resetsAt, now)
+	if in == "" {
+		return ""
+	}
+	return fmt.Sprintf(" \x1b[2m%s%s\x1b[0m", resetSymbol, in)
+}
+
+// formatResetIn renders the time remaining until resetsAt as day/hour/minute
+// components (1d2h3m, 2h3m, 45m), including every unit from the largest
+// non-zero one down to minutes. Returns "" once the window has already
+// rolled over (resetsAt in the past, or zero — the harness sends no window
+// at all rather than resetsAt: 0), so a stale percentage is never paired
+// with a countdown that has already expired.
+func formatResetIn(resetsAt int64, now time.Time) string {
+	remaining := time.Unix(resetsAt, 0).Sub(now)
+	if remaining <= 0 {
+		return ""
+	}
+	total := int(remaining.Truncate(time.Minute).Minutes())
+	days, hours, minutes := total/(24*60), (total/60)%24, total%60
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd%dh%dm", days, hours, minutes)
+	case hours > 0:
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
+}
+
+// harnessSettings is the subset of the harness's settings.json this package
+// reads.
+type harnessSettings struct {
+	Theme string `json:"theme"`
+}
+
+// themeIsDark reports whether the harness's configured theme is a dark
+// variant (dark, dark-ansi, dark-daltonized — Claude Code's own enum).
+// Defaults to false, the light-suited colours, when settings.json is
+// missing, unreadable, or names no theme: that was every render's colour
+// before theme awareness existed, so an absent signal keeps it rather than
+// guessing the more common dark terminal.
+func themeIsDark(configDir string) bool {
+	if configDir == "" {
+		return false
+	}
+	raw, err := os.ReadFile(filepath.Join(configDir, "settings.json"))
+	if err != nil {
+		return false
+	}
+	var s harnessSettings
+	if json.Unmarshal(raw, &s) != nil {
+		return false
+	}
+	return strings.HasPrefix(s.Theme, "dark")
+}
+
+// contextUsedPercent normalizes the harness's remaining-context percentage
+// against the auto-compact buffer, so the number reads 100% right when
+// compaction triggers rather than at whatever the raw window leaves. It also
+// writes the same numbers to the bridge file, for the claude-context-monitor
+// hook, which has no other way to see them.
+func contextUsedPercent(p *Payload, tempDir string) (int, bool) {
+	if p.ContextWindow == nil || p.ContextWindow.RemainingPercentage == nil {
+		return 0, false
 	}
 	remaining := *p.ContextWindow.RemainingPercentage
 
@@ -320,20 +429,41 @@ func renderContext(p *Payload, tempDir string) string {
 	used := int(math.Max(0, math.Min(100, math.Round(100-usableRemaining))))
 
 	writeBridgeFile(tempDir, p.SessionID, remaining, used)
+	return used, true
+}
 
-	filled := used / 10
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", 10-filled)
+// usageField renders one labelled percentage, coloured by how close it is to
+// its limit.
+func usageField(label string, pct int, dark bool) string {
+	return fmt.Sprintf("%s%s:%d%%\x1b[0m", usageColor(pct, dark), label, pct)
+}
 
+// usageColor mirrors the four-step severity ramp the bar used to encode in
+// block count: green, yellow, orange, red.
+func usageColor(pct int, dark bool) string {
+	colors := usageColors(dark)
 	switch {
-	case used < 50:
-		return fmt.Sprintf(" \x1b[32m%s %d%%\x1b[0m", bar, used)
-	case used < 65:
-		return fmt.Sprintf(" \x1b[33m%s %d%%\x1b[0m", bar, used)
-	case used < 80:
-		return fmt.Sprintf(" \x1b[38;5;208m%s %d%%\x1b[0m", bar, used)
+	case pct < 50:
+		return colors[0]
+	case pct < 65:
+		return colors[1]
+	case pct < 80:
+		return colors[2]
 	default:
-		return fmt.Sprintf(" \x1b[5;31m💀 %s %d%%\x1b[0m", bar, used)
+		return colors[3]
 	}
+}
+
+// usageColors picks the severity ramp for the terminal's theme. The base
+// (30-range) ANSI colours render as darker shades that read well on a light
+// background; their bright (90-range) counterparts render lighter and read
+// well on dark. Fixed RGB (the orange) has no such pair, so both ramps use
+// the same mid-bright shade.
+func usageColors(dark bool) [4]string {
+	if dark {
+		return [4]string{"\x1b[92m", "\x1b[93m", "\x1b[38;5;214m", "\x1b[91m"}
+	}
+	return [4]string{"\x1b[32m", "\x1b[33m", "\x1b[38;5;208m", "\x1b[31m"}
 }
 
 // bridgeData is the context snapshot written for out-of-process consumers.

@@ -65,8 +65,8 @@ func TestRenderWithMinimalCrossHarnessPayload(t *testing.T) {
 func TestRenderOmitsContextWhenAbsent(t *testing.T) {
 	dir := t.TempDir()
 	got := stripANSI(Render(&Payload{Model: &ModelInfo{DisplayName: "m"}}, Options{ConfigDir: dir, TempDir: dir, Dir: dir}))
-	if strings.ContainsAny(got, "█░") || strings.Contains(got, "%") {
-		t.Fatalf("want no context meter, got %q", got)
+	if strings.Contains(got, "%") {
+		t.Fatalf("want no usage segment, got %q", got)
 	}
 }
 
@@ -86,7 +86,7 @@ func TestRenderContextNormalizesAgainstAutoCompactBuffer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Payload{ContextWindow: &ContextWindow{RemainingPercentage: pct(tt.remaining)}}
-			got := stripANSI(renderContext(p, t.TempDir()))
+			got := stripANSI(renderUsage(p, t.TempDir(), ""))
 			if !strings.Contains(got, tt.want) {
 				t.Fatalf("remaining %.2f: want %s, got %q", tt.remaining, tt.want, got)
 			}
@@ -97,7 +97,7 @@ func TestRenderContextNormalizesAgainstAutoCompactBuffer(t *testing.T) {
 func TestRenderContextWritesBridgeFile(t *testing.T) {
 	tmp := t.TempDir()
 	p := &Payload{SessionID: "sess-1", ContextWindow: &ContextWindow{RemainingPercentage: pct(58.25)}}
-	renderContext(p, tmp)
+	renderUsage(p, tmp, "")
 
 	raw, err := os.ReadFile(filepath.Join(tmp, "claude-ctx-sess-1.json"))
 	if err != nil {
@@ -115,7 +115,7 @@ func TestRenderContextWritesBridgeFile(t *testing.T) {
 func TestRenderContextWithoutSessionWritesNoBridgeFile(t *testing.T) {
 	tmp := t.TempDir()
 	p := &Payload{ContextWindow: &ContextWindow{RemainingPercentage: pct(50)}}
-	renderContext(p, tmp)
+	renderUsage(p, tmp, "")
 
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
@@ -123,6 +123,184 @@ func TestRenderContextWithoutSessionWritesNoBridgeFile(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("want no bridge file without a session id, got %v", entries)
+	}
+}
+
+// Session and weekly usage come straight off the payload — no network call,
+// no bridge file — so both drop out independently when the harness omits
+// one of them (an older Claude Code, or a non-subscription account).
+func TestRenderUsageAddsSessionAndWeeklyFromRateLimits(t *testing.T) {
+	p := &Payload{RateLimits: &RateLimits{
+		FiveHour: &RateLimitWindow{UsedPercentage: 56},
+		SevenDay: &RateLimitWindow{UsedPercentage: 24},
+	}}
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " S:56% W:24%" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRenderUsageOmitsRateLimitFieldsIndependently(t *testing.T) {
+	p := &Payload{RateLimits: &RateLimits{FiveHour: &RateLimitWindow{UsedPercentage: 10}}}
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " S:10%" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRenderUsageCombinesContextAndRateLimits(t *testing.T) {
+	p := &Payload{
+		ContextWindow: &ContextWindow{RemainingPercentage: pct(58.25)},
+		RateLimits: &RateLimits{
+			FiveHour: &RateLimitWindow{UsedPercentage: 56},
+			SevenDay: &RateLimitWindow{UsedPercentage: 24},
+		},
+	}
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " C:50% S:56% W:24%" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestRenderUsageColorsBySeverity(t *testing.T) {
+	tests := []struct {
+		pct   float64
+		color string
+	}{
+		{10, "\x1b[32m"},
+		{55, "\x1b[33m"},
+		{70, "\x1b[38;5;208m"},
+		{90, "\x1b[31m"},
+	}
+	for _, tt := range tests {
+		p := &Payload{RateLimits: &RateLimits{FiveHour: &RateLimitWindow{UsedPercentage: tt.pct}}}
+		if got := renderUsage(p, t.TempDir(), ""); !strings.Contains(got, tt.color) {
+			t.Fatalf("pct %.0f: want colour %q in %q", tt.pct, tt.color, got)
+		}
+	}
+}
+
+func TestFormatResetIn(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		in   time.Duration
+		want string
+	}{
+		{"minutes only", 45 * time.Minute, "45m"},
+		{"hours and minutes", 2*time.Hour + 3*time.Minute, "2h3m"},
+		{"exact hour still shows minutes", 2 * time.Hour, "2h0m"},
+		{"days, hours, and minutes", 24*time.Hour + 2*time.Hour + 3*time.Minute, "1d2h3m"},
+		{"already reset", -time.Minute, ""},
+		{"resets this instant", 0, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetsAt := now.Add(tt.in).Unix()
+			if got := formatResetIn(resetsAt, now); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatResetInZeroMeansNoWindow(t *testing.T) {
+	if got := formatResetIn(0, time.Now()); got != "" {
+		t.Fatalf("want no countdown for an absent resets_at, got %q", got)
+	}
+}
+
+// The offsets carry 30s of slack past the minute boundary: renderUsage reads
+// time.Now() internally, and without slack the sub-second gap between that
+// call and this test computing "now" could truncate a minute early.
+func TestRenderUsageAppendsResetCountdownToRateLimitFields(t *testing.T) {
+	now := time.Now()
+	p := &Payload{RateLimits: &RateLimits{
+		FiveHour: &RateLimitWindow{UsedPercentage: 56, ResetsAt: now.Add(2*time.Hour + 3*time.Minute + 30*time.Second).Unix()},
+		SevenDay: &RateLimitWindow{UsedPercentage: 24, ResetsAt: now.Add(24*time.Hour + 2*time.Hour + 3*time.Minute + 30*time.Second).Unix()},
+	}}
+	got := stripANSI(renderUsage(p, t.TempDir(), ""))
+	want := " S:56% ⧖2h3m W:24% ⧖1d2h3m"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestRenderUsageOmitsCountdownOnceWindowHasRolledOver(t *testing.T) {
+	p := &Payload{RateLimits: &RateLimits{
+		FiveHour: &RateLimitWindow{UsedPercentage: 56, ResetsAt: time.Now().Add(-time.Minute).Unix()},
+	}}
+	got := stripANSI(renderUsage(p, t.TempDir(), ""))
+	if want := " S:56%"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// writeSettings writes a minimal settings.json with the given theme.
+func writeSettings(t *testing.T, dir, theme string) {
+	t.Helper()
+	raw, err := json.Marshal(harnessSettings{Theme: theme})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRenderUsageColorsSwapToBrightWhenThemeIsDark(t *testing.T) {
+	cfgDir := t.TempDir()
+	writeSettings(t, cfgDir, "dark")
+
+	p := &Payload{RateLimits: &RateLimits{FiveHour: &RateLimitWindow{UsedPercentage: 10}}}
+	if got := renderUsage(p, t.TempDir(), cfgDir); !strings.Contains(got, "\x1b[92m") {
+		t.Fatalf("want the bright-green dark-theme colour, got %q", got)
+	}
+}
+
+func TestRenderUsageColorsStayBaseWhenThemeIsLight(t *testing.T) {
+	cfgDir := t.TempDir()
+	writeSettings(t, cfgDir, "light")
+
+	p := &Payload{RateLimits: &RateLimits{FiveHour: &RateLimitWindow{UsedPercentage: 10}}}
+	if got := renderUsage(p, t.TempDir(), cfgDir); !strings.Contains(got, "\x1b[32m") {
+		t.Fatalf("want the base-green light-theme colour, got %q", got)
+	}
+}
+
+func TestThemeIsDarkRecognizesEveryDarkVariant(t *testing.T) {
+	for _, theme := range []string{"dark", "dark-ansi", "dark-daltonized"} {
+		t.Run(theme, func(t *testing.T) {
+			cfgDir := t.TempDir()
+			writeSettings(t, cfgDir, theme)
+			if !themeIsDark(cfgDir) {
+				t.Fatalf("theme %q: want dark", theme)
+			}
+		})
+	}
+}
+
+func TestThemeIsDarkDefaultsFalseWithoutSettings(t *testing.T) {
+	tests := []struct {
+		name      string
+		configDir string
+	}{
+		{"no config dir", ""},
+		{"missing settings.json", t.TempDir()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if themeIsDark(tt.configDir) {
+				t.Fatalf("want false without a readable theme")
+			}
+		})
+	}
+}
+
+func TestThemeIsDarkFalseOnMalformedSettings(t *testing.T) {
+	cfgDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfgDir, "settings.json"), []byte("not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if themeIsDark(cfgDir) {
+		t.Fatalf("want false on malformed settings.json")
 	}
 }
 
