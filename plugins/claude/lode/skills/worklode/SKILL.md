@@ -40,7 +40,7 @@ Every pre-merged state can go to `abandoned`; every terminal-ish state
 (`merged`, `deployed_dev`, `deployed_prod`, `released`, `abandoned`) can be
 sent back to `ready` by `reopen`, which requires a fresh claim.
 
-**You drive:** `draft→ready` (`task ready`), `ready→in_progress` (`task
+**You drive:** `draft→ready` (`task publish`), `ready→in_progress` (`task
 claim`/`next` when the work needs a worktree; `task start` when it doesn't —
 e.g. a design/review task that's just a judgment call, no code),
 `in_progress→ready` (`task stop`/`release`), `in_review→in_progress` (`task

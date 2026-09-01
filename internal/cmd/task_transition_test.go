@@ -109,7 +109,7 @@ func TestTaskTransitionCommands(t *testing.T) {
 		from []string // states the task walks through before the verb runs
 		want string
 	}{
-		{"ready", []string{"draft"}, "ready"},
+		{"publish", []string{"draft"}, "ready"},
 		{"reopen", []string{"ready", "in_progress", "in_review", "merged"}, "ready"},
 		{"rework", []string{"ready", "in_progress", "in_review"}, "in_progress"},
 		{"done", []string{"ready", "in_progress", "in_review"}, "merged"},
@@ -152,15 +152,15 @@ func TestTaskTransitionCommands(t *testing.T) {
 }
 
 // TestTaskTransitionRefusesIllegalMove pins that the server's 422 reaches the
-// caller as an error and leaves the task where it was: `ready` publishes a
+// caller as an error and leaves the task where it was: `publish` publishes a
 // draft, and has nothing to do with a task already published.
 func TestTaskTransitionRefusesIllegalMove(t *testing.T) {
 	st, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	task := createTaskInState(t, st, c, "already published", "ready")
 
-	if out, err := runLode(t, "task", "ready", task.ID); err == nil {
-		t.Fatalf("lode task ready on a ready task: want error, got nil\noutput: %s", out)
+	if out, err := runLode(t, "task", "publish", task.ID); err == nil {
+		t.Fatalf("lode task publish on a ready task: want error, got nil\noutput: %s", out)
 	}
 	if got := taskState(t, task.ID); got != "ready" {
 		t.Errorf("state after refused transition = %q, want %q", got, "ready")

@@ -174,7 +174,7 @@ lode inbox promote acme/widgets 41 --priority medium --draft --parent <backlog-i
   pages of 100 per kind, and on truncation prints the `--since` value to
   resume with.
 - `--draft` on `lode inbox promote` lands the task in `draft` (not claimable
-  until `lode task ready`); `--parent <id>` files it under an existing task in
+  until `lode task publish`); `--parent <id>` files it under an existing task in
   the same step. Any ordinary task can be a parent — the `child_of` edge is
   what makes it a container (spec 004 §6.1).
 - `lode inbox link <repo> <number> <task-id>` marks an issue as already
