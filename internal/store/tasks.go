@@ -150,8 +150,8 @@ var validTaskKinds = ns.Set(ns.TaskKinds)
 // containerForbiddenStates are the delivery states a task with children can
 // never occupy. They are earned by observed deploy facts about a specific
 // commit (spec 004 §5.2) and a container has no commit of its own. Checked on
-// both ends of a transition so `lode task done` on a parent reports the
-// roll-up rule instead of a from-state mismatch.
+// both ends of a transition so `lode task set state merged` on a parent
+// reports the roll-up rule instead of a from-state mismatch.
 var containerForbiddenStates = map[string]bool{
 	"in_review": true, "deployed_dev": true, "deployed_prod": true, "released": true,
 }

@@ -183,7 +183,6 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task delete` — Delete a task: hide a row that should not have existed
   Flags: --justification
 - `lode task detach` — Remove an attached blob from a task
-- `lode task done` — Mark a task merged from any pre-merge state
 - `lode task duplicate` — Mark a task as a duplicate of the canonical task for the same request
   Flags: --of
 - `lode task edit` — Edit a task's title, body, concern, priority, or needs-decomposition flag, or declare an artifact it is verified by
@@ -203,6 +202,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --ttl
 - `lode task reopen` — Reopen a delivered or abandoned task (merged|deployed_dev|deployed_prod|released|abandoned -> ready; a fresh claim is then required)
 - `lode task rework` — Send a task under review back to in_progress (e.g. changes requested)
+- `lode task set` — Set one field on a task, e.g. `lode task set state merged WL-5`
 - `lode task show` — Show a task's details: body, edges, blocked status, and lease holder
   Flags: --pager, --usage
 - `lode task skills` — Show or replace the task's pinned skills

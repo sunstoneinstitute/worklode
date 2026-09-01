@@ -642,7 +642,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 
 	// 9. Close alpha's set. The plan gate releases; the intra-plan edge does
 	// not, so only beta's task 1 becomes pickable.
-	if done, _, err := planner.DoneTask(ctx, alphaTask.ID); err != nil {
+	if done, _, err := planner.SetTaskState(ctx, alphaTask.ID, "merged"); err != nil {
 		t.Fatalf("done task %s: %v", alphaTask.ID, err)
 	} else if done.State != "merged" {
 		t.Fatalf("task %s state = %q, want merged", alphaTask.ID, done.State)
@@ -668,7 +668,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 
 	// 10. Close beta's set, one task at a time; the plan stays in
 	// --needs-execution until the last task closes.
-	if _, _, err := planner.DoneTask(ctx, first.ID); err != nil {
+	if _, _, err := planner.SetTaskState(ctx, first.ID, "merged"); err != nil {
 		t.Fatalf("done task %s: %v", first.ID, err)
 	}
 	assertNeedsExecution(t, "plans", beta.ID)
@@ -680,7 +680,7 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	if !pick.Claimed || pick.Task == nil || pick.Task.ID != second.ID {
 		t.Fatalf("claim-next #3 = %+v, want %s", pick, second.ID)
 	}
-	if _, _, err := planner.DoneTask(ctx, second.ID); err != nil {
+	if _, _, err := planner.SetTaskState(ctx, second.ID, "merged"); err != nil {
 		t.Fatalf("done task %s: %v", second.ID, err)
 	}
 	assertNeedsExecution(t, "plans")

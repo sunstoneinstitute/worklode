@@ -221,8 +221,8 @@ func TestTaskListStatusFiltering(t *testing.T) {
 		t.Fatalf("claim done: %v", err)
 	}
 	moveToReview(t, st, done.ID)
-	if _, _, err := c.DoneTask(ctx, done.ID); err != nil {
-		t.Fatalf("done: %v", err)
+	if _, _, err := c.SetTaskState(ctx, done.ID, "merged"); err != nil {
+		t.Fatalf("set state merged: %v", err)
 	}
 	if _, _, err := c.AbandonTask(ctx, abandoned.ID); err != nil {
 		t.Fatalf("abandon: %v", err)
@@ -939,5 +939,61 @@ func TestTaskFrontierCommandPassesProject(t *testing.T) {
 	}
 	if !strings.Contains(gotQuery, "project=worklode") {
 		t.Fatalf("query = %q; want project=worklode", gotQuery)
+	}
+}
+
+// TestTaskSetState covers `lode task set state <state> <id>`: the four states
+// it accepts, and the two rejections it makes itself. The bad field and the
+// bad state are refused before any request goes out, so both cases name the
+// values that would have worked instead of costing a round trip.
+func TestTaskSetState(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	walk := createTestTask(t, c, "Walk the delivery states")
+	release := createTestTask(t, c, "Release repo task")
+
+	for _, tc := range []struct {
+		id    string
+		state string
+	}{
+		{walk.ID, "merged"},
+		{walk.ID, "deployed_dev"},
+		{walk.ID, "deployed_prod"},
+		{release.ID, "merged"},
+		{release.ID, "released"},
+	} {
+		if _, err := runLode(t, "task", "set", "state", tc.state, tc.id); err != nil {
+			t.Fatalf("set state %s %s: %v", tc.state, tc.id, err)
+		}
+		got, _, err := c.GetTask(context.Background(), tc.id)
+		if err != nil {
+			t.Fatalf("get %s: %v", tc.id, err)
+		}
+		if got.State != tc.state {
+			t.Fatalf("%s state = %q, want %q", tc.id, got.State, tc.state)
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"unknown state", []string{"task", "set", "state", "shipped", walk.ID},
+			[]string{`unknown state "shipped"`, "merged", "deployed_dev", "deployed_prod", "released"}},
+		{"unknown field", []string{"task", "set", "colour", "red", walk.ID},
+			[]string{`unknown field "colour"`, `"state"`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := runLode(t, tc.args...)
+			if err == nil {
+				t.Fatalf("lode %s: want an error, got nil", strings.Join(tc.args, " "))
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not mention %q", err, want)
+				}
+			}
+		})
 	}
 }

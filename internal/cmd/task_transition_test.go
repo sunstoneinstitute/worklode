@@ -104,23 +104,32 @@ func TestTaskTransitionCommands(t *testing.T) {
 	st, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
+	// verb is the words before the id: one for the transition commands, three
+	// for `task set state <state> <id>`, which reaches merged the same way.
 	cases := []struct {
-		verb string
+		verb []string
 		from []string // states the task walks through before the verb runs
 		want string
 	}{
-		{"publish", []string{"draft"}, "ready"},
-		{"reopen", []string{"ready", "in_progress", "in_review", "merged"}, "ready"},
-		{"rework", []string{"ready", "in_progress", "in_review"}, "in_progress"},
-		{"done", []string{"ready", "in_progress", "in_review"}, "merged"},
-		{"abandon", []string{"ready", "in_progress"}, "abandoned"},
+		{[]string{"publish"}, []string{"draft"}, "ready"},
+		{[]string{"reopen"}, []string{"ready", "in_progress", "in_review", "merged"}, "ready"},
+		{[]string{"rework"}, []string{"ready", "in_progress", "in_review"}, "in_progress"},
+		{[]string{"set", "state", "merged"}, []string{"ready", "in_progress", "in_review"}, "merged"},
+		{[]string{"set", "state", "deployed_dev"}, []string{"ready", "in_progress", "in_review", "merged"}, "deployed_dev"},
+		{[]string{"set", "state", "deployed_prod"}, []string{"ready", "in_progress", "in_review", "merged"}, "deployed_prod"},
+		{[]string{"set", "state", "released"}, []string{"ready", "in_progress", "in_review", "merged"}, "released"},
+		{[]string{"abandon"}, []string{"ready", "in_progress"}, "abandoned"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.verb+"/table", func(t *testing.T) {
+		name := strings.Join(tc.verb, "-")
+		lode := func(extra ...string) []string {
+			return append(append([]string{"task"}, tc.verb...), extra...)
+		}
+		t.Run(name+"/table", func(t *testing.T) {
 			task := createTaskInState(t, st, c, "fixture", tc.from...)
-			out, err := runLode(t, "task", tc.verb, task.ID)
+			out, err := runLode(t, lode(task.ID)...)
 			if err != nil {
-				t.Fatalf("lode task %s: %v\noutput: %s", tc.verb, err, out)
+				t.Fatalf("lode task %s: %v\noutput: %s", name, err, out)
 			}
 			if got := taskRowState(t, out, task.ID); got != tc.want {
 				t.Errorf("printed state = %q, want %q\noutput: %s", got, tc.want, out)
@@ -130,11 +139,11 @@ func TestTaskTransitionCommands(t *testing.T) {
 			}
 		})
 
-		t.Run(tc.verb+"/json", func(t *testing.T) {
+		t.Run(name+"/json", func(t *testing.T) {
 			task := createTaskInState(t, st, c, "fixture", tc.from...)
-			out, err := runLode(t, "task", tc.verb, "--json", task.ID)
+			out, err := runLode(t, lode("--json", task.ID)...)
 			if err != nil {
-				t.Fatalf("lode task %s --json: %v\noutput: %s", tc.verb, err, out)
+				t.Fatalf("lode task %s --json: %v\noutput: %s", name, err, out)
 			}
 			var got model.Task
 			if err := json.Unmarshal([]byte(out), &got); err != nil {

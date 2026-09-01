@@ -56,13 +56,14 @@ arrived, in any order). Full event-by-event table: `references/webhooks.md`.
 **No PR, no webhook — close it by hand:** a design or review task (settling
 a decision, signing off on a proposal) has no code and no PR to drive the
 rest of the lifecycle. Once the call is made, drive it yourself: `task
-start` (ready→in_progress) → `task submit` (→in_review) → `task done`
-(→merged). `task start` refuses with a 422 if the task is already assigned
-to someone else's identity ("assigned to X; unassign first") — run `task
-unassign` first, then `start`.
+start` (ready→in_progress) → `task submit` (→in_review) → `task set state
+merged` (→merged). `task start` refuses with a 422 if the task is already
+assigned to someone else's identity ("assigned to X; unassign first") — run
+`task unassign` first, then `start`.
 
 A task with `child_of` children can't itself sit in `in_review` or any
-delivery state — `task done` on a parent reports the roll-up rule instead.
+delivery state — `task set state merged` on a parent reports the roll-up rule
+instead.
 
 ## Edges
 
@@ -84,7 +85,7 @@ lode task claim [<id>]                  # lease it, create its worktree
 lode worktree next                      # claim the top-ranked ready task
 lode task start [<id>]                  # ready->in_progress, no worktree/lease (e.g. a design/review call)
 lode task submit [<id>]                 # in_progress->in_review
-lode task done                          # in_review->merged
+lode task set state merged <id>         # in_review->merged
 lode task unassign [<id>]               # clear assignee (needed before `start` on someone else's task)
 lode task block --by <id>
 lode task abandon

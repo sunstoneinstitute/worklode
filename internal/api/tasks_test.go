@@ -678,7 +678,7 @@ func TestPatchTaskState(t *testing.T) {
 		if rr.Code != http.StatusUnprocessableEntity {
 			t.Fatalf("state=%s status = %d, want 422; body %s", state, rr.Code, rr.Body.String())
 		}
-		if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "claim, release, done, or abandon") {
+		if msg, _ := decodeMap(t, rr)["error"].(string); !strings.Contains(msg, "claim, release, state, or abandon") {
 			t.Fatalf("state=%s error = %q, want guidance to the dedicated endpoints", state, msg)
 		}
 	}
