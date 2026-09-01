@@ -248,7 +248,7 @@ Three commands answer "is this wired up, and did anything get missed" (spec
   only: App installation, last delivery, unapplied events, and repos that
   send webhooks but map to no project. A repo flagged `STALE` — no delivery
   since it was mapped — is the cue to reconcile.
-- `lode reconcile [--repo X | --task Y] [--since D] [--dry-run]` — repair
+- `lode task reconcile [--repo X | --task Y] [--since D] [--dry-run]` — repair
   what ingestion missed, admin only. Engine 1 replays stored `*.ignored`
   events; engine 2 polls GitHub for missed PR, merge and release facts. Each
   reports its own section, so one being skipped or failing does not hide what
@@ -256,13 +256,13 @@ Three commands answer "is this wired up, and did anything get missed" (spec
   server has no GitHub App configured.
 
 ```bash
-lode project doctor                       # every mapped repo
-lode reconcile --repo acme/app --dry-run  # what would be repaired
-lode reconcile --since 720h               # org-wide, last 30 days
+lode project doctor                            # every mapped repo
+lode task reconcile --repo acme/app --dry-run  # what would be repaired
+lode task reconcile --since 720h               # org-wide, last 30 days
 ```
 
 `--since` takes RFC 3339 or a Go duration against the server clock. Read
-`lode reconcile --help` before scheduling it: `--since` means a different
+`lode task reconcile --help` before scheduling it: `--since` means a different
 column per engine, and the poll's `repaired` list reports what the run
 *observed*, not what it changed — both are easy to build a wrong alert on.
 
