@@ -439,11 +439,22 @@ decisions are explicit: accept Gate 1 and authorize bounded pre-research, then d
 Gate 2 after the AI-assisted work. Starting Selection may prepare Gate 1, but no
 pre-research run begins without the first authorization.
 
+The dossier is a backbone-native revisioned document, not a `docs/specs/` DesignDoc:
+no section anchors, no crit review, no acceptance lifecycle — it holds
+investigation-specific evidence, not durable organizational intent (025 §2's
+boundary). Editing it, by the adopter or a new AI run, lands a new immutable
+revision; prior revisions stay addressable, so the audit path above is a real
+history rather than an overwritten field. `entity_kind='dossier'` in the approvals
+table (§7.1) needs no new approval machinery: Editorial Evaluation's decisions
+already bind to `subject_revision` like any other governed target.
+
 Editorial Evaluation records separate Editor and Science Lead decisions on the exact
 dossier revision. Both must approve before promotion. A rejection blocks promotion
 without closing the dossier; the rejecting role owns the next revise, reconsider,
 park or close decision. Overriding the AI recommendation requires a rationale and
-approval by both roles.
+approval by both roles. Editing the dossier after a decision is landed reopens
+Editorial Evaluation on the new revision per §7.1's reopening rule; the prior
+decision stays recorded against the revision it actually reviewed.
 
 Passing Editorial Evaluation promotes the pitch without a second “Create project”
 confirmation: one transaction creates the project, stamps labels and `seeded_by`,
