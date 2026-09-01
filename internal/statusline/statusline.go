@@ -35,9 +35,9 @@ import (
 const autoCompactBufferPct = 16.5
 
 const (
-	branchSymbol   = "⎇" // U+2387 alternate key, marks the git branch
-	worktreeSymbol = "⧉" // U+29C9 two joined squares, marks a linked worktree
-	resetSymbol    = "⟲" // U+27F2 anticlockwise gapped circle arrow, marks a usage window's reset countdown
+	branchSymbol   = "⎇"  // U+2387 alternate key, marks the git branch
+	worktreeSymbol = "⧉ " // U+29C9 two joined squares, marks a linked worktree
+	resetSymbol    = "⟲ " // U+27F2 anticlockwise gapped circle arrow, marks a usage window's reset countdown
 )
 
 // ANSI escape codes available for status line colouring.
