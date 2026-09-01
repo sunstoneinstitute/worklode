@@ -618,6 +618,23 @@ func TestPatchTaskConcern(t *testing.T) {
 		t.Fatalf("stored needs_decomposition = false, want true")
 	}
 
+	// human_only alone is a real edit: it must not trip the "no fields to
+	// update" guard (WL-466).
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"human_only": true})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("human_only-only patch status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if patched = decodeMap(t, rr); patched["human_only"] != true {
+		t.Errorf("patch response human_only = %v, want true", patched["human_only"])
+	}
+	task, err = st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if !task.HumanOnly {
+		t.Fatalf("stored human_only = false, want true")
+	}
+
 	// Clearing concern with "" or "none".
 	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"concern": "none"})
 	if rr.Code != http.StatusOK {

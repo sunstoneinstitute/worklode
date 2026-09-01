@@ -64,14 +64,19 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 }
 
 // readyCandidates returns every task eligible for pickup: state ready, no
-// child_of children, not needs_decomposition, unleased, not blocked by an
-// open 'blocks' edge from a task that is not in a closed state, and not held
+// child_of children, not needs_decomposition, not human_only, unleased, not
+// blocked by an open 'blocks' edge from a task not in a closed state, and not held
 // by a plan-to-plan ordering edge (planBlockedCondition, 025 §9.3). An empty
 // projectID matches every project; an empty kind matches every kind. A task
 // with children is excluded because the worktree is the unit of Worklode work
 // and a container has nothing to check out (spec 004 §6.3). A tombstoned task
 // is never handed out, and a tombstoned child does not make its parent a
 // container (044 §4).
+//
+// This is the one seam both ranked paths go through — Frontier and ClaimNext
+// share it via rankedFrontier — so human_only is filtered here and nowhere
+// else. Claim(id) does not consult it: an explicit claim by id is the escape
+// hatch for the person the task is waiting on (WL-466).
 func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT `+taskColumnsT+` FROM tasks t
@@ -81,6 +86,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		                  JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
 		                  WHERE c.to_task = t.id AND c.type = 'child_of')
 		  AND NOT t.needs_decomposition
+		  AND NOT t.human_only
 		  AND ($1 = '' OR t.project_id = $1)
 		  AND ($2 = '' OR t.kind = $2)
 		  AND NOT EXISTS (SELECT 1 FROM leases l

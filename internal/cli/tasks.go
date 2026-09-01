@@ -504,6 +504,9 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")
 	}
+	if t.HumanOnly {
+		fmt.Fprintf(w, "  human only: yes (not offered by lode next; claim it by id)\n")
+	}
 	if t.Blocked {
 		fmt.Fprintf(w, "  blocked:  yes\n")
 	}
