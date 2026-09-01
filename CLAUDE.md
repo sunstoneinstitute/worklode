@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+/lode:anti-smartass
+
 ## What this is
 
 Worklode is Sunstone's org-wide work tracker and coordination layer for
@@ -21,8 +23,6 @@ specs have amended it since. `docs/specs/` stays the corpus of record — **edit
 there, never in `inlined/`** — and a pre-commit hook regenerates the views.
 Implementation plans live in `docs/plans/`; `docs/follow-ups.md` holds known
 non-blocking gaps — check it before filing something as new.
-
-/dont-be-a-smartass
 
 ## Where the rest of the guidance lives
 
