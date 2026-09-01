@@ -390,7 +390,7 @@ func TestDocShowSectionFragmentSugar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode doc show #sec-1: %v\noutput: %s", err, out)
 	}
-	want := "## 1. First {#sec-1}\n\nBody of section 1.\n\n### 1.1 Nested {#sec-1.1}\n\nBody of nested section.\n\n"
+	want := "## 1. First {#sec-1}\n\nBody of section 1.\n\n### 1.1 Nested {#sec-1.1}\n\nBody of nested section.\n"
 	if out != want {
 		t.Fatalf("doc show #sec-1 = %q; want %q (heading, body, and its whole subtree)", out, want)
 	}
@@ -523,7 +523,7 @@ func TestDocShowSectionStopsAtAnchorlessBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode doc show --section sec-1: %v\noutput: %s", err, out)
 	}
-	want := "## 1. First {#sec-1}\n\nBody of section 1.\n\n### 1.1 Nested {#sec-1.1}\n\nBody of nested section.\n\n"
+	want := "## 1. First {#sec-1}\n\nBody of section 1.\n\n### 1.1 Nested {#sec-1.1}\n\nBody of nested section.\n"
 	if out != want {
 		t.Fatalf("doc show --section sec-1 = %q; want %q (stopping at the anchorless boundary heading, not over-printing to EOF)", out, want)
 	}
@@ -565,7 +565,7 @@ func TestDocShowSectionIncludesAnchorlessDescendant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lode doc show --section sec-1: %v\noutput: %s", err, out)
 	}
-	want := "## 1. First {#sec-1}\n\nBody of section 1.\n\n##### Deep unanchored aside\n\nAside body text.\n\n"
+	want := "## 1. First {#sec-1}\n\nBody of section 1.\n\n##### Deep unanchored aside\n\nAside body text.\n"
 	if out != want {
 		t.Fatalf("doc show --section sec-1 = %q; want %q (the anchorless H5 aside included, stopping before #sec-2)", out, want)
 	}
