@@ -91,7 +91,7 @@ lode task block --by <id>
 lode task abandon
 lode board                              # in-progress / in-review / blocked / ready, at a glance
 lode show <ref>                         # any entity by id: task, doc, project
-lode timeline <id>                      # full history: states, PRs, CI, deploys
+lode task timeline <id>                 # full history: states, PRs, CI, deploys
 
 lode doc new --kind spec --slug <slug> --file <draft.md>   # kind: spec, adr, plan
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers

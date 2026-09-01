@@ -518,7 +518,7 @@ narrowed it client-side:
 | `lode drift [--component IRI] [--acknowledged]` | violations and stale intent; accepted deviations, marked expired |
 | `lode gaps` | components with no governing document, and repo paths no component claims |
 | `lode task frontier` | the ranked ready set, annotated with depth and fan-out |
-| `lode critical-path [--task ID]` | the estimate-free critical path, plus any dependency cycles |
+| `lode task critical-path [--task ID]` | the estimate-free critical path, plus any dependency cycles |
 
 `GET /drift` renders the same views as a read-only web page. All of it needs
 `LODE_GRAPHSERVER_URL` (see the table above) — without it the frontier and

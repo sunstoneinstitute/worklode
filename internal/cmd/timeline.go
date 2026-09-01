@@ -34,7 +34,3 @@ func newTimelineCmd() *cobra.Command {
 	}
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newTimelineCmd())
-}

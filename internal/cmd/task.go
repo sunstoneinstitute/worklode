@@ -63,6 +63,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskBriefCmd(),
 		newTaskFrontierCmd(),
 		newTaskCostCmd(),
+		newCriticalPathCmd(),
+		newTimelineCmd(),
 		newTaskSkillsCmd(),
 		newTaskAttachCmd(),
 		newTaskDetachCmd(),
