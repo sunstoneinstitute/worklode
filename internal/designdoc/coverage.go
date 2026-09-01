@@ -566,6 +566,24 @@ func (ix *PlanIndex) Section(specPath, anchor string) (PlanningOutcome, []Coveri
 	return outcome, covering, owner
 }
 
+// Bound reports whether any plan's `covers` claims this section at `none`,
+// at any status. It is deliberately wider than the discharging set Section
+// applies: §2.1 asks which plans have *undertaken* work, where a draft one
+// has not, while §2.5 asks whether writing a plan is the act the section
+// waits for — and there a `none` claim "contributes no item, at any plan
+// status", because accepting the claiming plan would discharge nothing about
+// the section either. Without this a bound-only section reads as forgotten,
+// which is the whole distinction `none` exists to make (026 §5).
+func (ix *PlanIndex) Bound(specPath, anchor string) bool {
+	key := sectionKey{spec: resolveDoc(specPath, ix.specCanon, ix.specDir), anchor: anchor}
+	for _, c := range ix.claims[key] {
+		if c.level == "none" {
+			return true
+		}
+	}
+	return false
+}
+
 // deferredOwner returns the comma-joined, sorted, deduplicated set of owners
 // an accepted-or-superseded plan's `defers` names for key (026 §5.3) — the
 // same "not draft" eligibility rule Section applies to a covers claim

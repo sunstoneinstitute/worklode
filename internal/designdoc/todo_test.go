@@ -190,24 +190,25 @@ func TestTodoDraftDefersIsStillUnplanned(t *testing.T) {
 	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="})
 }
 
-// A *draft* plan's `none` claim binds nothing yet: it discharges no coverage
-// (026 §2.1's not-draft rule), so the section is still unplanned — and
-// accepting the plan would discharge nothing about it, so there is no
-// plan-draft item either.
-func TestTodoDraftBoundOnlyIsStillUnplanned(t *testing.T) {
+// A *draft* plan's `none` claim emits no item either: 026 §2.4 suppresses a
+// bound-only section "at any plan status", and accepting the plan would
+// discharge nothing about it, so there is no plan-draft item either. sec-2,
+// which no plan names at all, still reports — the distinction between a
+// governing constraint and a forgotten section is the whole reason `none`
+// exists (WL-469).
+func TestTodoDraftBoundOnlyEmitsNothing(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
 			"a.md": "---\nstatus: draft\ncovers:\n" +
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: none\n" +
-				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: none\n" +
 				"---\n# A\n\nBody.\n",
 		})
 	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-2 plan= task="})
 }
 
 func TestTodoPlanDraftReplacesTheSectionGap(t *testing.T) {

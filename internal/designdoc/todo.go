@@ -416,10 +416,14 @@ func (w *todoWalk) emitSection(docPath string, sec SectionMeta) string {
 	// that as unplanned "the opposite error", since the plan exists and
 	// rewriting it wastes the drafting — the pending act is the acceptance
 	// the plan-draft item below carries. §2.4 extends the same suppression to
-	// `partial` when the draft plan claims `full`. A section only a draft
-	// plan binds at `none` is a different case: §2.4 forbids a plan-draft
-	// item there, not an item at all, and nothing covers it, so it still
-	// needs planning.
+	// `partial` when the draft plan claims `full`.
+	//
+	// A section bound at `none` is suppressed at any plan status, draft
+	// included (§2.4, and PlanIndex.Bound): the level says the plan read the
+	// section and undertakes nothing in it, so no act — writing a plan,
+	// accepting this one — is pending there. §2.1's not-draft rule stays
+	// where it belongs, on the outcome, which is why this reads Bound rather
+	// than BoundOnly.
 	//
 	// Deferred falls through to no item, the same as BoundOnly: §2.5's five
 	// types are each an act this document's own plans can discharge, and a
@@ -429,7 +433,7 @@ func (w *todoWalk) emitSection(docPath string, sec SectionMeta) string {
 	// it.
 	gap := ""
 	switch {
-	case outcome == Unplanned && len(covering) == 0:
+	case outcome == Unplanned && len(covering) == 0 && !w.ix.Bound(docPath, sec.Anchor):
 		gap = TodoUnplanned
 	case outcome == Partial && !coveredFullByDraft(covering):
 		gap = TodoPartial
