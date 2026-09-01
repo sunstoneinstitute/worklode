@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,6 +67,7 @@ func newTaskCmd() *cobra.Command {
 		newCriticalPathCmd(),
 		newTimelineCmd(),
 		newTaskSkillsCmd(),
+		newTaskChecklistCmd(),
 		newTaskAttachCmd(),
 		newTaskDetachCmd(),
 		newTaskInstructCmd(),
@@ -1004,12 +1006,15 @@ func newTaskSetCmd() *cobra.Command {
 		Long: `Set one named field on a task. The task id is always the last argument;
 everything between the field and the id is the value.
 
-  state    exactly one of the delivery states:
-             lode task set state merged WL-5
-  skills   any number of skill names, replacing whatever was pinned:
-             lode task set skills tdd debugging WL-5
-           naming none clears the task's pinned skills:
-             lode task set skills WL-5`,
+  state      exactly one of the delivery states:
+               lode task set state merged WL-5
+  skills     any number of skill names, replacing whatever was pinned:
+               lode task set skills tdd debugging WL-5
+             naming none clears the task's pinned skills:
+               lode task set skills WL-5
+  checklist  an item (ordinal, canonical, or title) and true/false:
+               lode task set checklist 0 true WL-5
+               lode task set checklist "write tests" false WL-5`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			field, values, ref := args[0], args[1:len(args)-1], args[len(args)-1]
@@ -1023,8 +1028,15 @@ everything between the field and the id is the value.
 						values[0], strings.Join(model.SettableTaskStates, ", "))
 				}
 			case "skills":
+			case "checklist":
+				if len(values) != 2 {
+					return fmt.Errorf("field \"checklist\" takes an item and true/false: lode task set checklist <ordinal|title> <true|false> <id>")
+				}
+				if _, err := strconv.ParseBool(values[1]); err != nil {
+					return fmt.Errorf("checklist checked value %q must be true or false", values[1])
+				}
 			default:
-				return fmt.Errorf("unknown field %q: settable fields are \"state\" and \"skills\"", field)
+				return fmt.Errorf("unknown field %q: settable fields are \"state\", \"skills\" and \"checklist\"", field)
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1050,6 +1062,25 @@ everything between the field and the id is the value.
 					return fmt.Errorf("decode skills: %w", err)
 				}
 				cli.PinnedSkillList(cmd.OutOrStdout(), resp.Skills)
+				return nil
+			}
+			if field == "checklist" {
+				checked, _ := strconv.ParseBool(values[1]) // validated above
+				in := model.SetChecklistItemInput{Checked: checked}
+				if ord, err := strconv.Atoi(values[0]); err == nil {
+					in.Ordinal = &ord
+				} else {
+					in.Title = &values[0]
+				}
+				item, raw, err := c.SetChecklistItem(cmd.Context(), id, in)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				cli.ChecklistRender(cmd.OutOrStdout(), []model.ChecklistItem{item})
 				return nil
 			}
 			t, raw, err := c.SetTaskState(cmd.Context(), id, values[0])

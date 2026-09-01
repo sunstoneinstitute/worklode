@@ -166,6 +166,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task board` — Show the task board: what's in progress, in review, blocked, and ready
   Flags: --project, --repo
 - `lode task brief` — Fetch a task's brief: body, branch, open blockers, and active lease
+- `lode task checklist` — Show the checklist items parsed from the task's body
 - `lode task claim` — Lease a task to the current worktree and move it to in_progress
   Flags: --dry-run, --kind, --next, --project, --repo, --strict-focus, --ttl, --worktree
 - `lode task cost` — Show the token cost billed to a task

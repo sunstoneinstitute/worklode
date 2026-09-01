@@ -1718,6 +1718,7 @@ The contract, per emitted type:
 | `task.created` | `cli`, `web`, `watcher` (the `doc-lifecycle` mint) | the creation input, plus `task` — the minted id |
 | `task.updated` | `cli`, `watcher` (an absorbed acceptance, §15.4) | the changed fields, plus `task` |
 | `task.skills_set` | `cli` | the pinned skills, plus `task` |
+| `task.checklist_set` | `cli` | the item identifier (`ordinal` or `title`) and `checked`, plus `task` |
 | `task.decomposed` | `cli` | the child titles, plus `task` — the parent |
 | `task.assigned`, `task.unassigned`, `task.started`, `task.stopped` | `cli` | `task`, plus the assignee or actor where the act names one |
 | `task.done`, `task.abandoned`, `task.reopened` | `cli` | `task` |
