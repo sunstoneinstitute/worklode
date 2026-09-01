@@ -261,6 +261,61 @@ Body.
 	}
 }
 
+// todoPlanStaleDraftBody covers sec-1 exactly like todoPlanOpen, but its
+// frontmatter still says draft: `doc accept` flips the backbone row and never
+// rewrites the body, so an accepted plan's body can go on saying draft for
+// its whole life (WL-478).
+const todoPlanStaleDraftBody = `---
+status: draft
+task: WL-1
+covers:
+  - spec: docs/specs/001-example.md#sec-1
+    coverage: full
+---
+# Plan 1-1 — Build the first section
+
+Body.
+`
+
+// TestDocTodoStatusFromRow pins the fix for WL-478: setupTodoCorpus's add()
+// always serves the row status "accepted", so a plan whose body frontmatter
+// still says draft exercises exactly the drift a stale `doc accept` leaves
+// behind. The row is authoritative — the item must come back "unexecuted",
+// never "plan-draft".
+func TestDocTodoStatusFromRow(t *testing.T) {
+	setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{"001-1-first.md": todoPlanStaleDraftBody}, noTasks)
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1", "--json")
+	if err != nil {
+		t.Fatalf("doc todo: %v\noutput: %s", err, out)
+	}
+	var got struct {
+		Items []struct {
+			Type string `json:"type"`
+			Plan string `json:"plan"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode --json output: %v\noutput: %s", err, out)
+	}
+	var found bool
+	for _, it := range got.Items {
+		if it.Plan != "docs/plans/001-1-first.md" {
+			continue
+		}
+		found = true
+		if it.Type != "unexecuted" {
+			t.Errorf("plan item type = %q; want %q (row status must win over a stale draft body)",
+				it.Type, "unexecuted")
+		}
+	}
+	if !found {
+		t.Fatalf("no item named the plan\noutput: %s", out)
+	}
+}
+
 // TestDocTodoUnreachableServerFails pins that an unreachable backbone is an
 // error, not a narrower answer: the corpus lives in the backbone, so there is
 // no half of this question a client can answer without it.

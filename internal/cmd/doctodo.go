@@ -157,6 +157,11 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 			if err != nil {
 				return err
 			}
+			// d.Status is the backbone row, the authoritative status;
+			// CorpusDocFromBody filled Status from the body's frontmatter
+			// snapshot, which `doc accept` never rewrites and so drifts in
+			// either direction from the row (WL-478).
+			cd.Status = d.Status
 			out[i] = cd
 			return nil
 		})
