@@ -116,9 +116,9 @@ func TestBareTaskNumberResolvesInTimeline(t *testing.T) {
 	setupRepoConfig(t, "proj")
 
 	number := task.ID[strings.LastIndex(task.ID, "-")+1:]
-	out, err := runLode(t, "timeline", number, "--json")
+	out, err := runLode(t, "task", "timeline", number, "--json")
 	if err != nil {
-		t.Fatalf("lode timeline %s: %v\noutput: %s", number, err, out)
+		t.Fatalf("lode task timeline %s: %v\noutput: %s", number, err, out)
 	}
 	var resp struct {
 		Task struct {

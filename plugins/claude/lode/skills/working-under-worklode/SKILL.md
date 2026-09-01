@@ -44,7 +44,7 @@ touches the client, rebuild before you retest.
 **Capability is not occurrence.** Code that *permits* a transition is not
 evidence it happened that way. Reading the source for the endpoint that could
 have caused a state change yields a confident wrong story just as readily as a
-right one. Worklode keeps the actual record — `lode timeline <id>`, plus `git
+right one. Worklode keeps the actual record — `lode task timeline <id>`, plus `git
 reflog` for anything a hook did — so ask what happened rather than what was
 possible.
 

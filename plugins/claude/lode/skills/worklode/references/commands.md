@@ -24,10 +24,6 @@ Shortcuts: `lode board` runs `lode task board`.
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
-## `lode critical-path` — Estimate-free critical path over blocks + requires (D12)
-
-Flags: --task
-
 ## `lode derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones
 
 Flags: --allow-empty, --dry-run, --graph-url, --server
@@ -178,6 +174,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --dry-run, --kind, --next, --project, --repo, --strict-focus, --ttl, --worktree
 - `lode task cost` — Show the token cost billed to a task
   Flags: --children, --days
+- `lode task critical-path` — Estimate-free critical path over blocks + requires (D12)
+  Flags: --task
 - `lode task decompose` — Split an oversized task into children, in place
   Flags: --into
 - `lode task delete` — Delete a task: hide a row that should not have existed
@@ -209,6 +207,7 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task start` — Start working on a task you own (assigns you if unassigned). No worktree, no lease — for agent claims use `lode task claim`.
 - `lode task stop` — Put a started task back to ready; keeps the assignment.
 - `lode task submit` — Move your in-progress task to review.
+- `lode task timeline` — Show a task's full history: state changes, PRs, CI, reviews, deployments, runtime events
 - `lode task token` — Mint a task-scoped bearer token (printed once — save it now)
   Flags: --actor, --ttl
 - `lode task tree` — Show tasks with children, and their children, with per-parent progress
@@ -220,8 +219,6 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task unduplicate` — Drop a task's duplicate edge to its canonical task
 - `lode task unfollow-up` — Drop a task's follow-up edge to its origin
 - `lode task unparent` — Detach a task from its parent
-
-## `lode timeline` — Show a task's full history: state changes, PRs, CI, reviews, deployments, runtime events
 
 ## `lode token` — Manage bearer tokens
 
