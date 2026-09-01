@@ -31,7 +31,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskListCmd(),
 		newTaskShowCmd(),
 		newTaskEditCmd(),
-		newTaskReadyCmd(),
+		newTaskPublishCmd(),
 		newTaskReopenCmd(),
 		newTaskReworkCmd(),
 		newTaskClaimCmd(),
@@ -336,7 +336,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
-	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task ready`)")
+	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task publish`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
 	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
 	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
@@ -734,8 +734,8 @@ func readBodyFile(cmd *cobra.Command, path string) (string, error) {
 	return resolveBody("", path, cmd.InOrStdin())
 }
 
-func newTaskReadyCmd() *cobra.Command {
-	return newTaskTransitionCmd("ready <id>", "Publish a draft task (draft -> ready)",
+func newTaskPublishCmd() *cobra.Command {
+	return newTaskTransitionCmd("publish <id>", "Publish a draft task (draft -> ready)",
 		false, (*cli.Client).ReadyTask)
 }
 
