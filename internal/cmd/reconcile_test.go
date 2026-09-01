@@ -26,7 +26,7 @@ func TestReconcileFlagWiring(t *testing.T) {
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", "wl_test")
 
-	out, err := runLode(t, "reconcile", "--repo", "acme/app", "--since", "720h", "--dry-run")
+	out, err := runLode(t, "task", "reconcile", "--repo", "acme/app", "--since", "720h", "--dry-run")
 	if err != nil {
 		t.Fatalf("reconcile: %v\n%s", err, out)
 	}
@@ -42,7 +42,7 @@ func TestReconcileFlagWiring(t *testing.T) {
 }
 
 func TestReconcileRejectsRepoAndTask(t *testing.T) {
-	if out, err := runLode(t, "reconcile", "--repo", "a/b", "--task", "WL-1"); err == nil {
+	if out, err := runLode(t, "task", "reconcile", "--repo", "a/b", "--task", "WL-1"); err == nil {
 		t.Fatalf("reconcile accepted --repo with --task:\n%s", out)
 	}
 }

@@ -1,4 +1,4 @@
-// Engine 1 of lode reconcile (spec 013): re-apply stored events whose apply
+// Engine 1 of lode task reconcile (spec 013): re-apply stored events whose apply
 // never ran — GitHub *.ignored deliveries recorded before their repo was
 // mapped, and catalog deliveries that matched no declaration when they
 // arrived (029 §3.2, WL-256). Offline: the payload is intact in
