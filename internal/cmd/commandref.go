@@ -13,9 +13,13 @@ import (
 // markdown consumed by plugins/claude/lode/skills/worklode/references/commands.md
 // (kept fresh by TestCommandReference in commandref_test.go). One H2 per
 // top-level command, naming its own flags (if it takes any directly, e.g.
-// `lode board`) plus one bullet per descendant, depth-first and
+// `lode critical-path`) plus one bullet per descendant, depth-first and
 // path-qualified (`lode task claim`, not just `claim`). Every command also
 // accepts `--json` and `--help`; both are omitted throughout as implied.
+//
+// The 061 §1 L9 shortcuts get one line up front rather than an H2 of their
+// own: each is a second instance of a command already documented under its
+// real parent, so an H2 would duplicate that entry.
 func renderCommandReference(root *cobra.Command) string {
 	var b strings.Builder
 	b.WriteString("# lode command reference\n\n")
@@ -24,7 +28,20 @@ func renderCommandReference(root *cobra.Command) string {
 		"`--json`, omitted below as implied. Add `--help` to any command below " +
 		"for flag defaults and full descriptions.\n\n")
 
+	if len(shortcuts) > 0 {
+		var pairs []string
+		for _, s := range shortcuts {
+			pairs = append(pairs, fmt.Sprintf("`lode %s` runs `lode %s`",
+				s.target[len(s.target)-1], strings.Join(s.target, " ")))
+		}
+		sort.Strings(pairs)
+		fmt.Fprintf(&b, "Shortcuts: %s.\n\n", strings.Join(pairs, "; "))
+	}
+
 	for _, top := range sortedVisibleCommands(root) {
+		if top.GroupID == shortcutGroupID {
+			continue // documented under its real parent, plus the line above
+		}
 		var section strings.Builder
 		fmt.Fprintf(&section, "## `lode %s` — %s\n\n", top.Name(), top.Short)
 		if flags := localFlagNames(top); len(flags) > 0 {
