@@ -15,16 +15,17 @@ and judgment skills that shape how an agent works a task (008 §13). It ships
 nothing for the work *before* a task exists: deciding what to build,
 interrogating the decision, and writing it down. Two third-party plugins —
 `superpowers` and `mattpocock-skills`, both MIT, both in the official Claude
-marketplace — do that well and do it against files in a layout Worklode does
-not use.
+marketplace — do that well. But they do it against files in a layout Worklode
+does not use.
 
 This spec adopts them by **vendoring**: their skills are copied into
 `plugins/claude/lode/`, merged where both treat the same job, and edited to know
 Worklode's documents and the Sunstone Way. It covers the vendored tree and its
-drift check, the plugin-qualified skill identity the registry needs before two
-plugins can ship the same skill name, `lode install`'s version pinning and
-suppression list, and one end-to-end capability: a grilling session that reads
-Worklode design documents and lands its result in one.
+drift check, and the plugin-qualified skill identity the registry needs before
+two plugins can ship the same skill name. It also covers `lode install`'s
+version pinning and suppression list, and one end-to-end capability: a
+grilling session that reads Worklode design documents and lands its result in
+one.
 
 Out of scope: rewriting the design flow to author documents through the API.
 That needs a lode-first authoring path and an amendment to 025's git-first
@@ -35,9 +36,9 @@ projection model, neither of which exists. §11 states the boundary.
 ## 1. Why vendoring rather than composition {#sec-1}
 
 A skill in another plugin cannot be patched. Four mechanisms exist to change
-how one behaves — compose a thin skill that delegates to it, suppress it with
+how one behaves: compose a thin skill that delegates to it, suppress it with
 `skillOverrides`, inject context from a `SessionStart` hook, or copy it and
-edit it — and only the last reaches instructions baked into the upstream body.
+edit it. Only the last one reaches instructions baked into the upstream body.
 
 Composition fails on the specific skills that matter here. `writing-plans`
 carries its file layout inside its writing guidance, so a delegating overlay
@@ -60,8 +61,9 @@ keeps the edits stated and §2.3 keeps the drift visible; nothing makes it free.
 ### 2.1 Layout {#sec-2.1}
 
 Vendored skills live under `plugins/claude/lode/skills/`, alongside the CLI-wrapper
-skills already there. They are ordinary skills with no marker distinguishing
-them at load time; provenance lives in metadata, not in the tree shape.
+skills already there. They are ordinary skills with nothing marking them as
+different when they load; where they came from is recorded in metadata, not
+in the tree shape.
 
 Each vendored skill carries an `upstream` block in its `SKILL.md` frontmatter:
 
@@ -77,16 +79,16 @@ upstream:
 ```
 
 `plugin`, `version` and `path` name the revision the copy was taken from.
-`merged-with` lists every other upstream source folded into it, and is absent
+`merged-with` lists every other upstream source folded into it. It is absent
 on a skill vendored from a single source. A skill written from scratch carries
 no `upstream` block, which is how the drift check tells the two apart.
 
 ### 2.2 Transformation prompts {#sec-2.2}
 
 A vendored skill is not a frozen copy — it is an upstream body plus a stated
-set of changes. Recording only the result loses the changes: at the next
-upstream release nobody can tell which of our edits were deliberate and which
-were incidental, and the merge is redone from memory.
+set of changes. Recording only the result loses the changes. At the next
+upstream release, nobody can tell which of our edits were deliberate and
+which were incidental, and the merge gets redone from memory.
 
 So each vendored skill carries its transformation as a **prompt**, in a sibling
 `UPSTREAM.md`. The prompt says what to change and why, addressed to an agent
@@ -111,8 +113,8 @@ instruction that task state belongs to `lode` — and lives at
 is specific to one skill. The effective transformation is the plugin prompt
 followed by the skill prompt.
 
-The payoff is that re-vendoring becomes a re-run rather than a re-derivation:
-given a new upstream version and the same prompts, an agent reproduces the
+The payoff is that re-vendoring becomes a re-run rather than a re-derivation.
+Given a new upstream version and the same prompts, an agent reproduces the
 vendored skill, and a human reviews a diff against the previous one instead of
 reconstructing intent. It also makes the edits reviewable on their own terms —
 a prompt is a much smaller thing to argue with than a merged skill body.
@@ -120,14 +122,14 @@ a prompt is a much smaller thing to argue with than a merged skill body.
 ### 2.3 The drift check {#sec-2.3}
 
 `scripts/check-vendored-skills.py` compares each vendored skill against the
-upstream revision its frontmatter names and reports what changed upstream since
-the copy was taken. It follows `scripts/sync-codex-marketplace.py`'s shape: a
-`--check` mode that reports and exits non-zero, suitable for CI and pre-commit,
-and a default mode that reports without failing.
+upstream revision named in its frontmatter, and reports what changed upstream
+since the copy was taken. It follows `scripts/sync-codex-marketplace.py`'s
+shape: a `--check` mode that reports and exits non-zero, suitable for CI and
+pre-commit, and a default mode that reports without failing.
 
 The check **reports and never rewrites**. Regeneration is a separate,
-explicitly invoked act: the check names the skill and the upstream diff, and
-re-running §2.2's prompts against the new upstream is a decision a human takes
+explicitly invoked act: the check names the skill and the upstream diff.
+Re-running §2.2's prompts against the new upstream is a decision a human takes
 and reviews. Nothing rewrites a skill as a side effect of a commit hook, for
 the reason `secmeta.py` gives — a tool that silently fixes its own complaint
 teaches you to stop reading it.
@@ -175,15 +177,15 @@ questions against documents with different lifetimes. Design settles *what to
 build* and produces a spec — a durable statement that stays true after the code
 ships. Planning settles *how to build it* and produces a plan — an executable
 document spent once its tasks are minted (025 §2). Merging them would put a
-throwaway artifact and a permanent one behind one invocation, and it is exactly
-the boundary 025 draws and that spec 025's kind rename (`spec` → `design`)
+throwaway artifact and a permanent one behind one invocation. That is exactly
+the boundary 025 draws, the one spec 025's kind rename (`spec` → `design`)
 names. The interrogation techniques are shared, so the two skills share the
 question format and diverge on what they are driving toward.
 
 A merge is not a concatenation and not a winner-takes-all. `assay` is
-the worked example: superpowers contributes a phased lifecycle that ends in a
-written document, mattpocock contributes a breadth-first design tree with a
-numbered frontier and a recommended answer per question, and the merged skill
+the worked example. Superpowers contributes a phased lifecycle that ends in a
+written document; mattpocock contributes a breadth-first design tree with a
+numbered frontier and a recommended answer per question; the merged skill
 runs the tree inside the lifecycle. Each remix states in its body which
 behaviour came from where, so a later upstream change can be judged against the
 part it touches.
@@ -191,7 +193,7 @@ part it touches.
 **The merges are designed before they are written.** How to remix each family
 is a research question, not a transcription: it needs both upstream bodies read
 side by side, a judgment about what each contributes, and a written proposal.
-That research is its own step, its output is the §2.2 prompt set, and it is
+That research is its own step. Its output is the §2.2 prompt set, and it is
 reviewed and accepted before any vendored skill is written. §13.3 makes the
 gate an acceptance criterion; skipping it produces five skills nobody agreed
 to.
@@ -211,8 +213,8 @@ Worklode-specific behaviour is thin, and the planning remix's document output
 is deliberately deferred to §11.
 
 **The design remix is called `assay`.** An assay establishes what a sample is
-actually worth by testing it rather than by looking at it, which is what this
-skill does to a proposal — and it is mining-native, so it sits in the same
+actually worth by testing it rather than by looking at it — that is what this
+skill does to a proposal. It is also mining-native, so it sits in the same
 vocabulary as `lode` itself. The invocation is `/lode:assay`.
 
 The other four keep plain names — `planning`, `writing-for-agents`, `tdd`,
@@ -226,7 +228,7 @@ conversation, never an invocation.
 
 Everything else in both plugins, including the execution-loop skills
 (`executing-plans`, `subagent-driven-development`, `using-git-worktrees`,
-`finishing-a-development-branch`) whose branch and task-state ownership
+`finishing-a-development-branch`), whose ownership of branches and task state
 overlaps `lode worktree next`/`done` and `working-under-worklode`. Deciding whether they
 are redundant or complementary needs the lode-first authoring path to exist
 first; until then they are neither vendored nor suppressed.
@@ -261,11 +263,11 @@ Four changes carry it:
   neither the source repo nor `SKILL.md` frontmatter.
 
   Not the source repo, because a source is `owner/repo@ref:glob` and one repo
-  holds many plugins: the scanner's normal case is a glob like
-  `plugins/*/skills/*`, which is how this repo publishes `lode` and how a
-  marketplace repo publishes a dozen. Deriving from `source_repo` would give
-  every plugin in a marketplace the same qualifier, which is the collision
-  again under a longer name.
+  can hold many plugins. The scanner's normal case is a glob like
+  `plugins/*/skills/*` — how this repo publishes `lode`, and how a
+  marketplace repo publishes a dozen plugins at once. Deriving from
+  `source_repo` would give every plugin in a marketplace the same qualifier,
+  which is the collision again under a longer name.
 
   Not frontmatter, because the qualifier is a namespace claim: a `SKILL.md` that
   could name its own plugin could claim another plugin's.
@@ -282,13 +284,13 @@ Four changes carry it:
   skill dir by longest prefix.
 
   The manifest is **not** added to the skill archive. It is metadata about the
-  skill rather than part of it, and adding a file to the archive would change
+  skill rather than part of it. Adding a file to the archive would change
   every existing skill's `content_hash` — minting a spurious new version of
   every skill in the registry on the first sync after this ships.
 
 - **Uniqueness.** `skills_name_unique` becomes unique on the qualified name. A
   new migration adds the qualifier column, backfills existing rows from their
-  `source_repo`'s last segment, and only then adds the constraint; shipped
+  `source_repo`'s last segment, and only then adds the constraint. Shipped
   migrations are never edited. The backfill is a placeholder that the first
   sync after deploy corrects — a manifest-derived qualifier needs the tarball,
   which SQL does not have. Ordering the backfill before the constraint is what
@@ -296,7 +298,7 @@ Four changes carry it:
 
 - **Routing.** `GET /api/v1/skills/{name}` accepts a qualified name. A bare
   name that matches exactly one skill still resolves, so existing pins and
-  `lode skills` invocations keep working; a bare name matching more than one is
+  `lode skills` invocations keep working. A bare name matching more than one is
   an ambiguity error naming the candidates, in the shape
   `designdoc.AmbiguousRefError` already uses for documents.
 
@@ -332,7 +334,7 @@ The list is:
 - **Every `superpowers` skill.** All are model-invocable, and
   `using-superpowers` is injected at every `SessionStart` with an instruction
   that any applicable skill must be invoked — a prior strong enough that
-  leaving any of them reachable undermines the vendored set.
+  leaving any of them reachable would undermine the vendored set.
 - **The model-invocable `mattpocock-skills` skills the remixes replace.** 15 of
   its 36 skills carry no `disable-model-invocation`, and they include exactly
   the overlaps: `grilling`, `tdd`, `diagnosing-bugs`, `writing-for-agents`,
@@ -376,8 +378,8 @@ could look up. Against a Worklode project, three sources in order:
 A grilling session is started with its destination stated: a spec, a plan, a
 task body, or a loose idea with no home yet. The destination is part of the
 skill's contract rather than a question asked at the end, because it changes
-the interview — a session aimed at a plan asks about task boundaries and
-ordering, one aimed at a spec asks about invariants and acceptance.
+the interview. A session aimed at a plan asks about task boundaries and
+ordering; one aimed at a spec asks about invariants and acceptance.
 
 When the invocation does not name a destination, the skill asks for one before
 the first round of questions, and stops if it cannot get one.
@@ -388,10 +390,10 @@ When the frontier empties, the settled design tree is written to the named
 destination. Losing it to the transcript is the failure this replaces.
 
 Until the lode-first authoring path exists (§11), write-back targets what is
-writable today: a spec or plan destination produces a conforming file in the
+writable today. A spec or plan destination produces a conforming file in the
 configured corpus — filename, frontmatter, and `{#sec-N}` anchors per
-`docs/authoring-design-docs.md`, so `secfmt.py` and `secmeta.py` accept it — and
-a task-body destination writes through the existing CLI. An idea destination
+`docs/authoring-design-docs.md`, so `secfmt.py` and `secmeta.py` accept it. A
+task-body destination writes through the existing CLI. An idea destination
 writes a file the user names and nothing else interprets.
 
 The skill never accepts a document into the backbone and never syncs. It leaves
@@ -401,10 +403,10 @@ store, on the terms 025 §16.2 already sets.
 ### 6.4 Answering a round in crit {#sec-6.4}
 
 A grilling round asks the whole frontier at once — numbered questions, each
-with a recommended answer. In a terminal that is the wrong shape for the
-answering half: the questions scroll out of view while the answer is being
-typed, and there is no way to attach an answer to the question it belongs to
-except by repeating its number.
+with a recommended answer. In a terminal, that is the wrong shape for
+answering: the questions scroll out of view while an answer is being typed,
+and there is no way to attach an answer to its question except by repeating
+the number.
 
 The round is therefore rendered as a document and reviewed in `crit`. The
 mapping is direct:
@@ -419,8 +421,8 @@ mapping is direct:
 
 The recommendation-by-default is what makes this worth the machinery. A round
 of twelve questions where nine recommendations are right costs three comments
-instead of twelve numbered answers, and each answer is anchored to its
-question, so neither side is matching numbers by hand.
+instead of twelve numbered answers. Each answer is anchored to its
+question, so neither side has to match numbers by hand.
 
 The skill writes the round to
 `.worklode/cache/grilling/<session>/round-<n>.md` — one section per question,
@@ -461,7 +463,7 @@ the version and fetch time backing §7.3.
 ### 7.3 Conditional refetch {#sec-7.3}
 
 Refetching re-downloads a body only when it changed. Every editable storage
-object carries a monotonically increasing `version` (equivalently
+object carries a `version` number that only ever increases (equivalently
 `generation`), already present on the doc row and returned by
 `GET /api/v1/docs/{id}`. The client sends the version it holds; the server
 answers with the document when it has moved and a not-modified response when it
@@ -514,9 +516,9 @@ Both follow 022's conventions: nil-safe struct in the owning package's
   unverifiable and exits zero.
 - Every vendored skill's `upstream` block parses and names a path that existed
   in the declared upstream version.
-- `skillsync` derives the qualifier from the nearest plugin manifest: two
-  plugins under one `plugins/*/skills/*` source get distinct qualifiers, a
-  manifest-less repo falls back to the repo's last segment, and a `SKILL.md`
+- `skillsync` derives the qualifier from the nearest plugin manifest. Two
+  plugins under one `plugins/*/skills/*` source get distinct qualifiers; a
+  manifest-less repo falls back to the repo's last segment; and a `SKILL.md`
   claiming a foreign qualifier in frontmatter does not get it.
 - Capturing manifests leaves `content_hash` unchanged for every existing
   skill — the archive is byte-identical before and after.
@@ -530,7 +532,7 @@ Both follow 022's conventions: nil-safe struct in the owning package's
 - Grilling write-back produces a corpus file that `secfmt.py` and `secmeta.py`
   both accept.
 - A rendered grilling round carries one section per question with its
-  recommendation; answers read back from a crit review file map to the
+  recommendation. Answers read back from a crit review file map to the
   questions they were anchored to, and a question resolved without a comment is
   read as accepting the recommendation.
 - With `crit` absent, the round is asked in the terminal and the interview
@@ -539,7 +541,7 @@ Both follow 022's conventions: nil-safe struct in the owning package's
 ## 11. Non-goals {#sec-11}
 
 **Authoring documents through the API.** The design brief settles that `lode`
-becomes the authoring surface and the git corpus goes away; 025 makes the
+becomes the authoring surface and the git corpus goes away. 025 makes the
 backbone a projection of reviewed git, which is why `lode doc sync` refuses a
 dirty tree. Changing that needs an amendment and a write path, and every skill
 that would write through it is out of scope here. §6.3 writes files for exactly
@@ -548,11 +550,12 @@ this reason, and the planning remix's document output waits.
 **The execution loop.** §3.3.
 
 **Retrieval-based skill routing.** Holding every skill description in context
-does not scale, and the replacement is hybrid retrieval — lexical and semantic
-paths fused with Reciprocal Rank Fusion, then reranked — which 016 §2's schema
-does not yet support: it has no full-text index, and its `embedding` column
-carries no dimension typmod, so it is an unindexed exact scan with no HNSW
-available until the dimension is fixed. That is its own spec.
+does not scale. The replacement is hybrid retrieval — lexical and semantic
+paths fused with Reciprocal Rank Fusion, then reranked — but 016 §2's schema
+does not support that yet: it has no full-text index, and its `embedding`
+column carries no dimension typmod, so lookups run an unindexed exact scan
+with no HNSW index (the standard nearest-neighbour index type for vector
+search) available until the dimension is fixed. That is its own spec.
 
 ## 12. Open questions {#sec-12}
 
@@ -560,7 +563,7 @@ available until the dimension is fixed. That is its own spec.
    suppressed by neither, and model-invocable, so both can fire on the same
    trigger. Either the remix absorbs it or it earns a stated boundary.
 2. **What each remix actually says.** §3.2 fixes the pairings, the Design /
-   Planning split and the two customisation axes; the merged bodies are
+   Planning split, and the two customisation axes. The merged bodies are
    unwritten, and the Sunstone Way axis has no draft. This is scheduled work
    rather than an unknown — the research step and its review gate are §13.3 —
    and it stays listed here because its *outcome* is genuinely open.
@@ -578,8 +581,8 @@ available until the dimension is fixed. That is its own spec.
 2. Every vendored skill declares `upstream`, and `LICENSES.md` carries both MIT
    notices with per-skill provenance.
 3. The remix research is written, reviewed and accepted before any vendored
-   skill body is: one document per §3.2 family stating what each source
-   contributes and what the merged skill does, whose accepted output is the
+   skill body is. One document per §3.2 family states what each source
+   contributes and what the merged skill does; its accepted output is the
    §2.2 prompt set.
 4. Every vendored skill has an `UPSTREAM.md`, plugin-level prompts exist for
    both sources, and re-running the prompts against the pinned upstream

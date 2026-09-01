@@ -103,9 +103,9 @@ catalog not configured" — the same answer it already gives for an unset
 **The catalog is no longer reviewable by pull request.** A wrong `op://`
 reference, a `baseline = true` nobody agreed to, or a removed entry now lands
 without a second pair of eyes. The audit trail becomes 1Password's own item
-history — who changed which field, when — and the control becomes the
-population that can edit the item, which is the vault's write ACL rather than
-a repository's `CODEOWNERS`. That is a real reduction in review and is accepted
+history — who changed which field, when — and control now rests with
+whoever can edit the item: the vault's write ACL, not a repository's
+`CODEOWNERS`. That is a real reduction in review and is accepted
 deliberately: the catalog holds no values, and its content is a list of
 pointers whose blast radius is bounded by 1Password's own access control on the
 items pointed at.
@@ -114,10 +114,11 @@ items pointed at.
 catalog as one org-wide map, but vaults are per-cluster, so each environment's
 vault carries its own `worklode-secrets-catalog` item — hzdev's and hzprod's
 today, a third when the admin-cluster prod deployment lands. The copies do not
-race — a worklode server only ever serves its own cluster's item — but an
-org-wide entry is one edit per vault, nothing mechanical detects drift between
-them, and a name that resolves against one environment's server warns as
-missing against another's. The operational rule: an org-wide entry is mirrored
+race, because a worklode server only ever serves its own cluster's item. But
+an org-wide entry now takes one edit per vault, nothing mechanical detects
+drift between them, and a name that resolves on one environment's server
+warns as missing on another's. The operational rule: an org-wide entry is
+mirrored
 by hand into every vault whose cluster runs a worklode server; an entry
 meaningful in only one environment may deliberately exist only there. If hand
 mirroring proves error-prone, that is churn evidence for Q17.4 below.

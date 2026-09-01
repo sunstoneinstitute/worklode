@@ -43,10 +43,10 @@ The two answer different questions, and neither substitutes for the other.
 | Reversible | reopen (`abandoned → ready`) | undelete |
 
 Delete is **not** a new value in the task state enum. A tombstoned task keeps
-whatever state it had, and the transition set is untouched: adding `deleted` as
-a state would need a transition from every other state, would collide with the
-roll-up rules (004 §6), and would make "deleted" and "abandoned" look like
-alternatives on one axis when they are two axes.
+whatever state it had, and the transition set is untouched. Adding `deleted`
+as a state would need a transition from every other state, would collide with
+the roll-up rules (004 §6), and would make "deleted" and "abandoned" look like
+alternatives on one axis when they are really two separate axes.
 
 Prefer `abandon`. Reach for `delete` when the row is noise rather than history.
 
@@ -164,8 +164,8 @@ tombstone changes is which rows a *query* considers at all. Every place that
 would otherwise treat a deleted task as unfinished work — the blocking check,
 the plan's open-task set, a container's children — filters it out where it
 reads, rather than by calling it closed. The distinction matters because
-`closed` is a claim about work and a tombstone is a claim about the row, and
-one predicate answering both would make "this was delivered" and "this never
+`closed` is a claim about work, and a tombstone is a claim about the row. One
+predicate answering both would make "this was delivered" and "this never
 should have existed" indistinguishable to everything downstream.
 
 A tombstone hides a row; it does not freeze it. An edit or a state change

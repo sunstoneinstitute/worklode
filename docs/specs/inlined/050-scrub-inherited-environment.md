@@ -22,14 +22,14 @@ rest of §3 — are dropped. Everything else, including the shell plumbing the
 child needs to run at all (`PATH`, `HOME`, `TMPDIR`, the locale variables), is
 inherited unchanged.
 
-**A deny-list, not an allow-list.** An allow-list is the stronger guarantee and
-was considered and rejected for v1: the set of variables a task's child
-legitimately needs is open-ended — a compiler's cache directory, a proxy
+**A deny-list, not an allow-list.** An allow-list gives the stronger
+guarantee. It was considered for v1 and rejected: the variables a task's
+child genuinely needs are open-ended — a compiler's cache directory, a proxy
 setting, a tool's config path — so an allow-list breaks working tasks in ways
-that surface as confusing failures deep in a build, while a deny-list fails
-only by missing a credential it did not recognise. The trade is a weaker
-guarantee for a change that can ship without a survey of every tool an agent
-runs; §4 records what it therefore does not cover.
+that show up as confusing failures deep in a build. A deny-list, by
+contrast, only fails by missing a credential it did not recognise. The trade
+is a weaker guarantee, for a change that can ship without surveying every
+tool an agent runs; §4 lists what it therefore does not cover.
 
 The rule lives in `internal/secrets.ChildEnv`, alongside the strip-and-inject
 pass that was already there.
@@ -43,12 +43,12 @@ the operator's environment happens to contain". 017 §4 then specifies the
 names — and says nothing about the rest of the environment.
 
 So the negative half was never implemented. `lode secrets exec` passed
-`os.Environ()` through, stripped only of the names it was about to inject
-(so the task's value wins over an ambient one of the same name). A child
+`os.Environ()` through, stripping only the names it was about to inject (so
+the task's value wins over an ambient one with the same name). A child
 therefore saw every credential the operator's shell happened to export: the
 `ANTHROPIC_API_KEY` that starts the agent, `AWS_*` from a `direnv`, a
-`GITHUB_TOKEN` from a dotfile. The ceremony's careful per-task scoping bought
-nothing, because the ambient set arrived anyway.
+`GITHUB_TOKEN` from a dotfile. The careful per-task scoping gained nothing,
+because the ambient set arrived anyway.
 
 Prior art: kagent's `_sanitize_env()`
 (`python/packages/kagent-skills/src/kagent/skills/shell.py`) strips a
@@ -87,19 +87,19 @@ appears in any file, log, or event row.
 `PWD`, `OLDPWD`, `TMPDIR`, `TERM`, `TERMINFO`, `LANG`, `LANGUAGE`, `TZ`,
 `COLUMNS`, `LINES`, `SSH_AUTH_SOCK`, `SSH_AGENT_PID`, `GIT_AUTHOR_NAME`,
 `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and the `LC_`
-and `XDG_` namespaces. The keep set is consulted first, so a deny pattern
-cannot grow far enough to break the plumbing by accident — the git identity
-pair is here precisely because `AUTHOR` contains `AUTH`, and a child that kept
-the committer variables while losing the author ones would commit under a
-mismatched identity or fail outright. `SSH_AUTH_SOCK` is a deliberate member
-too: it is an ambient credential channel, but the Linux keystore (017 §3) is
-encrypted to a key held in ssh-agent and `git push` over ssh needs it, so
-stripping it would break `lode` itself inside the child.
+and `XDG_` namespaces. The keep set is checked first, so a deny pattern can
+never grow far enough to break this plumbing by accident. The git identity
+pair is here precisely because `AUTHOR` contains `AUTH`: a child that kept the
+committer variables while losing the author ones would commit under a
+mismatched identity, or fail outright. `SSH_AUTH_SOCK` is a deliberate member
+too. It is an ambient credential channel, but the Linux keystore (017 §3) is
+encrypted to a key held in ssh-agent, and `git push` over ssh needs that key —
+so stripping `SSH_AUTH_SOCK` would break `lode` itself inside the child.
 
-**Deny by namespace** — these exist to carry an identity, and their
-non-credential members select which ambient credential is used (`AWS_PROFILE`
-picks a key pair out of `~/.aws`, `ANTHROPIC_BASE_URL` picks which endpoint a
-key is presented to):
+**Deny by namespace** — these namespaces exist to carry an identity, and even
+their non-credential members pick which ambient credential gets used
+(`AWS_PROFILE` picks a key pair out of `~/.aws`; `ANTHROPIC_BASE_URL` picks
+which endpoint a key is presented to):
 
 `AWS_`, `AZURE_`, `GCP_`, `CLOUDSDK_`, `ANTHROPIC_`, `OPENAI_`, `VAULT_`, `OP_`.
 
@@ -108,15 +108,16 @@ carry none of the tokens below: `KUBECONFIG`, `NETRC`, `DOCKER_CONFIG`,
 `PGPASSFILE`, `GNUPGHOME`.
 
 **Deny by shape** — a name containing any of `TOKEN`, `SECRET`, `PASSWORD`,
-`PASSWD`, `PWD`, `PASSPHRASE`, `CRED`, `AUTH`, `APIKEY`, or ending `_KEY` (or
-containing `_KEY_`). Substring rather than suffix matching, because the shape
-appears in every position: `GITHUB_TOKEN`, `TOKEN_FOR_REGISTRY`,
-`GOOGLE_APPLICATION_CREDENTIALS`. The tokens are the short forms on purpose —
-`CRED` takes `*_CREDS` and `*_CREDS_FILE` as well as `CREDENTIALS`, and `PWD`
-takes MySQL's `MYSQL_PWD`, which is safe only because `PWD` and `OLDPWD` are in
-the keep set. `KEY` alone is not a pattern — that would take `KEYCLOAK_URL` and
-`KEYBOARD_LAYOUT` with it — so the `_KEY` tail carries `GIT_SIGNING_KEY` and
-`AWS_SECRET_ACCESS_KEY` while `KEYCLOAK_URL` stays.
+`PASSWD`, `PWD`, `PASSPHRASE`, `CRED`, `AUTH`, `APIKEY`, or ending in `_KEY`
+(or containing `_KEY_`). This matches the token anywhere in the name, not
+just at the end, because the shape can appear in any position:
+`GITHUB_TOKEN`, `TOKEN_FOR_REGISTRY`, `GOOGLE_APPLICATION_CREDENTIALS`. The
+tokens are deliberately short forms: `CRED` also matches `*_CREDS` and
+`*_CREDS_FILE` as well as `CREDENTIALS`, and `PWD` matches MySQL's
+`MYSQL_PWD` — safe only because `PWD` and `OLDPWD` are in the keep set. `KEY`
+alone is not a pattern, because that would also match `KEYCLOAK_URL` and
+`KEYBOARD_LAYOUT`; the `_KEY` tail instead catches `GIT_SIGNING_KEY` and
+`AWS_SECRET_ACCESS_KEY` while leaving `KEYCLOAK_URL` alone.
 
 **Where the line is.** The list covers names that *look like* credentials.
 It deliberately does not try to cover credentials that do not: a token in
@@ -132,19 +133,20 @@ the reverse.
 
 ## 4. What this does not cover
 
-**Credentials in unremarkable names.** §3's closing paragraph: the scrub reads
-names, not values, so a credential in a name that carries no credential shape
-is inherited. This is the deny-list's structural weakness and the reason to
-revisit the allow-list once there is evidence about what tasks actually need.
+**Credentials in unremarkable names.** As §3's closing paragraph notes, the
+scrub reads names, not values, so a credential in a name that doesn't look
+like a credential is still inherited. This is the deny-list's basic
+weakness, and the reason to revisit the allow-list once there is evidence
+about what tasks actually need.
 
 **`SSH_AUTH_SOCK`.** Kept by design, so the child can use every key the
 operator's agent holds. Removing it needs the keystore's Linux backend to stop
 depending on the agent first.
 
-**Credential files.** `~/.aws/credentials`, `~/.config/gh/hosts.yml` and their
-kind are reachable through `HOME`, which the child keeps. The scrub is an
-environment-scoping measure, not a filesystem sandbox; 038's sandbox is the
-place that boundary gets drawn.
+**Credential files.** `~/.aws/credentials`, `~/.config/gh/hosts.yml` and files
+like them are reachable through `HOME`, which the child keeps. The scrub only
+scopes the environment; it is not a filesystem sandbox. 038's sandbox is
+where that boundary gets drawn.
 
 **Everything except `lode secrets exec`.** An agent that runs a command
 directly rather than through `lode secrets exec` inherits the operator's
@@ -154,16 +156,16 @@ session.
 ## 5. Consequences
 
 **A task that quietly relied on an ambient credential now fails.** That is the
-point, and the failure is the intended shape — a credentialed command failing
-inside `lode secrets exec` is a block signal with a named missing secret
+point: the failure is the intended shape. A credentialed command failing
+inside `lode secrets exec` is a block signal naming the missing secret
 (017 §6), not something to work around. The fix is a catalog entry and a
-`--secrets` declaration, never a re-export.
+`--secrets` declaration — never a re-export.
 
 **False positives are silent.** A variable that matches by shape but carries
 configuration — say `SOMETHING_AUTHORITY` — disappears without a message,
-because printing what was stripped would name the operator's credentials in a
-log. A task that needs such a variable is an argument to narrow the pattern,
-with a test beside it.
+because printing what was stripped would put the operator's credentials in a
+log. If a task needs such a variable, that is a reason to narrow the
+pattern, with a test alongside it.
 
 **The list will drift.** New providers ship new namespaces. Like 047's, this
 list is a snapshot, and it degrades slowly rather than opening a hole: the

@@ -24,10 +24,10 @@ table becomes the built-in default workflow every project starts from.
 Why: not every project uses every state, and the final state differs by what
 the project ships. meetingroom-sync deploys to prod from main and has no
 meaningful `deployed_dev`. A data-science project's dataset is effectively
-production once it lands from main; `released` is its right terminal, as it is
-for CLI tools — while a service with dev and prod environments ends at
+production once it lands from main, so `released` is its right terminal state,
+as it is for CLI tools, while a service with dev and prod environments ends at
 `deployed_prod`. Deployment environments are detectable from
-`deploy/overlays/`, so the ordinary service case can be inferred rather than
+`deploy/overlays/`, so the ordinary service case can be inferred instead of
 hand-declared.
 
 Settled by WL-69 and taken as given here: definition-of-done is one idea
@@ -37,7 +37,7 @@ carries the state side — which states the project has and how they connect.
 Neither owns the other.
 
 Boundary with the rule engine (WL-60): rules choose *which legal edge to take
-and when*; the workflow defines *which edges exist*. A rule — LLM-backed or
+and when*. The workflow defines *which edges exist*. A rule — LLM-backed or
 not — can never add an edge (§6.3).
 
 Out of scope: minting new state names (§1.1 fixes the vocabulary), storing
@@ -53,7 +53,7 @@ The **state vocabulary** stays global and fixed: `draft`, `ready`,
 `in_progress`, `in_review`, `merged`, `deployed_dev`, `deployed_prod`,
 `released`, `abandoned` — the nine states of migration `0005_delivery`'s CHECK
 constraint and `ns/shapes.ttl`'s `wl:taskState` list. A workflow selects a
-subset of this vocabulary and an edge set over it; it never mints a state
+subset of this vocabulary and an edge set over it. It never mints a state
 name. Every state name that appears anywhere in the system — SQL, wire
 shapes, SHACL, UI — is drawn from the vocabulary.
 
@@ -85,11 +85,11 @@ workflow's declared states, and are legal in every workflow:
 | `merged`·`deployed_dev`·`deployed_prod`·`released`·`abandoned` `→ ready` | reopen |
 
 Every core edge targets a mandatory state. The resulting invariant: **a task
-can always leave its state along a core edge, whatever its workflow says; a
-task can only *enter* an optional state its workflow declares.** This is also
-the stranding rule — when a workflow change leaves a task in a state its
-workflow no longer declares, the core exits (done, abandon, rework, reopen)
-still apply, so no task is ever stuck (§6.4).
+can always leave its state along a core edge, no matter what its workflow
+says. A task can only *enter* an optional state its workflow declares.** This
+is also the stranding rule: when a workflow change leaves a task in a state
+its workflow no longer declares, the core exits (done, abandon, rework,
+reopen) still apply, so no task is ever stuck (§6.4).
 
 ### 1.3 Optional states and declared entries
 
@@ -121,17 +121,17 @@ The built-in workflow named `default` declares all nine states and all
 implied entries. Its edge set is, by construction, exactly today's
 `legalTransitions` table — the core edges of §1.2 plus every entry of §1.3.
 A project that has never touched workflows runs precisely the machine it runs
-today; the subsumption changes no behavior until a project opts in.
+today. The subsumption changes no behavior until a project opts in.
 
 Workflows carry short descriptive names (lowercase slug, `[a-z0-9-]{1,40}`) —
 `service`, `dataset-release`, `prod-from-main` — and an optional
-one-sentence `description`. LLMs may propose and maintain them (§6.3); the
+one-sentence `description`. LLMs may propose and maintain them (§6.3). The
 name is how a rule, a human, and an audit trail refer to one.
 
 ## 2. The guard
 
 > Amends 004 §5.1. The transition table there describes the built-in
-> `default` workflow; the authority for any given task is the workflow that
+> `default` workflow. The authority for any given task is the workflow that
 > governs it.
 
 `Transition(tx, now, taskID, from, to, eventID)` keeps its contract — checks
@@ -145,22 +145,22 @@ legal(task, from, to) =
 ```
 
 `workflowFor(task)` is resolved inside the same transaction (§3). Wrong
-from-state and illegal edge stay `ErrBadTransition`; the error message names
+from-state and illegal edge stay `ErrBadTransition`. The error message names
 the governing workflow when the edge exists in the vocabulary but not in the
-workflow, so "this project has no dev environment" reads as such rather than
+workflow, so "this project has no dev environment" reads as such, rather than
 as a mystery refusal.
 
 The `tasks.state` CHECK constraint and `ns/shapes.ttl`'s `sh:in` list are
 **not** relaxed or made per-project: they enforce the vocabulary (§1.1),
-which is still global. Store-level validation enforces workflow membership;
-the constraint stays as the vocabulary backstop.
+which is still global. Store-level validation enforces workflow membership.
+The constraint stays as the vocabulary backstop.
 
 ## 3. Which workflow governs a task
 
 Resolution order, evaluated at transition time (not frozen at creation):
 
 1. `tasks.workflow` — a per-task override naming one of the project's
-   workflows; set at creation or via `lode task edit --workflow <name>`.
+   workflows, set at creation or via `lode task edit --workflow <name>`.
    WL-60's rules become the automated writer of this field later.
 2. The project's `default` entry in `projects.workflows` (§4.1).
 3. The built-in `default` workflow (§1.4).
@@ -168,7 +168,7 @@ Resolution order, evaluated at transition time (not frozen at creation):
 Dynamic resolution means editing a workflow immediately applies to every task
 governed by it — there is no per-task snapshot to migrate. A `tasks.workflow`
 value naming a workflow that no longer exists resolves to the project
-default; §4.2 keeps that from happening to open tasks.
+default. §4.2 keeps that from happening to open tasks.
 
 Initial states are not workflow business: every task is created `ready`, or
 `draft` when the creator says so (`Draft` flag), in every workflow. Both are
@@ -214,7 +214,7 @@ column is not backfilled, so existing projects change nothing (§4.3).
   built-in `default`.
 - `workflows` — named definitions. A definition is `states` (must include
   the mandatory core) plus optional `transitions`. When `transitions` is
-  omitted, every §1.3 entry among the declared states is implied; when
+  omitted, every §1.3 entry among the declared states is implied. When it is
   present, it is the complete list of declared entries (core edges are never
   listed — they are not the workflow's to grant or revoke).
 
@@ -238,12 +238,12 @@ Enforced in the store on every write of `projects.workflows` and
 - `default` names a defined workflow or the built-in `default`.
 - Removing or renaming a workflow that open (not closed, per
   `taskClosed`) tasks reference by name is refused, naming the tasks.
-  Closed tasks may dangle; they resolve to the project default (§3), and
+  Closed tasks may dangle. They resolve to the project default (§3), and
   their core exits (reopen) remain legal regardless.
-- Workflow names match `[a-z0-9-]{1,40}`; `default` is reserved for the
+- Workflow names match `[a-z0-9-]{1,40}`. `default` is reserved for the
   built-in and cannot be redefined.
 - A repo mapping's `done_state` must be a state of the project's default
-  workflow; a mismatch is a warning on the write, not a refusal (§7).
+  workflow. A mismatch is a warning on the write, not a refusal (§7).
 
 A workflow change never moves a task. Tasks sit where they are; the stranding
 rule (§1.2) covers states the new definition dropped.
@@ -260,7 +260,7 @@ ALTER TABLE tasks ADD COLUMN workflow text;
 No backfill, no CHECK changes, no data rewrite. The code migration is the
 real work: `legalTransitions` is deleted and replaced by the vocabulary, the
 core-edge rules, and the entry table, with the built-in `default` derived
-from them; `Transition` resolves the governing workflow in-tx; the direct
+from them. `Transition` resolves the governing workflow in-tx. The direct
 table reads in `hierarchy_resolve.go` move to the core rules (§5.4). §5 is
 the complete accounting of every reader.
 
@@ -272,11 +272,11 @@ The audit behind this section swept `internal/` for state literals,
 `legalTransitions` references, and hand-maintained state sets. Each reader
 lands in one of four resolutions: **core** (depends only on mandatory states
 and core edges — unconditionally correct in every workflow, unchanged),
-**vocabulary-static** (enumerates a vocabulary subset as a candidate filter —
-stays sound because workflows only omit states; the guard remains
+**vocabulary-static** (enumerates a vocabulary subset as a candidate filter,
+and stays sound because workflows only omit states — the guard remains
 authoritative), **workflow-resolved** (must consult the governing workflow at
-runtime), or **display** (degrades gracefully; unknown-to-it states already
-render raw).
+runtime), or **display** (degrades gracefully — states it doesn't recognize
+already render raw).
 
 ### 5.1 Core — unchanged, unconditionally correct
 
@@ -297,7 +297,7 @@ render raw).
 ### 5.2 Vocabulary-static sets — stay, stay sound
 
 These enumerate vocabulary subsets as prefilters or orderings. A workflow
-omitting states only shrinks what they match; none of them grants a
+omitting states only shrinks what they match. None of them grants a
 transition, so the guard keeps them honest.
 
 | Reader | Why it stays sound |
@@ -355,19 +355,19 @@ meaning: *every non-core state* (`in_review` plus the delivery tail). Those
 states are earned by observed facts about a specific commit, and a container
 has no commit of its own — the rationale is workflow-independent.
 `hierarchy_resolve.go`'s direct reads of `legalTransitions` (`:104-118`)
-read the core rules instead; no behavior changes.
+read the core rules instead. No behavior changes.
 
 ### 5.5 Display — degrades gracefully, unchanged in v1
 
 The cockpit's buckets (`cockpit.go:196`, `admin.go:735`) are `in_progress`,
 `in_review`, `ready`, and derived `blocked` — two core states, one optional,
-one derived. For a workflow without `in_review` the bucket is vacuously
-empty; the `t.State == "in_review"` checks stay correct because no task can
-enter the state. Workflow-driven columns (a board that shows a project's own
-tail) are a cockpit follow-up, not this spec. `StateChip`/`StateLabel`
-already fall through to plain rendering for unlisted states. CLI help texts
-that spell the vocabulary keep spelling it; the ones that assert legality
-(`lode task done`'s stale `in_review -> merged` short) get reworded during
+one derived. For a workflow without `in_review` the bucket is vacuously empty. The
+`t.State == "in_review"` checks stay correct because no task can enter the
+state. Workflow-driven columns (a board that shows a project's own tail) are
+a cockpit follow-up, not this spec. `StateChip`/`StateLabel` already fall
+through to plain rendering for unlisted states. CLI help texts that spell the
+vocabulary keep spelling it. The ones that assert legality (`lode task
+done`'s stale `in_review -> merged` short) get reworded during
 implementation. Obsidian's `state: string` is already untyped.
 
 ## 6. Changing a workflow: review, not a gate
@@ -400,7 +400,7 @@ to what". A new watcher rule (peer of `doc-lifecycle`, same pure-function
 pattern in `internal/watcher`) reacts to it: mint a `review` task in the
 project — "Review workflow change on <project>" naming the changed workflow
 names — suppressed while an open review task from this rule exists for the
-same project. **The change is live from the moment the PUT commits; the
+same project. **The change is live from the moment the PUT commits. The
 review does not block it.** An admin who rejects the change reverts with
 another PUT, which is itself evented — the log holds both moves.
 
@@ -413,9 +413,9 @@ containment that made a static `legalTransitions` attractive is preserved by
 construction rather than by immutability:
 
 - The mandatory core is not editable at all (§1.2).
-- Declared entries are drawn from a fixed table (§1.3); no workflow can
+- Declared entries are drawn from a fixed table (§1.3). No workflow can
   contain `ready → deployed_prod`, so no prompt-injected rule can take it.
-- Rules (WL-60) read workflows and choose among declared edges; they have no
+- Rules (WL-60) read workflows and choose among declared edges. They have no
   write path to `projects.workflows`. A rule that wants a new edge is a
   workflow change — evented, reviewed, attributed.
 
@@ -423,7 +423,7 @@ construction rather than by immutability:
 
 `project_repos.done_state` (004 §5.1) keeps its job in v1: the per-repo
 marker for "fully delivered", feeding `taskClosed` and the resolver's
-frontier logic. Workflow owns *which edges exist*; `done_state` remains the
+frontier logic. Workflow owns *which edges exist*. `done_state` remains the
 per-repo pointer at which declared state counts as delivered. The two must
 agree — `done_state` must be a state of the governing workflow — and §4.2
 makes disagreement a warning. Folding `done_state` into a per-repo workflow
@@ -432,7 +432,7 @@ the natural next step and is deliberately deferred: it changes repo
 discovery and the resolver's per-repo semantics, and nothing above requires
 it.
 
-Deliverable (spec 029, WL-58) is untouched: evidence closes a task; the
+Deliverable (spec 029, WL-58) is untouched: evidence closes a task. The
 workflow says which states the task moves through on the way. The two meet
 only in prose — a task's definition-of-done is its deliverables *and* its
 workflow's delivered states.
@@ -451,8 +451,9 @@ Per spec 022's conventions, in the owning packages:
 ## 9. Testing
 
 - Store: table tests for the legality rule (§2) — core edges hold in a
-  minimal workflow; undeclared entries refuse; stranded states keep their
-  core exits; validation rejects each §4.2 violation with a named reason.
+  minimal workflow, undeclared entries refuse, stranded states keep their
+  core exits, and validation rejects each §4.2 violation with a named
+  reason.
 - The built-in `default` workflow's edge set is asserted equal to the old
   `legalTransitions` table verbatim — the subsumption proof, kept as a test
   so the equivalence cannot silently drift.
@@ -460,8 +461,8 @@ Per spec 022's conventions, in the owning packages:
   against the vocabulary (now a first-class constant rather than derived
   from the table).
 - Resolver: a repo with a `deployed_prod`-only workflow ignores dev
-  frontiers; a `released` workflow ignores prod frontiers; both walk their
-  declared tail on covered frontiers.
+  frontiers, a `released` workflow ignores prod frontiers, and both walk
+  their declared tail on covered frontiers.
 - Watcher: workflows-set event mints one review task, suppressed while one
   is open.
 - e2e: one scenario driving a custom-workflow project through the public

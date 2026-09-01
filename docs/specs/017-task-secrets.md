@@ -30,8 +30,8 @@ amendedBy:
 ## 0. Purpose & scope {#sec-0}
 
 Tasks declare which secrets they need, by symbolic name, the same way they pin skills (016).
-Machinery resolves the names against an org-wide catalog and materializes the values — through a
-ceremony the operator participates in — before execution goes unattended. Three failure modes this
+The system resolves the names against an org-wide catalog and materializes the values — through a
+ceremony the operator takes part in — before execution goes unattended. Three failure modes this
 removes:
 
 - **Stalling.** An agent that discovers mid-task it needs a credential stops making autonomous
@@ -42,7 +42,7 @@ removes:
   task declared — auditable in the event log — not whatever the operator's environment happens
   to contain.
 
-**Worklode is not a security broker.** It stores symbolic names and initiates a ceremony; it never
+**Worklode is not a security broker.** It stores symbolic names and starts a ceremony; it never
 stores, transports, or sees a secret value. 1Password is the source of truth for values, `op://`
 URLs are the addressing scheme, and the operator's own `op` session is the decryption authority.
 This is what keeps Employee-vault secrets usable: `op://Employee/…` resolves against each
@@ -68,10 +68,10 @@ forward-compatible.
 > that item. Changes are 1Password edits, not deployment-repo PRs; the mount
 > path and everything the server does are unchanged.
 
-> **Amended by ADR 047 §2.** The grammar additionally denies loader-sensitive
-> names: anything beginning `LD_` or `DYLD_`, plus an enumerated set of shell
+> **Amended by ADR 047 §2.** The grammar also blocks loader-sensitive
+> names: anything starting with `LD_` or `DYLD_`, plus a listed set of shell
 > and language-runtime loading variables (`PATH`, `IFS`, `ENV`, `BASH_ENV`,
-> `PYTHONPATH`, …) listed in ADR 047 §3. A name matching the pattern but naming
+> `PYTHONPATH`, …) in ADR 047 §3. A name that matches the pattern but names
 > one of those is rejected at every gate.
 
 **Namespace.** Secret names are env-var style (`^[A-Z][A-Z0-9_]*$`) and **org-unique** — never
@@ -93,15 +93,16 @@ description = "Kubernetes access to the hzdev cluster, for troubleshooting tasks
 ```
 
 - **Storage:** a ConfigMap in the worklode service deployment, mounted into the server. Changes
-  go through the deployment repo's normal PR flow. Deliberately not in a potentially-public repo:
-  vault and item names are themselves mildly sensitive.
-- **Serving:** `GET /api/v1/secrets/catalog`, **authenticated** (any actor token). No well-known
-  or unauthenticated URL — the name → `op://` map must not leak vault/item structure.
+  go through the deployment repo's normal PR flow. It is deliberately kept out of a
+  potentially-public repo, because vault and item names are themselves mildly sensitive.
+- **Serving:** `GET /api/v1/secrets/catalog`, **authenticated** (any actor token). There is no
+  well-known or unauthenticated URL, because the name → `op://` map must not leak vault/item
+  structure.
 - **`baseline = true`** marks secrets every task needs regardless of declaration (commit signing
   key, GitHub credentials — remote executors can never assume ssh-agent forwarding). Baseline
   secrets are packed for every claim and are exempt from the consent prompt. Everything else
   must be declared per task and is consented to at the ceremony.
-- The catalog carries no values and no per-user state. Per-operator resolution falls out of
+- The catalog carries no values and no per-user state. Per-operator resolution comes from
   `op://Employee/…` naming.
 
 ## 2. Declaration {#sec-2}
@@ -112,8 +113,8 @@ Mirrors 016's skill pins exactly:
 - **Design docs:** `secrets: [NAME, …]` in doc frontmatter, ingested when 025 lands; until then
   plans state them and the planner copies them onto tasks at `lode task add` time.
 - **Resolution at claim:** task pins ∪ governing-doc pins ∪ baseline set.
-- A declared name missing from the catalog is a **brief warning, never a failure** — same
-  degradation posture as an unknown skill pin (016).
+- A declared name missing from the catalog is a **brief warning, never a failure** — the same
+  degradation behavior as an unknown skill pin (016).
 
 Declaring is the **planner's** job: writing plans includes deciding, per task, which catalog
 names the executor will need. The `lode-secrets` skill (below) makes that a standing instruction.
@@ -123,7 +124,7 @@ names the executor will need. The `lode-secrets` skill (below) makes that a stan
 > **Amended by spec 042 §3.** A templated entry materializes one keystore item
 > per credential, named `<NAME>__<PLACEHOLDER>`; consent and the
 > `secrets_materialized` event stay at entry granularity, and the local
-> manifest additionally records the entry's item names, exported env name, and
+> manifest also records the entry's item names, exported env name, and
 > template text so exec stays offline.
 
 > **Amended by ADR 048 §2.** The "exit" in this section's trigger list is a
@@ -144,7 +145,7 @@ injection):
    Degradation).
 3. **Render template.** The hook writes `.worklode/secrets.env` in the worktree, in `op run`
    env-file format — `NAME=op://vault/item/field` lines, **references only, never values**. The
-   file is the portable packing manifest: v1.5 re-uses it verbatim when packing for a remote
+   file is the portable packing manifest: v1.5 reuses it exactly when packing for a remote
    executor.
 4. **Materialize — one approval.** The hook runs
    `op run --env-file .worklode/secrets.env -- lode secrets pack`.
@@ -181,9 +182,9 @@ that notices the lease is gone (resume, exit, or `lode doctor`).
 > lease is still held. Removal, `/lode-done` and `/lode-block` stay
 > unconditional and local-only.
 
-> **Amended by ADR 050 §2.** The inherited half of the child's environment is
-> stated: the child keeps the parent environment minus every credential-shaped
-> name (a deny-list — `ANTHROPIC_API_KEY`, `AWS_*`, anything containing
+> **Amended by ADR 050 §2.** This section spells out the inherited half of the
+> child's environment: the child keeps the parent environment minus every
+> credential-shaped name (a deny-list — `ANTHROPIC_API_KEY`, `AWS_*`, anything containing
 > `TOKEN`/`SECRET`/`PASSWORD`/`AUTH`, ADR 050 §3), keeping the shell plumbing
 > `PATH`, `HOME`, `TMPDIR` and the locale variables. Materialized names are
 > injected after the scrub, so a credential-shaped secret name is unaffected.
@@ -207,23 +208,23 @@ Supporting commands:
 | `lode secrets pack` | Internal: child of `op run` at ceremony time; writes env → keystore |
 | `lode secrets purge [--task <id>]` | Remove a task's keystore items; invoked by release hooks |
 
-**Purge** rides the spec-008 release path: `ExitWorktree` / worktree removal / `/lode-done` /
+**Purge** follows the spec-008 release path: `ExitWorktree` / worktree removal / `/lode-done` /
 `/lode-block` all purge the task's items. Materialized lifetime therefore equals worktree
 lifetime, matching the lease.
 
-Every one of those triggers rides an action, so a worktree that is *abandoned* rather than
+Every one of those triggers follows an action, so a worktree that is *abandoned* rather than
 removed keeps live credentials on the laptop until someone touches it again. `lode doctor` (013)
 closes that: its sweep walks the local manifests, which are the machine's only inventory of
 materialized secrets, asks the backbone about each task's lease, and purges the ones it gets a
 definite answer for — no lease, or no such task (044). **Uncertainty never purges**: an
-unreachable server skips the sweep and an unanswered task is left alone, because a secret reaped
-by mistake costs a whole consent ceremony to restore while one reaped a run later costs nothing.
+unreachable server skips the sweep and an unanswered task is left alone, because a secret purged
+by mistake costs a whole consent ceremony to restore, while one purged a run later costs nothing.
 It is the one trigger a human runs without the worktree needing to be entered, left, or removed,
 which is why ADR 048 §4 could leave the never-revisited worktree to it.
 
 ## 5. The `lode-secrets` skill {#sec-5}
 
-The convention travels as a skill loaded in **both** contexts the feature touches:
+The convention lives in a skill loaded in **both** contexts the feature touches:
 
 - **Writing plans:** every task in a plan lists the catalog names it needs (`lode secrets
   catalog` to browse); a task needing a secret that has no catalog entry is a plan-level finding
@@ -280,7 +281,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 - **008 (plugin)** — claim/resume/exit hooks host the ceremony and purge; brief carries the
   declared/materialized names; the `lode-secrets` skill joins the plugin skill set.
 - **016 (org-wide skills)** — the pin pattern and brief-integration shape this mirrors; doc
-  frontmatter pins ride 025 in both.
+  frontmatter pins land with 025 in both.
 - **External** — 1Password CLI (`op`) on every executing laptop; the deployment repo hosting the
   catalog ConfigMap; macOS keychain / ssh-agent.
 

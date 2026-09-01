@@ -41,8 +41,8 @@ This is defence in depth, not a live hole. The catalog is admin-controlled
 today the only way to place such an entry is to already hold the authority to
 edit the catalog. The argument for the deny-list is that the grammar is the
 documented contract three layers validate against, and a contract that permits
-`LD_PRELOAD` as a secret name is wrong independently of who can currently
-exercise it.
+`LD_PRELOAD` as a secret name is wrong, regardless of who can exercise it
+today.
 
 ## 2. What the grammar is now {#sec-2}
 

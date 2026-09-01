@@ -15,40 +15,43 @@
 
 ## 0. Purpose & scope
 
-Tokens are currently minted only by an admin (or the bootstrap env var).
-Humans should instead authenticate against the org Keycloak
+Today, only an admin (or the bootstrap env var) can mint tokens. Instead,
+humans should log in through the org's Keycloak server
 (https://auth.sunstoneinstitute.ai, realm `sunstone`) and get a worklode
-token from their SSO identity. The read-only web UI must also be gated behind
-the same OAuth2 login. Agent/service token issuance is unchanged.
+token from their single sign-on (SSO) identity. The read-only web UI must
+also sit behind the same OAuth2 login. Agent and service token issuance
+stays unchanged.
 
 Keycloak is the **sole** login mechanism for web and CLI. GitHub is a
 **link-only** OAuth flow: an already-authenticated actor connects their GitHub
-account once, and worklode stores the resulting user-to-server token so it can
-later call GitHub attributed as "SunstoneWork on behalf of `<user>`". The link
+account once, and worklode stores the resulting user-to-server token. It can
+then call GitHub attributed as "SunstoneWork on behalf of `<user>`". The link
 is verified **strictly** against a Keycloak-asserted `github_username`
-attribute, happens **lazily** at the point of first need, and is managed from
-the CLI via the `lode auth` command group. This spec delivers plumbing only —
-link flow, storage, refresh — verified end to end; the first feature that
-writes to GitHub as a user is a follow-up spec.
+attribute. It happens **lazily**, only when a feature first needs it, and is
+managed from the CLI via the `lode auth` command group. This spec delivers
+plumbing only — the link flow, storage, and refresh — verified end to end.
+The first feature that actually writes to GitHub as a user is a follow-up
+spec.
 
 ## 1. Motivation
 
 - A GitHub App acting on behalf of the user gives correct attribution when
   worklode interacts with GitHub (comment on PRs/issues, set commit status).
-  Keycloak OIDC only proves identity; it cannot act on GitHub.
+  Keycloak OpenID Connect (OIDC) only proves identity; it cannot act on GitHub.
 - **One actor per person.** The earlier dual-provider model created two actor
-  rows for the same human (`preferred_username` and `github:<id>`) and punted
-  on reconciling them. Making Keycloak the only login stops the split from
-  growing; the rows it already created are merged into the Keycloak actor
+  rows for the same human (`preferred_username` and `github:<id>`) and never
+  reconciled them. Making Keycloak the only login stops the split from
+  growing; the rows it already created get merged into the Keycloak actor
   (§3).
 - **Attribution without escalation.** A stored user token is bounded by the
-  intersection of App permissions, installation scope, and the user's own
-  access. An org owner's token therefore ≈ the full App permission set. The
-  App's ceiling is capped read-mostly (§9.1) so a compromise of the server —
-  which holds both the DB and `LODE_TOKEN_ENC_KEY` — cannot push code or
-  reach CI-trusted branches with anyone's token. Nothing shipped or specced
-  needs `contents: write` (spec 004 requires Contents: **read**; spec 008's
-  issue mirror needs Issues: write).
+  intersection of three things: the App's permissions, its installation
+  scope, and the user's own access. An org owner's token therefore ≈ the full
+  App permission set. The App's ceiling is capped read-mostly (§9.1). That
+  way, even if the server is compromised — and it holds both the DB and
+  `LODE_TOKEN_ENC_KEY` — the attacker cannot push code or reach CI-trusted
+  branches with anyone's token. Nothing shipped or specced needs
+  `contents: write` (spec 004 requires Contents: **read**; spec 008's issue
+  mirror needs Issues: write).
 - **Roles from one source.** GitHub org/team role derivation duplicated what
   Keycloak groups already provide.
 
@@ -57,10 +60,10 @@ writes to GitHub as a user is a follow-up spec.
 | Decision | Choice |
 |---|---|
 | Credential model | Unchanged: opaque `wl_` tokens remain the only API credential. SSO is a front door for minting them. |
-| CLI login | `lode login` is provider-neutral and server-mediated: the CLI discovers the server's login endpoints, waits on an ephemeral loopback port, and the server runs its own web login (§8). The browser login benefits transparently from macOS Platform SSO when that lands. |
-| Token exchange | Unauthenticated endpoint `POST /auth/oidc/token` validates a Keycloak ID token and mints a `wl_` token; kept as a dormant direct contract (§7). |
-| Web UI gating | Native OIDC sessions in the server (auth-code + PKCE redirect, signed cookie). Not oauth2-proxy — no k8s deployment exists yet, and native works the same in compose and k8s. |
-| Authorization | Keycloak client `worklode` with client roles `user` and `admin`, delivered in the `groups` claim (org-standard `client-roles-as-groups` mapper). `user` required to log in; `admin` maps to `Actor.Admin`, re-synced on every login. |
+| CLI login | `lode login` is provider-neutral and server-mediated. The CLI discovers the server's login endpoints and waits on an ephemeral loopback port; the server then runs its own web login (§8). The browser login automatically benefits from macOS Platform SSO once that lands. |
+| Token exchange | Unauthenticated endpoint `POST /auth/oidc/token` validates a Keycloak ID token and mints a `wl_` token. It's kept as a dormant direct contract (§7). |
+| Web UI gating | Native OIDC sessions in the server (authorization-code flow with Proof Key for Code Exchange (PKCE), a signed cookie). Not oauth2-proxy — no k8s deployment exists yet, and native works the same in compose and k8s. |
+| Authorization | Keycloak client `worklode` has client roles `user` and `admin`, delivered in the `groups` claim (the org-standard `client-roles-as-groups` mapper). `user` is required to log in; `admin` maps to `Actor.Admin` and is re-synced on every login. |
 | Actor provisioning | Auto-provision `human` actors on first login: id = `preferred_username`, display name = `name` claim. |
 | Feature flag | All of this is off unless `LODE_OIDC_ISSUER` + `LODE_OIDC_CLIENT_ID` are set; unset behaves exactly as today. |
 
@@ -72,36 +75,37 @@ writes to GitHub as a user is a follow-up spec.
 > for all human-dispatched work, a distinct actor only where the permissions
 > differ.
 
-A second shape of the same credential (WL-136, motivated by 038 §4.3): a `wl_` token whose row is
-bound to one task (`tokens.task_id`, nullable — NULL is today's actor-scoped token, unchanged) and
-attributed to an **agent actor** rather than the human who minted it. Its write actions must name
-the bound task; its reads are scoped to that task's project; it can mint tokens and administer
-nothing. Lifecycle is the task's lease: minting defaults expiry to the lease TTL, lease renewal
-extends it, and every lease-ending path — release, done, abandon, the expiry sweep — revokes the
-task's outstanding tokens in the same transaction. Minted by `POST /api/v1/tasks/{id}/tokens`
-(operator- or dispatcher-called); enforcement lives in the authz layer's one `grants` table, not
-in per-handler checks.
+This is a second shape of the same credential (WL-136, motivated by 038 §4.3): a `wl_` token whose
+row is bound to one task (`tokens.task_id`, nullable — NULL means today's actor-scoped token,
+unchanged), attributed to an **agent actor** rather than the human who minted it. Its write
+actions must name the bound task. Its reads are scoped to that task's project. It can mint
+tokens, but it has no administrative access. Its lifecycle follows the task's lease: minting sets
+the token's expiry to the lease's time-to-live (TTL) by default, and renewing the lease extends
+it. Every path that ends the lease — release, done, abandon, or the expiry sweep — revokes the
+task's outstanding tokens in the same transaction. It's minted by
+`POST /api/v1/tasks/{id}/tokens`, called by an operator or dispatcher. Enforcement lives in the
+authz layer's one `grants` table, not in checks scattered across each handler.
 
 ## 3. Keycloak is the only login
 
-- `/auth/choose`, GitHub web login (`/auth/github/login`), GitHub actor
-  provisioning and org/team role derivation are removed. `/auth/github/*`
-  routes survive only as the link flow (§9.3), reachable exclusively from an
-  authenticated session.
+- This removes `/auth/choose`, GitHub web login (`/auth/github/login`),
+  GitHub actor provisioning, and org/team role derivation. The
+  `/auth/github/*` routes survive only as the link flow (§9.3), reachable
+  only from an authenticated session.
 - Roles come from Keycloak `groups` only (`user` required, `admin` optional),
   unchanged from §2.
 - Config removed: `LODE_GITHUB_ORG`, `LODE_GITHUB_ADMIN_TEAM`. The App no
   longer needs the Organization → Members: read permission.
-- Existing `github:<id>` actor rows are **merged** into the person's Keycloak
-  actor: every row referencing them is repointed to the Keycloak actor id,
-  then the duplicate row is deleted. The same procedure governs any later
-  duplicate-actor pair, such as the one `lode login` creates when a person
-  already has an actor under another id.
+- Existing `github:<id>` actor rows get **merged** into the person's Keycloak
+  actor: every row that references them is repointed to the Keycloak actor
+  id, then the duplicate row is deleted. The same procedure applies to any
+  later duplicate-actor pair, such as the one `lode login` creates when a
+  person already has an actor under another id.
 
-  **The columns to repoint are enumerated from the Postgres catalog, never
-  from a list carried here.** A hand-kept list falls behind the schema, and
-  following a stale one leaves rows pointing at the deleted actor or aborts
-  partway on an `ON DELETE RESTRICT` constraint:
+  **The columns to repoint come from the Postgres catalog, never from a list
+  kept in this document.** A hand-kept list falls out of date as the schema
+  changes, and following a stale one leaves rows pointing at the deleted
+  actor, or aborts partway through on an `ON DELETE RESTRICT` constraint:
 
   ```sql
   SELECT c.conrelid::regclass AS tbl, a.attname AS col
@@ -111,17 +115,18 @@ in per-handler checks.
    WHERE c.contype = 'f' AND c.confrelid = 'actors'::regclass;
   ```
 
-  Repointing collides wherever a unique constraint covers the actor column
-  and both actors already appear. `project_participants` is the live case:
-  primary key `(project_id, actor_id, role)`, plus a partial unique index on
-  `(project_id, actor_id)` for the lead and deputy flags. The merge resolves
-  such a collision by dropping the duplicate row instead of repointing it.
+  Repointing can collide wherever a unique constraint covers the actor
+  column and both actors already appear in it. `project_participants` is the
+  real case: its primary key is `(project_id, actor_id, role)`, plus a
+  partial unique index on `(project_id, actor_id)` for the lead and deputy
+  flags. When repointing would collide, the merge drops the duplicate row
+  instead.
 
-  Worklode is in production with tasks and tokens referencing these rows, so
-  the merge runs as a reviewed one-off SQL script against the production
-  database with explicit human approval rather than as a schema migration.
-  The append-only event log keeps historical ids as provenance and is never
-  rewritten.
+  Worklode is already in production, with tasks and tokens referencing these
+  rows. So the merge runs as a reviewed, one-off SQL script against the
+  production database, with explicit human approval — not as a schema
+  migration. The append-only event log keeps the historical ids as
+  provenance and is never rewritten.
 
 ## 4. Keycloak realm configuration
 
@@ -152,19 +157,21 @@ New env (all optional; feature disabled when issuer/client unset):
 | `LODE_SESSION_SECRET` | HMAC key for session cookies (required if OIDC enabled) |
 | `LODE_WEB_OPEN` | Serve the web UI to anonymous callers when no provider is configured (§6). Ignored when OIDC is enabled; a non-boolean value fails the boot |
 
-ID-token verification uses `github.com/coreos/go-oidc/v3` (JWKS fetch +
-cache; checks signature, `iss`, `aud`, `exp`). Shared by both flows below.
-Claims used: `preferred_username`, `name`, `groups`.
+ID-token verification uses `github.com/coreos/go-oidc/v3` (JSON Web Key Set
+(JWKS) fetch and cache; it checks the signature, `iss`, `aud`, and `exp`).
+Both flows below share this verification. Claims used: `preferred_username`,
+`name`, `groups`.
 
 ## 6. Web UI sessions
 
 When OIDC is enabled, the web UI routes (`/`, `/tasks/{id}`,
-`/projects/{id}`) require a valid session cookie; otherwise they 302 to
-`/auth/login`. `/healthz` and `/metrics` stay open. When OIDC is unconfigured
-the web routes refuse to serve at all — a 503 naming the missing
-configuration — unless `LODE_WEB_OPEN` is set, which serves them to anonymous
-callers on a trusted network. The opt-in is ignored when OIDC is configured:
-it is about the absence of a provider, never about weakening one.
+`/projects/{id}`) require a valid session cookie; otherwise they redirect
+(302) to `/auth/login`. `/healthz` and `/metrics` stay open regardless. When
+OIDC is unconfigured, the web routes refuse to serve at all — a 503 response
+naming the missing configuration — unless `LODE_WEB_OPEN` is set, which
+serves them to anonymous callers on a trusted network. This opt-in is
+ignored when OIDC is configured: it exists for the case where no provider is
+set up at all, never to weaken one that is.
 
 - `GET /auth/login` → 302 to Keycloak authorize URL (auth-code + PKCE,
   `state` + PKCE verifier in a short-lived signed cookie).
@@ -178,11 +185,11 @@ it is about the absence of a provider, never about weakening one.
 
 ## 7. Direct OIDC token exchange (dormant)
 
-`GET /auth/oidc/config` and `POST /auth/oidc/token` are kept as a dormant
-direct-Keycloak contract, preserved at zero cost for a future client (e.g.
-self-hosted Forgejo). Server-mediated login (§8) already covers
-Keycloak-as-a-provider via the web flow; these endpoints are an additional
-direct integration point, not what keeps Keycloak alive.
+`GET /auth/oidc/config` and `POST /auth/oidc/token` stay as a dormant
+direct-Keycloak contract, kept at zero cost for a future client (e.g.
+self-hosted Forgejo). Server-mediated login (§8) already covers Keycloak as
+a provider through the web flow; these endpoints are an extra, direct
+integration point — they are not what keeps Keycloak alive.
 
 `POST /auth/oidc/token`, body `{"id_token": "..."}` — registered outside the
 `/api/v1` auth middleware, like `/healthz` and `/hooks/*`. Returns 404 when
@@ -198,12 +205,12 @@ OIDC is unconfigured.
 
 ## 8. CLI login: server-mediated loopback
 
-`lode login` is **provider-neutral**: it discovers how to authenticate from the server
-and kicks off whichever web login the server is configured with — Keycloak, the sole
-interactive login provider (§3) — reusing the browser session the user already has, and ends
-with a `wl_` token stored securely. The CLI speaks **no** provider protocol and never sees a
-provider token. Provider-neutrality is a property of the CLI, not a claim that more than
-one login provider exists.
+`lode login` is **provider-neutral**. It asks the server how to authenticate, then kicks off
+whichever web login the server is configured with — currently Keycloak, the sole interactive
+login provider (§3). It reuses the browser session the user already has, and ends with a `wl_`
+token stored securely. The CLI speaks **no** provider protocol and never sees a provider token.
+Provider-neutrality is a property of the CLI, not a claim that more than one login provider
+exists.
 
 The provider-specific logic lives entirely in the **server**, reusing the existing web login
 flows. The CLI only opens a URL and waits on a localhost listener.
@@ -221,10 +228,10 @@ lode login
   6. store token in the OS keychain (or the 0600 token file, §8.5); write only `server` to config.toml
 ```
 
-Because the **server** performs the final redirect to the loopback URI (the provider redirects
-to the server's own callback, not to localhost), the loopback URI needs no pre-registration
-with Keycloak. The CLI is therefore free to bind an **ephemeral port** and is immune
-to port conflicts.
+Because the **server** performs the final redirect to the loopback URI — the provider
+redirects to the server's own callback, not to localhost — the loopback URI needs no
+pre-registration with Keycloak. So the CLI is free to bind an **ephemeral port** and never
+runs into port conflicts.
 
 The loopback flow assumes the CLI can launch a browser on the machine it is running on.
 When it cannot — no opener binary, or no display — the same endpoints run in a second
@@ -234,36 +241,36 @@ mode that puts the one-time code on a page instead of on a redirect (§8.7).
 
 - **`GET /.well-known/lode-login`** — discovery. Returns
   `{ "authorize_url": "{public}/auth/cli/login", "token_url": "{public}/auth/cli/token", "providers": ["keycloak"] }`.
-  `providers` is informational (lets the CLI print "Signing in with Keycloak…") and always
-  names the one interactive provider.
-  Returns **404** when the server has no interactive provider configured
-  (`s.oidc == nil`); the CLI then prints a clear message telling the
-  user to ask an admin for a token. Registered outside the bearer-auth middleware,
-  like `/healthz` and `/auth/oidc/*`.
+  `providers` is informational — it lets the CLI print "Signing in with Keycloak…" — and
+  always names the one interactive provider. It returns **404** when the server has no
+  interactive provider configured (`s.oidc == nil`); the CLI then prints a clear message
+  telling the user to ask an admin for a token. This endpoint is registered outside the
+  bearer-auth middleware, like `/healthz` and `/auth/oidc/*`.
 
-- **`GET /auth/cli/login?redirect_uri=…&state=…`** — validates `redirect_uri` is
-  **loopback-only** (host in `localhost` / `127.0.0.1` / `::1`, scheme `http`,
-  explicit non-zero port), stores the CLI intent (`redirect_uri` + `state` + `mode`) in a
-  short-lived signed cookie (signed with `SessionSecret`), then redirects into the
-  existing `loginTarget(next)` entrypoint, which resolves to the sole configured
-  login provider. No new provider code.
+- **`GET /auth/cli/login?redirect_uri=…&state=…`** — validates that `redirect_uri` is
+  **loopback-only** (host in `localhost` / `127.0.0.1` / `::1`, scheme `http`, an explicit
+  non-zero port), and stores the CLI intent (`redirect_uri` + `state` + `mode`) in a
+  short-lived signed cookie (signed with `SessionSecret`). It then redirects into the
+  existing `loginTarget(next)` entrypoint, which resolves to the sole configured login
+  provider. No new provider code is needed.
   With **`mode=manual`** (§8.7) there is no loopback listener to redirect to, so
-  `redirect_uri` is omitted and the loopback check does not apply; `state` is still
+  `redirect_uri` is omitted and the loopback check doesn't apply; `state` is still
   required. Any other combination — a missing or non-loopback `redirect_uri` without
-  `mode=manual`, or a missing `state` — is a `400`.
+  `mode=manual`, or a missing `state` — gets a `400`.
 
-- **`POST /auth/cli/token` `{code, state}`** — validates the one-time code (exists,
-  unexpired, unused, `state` matches the value bound at mint time), mints a 30-day
-  `wl_` token via `st.CreateToken(actor, "lode login", exp)`, marks the code used, and
-  returns `{ token, actor_id, expires_at }` — the same JSON shape as the existing
-  `/auth/oidc/token`. Unauthenticated, like `/auth/oidc/token`: possession of the
-  one-time code proves the browser flow completed.
+- **`POST /auth/cli/token` `{code, state}`** — validates the one-time code (it must
+  exist, be unexpired and unused, and its `state` must match the value bound at mint
+  time), mints a 30-day `wl_` token via `st.CreateToken(actor, "lode login", exp)`,
+  marks the code as used, and returns `{ token, actor_id, expires_at }` — the same
+  JSON shape as the existing `/auth/oidc/token`. This endpoint is unauthenticated, like
+  `/auth/oidc/token`: holding the one-time code is itself proof that the browser flow
+  completed.
 
 ### 8.2 The reuse seam: `finishLogin`
 
-`authCallback` (Keycloak, `oidcweb.go`) and, while GitHub web login still existed,
-`githubCallback` (`githubweb.go`) ended identically: provision actor → set the session
-cookie → redirect to `next`. That shared tail is extracted into:
+`authCallback` (Keycloak, `oidcweb.go`) and, back when GitHub web login still existed,
+`githubCallback` (`githubweb.go`) ended the same way: provision the actor → set the session
+cookie → redirect to `next`. That shared tail is pulled out into:
 
 ```
 func (s *server) finishLogin(w http.ResponseWriter, r *http.Request, actorID string)
@@ -281,17 +288,17 @@ The login handler gains CLI login from this one change and is not otherwise touc
 
 ### 8.3 One-time code store
 
-In-memory `map[string]cliCode` (`{actorID, state, expiresAt, used}`) guarded by a mutex.
-**5-minute TTL**, single-use, 32 bytes of entropy. The TTL is set by the slowest legitimate
-path, which is manual mode (§8.7): a human reading a code off one machine's screen and typing
-or pasting it into another's terminal cannot reliably beat the 60 seconds this store originally
-allowed, and the resulting failure ("invalid or expired code") reads like a bug rather than a
-timeout. Five minutes matches the CLI's own wait window and stays inside RFC 6749 §4.1.2's
-ten-minute ceiling for authorization codes; single-use and the `state` binding, not the TTL,
-are what make the code safe. In-memory is sufficient because the server is
-single-instance (one PVC + litestream); a restart drops pending codes and the user
-simply re-runs `lode login`. No DB migration. (If we ever go multi-replica, promote to a table
-— noted, not built.)
+An in-memory `map[string]cliCode` (`{actorID, state, expiresAt, used}`) guarded by a mutex
+holds the codes. Each has a **5-minute TTL**, is single-use, and carries 32 bytes of entropy.
+The TTL is set by the slowest legitimate path: manual mode (§8.7), where a human reads a code
+off one machine's screen and types or pastes it into another machine's terminal. That can't
+reliably beat the 60 seconds this store originally allowed, and the resulting failure
+("invalid or expired code") reads like a bug, not a timeout. Five minutes matches the CLI's own
+wait window and stays inside RFC 6749 §4.1.2's ten-minute ceiling for authorization codes; it's
+the single use and the `state` binding, not the TTL, that make the code safe. Keeping the store
+in memory is enough because the server is single-instance (one Persistent Volume Claim (PVC) +
+litestream); a restart just drops pending codes, and the user re-runs `lode login`. No DB
+migration is needed. (If we ever go multi-replica, promote this to a table — noted, not built.)
 
 ### 8.4 Client behavior
 
@@ -305,15 +312,16 @@ simply re-runs `lode login`. No DB migration. (If we ever go multi-replica, prom
 - **`cmd/login.go`** is unchanged except its Keycloak-specific help text becomes
   provider-neutral. It later gains `--no-browser` (§8.7).
 - **`LoginOptions`** carries `Stdin`/`Stdout` alongside `OpenBrowser`, defaulting to
-  the process's own. Manual mode (§8.7) prompts, so the prompt and the code the user
-  pastes are both injectable and the flow is testable without a terminal; the flow's
-  progress messages go to `Stdout` rather than straight to `os.Stdout`.
+  the process's own. Manual mode (§8.7) prompts the user, so both the prompt and the
+  code the user pastes back are injectable, which makes the flow testable without a
+  real terminal. The flow's progress messages go to `Stdout` rather than straight to
+  `os.Stdout`.
 
 ### 8.5 Token storage: OS keychain, then a 0600 file
 
-`SaveConfig` previously wrote `server` **and** `token` into
-`~/.config/worklode/config.toml` at 0600 — cleartext on disk. Secret is split from
-non-secret:
+`SaveConfig` used to write `server` **and** `token` into
+`~/.config/worklode/config.toml` at 0600 — cleartext on disk. Now the secret is split
+from the non-secret:
 
 - **`config.toml` keeps only `server`.** The token never goes in config.toml.
 - **Token lives in the OS keychain**, keyed by server URL (service `worklode`,
@@ -335,45 +343,47 @@ non-secret:
   written.
 - **No keychain: the token file.** On a machine with no keychain at all, the token
   goes to `~/.config/worklode/token` at mode 0600, one `<server> <token>` line per
-  server — keyed by server for the same reason the keychain is, so `LODE_SERVER`
-  cannot carry a token minted for one server to another. The file is written
-  temp-file-plus-rename, which is atomic (no truncated token) and replaces the mode
-  along with the inode (an existing looser file comes out 0600). The last token
-  deleted removes the file. `lode login` prints the path when it takes this route,
-  so the fallback is never silent. Automation (`lode watch` in-cluster) already uses
-  `LODE_TOKEN` and is unaffected.
-- **Absence, not failure, is what earns the fallback.** `keychainAvailable` probes
-  by asking go-keyring for an account no server URL can equal: a backend that is
-  present answers `ErrNotFound` even when empty. Only `ErrUnsupportedPlatform`, a
-  D-Bus `ServiceUnknown`/`NameHasNoOwner` reply (session bus up, nothing serving
-  `org.freedesktop.secrets`), or a failure to reach a bus at all count as absence.
-  A keychain that exists and refuses — locked collection, dismissed prompt — is
-  still an **error** carrying the `export LODE_TOKEN=…` guidance: writing the token
-  to disk instead would silently downgrade a working secret store, which is the
-  outcome this section has always been about preventing.
+  server. It's keyed by server for the same reason the keychain is: so `LODE_SERVER`
+  can't carry a token minted for one server over to another. The file is written
+  temp-file-plus-rename, which is atomic (no truncated token) and replaces the
+  file's mode along with its inode, so an existing looser-permission file comes out
+  0600. Deleting the last token removes the file. `lode login` prints the path when
+  it takes this route, so the fallback is never silent. Automation (`lode watch`
+  in-cluster) already uses `LODE_TOKEN` and is unaffected.
+- **Absence, not failure, earns the fallback.** `keychainAvailable` probes by
+  asking go-keyring for an account no server URL could ever equal: a backend that's
+  present answers `ErrNotFound` even when it's empty. Only `ErrUnsupportedPlatform`,
+  a D-Bus `ServiceUnknown`/`NameHasNoOwner` reply (the session bus is up, but
+  nothing is serving `org.freedesktop.secrets`), or a failure to reach a bus at all
+  count as absence. A keychain that exists but refuses — a locked collection, a
+  dismissed prompt — is still an **error**, and it carries the
+  `export LODE_TOKEN=…` guidance. Falling back to disk in that case would silently
+  downgrade a working secret store, which is exactly the outcome this section
+  exists to prevent.
 
-  That failing write still records `server` in config.toml. The server URL is not
-  a secret, and `LODE_TOKEN` alone does not make a working client: without it every
-  later command fails with "server URL not set", which is the guidance quietly not
-  working. The one thing that path must not do is strip a legacy cleartext `token`
-  — nothing migrated it into the keychain, so stripping it would destroy the only
-  copy.
+  That failing write still records `server` in config.toml. The server URL isn't a
+  secret, and `LODE_TOKEN` alone doesn't make a working client: without the server
+  URL, every later command fails with "server URL not set" — which would make the
+  guidance silently useless. The one thing that path must never do is strip a
+  legacy cleartext `token`: nothing migrated it into the keychain, so stripping it
+  would destroy the only copy.
 
   Until 2026-08-14 there was no fallback: *any* failed keychain write errored, on
-  the rule that a token must never touch disk. Manual mode (§8.7) had already
-  retracted the premise that login implies a desktop — its whole purpose is the
+  the rule that a token must never touch disk. But manual mode (§8.7) had already
+  broken the assumption that login implies a desktop — its whole purpose is the
   machine with no browser, which on Linux is usually also the machine with no
-  Secret Service — leaving every headless install to re-export a token by hand on
-  every new shell, which in practice means a token pasted into a shell history or a
-  dotfile. A 0600 file the CLI manages, tells the user about, and `lode logout` can
-  clear is the better of the two cleartext outcomes. Losing a token the user
-  watched arrive was always the worse failure; the file now prevents it outright
-  rather than softening it with an error message.
+  Secret Service. That left every headless install re-exporting a token by hand on
+  every new shell, which in practice meant a token pasted into shell history or a
+  dotfile. A 0600 file that the CLI manages, tells the user about, and
+  `lode logout` can clear is the better of those two cleartext outcomes. Losing a
+  token the user watched arrive was always the worse failure; the file now
+  prevents that outright, instead of just warning about it.
 
 ### 8.6 Security
 
 - `redirect_uri` is loopback-only, blocking code exfiltration / open redirect.
-- `state` is round-tripped and checked by the CLI (CSRF).
+- `state` is round-tripped and checked by the CLI (this defends against
+  cross-site request forgery, or CSRF).
 - One-time codes are single-use, 5-minute, high-entropy, bound to actor + `state`.
 - The CLI-intent cookie is signed with `SessionSecret` and short-lived.
 - The token-exchange endpoint is unauthenticated by design; only a valid one-time
@@ -406,22 +416,22 @@ lode login --no-browser        (or: any login where no browser can be launched)
 Steps 1, 4 and 5 are byte-identical to §8; only how the code travels changes.
 
 **The page carries the code, not the token.** Displaying the 30-day `wl_` token
-directly would remove the exchange step, and it is what a "copy your token" page
-normally does — but it would put a long-lived credential into the screen, clipboard,
-and terminal scrollback of a machine that manual mode exists precisely because it is
-*not* the user's own. The code is single-use and dead in five minutes, the user
-experience is identical (click Copy, paste), and routing through `/auth/cli/token`
-keeps the token's only appearance inside the CLI process and the keychain, which is
-what §8.5 and §8.6 already promise. It also means the CLI learns `actor_id` and
-`expires_at` for free and rejects a truncated paste immediately, instead of failing on
-some unrelated command later.
+directly would skip the exchange step — that's what a normal "copy your token" page
+does — but it would put a long-lived credential into the screen, clipboard, and
+terminal scrollback of a machine that manual mode exists precisely because it is
+*not* the user's own. The code, by contrast, is single-use and dead in five minutes.
+The user experience is identical (click Copy, paste), and routing through
+`/auth/cli/token` keeps the token's only appearance inside the CLI process and the
+keychain, which is exactly what §8.5 and §8.6 already promise. It also means the CLI
+learns `actor_id` and `expires_at` for free, and rejects a truncated paste
+immediately instead of failing later on some unrelated command.
 
 **No new route and no new guard.** `GET /auth/cli/login` already exists and is `open`;
 the page is rendered as the response to the existing `/auth/callback`. `cliIntent`
-gains a `Mode` field (`""`/`loopback` | `manual`, so an in-flight cookie from a
-previous binary still means loopback), and `finishLogin` — the §8.2 seam — gains a
-third branch: manual intent renders the page rather than `302`-ing to a
-`redirect_uri` that does not exist.
+gains a `Mode` field (`""`/`loopback` | `manual`, so an in-flight cookie from an
+older binary still means loopback). `finishLogin` — the §8.2 seam — gains a third
+branch: a manual intent renders the page instead of `302`-ing to a `redirect_uri`
+that doesn't exist.
 
 **When the CLI chooses manual mode.** Explicitly with `--no-browser`, or
 automatically when it can tell a browser cannot be launched:
@@ -431,37 +441,39 @@ automatically when it can tell a browser cannot be launched:
   are empty.
 
 The second test matters more than the first. `xdg-open` is usually *installed* on a
-Linux server; over SSH it launches, finds no display, and fails asynchronously —
-`Start()` has already returned success, so without this check `lode login` waits five
-minutes for a callback that can never arrive and then reports a timeout. Any other
-launch failure stays fatal, because it means a browser probably did open and silently
-falling back would leave two logins racing.
+Linux server; over SSH it launches, finds no display, and fails asynchronously. By
+then `Start()` has already returned success, so without this check `lode login`
+would wait the full five minutes for a callback that can never arrive, then report a
+timeout. Any other launch failure stays fatal, because it likely means a browser did
+open, and silently falling back would leave two logins racing each other.
 
-Manual mode binds no listener at all. A browser opened by hand on the same machine
-therefore does not shortcut the paste — a deliberate simplification: it removes a
-select over two arrival paths and, more importantly, an inconsistency where the same
-printed URL sometimes needs a paste and sometimes does not.
+Manual mode binds no listener at all, so a browser opened by hand on the same
+machine does not shortcut the paste. This is a deliberate simplification: it removes
+a choice between two arrival paths, and — more importantly — it removes an
+inconsistency where the same printed URL sometimes needs a paste and sometimes
+doesn't.
 
-**Security.** The page is unauthenticated in the same sense `/auth/callback` is —
-it is reached only by completing the Keycloak login, and only that login's own
-session decides whose code is minted. Manual mode gives up the loopback flow's
-guarantee that the code lands in the process that requested it (§8.6's first bullet):
-the value crosses a human, so a user who can be talked into running `lode login` can
-be talked into pasting a code into an attacker's terminal instead of their own. This
-is the same residual risk every out-of-band and device-code flow carries, it is bounded
-by the code's single use and five-minute life, and no CSRF check can close it — the
-`state` binding still ensures the code only redeems against the `lode login` that
-minted it, which is what stops a code from being replayed into a *different* CLI
-session. Manual mode is therefore opt-in-by-necessity: the CLI uses it only when the
-loopback flow genuinely cannot run.
+**Security.** The page is unauthenticated in the same sense `/auth/callback` is: it's
+reached only by completing the Keycloak login, and only that login's own session
+decides whose code gets minted. Manual mode gives up the loopback flow's guarantee
+that the code lands in the process that requested it (§8.6's first bullet), because
+the value now crosses a human. So a user who can be talked into running `lode login`
+can also be talked into pasting a code into an attacker's terminal instead of their
+own. This is the same residual risk every out-of-band and device-code flow carries.
+It's bounded by the code's single use and five-minute life, and no CSRF check can
+close it — the `state` binding only ensures the code redeems against the
+`lode login` that minted it, which stops a code from being replayed into a
+*different* CLI session. Manual mode is therefore opt-in by necessity: the CLI uses
+it only when the loopback flow genuinely cannot run.
 
 ## 9. GitHub account linking
 
 ### 9.1 The GitHub App and its configuration
 
-Create `worklode-dev` now (`worklode-prod` later). One App per env
-because a GitHub App has a single webhook URL and single set of callback URLs;
-this mirrors the existing Keycloak client-per-env split.
+Create `worklode-dev` now (`worklode-prod` later). There's one App per
+environment because a GitHub App has a single webhook URL and a single set
+of callback URLs; this mirrors the existing Keycloak client-per-environment
+split.
 
 App configuration:
 
@@ -473,10 +485,10 @@ App configuration:
   (unchanged from today; HMAC via `LODE_GITHUB_WEBHOOK_SECRET`).
 - **Permission ceiling:** Repository → Contents: **read**, Actions: **read**,
   Deployments: **read**, Pull requests: **read**; Issues: **write** when the
-  spec 008 issue mirror lands. **Never `contents: write`** — it is what turns
-  a stolen token (user or installation) into a push to CI-trusted branches.
-  A future feature needing repo writes gets a separate, narrowly-installed
-  App rather than a widened ceiling here.
+  spec 008 issue mirror lands. **Never `contents: write`.** That permission
+  is what would turn a stolen token (user or installation) into a push to
+  CI-trusted branches. A future feature that needs repo writes gets its own
+  separate, narrowly-installed App, rather than a widened ceiling here.
 - **Installation scope:** installed in the `sunstoneinstitute` org, selected
   repositories only; the provisioning and admin-cluster repos (whose CI holds
   cluster credentials) are excluded. User-to-server tokens can only reach
@@ -502,12 +514,13 @@ Env vars, **added** to the existing Keycloak/OIDC config:
 | `LODE_PUBLIC_URL` | config | `https://worklode.dev.sunstoneinstitute.ai` (already required) |
 
 Nothing is removed on the Keycloak side: `LODE_OIDC_ISSUER`,
-`LODE_OIDC_CLIENT_ID`, and the OIDC secret stay. Counting the App credentials
-the webhook path already required, the full GitHub-side inventory after this
-spec is therefore `LODE_GITHUB_APP_CLIENT_ID`, `LODE_GITHUB_APP_CLIENT_SECRET`,
-`LODE_TOKEN_ENC_KEY`, `LODE_GITHUB_APP_ID`, `LODE_GITHUB_APP_PRIVATE_KEY`,
-and `LODE_GITHUB_WEBHOOK_SECRET`; `LODE_GITHUB_ORG` (`sunstoneinstitute`)
-and `LODE_GITHUB_ADMIN_TEAM` (`worklode-admins`) are removed.
+`LODE_OIDC_CLIENT_ID`, and the OIDC secret all stay. Counting the App
+credentials the webhook path already required, the full GitHub-side
+inventory after this spec is `LODE_GITHUB_APP_CLIENT_ID`,
+`LODE_GITHUB_APP_CLIENT_SECRET`, `LODE_TOKEN_ENC_KEY`, `LODE_GITHUB_APP_ID`,
+`LODE_GITHUB_APP_PRIVATE_KEY`, and `LODE_GITHUB_WEBHOOK_SECRET`.
+`LODE_GITHUB_ORG` (`sunstoneinstitute`) and `LODE_GITHUB_ADMIN_TEAM`
+(`worklode-admins`) are removed.
 
 Deployment impact: the app-deployment **Keycloak/SSO wiring stays**; the GitHub
 App is added alongside the existing Keycloak client (not a replacement).
@@ -532,38 +545,38 @@ App is added alongside the existing Keycloak client (not a replacement).
 1. `GET /auth/github/link` (authenticated) redirects to GitHub's authorize
    endpoint with signed state, as a confidential client with no PKCE.
 2. `GET /auth/github/callback` exchanges the code, fetches `GET /user`
-   (numeric `id`, `login`), and **strict-checks**: `login` must equal the
-   session actor's `expected_github_login`, case-insensitively. Missing
-   attribute or mismatch → the link is refused with an error naming the fix
+   (numeric `id`, `login`), and **strict-checks** it: `login` must equal the
+   session actor's `expected_github_login`, case-insensitively. A missing
+   attribute or a mismatch refuses the link, with an error naming the fix
    ("your Keycloak account has no/another GitHub username; get the
    `github_username` attribute corrected"). No row is written.
 3. On success, upsert the link row keyed by the **worklode actor id** (§9.5).
    The numeric GitHub user id is the durable external identity; `login` is
    display metadata (renameable).
-4. Linking is **lazy**: nothing prompts at login. Features that need GitHub
-   surface a "Connect GitHub" redirect at the point of need; a settings/
-   profile entry allows proactive linking. Re-linking (e.g. after `broken`,
-   §9.5) repeats the same flow; GitHub skips the consent screen for an
-   already-authorized App.
+4. Linking is **lazy**: nothing prompts for it at login. Features that need
+   GitHub show a "Connect GitHub" redirect at the point of need; a settings/
+   profile entry also lets someone link proactively. Re-linking (for
+   example, after `broken`, §9.5) repeats the same flow; GitHub skips the
+   consent screen for an App that's already authorized.
 
 ### 9.4 `lode auth` command group
 
 - `lode login` moves to `lode auth login`; the old spelling remains as a
   hidden alias. The loopback flow itself is unchanged.
-- `lode auth link github`: the CLI calls a bearer-authed endpoint that mints
-  a one-time, short-lived signed nonce bound to the calling actor and
-  returns a link URL; the CLI opens the browser and polls link status until
-  linked, refused, or the nonce expires. The nonce ties the browser flow to
-  the CLI's actor without requiring a web session cookie.
+- `lode auth link github`: the CLI calls a bearer-authed endpoint that
+  mints a one-time, short-lived signed nonce bound to the calling actor and
+  returns a link URL. The CLI opens the browser and polls the link status
+  until it's linked, refused, or the nonce expires. The nonce ties the
+  browser flow to the CLI's actor without needing a web session cookie.
 - `lode auth status`: shows the logged-in identity, token expiry, and GitHub
   link state (unlinked / linked as `<login>` / broken — reconnect).
 
 ### 9.5 GitHub token storage and refresh
 
-`github_user_tokens` holds the stored user token and is reworked by a new
-migration so that the token row **is** the link — a link exists iff a row
-exists, unlink = delete the row. The tokens sit
-in a dedicated table rather than as columns on the actor row because they have
+`github_user_tokens` holds the stored user token, reworked by a new
+migration so that the token row **is** the link: a link exists exactly when
+a row exists, and unlinking means deleting the row. These tokens sit in a
+dedicated table, rather than as columns on the actor row, because they have
 their own lifecycle and a null-until-first-link state:
 
 | column | notes |
@@ -580,13 +593,14 @@ rest** with AES-GCM under a key from the secret `LODE_TOKEN_ENC_KEY`; the
 sealing itself lives in `internal/tokencrypt`.
 
 Accessor: `store.UserToken(ctx, actorID)` returns a valid access token,
-refreshing lazily when the access token is expired or within a skew window of
-expiry. GitHub refresh tokens are **single-use**, so the row is locked
-(`SELECT … FOR UPDATE`) for the duration of a refresh; concurrent callers wait
-and reuse the fresh pair. A failed refresh (revoked App authorization,
->6-month lapse) sets `status = broken`; callers translate that into "reconnect
-GitHub" guidance. No background refresher — on-demand refresh suffices given
-the ~6-month refresh-token lifetime.
+refreshing it lazily when the access token has expired or is within a skew
+window of expiring. GitHub refresh tokens are **single-use**, so the row is
+locked (`SELECT … FOR UPDATE`) for the duration of a refresh; concurrent
+callers wait and reuse the fresh pair. A failed refresh (revoked App
+authorization, or a lapse of more than 6 months) sets `status = broken`;
+callers translate that into "reconnect GitHub" guidance. There's no
+background refresher — refreshing on demand is enough, given the refresh
+token's roughly 6-month lifetime.
 
 ## 10. Error handling
 
@@ -654,9 +668,9 @@ the ~6-month refresh-token lifetime.
   enabled in this Keycloak), web-UI write actions, per-user authz beyond the
   existing `Admin` bool, and any change to agent/service token issuance.
 - Any feature that writes to GitHub as a user (issue mirror, comment relay)
-  — own spec, first consumer of `store.UserToken`. This design establishes
-  the *capability* (stored user tokens + App permissions); the first concrete
-  outbound action is a follow-up.
+  gets its own spec, as the first consumer of `store.UserToken`. This design
+  establishes the *capability* — stored user tokens plus App permissions;
+  the first concrete outbound action is a follow-up.
 - Background/scheduled token refresh.
 - Unlink UI beyond row deletion via admin/CLI.
 - hzprod rollout — a later project; create the `worklode-prod` App then

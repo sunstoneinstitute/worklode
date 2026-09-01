@@ -21,7 +21,7 @@ selection is itself shared state, and both the ranking and the claim have to sta
 under contention.
 
 The whole point: a `claim` that needs a task id forces an agent to **list → pick → claim**,
-which races other agents, so work gets hand-kicked to dodge collisions and throughput is
+which races other agents, so work gets manually routed to dodge collisions and throughput is
 capped. `claim --next` closes that window — the server **ranks and leases in one
 transaction**, so no two agents can select the same task. That is what makes **safe
 unattended 24/7 parallel pickup** possible on a well-spec'd project.
@@ -37,7 +37,7 @@ source.
 
 ## 1. `concern` and `priority` {#sec-1}
 
-Two orthogonal task properties carry prioritization signal. Both are **fixed, closed
+Two independent task properties carry prioritization signal. Both are **fixed, closed
 enums** that grow only by explicit schema change, the same discipline the existing
 `priority` enum already follows.
 
@@ -204,7 +204,7 @@ below the model's hard limit.
 - **The "too big" call is agentic, made at review (crit)** — not a static pre-filter. A
   reviewer (human or agent) sets the label when the task's **projected context** (brief +
   governing spec/plan excerpt + affected components + definition-of-done, per
-  `lode task brief`) would blow the budget.
+  `lode task brief`) would exceed the budget.
 - Backed by a concrete, **server-side-configurable token budget, default ~100k.** The
   number is a guide for the agentic call and a ceiling the reviewer checks against —
   **not** an automatic detector, and no separate heuristic is needed alongside it.

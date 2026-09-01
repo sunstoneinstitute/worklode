@@ -10,15 +10,16 @@ requires:
 
 ## 0. Purpose & scope {#sec-0}
 
-`tasks.body` is markdown, and markdown already has image syntax. What is missing is somewhere
-for the bytes to live and a path that gets them there without the author thinking about it.
-This spec adds a content-addressed blob store on Hetzner Object Storage, the database index
-that makes those blobs referenceable and collectable, and the CLI ergonomics that make
-`![alt](./shot.png)` in a body file Just Work.
+`tasks.body` is markdown, and markdown already has syntax for images. What is missing is a
+place for the bytes to live, and a path that gets them there without the author having to
+think about it. This spec adds a content-addressed blob store (bytes stored and looked up by
+the hash of their content) on Hetzner Object Storage, the database index that makes those
+blobs referenceable and collectible, and the CLI changes that make
+`![alt](./shot.png)` in a body file just work.
 
 The motivating user is a designer whose bug reports are "the map flashes narrow for one frame
 when you scroll back up at 390px". That report is a screen capture and two screenshots. Prose
-is a lossy re-encoding of it.
+is a lossy way to re-tell it — it loses detail turning a picture into words.
 
 Blobs serve two distinct jobs, and the difference runs through the whole spec:
 
@@ -44,7 +45,7 @@ service the fleet already uses for CNPG and Velero backups). Postgres holds the 
 reference graph, never the payload.
 
 The object key is derived from the content hash, sharded two hex characters deep so the
-orphan sweep (§11) can parallelise over 256 prefixes:
+orphan sweep (§11) can run in parallel across 256 prefixes:
 
 ```
 blobs/<hash[0:2]>/<hash>          e.g. blobs/9f/9f2a…c1
@@ -79,24 +80,25 @@ CREATE INDEX task_blobs_hash_idx ON task_blobs (hash);
 No object key column: the key is a pure function of the hash, so storing it would create a
 second source of truth that can disagree.
 
-Dedup is free — the same screenshot on five tasks is one object and one `blobs` row.
-`blobs` is deliberately not task-scoped, so spec 025 document sections can reference the same
-bytes through a `section_blobs` table without a migration or a copy.
+Deduplication (dedup) is free — the same screenshot on five tasks is one object and one
+`blobs` row. `blobs` is deliberately not scoped to one task, so spec 025 document sections
+can reference the same bytes through a `section_blobs` table with no migration and no copy.
 
 `embedded` is **derived**: on every task create and update, the body is parsed, its
-`/blob/<hash>` references are extracted, and `embedded` is reconciled to match in the same
+`/blob/<hash>` references are pulled out, and `embedded` is updated to match in the same
 transaction. Edit an image out of the body and the flag clears on the next write, which is
-what makes GC honest — a reference the body no longer makes must not keep bytes alive.
+what keeps garbage collection (GC) honest — a reference the body no longer makes must not
+keep the bytes alive.
 
 `attached` is **declared**: set by `lode task attach`, cleared by `lode task detach`. It
 survives body edits because it was never in the body.
 
-A row needs at least one of the two; the `CHECK` enforces it, and reconciliation deletes any
-row that would fail it.
+A row needs at least one of the two flags set; the `CHECK` constraint enforces it, and
+reconciliation deletes any row that would fail it.
 
 `ON DELETE RESTRICT` on `task_blobs.hash` is the interlock that makes GC safe: the database
-refuses to delete a `blobs` row that anything still references, so a GC bug degrades into an
-error rather than into a broken image.
+refuses to delete a `blobs` row that anything still references, so a GC bug turns into an
+error instead of a broken image.
 
 ---
 
@@ -109,10 +111,10 @@ Bodies store a **root-relative, permanent URL**:
 ```
 
 `GET /blob/{hash}` authenticates the caller (§4), then **302-redirects to a short-lived
-presigned object-storage URL**. This is the GitHub and GitLab pattern: the durable identifier
-lives in the content, the credential lives in a URL that expires in minutes, and the bytes
-never transit the application. That last property is what makes a 100 MiB screen recording
-affordable to serve.
+presigned object-storage URL** (a URL signed to grant temporary access, without needing a
+login). This is the GitHub and GitLab pattern: the durable identifier lives in the content,
+the credential lives in a URL that expires in minutes, and the bytes never pass through the
+application. That last property is what makes it cheap to serve a 100 MiB screen recording.
 
 Presign parameters carry the headers, since the browser sees the object store's response and
 not ours:
@@ -125,8 +127,8 @@ not ours:
 | `Cache-Control` | `response-cache-control: private, max-age=31536000, immutable` — safe because the URL is content-addressed |
 
 **The name travels with the reference, not with the blob.** `task_blobs.filename` is
-per-reference and `/blob/{hash}` is per-blob, so one blob two tasks attached under different
-names has no single name the route could look up. Every surface that mints a reference — the
+per-reference and `/blob/{hash}` is per-blob, so a blob two tasks attached under different
+names has no single name the route could look up. Every surface that creates a reference — the
 task detail response, the task blob list, the brief, the cockpit's attachments card — therefore
 appends the reference's own name as a query parameter, `/blob/{hash}?filename=crash.log`, and
 the route echoes it into `response-content-disposition`. A reference with no name (every
@@ -134,44 +136,44 @@ embedded image) keeps the bare URL and the bare token. Body text is never rewrit
 an embedded `](/blob/<hash>)` must keep matching the anchored grammar that pins its blob
 against GC (§11).
 
-The name is caller-controlled — it arrives on a URL anyone may craft — so it is encoded per RFC
-6266 (`filename="…"` plus the percent-encoded `filename*` for anything non-ASCII) and reduced
-first: control characters stripped, last path segment only, invalid UTF-8 and anything over 200
-bytes refused. The parameter is deliberately **not** part of anything signed. On the
-object-storage leg it cannot be tampered with anyway — SigV4 signs the presigned URL's whole
-query string, `response-content-disposition` included. On our own leg it is unsigned, so a
-caller who may already read a blob may choose what their own browser saves it as; that grants
-no access, since the bytes, the media type and the inline/attachment token are all decided
-server-side from `blobs`, and only the token carries §6's weight. The residual risk — a
+The name is controlled by the caller — it arrives on a URL anyone can craft — so it is encoded
+per RFC 6266 (`filename="…"` plus the percent-encoded `filename*` for anything non-ASCII) and
+cleaned up first: control characters stripped, last path segment only, invalid UTF-8 and
+anything over 200 bytes refused. The parameter is deliberately **not** part of anything signed.
+On the object-storage side it cannot be tampered with anyway — SigV4 (the AWS request-signing
+scheme S3-compatible stores use) signs the presigned URL's whole query string, including
+`response-content-disposition`. On our own side it is unsigned, so a caller who can already
+read a blob can choose what their own browser saves it as; that grants no extra access, since
+the bytes, the media type, and the inline/attachment token are all decided server-side from
+`blobs`, and only the token carries the weight described in §6. The residual risk — a
 hand-crafted link that saves a known blob under a misleading name — is strictly weaker than the
-same actor hosting the file themselves, and signing would not remove it: whoever can mint a
-link can mint one under the name they wanted.
+same actor hosting the file themselves, and signing would not remove it: whoever can create a
+link can create one under the name they wanted.
 
-Setting `Content-Type` at PUT time *and* overriding on presign is deliberate belt-and-braces:
-the override is what actually reaches the browser, and the stored `Content-Type` keeps the
-object self-describing for anyone reading the bucket directly. It is a system header, not the
-user metadata §6 rules out.
+Setting `Content-Type` at PUT time *and* overriding it on presign is a deliberate belt-and-braces
+move — doing it twice, once as a backup for the other: the override is what actually reaches the
+browser, and the stored `Content-Type` keeps the object self-describing for anyone reading the
+bucket directly. It is a system header, not the user metadata that §6 rules out.
 
-The redirect itself is `Cache-Control: private, max-age=60`, comfortably inside the presign
-TTL of 5 minutes, so a page with twenty images issues twenty redirects once and then serves
-from cache.
+The redirect itself carries `Cache-Control: private, max-age=60`, comfortably inside the
+presigned URL's 5-minute lifetime (TTL), so a page with twenty images issues twenty redirects
+once and then serves from cache.
 
-`/blob/{hash}` sits outside `/api/v1` on purpose: it is an asset route rather than a JSON API,
-and it must be reachable by both auth schemes.
+`/blob/{hash}` sits outside `/api/v1` on purpose: it is a route for serving files, not a JSON
+API, and it must be reachable by both auth methods.
 
-**Verify before building:** Hetzner Object Storage is Ceph RADOS Gateway behind an S3 API, and
-presigned GET with `response-*` overrides is standard SigV4 that it should honour. If an
-override turns out to be unsupported, the fallback is to stream the object through the server
-with our own headers — simpler, same external behaviour, and it costs the app egress and a held
-connection per download.
+**Verify before building:** Hetzner Object Storage is Ceph RADOS Gateway (an open-source
+storage system) behind an S3 API, and a presigned GET with `response-*` overrides is standard
+SigV4 that it should honour. If an override turns out to be unsupported, the fallback is to
+stream the object through the server with our own headers — simpler, with the same behaviour
+from outside, but it costs the app network egress and a held connection per download.
 
 **Not yet verified.** As of the §1–§12 implementation — the whole spec, less this — it has
-**not** been confirmed against a live bucket: no bucket has been provisioned and no credentials
-are configured. The check is still outstanding, tracked by **WL-206**. The `httptest`-based
-tests in `internal/blobstore/s3_test.go` do not discharge it — they prove our client emits and
-signs the `response-*` overrides, not that the gateway honours them, which is gateway behaviour
-only a real bucket can answer. `Content-Length` is not in our code at all; it is the gateway's
-in full.
+**not** been confirmed against a live bucket: no bucket has been set up and no credentials are
+configured. The check is still outstanding, tracked by **WL-206**. The `httptest`-based tests
+in `internal/blobstore/s3_test.go` do not settle it — they prove our client sends and signs the
+`response-*` overrides, not that the gateway honours them, which only a real bucket can answer.
+`Content-Length` is not in our code at all; it comes entirely from the gateway.
 
 ---
 
@@ -190,8 +192,9 @@ in full.
 | `lode task add --body-file`, `lode task edit --body-file` | **Reference rewriting** (§7) — the main event. |
 | `lode blob gc [--apply]` | Both GC sweeps (§11). Reports only unless `--apply`. |
 
-`lode task attach` is the explicit path and the only path for non-embeddable files. Reference
-rewriting is what people will actually use for images, because it requires knowing nothing.
+`lode task attach` is the explicit path, and the only path, for files that cannot be embedded.
+Reference rewriting is what people will actually use for images, because it needs the author
+to know nothing about how it works.
 
 ---
 
@@ -207,28 +210,30 @@ func (s *server) eitherAuth(next http.HandlerFunc) http.Handler
 ```
 
 **It must mirror `webAuth`'s bypass exactly.** `webAuth` (`internal/api/oidcweb.go:57`) passes
-every request through when neither OIDC nor GitHub login is configured — the read-only web UI
-is unauthenticated on such an install. A blob route that authenticated unconditionally would
-render the task page fine and 401 every `<img>` on it. Consistency with the surrounding UI wins
-here: the blob route is not the place to unilaterally tighten the installation's auth model.
+every request through when neither OpenID Connect (OIDC) nor GitHub login is configured — on
+such an install, the read-only web UI needs no login. A blob route that authenticated
+unconditionally would render the task page fine and 401 every `<img>` on it. Consistency with
+the surrounding UI wins here: the blob route is not the place to tighten the installation's
+auth model on its own.
 
 The consequence follows the UI's auth model rather than restating it: an install with no web
 auth provider serves no web surface at all unless it sets `LODE_WEB_OPEN`, and the blob route
-inherits exactly that — refused on a closed instance, open on one that opted in. The blob route
-is still not the place to tighten the auth model unilaterally; it is now inheriting a model that
-is closed by default.
+inherits exactly that behaviour — refused on a closed instance, open on one that opted in. The
+blob route is still not the place to tighten the auth model on its own; it is now inheriting a
+model that is closed by default.
 
-Where web auth *is* configured, a content-addressed URL is unguessable and that is **not** the
-access control. Task bodies carry pre-release design work; the hash does dedup, the middleware
-does access.
+Where web auth *is* configured, a content-addressed URL is unguessable, but that is **not**
+the access control. Task bodies carry pre-release design work; the hash's job is
+deduplication, the middleware's job is access control.
 
 The bucket itself stays private in every case — presigned URLs are the only anonymous read
 path, and they expire.
 
 Session cookies are already `SameSite=Lax` (`internal/api/cliauth.go:130`, `oidcweb.go:97`,
-`githubweb.go:100`). That is load-bearing here: Lax withholds the cookie from cross-site
-subresource loads, so an attacker page embedding `<img src="https://worklode/blob/…">` gets a
-401 rather than a probe for which blobs a logged-in victim can see. Keep it.
+`githubweb.go:100`). That detail matters here: with `Lax`, a browser withholds the cookie from
+a request another site's page triggers, so an attacker page embedding
+`<img src="https://worklode/blob/…">` gets a 401 instead of a way to probe which blobs a
+logged-in victim can see. Keep it.
 
 ---
 
@@ -242,7 +247,7 @@ all:
 2. `os.CreateTemp` in the server's spool directory; `defer` both close and remove so every
    exit path cleans up.
 3. Copy request body → temp file through an `io.TeeReader` into a `sha256` hasher, capturing
-   the first 512 bytes for sniffing.
+   the first 512 bytes for sniffing (detecting the file's type from its bytes, below).
 4. Look up the hash. **Present → discard the temp file and return the existing row.** A
    re-uploaded screenshot costs one query and zero object-store traffic.
 5. Absent → `PutObject` streaming from the rewound temp file, then insert the `blobs` row.
@@ -255,17 +260,17 @@ const maxBlobBytes = 100 << 20 // 100 MiB
 ```
 
 100 MiB fits screen recordings, which is the point: the bug reports this spec exists to carry
-are frequently motion, and a still frame of a one-frame flash proves nothing.
+are often video, and a still frame of a one-frame flash proves nothing.
 
 **Write ordering is object-then-row, always.** A failure after the PUT leaves an orphan object,
 which §11 sweeps. The reverse order would leave a `blobs` row pointing at nothing, which
 renders as a permanently broken image. Both failure modes are possible; only one is recoverable
 without a human, so the design fails toward that one.
 
-The server sniffs with `http.DetectContentType` over the first 512 bytes and stores the result.
-A client's `Content-Type` header is advisory and never persisted — a payload labelled
-`image/png` that sniffs as HTML is stored, and served, as HTML, which is why §6's headers exist
-rather than relying on the label.
+The server sniffs the type with `http.DetectContentType` over the first 512 bytes and stores
+the result. A client's `Content-Type` header is just a hint and is never trusted or persisted
+— a payload labelled `image/png` that sniffs as HTML is stored, and served, as HTML, which is
+why §6's headers exist rather than relying on the label.
 
 | Class | Types | Treatment |
 |---|---|---|
@@ -289,10 +294,10 @@ of the two is happening.
 Nothing is rejected on type. A core dump is a legitimate attachment, and an allowlist that
 blocks it buys nothing once §6 guarantees non-embeddable types are never served inline.
 
-**SVG is embeddable deliberately.** It is a first-class asset in the repos this serves, and
-rejecting it would push authors into lossy PNG screenshots of vector work. What contains script
-inside it is §6's cross-origin boundary, not a CSP: a hostile SVG runs in the object store's
-origin, not the app's.
+**SVG is embeddable deliberately.** It is a fully supported file type in the repos this serves,
+and rejecting it would push authors into lossy PNG screenshots of vector work. What keeps a
+script inside an SVG from doing harm is the cross-origin boundary of §6, not a Content Security
+Policy (CSP): a hostile SVG runs in the object store's origin, not the app's.
 
 ---
 
@@ -301,9 +306,9 @@ origin, not the app's.
 A blob is bytes an authenticated user uploaded. The redirect target is a different origin from
 the app, which is itself a useful boundary — a hostile SVG or HTML payload executes in the
 object store's origin, not in ours. That origin is not empty (path-style addressing shares it
-with every other bucket on the endpoint, Velero's and CNPG's included), but S3 carries no
-ambient credential: every read there needs SigV4 or a presign, so script running in it holds
-nothing it did not already have.
+with every other bucket on the endpoint, including Velero's and CNPG's), but S3 grants no
+credential just by being there: every read there needs SigV4 or a presign, so script running in
+it holds nothing it did not already have.
 
 The redirect response carries:
 
@@ -330,8 +335,8 @@ this deployment configures. An earlier draft of this section proposed setting bo
 object metadata; it could not have worked against RGW, and uploads now send no user metadata at
 all.
 
-The `filename` half §2 adds changes none of that: it is cosmetic, it never moves the
-inline/attachment token, and a name a caller invents cannot make bytes executable that the
+The `filename` addition from §2 changes none of that: it is cosmetic, it never changes the
+inline/attachment token, and a name a caller makes up cannot make bytes executable that the
 token already downloads rather than renders.
 
 So the controls that do hold are the ones §5 already relies on: every non-embeddable type is
@@ -343,8 +348,8 @@ is a direct top-level navigation to the blob URL; and that navigation lands in t
 store's origin, per the boundary above.
 
 The `response-*` overrides themselves are **not yet verified** against a real gateway, for the
-same reason as §2: no bucket is provisioned and no credentials are configured in this
-environment. That check is tracked by **WL-206**.
+same reason as §2: no bucket is set up and no credentials are configured in this environment.
+That check is tracked by **WL-206**.
 
 The task page's own CSP must list the object-storage endpoint in `img-src` and `media-src`,
 since that is where the redirect lands.
@@ -374,8 +379,8 @@ rewrites the destination to `/blob/<hash>` before the body is sent. Same pass on
 
 Rules that keep it predictable:
 
-- Only image nodes. A link to a local file is left alone and reported as a warning — use
-  `lode task attach` for those.
+- Only images are rewritten. A link to a local file is left alone and reported as a warning —
+  use `lode task attach` for those.
 - Absolute paths and any destination carrying a scheme are untouched.
 - Path traversal above the body file's directory is an error.
 - A missing file is an error, and the whole command fails before the task is written, so an
@@ -396,14 +401,14 @@ content, and `embedded` reconciliation (§1) sees the rewritten body.
 `templates/task.html` renders `<pre>{{.Task.Body}}</pre>` today. Images require real markdown
 rendering, which turns the body into HTML — and **task bodies are untrusted**. Spec 020's
 `lode inbox import` writes GitHub issue text straight into `tasks.body`, so anyone who can open
-an issue on a mapped repo can put markup in a task body. Rendering that unsanitised is stored
-XSS with an ingestion pipeline attached.
+an issue on a mapped repo can put markup in a task body. Rendering that unsanitised would be a
+stored cross-site scripting (XSS) hole with an ingestion pipeline feeding it.
 
 The pipeline mirrors what GitHub does — render permissively, then sanitise the **output HTML**:
 
-1. **goldmark** with the GFM extension set, `html.WithUnsafe()` **enabled** so raw HTML passes
-   through to the sanitiser rather than being escaped at the parser. (goldmark is already an
-   indirect dependency via glamour; promote it to direct.)
+1. **goldmark** with the GitHub Flavored Markdown (GFM) extension set, `html.WithUnsafe()`
+   **enabled** so raw HTML passes through to the sanitiser rather than being escaped at the
+   parser. (goldmark is already an indirect dependency via glamour; promote it to direct.)
 2. **bluemonday** `UGCPolicy()` — GitHub's allowlist in all but name: headings, lists, tables,
    `code`/`pre`, `blockquote`, inline emphasis, `a`, `img`, and GFM task-list checkboxes, with
    everything else stripped. New direct dependency.
@@ -417,13 +422,14 @@ The pipeline mirrors what GitHub does — render permissively, then sanitise the
      `fix(security): reject non-http(s) licence URLs before rendering as href`.
    - `video` allowed with `controls`, `preload`, `poster`.
 
-**CSRF.** This section was written when every web route was `GET`. That is no longer true —
-spec 032's cockpit added POST forms (`internal/api/webform.go`), so the "no mutating web
-surface" rule is retired rather than upheld, and the test that would have asserted an empty
-`<form>` set is not written. What replaced it is a same-origin check on every form POST
-(`sameOriginForm`, reading `Sec-Fetch-Site`/`Origin`) plus the `SameSite=Lax` session cookie,
-with `form-action 'self'` in the page CSP as a third layer. A per-session token is still the
-stronger answer and remains open.
+**Cross-site request forgery (CSRF).** This section was written when every web route was
+`GET`. That is no longer true — spec 032's cockpit added POST forms
+(`internal/api/webform.go`), so the "no surface that changes data" rule is retired rather than
+upheld, and the test that would have asserted an empty `<form>` set is not written. What
+replaced it is a same-origin check on every form POST (`sameOriginForm`, reading
+`Sec-Fetch-Site`/`Origin`) plus the `SameSite=Lax` session cookie, with `form-action 'self'` in
+the page CSP as a third layer. A per-session token is still the stronger answer and remains
+open.
 
 **CSP.** Every page carries one, set in the single place all pages render through:
 `default-src 'self'`, `script-src 'self'`, `img-src`/`media-src` extended with the blob
@@ -469,7 +475,7 @@ lode task attach WL-42 ./crash.log ./heap.prof
 lode task attach WL-42 ./flash-390.png        # image → also appended to the body
 ```
 
-The distinction is entirely media-type driven: image and video get a reference appended and
+The distinction is decided entirely by media type: image and video get a reference appended and
 `embedded = true` on the reconciliation that follows; everything else gets `attached = true` and
 appears only in the attachments list. `--no-embed` suppresses the append for an image the author
 wants attached but not shown inline.
@@ -596,8 +602,9 @@ both directions, deliberately avoided here:
 
 Everything becomes a blob; nothing in a rendered body ever points off-site.
 
-This makes import a URL-fetching operation on attacker-influenced input, so it needs the usual
-SSRF guard:
+This makes import a URL-fetching operation on input an attacker can influence, so it needs the
+usual guard against server-side request forgery (SSRF) — tricking the server into fetching a
+URL it shouldn't:
 
 - Fetch only `https`, only from a host allowlist (`*.githubusercontent.com`,
   `github.com`) — the import path knows exactly which host it expects. This allowlist is wider
@@ -621,7 +628,7 @@ Server config (env, and the deployment's ConfigMap plus an ESO-provisioned secre
 | `LODE_BLOB_ENDPOINT` | `https://hel1.your-objectstorage.com` |
 | `LODE_BLOB_BUCKET` | `sunstone-worklode-blobs` |
 | `LODE_BLOB_REGION` | `hel1` |
-| `LODE_BLOB_ACCESS_KEY` / `LODE_BLOB_SECRET_KEY` | 1Password → ESO, per the fleet's existing pattern |
+| `LODE_BLOB_ACCESS_KEY` / `LODE_BLOB_SECRET_KEY` | 1Password → External Secrets Operator (ESO), per the fleet's existing pattern |
 | `LODE_BLOB_SPOOL_DIR` | temp-file directory for §5; defaults to `os.TempDir()` |
 
 `aws-sdk-go-v2` with `UsePathStyle: true`, matching the `s3ForcePathStyle: true` the fleet
@@ -632,10 +639,11 @@ other surface behaves exactly as it does today, so a local `docker compose` stac
 with no bucket. Worth a `lode doctor` line rather than a silent absence.
 
 **Once an endpoint and a bucket are named, the two keys are required too**, and a missing one
-fails the boot rather than degrading. An empty static credential provider fails per request, not
-at construction, so naming a bucket while the ESO secret is missing would otherwise yield a
-server that reports healthy and `502`s every upload and every serve. Endpoint and bucket remain
-the on-switch: with either unset the feature stays off and uploads `501` as above.
+fails startup rather than degrading silently. An empty static credential provider fails per
+request, not when it is created, so naming a bucket while the ESO secret is missing would
+otherwise leave a server that reports healthy and `502`s every upload and every serve. Endpoint
+and bucket remain the on-switch: with either unset the feature stays off and uploads `501` as
+above.
 
 ---
 
@@ -676,14 +684,14 @@ the on-switch: with either unset the feature stays off and uploads `501` as abov
 3. `GET /blob/{hash}` 302s to a presigned URL for both a bearer token and a web session. With a
    web auth provider configured it `401`s with neither; with no provider configured it refuses
    with a `401` unless `LODE_WEB_OPEN` is set. The refusal is `eitherGuard`'s, not `webGuard`'s
-   `503`, on two counts: a subresource a browser fetches must answer with a status code, never
-   with an HTML error page or a login redirect (§4); and unlike a page, a blob on a
-   provider-less instance *is* served to a caller who presents a bearer token, so the anonymous
-   refusal is a missing credential rather than a deployment fact. An unknown bearer token is
-   `401` too, on an opted-in instance as much as a closed one — a rejected credential never
-   falls through to the anonymous posture. The presigned response carries the sniffed
-   `Content-Type`, a correct `Content-Length`, and `Content-Disposition: attachment` for a
-   non-embeddable type.
+   `503`, for two reasons: a resource a browser fetches as part of a page must answer with a
+   status code, never with an HTML error page or a login redirect (§4); and unlike a page, a
+   blob on a provider-less instance *is* served to a caller who presents a bearer token, so the
+   anonymous refusal is a missing credential rather than a fact about the deployment. An unknown
+   bearer token is `401` too, on an opted-in instance as much as a closed one — a rejected
+   credential never falls through to the anonymous fallback. The presigned response carries the
+   sniffed `Content-Type`, a correct `Content-Length`, and `Content-Disposition: attachment` for
+   a non-embeddable type.
 4. `lode task add --body-file` on markdown referencing two local PNGs creates one task whose
    body cites `/blob/…` twice, with two `blobs` rows and two `task_blobs` rows at
    `embedded = true`.

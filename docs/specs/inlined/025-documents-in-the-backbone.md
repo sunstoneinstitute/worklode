@@ -136,27 +136,28 @@ second.
 Supersession is the nearest thing to a document ending, and it is still not closure. A superseded
 document stays readable, stays true as of its issue, and stays linkable — §3's anchors outlive it
 deliberately, and §3.3 keeps the heading rather than deleting it. A delivered task leaves the board;
-a superseded spec does not leave the corpus. The corpus only accretes.
+a superseded spec does not leave the corpus. The corpus only grows.
 
-**The cardinality is the test.** A document accrues many tasks over its life: the one that authored
+**The cardinality is the test.** A document gathers many tasks over its life: the one that authored
 it, each revision, each review. A task produces at most one document. When a new object is proposed,
 ask which side of that asymmetry it falls on — what many undertakings act on over time is a
 document, what is undertaken once is a task.
 
 **A decision is the third category, and the test does not reach it.** §10's `decision` kind is an
 undertaking that produces no artifact at all: its deliverable is a recorded answer held on the task
-itself (§10.1), neither a document nor a diff. So it never faces the cardinality above — there is no
-document to count on either side of it — and the binary this section argues for holds unbroken over
-the artifacts it is a binary about. A decision closes when the answer is recorded, which is the
-ordinary closure this section reserves for undertakings, and the answer then stands as of its
-recording the way a superseded document stands as of its issue: deciding the same question again is
-another decision, not a revision of this one.
+itself (§10.1), neither a document nor a diff. So it never faces the cardinality test above — there
+is no document to count on either side of it — and the document/task split this section argues for
+still holds, because that split is only about the artifacts things produce, and a decision produces
+none. A decision closes when the answer is recorded, which is the ordinary closure this section
+reserves for undertakings, and the answer then stands as of its recording the way a superseded
+document stands as of its issue: deciding the same question again is another decision, not a
+revision of this one.
 
 A decision that earns a durable rationale still becomes a document by the ordinary route — an ADR,
 authored by a `design`-kind task, which the decision **blocks** (004 §1.3). The two are separate
 undertakings held in order, not one task wearing both jobs. An earlier draft of this section fused
-them, calling a decision a task whose record is an ADR, which made every go/no-go call owe a
-document before it could close and left the calls nobody writes up with no representation at all.
+them, calling a decision a task whose record is an ADR. That made every go/no-go call owe a
+document before it could close, and left the decisions nobody writes up with no record at all.
 
 **Consequence for the authoring task.** §10 closes a `design`-kind task "when its document is
 accepted", which fuses two acts on two objects: the authoring work, and the acceptance §7 requires
@@ -172,7 +173,7 @@ requirement is unchanged; it simply stops holding a task hostage.
 Everything the in-repo claim needs — durable anchors, supersede-in-place, partial implementation —
 is one requirement: **sections must be addressable nodes.**
 
-Spec 006 explicitly declined this, and was right to for the requirement it had:
+Spec 006 explicitly declined this, and it was the right call given the requirement it had:
 
 > Range is a literal section reference (`"§4.2"`, a heading string) — deliberately **not** a section
 > IRI. […] recommended over minting section sub-IRIs (lighter; no addressable-section namespace to
@@ -303,9 +304,9 @@ stable, **never** carrying a git branch or version"). Versioned IRIs are compati
 requirement but the reconciliation must be explicit, because it is not self-evident:
 
 > **The canonical IRI remains version-free and is the only IRI anything links to by default.
-> Versioned IRIs are additional siblings, and appear exclusively in pinned claims (§11).**
+> Versioned IRIs are additional siblings, and appear only in pinned claims (§11).**
 
-This needs a small amendment to rdf-registry ADR-0006 permitting the versioned sibling under a
+This needs a small amendment to rdf-registry ADR-0006 allowing the versioned sibling under a
 named exception, rather than a silent local deviation.
 
 ### 4.3 Publication is one transaction
@@ -323,12 +324,12 @@ Publishing v4 is therefore a single SPARQL Update — `INSERT` the new version g
 document whose current-version pointer disagrees with its content.
 
 Immutable version graphs also make the §3 immutability constraint nearly free: it is a set diff
-between two graphs at publish time (§6), not a bespoke checker over Markdown.
+between two graphs at publish time (§6), not a custom checker over Markdown.
 
 ### 4.4 Section-level staleness without section-level versions
 
-Versioning at section granularity would multiply the namespace badly. Instead, each section records
-the document version in which it last changed:
+Versioning each section on its own would badly multiply the number of IRIs needed. Instead, each
+section records the document version in which it last changed:
 
 ```turtle
 wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT
@@ -337,8 +338,8 @@ wl:lastRevisedIn a owl:ObjectProperty, owl:FunctionalProperty ;   # MINT
                  "pinned at version N be tested for staleness without per-section version IRIs." .
 ```
 
-A claim pinned at v3 against §4.2 is stale **iff** `§4.2 wl:lastRevisedIn` names a snapshot whose
-`dcat:version` exceeds 3. Editing any other section of the same document
+A claim pinned at v3 against §4.2 is stale **if and only if** `§4.2 wl:lastRevisedIn` names a
+snapshot whose `dcat:version` exceeds 3. Editing any other section of the same document
 therefore does not invalidate anyone's claim on §4.2 — document-level versioning, section-level
 precision, one property.
 
@@ -396,9 +397,9 @@ The spelling exists because a numbered plan series is authored forward. Both end
 must already exist, so without it the ordering can only be stated on the *earlier* plan and
 only once the later one exists: part 3 knows it follows part 2, but part 2 would have to be
 amended to say so, and part 2 may already be accepted and spent. Which plan typed the key is
-therefore recorded — `doc_edges.declared_by`, distinct from the row's from end — so rewriting
-either plan clears its own declarations and leaves the other's standing. Both plans declaring
-the same ordering is the same fact twice: it stays one row.
+therefore recorded — `doc_edges.declared_by`, separate from which plan is the edge's origin — so
+rewriting either plan clears its own declarations and leaves the other's standing. Both plans
+declaring the same ordering is the same fact twice: it stays one row.
 
 §4's canonical + versioned IRIs, `dcat:hasVersion` shape and `wl:lastRevisedIn` survive as
 the **projection** of this store; its named-graph publication transaction becomes an ordinary
@@ -814,7 +815,7 @@ a rendering rule rather than a workflow.
 
 The target this serves is **100% resolution**: every accepted document is shipped or explicitly
 closed. Conversion — every accepted document eventually shipped — is the wrong target, because
-it puts pressure on the margin to build designs that reality has already overtaken. The number
+chasing it pressures teams to build designs that reality has already passed by. The number
 worth watching is the age of the unresolved set, not its size:
 `lode doc list --unresolved --older-than 30d`.
 
@@ -1152,7 +1153,7 @@ CHECK (kind IN ('feature','bug','chore','design','review','spike','decision'))
   answer on the task*. It starts from the question rather than from a problem statement —
   a decision task's title **is** the question, and its body is the context the decider
   needs — and its deliverable is the recorded answer held in `task_decisions` (§10.1),
-  never a document, so it accrues no `prov:wasGeneratedBy` edge and produces nothing for
+  never a document, so it gets no `prov:wasGeneratedBy` edge and produces nothing for
   §2.2's cardinality test to count. It closes when the answer is recorded, and the
   recording is terminal: an answer is not revised in place, and deciding again is another
   decision task. It has no code, no branch and no PR, so 004 §6.3 excludes it from
@@ -1347,7 +1348,7 @@ superseded by this spec** and should be removed from 013 rather than built; 013'
 likewise gives way to the manifest. Engines 1 and 2 of spec 013 are untouched — they diagnose missed
 *ingestion*, an unrelated problem.
 
-The same argument retires **spec 007 §4.3**, which is the identical heuristic one substrate up:
+The same argument retires **spec 007 §4.3**, which is the identical heuristic one layer up:
 `dct:modified` on a DesignDoc compared against the closure time of the last Task that implemented
 it. No timestamp comparison determines whether intent has been satisfied — only a pinned claim
 does. 007 §3.3 keeps its question but re-points its join, since coverage reads the Component→Section
