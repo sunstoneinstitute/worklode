@@ -13,7 +13,7 @@ import (
 // markdown consumed by plugins/claude/lode/skills/worklode/references/commands.md
 // (kept fresh by TestCommandReference in commandref_test.go). One H2 per
 // top-level command, naming its own flags (if it takes any directly, e.g.
-// `lode critical-path`) plus one bullet per descendant, depth-first and
+// `lode install`) plus one bullet per descendant, depth-first and
 // path-qualified (`lode task claim`, not just `claim`). Every command also
 // accepts `--json` and `--help`; both are omitted throughout as implied.
 //

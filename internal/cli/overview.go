@@ -193,10 +193,10 @@ func FrontierTable(w io.Writer, tasks []model.FrontierTask) {
 	tbl.flush(w)
 }
 
-// CriticalPathRender prints `lode critical-path`: the chain length, one row
-// per critical task, then any cycles. A task filter narrows the rows to that
-// one task, so the chain length — a property of the whole graph, not of the
-// row — is left out.
+// CriticalPathRender prints `lode task critical-path`: the chain length, one
+// row per critical task, then any cycles. A task filter narrows the rows to
+// that one task, so the chain length — a property of the whole graph, not of
+// the row — is left out.
 func CriticalPathRender(w io.Writer, cp model.CriticalPath, task string) {
 	cp = CriticalPathFiltered(cp, task)
 	tw := newTabwriter(w)

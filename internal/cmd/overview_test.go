@@ -258,9 +258,9 @@ func TestCriticalPathJSONHonoursTaskFilter(t *testing.T) {
 	fakeOverviewServer(t, func(*http.Request) (int, string) {
 		return http.StatusOK, `{"max_depth":2,"tasks":[{"id":"WL-1","depth":1},{"id":"WL-2","depth":2}]}`
 	})
-	out, err := runLode(t, "critical-path", "--json", "--task", "WL-2")
+	out, err := runLode(t, "task", "critical-path", "--json", "--task", "WL-2")
 	if err != nil {
-		t.Fatalf("critical-path --json --task: %v", err)
+		t.Fatalf("task critical-path --json --task: %v", err)
 	}
 	var got model.CriticalPath
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
