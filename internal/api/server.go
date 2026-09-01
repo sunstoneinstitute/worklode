@@ -627,6 +627,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/tasks/{id}/cost", s.getTaskCost)
 	r.api("PATCH /api/v1/tasks/{id}", s.patchTask)
 	r.api("PUT /api/v1/tasks/{id}/skills", s.setTaskSkills)
+	r.api("GET /api/v1/tasks/{id}/checklist", s.getChecklist)
+	r.api("POST /api/v1/tasks/{id}/checklist", s.setChecklistItem)
 	r.api("POST /api/v1/tasks/{id}/edges", s.addEdge)
 	r.api("DELETE /api/v1/tasks/{id}/edges", s.removeEdge)
 	r.api("POST /api/v1/tasks/{id}/decompose", s.decomposeTask)
