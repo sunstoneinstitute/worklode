@@ -902,6 +902,12 @@ Worklode leaves it alone and reports the one-line addition as a suggestion. An `
 symlinked to `CLAUDE.local.md` already puts the managed block in a file Claude Code reads and
 satisfies the step with nothing created.
 
+An `AGENTS.md` whose lines are `@`-imports of other instruction files is a **hub**, not the file
+the block belongs in: appending there leaves the block where Claude Code never reads it. So the
+install resolves those imports one hop and writes the block into an imported file — one already
+carrying the block, or failing that an imported `CLAUDE.local.md` — leaving the hub untouched and
+the `CLAUDE.local.md` step satisfied. Uninstall strips it from the same file.
+
 ## 18. Degradation
 
 | Condition | Behavior |

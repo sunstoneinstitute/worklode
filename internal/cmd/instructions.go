@@ -65,9 +65,20 @@ reach it.
 ` + agentsBlockEnd + "\n"
 
 // instructionsResult reports what one run did to each instruction file.
+// BlockFile is the file the managed block actually landed in — AGENTS.md
+// unless blockFile redirected it through an @-import.
 type instructionsResult struct {
-	AgentsMD string `json:"agents_md,omitempty"`
-	ClaudeMD string `json:"claude_md,omitempty"`
+	AgentsMD  string `json:"agents_md,omitempty"`
+	ClaudeMD  string `json:"claude_md,omitempty"`
+	BlockFile string `json:"block_file,omitempty"`
+}
+
+// blockIn names the file the block was written to, for the report.
+func (r *instructionsResult) blockIn() string {
+	if r.BlockFile != "" {
+		return r.BlockFile
+	}
+	return agentsFile
 }
 
 // ensureInstructions writes the managed block into root's AGENTS.md and, where
@@ -83,12 +94,22 @@ func ensureInstructions(root string) (*instructionsResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &instructionsResult{AgentsMD: agents, ClaudeMD: claude}, nil
+	block, err := blockFile(root)
+	if err != nil {
+		return nil, err
+	}
+	rel, _ := filepath.Rel(root, block)
+	return &instructionsResult{AgentsMD: agents, ClaudeMD: claude, BlockFile: rel}, nil
 }
 
 // removeInstructions is ensureInstructions' inverse. AGENTS.md goes first so
 // the CLAUDE.local.md step sees the state the strip left behind.
 func removeInstructions(root string) (*instructionsResult, error) {
+	block, err := blockFile(root)
+	if err != nil {
+		return nil, err
+	}
+	rel, _ := filepath.Rel(root, block)
 	agents, err := removeAgentsBlock(root)
 	if err != nil {
 		return nil, err
@@ -97,13 +118,16 @@ func removeInstructions(root string) (*instructionsResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &instructionsResult{AgentsMD: agents, ClaudeMD: claude}, nil
+	return &instructionsResult{AgentsMD: agents, ClaudeMD: claude, BlockFile: rel}, nil
 }
 
 // ensureAgentsMD splices the managed block into root's AGENTS.md, creating the
 // file when it is missing and leaving every byte outside the markers alone.
 func ensureAgentsMD(root string) (string, error) {
-	path := filepath.Join(root, agentsFile)
+	path, err := blockFile(root)
+	if err != nil {
+		return "", err
+	}
 	old, err := os.ReadFile(path)
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !missing {
@@ -231,6 +255,21 @@ func spliceAgentsBlock(existing string) string {
 // per-checkout state, never something to commit.
 func ensureClaudeMD(root string) (string, error) {
 	claudePath := filepath.Join(root, claudeFile)
+	block, err := blockFile(root)
+	if err != nil {
+		return "", err
+	}
+	// The block went into a file AGENTS.md imports rather than AGENTS.md
+	// itself. Claude Code reads CLAUDE.md and CLAUDE.local.md directly, so it
+	// already sees the block; there is no import line to add.
+	if filepath.Base(block) != agentsFile {
+		if block == claudePath {
+			if err := ensureGitignored(root, claudeFile); err != nil {
+				return "", err
+			}
+		}
+		return instrSatisfied, nil
+	}
 	same, err := sameFile(filepath.Join(root, agentsFile), claudePath)
 	if err != nil {
 		return "", err
@@ -257,6 +296,62 @@ func ensureClaudeMD(root string) (string, error) {
 		return instrSatisfied, nil
 	}
 	return instrSuggested, nil
+}
+
+// importedPaths returns the files body @-imports: a line that is nothing but
+// `@path`, which is how both Claude Code and the AGENTS.md readers pull one
+// instruction file into another. A marker inside a fenced block is quoted
+// text, matching findBlockRegions.
+func importedPaths(body string) []string {
+	var out []string
+	inFence := false
+	for _, line := range strings.Split(body, "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, "```"):
+			inFence = !inFence
+		case inFence, !strings.HasPrefix(t, "@"), strings.ContainsAny(t, " \t"):
+		default:
+			out = append(out, strings.TrimPrefix(t, "@"))
+		}
+	}
+	return out
+}
+
+// blockFile picks the file the managed block belongs in. Normally AGENTS.md,
+// but a repo whose AGENTS.md only @-imports other instruction files uses it as
+// a hub so Claude Code and the AGENTS.md readers share one set of files;
+// appending there would leave the block in a file Claude Code never reads. So
+// an imported file already carrying the block wins, and failing that an
+// imported CLAUDE.local.md does. One hop only: hub files do not nest in
+// practice.
+func blockFile(root string) (string, error) {
+	agents := filepath.Join(root, agentsFile)
+	body, err := os.ReadFile(agents)
+	if errors.Is(err, fs.ErrNotExist) {
+		return agents, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", agents, err)
+	}
+	var fallback string
+	for _, p := range importedPaths(string(body)) {
+		path := filepath.Join(root, p)
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if len(findBlockRegions(string(b))) > 0 {
+			return path, nil
+		}
+		if fallback == "" && filepath.Base(path) == claudeFile {
+			fallback = path
+		}
+	}
+	if fallback != "" {
+		return fallback, nil
+	}
+	return agents, nil
 }
 
 // ensureGitignored appends name to root's tracked .gitignore, once. Unlike
@@ -292,7 +387,10 @@ func ensureGitignored(root, name string) error {
 // itself is deleted only when it is a regular file with nothing but the block
 // in it: a symlink's target belongs to whoever wrote it.
 func removeAgentsBlock(root string) (string, error) {
-	path := filepath.Join(root, agentsFile)
+	path, err := blockFile(root)
+	if err != nil {
+		return "", err
+	}
 	old, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return instrNone, nil
