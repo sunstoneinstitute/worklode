@@ -52,7 +52,8 @@ itself, but load it by name if it has not:
   marketplaces, and the org onboarding skill in another repo hardcode `lode`
   invocations. `docs/agent-surfaces.md` is the register of those surfaces and
   the checklist for keeping them true; it also holds the rules for adding and
-  retiring a skill.
+  retiring a skill. Naming a new or renamed command follows the nine rules in
+  `internal/cmd/CLAUDE.md`'s "Naming" section (`WL-SPEC-61`).
 
 ## Commands
 
