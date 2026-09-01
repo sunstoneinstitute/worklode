@@ -156,6 +156,8 @@ var routeGuards = map[string]routeGuard{
 	"DELETE /api/v1/tasks/{id}/blobs/{hash}": guardedBound(permTaskWrite),
 	"PATCH /api/v1/tasks/{id}":               guardedBound(permTaskWrite),
 	"PUT /api/v1/tasks/{id}/skills":          guardedBound(permTaskWrite),
+	"GET /api/v1/tasks/{id}/checklist":       guardedBound(permTaskRead),
+	"POST /api/v1/tasks/{id}/checklist":      guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/edges":          guardedBound(permTaskWrite),
 	"DELETE /api/v1/tasks/{id}/edges":        guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/decompose":      guardedBound(permTaskWrite),
