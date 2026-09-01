@@ -87,9 +87,50 @@ func groupTopLevel() {
 	}
 }
 
+// rejectStrayGroupArgs makes every command group refuse an argument it has no
+// subcommand for.
+//
+// cobra's default (legacyArgs) errors on an unknown first argument for the
+// root command only; under any other parent it accepts anything, and a parent
+// with no Run falls through to printing help and exiting 0. That turned a
+// renamed subcommand into a silent success for callers this repo cannot see —
+// `lode task ready $ID && echo done` printed "done" and published nothing
+// (WL-480).
+//
+// Both assignments are needed. cobra returns flag.ErrHelp from its
+// !Runnable() check *before* it calls ValidateArgs, so Args alone is never
+// consulted on a group; RunE is what makes the group runnable far enough to
+// reach its own validation, and it prints the help a bare `lode task` still
+// owes. A parent that is already runnable is left alone: `lode project crew
+// <project>` has subcommands and takes a real positional argument.
+//
+// Set here rather than on each constructor so a new group cannot forget it.
+func rejectStrayGroupArgs(c *cobra.Command) {
+	if c.HasSubCommands() && !c.Runnable() {
+		// RunE is the half that matters: a non-runnable parent returns
+		// flag.ErrHelp before ValidateArgs is ever reached, so an Args
+		// validator on it is dead code. cobra's own `completion` command
+		// proves it — it ships with Args: NoArgs and still exits 0 on a
+		// stray argument. Only supply Args when the command has none, so a
+		// parent that declares its own validator keeps it.
+		if c.Args == nil {
+			c.Args = cobra.NoArgs
+		}
+		c.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
+	}
+	for _, sub := range c.Commands() {
+		rejectStrayGroupArgs(sub)
+	}
+}
+
 // Execute runs the root command.
 func Execute() error {
 	groupTopLevel()
+	// cobra builds `completion` and its four shell subcommands lazily inside
+	// Execute, so they have to be materialised first or the walk never sees
+	// them and `lode completion bogus` keeps exiting 0.
+	rootCmd.InitDefaultCompletionCmd()
+	rejectStrayGroupArgs(rootCmd)
 	return rootCmd.Execute()
 }
 

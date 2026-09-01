@@ -75,3 +75,38 @@ The resulting top-level, twenty commands and four shortcuts:
 | Shortcuts (L9) | `board`, `next`, `overview`, `status` |
 
 `lode work` holds `next`, `resume`, `submit`, `block`, `status`, `listen`.
+
+## Checking whether a command still resolves
+
+Auditing a rename means asking what exists. Two obvious ways lie, and both
+cost real time (WL-480, WL-482):
+
+- **`lode <path> --help` proves nothing.** cobra returns `flag.ErrHelp` before
+  it validates arguments, so a deleted subcommand exits 0 and prints its
+  parent's help. A sweep built on `--help` reports every dead command healthy.
+- **Running each command bare to see if it errors is not read-only.**
+  `lode install`, `uninstall` and `login` do their work when invoked with no
+  arguments: a probe loop over them rewrote git hooks and opened a browser.
+
+Use the generated catalog, which is rendered straight off the cobra tree and
+touches nothing:
+
+```bash
+go test -trimpath ./internal/cmd -run TestCommandReference -update-command-ref
+grep -n "lode task publish" plugins/claude/lode/skills/worklode/references/commands.md
+```
+
+To check one specific command you believe is gone, the error text is reliable
+where `--help` is not — but only reach for this on a command that does not
+exist, never as a loop over a list:
+
+```bash
+lode task ready 2>&1 | head -1     # unknown command "ready" for "lode task"
+```
+
+The same ordering is why a command group needs `RunE`, not just `Args`: cobra
+reaches its `!Runnable()` check before `ValidateArgs`, so an `Args` validator
+on a parent that does nothing is dead code — cobra ships `completion` that way
+itself. `rejectStrayGroupArgs` in `root.go` supplies both; `groupargs_test.go`
+is the tripwire, and it is behavioural because a structural check goes vacuous
+once that walk runs.
