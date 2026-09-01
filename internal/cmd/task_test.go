@@ -927,3 +927,17 @@ func TestTaskClaimFromLinkedWorktreeBindsLease(t *testing.T) {
 		t.Fatalf("lease.Worktree = %q, want it to name the linked worktree %q, not the main checkout", detail.Lease.Worktree, dir)
 	}
 }
+
+func TestTaskFrontierCommandPassesProject(t *testing.T) {
+	var gotQuery string
+	fakeOverviewServer(t, func(r *http.Request) (int, string) {
+		gotQuery = r.URL.RawQuery
+		return http.StatusOK, `{"tasks":[]}`
+	})
+	if _, err := runLode(t, "task", "frontier", "--project", "worklode", "--json"); err != nil {
+		t.Fatalf("task frontier: %v", err)
+	}
+	if !strings.Contains(gotQuery, "project=worklode") {
+		t.Fatalf("query = %q; want project=worklode", gotQuery)
+	}
+}

@@ -271,20 +271,6 @@ func TestCriticalPathJSONHonoursTaskFilter(t *testing.T) {
 	}
 }
 
-func TestFrontierCommandPassesProject(t *testing.T) {
-	var gotQuery string
-	fakeOverviewServer(t, func(r *http.Request) (int, string) {
-		gotQuery = r.URL.RawQuery
-		return http.StatusOK, `{"tasks":[]}`
-	})
-	if _, err := runLode(t, "frontier", "--project", "worklode", "--json"); err != nil {
-		t.Fatalf("frontier: %v", err)
-	}
-	if !strings.Contains(gotQuery, "project=worklode") {
-		t.Fatalf("query = %q; want project=worklode", gotQuery)
-	}
-}
-
 func TestDriftAcknowledgedFlag(t *testing.T) {
 	var gotQuery string
 	fakeOverviewServer(t, func(r *http.Request) (int, string) {

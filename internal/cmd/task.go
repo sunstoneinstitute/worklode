@@ -59,6 +59,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskTreeCmd(),
 		newTaskDecomposeCmd(),
 		newTaskBriefCmd(),
+		newTaskFrontierCmd(),
 		newTaskCostCmd(),
 		newTaskSkillsCmd(),
 		newTaskAttachCmd(),
@@ -1118,6 +1119,38 @@ func newTaskBlockersCmd() *cobra.Command {
 		},
 	}
 	addScopeFlags(cmd, &scope, "show one project's blocked tasks")
+	return cmd
+}
+
+// newTaskFrontierCmd wires `lode task frontier`: the ranked ready set,
+// pre-sorted by the D9 ordering the backbone computes (spec 007 §3.4).
+func newTaskFrontierCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "frontier",
+		Short: "Ready, unblocked tasks in pickup order",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			resp, raw, err := c.Frontier(cmd.Context(), sc.Project)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.FrontierTable(cmd.OutOrStdout(), resp.Tasks)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "list one project's frontier")
 	return cmd
 }
 
