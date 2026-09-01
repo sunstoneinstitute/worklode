@@ -18,8 +18,8 @@
 Pi is the first non-Claude harness Worklode integrates through a native,
 distributable extension rather than a shell-hook configuration. This spec
 delivers the complete Worklode lifecycle in Pi: session tracking, heartbeats,
-the task commands, task guidance, and a live status indicator. It is intended
-to expose differences between Pi's event model and Claude Code's hooks while
+the task commands, task guidance, and a live status indicator. The goal is to
+surface differences between Pi's event model and Claude Code's hooks, while
 leaving the coordination model in 008 unchanged.
 
 The adapter owns no task, lease, worktree, or authentication state. The `lode`
@@ -96,8 +96,9 @@ Pi's events map to Worklode's existing hook vocabulary as follows:
 
 `turn_end`, rather than `agent_end`, is the heartbeat source because an agent
 run may auto-retry or continue. `agent_settled` is deliberately not a second
-heartbeat: status needs the settled boundary, but duplicate lifecycle writes
-would obscure the event model being evaluated. The existing git pre-commit
+heartbeat: status needs the settled boundary, but writing the lifecycle twice
+would blur the event model this integration is meant to evaluate. The
+existing git pre-commit
 heartbeat remains the harness-independent floor from 008.
 
 Pi may emit `session_shutdown` for reload, new-session, resume, fork, and
@@ -119,8 +120,8 @@ operations and done/block judgment as the Claude tree, but is not a symlink or
 a second source of truth for Claude metadata. Claude-specific frontmatter,
 namespaced command invocation, and agent definitions do not describe Pi. The
 first release intentionally duplicates this small operational prose. A future
-shared source is justified only after stable common fragments are demonstrated
-in both renderings.
+shared source is worth building only once the common fragments between the
+two renderings have proven stable.
 
 After session start, every command, and `agent_settled`, the extension runs
 `lode worktree status --json` and renders a compact task key/title plus lease and
@@ -132,8 +133,8 @@ not placed on streaming or message-update events.
 
 ## 5. Discovery criteria
 
-The integration is deliberately full-lifecycle so implementation resolves,
-rather than assumes, these seams:
+The integration deliberately covers the whole lifecycle, so building it settles
+these seams instead of just assuming how they behave:
 
 1. whether `turn_end` emits reliably after tool failures, aborts, and
    compaction/retry paths, and whether the heartbeat cadence is appropriate;

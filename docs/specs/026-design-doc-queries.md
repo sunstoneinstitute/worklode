@@ -14,17 +14,18 @@ Three questions come up constantly while working this repo:
 2. Which plans still need executing?
 3. What does this spec actually say, once its amendments and supersessions are folded in?
 
-Every one of them is a deterministic function of the corpus, and every one of them is
-currently answered by an agent opening 25 specs and 40 plans and reasoning about YAML.
-That is expensive, non-reproducible, and wrong often enough to matter — the audit that
+Every one of them always has the same answer when computed from the corpus (the whole body of
+specs and plans) — it is deterministic — and every one of them is currently answered by an
+agent opening 25 specs and 40 plans and reasoning about YAML by hand. That is expensive, does
+not reliably give the same answer twice, and is wrong often enough to matter — the audit that
 prompted this spec had to caveat itself as "strong evidence, not proof".
 
-The first question also needs a predicate worth asking, and a binary one —
+The first question also needs a test worth asking, and a plain yes/no test —
 *accepted sections not named by any accepted plan's `implements`* — is wrong in
-both directions when one spec fans out to a plan series: a part that touches a
-section without finishing it reads as covered, and a part governed by a standing
-rule it implements nothing from either reads as covering that rule or as having
-forgotten it.
+both directions when one spec splits into a series of plans: a part that touches a
+section without finishing it reads as covered, and a part that is bound by a standing
+rule but implements none of it is impossible to tell apart from a part that simply
+forgot the rule exists.
 
 The gap is not theoretical. Four independent plans were written for spec 032
 part 1 on 2026-08-09. All four carried the same seven-section `implements` list;
@@ -39,21 +40,21 @@ change what a plan *is* (025 §9), how acceptance mints tasks (025 §9.2), or ho
 implemented code claims a section (025 §11).
 
 **Planning coverage is not implementation coverage.** 025 §11 records
-`<component> wl:implements <section>` — observed, derived from
+`<component> wl:implements <section>` — an observed fact, derived from
 `.worklode/implements.yaml`, answering "does the running code satisfy this?".
-This spec records `<plan> wl:covers <section>` — declared, authored, answering
-"has anyone undertaken to build this?". Two layers, two questions, no shared
+This spec records `<plan> wl:covers <section>` — a declared, authored fact, answering
+"has anyone agreed to build this?". Two layers, two questions, no shared
 owner, and now no shared key.
 
 Spec 025 §18 already reserves the surface (`lode doc list --needs-planning`,
 `--needs-execution`, `lode doc show --resolved` — spelled `lode show` here, §3), and
-025 §9.3 fixes the semantics, resolved by §2.1.
+025 §9.3 defines exactly what they mean, as resolved by §2.1.
 What 025 does not do is make them available before the backbone document store exists —
-its own implementation is a long way out, and these queries are needed to plan it.
+its own implementation is a long way off, and these queries are needed to plan it.
 
 This spec implements the read-only subset of 025 §18 against the git mirror that
 `docs/specs/` and `docs/plans/` still are, using `internal/designdoc`. The verb names,
-flags, and semantics are 025's, so when the store lands the change is the data source and
+flags, and semantics are 025's, so once the store lands, only the data source changes and
 nothing else.
 
 **In scope:** `lode doc list`, `lode show`, `lode doc sections`, corpus loading and
@@ -61,8 +62,8 @@ reference resolution in `internal/designdoc`, one new pre-commit script (§4.1),
 frontmatter keys the queries depend on, tests.
 
 **The commit-time gates stay Python scripts and `lode` is never one of them.** A git hook
-must run in a fresh checkout, mid-rebase, before anything is built; depending on a build
-artifact makes the gate fail exactly when the tree is in the state worth checking. So
+must run in a fresh checkout, mid-rebase, before anything is built; depending on a built
+binary makes the gate fail exactly when the tree is in the state worth checking. So
 `secfmt.py` keeps its hook, §4.1's permanence check joins it as a second script, and the Go
 commands are the **read surface only** — they report the defects they
 encounter so a query never quietly lies, but nothing here makes them a precondition for
@@ -96,17 +97,18 @@ existing task API.
 **This spec is a stated exception to the metrics rule** (022; `CLAUDE.md`), which requires
 `worklode_*` metrics of any change adding an HTTP endpoint, background loop, outbound call, or
 store operation with meaningful outcomes. `--needs-execution`'s task-state fetch is an outbound
-call, and is the one thing here that reads as a trigger — but the rule governs **server-side**
+call, and is the one thing here that looks like it should trigger the rule — but the rule governs **server-side**
 changes, and nearly everything this spec adds runs in the CLI, where no `prometheus.Registerer`
 is threaded: it reaches `lode serve` alone. So no endpoint and no background loop.
 
 One half of §2.4 is server-side and does add a store operation: the `closed` boolean §2.4
 requires on `model.Task` is computed by a task-closure read that `ListTasks` and `GetTask`
-call. It still takes no metric — its outcome space is success or error, not the meaningful
-outcomes the rule names, and instrumenting it while the two list reads it hangs off, and the
-blocked-task read beside it, stay uninstrumented would measure the accessory and not the
-operation. The exception is recorded here rather than left to be re-derived, because the
-absence otherwise reads as an oversight to every later reviewer.
+call. It still takes no metric — the only things that can happen to it are success or error,
+not the meaningful outcomes the rule names, and instrumenting it while the two list reads it
+hangs off, and the blocked-task read beside it, stay uninstrumented would measure the
+accessory and not the operation. The exception is recorded here rather than left for a later
+reader to work out again, because the absence otherwise reads as an oversight to every later
+reviewer.
 
 The corpus root is the directory holding the repo-local `.worklode/config.toml` (spec 019's
 walk, which already ran to resolve the project), with `specs/` and `plans/` under `docs/`.
@@ -156,7 +158,7 @@ section was read.
 
 A deferral (§5.3) discharges nothing either: it is the explicit zero, the plan
 that looked at `S`, will not build it, and names the document whose plans
-should. An undischarged section reports the strongest reading that holds —
+should. An undischarged section reports the strongest status that applies —
 `partial` over `deferred` over `bound only` over `unplanned`. A section someone
 is partially building is foremost partially built, and a deferral outranks
 `none` because it carries who is owed the rest, not merely that the section was
@@ -167,13 +169,13 @@ is *delivered* when `S` is discharged under the rules above, by any plan: the
 owner is who was named, never a gate on who may deliver.
 
 The acceptance test applies to both ends: a draft spec is not yet owed planning,
-and a draft plan has not yet undertaken work. Counting a draft plan would let an
+and a draft plan has not yet begun work. Counting a draft plan would let an
 unapproved split hide a real gap.
 
 **A superseded plan discharges what it covered.** §2.2 defines the status on a
 plan as *spent* — 025 §9's "a plan is spent once executed" — so a superseded
 plan is one that was accepted and then carried out. Reading the discharging set
-as `accepted` alone inverts the answer on every section that has already
+as `accepted` alone flips the answer on every section that has already
 shipped: a third of this corpus is superseded, and the whole of it would report
 as unplanned work. The set is therefore "not `draft`", and the two statuses
 differ only in what §2.4 owes the caller afterwards — an accepted plan may still
@@ -184,7 +186,7 @@ The rest of 025 §9.3 is untouched: ordering between plans stays a document-leve
 minted above a plan's tasks.
 
 A whole-document claim contributes nothing: it cannot say which present section
-it undertakes and would silently claim future sections. A spec is listed when at
+it covers and would silently claim future sections too. A spec is listed when at
 least one current section is not fully planned; the output gives the gap count,
 anchors, and whether each is partial, bound-only, or unplanned.
 
@@ -196,9 +198,9 @@ docs/specs/007-drift-and-overview.md      accepted   3/9 need planning   sec-2.4
 ```
 
 A plan whose `covers` is **`NO-SPEC`** declares that no spec governs it (§4.3). It
-contributes coverage to nothing and is never itself a planning gap — the sentinel is how a
-standalone plan says so out loud, instead of carrying no `covers` and being
-indistinguishable from one that forgot.
+contributes coverage to nothing and is never itself a planning gap — the sentinel value (a
+special marker meaning "deliberately none") is how a standalone plan says so out loud, instead
+of carrying no `covers` and being indistinguishable from one that forgot.
 
 `--needs-planning` implies `status: accepted` — planning follows acceptance (025 §7), and a
 draft spec is not a planning gap. Combining it with a conflicting `--status` is an error
@@ -265,7 +267,7 @@ Two things produce that, and the second is the one worth catching:
 - a document **authored or imported** as `superseded` with no `replaces` edge naming it at all;
 - a document the **accept path** superseded while explaining only part of it. Acceptance
   supersedes every document a `replaces` edge points at from the successor as a whole,
-  irrespective of whether the edge's *target* names a section — so a successor declaring
+  regardless of whether the edge's *target* names a section — so a successor declaring
   `replaces: {".": [006-old.md#sec-1]}` retires all of `006-old` while explaining `sec-1`
   alone, leaving its remaining sections bare. This is exactly rule 2's "broken promise to
   whoever linked to it", produced by an ordinary accept.
@@ -365,8 +367,9 @@ a deliberate human act, and folding a draft plan into `unexecuted` would invite
 an agent to execute a split nobody approved. Reporting it as `unplanned` is the
 opposite error: the plan exists and rewriting it wastes the drafting.
 
-**The list is ordered, not merely collected.** Items sort topologically over
-plan `requires`, so the output is an execution queue rather than a set the
+**The list is ordered, not merely collected.** Items sort topologically (each item
+after everything it depends on) over plan `requires`, so the output is an execution
+queue rather than a set the
 caller must sequence. Within a rank, document order over the spec's sections
 breaks the tie, so two runs over an unchanged corpus agree exactly.
 
@@ -436,7 +439,7 @@ that checks it.
 
 Nothing here evaluates implementation. Whether the code satisfies a section is
 `lode doc coverage`'s question (025 §18, §11 below), it needs
-`.worklode/implements.yaml` and a repo scan, and the two must not be conflated:
+`.worklode/implements.yaml` and a repo scan, and the two must not be mixed together:
 a section can be fully planned, fully executed, and still unimplemented.
 
 ## 3. Showing a document: `lode show` {#sec-3}
@@ -451,7 +454,7 @@ or the bare number `3`, which is expanded to `sec-3`.
 `<ref>` is a path, a bare filename, a spec number (`025`, `025-documents-in-the-backbone`),
 a document slug (`design-doc-queries` — the name the `lode doc` verbs resolve, so the two
 readers cannot disagree about what a name means), or
-025 §14.3's shorthand (`WL-SPEC-25`, and `WL-SPEC-25#sec-9` as sugar for `--section sec-9`)
+025 §14.3's shorthand (`WL-SPEC-25`, and `WL-SPEC-25#sec-9` as a shorter way to write `--section sec-9`)
 that matches exactly one document; an ambiguous ref is an error listing the candidates. The
 candidates of an ambiguous ref are the documents that bear the name asked for and nothing
 else: a number-led slug (`001-zero-trust-gateway`) names the document whose slug it is, and
@@ -498,7 +501,8 @@ act on it:
 Only **effective** claims are inlined (§3.1); a pending one is listed as a reference marked
 `pending`, so a draft spec's proposed amendment never reads as settled design.
 
-Inlining is **transitive** (§3.2). An amendment that is itself amended is expanded, not
+Inlining is **transitive** (§3.2) — it follows the chain however far it goes, not just one
+step. An amendment that is itself amended is expanded, not
 listed as a reference: a view that stops partway shows a less-outdated version of the
 design, which reads as current and is therefore worse than not rendering it at all.
 
@@ -555,7 +559,7 @@ disagreement separately rather than letting it change the answer.
 
 ### 3.2 Consolidation is a fixpoint, not a depth-bounded walk {#sec-3.2}
 
-Fragmentation is intrinsic to an append-only corpus with frozen anchors: every amendment
+Fragmentation is built into an append-only corpus with frozen anchors: every amendment
 must leave scar tissue in the source, and that is exactly what keeps a pin like
 `006#sec-1.2` — or an `implements.yaml` claim against it — true forever. The source
 documents will get messier over time by design. What was missing is a derived read path, not
@@ -569,9 +573,10 @@ reader sees what was replaced next to what replaced it. **Document-scoped** edge
 lacking a section, whether the acting key is `"."` or the value carries no fragment — stay
 banners and are never inlined; they carry no section-shaped payload.
 
-**Backfill: the traversal runs both ways.** For each effective section-scoped edge on which
-`s` is the *acting* end, the target's consolidation is inlined beneath `s` as marked context.
-Without this the walk follows target→actor only, so entering the newer document of an
+**Backfill: the walk through the graph (traversal) runs both ways.** For each effective
+section-scoped edge on which `s` is the *acting* end, the target's consolidation is inlined
+beneath `s` as marked context. Without this the walk follows target→actor only, so entering the
+newer document of an
 amendment pair never surfaces the still-live older text, and the root-independence claimed
 below would hold for replacement chains and fail for every amendment. A backfilled block's
 marker names the section whose body it carries — `**[amended text 006#sec-1.2]:**` — because
@@ -595,7 +600,7 @@ Three rules make that total and bounded without a depth limit:
 - **Cycle marker.** A visited set along each expansion path; revisiting a section emits
   `[cycle: 025#sec-17 → 0NN#sec-2 → 025#sec-17]` and stops, and the cycle is reported through
   §4's defect machinery. Acting edges point new→old, so cycles are near-impossible today and
-  become constructible under revision; the visited set is cheaper than the incident.
+  become possible to create as documents are revised; the visited set is cheaper than the incident.
 
 Because every emitted body is either live or shown beside its successor, and because backfill
 makes the traversal symmetric, the choice of root document changes *where* a body appears,
@@ -610,11 +615,12 @@ forward" the same answer, so neither needs to be a mode.
 into lineage chains, and the head of a chain is what "the newest document on this subject"
 means. Nothing is stored to represent it (025 §1).
 
-**Why the document stays the unit of authorship.** Going section-centric was considered and
-rejected: a section's identity is `<doc>#sec-N` (025 §3), its staleness test rides on
-document-level versioning (`wl:lastRevisedIn`, 025 §4, which deliberately avoids per-section
+**Why the document stays the unit of authorship.** Making the section rather than the
+document the primary unit was considered and rejected: a section's identity is
+`<doc>#sec-N` (025 §3), the test for whether it is stale rides on document-level
+versioning (`wl:lastRevisedIn`, 025 §4, which deliberately avoids per-section
 version namespaces), and acceptance, review anchoring, status and provenance are all
-document-grained — 025 §5 stores `doc_sections` as children of `docs` rows. Free-floating
+measured at the document level — 025 §5 stores `doc_sections` as children of `docs` rows. Free-floating
 sections would need their own version counters, their own accept gate, and a rename of every
 inbound reference, to solve what is a rendering problem. The document remains the unit of
 authorship, acceptance and identity; the **section lineage** becomes the unit of reading.
@@ -708,7 +714,7 @@ how the reader survives one that got through.
 
 It runs as a `.pre-commit-config.yaml` entry alongside `section-numbers`, but unlike it
 **refuses rather than rewrites**: there is no
-correct automatic repair for a deleted published anchor, and inventing one would paper over
+correct automatic repair for a deleted published anchor, and inventing one would hide
 the exact mistake the check exists to surface.
 
 Reference resolution therefore exists twice — in the script as a gate, in `designdoc` as
@@ -719,7 +725,7 @@ two implementations ever disagree about it.
 
 **After 025 the gate moves to the server.** Once documents are backbone rows, there is no
 commit to hook and `lode doc accept` is the only way an anchor becomes published, so every
-rule in this section — permanence, reference integrity, acyclicity — becomes an accept-time
+rule in this section — permanence, reference integrity, having no cycles (acyclicity) — becomes an accept-time
 check inside that transaction, which is what 025 §5 already says happens to 025 §6's
 constraints. The script is the git-mirror form of a check that outlives it, and it is
 deleted with the files rather than ported.
@@ -734,7 +740,7 @@ decided by the key, never by the caller:
 
 | Tier | Reference | Resolved by | An unresolvable one is |
 |---|---|---|---|
-| 1 | key is the current project — §1's `.worklode/config.toml` walk | glob `<n>` against this corpus's filenames, which §1 fixes as `docs/specs/NNN-*.md` | a **defect**, exactly as §4 treats a dangling path |
+| 1 | key is the current project — §1's `.worklode/config.toml` walk | wildcard-match (glob) `<n>` against this corpus's filenames, which §1 fixes as `docs/specs/NNN-*.md` | a **defect**, exactly as §4 treats a dangling path |
 | 2 | key is another project, backbone reachable | the `docs` rows of 025 §9 | a **defect** — the key is known and the document is not |
 | 3 | key is another project, backbone unreachable | shape validation alone | **`unresolved: project <KEY> not known here`** — printed, exit code unaffected |
 
@@ -811,7 +817,7 @@ covers: NO-SPEC
 **The sentinel carries no project key.** Spec 0 is not one project's zeroth spec — it is the
 absence of a spec, and absence is the same fact in every corpus. So `NO-SPEC` is the canonical
 spelling in any project, and `<KEY>-SPEC-0` in any project *means* it: the tier table of §4.2
-never runs, because there is no key to dispatch on. A renderer showing a reference to spec 0
+never runs, because there is no key to route on. A renderer showing a reference to spec 0
 prints `NO-SPEC` whatever the source wrote.
 
 It names no file **by construction** — there is no spec 0 and there will not be one — so it is
@@ -876,8 +882,8 @@ lets a reader be shown that set without any plan naming it.
 to mint `wl:fullyImplements` on the grounds that coverage is a query over
 sections, and that ruling is preserved: no property here says "how much" on its
 own. The level hangs off a reified node that sits *beside* the `wl:covers` edge
-rather than replacing it — PROV's arrangement, though not PROV's linkage
-(§6.3). 025 §11.2 already gives the repo-side claim a structured form
+rather than replacing it — the arrangement used by PROV (the W3C provenance
+vocabulary), though not PROV's linkage (§6.3). 025 §11.2 already gives the repo-side claim a structured form
 (`section:`/`pinned:`/`by:`); this is the same move on the plan side.
 
 ### 5.1 Frontmatter shape {#sec-5.1}
@@ -1013,9 +1019,10 @@ one, where nobody knows what else is owed. The shape of the remainder must be
 written down even when its content is not.
 
 The alternative was a forward pointer from each `partial` claim to the plans
-completing it (§5). That makes closure decidable per-claim at the cost of
-pointing the wrong way down the permanence gradient. The invariant gets the same
-decidability from the set instead of from the claim, and costs no edge.
+completing it (§5). That makes closure answerable by looking at one claim alone, but at the
+cost of pointing the reference the wrong way — from something more permanent (a spec)
+to something less permanent (a plan). The invariant gets that same answerability from the
+whole set of claims instead of from any single claim, and needs no extra edge.
 
 **The stamp.** A document is **decomposed** when every section of it carries a
 claim. `wl:decomposedAt` (§6) records when that was last established, and
@@ -1060,7 +1067,9 @@ named it.
 
 ## 6. Ontology {#sec-6}
 
-**Name a predicate by reading a triple aloud.** Substitute the class names of
+**Name a predicate by reading a triple aloud.** (A triple is an RDF fact of the
+shape *subject – predicate – object*, e.g. "the plan covers the section"; the
+predicate is the verb linking the two.) Substitute the class names of
 subject and object and see whether the sentence survives. A predicate that needs
 its domain and range recited before it means anything is too weak to carry the
 edge, and the weakness shows up as prose that has to explain the term every time
@@ -1107,9 +1116,11 @@ wl:decomposedAt a owl:DatatypeProperty, owl:FunctionalProperty ;
     rdfs:domain wl:DesignDoc ; rdfs:range xsd:dateTime .
 ```
 
-`wlc:CoverageLevel` is a SKOS concept scheme in `ns/concept.ttl` with exactly
-`wlc:full`, `wlc:partial`, and `wlc:none`. SHACL enforces that a `wl:Coverage`'s
-`wl:coveringPlan` also asserts a direct `wl:covers` to its `wl:coveredSection`.
+`wlc:CoverageLevel` is a SKOS (Simple Knowledge Organization System — a standard vocabulary
+for value lists) concept scheme in `ns/concept.ttl` with exactly `wlc:full`, `wlc:partial`, and
+`wlc:none`. SHACL (Shapes Constraint Language — the language that checks RDF data against
+rules) enforces that a `wl:Coverage`'s `wl:coveringPlan` also asserts a direct `wl:covers` to
+its `wl:coveredSection`.
 
 `wl:completedWith` is **not** minted. The forward pointer it would carry is what
 §5 rejects, and the sibling set a reader wants is derivable from the other plans
@@ -1117,7 +1128,9 @@ covering the same section.
 
 The range is `skos:Concept`, not `wlc:CoverageLevel`: the latter is a
 `skos:ConceptScheme`, not an RDFS class. The exact three members and their
-membership in that scheme are closed-world constraints, so SHACL owns them.
+membership in that scheme are closed-world constraints (rules that assume the data
+they see is the complete picture, rather than RDF's usual assumption that more facts
+could exist elsewhere), so SHACL owns them.
 
 `wl:status` is also corrected here for the Plan that 025 §9 restored:
 
@@ -1129,7 +1142,7 @@ wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
 ```
 
 Omitting `wl:Plan` would infer every status-bearing Plan into the
-`DesignDoc ∪ Section` union, which is disjoint from Plan. `wl:PlanShape`
+`DesignDoc ∪ Section` union, which is disjoint from (has no overlap with) Plan. `wl:PlanShape`
 therefore requires a Plan to carry one status from `wlc:DesignDocStatus`,
 matching the existing DesignDoc shape.
 
@@ -1167,7 +1180,7 @@ telling them apart, which means a reader distinguishes a promise from a delivery
 by inspecting the object's type.
 
 The halves separate. `wl:implements` keeps the Component→Section claim, because
-that is the paradigmatic sense of the word in software and the manifest is
+that is the most typical sense of the word in software and the manifest is
 already named for it; the Task half takes a new term:
 
 | Edge | Property | Says |
@@ -1296,7 +1309,7 @@ never rewrites, so a failure is the author's to decide.
 
 ### 7.1 Documents the rename reaches {#sec-7.1}
 
-The rename is not confined to the ontology; its supporting change updates every
+The rename is not limited to the ontology; its supporting change updates every
 surface that owns the old spelling:
 
 | Document | What changes |
@@ -1389,7 +1402,8 @@ a test failure rather than a corpus that means two things.
   (emitted or back-referenced), not as rendered strings, since body-once means the two
   orderings legitimately differ. Sections outside the shared component are excluded rather
   than expected to match. 025 is `draft`, so this runs with `--with-drafts`; without it the
-  edges under test are `pending` and the assertion is vacuous.
+  edges under test are `pending` and the assertion is vacuous (trivially true because
+  it tests nothing real).
 - `--section` on a replaced anchor forward-resolves to its replacement's consolidation.
 - The §3.1 gate: a draft document's `replaces` leaves its target listed and marked
   `pending`; the same claim from an accepted document drops it; `--with-drafts` flips the
@@ -1415,7 +1429,7 @@ a test failure rather than a corpus that means two things.
 - **`lode doc coverage`** — 025 §18 and §7 already own the command; this spec fixes the
   predicate it evaluates and stops there. Implemented-vs-unimplemented needs
   `.worklode/implements.yaml` and repo scanning (025 §11), so `--needs-planning` answers the
-  planning half only, and the two must not be conflated in output or in prose. The
+  planning half only, and the two must not be mixed together in output or in prose. The
   store-backed implementation follows the document store.
 - **Write verbs.** Nothing here creates, accepts or revises a document; acceptance stays a
   deliberate human act (025 §7).

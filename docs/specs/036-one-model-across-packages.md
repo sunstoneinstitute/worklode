@@ -73,7 +73,8 @@ A closed list. Adding to it takes an amendment.
 templ runtime. Every layer can then depend on it and nothing depends back, so
 the package graph stays acyclic without a rule to remember.
 
-The model type owns its own wire invariants. `toTaskJSON` today normalizes a
+The model type owns its own wire invariants — the rules for what its JSON must
+always look like. `toTaskJSON` today normalizes a
 nil `Skills` slice to `[]string{}` so the JSON reads `[]` rather than `null`;
 with no conversion step left to host it, that becomes a guarantee the store
 upholds when it fills the struct.
@@ -158,11 +159,11 @@ carrying the reason (a cookie, a state parameter, an on-disk file — §3). An
 entry that matches no declaration is reported as stale, the way
 `internal/api/router.go` treats an unused route guard.
 
-The guard's own reach is checked rather than assumed:
-`TestGuardCatchesTheDodges` and `TestUntypedMapGuardCatchesTheDodges` run the
-checks over known-bad source so each rule is known to still match something, and a scanned package that parses no files is a failure, so
-renaming or splitting one cannot turn the guard green while it inspects
-nothing.
+The guard's own reach is checked rather than assumed. `TestGuardCatchesTheDodges`
+and `TestUntypedMapGuardCatchesTheDodges` run the checks over known-bad source,
+so each rule is known to still match something. A scanned package that parses
+no files is a failure, so renaming or splitting one cannot turn the guard
+green while it inspects nothing.
 
 What it does not see: a body assembled by a helper that returns a map, or
 marshalled to bytes before it reaches a body argument. Both take deliberate
@@ -173,9 +174,10 @@ The timeline was this ADR's one deferred shape and is now typed.
 `type` on every entry, the rest `omitempty` and populated per type. A per-type
 struct behind a `payload` object was the alternative and was not taken — the
 entries are flat on the wire, seven fields are shared by two or more of the ten
-types, and Go has no sum type that would buy a consumer exhaustiveness
-checking for the nesting it would cost. A consumer switches on `type` either
-way; the difference is only whether the fields it then reads are declared.
+types, and Go has no sum type, so nesting the payload would not even earn a
+consumer the exhaustiveness checking that could justify the cost. A consumer
+switches on `type` either way; the difference is only whether the fields it
+then reads are declared.
 `change` stays a `json.RawMessage`: it is a stored `state_log` payload passing
 through, and `LogChange` writes `{"field","old","new"}` for a field update but
 `{"field","names"}` for materialized secrets, so there is no one struct to

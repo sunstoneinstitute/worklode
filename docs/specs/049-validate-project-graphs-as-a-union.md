@@ -22,8 +22,9 @@ foreign endpoint therefore appears in that graph as a bare object IRI with no
 and never mirrors a foreign task.
 
 Correspondingly, SHACL validation of projected data is defined over the
-**union of the project named graphs** (their RDF merge, plus the TBox), never
-over a single project graph. A foreign endpoint's `rdf:type` is found in its
+**union of the project named graphs** (their RDF merge, plus the TBox — the
+ontology's class and property definitions), never over a single project
+graph. A foreign endpoint's `rdf:type` is found in its
 home graph, where it is authoritative; `sh:class` constraints hold across the
 union. No per-graph validation gate is ever introduced.
 
@@ -35,7 +36,7 @@ validation gate. No code changes.
 ## 1. The problem {#sec-1}
 
 The projector renders one named graph per project and replaces it whole via
-GSP `PUT` (006 §11). A `blocks`/`child_of`/`follow_up_to` edge that crosses
+a Graph Store Protocol (GSP) `PUT` (006 §11). A `blocks`/`child_of`/`follow_up_to` edge that crosses
 projects lands `A wl:blocks B` in P1's graph and `B wl:dependsOn A` in P2's;
 neither graph holds both ends, so each carries an object IRI it says nothing
 else about. Nothing validates projected data today — the 006 §7 SHACL tier
@@ -65,7 +66,8 @@ semantic completeness boundary. This ADR makes the boundary explicit:
 
 A consumer that fetches one project graph gets a self-consistent description
 of that project's own work, with resolvable IRIs at the edges. It does not
-get a closed world, and must not validate the graph in isolation (§3).
+get a closed world — a self-contained, complete picture — and must not
+validate the graph in isolation (§3).
 
 ## 3. Validation scope {#sec-3}
 
@@ -74,7 +76,7 @@ every project named graph on the work branch, plus `ns/ontology.ttl` for
 `rdfs:subClassOf` resolution. This makes validation a batch operation — a CI
 job or a periodic sweep reading graph-server — never a per-`PUT` gate.
 
-Per-`PUT` validation would be flaky by construction, not just misscoped: one
+Per-`PUT` validation would be flaky by construction, not just mis-scoped: one
 edge write logs both endpoint tasks (`AddEdge` in `internal/store/tasks.go`
 calls `LogChange` for each end), so both projects go dirty and both graphs
 re-render — but sequentially, and at worst in adjacent batches when the two

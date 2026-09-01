@@ -16,6 +16,7 @@ These files do that resolution once.
 ## Documents
 
 - [`001-identity-and-authentication.md`](001-identity-and-authentication.md) — Spec 001 — Identity & authentication (draft)
+- [`002-glossary.md`](002-glossary.md) — Spec 002 — Glossary (draft)
 - [`004-execution-backbone.md`](004-execution-backbone.md) — Spec 004 — Execution backbone (draft)
 - [`005-prioritization-and-pickup.md`](005-prioritization-and-pickup.md) — Spec 005 — Prioritization & pickup (draft)
 - [`006-knowledge-graph.md`](006-knowledge-graph.md) — Spec 006 — Knowledge graph: vocabulary, entity model, runtime layer & projection (draft)

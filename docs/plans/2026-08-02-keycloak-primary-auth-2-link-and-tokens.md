@@ -1,6 +1,8 @@
 ---
 status: accepted
-covers: docs/specs/001-identity-and-authentication.md
+covers:
+  - docs/specs/001-identity-and-authentication.md#sec-9.3
+  - docs/specs/001-identity-and-authentication.md#sec-9.5
 requires:
   - 2026-08-11-keycloak-primary-auth-identity.md
 ---
@@ -42,7 +44,15 @@ requires:
 
 ---
 
-## Task 1: The link row
+## Tasks
+
+### Task 1 — The link row
+
+```yaml
+kind: feature
+priority: high
+blockedBy: []
+```
 
 **Files:**
 - Create: `deploy/base/migrations/0011_github_links.up.sql`, `…down.sql`
@@ -286,7 +296,13 @@ git commit -m "Make the GitHub token row the account link"
 
 ---
 
-## Task 2: `githubauth.Client.Refresh`
+### Task 2 — `githubauth.Client.Refresh`
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: []
+```
 
 **Files:**
 - Modify: `internal/githubauth/githubauth.go`
@@ -389,7 +405,13 @@ git commit -m "Add the GitHub refresh-token grant"
 
 ---
 
-## Task 3: `store.UserToken`
+### Task 3 — `store.UserToken`
+
+```yaml
+kind: feature
+priority: high
+blockedBy: [1]
+```
 
 **Files:**
 - Modify: `internal/store/github_tokens.go`
@@ -711,7 +733,13 @@ git commit -m "Add store.UserToken with single-use-safe refresh"
 
 ---
 
-## Task 4: The web link flow
+### Task 4 — The web link flow
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [1, 2, 3]
+```
 
 **Files:**
 - Create: `internal/api/githublink.go`, `internal/api/githublink_test.go`
@@ -1086,7 +1114,13 @@ git commit -m "Add the GitHub account link flow"
 
 ---
 
-## Task 5: `/profile` — see and start a link
+### Task 5 — `/profile` — see and start a link
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [1, 4]
+```
 
 **Files:**
 - Create: `internal/api/templates/profile.html`
@@ -1253,7 +1287,13 @@ git commit -m "Add a profile page showing GitHub link state"
 
 ---
 
-## Task 6: Metrics for the link flow and token refresh
+### Task 6 — Metrics for the link flow and token refresh
+
+```yaml
+kind: chore
+priority: low
+blockedBy: [2, 4]
+```
 
 **Files:**
 - Modify: `internal/api/metrics.go`, `internal/api/server.go`, `internal/api/githublink.go`

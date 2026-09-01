@@ -17,8 +17,8 @@
 
 Defines the *knowledge* half of Worklode: the `wl:` RDF vocabulary, the entity model across the
 three layers (Intent / Execution·VCS / Runtime·Deploy), the canonical IRI scheme, the
-backbone→graph projection, and what the data-platform must host for any of it to run. This is the
-model that spec 007 queries for drift and overview.
+backbone→graph projection, and what the data-platform must host to run any of it. Spec 007 queries
+this model for drift and overview.
 
 The vocabulary ships as a **PR to `rdf-registry`** as three files (per ADR-0007 file naming):
 `rdf/wl/ontology.ttl` (RDF 1.1 — classes + plain properties), `rdf/wl/ontology.1-2.ttl` (RDF 1.2 —
@@ -31,8 +31,8 @@ purpose).
 SHACL gate + the RDF-1.2 round-trip), but the published IRI base is **`https://worklode.io/ns/`**,
 not `sunstone.institute/rdf/`. rdf-registry's pipeline emits the `worklode.io/ns/` base for the
 `rdf/wl/` sources. This breaks ADR-0006's implicit "repo path = host path" mapping (`rdf/wl/` ↔
-`sunstone.institute/rdf/wl/`); rdf-registry owns closing that wrinkle (a base-URL override for the
-`wl` ontology) — tracked in §13.2 item 3.
+`sunstone.institute/rdf/wl/`); rdf-registry is responsible for closing that gap (a base-URL override
+for the `wl` ontology) — tracked in §13.2 item 3.
 
 **In scope:** the `wl:` terms (reuse vs mint), the entity model with v1/v2 marks, the runtime
 classes and their SKOS schemes, Deliverable as declared definition-of-done, the natural-key IRI
@@ -44,15 +44,15 @@ its frontier arithmetic (004 §5 — this spec models the *facts* it reads, not
 the state machine), and the plugin (008).
 
 **Why the runtime layer is modelled here.** The Layer 3 nodes — Artifact, Deployment,
-Environment, Commit — are the observed half a Deliverable's declared `dct:relation` targets point
-at, so they need real classes: untyped instance IRIs leave a `wl:Deliverable` declaring its
-definition-of-done against nothing, and give 007's `observed/deploy` deriver no vocabulary to emit.
-The delivery lifecycle (004 §5) also makes the layer load-bearing for task
-state — `deployed_dev`, `deployed_prod`, `released`, over `main_commits`, `env_deploys` and
-`release_frontiers` — which puts Commit on the critical path of the state machine. §1.1, §2.1,
-§3.1, §6, §10.1 and §11.1 supply it: the reuse survey behind each runtime mint, the six
-classes anchored on PROV-O, the four runtime SKOS schemes, the natural-key IRI grammar, and the
-projection table.
+Environment, Commit — are the observed half that a Deliverable's declared `dct:relation` targets
+point at, so they need real classes. Without them, untyped instance IRIs would leave a
+`wl:Deliverable` declaring its definition-of-done against nothing, and would give 007's
+`observed/deploy` deriver no vocabulary to emit. The delivery lifecycle (004 §5) also makes this
+layer load-bearing for task state — `deployed_dev`, `deployed_prod`, `released`, over
+`main_commits`, `env_deploys` and `release_frontiers` — which puts Commit on the critical path of
+the state machine. §1.1, §2.1, §3.1, §6, §10.1 and §11.1 cover it: the reuse survey behind each
+runtime mint, the six classes anchored on PROV-O, the four runtime SKOS schemes, the natural-key
+IRI grammar, and the projection table.
 
 **Binding conventions:** standards-first; **mint `wl:` sparingly**; **no gtio ontologies at all**
 (research-scoped/experimental). The physical `gtio-sc:Component` is a supply-chain term — a TRAP;
@@ -723,7 +723,7 @@ satisfied — is **v2** and belongs to the observed-layer derivers (spec 007).
 ## 10. Canonical IRI scheme
 
 Branch-free, version-free term & instance IRIs (ADR-0006 §3). This is the **host/namespace
-commitment** that §13.2 item 3 commits the data-platform to hosting.
+commitment** that §13.2 item 3 obligates the data-platform to.
 
 **Base:** `https://worklode.io/ns/` — the published base carries **no ontology-name segment**,
 whatever the source path in rdf-registry is (025 §17).
@@ -756,7 +756,7 @@ The per-repo **component manifest** fixes each component's slug so the IRI is st
 when directory layout shifts. Component IRIs are **branch-free**: the work graph lives on one
 fixed graph-server branch (project is a *property*, not a branch — §13.2 item 5).
 
-Slashes inside `<localid>` are permissible (slash namespace, opaque path) and match the
+Slashes inside `<localid>` are allowed (slash namespace, opaque path) and match the
 rdf-registry `id/` convention.
 
 A Project's projection named graph is `…/graph/project/<project-id>` — the family that §11 anchors
@@ -774,8 +774,8 @@ A container-shaped Artifact pattern — `id/artifact/<registry>/<repo>/<tag-or-d
 `…/id/artifact/ghcr.io/sunstoneinstitute/graph-server/v1` — cannot spell a PyPI package or a binary
 release, though the `artifacts` table has allowed all four kinds since the baseline migration. The
 grammar is therefore kind-first, matching `UNIQUE (kind, name, version)` exactly. Nothing is
-published yet, so the shape is free to fix now and breaking once the rdf-registry PR lands — the
-same argument 025 §17 makes for the prefix rename.
+published yet, so the shape is free to change now; changing it after the rdf-registry PR lands
+would be a breaking change — the same argument 025 §17 makes for the prefix rename.
 
 | Type | Pattern | Natural key | Example |
 |---|---|---|---|
@@ -920,7 +920,7 @@ unresolvable projects no commit edge at all: a repository alone does not identif
 ## 12. Accepted deviations — drift suppression
 
 Some observed-but-unasserted edges are **intentional** — a sanctioned coupling the architecture
-tolerates but never elevated to intent. Without suppression, spec 007's violation query reports them
+tolerates but never elevates to intent. Without suppression, spec 007's violation query reports them
 forever. An accepted deviation is modelled as a **declared-layer fact** so it is crit-reviewed,
 provenanced, and expirable like any other declared edge — **not** a backbone allowlist.
 

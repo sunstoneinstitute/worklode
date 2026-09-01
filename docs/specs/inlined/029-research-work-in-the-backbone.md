@@ -16,21 +16,21 @@
 ## 0. Why
 
 The backbone tracks engineering execution: agents claim tasks into worktrees, webhooks
-record what happened, provenance is an event log. Sunstone's actual product is made by
-journalists and data scientists working the Sunstone Way from Discovery through Report,
-and that work is invisible to the backbone today. Four problems, named by the CTO for
-the 2026-08-11 rollout, define what this spec must fix:
+record what happened, and an event log keeps the provenance. Sunstone's real product is
+made by journalists and data scientists working the Sunstone Way, from Discovery
+through Report, and today the backbone cannot see that work. Four problems, named by
+the CTO for the 2026-08-11 rollout, define what this spec must fix:
 
 1. The editor cannot learn a project's status without chasing someone.
-2. Nobody can tell whether a deliverable has actually been published; the CMS and the
-   data pipeline emit no events, and every hop between them is a human remembering.
+2. Nobody can tell whether a deliverable has actually been published. The CMS and the
+   data pipeline emit no events, so a human has to remember every step in between.
 3. There is no shared definition of done for data-science work, and no stated
    deliverable per project.
 4. Reviews of code, prose, and CMS content leave no queryable record.
 
-The design extends the backbone rather than forking it: research work gets the same
-event log, the same project scoping, the same claim/lease machinery where agents are
-involved — plus the entities engineering work never needed: milestones, deliverables,
+The design extends the backbone instead of forking it: research work gets the same
+event log, the same project scoping, and the same claim/lease machinery where agents
+are involved, plus the entities engineering work never needed: milestones, deliverables,
 participants, and approvals. Humans become first-class actors through assignment
 (the 2026-08-06 human-assignment plan), which this spec adopts.
 
@@ -43,14 +43,14 @@ Each investigation is one worklode project — its key prefixes every identifier
 page answers "what is the status of cost-of-war", and its lifecycle is the
 investigation's lifecycle.
 
-Research projects own no git repo. The research monorepo maps once, to a standing
-umbrella project, which is what opens the webhook gate (`internal/hooks` records
-events only for mapped repos); investigation projects are repo-less. Scoping inside
+Research projects own no git repo; investigation projects are repo-less. The research
+monorepo maps once, to a standing umbrella project, and that mapping is what opens the
+webhook gate (`internal/hooks` records events only for mapped repos). Scoping inside
 the monorepo works per directory: each investigation directory carries
 `.worklode/config.toml` with `current_project`, and the nearest-config-wins rule
-resolves it. Commit, branch, and PR correlation is unaffected — a PR on
-`lode/COW-7-slug` attaches to task `COW-7` regardless of which project the repo maps
-to, because correlation matches on task id alone.
+resolves it. Commit, branch, and PR correlation are unaffected: a PR on
+`lode/COW-7-slug` attaches to task `COW-7` no matter which project the repo maps to,
+because correlation matches on task id alone.
 
 Projects gain three pieces of metadata:
 
@@ -61,29 +61,32 @@ Projects gain three pieces of metadata:
 - **`horizon`** — `bounded` or `standing`. An investigation is bounded: it ends.
   A project holding an in-house infrastructure component is standing: it does not.
 
-`horizon` is an attribute, not a class, and 025 §13's single unbounded `wl:Project`
-stands. A class for unbounded work would make "unbounded" a *kind of thing* disjoint
-from Project, so a standing infrastructure project could not be a Project at all, and
-could not carry a project key, tasks or a focus. Being unbounded is something a
-project *is*, not something it *is instead of*. The task-level reading of the same
-word is separate and needs no term either: a task with no milestone is ongoing
-maintenance, which is the query `milestone_id IS NULL` (§2).
+`horizon` is an attribute, not a class, so 025 §13's single unbounded `wl:Project`
+still stands. A class for unbounded work would make "unbounded" a *kind of thing*
+disjoint from Project (a separate category, with no overlap), so a standing
+infrastructure project could not be a Project at all, and could not carry a project
+key, tasks or a focus. Being unbounded is something
+a project *is*, not something it *is instead of*. The task-level reading of the same
+word is a separate matter and needs no term either: a task with no milestone is
+ongoing maintenance, which is the query `milestone_id IS NULL` (§2).
 
-The Sunstone stage is likewise a query, not an editable project-status column. It is
-derived from governed decisions (a `decision`-kind task, 025 §10, whose recorded answer is
-the fact the query reads), milestones, deliverables and work. Entering Research
-is an explicit decision by the project lead; that decision is one of the facts the
-query reads. Work from adjacent stages may overlap — the derived primary stage orients
-people and never hides valid work merely because it belongs to the next stage.
+The Sunstone stage works the same way: it is a query, not an editable project-status
+column. It is derived from governed decisions (a `decision`-kind task, 025 §10, whose
+recorded answer is the fact the query reads), milestones, deliverables, and work.
+Entering Research is an explicit decision by the project lead, and that decision is
+one of the facts the query reads. Work from adjacent stages may overlap: the derived
+primary stage orients people and never hides valid work just because it belongs to the
+next stage.
 
-After Research, Worklode may recommend a stage transition from governed decision,
-milestone, deliverable and review facts; the project lead confirms it. Advancing with
-unfinished work requires a reason. That work remains attached to its original milestone and is
-shown as carryover — stage movement neither closes nor reparents it. Returning to an
-earlier stage appends another reasoned transition event and preserves the full history.
-Once all required deliverables are terminal, Worklode may recommend closure, but the
-lead explicitly closes the project after reviewing every unfinished item. Closure, not
-deliverable state alone, ends the bounded project and its active Crew.
+After Research, Worklode may recommend a stage transition based on governed decision,
+milestone, deliverable, and review facts, and the project lead confirms it. Advancing
+with unfinished work needs a stated reason. That work stays attached to its original
+milestone and shows up as carryover — moving to the next stage neither closes it nor
+reparents it. Returning to an earlier stage appends another reasoned transition event
+and keeps the full history. Once every required deliverable is terminal, Worklode may
+recommend closing the project, but the lead has to close it explicitly, after
+reviewing every unfinished item. Closure, not deliverable state alone, ends the
+bounded project and its active Crew.
 
 ## 2. Milestones and deliverables
 
@@ -105,14 +108,14 @@ would store a row that lies about what it is. A milestone's progress is a query 
 its tasks and the state of its deliverables; it stores no state of its own beyond
 identity, title, and ordering. This preserves 025 §1's rule: groupings are queries.
 
-The **governed decision** the stage query in §1 reads goes the other way: it *is* a task
-kind (`decision`, 025 §10), so it needs no entity here. A decision is undertaken, owned
-by one assignee, and closed when its answer is recorded — everything a task already is —
-and it sits in this same hierarchy, attaching to a milestone through the ordinary
-nullable `milestone_id` like any other task. What distinguishes it is where its
-deliverable lives (a row in `task_decisions`, not a document or a diff) and how it is
-picked up (assigned, never claimed into a worktree — 004 §6.3), neither of which is a
-reason for a table of its own.
+The **governed decision** that the stage query in §1 reads works the other way: it
+*is* a task kind (`decision`, 025 §10), so it needs no entity of its own here. A
+decision is undertaken, owned by one assignee, and closed when its answer is recorded
+— everything a task already is — and it sits in this same hierarchy, attaching to a
+milestone through the ordinary nullable `milestone_id` like any other task. What sets
+it apart is where its deliverable lives (a row in `task_decisions`, not a document or a
+diff) and how it is picked up (assigned, never claimed into a worktree — 004 §6.3).
+Neither difference is reason enough for a table of its own.
 
 - A project has one or more milestones. A milestone has zero or more tasks and zero
   or more deliverables.
@@ -120,23 +123,23 @@ reason for a table of its own.
   milestone are **ongoing maintenance** — legal everywhere, and the norm for
   engineering projects. The sunstone-way skill requires milestone attachment for
   research-project tasks; the server does not.
-- Task → subtask is exactly what 004 §6.10 describes: `decompose` creates
-  parent-hood and children in one transaction, and `checkHierarchy` accepts any
-  ordinary task as parent. The depth cap of 2 edges spans task → subtask only and
+- Task → subtask works exactly as 004 §6.10 describes: `decompose` creates the
+  parent link and the children in one transaction, and `checkHierarchy` accepts any
+  ordinary task as a parent. The depth cap of 2 edges spans task → subtask only and
   stops binding in practice.
-- **No task kind is a container** — convergent with 025 §10's kind list. A declared
-  container above tasks would carry nothing the project and the milestone do not
-  already carry, and both of those are real objects with facts of their own. Where
-  the kind CHECK does change, it follows the standing rule: the CHECK, `validKinds`,
-  and `wlc:TaskKind` change together, held by the existing test.
+- **No task kind is a container** — this lines up with 025 §10's kind list. A
+  declared container above tasks would carry nothing the project and the milestone
+  don't already carry, and both of those are real objects with facts of their own.
+  Wherever the kind CHECK does change, it follows the standing rule: the CHECK,
+  `validKinds`, and `wlc:TaskKind` change together, enforced by the existing test.
 
 The default shape, minted at promotion (§8) for `kind=sunstone-story` projects: two
 milestones, **internal review** and **publication**, with deliverables dataset/data
 product, reproducible analysis, methodology, scientific report, and story attached.
 This is a starting point the team refines, never a universal schema the server
 enforces. Named, versioned instance configuration supplies the template and review
-flow; a project receives a snapshot so a later configuration edit cannot silently
-change its definition of done.
+flow. A project receives a snapshot of it, so a later configuration edit can't
+silently change its definition of done.
 
 ## 3. Deliverables
 
@@ -151,11 +154,11 @@ A deliverable declares how its existence and state are verified:
 - **By address**, when known in advance — a GCS URL, a CMS slug, a table name.
 - **By label**, when the address is minted at build time (a docker tag, an Iceberg
   snapshot). Worklode defines the label key and value at deliverable creation
-  (`worklode.deliverable=COW/datasets`); skills materialize the convention into
-  deterministic checks — lint rules verifying `docker-bake.hcl` applies the tag, or
-  that `datasets.yaml` carries the label definitions (sunstone-py grows support as
-  needed). Humans never link artifacts to deliverables by hand; hand-linking is
-  toil, and toil is skipped exactly when it matters.
+  (`worklode.deliverable=COW/datasets`), and skills turn that convention into
+  deterministic checks — lint rules that verify `docker-bake.hcl` applies the tag,
+  or that `datasets.yaml` carries the label definitions (sunstone-py grows support
+  as needed). Humans never link artifacts to deliverables by hand: hand-linking is
+  toil, and toil gets skipped exactly where it matters most.
 
 The configured story-project deliverables above have well-known meanings, not hardcoded
 rows. A person may add a custom deliverable with exactly three descriptive fields:
@@ -179,12 +182,12 @@ Deliverable state is **reported, never asserted by a human closing a task**:
 "Is the project published" is then a query: every deliverable published ⇔ the
 project is published. No column stores it.
 
-Every deliverable fact retains how it became known: **observed** from an emitter or
-prober, or **user-reported** by an authenticated actor where no integration exists.
-The UI uses “User-reported” exactly; “human-reported” is not product language. A
-user-reported fact is auditable but does not masquerade as independent verification.
-Declared intent, reported/observed state, and an AI recommendation therefore remain
-three different things.
+Every deliverable fact keeps a record of how it became known: **observed** from an
+emitter or prober, or **user-reported** by an authenticated actor where no integration
+exists. The UI uses "User-reported" exactly; "human-reported" is not product language.
+A user-reported fact is auditable, but it does not stand in for independent
+verification. Declared intent, reported/observed state, and an AI recommendation
+therefore stay three different things.
 
 Probing as *verification* of reported state — reconciling a claim against production
 — stays on 007's v2 line and is out of scope here.
@@ -209,28 +212,29 @@ from `(project, kind)` counter rows:
 | ADR | `COW-ADR-1` | own |
 | Plan | `COW-PLAN-7` | own |
 
-Every kind takes the same `<KEY>-<TYPE>-<n>` form, so a reader learns one shape and
-a listing renders one column. An earlier draft of this section gave plans a two-part
+Every kind takes the same `<KEY>-<TYPE>-<n>` form, so a reader learns one shape and a
+listing renders one column. An earlier draft of this section gave plans a two-part id,
 `COW-PLAN-4-1` — the parent spec's ordinal, then a count within it — to keep a
-deliberate spec-skip visible as `PLAN-0`. That is dropped: it made a plan the one
-kind whose id had a different arity, and it bound identity to coverage, so moving a
-plan's `covers` set would renumber the plan. Coverage is already an edge and answers
-that question without spending the id on it; whether a plan has a governing spec is
-the query "does it cover anything", which is exactly as visible and never stale.
+deliberate spec-skip visible as `PLAN-0`. That is dropped: it made a plan the one kind
+whose id had a different arity (a different number of parts), and it tied identity to
+coverage, so moving a plan's `covers` set would renumber the plan. Coverage is already
+an edge and answers that question without spending the id on it: whether a plan has a
+governing spec is the query "does it cover anything", which is exactly as visible and
+never goes stale.
 
 Numbers are unique per kind, not per corpus: each kind draws from its own sequence,
 so `COW-PLAN-1` and `COW-SPEC-1` both exist and a reference resolves on the pair.
 
-Only tasks are claimable, so only bare `<KEY>-<n>` ids ever appear in branch names,
+Only tasks are claimable, so only bare `<KEY>-<n>` ids ever show up in branch names,
 `Worklode-Task:` trailers, or merge-subject correlation — the existing patterns
-(`[A-Z][A-Z0-9]*-[0-9]+`) are untouched by construction. The scheme generalizes
-025 §14.3's cross-corpus shorthand (`WL-SPEC-1`), which already reads as an
-instance of it. The type segment is also what `lode show <id>` dispatches on, with an
-equivalent `--kind`/per-kind flag spelling for each (019 §4.4); kinds in this table
-whose entities do not exist yet are recognized and reported, never treated as typos.
+(`[A-Z][A-Z0-9]*-[0-9]+`) stay untouched by construction. The scheme generalizes
+025 §14.3's cross-corpus shorthand (`WL-SPEC-1`), which already reads as one instance
+of it. The type segment is also what `lode show <id>` dispatches on, with an
+equivalent `--kind`/per-kind flag spelling for each (019 §4.4). Kinds in this table
+whose entities don't exist yet are recognized and reported, never treated as typos.
 
-Documents drawing identity from these sequences changes 025's assumptions; its
-implementation plans are re-planned before execution.
+Documents drawing identity from these sequences changes 025's assumptions. Its
+implementation plans get re-planned before execution.
 
 ## 5. References across projects
 
@@ -245,8 +249,8 @@ cross:
   owning the work that produces it.
 
 Plus `seeded_by` from a project to its intake task (§1). References are rows in one
-typed edge table `(from_kind, from_id, to_kind, to_id, rel)`; there is no unified
-entities table — per-kind tables with per-kind counters carry identity.
+typed edge table `(from_kind, from_id, to_kind, to_id, rel)`. There is no unified
+entities table: per-kind tables with per-kind counters carry identity.
 
 ## 6. People
 
@@ -255,45 +259,44 @@ entities table — per-kind tables with per-kind counters carry identity.
 **Crew** is the user-facing name for the time-limited group of humans working on a
 bounded story project. It is not another container or stored entity: crew membership
 is the project's role-labelled participant rows below. Agents execute delegated work
-but are never crew members; the project lead remains the accountable human.
+but are never crew members. The project lead remains the accountable human.
 
-- **Assignee** (one, nullable): ownership of a task or decision. Semantics as the
-  2026-08-06 human-assignment plan: separate from leases, lease-free
-  start/stop/submit lifecycle, auto-assign on start. One assignee — shared
-  assignment dilutes the feeling of responsibility; a genuinely joint task splits.
+- **Assignee** (one, nullable): ownership of a task or decision. Its semantics follow
+  the 2026-08-06 human-assignment plan: separate from leases, a lease-free
+  start/stop/submit lifecycle, auto-assign on start. Only one assignee — sharing
+  assignment dilutes the feeling of responsibility, so a genuinely joint task splits
+  instead.
 - **Participants** (stored, per project and role-labelled): who is *on* the
   investigation, visible before any task is picked up. The UI calls this set the
-  **Crew**. One actor may carry several project role labels; exactly one participant
-  is the project lead. Role labels are drawn from a fixed vocabulary (WL-297) —
-  `member` (the default), `editor`, `science-lead`, `reporter`, `domain-expert`,
-  `data-scientist`, `engineer` — enforced by a CHECK constraint and offered as the
-  Crew form's dropdown; widening it changes the migration, the store's list, and the
-  form together. Agents, advisory-only approvers and reviewers, and notification
-  recipients are not silently added to it.
+  **Crew**. One actor may carry several project role labels, and exactly one
+  participant is the project lead. Role labels are drawn from a fixed vocabulary
+  (WL-297) — `member` (the default), `editor`, `science-lead`, `reporter`,
+  `domain-expert`, `data-scientist`, `engineer` — enforced by a CHECK constraint and
+  offered as the Crew form's dropdown. Widening it changes the migration, the
+  store's list, and the form together. Agents, advisory-only approvers and
+  reviewers, and notification recipients are never silently added to it.
 - **Contributors** (derived): everyone who was ever assigned a task in the project.
   Derivation is the point — an engineer who fixed a pipeline task gets credit on the
   story without anyone maintaining a list.
 
-Any Crew member may add or remove an ordinary Crew member; every change is an event.
-Before removal, every open task, decision and review the member owns must be reassigned
-or explicitly left unassigned; the member's historical roles and contribution remain.
-Changing the project lead requires acceptance by the outgoing and incoming leads. If
-the outgoing lead is unavailable, the Editor and Science Lead jointly authorize the
-handoff.
+Any Crew member may add or remove an ordinary Crew member, and every change is an
+event. Before removal, every open task, decision, and review the member owns must be
+reassigned or explicitly left unassigned. The member's historical roles and
+contribution remain. Changing the project lead requires acceptance by both the
+outgoing and incoming leads. If the outgoing lead is unavailable, the Editor and
+Science Lead jointly authorize the handoff.
 
-A project may also designate one Crew member as **deputy** — a fact set when
-they are added, like the lead flag, and revocable by removing and re-adding
-the member. A deputy exercises
-full lead authority, including authorizing the handoff above, whenever the
-lead does not act; the lead remains the accountable human, and holding the
-designation never makes the deputy lead. The lead and deputy positions are
-mutually exclusive — no member holds both — and a project has at most one
-deputy. Removing a deputy from the Crew is an ordinary removal, subject only
-to the open-work guard above: there is no handoff process for it, because the
-designation carries no accountability to transfer. The roster shows the
-designation as **acting-lead**: a read-only, virtual role label folded into
-the member's role list for display. It cannot be set through the role
-vocabulary above — a role of `acting-lead` is refused the same way any other
+A project may also designate one Crew member as **deputy** — a fact set when they are
+added, like the lead flag, and revocable by removing and re-adding the member. A
+deputy has full lead authority, including authorizing the handoff above, whenever the
+lead does not act. The lead remains the accountable human, and holding the designation
+never makes the deputy the lead. The lead and deputy positions are mutually exclusive
+— no member holds both — and a project has at most one deputy. Removing a deputy from
+the Crew is an ordinary removal, subject only to the open-work guard above: there is
+no separate handoff process for it, because the designation carries no accountability
+to transfer. The roster shows the designation as **acting-lead**: a read-only, virtual
+role label folded into the member's role list for display. It cannot be set through
+the role vocabulary above — a role of `acting-lead` is refused the same way any other
 unrecognized role is.
 
 Closing the project closes the active Crew but preserves its roster, role
@@ -312,9 +315,9 @@ Keycloak is the human identity (001). Three additions:
   actor, so GitHub facts (PR authors, reviewers, commits) attach to the person, not
   just the task.
 - The groups claim is stored on the actor **in full** at login, not filtered to
-  `user`/`admin`. Gates check group membership by name; Keycloak stays the sole
-  authority, and hiring a Science Lead is a Keycloak change and nothing else.
-  Stored groups go stale between logins — which is why approval is a web-session
+  `user`/`admin`. Gates check group membership by name. Keycloak stays the sole
+  authority, so hiring a Science Lead is a Keycloak change and nothing else.
+  Stored groups go stale between logins, which is why approval is a web-session
   act (§7.3), never a CLI-token act.
 - The `email` claim is stored on the actor at login, alongside `githubUsername`.
   Nothing reads it yet except Crew space provisioning (§8.4), which needs an
@@ -350,13 +353,13 @@ is left to the flow rather than settled here.
 
 Each decision binds the exact governed revision it reviewed: a document version, an
 analysis commit, a PR head, or a deliverable evidence revision. Submitting a material
-change reopens the changed target; it does not erase decisions on unrelated objects.
-Dependent objects receive an explicit impact review rather than automatic blanket
+change reopens the changed target. It does not erase decisions on unrelated objects.
+Dependent objects get an explicit impact review instead of automatic blanket
 invalidation: the downstream owner supplies an impact note, then a qualified prior
-approver confirms the existing decision still holds or reopens it. Approval by an
+approver confirms the existing decision still holds, or reopens it. Approval by an
 object's author is disallowed by default. A self-review exception is valid only when
 the effective review policy allows it and a different authorized actor approves the
-exception before review; the allowance and authorization are both event-logged.
+exception before review. Both the allowance and the authorization are event-logged.
 
 ### 7.2 Where requirements come from
 
@@ -369,8 +372,8 @@ an open review.
 
 The default story flow keeps three review lanes independent:
 
-- reproducible analysis: GitHub PR review per task policy plus one analysis-level
-  qualified data-science or engineering peer decision on an exact commit; the peer is
+- reproducible analysis: GitHub PR review per task policy, plus one analysis-level
+  qualified data-science or engineering peer decision on an exact commit. The peer is
   selected through the project reviewer template and is not the author;
 - methodology: Science Lead and domain-expert decisions on an exact revision; and
 - scientific report: buddy, expert, and journalist decisions on an exact revision.
@@ -379,8 +382,8 @@ One review session may present multiple targets, but records separate decisions.
 Tasks have no review requirement by default. If a user elects to review a plan, the
 same choice may require review of that plan's task results, typically their PRs.
 Ad-hoc requirements can be added to any governed target. Rule-created rows are owned
-by the system `worklode` actor: the rule inserted them, and attributing policy to
-whichever human filed the idea would misstate who did what; the event log preserves
+by the system `worklode` actor: the rule inserted them, and crediting the policy to
+whichever human filed the idea would misstate who did what. The event log preserves
 causality.
 
 An analysis review submission is a revision-bound evidence bundle: exact repository
@@ -397,7 +400,7 @@ the precise evidence chain an approval covered remains queryable.
 
 ### 7.3 The gates
 
-- **Approving is a web UI act.** The OIDC session's group claims are fresh; a
+- **Approving is a web UI act.** The OIDC session's group claims are fresh, but a
   30-day CLI token's are not (§6.2). This is the only mutation the web UI must
   learn first.
 - **CI**: the manually-triggered prod publish workflow queries worklode for the
@@ -408,7 +411,7 @@ the precise evidence chain an approval covered remains queryable.
   worklode is unreachable.
 - **GitHub PRs**: the existing `pull_request_review` ingest writes into the same
   table — an `awaiting` row when a task-correlated PR opens, resolved when the
-  review lands. GitHub remains the review surface (jump-out links); whether it is
+  review lands. GitHub remains the review surface (jump-out links). Whether it is
   ever replaced is explicitly undecided. 025 §7.3's per-document reviewer set becomes
   rows in this table.
 
@@ -430,7 +433,7 @@ these are separate stored fields: they are prose in the same description. An ide
 drafted with LLM help is not exempt from scrutiny — the pitcher, not any AI used to
 draft it, is responsible for fact-checking its claims before capture. An AI
 Threat↔Intervention analysis may also group and deduplicate related findings into an
-unowned pitch; a named human must adopt it before Selection begins.
+unowned pitch. A named human must adopt it before Selection begins.
 
 An idea remains a task. Selection builds a versioned dossier around it: litmus-test
 results, claims, sources, unknowns, hypothesis changes, recommendation and the exact
@@ -440,21 +443,21 @@ decisions are explicit: accept Gate 1 and authorize bounded pre-research, then d
 Gate 2 after the AI-assisted work. Starting Selection may prepare Gate 1, but no
 pre-research run begins without the first authorization.
 
-The dossier is a backbone-native revisioned document, not a `docs/specs/` DesignDoc:
-no section anchors, no crit review, no acceptance lifecycle — it holds
+The dossier is a backbone-native revisioned document, not a `docs/specs/` DesignDoc.
+It has no section anchors, no crit review, no acceptance lifecycle: it holds
 investigation-specific evidence, not durable organizational intent (025 §2's
 boundary). Editing it, by the adopter or a new AI run, lands a new immutable
-revision; prior revisions stay addressable, so the audit path above is a real
-history rather than an overwritten field. `entity_kind='dossier'` in the approvals
+revision. Prior revisions stay addressable, so the audit path above is a real
+history, not an overwritten field. `entity_kind='dossier'` in the approvals
 table (§7.1) needs no new approval machinery: Editorial Evaluation's decisions
 already bind to `subject_revision` like any other governed target.
 
 Editorial Evaluation records separate Editor and Science Lead decisions on the exact
 dossier revision. Both must approve before promotion. A rejection blocks promotion
-without closing the dossier; the rejecting role owns the next revise, reconsider,
-park or close decision. Overriding the AI recommendation requires a rationale and
+without closing the dossier. The rejecting role owns the next revise, reconsider,
+park, or close decision. Overriding the AI recommendation requires a rationale and
 approval by both roles. Editing the dossier after a decision is landed reopens
-Editorial Evaluation on the new revision per §7.1's reopening rule; the prior
+Editorial Evaluation on the new revision, per §7.1's reopening rule; the prior
 decision stays recorded against the revision it actually reviewed.
 
 Passing Editorial Evaluation promotes the pitch without a second “Create project”
@@ -472,11 +475,11 @@ offset-tracked subscriber reacting to Crew events, not a notifier wired into the
 mutation handler. Beyond that, the MVP sends no scheduled email, ad-hoc Google Chat
 message, or off-hours notification for work Worklode orchestrates. Its
 first human-facing consequence is the per-user Morning Brief in the web UI, derived
-from lifecycle events when the user returns. Decisions and exceptions persist;
-routine successful activity collapses. Opening Home does not advance the per-user
-event boundary. The user explicitly chooses **Reviewed through now**; unresolved
-decisions remain after the cursor advances. Production alerts remain a separate
-system.
+from lifecycle events when the user returns. Decisions and exceptions persist, while
+routine successful activity collapses out of view. Opening Home does not advance the
+per-user event boundary. The user explicitly chooses **Reviewed through now**.
+Unresolved decisions remain after the cursor advances. Production alerts remain a
+separate system.
 
 ### 8.3 Events in
 
@@ -531,8 +534,8 @@ new rather than reused, because unlike the Flux alert bot this one creates space
 and manages membership, not just posts messages. Those scopes
 (`chat.app.spaces.create` and the membership-management equivalent) need a
 one-time Workspace-admin approval beyond what the Flux bot's `chat.bot` role
-required. worklode's server has no GCP/Workload Identity wiring today; this is
-the first.
+required. worklode's server has no GCP/Workload Identity wiring today. This is the
+first.
 
 **Out of scope for this increment**: archiving or deleting the space when a
 project closes; giving the project lead elevated (manager) status in the space;
@@ -540,15 +543,15 @@ reflecting Crew role labels in the space description or topic.
 
 ## 9. Out of scope
 
-- The review-surface tool (galley vs crit) — deferred until use cases crystallize;
-  whichever wins must sync bidirectionally with GitHub PRs.
+- The review-surface tool (galley vs crit) — deferred until use cases crystallize.
+  Whichever wins must sync bidirectionally with GitHub PRs.
 - Probing as verification of reported deliverable state (007 v2).
 - Per-project access control. Stated assumption: every logged-in user sees every
-  project, drafts included; the first genuinely sensitive investigation triggers a
+  project, drafts included. The first genuinely sensitive investigation triggers a
   deliberate decision.
-- Data-quality lint minimums for datasets — reviewer judgment first; a rule is
-  written from what good looks like after a few real projects, not guessed now.
+- Data-quality lint minimums for datasets — reviewer judgment comes first. A rule
+  gets written from what good looks like after a few real projects, not guessed now.
 - Definition-of-done prose and task-decomposition guidance — the sunstone-way
-  skill owns these; this spec only gives them entities to attach to.
+  skill owns these. This spec only gives them entities to attach to.
 - Automating the CMS datapackage import, and `report-format`'s single-report
   layout — real gaps, owned by those repos.

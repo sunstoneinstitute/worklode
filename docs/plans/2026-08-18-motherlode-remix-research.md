@@ -3,6 +3,8 @@ status: draft
 covers:
 - docs/specs/037-vendored-design-skills.md#sec-2.2
 - docs/specs/037-vendored-design-skills.md#sec-3.2
+- spec: docs/specs/037-vendored-design-skills.md#sec-6
+  coverage: partial
 ---
 # The motherlode remixes — research and transformation prompts
 

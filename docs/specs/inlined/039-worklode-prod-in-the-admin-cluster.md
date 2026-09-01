@@ -65,9 +65,10 @@ and pipelines that can change what runs there. §1 is why worklode prod belongs
 in that set.
 
 `hzprod` is where production *workloads* run. Its blast radius is meant to be
-one application; worklode's is the org. Co-locating the coordination layer with
-the things it coordinates also makes the observer share the fate of the
-observed — a bad property for the system you consult when hzprod is broken.
+one application; worklode's is the org. Putting the coordination layer
+alongside the things it coordinates also makes the observer share the fate
+of the observed — a bad property for the system you consult when hzprod is
+broken.
 
 Running **in** the admin cluster grants worklode no admin-cluster privilege.
 The GitHub App stays installed on selected repositories with the provisioning
@@ -86,8 +87,8 @@ itself runs, and it must not be repurposed to.
 
 The server carries a second, unrelated fact: **is this a dev instance or a prod
 instance?** A dev instance re-seeds and discards data all day; a prod instance
-holds the record. Behaviour that differs between them has nothing to key off
-today.
+holds the record. Today, nothing lets behaviour that should differ between
+them key off that fact.
 
 | | |
 |---|---|

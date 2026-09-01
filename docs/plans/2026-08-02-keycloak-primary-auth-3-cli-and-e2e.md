@@ -1,6 +1,11 @@
 ---
 status: accepted
-covers: docs/specs/001-identity-and-authentication.md
+covers:
+  - docs/specs/001-identity-and-authentication.md#sec-9.4
+  - spec: docs/specs/001-identity-and-authentication.md#sec-10
+    coverage: partial
+  - spec: docs/specs/001-identity-and-authentication.md#sec-11
+    coverage: partial
 requires:
   - 2026-08-02-keycloak-primary-auth-2-link-and-tokens.md
 ---
@@ -40,7 +45,15 @@ requires:
 
 ---
 
-## Task 1: The link nonce
+## Tasks
+
+### Task 1 — The link nonce
+
+```yaml
+kind: feature
+priority: high
+blockedBy: []
+```
 
 **Files:**
 - Create: `internal/api/linknonce.go`, `internal/api/linknonce_test.go`
@@ -251,7 +264,13 @@ git commit -m "Add single-use nonces for CLI-initiated GitHub linking"
 
 ---
 
-## Task 2: Nonce-authenticated link start and the API endpoints
+### Task 2 — Nonce-authenticated link start and the API endpoints
+
+```yaml
+kind: feature
+priority: high
+blockedBy: [1]
+```
 
 **Files:**
 - Modify: `internal/api/session.go`, `internal/api/githublink.go`, `internal/api/server.go`, `internal/store/actors.go`
@@ -632,7 +651,13 @@ git commit -m "Let the CLI start a GitHub link with a bound nonce"
 
 ---
 
-## Task 3: CLI client and polling
+### Task 3 — CLI client and polling
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [2]
+```
 
 **Files:**
 - Modify: `internal/cli/client.go`
@@ -901,7 +926,13 @@ git commit -m "Add the CLI GitHub link and auth status calls"
 
 ---
 
-## Task 4: `lode auth`
+### Task 4 — `lode auth`
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [3]
+```
 
 **Files:**
 - Create: `internal/cmd/auth.go`, `internal/cmd/auth_test.go`
@@ -1172,7 +1203,13 @@ git commit -m "Add the lode auth command group"
 
 ---
 
-## Task 5: End-to-end
+### Task 5 — End-to-end
+
+```yaml
+kind: chore
+priority: medium
+blockedBy: [3]
+```
 
 **Files:**
 - Create: `e2e/authlink_test.go`
@@ -1371,7 +1408,13 @@ git commit -m "Cover Keycloak login through GitHub linking end to end"
 
 ---
 
-## Task 6: Close out the docs
+### Task 6 — Close out the docs
+
+```yaml
+kind: chore
+priority: low
+blockedBy: [4]
+```
 
 **Files:**
 - Modify: `docs/specs/001-identity-and-authentication.md` (one stale note), `docs/follow-ups.md`, `README.md` (if it documents `lode login` or the removed env vars)

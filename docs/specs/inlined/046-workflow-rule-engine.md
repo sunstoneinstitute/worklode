@@ -38,8 +38,8 @@ does not depend on trusting the rule engine (§4.4).
 
 How a project comes to have rules: a human or an agent writes them, through
 the same reviewed PUT as the workflows they steer (045 §6). A project owner
-who describes their process in prose gets an agent to compile it into rules;
-whatever condition the config vocabulary cannot express becomes a rule's
+who describes their process in prose gets an agent to compile it into rules.
+Whatever condition the config vocabulary cannot express becomes a rule's
 prompt, evaluated at runtime. Authoring assistance is an agent workflow, not
 engine machinery — the engine only ever reads rules.
 
@@ -63,7 +63,7 @@ than one legal continuation exists, or where no observed fact ever arrives.
 A CLI-tool project has no Flux frontier, so nothing ever takes `merged →
 released` for it — a rule can, the moment a task lands in `merged`. A
 project that wants rework routed back automatically when review stalls can
-say so. The rule engine is the configurable layer; everything hardwired
+say so. The rule engine is the configurable layer. Everything hardwired
 stays hardwired.
 
 Rules are conveniences, never gates. Every core edge remains manually
@@ -78,7 +78,7 @@ Rules trigger on the state machine's own motion. Every committed transition
 **`wl:TaskTransitioned`** domain event in the same transaction that appends
 the `state_log` row, shaped per 025 §15.2: `wl:subject` names the task,
 `wl:fromState` and `wl:toState` carry the edge, `prov:wasAssociatedWith` the
-actor. `ns/ontology.ttl` gains the subclass and the two properties; the
+actor. `ns/ontology.ttl` gains the subclass and the two properties. The
 eventbus vocabulary mirror follows until 025 §17's codegen lands.
 
 One event type is deliberately the whole trigger surface in v1. Everything
@@ -88,7 +88,7 @@ every existing mover instead of duplicating its input: the resolver takes
 `merged → deployed_prod` from a frontier, and a rule sees the task arrive in
 `deployed_prod` without knowing anything about Flux. Triggering on raw
 vendor webhook deliveries would re-implement the hooks' correlation logic
-inside the rule engine; a project that wants a vendor fact to move a task
+inside the rule engine. A project that wants a vendor fact to move a task
 routes it through an ingest path that transitions, and rules take over from
 there. Widening the trigger surface is deferred work (§8), and the `on`
 field is shaped so widening it later is additive.
@@ -98,7 +98,7 @@ field is shaped so widening it later is additive.
 A project's rules are an ordered JSON array (§2.1). For each triggering
 event, the engine evaluates that task's project rules in array order and
 fires the action of the **first** rule whose trigger and condition both
-hold; no further rule is considered for that event. No match is a no-op.
+hold. No further rule is considered for that event. No match is a no-op.
 
 Evaluation is totally ordered: the subscriber loop consumes events in log
 order (one offset, 025 §15.2), and rules evaluate in array order within one
@@ -156,19 +156,19 @@ A rule's fields:
 - `name` — slug (`[a-z0-9-]{1,40}`), unique within the project. How events,
   audit trails, and humans refer to the rule; never a metric label (§6).
 - `on` — the trigger. `to` (required) names the state the task just
-  entered; `from` (optional) narrows to arrivals along one edge; `actor`
-  (optional) narrows to transitions performed by one actor id. The object
-  form leaves room for other trigger event types later (§8) without
+  entered. `from` (optional) narrows it to arrivals along one edge. `actor`
+  (optional) narrows it to transitions performed by one actor id. The
+  object form leaves room for other trigger event types later (§8) without
   reshaping existing rules.
 - `when` — optional structured filters, all of which must hold: `kind` (a
-  list of task kinds) and `workflow` (a list of workflow names; matches
-  when the task's *governing* workflow — resolved per 045 §3 — is listed).
+  list of task kinds) and `workflow` (a list of workflow names — matches
+  when the task's *governing* workflow, resolved per 045 §3, is listed).
   Deliberately small: conditions this vocabulary cannot express belong in
   `prompt`, not in a growing predicate language.
 - `prompt` — optional prose condition, ≤ 2000 characters, evaluated by the
   LLM per §4. Required when `then.choose` lists more than one target.
 - `then` — the action: exactly one of `to` (one target state) or `choose`
-  (2–5 candidate target states, LLM-picked or LLM-confirmed per §4.2; a
+  (2–5 candidate target states, LLM-picked or LLM-confirmed per §4.2 — a
   single-element `choose` with a `prompt` means "fire only if the model
   confirms").
 
@@ -187,11 +187,11 @@ no prompt, no model output — can change which edge a rule is about.
   (`on.to`, `t`) is a core edge (045 §1.2) or a row of the entry table
   (045 §1.3). A rule naming `ready → deployed_prod` is unstorable — the
   config cannot even spell an edge the vocabulary forbids.
-- `when.kind` values are valid task kinds; `when.workflow` values name
+- `when.kind` values are valid task kinds. `when.workflow` values name
   workflows defined in the same object, or `default`.
 - `prompt` present and non-empty when `then.choose` has more than one
   target; ≤ 2000 characters.
-- `then` has exactly one of `to` / `choose`; `choose` lists 2–5 distinct
+- `then` has exactly one of `to` / `choose`. `choose` lists 2–5 distinct
   states (1 permitted with `prompt`).
 
 Rule-edge legality is checked against the vocabulary-wide superset, not
@@ -199,7 +199,7 @@ against one workflow, because the governing workflow is per-task and
 resolved at fire time (045 §3): a rule may serve tasks under several
 workflows, and the guard (045 §2) refuses the edge for any task whose
 workflow does not declare it (§3.3). Two checks, two jobs: validation keeps
-impossible edges out of storage; the guard keeps legal-somewhere edges
+impossible edges out of storage. The guard keeps legal-somewhere edges
 honest per task.
 
 `rules` is optional and orthogonal to `workflows`: either key may appear
@@ -215,7 +215,7 @@ One `wl:TaskTransitioned` event produces one evaluation pass:
 1. Skip entirely if the event's actor is the engine (§1.4), the task is
    deleted, or the project has no rules.
 2. Load the task's current facts and the project's rules once, at pass
-   start; the pass evaluates against that snapshot.
+   start. The pass evaluates against that snapshot.
 3. In array order, test each rule: trigger fields against the event, `when`
    filters against the task facts — both pure and instant. On the first
    rule that passes them:
@@ -234,7 +234,7 @@ A pass makes at most **10** LLM calls, each bounded by a per-call timeout
 (default 20s, deployment-configurable). Prompt rules beyond the budget do
 not match (outcome `budget`, §6). The subscriber loop is serial by design —
 one offset, in-order — so the budget is what keeps one pathological event
-from stalling the log; eventbus lag metrics make a slow LLM visible.
+from stalling the log. Eventbus lag metrics make a slow LLM visible.
 
 ### 3.3 Firing and staleness
 
@@ -243,18 +243,19 @@ the same rules as every other caller (045 §2). Two refusals are expected
 and benign:
 
 - **Stale**: the task moved between the event and the pass (or during the
-  pass's LLM calls); the from-state check fails. Outcome `stale`, no-op, no
-  falling through — the world the rules were evaluated against is gone, and
-  the transition that moved the task emits its own event for a fresh pass.
+  pass's LLM calls), so the from-state check fails. Outcome `stale`, no-op,
+  no falling through — the world the rules were evaluated against is gone,
+  and the transition that moved the task emits its own event for a fresh
+  pass.
 - **Undeclared edge**: the rule's edge is vocabulary-legal but the
   governing workflow does not declare it. Outcome `refused`, no-op. Not a
   validation gap: §2.2 explains why this is checked per task, at fire time.
 
-Any other error is `error` and the pass ends; §3.4 says why that is safe.
+Any other error is `error` and the pass ends. §3.4 says why that is safe.
 
 ### 3.4 Delivery and idempotency
 
-The subscriber is at-least-once (eventbus offsets); redelivery must not
+The subscriber is at-least-once (eventbus offsets), so redelivery must not
 double-fire. Two independent layers make re-processing a no-op: the fired
 event's dedup identity — `source = watcher`, `external_id =
 workflow-rules:<triggering event id>:<rule name>` (§5.3), the doc-lifecycle
@@ -269,7 +270,7 @@ poison event must not wedge the log.
 
 ### 4.1 What the model sees
 
-The engine builds the whole request; the rule author contributes only the
+The engine builds the whole request. The rule author contributes only the
 `prompt` text, which arrives through the reviewed PUT and is treated as
 trusted policy. The rest of the context is a fixed frame over task-local
 facts:
@@ -309,7 +310,7 @@ target*), and structurally nothing else.
 Transport error, timeout, HTTP failure, `unparseable`, exhausted budget
 (§3.2), or no provider configured: in every case the rule **does not
 match** and evaluation falls through to the next rule. Each outcome is a
-distinct metric label (§6); none of them stalls the pass, retries within
+distinct metric label (§6). None of them stalls the pass, retries within
 the pass, or is ever promoted to a match. A deployment with no LLM
 configured runs structured rules at full fidelity and treats every prompt
 rule as never-matching (`unconfigured`) — the 040 posture: no provider
@@ -323,10 +324,10 @@ or a prompt-injected task body — and an illegal transition:
 1. **Write-time validation** (§2.2): the config cannot store an edge
    outside the fixed vocabulary superset. The injected text never gets to
    *write* config at all: the engine has no write path to
-   `projects.workflows`; a rule change is a PUT — evented, reviewed,
+   `projects.workflows`. A rule change is a PUT — evented, reviewed,
    attributed (045 §6).
 2. **Answer-space bounding** (§4.2): model output selects among
-   pre-declared, pre-validated targets or declines; it is never
+   pre-declared, pre-validated targets, or declines. It is never
    interpreted as a state name or an edge.
 3. **The guard** (045 §2): every firing passes the same per-task legality
    check as a human's `lode task edit`, inside the transition transaction.
@@ -403,34 +404,34 @@ Per spec 022's conventions, in the owning packages:
   `internal/llm`.
 
 All label values are bounded enumerations. Rule names are project data and
-therefore never metric labels; per-rule accounting reads the
+therefore never metric labels. Per-rule accounting reads the
 `wl:WorkflowRuleFired` events. Subscriber lag and throughput ride the
 existing eventbus loop metrics.
 
 ## 7. Testing
 
-- Evaluator (pure, no Postgres): first-match ordering; trigger and filter
-  matching; prompt rules interleaved with structured rules; §4.2's parser
-  accepting exactly the two shapes and rejecting free text, out-of-range
-  indexes, state names, and JSON-in-prose.
-- Validation: each §2.2 refusal with a named rule; the
+- Evaluator (pure, no Postgres): first-match ordering, trigger and filter
+  matching, prompt rules interleaved with structured rules, and §4.2's
+  parser accepting exactly the two shapes and rejecting free text,
+  out-of-range indexes, state names, and JSON-in-prose.
+- Validation: each §2.2 refusal with a named rule. The
   `ready → deployed_prod` rule is unstorable.
 - Executor (fake LLM via `httptest`): every §4.3 failure outcome falls
-  through to the next rule; budget exhaustion; cascade guard (an
-  engine-actored event evaluates nothing); stale firing is a no-op;
+  through to the next rule, budget exhaustion, cascade guard (an
+  engine-actored event evaluates nothing), stale firing is a no-op, and
   redelivered event double-fires nothing (dedup + from-state, §3.4).
 - Store: `wl:TaskTransitioned` emitted in-transaction with every
   `state_log` append, across claim, hook, resolver, manual, and rule-fired
   paths.
-- e2e: a project whose rules take `merged → released` on landing; a prompt
-  rule with no provider configured falls through to a structured rule
-  behind it.
+- e2e: a project whose rules take `merged → released` on landing, and a
+  prompt rule with no provider configured falls through to a structured
+  rule behind it.
 
 ## 8. Non-goals and deferred
 
 - **Writing `tasks.workflow` from rules** (045 §3's "later"): assigning a
   workflow is a creation-time act and there is no task-creation domain
-  event yet; adding one and an `assign_workflow` action is a compatible
+  event yet. Adding one and an `assign_workflow` action is a compatible
   extension of §2.1's `then`.
 - **Trigger types beyond `wl:TaskTransitioned`** (§1.2): `on` is an object
   so a later `event` discriminator is additive.
@@ -451,10 +452,10 @@ existing eventbus loop metrics.
 - Rules are stored in `projects.workflows`, round-trip through the 045
   surface, and every §2.2 violation is refused naming the rule.
 - Every committed transition emits `wl:TaskTransitioned` in the same
-  transaction; the equivalence suite of 045 is unaffected.
+  transaction. The equivalence suite of 045 is unaffected.
 - On a triggering event, the first rule whose condition holds fires, once,
   through the guard, recorded as `wl:WorkflowRuleFired` with the state_log
-  row attributed to it; redelivery double-fires nothing.
+  row attributed to it. Redelivery double-fires nothing.
 - The engine never evaluates its own transitions.
 - Each LLM failure mode (`timeout`, `error`, `unparseable`,
   `unconfigured`, `budget`) demonstrably falls through to the next rule,

@@ -1,7 +1,13 @@
 ---
 status: accepted
 task: WL-3
-covers: docs/specs/006-knowledge-graph.md
+covers:
+  - docs/specs/006-knowledge-graph.md#sec-13
+  - docs/specs/006-knowledge-graph.md#sec-13.1
+  - spec: docs/specs/006-knowledge-graph.md#sec-13.2
+    coverage: partial
+  - spec: docs/specs/006-knowledge-graph.md#sec-13.3
+    coverage: partial
 ---
 # Data-platform KG requirements (spec 009) — Implementation Plan
 
@@ -147,7 +153,15 @@ provisional until it actually executes — not this plan's concern.)
 
 ---
 
-## Task 1: GSP client — PutGraph, GetGraph, DeleteGraph
+## Tasks
+
+### Task 1 — GSP client — PutGraph, GetGraph, DeleteGraph
+
+```yaml
+kind: feature
+priority: high
+blockedBy: []
+```
 
 **Files:**
 - Create: `internal/graphserver/client.go`
@@ -452,7 +466,13 @@ git commit -m "Add a graph-server GSP client"
 
 ---
 
-## Task 2: SPARQL SELECT via the /sparql proxy
+### Task 2 — SPARQL SELECT via the /sparql proxy
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [1]
+```
 
 **Files:**
 - Modify: `internal/graphserver/client.go`
@@ -574,7 +594,13 @@ git commit -m "Add SPARQL SELECT to the graph-server client"
 
 ---
 
-## Task 3: Client from environment, with Keycloak client credentials
+### Task 3 — Client from environment, with Keycloak client credentials
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [1]
+```
 
 **Files:**
 - Create: `internal/graphserver/env.go`
@@ -726,7 +752,13 @@ git commit -m "Configure the graph-server client from the environment"
 
 ---
 
-## Task 4: The acceptance harness
+### Task 4 — The acceptance harness
+
+```yaml
+kind: feature
+priority: medium
+blockedBy: [1, 2, 3]
+```
 
 **Files:**
 - Create: `e2e/graphserver_test.go`
@@ -886,7 +918,13 @@ git commit -m "Add the spec 009 acceptance harness against graph-server"
 
 ---
 
-## Task 5: Document the harness
+### Task 5 — Document the harness
+
+```yaml
+kind: chore
+priority: low
+blockedBy: [4]
+```
 
 **Files:**
 - Modify: `README.md` (under `## Development`, `README.md:340`)
@@ -933,7 +971,13 @@ git commit -m "Document the graph-server acceptance harness"
 
 ---
 
-## Task 6: File the cross-repo hand-off issues
+### Task 6 — File the cross-repo hand-off issues
+
+```yaml
+kind: chore
+priority: low
+blockedBy: []
+```
 
 **Files:** none in this repo (issues in `sunstoneinstitute/data-platform`
 and `sunstoneinstitute/rdf-registry`).

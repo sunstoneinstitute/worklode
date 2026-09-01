@@ -41,7 +41,7 @@ must stay distinct.
 | `lode reconcile [--repo X \| --task Y] [--since D] [--dry-run]` | operator | admin | repair what ingestion missed |
 
 The split is a permission boundary, not a cosmetic one: `doctor` is what every developer runs when
-their client misbehaves and must need no privileges; the other two read across the whole org.
+their client misbehaves, and it must require no special privileges; the other two read across the whole org.
 
 ### 1.1 `lode doctor` {#sec-1.1}
 
@@ -62,10 +62,10 @@ Exits non-zero if any check fails, so it is usable from a hook or CI step.
 Per mapped repo, reported from the server:
 
 - **App installed** — read from `GET /repos/{owner}/{name}/installation` (`githubauth.AppAuth`),
-  one round trip per repo. Reported as installed / not installed / unchecked: GitHub's own 404 is
-  the only "not installed", and a failed or un-run check says so rather than reading as absence.
-  The checks run concurrently under one deadline covering the whole check phase, so an org's repo
-  count cannot multiply into the response time.
+  one round trip per repo. Reported as installed / not installed / unchecked: only GitHub's own 404
+  counts as "not installed", and a failed or un-run check says so instead of looking like the app
+  is missing. The checks run at the same time, under one deadline that covers the whole check
+  phase, so a large org's repo count can't multiply the response time.
 - **Last webhook received**, and the event types seen, from the `events` table.
 - **Unapplied events** — count of `*.ignored` and nil-apply events still awaiting replay.
 - **Unmapped senders** — repos that have sent events but map to no project.
@@ -80,7 +80,7 @@ delivery predates its mapping, is the signal that sends an operator to `lode rec
 Two engines behind one command, run in order, cheapest first. Facts are repaired; findings are
 reported. `--dry-run` suppresses the writes of both.
 
-`--repo` / `--task` / `--since` bound the candidate set. Unbounded is the scheduled-caller case.
+`--repo` / `--task` / `--since` limit the candidate set. Leaving them off is the scheduled-caller case.
 `--since` accepts an RFC 3339 date or a Go duration (`720h`), resolved against the server clock.
 
 **Implementation order.** Two separable phases, shipped in engine order: engine 1 is
@@ -98,10 +98,10 @@ failed. The payload is intact in `events.payload`, so this engine is offline and
 **Record first, apply second (WL-247).** The webhook path commits the event row in its own
 transaction and runs the apply in a second one (`store.RecordEventThenApply`), so a failed apply
 answers 500 but leaves the row with `applied_at` NULL — exactly the state this engine repairs —
-instead of rolling the delivery back into nonexistence, which no one redelivers. The split is
-safe because the applies are already order-safe under replay (below). Dedup follows the marker,
-not the row: a redelivered event whose row exists unapplied gets its apply re-run, so GitHub's
-manual redelivery is a second remedy alongside replay; only an event already marked applied is a
+instead of deleting the delivery, which no one would then redeliver. The split is safe because the
+applies are already order-safe under replay (below). Deduplication follows the marker, not the
+row: a redelivered event whose row exists unapplied gets its apply re-run, so GitHub's manual
+redelivery is a second way to fix it alongside replay; only an event already marked applied is a
 no-op duplicate.
 
 **Required refactor.** Apply routing is today a method on `githubHandler`, bound to the HTTP
@@ -114,19 +114,20 @@ transition points at the real GitHub event. The timeline reads correctly — the
 applied late.
 
 **Completion marker.** `events.applied_at timestamptz` — nullable; set when an event's apply
-completes, by either the webhook path or the replayer. Re-running is harmless because the applies
-are order-safe, not merely idempotent: a replayed event may be older than facts that already
-landed, so every fact upsert is guarded on the fact's own last-modified time and cannot overwrite a
-newer row (see `store.UpsertPR`), and `Transition` guards on the from-state. The marker exists so
-reconcile can find outstanding work without rescanning history. The down migration drops the
-column; the repo's `migrate up`/`down` round-trip check covers it.
+completes, by either the webhook path or the replayer. Running it again is harmless because the
+applies are order-safe, not just idempotent: a replayed event can be older than facts that already
+landed, so every fact upsert checks the fact's own last-modified time and cannot overwrite a newer
+row (see `store.UpsertPR`), and `Transition` checks the from-state. The marker exists so reconcile
+can find outstanding work without rescanning history. The down migration drops the column; the
+repo's `migrate up`/`down` round-trip check covers it.
 
-**Batch size.** One run reads a bounded batch of candidates (oldest first), not the whole backlog:
-each candidate carries its entire delivery payload, and the unscoped org-wide run is exactly the
-caller whose backlog can be arbitrarily large. A run that fills its batch reports `truncated`, and
-the reported error list is capped the same way (the surplus is counted, not listed) because that
-list is part of the API response body. Both are re-run signals — an applied event leaves the
-candidate set, so running again continues after the last batch rather than repeating it.
+**Batch size.** One run reads a fixed-size batch of candidates (oldest first), not the whole
+backlog: each candidate carries its entire delivery payload, and the unscoped org-wide run is
+exactly the case whose backlog can grow arbitrarily large. A run that fills its batch reports
+`truncated`, and the reported error list is capped the same way (the surplus is counted, not
+listed) because that list is part of the API response body. Both are signals to run it again — an
+applied event leaves the candidate set, so the next run continues after the last batch instead of
+repeating it.
 
 ### 2.2 Engine 2 — poll GitHub {#sec-2.2}
 

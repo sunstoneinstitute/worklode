@@ -31,7 +31,7 @@ certificate, context, user and namespace names are configuration, not secrets.
 This spec splits such a catalog entry into (a) a **plaintext template**,
 shipped as a non-secret asset next to the catalog, and (b) one or more small
 **credentials**, which are the only values that take the `op://` → keystore
-path. `lode secrets exec` interpolates the credentials into the template,
+path. `lode secrets exec` substitutes the credentials into the template,
 writes the result to a file with mode 0600, and points the consuming
 environment variable (e.g. `KUBECONFIG`) at that file instead of injecting a
 multi-kilobyte value.
@@ -39,7 +39,7 @@ multi-kilobyte value.
 It amends spec 017: §2 here amends 017 §1 (catalog format), §3 amends 017 §3
 (materialization), §4 amends 017 §4 (execution), §5 amends 017 §6
 (degradation). Everything 017 says that is not restated here — the ceremony,
-consent, the event-log posture, purge riding the release paths — holds
+consent, the event-log posture, purge following the release paths — holds
 unchanged.
 
 ## 1. The split model
@@ -64,8 +64,8 @@ values; 1Password remains the source of truth for every secret byte.
 **Rejected: chunking.** Splitting an oversized value across N keystore items
 hides the modelling error, multiplies items to keep consistent, and still
 injects the full plaintext through the environment — a 6 KB env var is itself
-hostile to `ps e`/`/proc/*/environ` hygiene and to the v1.5 remote packing
-format. The cap is a useful forcing function: what exceeds it is scaffolding
+exposed via `ps e`/`/proc/*/environ`, and a poor fit for the v1.5 remote
+packing format. The cap is a useful forcing function: what exceeds it is scaffolding
 wrapped around a credential, and the scaffolding is not entitled to keystore
 protection.
 
@@ -81,7 +81,7 @@ protection.
 > object kind and how it gets provisioned.
 
 > **Amended by ADR 047 §2.** The secret-name grammar this section borrows for
-> `cred.<PLACEHOLDER>` and `env` now also denies loader-sensitive names
+> `cred.<PLACEHOLDER>` and `env` now also blocks loader-sensitive names
 > (`LD_*`, `DYLD_*`, `PATH`, `IFS`, `ENV`, `BASH_ENV`, `PYTHONPATH`, …). An
 > `env` name is what an entry is exported under at exec time, so the deny-list
 > is load-bearing there.
@@ -147,14 +147,15 @@ declares `KUBECONFIG_HZDEV`, not its parts.
 inlines each templated entry's template text, exported name, and
 placeholder → `op://` map in its response entry. The response stays a few KB;
 a separate template endpoint would add a route and a failure mode to save
-nothing. The server validates the catalog — template file present, placeholder
-set ↔ `cred.` set equality, template text valid UTF-8 (it crosses two JSON
-round-trips, the catalog response and the manifest, where Go's encoder would
-silently replace invalid bytes and corrupt "verbatim"), and the §3 item names
-(`<NAME>__<PLACEHOLDER>`) unique catalog-wide and disjoint from every entry
-name (the name grammar permits `__`, so nothing else stops a plain entry
-named `X__Y` colliding with a templated entry's item) — when it reads it, and
-a validation failure is a 500 with a log line naming the entry: the catalog
+nothing. The server validates the catalog when it reads it: the template file
+must be present, the placeholder set must match the `cred.` set exactly, and
+the template text must be valid UTF-8 (it crosses two JSON round-trips, the
+catalog response and the manifest, where Go's encoder would silently replace
+invalid bytes and corrupt "verbatim"). It also checks that the §3 item names
+(`<NAME>__<PLACEHOLDER>`) are unique catalog-wide and disjoint from every
+entry name (the name grammar permits `__`, so nothing else stops a plain
+entry named `X__Y` from colliding with a templated entry's item). A
+validation failure is a 500 with a log line naming the entry: the catalog
 is admin-controlled, and a broken entry should fail loudly at the source
 rather than degrade per-claim.
 
@@ -240,14 +241,14 @@ unlinks each rendered file recorded in the manifest (by absolute path, so
 `--task` purges from anywhere) alongside the keystore items; when purge runs
 bound to a worktree it also removes that worktree's `.worklode/secrets/`
 directory, catching a file a worktree move stranded before any exec re-rendered
-and re-recorded it. Purge already rides every release path — `lode worktree done`,
+and re-recorded it. Purge already follows every release path — `lode worktree done`,
 `lode worktree block`, worktree removal, exit hooks. The residual exposure is a 0600
 file, on the operator's own single-user machine, inside a directory git
 ignores, for exactly the window the same task's credentials sit in the local
 keystore. Unlike those items — ciphertext at rest in the macOS keychain and
 in 017's ssh-agent-keyed Linux file store alike — the rendered file is
 plaintext at rest, the least-protected copy of the credentials on the
-machine. That marginal exposure is accepted, not waved away: purge rides every
+machine. That marginal exposure is accepted, not waved away: purge follows every
 release path, the window equals the keystore items' own, and the fork/wait
 alternative both changes the exec contract and still needs purge as its
 backstop. Q17.2's staleness question (force re-materialization after N days)

@@ -3,6 +3,9 @@ status: draft
 covers:
   - spec: docs/specs/025-documents-in-the-backbone.md#sec-11.5
     coverage: partial
+  - docs/specs/006-knowledge-graph.md#sec-3
+  - docs/specs/006-knowledge-graph.md#sec-10.1
+  - docs/specs/006-knowledge-graph.md#sec-11
 ---
 # The repo-implements deriver — implementation plan
 
@@ -114,14 +117,21 @@ shipping a query that always returns nothing):
   document's current version.
 
 Surface them in `lode overview` beside the drift queries, same rendering
-conventions (`internal/cli` renderer, `--json` passthrough). Note that against
-today's production graph **all four** queries return nothing: WL-289's
-document projection deliberately defers sections
-(`internal/graphproj/doc.go`), so no `wl:Section` nodes exist for the
-unimplemented-intent and coverage joins until 025's fuller projection lands
-them, and the stale and orphan queries additionally wait on versioned
-snapshots (`wl:lastRevisedIn`). Assert every query's text against the harness
-with hand-loaded fixture triples anyway so the shapes cannot rot silently.
+conventions (`internal/cli` renderer, `--json` passthrough).
+
+> **Correction (found in review, WL-443):** this section originally said all
+> four queries return nothing against production because section projection
+> was deferred. That shipped since this plan was written: WL-322 (#304,
+> 2026-08-24) projects `wl:Section` nodes for every accepted document
+> (`graphproj.SectionTriples`, wired into `projector.go`'s live path). The
+> **unimplemented-intent** and **coverage** queries therefore have real
+> section data to join against today, once this plan's Task 1/2 land the
+> `wl:implements` edges the join's other side needs. Only **stale claim** and
+> **orphaned claim** still wait on versioned snapshots (`wl:lastRevisedIn`),
+> confirmed still unbuilt as of this correction and tracked by the DCAT
+> version-graphs plan (`doc-version-graphs-plan`, reviewed WL-407, not yet
+> accepted). Assert every query's text against the harness with hand-loaded
+> fixture triples regardless, so the shapes cannot rot silently either way.
 
 - [ ] four queries with wrappers and harness tests
 - [ ] `lode overview` renders the new sections; command catalog regenerated
