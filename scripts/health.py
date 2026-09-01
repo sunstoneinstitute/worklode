@@ -25,7 +25,7 @@ Every source is the worklode backbone, read through the `lode` CLI:
                                   is issued only where a list cannot answer
   lode task list                  the live task rows, each naming the plan it
                                   was minted from (plan_doc, 025 sec-9.2)
-  lode timeline                   per-task state_log transitions -- real
+  lode task timeline               per-task state_log transitions -- real
                                   completion times, so throughput and lead
                                   time are measured, not guessed
 
@@ -117,7 +117,7 @@ def fetch_timelines(ids, workers=8):
     """{task id: [entry]}. A task whose timeline fails is simply absent."""
     def one(task_id):
         try:
-            return task_id, run_lode(["timeline", task_id, "--json"])["timeline"]
+            return task_id, run_lode(["task", "timeline", task_id, "--json"])["timeline"]
         except Exception:
             return task_id, None
 

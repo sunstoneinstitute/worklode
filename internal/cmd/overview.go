@@ -302,10 +302,10 @@ func newGapsCmd() *cobra.Command {
 	}
 }
 
-// newCriticalPathCmd wires `lode critical-path [--task <id>]`; cycles are
-// findings, not silent drops (spec 007 §Cycle handling). --task narrows the
-// table to that task's row (its depth and fan-out), client-side, so --json
-// re-encodes the narrowed value rather than passing the server's body
+// newCriticalPathCmd wires `lode task critical-path [--task <id>]`; cycles
+// are findings, not silent drops (spec 007 §Cycle handling). --task narrows
+// the table to that task's row (its depth and fan-out), client-side, so
+// --json re-encodes the narrowed value rather than passing the server's body
 // through.
 func newCriticalPathCmd() *cobra.Command {
 	var task string
@@ -338,5 +338,5 @@ func newCriticalPathCmd() *cobra.Command {
 
 func init() {
 	rootCmd.AddCommand(newDeriveCmd(), newOverviewCmd(), newDriftCmd(),
-		newGapsCmd(), newCriticalPathCmd())
+		newGapsCmd())
 }

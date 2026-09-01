@@ -119,8 +119,8 @@ class FakeLode:
             return self.details.get(int(args[2])) or detail(int(args[2]))
         if args[:2] == ["task", "list"]:
             return {"tasks": self.tasks}
-        if args[0] == "timeline":
-            return {"timeline": self.timelines.get(args[1], [])}
+        if args[:2] == ["task", "timeline"]:
+            return {"timeline": self.timelines.get(args[2], [])}
         raise AssertionError(f"unexpected lode call: {args}")
 
     def fetched(self):

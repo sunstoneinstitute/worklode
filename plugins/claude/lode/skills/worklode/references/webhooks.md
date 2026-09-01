@@ -15,7 +15,7 @@ old webhook (`lode inbox import`) is always safe.
 | `pull_request_review` `approved` / `changes_requested` / `commented` | the review | Resolves (closes) the open approval this review decides. |
 | `pull_request` `closed`, `merged: true` | the head SHA and merge-commit SHA as `task_commits` | **No state change yet.** The task advances only once one of these SHAs actually appears on the default branch via a `push` event — see below. The lease is deliberately left untouched (a merge doesn't free the worktree). |
 | `push` to a repo's default branch | new `main_commits`, then finds every task whose recorded commit sits at or below the new frontier | Calls `ResolveDelivery` for each — see below. |
-| `workflow_run` | a `ci_runs` row (status/conclusion/url) | None directly; visible on `lode timeline`. |
+| `workflow_run` | a `ci_runs` row (status/conclusion/url) | None directly; visible on `lode task timeline`. |
 | `release` | an `artifacts` row (`git_tag`) | None directly. |
 | `registry_package` | an `artifacts` row (`docker_image`/`pypi`) | None directly. |
 
