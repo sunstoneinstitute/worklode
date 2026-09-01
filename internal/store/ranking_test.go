@@ -429,7 +429,7 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	task := createTask(t, s, claimNextTestNow, defaultTaskInput())
 
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, claimNextTestNow, task.ID, nil, nil, nil, nil, nil, boolPtr(true), nil)
+		return UpdateTaskFields(tx, claimNextTestNow, task.ID, nil, nil, nil, nil, nil, boolPtr(true), nil, nil)
 	}); err != nil {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}
@@ -440,6 +440,63 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	}
 	if res.Claimed || res.Task != nil {
 		t.Fatalf("ClaimNext with only a needs_decomposition task: got %+v, want Claimed:false Task:nil", res)
+	}
+}
+
+// TestHumanOnlySkippedByRankButClaimableByID pins both halves of WL-466 in one
+// place, because either alone is the wrong feature: a human_only task must
+// never be handed out by the ranked path (ClaimNext, and Frontier which shares
+// readyCandidates with it), and must still be claimable by id, which is the
+// escape hatch for the person it is waiting on.
+func TestHumanOnlySkippedByRankButClaimableByID(t *testing.T) {
+	t.Parallel()
+	s := openClaimNextStore(t)
+	ctx := t.Context()
+
+	top := defaultTaskInput()
+	top.Priority = "critical"
+	human := createTask(t, s, claimNextTestNow, top)
+
+	next := defaultTaskInput()
+	next.Priority = "low"
+	runnerUp := createTask(t, s, claimNextTestNow, next)
+
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return UpdateTaskFields(tx, claimNextTestNow, human.ID, nil, nil, nil, nil, nil, nil, boolPtr(true), nil)
+	}); err != nil {
+		t.Fatalf("set human_only: %v", err)
+	}
+
+	frontier, _, err := s.Frontier(ctx, "")
+	if err != nil {
+		t.Fatalf("Frontier: %v", err)
+	}
+	for _, tk := range frontier {
+		if tk.ID == human.ID {
+			t.Fatalf("Frontier offered human_only task %s", human.ID)
+		}
+	}
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{ActorID: "stig", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if !res.Claimed || res.Task == nil || res.Task.ID != runnerUp.ID {
+		t.Fatalf("ClaimNext: got %+v, want claim of %s (the human_only %s must be skipped despite ranking first)",
+			res, runnerUp.ID, human.ID)
+	}
+
+	if _, err := s.Claim(ctx, human.ID, "stig", "h:/.worktrees/2", 0); err != nil {
+		t.Fatalf("Claim by id of a human_only task: %v, want success", err)
+	}
+	mustState(t, s, human.ID, "in_progress")
+
+	got, err := s.GetTask(ctx, human.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if !got.HumanOnly {
+		t.Fatal("human_only did not round-trip through the task columns")
 	}
 }
 
