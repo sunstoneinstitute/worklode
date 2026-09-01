@@ -169,7 +169,7 @@ func GapTable(w io.Writer, gaps []model.Gap) {
 	tw.Flush()
 }
 
-// FrontierTable prints `lode frontier`: the ready set in the order the server
+// FrontierTable prints `lode task frontier`: the ready set in the order the server
 // ranked it, with the criticality measures the overview adds. CRIT marks the
 // tasks on the critical path.
 func FrontierTable(w io.Writer, tasks []model.FrontierTask) {

@@ -76,10 +76,6 @@ Flags: --acknowledged, --component
 - `lode event tail` — List recent events, newest last (--follow to keep watching)
   Flags: --follow, --limit, --since, --type
 
-## `lode frontier` — Ready, unblocked tasks in pickup order
-
-Flags: --project, --repo
-
 ## `lode gaps` — Doc gaps and unmatched-path coverage gaps
 
 ## `lode graph` — The knowledge-graph projection: its health, and what it owes
@@ -194,6 +190,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --artifact, --body, --body-file, --concern, --kind, --needs-decomposition, --no-upload, --priority, --secrets, --title
 - `lode task follow-up` — Record that a task was spun out of the work on another task
   Flags: --of
+- `lode task frontier` — Ready, unblocked tasks in pickup order
+  Flags: --project, --repo
 - `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
   Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status
