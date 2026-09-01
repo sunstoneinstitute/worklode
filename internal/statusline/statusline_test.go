@@ -134,27 +134,27 @@ func TestRenderUsageAddsSessionAndWeeklyFromRateLimits(t *testing.T) {
 		FiveHour: &RateLimitWindow{UsedPercentage: 56},
 		SevenDay: &RateLimitWindow{UsedPercentage: 24},
 	}}
-	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " S:56% W:24%" {
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " [Sess 56%] [Week 24%]" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestRenderUsageOmitsRateLimitFieldsIndependently(t *testing.T) {
 	p := &Payload{RateLimits: &RateLimits{FiveHour: &RateLimitWindow{UsedPercentage: 10}}}
-	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " S:10%" {
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " [Sess 10%]" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestRenderUsageCombinesContextAndRateLimits(t *testing.T) {
 	p := &Payload{
-		ContextWindow: &ContextWindow{RemainingPercentage: pct(58.25)},
+		ContextWindow: &ContextWindow{RemainingPercentage: pct(58.25), TotalInputTokens: 101000},
 		RateLimits: &RateLimits{
 			FiveHour: &RateLimitWindow{UsedPercentage: 56},
 			SevenDay: &RateLimitWindow{UsedPercentage: 24},
 		},
 	}
-	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " C:50% S:56% W:24%" {
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " [CtxWin 50% 101k] [Sess 56%] [Week 24%]" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -177,6 +177,32 @@ func TestRenderUsageColorsBySeverity(t *testing.T) {
 	}
 }
 
+// The base 200k window leaves less real working room at a given percentage
+// than the 1M extended window does, so the CtxWin field's colour bumps one
+// severity level early — landing on yellow uses the punchier gold rather than
+// the ramp's ordinary yellow.
+func TestContextColorBumpsOneLevelAtBaseWindowSize(t *testing.T) {
+	tests := []struct {
+		name       string
+		pct        int
+		windowSize int64
+		want       string
+	}{
+		{"green bumps to gold at base window", 10, 200_000, ansiGoldLight},
+		{"yellow bumps to orange at base window", 55, 200_000, ansiOrangeLight},
+		{"red stays red, nothing above it", 90, 200_000, ansiRedLight},
+		{"extended window keeps the plain ramp", 10, 1_000_000, ansiGreenLight},
+		{"unknown window size keeps the plain ramp", 10, 0, ansiGreenLight},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := contextColor(tt.pct, tt.windowSize, false); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFormatResetIn(t *testing.T) {
 	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 	tests := []struct {
@@ -187,7 +213,7 @@ func TestFormatResetIn(t *testing.T) {
 		{"minutes only", 45 * time.Minute, "45m"},
 		{"hours and minutes", 2*time.Hour + 3*time.Minute, "2h3m"},
 		{"exact hour still shows minutes", 2 * time.Hour, "2h0m"},
-		{"days, hours, and minutes", 24*time.Hour + 2*time.Hour + 3*time.Minute, "1d2h3m"},
+		{"days and hours drop minutes", 24*time.Hour + 2*time.Hour + 3*time.Minute, "1d2h"},
 		{"already reset", -time.Minute, ""},
 		{"resets this instant", 0, ""},
 	}
@@ -217,7 +243,7 @@ func TestRenderUsageAppendsResetCountdownToRateLimitFields(t *testing.T) {
 		SevenDay: &RateLimitWindow{UsedPercentage: 24, ResetsAt: now.Add(24*time.Hour + 2*time.Hour + 3*time.Minute + 30*time.Second).Unix()},
 	}}
 	got := stripANSI(renderUsage(p, t.TempDir(), ""))
-	want := " S:56% ⧖2h3m W:24% ⧖1d2h3m"
+	want := " [Sess 56% ⟲2h3m] [Week 24% ⟲1d2h]"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -228,7 +254,7 @@ func TestRenderUsageOmitsCountdownOnceWindowHasRolledOver(t *testing.T) {
 		FiveHour: &RateLimitWindow{UsedPercentage: 56, ResetsAt: time.Now().Add(-time.Minute).Unix()},
 	}}
 	got := stripANSI(renderUsage(p, t.TempDir(), ""))
-	if want := " S:56%"; got != want {
+	if want := " [Sess 56%]"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
@@ -432,12 +458,24 @@ func TestRenderLocationPrefersTheTaskID(t *testing.T) {
 	gitIn(t, root, "checkout", "-q", "-b", "WL-7-fix-the-thing")
 	gitIn(t, root, "config", "--worktree", "worklode.task-id", "WL-7")
 
-	got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "")
-	if want := "worklode WL-7 fix-the-thing"; got != want {
+	got := stripANSI(renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "", false))
+	if want := "WL-7 worklode fix-the-thing"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 	if strings.ContainsAny(got, branchSymbol+worktreeSymbol) {
 		t.Fatalf("got %q, want no branch or worktree symbols alongside the task id", got)
+	}
+}
+
+// The task id renders in blue.
+func TestRenderLocationColorsTaskIDBlue(t *testing.T) {
+	root := initRepo(t)
+	gitIn(t, root, "checkout", "-q", "-b", "WL-7-fix-the-thing")
+	gitIn(t, root, "config", "--worktree", "worklode.task-id", "WL-7")
+
+	got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "", false)
+	if !strings.Contains(got, ansiBlueLight) {
+		t.Fatalf("want the light-theme blue colour, got %q", got)
 	}
 }
 
@@ -450,18 +488,18 @@ func TestFormatTaskLocation(t *testing.T) {
 		branch string
 		want   string
 	}{
-		{"id and slug", "WL-7", "WL-7-fix-the-thing", "worklode WL-7 fix-the-thing"},
-		{"single-word slug", "WL-7", "WL-7-fix", "worklode WL-7 fix"},
-		{"branch is the bare id", "WL-7", "WL-7", "worklode WL-7"},
-		{"branch renamed away from the id", "WL-7", "spike", "worklode WL-7"},
+		{"id and slug", "WL-7", "WL-7-fix-the-thing", "WL-7 worklode fix-the-thing"},
+		{"single-word slug", "WL-7", "WL-7-fix", "WL-7 worklode fix"},
+		{"branch is the bare id", "WL-7", "WL-7", "WL-7 worklode"},
+		{"branch renamed away from the id", "WL-7", "spike", "WL-7 worklode"},
 		// The split anchors on the full "WL-7-" join, not a bare "WL-7", so a
 		// neighbouring task's branch cannot be sliced into a bogus slug.
-		{"another task's branch", "WL-7", "WL-70-other", "worklode WL-7"},
-		{"no branch", "WL-7", "", "worklode WL-7"},
+		{"another task's branch", "WL-7", "WL-70-other", "WL-7 worklode"},
+		{"no branch", "WL-7", "", "WL-7 worklode"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := formatTaskLocation("worklode", tt.taskID, tt.branch); got != tt.want {
+			if got := stripANSI(formatTaskLocation("worklode", tt.taskID, tt.branch, false)); got != tt.want {
 				t.Fatalf("got %q, want %q", got, tt.want)
 			}
 		})
@@ -476,10 +514,10 @@ func TestRenderLocationTaskIDIsPerWorktree(t *testing.T) {
 	gitIn(t, root, "worktree", "add", "-b", "WL-7-fix-the-thing", wt)
 	gitIn(t, wt, "config", "--worktree", "worklode.task-id", "WL-7")
 
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, ""); got != "worklode WL-7 fix-the-thing" {
-		t.Fatalf("worktree location = %q, want %q", got, "worklode WL-7 fix-the-thing")
+	if got := stripANSI(renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false)); got != "WL-7 worklode fix-the-thing" {
+		t.Fatalf("worktree location = %q, want %q", got, "WL-7 worklode fix-the-thing")
 	}
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, ""); got != "worklode ⎇ main" {
+	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "", false); got != "worklode ⎇ main" {
 		t.Fatalf("main checkout location = %q, want the branch rendering", got)
 	}
 }
@@ -488,13 +526,13 @@ func TestRenderLocationTaskIDIsPerWorktree(t *testing.T) {
 // existed — the claude-context-monitor behaviour.
 func TestRenderLocationWithoutTaskIDShowsBranchAndWorktree(t *testing.T) {
 	root := initRepo(t)
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, ""); got != "worklode ⎇ main" {
+	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "", false); got != "worklode ⎇ main" {
 		t.Fatalf("got %q, want %q", got, "worklode ⎇ main")
 	}
 
 	wt := filepath.Join(root, ".worktrees", "spike")
 	gitIn(t, root, "worktree", "add", "-b", "spike", wt)
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, ""); got != "worklode ⎇⧉ spike" {
+	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false); got != "worklode ⎇⧉ spike" {
 		t.Fatalf("got %q, want %q", got, "worklode ⎇⧉ spike")
 	}
 }
@@ -508,7 +546,7 @@ func TestRenderLocationWithoutTheWorktreeConfigExtension(t *testing.T) {
 	wt := filepath.Join(root, ".worktrees", "spike")
 	gitIn(t, root, "worktree", "add", "-b", "spike", wt)
 
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, ""); got != "worklode ⎇⧉ spike" {
+	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false); got != "worklode ⎇⧉ spike" {
 		t.Fatalf("got %q, want the branch rendering", got)
 	}
 }
@@ -519,7 +557,7 @@ func TestRenderLocationOutsideGitUsesDirectoryName(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &Payload{Workspace: &WorkspaceInfo{CurrentDir: dir}}
-	if got := renderLocation(p, ""); got != "somewhere" {
+	if got := renderLocation(p, "", false); got != "somewhere" {
 		t.Fatalf("got %q", got)
 	}
 }
