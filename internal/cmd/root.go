@@ -28,12 +28,68 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// Help headings for the top-level command list. Cobra only splits that list
+// into headings once a group exists, so declaring the shortcut group means
+// declaring the ordinary one too — otherwise every non-shortcut command lands
+// under cobra's "Additional Commands:" fallback.
+const (
+	commandGroupID  = "commands"
+	shortcutGroupID = "shortcuts"
+)
+
+// shortcut is one of the top-level aliases 061 §1 L9 fixes: a nested command
+// that also sits at the root because it runs many times per session. This
+// table is the only place a top-level alias is declared — no cobra `Aliases`
+// anywhere — and L9 closes the list at four entries: `next` (work next),
+// `status` (work status), `board` (task board), `overview` (project
+// overview). Adding a fifth requires amending 061 §1 L9. They are permanent
+// API, not compatibility aliases.
+type shortcut struct {
+	// target is the real command's path below the root, e.g. task board.
+	target []string
+	// build constructs a second instance of that command: cobra sets a
+	// command's parent in AddCommand, so one pointer cannot sit under two.
+	build func() *cobra.Command
+	// reason is why L9 grants this command a shortcut.
+	reason string
+}
+
+var shortcuts = []shortcut{
+	// The board is the first thing read on entering a project and re-read
+	// after every state change.
+	{target: []string{"task", "board"}, build: newBoardCmd, reason: "read many times per session"},
+}
+
 func init() {
 	rootCmd.PersistentFlags().Bool("json", false, "print the raw JSON response instead of a table")
+
+	rootCmd.AddGroup(
+		&cobra.Group{ID: commandGroupID, Title: "Available Commands:"},
+		&cobra.Group{ID: shortcutGroupID, Title: "Shortcuts:"},
+	)
+	rootCmd.SetHelpCommandGroupID(commandGroupID)
+	rootCmd.SetCompletionCommandGroupID(commandGroupID)
+	for _, s := range shortcuts {
+		cmd := s.build()
+		cmd.GroupID = shortcutGroupID
+		rootCmd.AddCommand(cmd)
+	}
+}
+
+// groupTopLevel files every ordinary top-level command under the "Available
+// Commands:" heading. Registration is spread across per-file init() funcs
+// whose relative order is not fixed, so this runs once all of them have.
+func groupTopLevel() {
+	for _, c := range rootCmd.Commands() {
+		if c.GroupID == "" {
+			c.GroupID = commandGroupID
+		}
+	}
 }
 
 // Execute runs the root command.
 func Execute() error {
+	groupTopLevel()
 	return rootCmd.Execute()
 }
 

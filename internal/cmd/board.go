@@ -48,7 +48,3 @@ func newBoardCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "show one project's board")
 	return cmd
 }
-
-func init() {
-	rootCmd.AddCommand(newBoardCmd())
-}
