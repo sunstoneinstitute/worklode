@@ -2040,6 +2040,14 @@ the spec first, then mirror the term in `ns/`.
 
 ## 18. Surfaces
 
+> Amended by `WL-SPEC-61#sec-2`
+
+> **Amended by spec 061 §2.** The spellings below are replaced; the surface
+> they describe is unchanged. `lode doc new` → `lode doc add`,
+> `lode doc anchors` → `lode doc lint`, `lode drift --docs` →
+> `lode graph drift --docs`. `lode doc show` is restored as the read verb the
+> implementation had drifted to `get`.
+
 The document and event surface, backed by the backbone store:
 
 | Surface | Purpose |

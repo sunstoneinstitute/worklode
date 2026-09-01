@@ -172,7 +172,7 @@ blockedBy:
 # Plan
 """})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("WL-PLAN-11 names another project", result.stderr)
+        self.assertIn("WL-PLAN-11 has no file in this corpus", result.stderr)
 
     def test_scalar_bare_whole_document_is_reported_without_breaking_legacy_plans(self):
         result = run_secmeta({"docs/specs/s.md": SPEC,

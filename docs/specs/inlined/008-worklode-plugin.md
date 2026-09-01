@@ -59,6 +59,12 @@ usage feedback loop that 016 §v2 defers.
 
 ## 1. Design lens & CLI naming
 
+> Amended by `WL-SPEC-61#sec-1`
+
+> **Amended by spec 061 §1.** This section fixes the product and binary names
+> and the `lode-` prefix and says nothing about subcommands; 061 §1's nine
+> naming rules complete it, and 061 §2 lists every spelling they change.
+
 **Push coordination into deterministic, token-free machinery; spend model tokens only on judgment.**
 Three applications, in force throughout:
 

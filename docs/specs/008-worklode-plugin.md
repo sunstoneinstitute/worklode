@@ -7,6 +7,8 @@ requires:
 - docs/specs/016-org-wide-skills.md
 - docs/specs/022-prometheus-metrics.md
 amendedBy:
+  "#sec-1":
+    - WL-SPEC-61#sec-1
   "#sec-16.3":
     - 051-codex-and-amp-bindings-as-built.md#sec-1
   "#sec-17.2":
@@ -69,6 +71,10 @@ status line. **v2:** OTLP ingest, the TypeScript plugin shims for opencode/pi, a
 usage feedback loop that 016 §v2 defers.
 
 ## 1. Design lens & CLI naming {#sec-1}
+
+> **Amended by spec 061 §1.** This section fixes the product and binary names
+> and the `lode-` prefix and says nothing about subcommands; 061 §1's nine
+> naming rules complete it, and 061 §2 lists every spelling they change.
 
 **Push coordination into deterministic, token-free machinery; spend model tokens only on judgment.**
 Three applications, in force throughout:
