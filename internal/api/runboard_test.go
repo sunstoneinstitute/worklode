@@ -366,9 +366,14 @@ func TestRunBoardPage(t *testing.T) {
 	}
 	// 1e5 output tokens at claude-sonnet-5's seeded $10/MTok output rate
 	// (migration 0008) prices to exactly $1.00 — see agentsessions_test.go's
-	// sonnetUsagePrevDay, the same bucket shape.
+	// sonnetUsagePrevDay, the same bucket shape. Pinned to a fixed date
+	// before the migration's 2026-09-01 rate change, same as that fixture:
+	// bucket cost is priced once at record time against the rate in force on
+	// the bucket's own day, so a bucket dated "now" would silently reprice
+	// itself out from under this assertion the day that second rate row
+	// takes effect — exactly what the migration's own comment warns against.
 	if _, err := st.TouchAgentSession(ctx, running.ID, "agent-one", "claude-code", "2.1", "sess-1",
-		[]store.SessionUsageBucket{{Day: now, Model: "claude-sonnet-5", Tokens: store.TokenCounts{Output: 100_000}}}); err != nil {
+		[]store.SessionUsageBucket{{Day: time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC), Model: "claude-sonnet-5", Tokens: store.TokenCounts{Output: 100_000}}}); err != nil {
 		t.Fatalf("touch agent session: %v", err)
 	}
 
