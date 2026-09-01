@@ -616,11 +616,11 @@ your own token.`,
 
 func newTaskEditCmd() *cobra.Command {
 	var title, body, bodyFile, concern, priority, kindFlag string
-	var needsDecomposition, noUpload bool
+	var needsDecomposition, humanOnly, noUpload bool
 	var secretNames, artifacts []string
 	cmd := &cobra.Command{
 		Use:   "edit <id>",
-		Short: "Edit a task's title, body, concern, priority, or needs-decomposition flag, or declare an artifact it is verified by",
+		Short: "Edit a task's title, body, concern, priority, needs-decomposition or human-only flag, or declare an artifact it is verified by",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var in model.EditTaskInput
@@ -652,6 +652,9 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("needs-decomposition") {
 				in.NeedsDecomposition = &needsDecomposition
 			}
+			if cmd.Flags().Changed("human-only") {
+				in.HumanOnly = &humanOnly
+			}
 			if cmd.Flags().Changed("secrets") {
 				names := secretNames
 				if len(names) == 1 && names[0] == "none" {
@@ -662,8 +665,8 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("artifact") {
 				in.Artifacts = &artifacts
 			}
-			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.Secrets == nil && in.Artifacts == nil && in.Kind == nil {
-				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --kind, --needs-decomposition, --secrets, or --artifact")
+			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.HumanOnly == nil && in.Secrets == nil && in.Artifacts == nil && in.Kind == nil {
+				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --kind, --needs-decomposition, --human-only, --secrets, or --artifact")
 			}
 
 			c, cfg, err := newAPIClientWithConfig()
@@ -701,6 +704,7 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kindFlag, "kind", "", "retag the task's kind: feature, bug, chore, design, review, spike")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
+	cmd.Flags().BoolVar(&humanOnly, "human-only", false, "mark (or unmark) the task as human-only: never offered by lode next or the frontier, still claimable by id")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
 		"replace the task's declared secret names (comma-separated; 'none' clears)")
 	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
