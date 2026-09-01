@@ -561,8 +561,9 @@ GitHub App):
   harness's own skills directory.
 
 Pin skills to a task with `lode task add --skill <name>` (repeatable) or
-manage them after the fact with `lode task skills <id> [--set ...]`; pinned
-skills are always inlined in `lode task brief`.
+after the fact with `lode task set skills <name...> <id>` (no names clears
+them); `lode task skills <id>` shows what is pinned, and pinned skills are
+always inlined in `lode task brief`.
 
 Recommendations need `LODE_EMBEDDING_URL` and `LODE_EMBEDDING_MODEL` on the
 server, and, if the endpoint requires auth, `LODE_EMBEDDING_API_KEY`. With
