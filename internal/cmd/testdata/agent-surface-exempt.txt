@@ -10,11 +10,18 @@
 lode decompose <ref>
 lode decompose
 
-# Spec 061 §1's naming law (internal/cmd/CLAUDE.md "Naming") describes the
-# target command surface, not the current one; the rename lands across
-# WL-471..WL-477. Remove these once `work`, `next`, and `status` exist as
-# top-level commands and the entity/verb pattern is real.
+# Spec 061 §1's naming law (internal/cmd/CLAUDE.md "Naming") states the
+# pattern itself. `<entity>` and `<verb>` are placeholders, so this can never
+# resolve however real the surface gets. Remove it only if the law's wording
+# stops spelling the pattern as an invocation, or the test learns to skip a
+# command whose first token is a placeholder.
 lode <entity> <verb>
+
+# Also from 061 §1: commands the naming law names before they ship. The
+# rename lands across WL-471..WL-477 and `work` arrives with its own part;
+# `next` and `status` are two of the L9 shortcuts, which can only be
+# registered once `work next` and `work status` exist. Remove each once its
+# command does.
 lode work
 lode next
 lode status
