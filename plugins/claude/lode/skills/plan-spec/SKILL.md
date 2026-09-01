@@ -51,6 +51,6 @@ lode doc new --kind plan --slug <slug> --file <path>
 in the accepting transaction (025 §9.2), which is what turns a written plan
 into claimable work. Only the document's owner may accept it.
 
-**Step 5: finish the design task.** `lode task done <design-task-id>` once the
+**Step 5: finish the design task.** `lode task set state merged <design-task-id>` once the
 plan documents are accepted. Writing the plan is the deliverable; executing it
 is the task set the acceptance just minted, not this task.

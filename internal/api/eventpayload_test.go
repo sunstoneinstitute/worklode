@@ -238,7 +238,8 @@ func TestEventPayloadTaskDeleted(t *testing.T) {
 	}
 }
 
-// TestEventPayloadTaskDone covers POST /api/v1/tasks/{id}/done.
+// TestEventPayloadTaskDone covers POST /api/v1/tasks/{id}/state with "merged",
+// which keeps the "task.done" event name.
 func TestEventPayloadTaskDone(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
@@ -247,7 +248,7 @@ func TestEventPayloadTaskDone(t *testing.T) {
 		"project": "proj", "title": "Ship it", "priority": "high", "kind": "chore",
 	})
 
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 	}

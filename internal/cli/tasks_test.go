@@ -116,18 +116,21 @@ func TestClientTaskLifecycle(t *testing.T) {
 		t.Fatalf("GetTask after release = %+v", detail)
 	}
 
-	// Done: claim, move to in_review out of band (no CLI command for the PR
-	// flow that normally does this), then mark done.
+	// Set state: claim, move to in_review out of band (no CLI command for the
+	// PR flow that normally does this), then mark it merged and walk the two
+	// delivery states past it.
 	if _, _, err := c.ClaimTask(ctx, "WL-1", "host:/wt-2", 0); err != nil {
 		t.Fatalf("re-claim: %v", err)
 	}
 	moveToReview(t, st, "WL-1")
-	done, _, err := c.DoneTask(ctx, "WL-1")
-	if err != nil {
-		t.Fatalf("DoneTask: %v", err)
-	}
-	if done.State != "merged" {
-		t.Fatalf("DoneTask result = %+v", done)
+	for _, state := range []string{"merged", "deployed_dev", "deployed_prod"} {
+		got, _, err := c.SetTaskState(ctx, "WL-1", state)
+		if err != nil {
+			t.Fatalf("SetTaskState %s: %v", state, err)
+		}
+		if got.State != state {
+			t.Fatalf("SetTaskState %s result = %+v", state, got)
+		}
 	}
 
 	// Abandon a fresh task straight from ready.

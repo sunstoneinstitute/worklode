@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -290,7 +291,7 @@ func TestDone(t *testing.T) {
 	}
 	moveToReview(t, st, "WL-1")
 
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -316,7 +317,7 @@ func TestDoneWithoutReview(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "From in progress", "priority": "high", "kind": "chore"})
 
 	// ready -> merged, no claim and no review in between.
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done from ready status = %d, want 200; body %s", rr.Code, rr.Body.String())
 	}
@@ -329,7 +330,7 @@ func TestDoneWithoutReview(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("claim status = %d", rr.Code)
 	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done from in_progress status = %d, want 200; body %s", rr.Code, rr.Body.String())
 	}
@@ -352,7 +353,7 @@ func TestDoneBadStates(t *testing.T) {
 	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Closed already", "priority": "high", "kind": "feature"})
 
 	// From draft: 422. Publish it first.
-	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("done from draft status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
@@ -361,14 +362,72 @@ func TestDoneBadStates(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("abandon status = %d", rr.Code)
 	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-2/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("done from abandoned status = %d, want 422", rr.Code)
 	}
 	// Unknown task: 404.
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-99/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("done unknown task status = %d, want 404", rr.Code)
+	}
+}
+
+// TestSetStateRejectsStatesWithTheirOwnEndpoint: the endpoint takes the four
+// delivery states and nothing else. abandoned and ready are legal moves in the
+// store's table, but they belong to abandon and reopen, which do more than
+// write the state — so they must not be reachable here.
+func TestSetStateRejectsStatesWithTheirOwnEndpoint(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Ship it", "priority": "high", "kind": "feature"})
+
+	for _, state := range []string{"abandoned", "ready", "in_progress", "banana", ""} {
+		rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": state})
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("set state %q status = %d, want 422; body %s", state, rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "deployed_prod") {
+			t.Errorf("set state %q body %s does not name the valid states", state, rr.Body.String())
+		}
+	}
+}
+
+// TestSetStateWalksTheDeliveryStates: the three states past merged are
+// reachable by hand, and the store's transition table is still the whole gate
+// on which of them a given task may reach next.
+func TestSetStateWalksTheDeliveryStates(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Ship it", "priority": "high", "kind": "feature"})
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "Release it", "priority": "high", "kind": "feature"})
+
+	for _, state := range []string{"merged", "deployed_dev", "deployed_prod"} {
+		rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": state})
+		if rr.Code != http.StatusOK {
+			t.Fatalf("set state %s status = %d, body %s", state, rr.Code, rr.Body.String())
+		}
+		if got := decodeMap(t, rr); got["state"] != state {
+			t.Fatalf("state = %v, want %s", got["state"], state)
+		}
+	}
+	// released is the other terminal, reached from merged on a release repo.
+	for _, state := range []string{"merged", "released"} {
+		rr := doReq(t, h, "POST", "/api/v1/tasks/WL-2/state", token, map[string]any{"state": state})
+		if rr.Code != http.StatusOK {
+			t.Fatalf("set state %s status = %d, body %s", state, rr.Code, rr.Body.String())
+		}
+		if got := decodeMap(t, rr); got["state"] != state {
+			t.Fatalf("state = %v, want %s", got["state"], state)
+		}
+	}
+	// deployed_prod -> released is not in the store's table, and this endpoint
+	// does not widen it.
+	rr := doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "released"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("deployed_prod -> released status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -411,7 +470,7 @@ func TestAbandon(t *testing.T) {
 		t.Fatalf("claim status = %d", rr.Code)
 	}
 	moveToReview(t, st, "WL-3")
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-3/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d", rr.Code)
 	}
@@ -618,7 +677,7 @@ func TestReopen(t *testing.T) {
 		t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 	}
 	moveToReview(t, st, "WL-1")
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 	}
@@ -725,7 +784,7 @@ func TestReopenFromDeliveryStates(t *testing.T) {
 				t.Fatalf("claim status = %d, body %s", rr.Code, rr.Body.String())
 			}
 			moveToReview(t, st, "WL-1")
-			rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+			rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 			if rr.Code != http.StatusOK {
 				t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 			}

@@ -232,7 +232,7 @@ func TestHumanLifecycle(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("patch to in_review status = %d, body %s", rr.Code, rr.Body.String())
 	}
-	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/done", token, nil)
+	rr = doReq(t, h, "POST", "/api/v1/tasks/WL-1/state", token, map[string]any{"state": "merged"})
 	if rr.Code != http.StatusOK {
 		t.Fatalf("done status = %d, body %s", rr.Code, rr.Body.String())
 	}
