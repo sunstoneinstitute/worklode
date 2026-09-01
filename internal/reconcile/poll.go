@@ -1,4 +1,4 @@
-// Package reconcile implements engine 2 of lode reconcile (spec 013): ask
+// Package reconcile implements engine 2 of lode task reconcile (spec 013): ask
 // GitHub the current truth about candidate tasks, write the missing facts
 // through the existing upserts, and let store.ResolveDelivery advance the
 // state. Because ResolveDelivery derives delivery state from recorded facts,

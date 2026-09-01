@@ -129,10 +129,6 @@ Flags: --project, --repo
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
-## `lode reconcile` — Repair what webhook ingestion missed
-
-Flags: --dry-run, --repo, --since, --task
-
 ## `lode secrets` — Task-declared secrets: catalog, status, exec, purge (spec 017)
 
 - `lode secrets catalog` — List the org secrets catalog: names, baseline flag, descriptions
@@ -195,6 +191,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task parent` — File a task under a parent task
   Flags: --under
 - `lode task publish` — Publish a draft task (draft -> ready)
+- `lode task reconcile` — Repair what webhook ingestion missed
+  Flags: --dry-run, --repo, --since, --task
 - `lode task release` — Release the caller's lease on a task, returning it to ready
 - `lode task renew` — Extend the caller's lease on a task
   Flags: --ttl

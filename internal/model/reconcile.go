@@ -46,7 +46,7 @@ type RepoDoctor struct {
 	EventTypes      []string   `json:"event_types"`
 	UnappliedEvents int        `json:"unapplied_events"`
 	// Stale: this repo has never delivered a webhook, or its last delivery
-	// predates the mapping — the signal to run lode reconcile.
+	// predates the mapping — the signal to run lode task reconcile.
 	Stale bool `json:"stale"`
 }
 
@@ -65,7 +65,7 @@ type ReposDoctorResponse struct {
 }
 
 // ReconcileInput is the request body of POST /api/v1/reconcile, and what
-// the CLI (`lode reconcile`) sends. Repo and Task are mutually exclusive
+// the CLI (`lode task reconcile`) sends. Repo and Task are mutually exclusive
 // bounds; Since accepts RFC 3339 or a Go duration, resolved against the
 // server clock.
 type ReconcileInput struct {
@@ -92,7 +92,7 @@ type ReconcileResponse struct {
 // PollResult is one reconcile poll run's report (spec 013 engine 2). Like
 // ReplayResult it is a section of the POST /api/v1/reconcile response body,
 // so ADR 036 puts it here rather than in internal/reconcile. Repaired is what
-// the run observed, not what it changed — see `lode reconcile --help`.
+// the run observed, not what it changed — see `lode task reconcile --help`.
 type PollResult struct {
 	RunID      string       `json:"run_id"`
 	DryRun     bool         `json:"dry_run"`

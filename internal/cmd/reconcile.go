@@ -1,5 +1,5 @@
-// lode reconcile: repair task and spec activity the ingestion path missed
-// (spec 013). Operator command; the server does the work.
+// lode task reconcile: repair task and spec activity the ingestion path
+// missed (spec 013). Operator command; the server does the work.
 
 package cmd
 
@@ -69,8 +69,4 @@ GitHub about because nothing was recorded for them.`,
 	cmd.Flags().StringVar(&since, "since", "", "RFC 3339 time or Go duration (e.g. 720h), against the server clock")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report repairs without writing")
 	return cmd
-}
-
-func init() {
-	rootCmd.AddCommand(newReconcileCmd())
 }

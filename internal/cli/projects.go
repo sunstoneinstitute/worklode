@@ -252,7 +252,7 @@ func ReposDoctorRender(w io.Writer, resp model.ReposDoctorResponse) {
 		fmt.Fprintf(w, "  last event: %s (types: %s)\n", last, strings.Join(r.EventTypes, ", "))
 		fmt.Fprintf(w, "  unapplied:  %d\n", r.UnappliedEvents)
 		if r.Stale {
-			fmt.Fprintf(w, "  STALE: no delivery since mapping — run `lode reconcile --repo %s`\n", r.Repo)
+			fmt.Fprintf(w, "  STALE: no delivery since mapping — run `lode task reconcile --repo %s`\n", r.Repo)
 		}
 	}
 	for _, u := range resp.UnmappedSenders {
@@ -261,7 +261,7 @@ func ReposDoctorRender(w io.Writer, resp model.ReposDoctorResponse) {
 	}
 }
 
-// ReconcileRender prints `lode reconcile`: the run id, what the replay pass
+// ReconcileRender prints `lode task reconcile`: the run id, what the replay pass
 // repaired (or would repair, on a dry run), and what the poll pass did.
 func ReconcileRender(w io.Writer, resp model.ReconcileResponse) {
 	verb := "repaired"
