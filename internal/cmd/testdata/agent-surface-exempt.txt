@@ -25,3 +25,10 @@ lode <entity> <verb>
 lode work
 lode next
 lode status
+
+# internal/cmd/CLAUDE.md "Checking whether a command still resolves" documents
+# how to detect a command that is gone, so its examples have to name one. The
+# placeholder form cannot resolve for the same reason `lode <entity> <verb>`
+# cannot. Remove these only if that section stops using a worked example.
+lode <path> --help
+lode task ready 2>&1 | head -1     # unknown command "ready" for "lode task"
