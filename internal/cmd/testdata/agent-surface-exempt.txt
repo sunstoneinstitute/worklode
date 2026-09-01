@@ -9,3 +9,12 @@
 # skill stops hedging.
 lode decompose <ref>
 lode decompose
+
+# Spec 061 §1's naming law (internal/cmd/CLAUDE.md "Naming") describes the
+# target command surface, not the current one; the rename lands across
+# WL-471..WL-477. Remove these once `work`, `next`, and `status` exist as
+# top-level commands and the entity/verb pattern is real.
+lode <entity> <verb>
+lode work
+lode next
+lode status
