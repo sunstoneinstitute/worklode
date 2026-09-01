@@ -242,9 +242,13 @@ func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, l
 	return nil
 }
 
-// DoneTask calls POST /api/v1/tasks/{id}/done.
-func (c *Client) DoneTask(ctx context.Context, id string) (model.Task, []byte, error) {
-	return c.taskAction(ctx, id, "done")
+// SetTaskState calls POST /api/v1/tasks/{id}/state: move the task into one of
+// model.SettableTaskStates and close any active lease. Whether the move is
+// legal from the task's current state is the server's call, and its refusal is
+// returned unchanged.
+func (c *Client) SetTaskState(ctx context.Context, id, state string) (model.Task, []byte, error) {
+	return doJSON[model.Task](ctx, c, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(id)+"/state",
+		model.SetTaskStateInput{State: state}, "task")
 }
 
 // ReportMerge calls POST /api/v1/merges: tell the backbone that sha landed on

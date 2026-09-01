@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -238,20 +240,41 @@ var reopenableStates = map[string]bool{
 	"released": true, "abandoned": true,
 }
 
-// doneTask handles POST /api/v1/tasks/{id}/done: current state -> merged,
-// closing any active lease in the same transaction. The from-state is read
-// inside the transaction so a concurrent change cannot be raced, exactly as
-// abandonTask does.
+// setStateEventType names the event a manual move to state records. merged
+// keeps "task.done", the name this transition has carried since the endpoint
+// was POST /tasks/{id}/done, so the log stays one series across the rename.
+func setStateEventType(state string) string {
+	if state == "merged" {
+		return "task.done"
+	}
+	return "task." + state
+}
+
+// setTaskState handles POST /api/v1/tasks/{id}/state: current state -> the
+// requested one of model.SettableTaskStates, closing any active lease in the
+// same transaction. The from-state is read inside the transaction so a
+// concurrent change cannot be raced, exactly as abandonTask does.
 //
-// It does not hardcode in_review as the from-state. legalTransitions already
-// allows the direct-to-main jumps ready|in_progress -> merged, and pinning
-// the endpoint to in_review made it stricter than the domain model: not every
-// task earns a review, and some carry no code at all — an admin UI change or
-// a CMS edit has no webhook to report anything, so a manual done is the right
-// and only close for those. legalTransitions is the gate that remains: draft
-// and the terminal states still 422.
-func (s *server) doneTask(w http.ResponseWriter, r *http.Request) {
-	s.finishTask(w, r, "task.done", transitionTo("merged"))
+// It does not hardcode a from-state. store.legalTransitions is the whole
+// gate, and it is deliberately not widened here: these four states are
+// normally supplied by ingestion (the PR-merge webhook, the Flux frontier
+// resolver), and this endpoint is the manual route for work no webhook can
+// see — an admin UI change, a CMS edit, a deploy the backbone never observed.
+// Every refusal the store makes (draft, a terminal state, a container whose
+// state follows its children) still stands.
+func (s *server) setTaskState(w http.ResponseWriter, r *http.Request) {
+	var req model.SetTaskStateInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if !slices.Contains(model.SettableTaskStates, req.State) {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"state must be one of "+strings.Join(model.SettableTaskStates, ", ")+
+				"; use the claim, release, abandon, reopen, or PATCH endpoints for other transitions")
+		return
+	}
+	s.finishTask(w, r, setStateEventType(req.State), transitionTo(req.State))
 }
 
 // abandonTask handles POST /api/v1/tasks/{id}/abandon: current state ->

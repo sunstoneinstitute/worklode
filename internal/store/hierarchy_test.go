@@ -773,7 +773,8 @@ func TestClaimAllowsChildlessTask(t *testing.T) {
 }
 
 // TestContainerForbiddenStates checks the guard on both ends of a transition:
-// a task with children can never enter a delivery state, and `lode task done`
+// a task with children can never enter a delivery state, and `lode task set
+// state merged`
 // (in_review -> merged) reports the roll-up rule rather than a from-state
 // mismatch. The guard keys off the children, not a kind (029 §2).
 func TestContainerForbiddenStates(t *testing.T) {

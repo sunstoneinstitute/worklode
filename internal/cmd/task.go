@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,7 +43,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskStartCmd(),
 		newTaskStopCmd(),
 		newTaskSubmitCmd(),
-		newTaskDoneCmd(),
+		newTaskSetCmd(),
 		newTaskAbandonCmd(),
 		newTaskDeleteCmd(),
 		newTaskUndeleteCmd(),
@@ -995,9 +996,48 @@ func newTaskSubmitCmd() *cobra.Command {
 		false, (*cli.Client).SubmitTask)
 }
 
-func newTaskDoneCmd() *cobra.Command {
-	return newTaskTransitionCmd("done <id>", "Mark a task merged from any pre-merge state",
-		true, (*cli.Client).DoneTask)
+// newTaskSetCmd is `lode task set <field> <value> <id>` (061 §2.1): write one
+// named field on a task. "state" is the only field it takes today — the four
+// delivery states an ingestion path normally supplies, reachable by hand for
+// work no webhook can see. The field and the value are arguments, not part of
+// the verb, so this does not fit newTaskTransitionCmd.
+//
+// Both are checked here, before any client call, so a typo names the valid
+// values instead of costing a round trip. Whether the named state is legal
+// from where the task currently stands is not checked here at all: that is
+// the server's transition table, and its refusal is returned unchanged.
+func newTaskSetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set <field> <value> <id>",
+		Short: "Set one field on a task, e.g. `lode task set state merged WL-5`",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			field, value := args[0], args[1]
+			if field != "state" {
+				return fmt.Errorf("unknown field %q: the only settable field is \"state\"", field)
+			}
+			if !slices.Contains(model.SettableTaskStates, value) {
+				return fmt.Errorf("unknown state %q: must be one of %s",
+					value, strings.Join(model.SettableTaskStates, ", "))
+			}
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[2], c, cfg)
+			if err != nil {
+				return err
+			}
+			t, raw, err := c.SetTaskState(cmd.Context(), id, value)
+			if err != nil {
+				return err
+			}
+			// The work on this task is over, so drop the current worktree's
+			// stamp exactly as the transition commands with clearBinding do.
+			clearTaskBindingIfCurrent(cmd, id)
+			return renderTask(cmd, t, raw)
+		},
+	}
 }
 
 func newTaskAbandonCmd() *cobra.Command {

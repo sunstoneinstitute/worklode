@@ -128,7 +128,7 @@ func TestHumanAssignLifecycle(t *testing.T) {
 		t.Fatalf("submitted task state = %q, want in_review", reviewed.State)
 	}
 
-	done, _, err := alice.DoneTask(ctx, task.ID)
+	done, _, err := alice.SetTaskState(ctx, task.ID, "merged")
 	if err != nil {
 		t.Fatalf("alice done task: %v", err)
 	}
