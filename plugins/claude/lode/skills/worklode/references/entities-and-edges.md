@@ -54,8 +54,8 @@ Every pre-merged state can also go to `abandoned`; `merged`/`deployed_dev`/
 | terminal-ish → `ready` | You: `lode task reopen` (fresh claim required) |
 
 A **container task** — one with children — cannot itself sit in
-`in_review`/`deployed_dev`/`deployed_prod`/`released`; `lode task done` on a
-parent reports the roll-up rule instead of a bad transition.
+`in_review`/`deployed_dev`/`deployed_prod`/`released`; `lode task set state
+merged` on a parent reports the roll-up rule instead of a bad transition.
 
 Leases are orthogonal to state: a lease says a worktree is occupied, and
 nothing in the delivery pipeline (merge, deploy, release) touches it. Leases

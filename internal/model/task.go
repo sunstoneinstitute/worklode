@@ -65,6 +65,20 @@ type DeleteInput struct {
 	Justification string `json:"justification,omitempty"`
 }
 
+// SetTaskStateInput is the request body for POST /api/v1/tasks/{id}/state:
+// the delivery state to move the task into.
+type SetTaskStateInput struct {
+	State string `json:"state"`
+}
+
+// SettableTaskStates are the states that endpoint accepts (061 §2.1) — the
+// four an ingestion path normally supplies. Every other transition has its
+// own endpoint, because it carries behaviour beyond the state write (claim
+// takes a lease, reopen clears commit attribution, abandon is its own event).
+// Which of these four a given task may actually reach stays the store's
+// transition table's call; this list only bounds the endpoint.
+var SettableTaskStates = []string{"merged", "deployed_dev", "deployed_prod", "released"}
+
 // CreateTaskInput is the request body for CreateTask (POST /api/v1/tasks).
 type CreateTaskInput struct {
 	Project  string   `json:"project"`

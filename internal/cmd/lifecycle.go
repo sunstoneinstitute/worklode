@@ -30,7 +30,7 @@ import (
 // themselves) and speak in terms of "the task in the worktree I'm standing in"
 // rather than an explicit task id. The grouping is also what keeps `lode
 // worktree done` (submit for review, release the lease) from colliding in
-// meaning with `lode task done <id>` (the work landed).
+// meaning with `lode task set state merged <id>` (the work landed).
 
 func init() {
 	rootCmd.AddCommand(newWorktreeCmd())
@@ -67,11 +67,11 @@ func layoutFrom(dir string) (worktree.Layout, error) {
 // repository, or when the repo root carries no task binding.
 //
 // byName is the caller's own "say which task instead of inferring it" form —
-// an id for the commands that have an explicit-id sibling ("lode task done
-// <id>"), a directory for `resume`. It is offered first in the failure because
-// the user is standing in a checkout that holds no task, and the shortest way
-// forward is usually to name the one they mean. Callers with no such form
-// pass "".
+// an id for the commands that have an explicit-id sibling ("lode task set
+// state merged <id>"), a directory for `resume`. It is offered first in the
+// failure because the user is standing in a checkout that holds no task, and
+// the shortest way forward is usually to name the one they mean. Callers with
+// no such form pass "".
 func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root string, err error) {
 	root, ok := worktree.Root(dir)
 	if !ok {
@@ -457,9 +457,9 @@ func runResume(cmd *cobra.Command, dir string) error {
 // verb. It submits the task for review (in_progress -> in_review) and closes
 // the lease; it never moves the task to `merged`. `merged` means the work
 // landed on the default branch (spec 004 §5.1) — a fact only the PR-merge
-// webhook, the delivery resolver, or a human running `lode task done <id>`
-// for a change that carries no PR can know. An agent finishing in a worktree
-// knows none of it: the branch may not even be pushed yet.
+// webhook, the delivery resolver, or a human running `lode task set state
+// merged <id>` for a change that carries no PR can know. An agent finishing in
+// a worktree knows none of it: the branch may not even be pushed yet.
 func newDoneCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "done",
@@ -467,8 +467,8 @@ func newDoneCmd() *cobra.Command {
 		Long: "Submit the current worktree's task for review and release its lease.\n\n" +
 			"The task moves to in_review, not merged: `merged` records that the\n" +
 			"work landed on the default branch, which the PR-merge webhook reports.\n" +
-			"For a change that will never have a PR, close it with `lode task done\n" +
-			"<id>` once it has actually landed.",
+			"For a change that will never have a PR, close it with\n" +
+			"`lode task set state merged <id>` once it has actually landed.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

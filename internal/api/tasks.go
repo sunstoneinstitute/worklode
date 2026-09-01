@@ -474,7 +474,7 @@ func (s *server) listTaskTree(w http.ResponseWriter, r *http.Request, q url.Valu
 // with no PR, moved by assign/start rather than claim). The GitHub PR webhook
 // (internal/hooks/github.go) is the automatic route to in_review for
 // PR-backed tasks. Every other transition has a dedicated endpoint (claim,
-// release, done, abandon, reopen) that also manages the task's lease.
+// release, state, abandon, reopen) that also manages the task's lease.
 var patchStateFrom = map[string]string{
 	"ready":       "draft",
 	"in_progress": "in_review",
@@ -533,7 +533,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		stateFrom, ok = patchStateFrom[*req.State]
 		if !ok {
 			writeErr(w, http.StatusUnprocessableEntity,
-				`state must be "ready" (from draft), "in_progress" (from in_review), or "in_review" (from in_progress); use the claim, release, done, or abandon endpoints for other transitions`)
+				`state must be "ready" (from draft), "in_progress" (from in_review), or "in_review" (from in_progress); use the claim, release, state, or abandon endpoints for other transitions`)
 			return
 		}
 	}

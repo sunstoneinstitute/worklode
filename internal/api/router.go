@@ -159,7 +159,7 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/edges":          guardedBound(permTaskWrite),
 	"DELETE /api/v1/tasks/{id}/edges":        guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/decompose":      guardedBound(permTaskWrite),
-	"POST /api/v1/tasks/{id}/done":           guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/state":          guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/abandon":        guardedBound(permTaskWrite),
 	"POST /api/v1/tasks/{id}/reopen":         guarded(permTaskWrite),
 	// Delete and undelete are task writes like the rest (044 §5). Deliberately
@@ -261,7 +261,7 @@ var routeGuards = map[string]routeGuard{
 
 	// --- delivery ------------------------------------------------------------
 	// Reporting a merge advances tasks, so it needs the same permission the
-	// done/abandon endpoints do. The webhook reporter carries no actor and is
+	// state/abandon endpoints do. The webhook reporter carries no actor and is
 	// authenticated by HMAC instead; this one is a person's CLI token.
 	"POST /api/v1/merges": guardedAny(permTaskWrite),
 

@@ -179,13 +179,13 @@ func TestResolveWorktreeTaskRejectsNonWorktree(t *testing.T) {
 	// ParseDir rejection (a plain repo root is not a Worklode worktree), not
 	// the earlier worktree.Root failure a non-repo tempdir would hit instead.
 	root := initGitRepo(t)
-	_, _, err = resolveWorktreeTask(l, root, "lode task done <id>")
+	_, _, err = resolveWorktreeTask(l, root, "lode task set state merged <id>")
 	if err == nil {
 		t.Fatal("resolveWorktreeTask accepted a non-worktree directory")
 	}
 	// The failure is about the checkout holding no task, and its way out is
 	// naming one — not a lecture on the two resolution rules that just missed.
-	for _, want := range []string{"not bound to a Worklode task", "lode task done <id>", "lode worktree next [id]"} {
+	for _, want := range []string{"not bound to a Worklode task", "lode task set state merged <id>", "lode worktree next [id]"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
