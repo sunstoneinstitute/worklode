@@ -535,11 +535,12 @@ type taskShowUsageResult struct {
 	Cost json.RawMessage `json:"cost"`
 }
 
+// newTaskSkillsCmd is the read-only view of a task's pinned skills (061 §2.2,
+// rule L6). The paired write is `lode task set skills <name…> <id>`.
 func newTaskSkillsCmd() *cobra.Command {
-	var set []string
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "skills <id>",
-		Short: "Show or replace the task's pinned skills",
+		Short: "Show the task's pinned skills",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
@@ -549,22 +550,6 @@ func newTaskSkillsCmd() *cobra.Command {
 			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
 			if err != nil {
 				return err
-			}
-			if cmd.Flags().Changed("set") {
-				raw, err := c.SetTaskSkills(cmd.Context(), id, set)
-				if err != nil {
-					return err
-				}
-				if jsonOut(cmd) {
-					printRaw(cmd, raw)
-					return nil
-				}
-				var resp model.TaskSkills
-				if err := json.Unmarshal(raw, &resp); err != nil {
-					return fmt.Errorf("decode skills: %w", err)
-				}
-				cli.PinnedSkillList(cmd.OutOrStdout(), resp.Skills)
-				return nil
 			}
 			t, raw, err := c.GetTask(cmd.Context(), id)
 			if err != nil {
@@ -578,8 +563,6 @@ func newTaskSkillsCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringSliceVar(&set, "set", nil, "replace pinned skills (comma-separated)")
-	return cmd
 }
 
 // newTaskTokenCmd mints a task-scoped token (001 §2.1): a wl_ credential
@@ -996,39 +979,76 @@ func newTaskSubmitCmd() *cobra.Command {
 		false, (*cli.Client).SubmitTask)
 }
 
-// newTaskSetCmd is `lode task set <field> <value> <id>` (061 §2.1): write one
-// named field on a task. "state" is the only field it takes today — the four
-// delivery states an ingestion path normally supplies, reachable by hand for
-// work no webhook can see. The field and the value are arguments, not part of
+// newTaskSetCmd is `lode task set <field> <value…> <id>` (061 §2.1): write one
+// named field on a task. The field and the values are arguments, not part of
 // the verb, so this does not fit newTaskTransitionCmd.
 //
-// Both are checked here, before any client call, so a typo names the valid
-// values instead of costing a round trip. Whether the named state is legal
-// from where the task currently stands is not checked here at all: that is
-// the server's transition table, and its refusal is returned unchanged.
+// The task id is always the LAST argument, which is what lets a field take
+// more than one value: "state" takes exactly one (the four delivery states an
+// ingestion path normally supplies, reachable by hand for work no webhook can
+// see), "skills" takes any number, and no names at all clears the pins.
+//
+// The field and a state value are checked here, before any client call, so a
+// typo names the valid values instead of costing a round trip. Whether the
+// named state is legal from where the task currently stands is not checked
+// here at all: that is the server's transition table, and its refusal is
+// returned unchanged.
 func newTaskSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <field> <value> <id>",
+		Use:   "set <field> <value…> <id>",
 		Short: "Set one field on a task, e.g. `lode task set state merged WL-5`",
-		Args:  cobra.ExactArgs(3),
+		Long: `Set one named field on a task. The task id is always the last argument;
+everything between the field and the id is the value.
+
+  state    exactly one of the delivery states:
+             lode task set state merged WL-5
+  skills   any number of skill names, replacing whatever was pinned:
+             lode task set skills tdd debugging WL-5
+           naming none clears the task's pinned skills:
+             lode task set skills WL-5`,
+		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			field, value := args[0], args[1]
-			if field != "state" {
-				return fmt.Errorf("unknown field %q: the only settable field is \"state\"", field)
-			}
-			if !slices.Contains(model.SettableTaskStates, value) {
-				return fmt.Errorf("unknown state %q: must be one of %s",
-					value, strings.Join(model.SettableTaskStates, ", "))
+			field, values, ref := args[0], args[1:len(args)-1], args[len(args)-1]
+			switch field {
+			case "state":
+				if len(values) != 1 {
+					return fmt.Errorf("field \"state\" takes exactly one value: lode task set state <state> <id>")
+				}
+				if !slices.Contains(model.SettableTaskStates, values[0]) {
+					return fmt.Errorf("unknown state %q: must be one of %s",
+						values[0], strings.Join(model.SettableTaskStates, ", "))
+				}
+			case "skills":
+			default:
+				return fmt.Errorf("unknown field %q: settable fields are \"state\" and \"skills\"", field)
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
 			}
-			id, err := resolveTaskID(cmd.Context(), args[2], c, cfg)
+			id, err := resolveTaskID(cmd.Context(), ref, c, cfg)
 			if err != nil {
 				return err
 			}
-			t, raw, err := c.SetTaskState(cmd.Context(), id, value)
+			if field == "skills" {
+				// Pinning skills does not end the work, so the worktree keeps
+				// its task stamp.
+				raw, err := c.SetTaskSkills(cmd.Context(), id, values)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				var resp model.TaskSkills
+				if err := json.Unmarshal(raw, &resp); err != nil {
+					return fmt.Errorf("decode skills: %w", err)
+				}
+				cli.PinnedSkillList(cmd.OutOrStdout(), resp.Skills)
+				return nil
+			}
+			t, raw, err := c.SetTaskState(cmd.Context(), id, values[0])
 			if err != nil {
 				return err
 			}

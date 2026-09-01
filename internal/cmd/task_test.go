@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -995,5 +996,58 @@ func TestTaskSetState(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTaskSetSkills covers `lode task set skills <name…> <id>` and its read
+// side `lode task skills <id>`: many names replace the pins, naming none
+// clears them, and the removed `--set` flag on the view is now an error.
+func TestTaskSetSkills(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Pin some skills")
+
+	pinned := func() []string {
+		t.Helper()
+		got, _, err := c.GetTask(context.Background(), task.ID)
+		if err != nil {
+			t.Fatalf("get %s: %v", task.ID, err)
+		}
+		return got.Skills
+	}
+
+	if _, err := runLode(t, "task", "set", "skills", "tdd", "debugging", task.ID); err != nil {
+		t.Fatalf("set skills: %v", err)
+	}
+	if got := pinned(); !slices.Equal(got, []string{"tdd", "debugging"}) {
+		t.Fatalf("skills = %v, want [tdd debugging]", got)
+	}
+
+	out, err := runLode(t, "task", "skills", task.ID)
+	if err != nil {
+		t.Fatalf("task skills: %v", err)
+	}
+	for _, want := range []string{"tdd", "debugging"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("view output %q does not mention %q", out, want)
+		}
+	}
+
+	// No names at all is the clear.
+	if _, err := runLode(t, "task", "set", "skills", task.ID); err != nil {
+		t.Fatalf("clear skills: %v", err)
+	}
+	if got := pinned(); len(got) != 0 {
+		t.Fatalf("skills after clear = %v, want none", got)
+	}
+
+	// The view no longer writes: --set is gone, not silently accepted.
+	if _, err := runLode(t, "task", "skills", task.ID, "--set", "tdd"); err == nil {
+		t.Fatal("lode task skills --set: want an unknown-flag error, got nil")
+	}
+	// A field is not a value: "state" still refuses a list.
+	_, err = runLode(t, "task", "set", "state", "merged", "released", task.ID)
+	if err == nil || !strings.Contains(err.Error(), "exactly one value") {
+		t.Fatalf("set state with two values: %v", err)
 	}
 }
