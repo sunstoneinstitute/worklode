@@ -37,6 +37,7 @@ const autoCompactBufferPct = 16.5
 const (
 	branchSymbol   = "⎇" // U+2387 alternate key, marks the git branch
 	worktreeSymbol = "⧉" // U+29C9 two joined squares, marks a linked worktree
+	resetSymbol    = "⧖" // U+29D6 white hourglass, marks a usage window's reset countdown
 )
 
 // Payload is the status-line JSON the harness writes to stdin. Both harnesses
@@ -78,6 +79,7 @@ type RateLimits struct {
 // RateLimitWindow is one usage window (5-hour session or 7-day week).
 type RateLimitWindow struct {
 	UsedPercentage float64 `json:"used_percentage"`
+	ResetsAt       int64   `json:"resets_at"`
 }
 
 // Options is the ambient state rendering reads. Every field has a working
@@ -324,29 +326,65 @@ func renderTask(dir, session string) string {
 }
 
 // renderUsage returns the usage segment: context, session, and weekly
-// percentages as coloured numbers (C:12% S:56% W:24%) rather than a bar, so
-// all three fit in the width the bar alone used to need. Each field drops
-// out independently — a payload can carry context_window without
-// rate_limits (a harness below Claude Code 2.1.x, or a non-subscription
-// account), or the reverse.
+// percentages as coloured numbers (C:12% S:56% ⧖2h3m W:24% ⧖1d2h3m) rather
+// than a bar, so all three fit in the width the bar alone used to need. Each
+// field drops out independently — a payload can carry context_window
+// without rate_limits (a harness below Claude Code 2.1.x, or a
+// non-subscription account), or the reverse. Only the rate-limit windows
+// carry a reset countdown; context has no fixed reset schedule.
 func renderUsage(p *Payload, tempDir, configDir string) string {
 	dark := themeIsDark(configDir)
+	now := time.Now()
 	var fields []string
 	if used, ok := contextUsedPercent(p, tempDir); ok {
 		fields = append(fields, usageField("C", used, dark))
 	}
 	if p.RateLimits != nil {
 		if w := p.RateLimits.FiveHour; w != nil {
-			fields = append(fields, usageField("S", int(math.Round(w.UsedPercentage)), dark))
+			fields = append(fields, usageField("S", int(math.Round(w.UsedPercentage)), dark)+resetSuffix(w.ResetsAt, now))
 		}
 		if w := p.RateLimits.SevenDay; w != nil {
-			fields = append(fields, usageField("W", int(math.Round(w.UsedPercentage)), dark))
+			fields = append(fields, usageField("W", int(math.Round(w.UsedPercentage)), dark)+resetSuffix(w.ResetsAt, now))
 		}
 	}
 	if len(fields) == 0 {
 		return ""
 	}
 	return " " + strings.Join(fields, " ")
+}
+
+// resetSuffix renders the dimmed "⧖2h3m" countdown following a usage
+// field, or "" once formatResetIn drops out.
+func resetSuffix(resetsAt int64, now time.Time) string {
+	in := formatResetIn(resetsAt, now)
+	if in == "" {
+		return ""
+	}
+	return fmt.Sprintf(" \x1b[2m%s%s\x1b[0m", resetSymbol, in)
+}
+
+// formatResetIn renders the time remaining until resetsAt as day/hour/minute
+// components (1d2h3m, 2h3m, 45m), including every unit from the largest
+// non-zero one down to minutes. Returns "" once the window has already
+// rolled over (resetsAt in the past, or zero — the harness sends no window
+// at all rather than resetsAt: 0), so a stale percentage is never paired
+// with a countdown that has already expired.
+func formatResetIn(resetsAt int64, now time.Time) string {
+	remaining := time.Unix(resetsAt, 0).Sub(now)
+	if remaining <= 0 {
+		return ""
+	}
+	total := int(remaining.Truncate(time.Minute).Minutes())
+	days, hours, minutes := total/(24*60), (total/60)%24, total%60
+
+	switch {
+	case days > 0:
+		return fmt.Sprintf("%dd%dh%dm", days, hours, minutes)
+	case hours > 0:
+		return fmt.Sprintf("%dh%dm", hours, minutes)
+	default:
+		return fmt.Sprintf("%dm", minutes)
+	}
 }
 
 // harnessSettings is the subset of the harness's settings.json this package

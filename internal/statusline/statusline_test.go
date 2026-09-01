@@ -177,6 +177,62 @@ func TestRenderUsageColorsBySeverity(t *testing.T) {
 	}
 }
 
+func TestFormatResetIn(t *testing.T) {
+	now := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name string
+		in   time.Duration
+		want string
+	}{
+		{"minutes only", 45 * time.Minute, "45m"},
+		{"hours and minutes", 2*time.Hour + 3*time.Minute, "2h3m"},
+		{"exact hour still shows minutes", 2 * time.Hour, "2h0m"},
+		{"days, hours, and minutes", 24*time.Hour + 2*time.Hour + 3*time.Minute, "1d2h3m"},
+		{"already reset", -time.Minute, ""},
+		{"resets this instant", 0, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetsAt := now.Add(tt.in).Unix()
+			if got := formatResetIn(resetsAt, now); got != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFormatResetInZeroMeansNoWindow(t *testing.T) {
+	if got := formatResetIn(0, time.Now()); got != "" {
+		t.Fatalf("want no countdown for an absent resets_at, got %q", got)
+	}
+}
+
+// The offsets carry 30s of slack past the minute boundary: renderUsage reads
+// time.Now() internally, and without slack the sub-second gap between that
+// call and this test computing "now" could truncate a minute early.
+func TestRenderUsageAppendsResetCountdownToRateLimitFields(t *testing.T) {
+	now := time.Now()
+	p := &Payload{RateLimits: &RateLimits{
+		FiveHour: &RateLimitWindow{UsedPercentage: 56, ResetsAt: now.Add(2*time.Hour + 3*time.Minute + 30*time.Second).Unix()},
+		SevenDay: &RateLimitWindow{UsedPercentage: 24, ResetsAt: now.Add(24*time.Hour + 2*time.Hour + 3*time.Minute + 30*time.Second).Unix()},
+	}}
+	got := stripANSI(renderUsage(p, t.TempDir(), ""))
+	want := " S:56% ⧖2h3m W:24% ⧖1d2h3m"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestRenderUsageOmitsCountdownOnceWindowHasRolledOver(t *testing.T) {
+	p := &Payload{RateLimits: &RateLimits{
+		FiveHour: &RateLimitWindow{UsedPercentage: 56, ResetsAt: time.Now().Add(-time.Minute).Unix()},
+	}}
+	got := stripANSI(renderUsage(p, t.TempDir(), ""))
+	if want := " S:56%"; got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 // writeSettings writes a minimal settings.json with the given theme.
 func writeSettings(t *testing.T, dir, theme string) {
 	t.Helper()
