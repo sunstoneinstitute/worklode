@@ -37,7 +37,60 @@ const autoCompactBufferPct = 16.5
 const (
 	branchSymbol   = "⎇" // U+2387 alternate key, marks the git branch
 	worktreeSymbol = "⧉" // U+29C9 two joined squares, marks a linked worktree
-	resetSymbol    = "⧖" // U+29D6 white hourglass, marks a usage window's reset countdown
+	resetSymbol    = "⟲" // U+27F2 anticlockwise gapped circle arrow, marks a usage window's reset countdown
+)
+
+// ANSI escape codes available for status line colouring.
+const (
+	ansiReset = "\x1b[0m"
+	ansiDim   = "\x1b[2m"
+	ansiBold  = "\x1b[1m"
+
+	ansiGreenDark  = "\x1b[92m"
+	ansiYellowDark = "\x1b[93m"
+	ansiOrangeDark = "\x1b[38;5;214m"
+	ansiRedDark    = "\x1b[91m"
+
+	ansiGreenLight  = "\x1b[32m"
+	ansiYellowLight = "\x1b[33m"
+	ansiOrangeLight = "\x1b[38;5;208m"
+	ansiRedLight    = "\x1b[31m"
+
+	ansiBlueDark  = "\x1b[94m"
+	ansiBlueLight = "\x1b[34m"
+
+	// The gold used when the context field's severity is bumped a level for
+	// the base 200k window and lands on the yellow tier: punchier than the
+	// plain ANSI yellow above it stands in for, so the bump reads as a step
+	// up rather than the ramp's ordinary yellow.
+	ansiGoldDark  = "\x1b[38;5;220m"
+	ansiGoldLight = "\x1b[38;5;178m"
+)
+
+// Colours used for each piece of the status line. Package-global so a build
+// can retint the line without touching render logic. Dim reads faint to the
+// point of illegibility on a dark terminal, so only the light ramp dims
+// model/location/reset text; dark renders them at normal weight instead.
+var (
+	taskColor = ansiBold
+
+	modelColorDark  = ansiReset
+	modelColorLight = ansiDim
+
+	locationColorDark  = ansiReset
+	locationColorLight = ansiDim
+
+	taskIDColorDark  = ansiBlueDark
+	taskIDColorLight = ansiBlueLight
+
+	contextBumpColorDark  = ansiGoldDark
+	contextBumpColorLight = ansiGoldLight
+
+	resetColorDark  = ansiDim
+	resetColorLight = ansiDim
+
+	usageColorsDark  = [4]string{ansiGreenDark, ansiYellowDark, ansiOrangeDark, ansiRedDark}
+	usageColorsLight = [4]string{ansiGreenLight, ansiYellowLight, ansiOrangeLight, ansiRedLight}
 )
 
 // Payload is the status-line JSON the harness writes to stdin. Both harnesses
@@ -63,8 +116,15 @@ type WorkspaceInfo struct {
 }
 
 // ContextWindow carries the harness's own accounting of window occupancy.
+// TotalInputTokens and TotalOutputTokens are 0 (not absent) before the first
+// API response, so they carry no presence signal the way the percentage's
+// pointer does. ContextWindowSize is 200000 by default, or 1000000 for a
+// model with extended context; a harness that predates the field sends 0.
 type ContextWindow struct {
 	RemainingPercentage *float64 `json:"remaining_percentage"`
+	TotalInputTokens    int64    `json:"total_input_tokens"`
+	TotalOutputTokens   int64    `json:"total_output_tokens"`
+	ContextWindowSize   int64    `json:"context_window_size"`
 }
 
 // RateLimits carries the Claude.ai subscription usage the harness reports on
@@ -122,15 +182,21 @@ func Run(r io.Reader, w io.Writer, timeout time.Duration, opts Options) error {
 // keeps one, the git location, and a context-usage meter.
 func Render(p *Payload, opts Options) string {
 	model := renderModel(p)
-	location := renderLocation(p, opts.Dir)
 	cfgDir := configDir(opts.ConfigDir)
+	dark := themeIsDark(cfgDir)
+	location := renderLocation(p, opts.Dir, dark)
 	task := renderTask(cfgDir, p.SessionID)
 	usage := renderUsage(p, opts.TempDir, cfgDir)
 
-	if task != "" {
-		return fmt.Sprintf("\x1b[2m%s\x1b[0m │ \x1b[1m%s\x1b[0m │ \x1b[2m%s\x1b[0m%s", model, task, location, usage)
+	modelColor, locationColor := modelColorLight, locationColorLight
+	if dark {
+		modelColor, locationColor = modelColorDark, locationColorDark
 	}
-	return fmt.Sprintf("\x1b[2m%s\x1b[0m │ \x1b[2m%s\x1b[0m%s", model, location, usage)
+
+	if task != "" {
+		return fmt.Sprintf("%s%s%s │ %s%s%s │ %s%s%s%s", modelColor, model, ansiReset, taskColor, task, ansiReset, locationColor, location, ansiReset, usage)
+	}
+	return fmt.Sprintf("%s%s%s │ %s%s%s%s", modelColor, model, ansiReset, locationColor, location, ansiReset, usage)
 }
 
 // errTimeout reports that no payload arrived in time.
@@ -186,7 +252,7 @@ func renderModel(p *Payload) string {
 // by either the task the workspace is bound to or its branch and worktree
 // state. Project is the basename of the remote URL (github.com/foo/bar.git ->
 // bar). Falls back to the directory basename outside a git repo.
-func renderLocation(p *Payload, fallbackDir string) string {
+func renderLocation(p *Payload, fallbackDir string, dark bool) string {
 	dir := fallbackDir
 	if p.Workspace != nil && p.Workspace.CurrentDir != "" {
 		dir = p.Workspace.CurrentDir
@@ -208,22 +274,30 @@ func renderLocation(p *Payload, fallbackDir string) string {
 
 	project := gitProject(dir, mainWorktree)
 	if taskID, ok := worktree.StampedTaskID(dir); ok {
-		return formatTaskLocation(project, taskID, branch)
+		return formatTaskLocation(project, taskID, branch, dark)
 	}
 	return formatLocation(project, toplevel != mainWorktree, branch)
 }
 
-// formatTaskLocation renders a workspace bound to a task: project, task id,
-// and slug as three words. The branch is rendered from the id and slug
-// (`WL-7-fix-the-thing`), so splitting the id back off recovers the slug, and
-// a space where the joining dash was reads as two facts rather than one long
-// token.
+// formatTaskLocation renders a workspace bound to a task: the task id in
+// blue, then project, then slug as three words. The branch is rendered from
+// the id and slug (`WL-7-fix-the-thing`), so splitting the id back off
+// recovers the slug, and a space where the joining dash was reads as two
+// facts rather than one long token.
 //
 // A branch that does not carry the id — renamed by hand, or produced by a
 // LODE_BRANCH_TEMPLATE that orders the parts differently — yields no slug, and
 // the id stands alone rather than having a guess appended to it.
-func formatTaskLocation(project, taskID, branch string) string {
-	out := project + " " + taskID
+//
+// The id's colour is reset back to locationColor rather than ansiReset alone,
+// because the caller wraps the whole location segment in locationColor and
+// this text sits inside that span.
+func formatTaskLocation(project, taskID, branch string, dark bool) string {
+	taskIDColor, resumeColor := taskIDColorLight, locationColorLight
+	if dark {
+		taskIDColor, resumeColor = taskIDColorDark, locationColorDark
+	}
+	out := fmt.Sprintf("%s%s%s%s %s", taskIDColor, taskID, ansiReset, resumeColor, project)
 	if slug := strings.TrimPrefix(branch, taskID+"-"); slug != branch && slug != "" {
 		out += " " + slug
 	}
@@ -325,26 +399,29 @@ func renderTask(dir, session string) string {
 	return ""
 }
 
-// renderUsage returns the usage segment: context, session, and weekly
-// percentages as coloured numbers (C:12% S:56% ⧖2h3m W:24% ⧖1d2h3m) rather
-// than a bar, so all three fit in the width the bar alone used to need. Each
-// field drops out independently — a payload can carry context_window
-// without rate_limits (a harness below Claude Code 2.1.x, or a
-// non-subscription account), or the reverse. Only the rate-limit windows
-// carry a reset countdown; context has no fixed reset schedule.
+// renderUsage returns the usage segment: context, session, and weekly usage
+// as bracketed fields ([CtxWin 12% 101k] [Sess 56% ⟲2h3m] [Week 24%
+// ⟲1d2h3m]) rather than a bar, so all three fit in the width the bar alone
+// used to need. Each field drops out independently — a payload can carry
+// context_window without rate_limits (a harness below Claude Code 2.1.x, or
+// a non-subscription account), or the reverse. Only the rate-limit windows
+// carry a reset countdown; context has no fixed reset schedule, and shows its
+// raw token count instead.
 func renderUsage(p *Payload, tempDir, configDir string) string {
 	dark := themeIsDark(configDir)
 	now := time.Now()
 	var fields []string
-	if used, ok := contextUsedPercent(p, tempDir); ok {
-		fields = append(fields, usageField("C", used, dark))
+	if used, tokens, windowSize, ok := contextUsedPercent(p, tempDir); ok {
+		fields = append(fields, bracketField("CtxWin", used, contextColor(used, windowSize, dark), humanTokens(tokens)))
 	}
 	if p.RateLimits != nil {
 		if w := p.RateLimits.FiveHour; w != nil {
-			fields = append(fields, usageField("S", int(math.Round(w.UsedPercentage)), dark)+resetSuffix(w.ResetsAt, now))
+			pct := int(math.Round(w.UsedPercentage))
+			fields = append(fields, bracketField("Sess", pct, usageColor(pct, dark), resetSuffix(w.ResetsAt, now, dark)))
 		}
 		if w := p.RateLimits.SevenDay; w != nil {
-			fields = append(fields, usageField("W", int(math.Round(w.UsedPercentage)), dark)+resetSuffix(w.ResetsAt, now))
+			pct := int(math.Round(w.UsedPercentage))
+			fields = append(fields, bracketField("Week", pct, usageColor(pct, dark), resetSuffix(w.ResetsAt, now, dark)))
 		}
 	}
 	if len(fields) == 0 {
@@ -353,22 +430,38 @@ func renderUsage(p *Payload, tempDir, configDir string) string {
 	return " " + strings.Join(fields, " ")
 }
 
-// resetSuffix renders the dimmed "⧖2h3m" countdown following a usage
-// field, or "" once formatResetIn drops out.
-func resetSuffix(resetsAt int64, now time.Time) string {
+// bracketField renders one usage field as "[Label pct% extra]". "Label pct%"
+// carries color; extra (a token count or a dimmed reset countdown) keeps
+// whatever colour it was already given, or none. Brackets render in the
+// terminal's default colour so they never compete with either.
+func bracketField(label string, pct int, color, extra string) string {
+	head := fmt.Sprintf("%s%s %d%%%s", color, label, pct, ansiReset)
+	if extra == "" {
+		return "[" + head + "]"
+	}
+	return "[" + head + " " + extra + "]"
+}
+
+// resetSuffix renders the dimmed "⟲2h3m" countdown, or "" once formatResetIn
+// drops out.
+func resetSuffix(resetsAt int64, now time.Time, dark bool) string {
 	in := formatResetIn(resetsAt, now)
 	if in == "" {
 		return ""
 	}
-	return fmt.Sprintf(" \x1b[2m%s%s\x1b[0m", resetSymbol, in)
+	color := resetColorLight
+	if dark {
+		color = resetColorDark
+	}
+	return fmt.Sprintf("%s%s%s%s", color, resetSymbol, in, ansiReset)
 }
 
-// formatResetIn renders the time remaining until resetsAt as day/hour/minute
-// components (1d2h3m, 2h3m, 45m), including every unit from the largest
-// non-zero one down to minutes. Returns "" once the window has already
-// rolled over (resetsAt in the past, or zero — the harness sends no window
-// at all rather than resetsAt: 0), so a stale percentage is never paired
-// with a countdown that has already expired.
+// formatResetIn renders the time remaining until resetsAt as its two most
+// significant components (2d20h, 2h3m, 45m) — a third unit is precision the
+// countdown doesn't need. Returns "" once the window has already rolled over
+// (resetsAt in the past, or zero — the harness sends no window at all rather
+// than resetsAt: 0), so a stale percentage is never paired with a countdown
+// that has already expired.
 func formatResetIn(resetsAt int64, now time.Time) string {
 	remaining := time.Unix(resetsAt, 0).Sub(now)
 	if remaining <= 0 {
@@ -379,7 +472,7 @@ func formatResetIn(resetsAt int64, now time.Time) string {
 
 	switch {
 	case days > 0:
-		return fmt.Sprintf("%dd%dh%dm", days, hours, minutes)
+		return fmt.Sprintf("%dd%dh", days, hours)
 	case hours > 0:
 		return fmt.Sprintf("%dh%dm", hours, minutes)
 	default:
@@ -418,40 +511,83 @@ func themeIsDark(configDir string) bool {
 // against the auto-compact buffer, so the number reads 100% right when
 // compaction triggers rather than at whatever the raw window leaves. It also
 // writes the same numbers to the bridge file, for the claude-context-monitor
-// hook, which has no other way to see them.
-func contextUsedPercent(p *Payload, tempDir string) (int, bool) {
+// hook, which has no other way to see them. The returned token count is the
+// raw total_input_tokens + total_output_tokens, on the window's own scale
+// rather than the normalized percentage; windowSize is the raw
+// context_window_size, 0 when the harness sends none.
+func contextUsedPercent(p *Payload, tempDir string) (used int, tokens, windowSize int64, ok bool) {
 	if p.ContextWindow == nil || p.ContextWindow.RemainingPercentage == nil {
-		return 0, false
+		return 0, 0, 0, false
 	}
 	remaining := *p.ContextWindow.RemainingPercentage
 
 	usableRemaining := math.Max(0, ((remaining-autoCompactBufferPct)/(100-autoCompactBufferPct))*100)
-	used := int(math.Max(0, math.Min(100, math.Round(100-usableRemaining))))
+	used = int(math.Max(0, math.Min(100, math.Round(100-usableRemaining))))
+	tokens = p.ContextWindow.TotalInputTokens + p.ContextWindow.TotalOutputTokens
+	windowSize = p.ContextWindow.ContextWindowSize
 
 	writeBridgeFile(tempDir, p.SessionID, remaining, used)
-	return used, true
+	return used, tokens, windowSize, true
 }
 
-// usageField renders one labelled percentage, coloured by how close it is to
-// its limit.
-func usageField(label string, pct int, dark bool) string {
-	return fmt.Sprintf("%s%s:%d%%\x1b[0m", usageColor(pct, dark), label, pct)
+// humanTokens abbreviates a token count for the status line: 101k, 1.2M.
+// Below 1000 there is no "k" to round to, so it prints the exact count.
+func humanTokens(n int64) string {
+	switch {
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%dk", int(math.Round(float64(n)/1_000)))
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+// baseContextWindowTokens is Claude's default context window size; a harness
+// reporting this (rather than the 1M extended window) leaves much less
+// working room than the raw percentage alone suggests.
+const baseContextWindowTokens = 200_000
+
+// severityIndex maps a percentage to its position in the four-step severity
+// ramp: 0 green, 1 yellow, 2 orange, 3 red.
+func severityIndex(pct int) int {
+	switch {
+	case pct < 50:
+		return 0
+	case pct < 65:
+		return 1
+	case pct < 80:
+		return 2
+	default:
+		return 3
+	}
 }
 
 // usageColor mirrors the four-step severity ramp the bar used to encode in
 // block count: green, yellow, orange, red.
 func usageColor(pct int, dark bool) string {
-	colors := usageColors(dark)
-	switch {
-	case pct < 50:
-		return colors[0]
-	case pct < 65:
-		return colors[1]
-	case pct < 80:
-		return colors[2]
-	default:
-		return colors[3]
+	return usageColors(dark)[severityIndex(pct)]
+}
+
+// contextColor picks the CtxWin field's colour: the usual severity ramp,
+// bumped one level brighter when windowSize is the base 200k rather than the
+// 1M extended window — that smaller window leaves less room to work with at
+// the same percentage, so the warning should arrive a level early. A bump
+// landing on yellow uses a punchier gold instead, so it reads as a step up
+// rather than the ramp's ordinary yellow.
+func contextColor(pct int, windowSize int64, dark bool) string {
+	idx := severityIndex(pct)
+	bumped := windowSize > 0 && windowSize <= baseContextWindowTokens && idx < 3
+	if bumped {
+		idx++
 	}
+	if bumped && idx == 1 {
+		if dark {
+			return contextBumpColorDark
+		}
+		return contextBumpColorLight
+	}
+	return usageColors(dark)[idx]
 }
 
 // usageColors picks the severity ramp for the terminal's theme. The base
@@ -461,9 +597,9 @@ func usageColor(pct int, dark bool) string {
 // the same mid-bright shade.
 func usageColors(dark bool) [4]string {
 	if dark {
-		return [4]string{"\x1b[92m", "\x1b[93m", "\x1b[38;5;214m", "\x1b[91m"}
+		return usageColorsDark
 	}
-	return [4]string{"\x1b[32m", "\x1b[33m", "\x1b[38;5;208m", "\x1b[31m"}
+	return usageColorsLight
 }
 
 // bridgeData is the context snapshot written for out-of-process consumers.
