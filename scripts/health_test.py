@@ -6,7 +6,7 @@ place the script shells out -- is stubbed with recorded JSON in the exact wire
 shapes of `internal/model`. Nothing here starts a server or reads a file.
 
 FakeLode records its calls, because which documents the script fetches in full
-is part of the contract: `lode doc get` is one round trip per document, and a
+is part of the contract: `lode doc show` is one round trip per document, and a
 --needs-planning row already carries the section count a spec would otherwise
 be fetched for.
 """
@@ -51,7 +51,7 @@ def plan_doc(doc_id, slug, **kw):
 
 
 def detail(doc_id, sections=0, covers=()):
-    """A `lode doc get` response.
+    """A `lode doc show` response.
 
     `covers` is one entry per coverage edge: an int is a resolved document, a
     string is the unresolvable reference the backbone puts in `to_external`.
@@ -115,7 +115,7 @@ class FakeLode:
                 return {"docs": [], "planning_gaps": self.gaps}
             kind = args[args.index("--kind") + 1]
             return {"docs": self.specs if kind == "spec" else self.plans}
-        if args[:2] == ["doc", "get"]:
+        if args[:2] == ["doc", "show"]:
             return self.details.get(int(args[2])) or detail(int(args[2]))
         if args[:2] == ["task", "list"]:
             return {"tasks": self.tasks}
@@ -125,7 +125,7 @@ class FakeLode:
 
     def fetched(self):
         """The document ids pulled in full, which is the cost this script pays."""
-        return sorted(int(a[2]) for a in self.calls if a[:2] == ["doc", "get"])
+        return sorted(int(a[2]) for a in self.calls if a[:2] == ["doc", "show"])
 
 
 def collect(fake, project=None):

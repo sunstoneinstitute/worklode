@@ -356,7 +356,7 @@ func TestCheckInvocation(t *testing.T) {
 		{"lode task tree", false},
 
 		{"lode doc list --kind spec", false},
-		{"lode doc new --kind plan --slug s --file f", false}, // "spec, adr, or plan"
+		{"lode doc add --kind plan --slug s --file f", false}, // "spec, adr, or plan"
 		{"lode task add --kind design", false},
 		{"lode task add --kind <the kind>", false},
 		{"lode task list --parent WL-1", false},

@@ -364,7 +364,7 @@ func DocVersionsTable(w io.Writer, versions []model.DocVersionSummary) {
 }
 
 // DocVersionRender prints one version of a document: its identity and body —
-// the `lode doc get --version` view. current is the document's live version;
+// the `lode doc show --version` view. current is the document's live version;
 // when it differs from v.Version, a line says the rendered version is not it.
 func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
 	fmt.Fprintf(w, "%d  %s\n", v.Doc, v.Title)
@@ -383,7 +383,7 @@ func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
 }
 
 // DocDetailRender prints one document: its metadata, body, sections, and
-// edges both ways — the `lode doc get` view.
+// edges both ways — the `lode doc show` view.
 func DocDetailRender(w io.Writer, d model.DocDetail) {
 	fmt.Fprintf(w, "%d  %s\n", d.ID, d.Title)
 	fmt.Fprintf(w, "  project:  %s\n", d.Project)

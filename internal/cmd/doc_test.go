@@ -63,9 +63,9 @@ func writeDocFile(t *testing.T, content string) string {
 
 // --- flag validation (no server needed) --------------------------------
 
-func TestDocNewUnknownKind(t *testing.T) {
+func TestDocAddUnknownKind(t *testing.T) {
 	file := writeDocFile(t, docTestBody)
-	cmd := newDocNewCmd()
+	cmd := newDocAddCmd()
 	cmd.SetArgs([]string{"--kind", "bogus", "--slug", "s", "--file", file, "--project", "proj"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -75,8 +75,8 @@ func TestDocNewUnknownKind(t *testing.T) {
 	}
 }
 
-func TestDocNewMissingFile(t *testing.T) {
-	cmd := newDocNewCmd()
+func TestDocAddMissingFile(t *testing.T) {
+	cmd := newDocAddCmd()
 	cmd.SetArgs([]string{"--kind", "spec", "--slug", "s", "--project", "proj"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -86,9 +86,9 @@ func TestDocNewMissingFile(t *testing.T) {
 	}
 }
 
-func TestDocNewMissingSlug(t *testing.T) {
+func TestDocAddMissingSlug(t *testing.T) {
 	file := writeDocFile(t, docTestBody)
-	cmd := newDocNewCmd()
+	cmd := newDocAddCmd()
 	cmd.SetArgs([]string{"--kind", "spec", "--file", file, "--project", "proj"})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)
@@ -197,9 +197,9 @@ func TestDocAcceptBySlugPrintsMintedTasks(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	planFile := writeDocFile(t, docPlanMintBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
 		"--slug", "mint-plan", "--file", planFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 	out, err := runLode(t, "doc", "accept", "mint-plan")
 	if err != nil {
@@ -217,9 +217,9 @@ func TestDocSubmitBySlug(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	specFile := writeDocFile(t, docTestBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "1", "--slug", "my-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 
 	out, err := runLode(t, "doc", "submit", "my-spec")
@@ -259,53 +259,53 @@ func TestDocFileFlagRejectsEmptyPath(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
 		"--number", "902", "--slug", "empty-file-adr", "--file", ""); err == nil {
-		t.Fatal(`doc new --file "": want error, got nil`)
+		t.Fatal(`doc add --file "": want error, got nil`)
 	}
 	out, err := runLode(t, "doc", "list", "--project", "proj", "--json")
 	if err != nil {
 		t.Fatalf("doc list: %v\noutput: %s", err, out)
 	}
 	if strings.Contains(out, "empty-file-adr") {
-		t.Fatalf(`doc new --file "" created a document anyway: %s`, out)
+		t.Fatalf(`doc add --file "" created a document anyway: %s`, out)
 	}
 
 	// Same guard on the edit side: the body must survive a rejected --file.
 	specFile := writeDocFile(t, docTestBody)
-	out, err = runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "902", "--slug", "keeps-its-body", "--file", specFile, "--json")
 	if err != nil {
-		t.Fatalf("doc new: %v\noutput: %s", err, out)
+		t.Fatalf("doc add: %v\noutput: %s", err, out)
 	}
 	idArg := strconv.FormatInt(docJSON(t, out).ID, 10)
 
 	if _, err := runLode(t, "doc", "edit", idArg, "--file", ""); err == nil {
 		t.Fatal(`doc edit --file "": want error, got nil`)
 	}
-	out, err = runLode(t, "doc", "get", idArg, "--json")
+	out, err = runLode(t, "doc", "show", idArg, "--json")
 	if err != nil {
-		t.Fatalf("doc get: %v\noutput: %s", err, out)
+		t.Fatalf("doc show: %v\noutput: %s", err, out)
 	}
 	if got := docJSON(t, out).Body; got != docTestBody {
 		t.Fatalf(`body after rejected --file "" = %q, want it untouched`, got)
 	}
 }
 
-// TestDocNewAutoAssignsNumber: omitting --number for a spec/ADR gets the next
+// TestDocAddAutoAssignsNumber: omitting --number for a spec/ADR gets the next
 // free number for its (project, kind) rather than refusing (025 §14.3).
-func TestDocNewAutoAssignsNumber(t *testing.T) {
+func TestDocAddAutoAssignsNumber(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	specFile := writeDocFile(t, docTestBody)
 
-	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "auto-numbered", "--file", specFile, "--json")
 	if err != nil {
-		t.Fatalf("doc new (no --number): %v\noutput: %s", err, out)
+		t.Fatalf("doc add (no --number): %v\noutput: %s", err, out)
 	}
 	if got := docJSON(t, out); got.Number != 1 {
-		t.Errorf("doc new (no --number): number = %d, want 1 (auto-assigned)", got.Number)
+		t.Errorf("doc add (no --number): number = %d, want 1 (auto-assigned)", got.Number)
 	}
 }
 
@@ -315,34 +315,34 @@ func TestDocLifecycle(t *testing.T) {
 
 	specFile := writeDocFile(t, docTestBody)
 
-	// new
-	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	// add
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "1", "--slug", "test-spec", "--file", specFile, "--json")
 	if err != nil {
-		t.Fatalf("doc new: %v\noutput: %s", err, out)
+		t.Fatalf("doc add: %v\noutput: %s", err, out)
 	}
 	created := docJSON(t, out)
 	if created.ID == 0 {
-		t.Fatalf("doc new: id = 0, want a generated id")
+		t.Fatalf("doc add: id = 0, want a generated id")
 	}
 	if created.Title != "Test Document" {
-		t.Errorf("doc new: title = %q, want the body's H1", created.Title)
+		t.Errorf("doc add: title = %q, want the body's H1", created.Title)
 	}
 	if created.Status != "draft" {
-		t.Errorf("doc new: status = %q, want draft", created.Status)
+		t.Errorf("doc add: status = %q, want draft", created.Status)
 	}
 	id := created.ID
 	idArg := strconv.FormatInt(id, 10)
 
-	// new: non-json prints a table with the id and title.
-	out, err = runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+	// add: non-json prints a table with the id and title.
+	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
 		"--number", "1", "--slug", "test-adr", "--file", specFile)
 	if err != nil {
-		t.Fatalf("doc new (table): %v\noutput: %s", err, out)
+		t.Fatalf("doc add (table): %v\noutput: %s", err, out)
 	}
 	// The kind is in the ref now, not a column of its own.
 	if !strings.Contains(out, "Test Document") || !strings.Contains(out, "PROJ-ADR-1") {
-		t.Errorf("doc new table output = %q, want it to mention the title and the ref", out)
+		t.Errorf("doc add table output = %q, want it to mention the title and the ref", out)
 	}
 
 	// list
@@ -360,26 +360,26 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("doc list: got %d docs, want 2", len(listed.Docs))
 	}
 
-	// get
-	out, err = runLode(t, "doc", "get", idArg, "--json")
+	// show
+	out, err = runLode(t, "doc", "show", idArg, "--json")
 	if err != nil {
-		t.Fatalf("doc get: %v\noutput: %s", err, out)
+		t.Fatalf("doc show: %v\noutput: %s", err, out)
 	}
 	var detail model.DocDetail
 	if err := json.Unmarshal([]byte(out), &detail); err != nil {
 		t.Fatalf("decode doc detail %q: %v", out, err)
 	}
 	if !strings.Contains(detail.Body, "Some body text.") {
-		t.Errorf("doc get: body = %q, want it to contain the source body", detail.Body)
+		t.Errorf("doc show: body = %q, want it to contain the source body", detail.Body)
 	}
 
-	// get: non-json renders the body.
-	out, err = runLode(t, "doc", "get", idArg)
+	// show: non-json renders the body.
+	out, err = runLode(t, "doc", "show", idArg)
 	if err != nil {
-		t.Fatalf("doc get (rendered): %v\noutput: %s", err, out)
+		t.Fatalf("doc show (rendered): %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(out, "Some body text.") {
-		t.Errorf("doc get rendered output = %q, want it to contain the body", out)
+		t.Errorf("doc show rendered output = %q, want it to contain the body", out)
 	}
 
 	// edit
@@ -489,17 +489,17 @@ func TestDocLifecycle(t *testing.T) {
 	}
 }
 
-// TestDocGetVersion covers `lode doc get <ref> --version N`: it reads back a
+// TestDocShowVersion covers `lode doc show <ref> --version N`: it reads back a
 // past version instead of the current one, and the rendered view says so.
-func TestDocGetVersion(t *testing.T) {
+func TestDocShowVersion(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
 	specFile := writeDocFile(t, docTestBody)
-	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
 		"--slug", "test-plan", "--file", specFile, "--json")
 	if err != nil {
-		t.Fatalf("doc new: %v\noutput: %s", err, out)
+		t.Fatalf("doc add: %v\noutput: %s", err, out)
 	}
 	idArg := strconv.FormatInt(docJSON(t, out).ID, 10)
 
@@ -508,35 +508,35 @@ func TestDocGetVersion(t *testing.T) {
 		t.Fatalf("doc edit: %v\noutput: %s", err, out)
 	}
 
-	out, err = runLode(t, "doc", "get", idArg, "--version", "1", "--json")
+	out, err = runLode(t, "doc", "show", idArg, "--version", "1", "--json")
 	if err != nil {
-		t.Fatalf("doc get --version 1 --json: %v\noutput: %s", err, out)
+		t.Fatalf("doc show --version 1 --json: %v\noutput: %s", err, out)
 	}
 	var v1 model.DocVersion
 	if err := json.Unmarshal([]byte(out), &v1); err != nil {
 		t.Fatalf("decode doc version %q: %v", out, err)
 	}
 	if v1.Body != docTestBody {
-		t.Errorf("doc get --version 1: body = %q, want the pre-edit body %q", v1.Body, docTestBody)
+		t.Errorf("doc show --version 1: body = %q, want the pre-edit body %q", v1.Body, docTestBody)
 	}
 
-	out, err = runLode(t, "doc", "get", idArg, "--version", "1")
+	out, err = runLode(t, "doc", "show", idArg, "--version", "1")
 	if err != nil {
-		t.Fatalf("doc get --version 1 (rendered): %v\noutput: %s", err, out)
+		t.Fatalf("doc show --version 1 (rendered): %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(out, "not the current version") {
-		t.Errorf("doc get --version 1 rendered output = %q, want it to flag a stale version", out)
+		t.Errorf("doc show --version 1 rendered output = %q, want it to flag a stale version", out)
 	}
 
-	out, err = runLode(t, "doc", "get", idArg, "--version", "2")
+	out, err = runLode(t, "doc", "show", idArg, "--version", "2")
 	if err != nil {
-		t.Fatalf("doc get --version 2 (rendered): %v\noutput: %s", err, out)
+		t.Fatalf("doc show --version 2 (rendered): %v\noutput: %s", err, out)
 	}
 	if strings.Contains(out, "not the current version") {
-		t.Errorf("doc get --version 2 rendered output = %q, want no stale-version note", out)
+		t.Errorf("doc show --version 2 rendered output = %q, want no stale-version note", out)
 	}
 	if !strings.Contains(out, "Edited body text.") {
-		t.Errorf("doc get --version 2 rendered output = %q, want the current body", out)
+		t.Errorf("doc show --version 2 rendered output = %q, want the current body", out)
 	}
 }
 
@@ -547,10 +547,10 @@ func TestDocVersionsCmd(t *testing.T) {
 	setupProject(t, c)
 
 	specFile := writeDocFile(t, docTestBody)
-	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
 		"--slug", "test-plan", "--file", specFile, "--json")
 	if err != nil {
-		t.Fatalf("doc new: %v\noutput: %s", err, out)
+		t.Fatalf("doc add: %v\noutput: %s", err, out)
 	}
 	idArg := strconv.FormatInt(docJSON(t, out).ID, 10)
 
@@ -713,22 +713,22 @@ func TestDocListNeedsPlanningAndExecution(t *testing.T) {
 	setupProject(t, c)
 
 	ownerFile := writeDocFile(t, docOwnerSpec)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "2", "--slug", "owner-spec", "--file", ownerFile); err != nil {
-		t.Fatalf("doc new owner spec: %v", err)
+		t.Fatalf("doc add owner spec: %v", err)
 	}
 	specFile := writeDocFile(t, docSpecTwoSections)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "1", "--slug", "my-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new spec: %v", err)
+		t.Fatalf("doc add spec: %v", err)
 	}
 	if _, err := runLode(t, "doc", "accept", "my-spec"); err != nil {
 		t.Fatalf("doc accept spec: %v", err)
 	}
 	planFile := writeDocFile(t, docPlanCoveringSec1DefersSec2)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
 		"--slug", "part-one", "--file", planFile); err != nil {
-		t.Fatalf("doc new plan: %v", err)
+		t.Fatalf("doc add plan: %v", err)
 	}
 	if _, err := runLode(t, "doc", "accept", "part-one"); err != nil {
 		t.Fatalf("doc accept plan: %v", err)
@@ -782,17 +782,17 @@ func TestDocListByOwner(t *testing.T) {
 	}
 
 	specFile := writeDocFile(t, docTestBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "alice-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new (alice spec): %v", err)
+		t.Fatalf("doc add (alice spec): %v", err)
 	}
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
 		"--slug", "alice-adr", "--file", specFile); err != nil {
-		t.Fatalf("doc new (alice adr): %v", err)
+		t.Fatalf("doc add (alice adr): %v", err)
 	}
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "bob-spec", "--owner", "bob", "--file", specFile); err != nil {
-		t.Fatalf("doc new (bob spec): %v", err)
+		t.Fatalf("doc add (bob spec): %v", err)
 	}
 
 	out, err := runLode(t, "doc", "list", "--project", "proj", "--owner", "bob", "--json")
@@ -908,12 +908,12 @@ func TestDocAnchorsMissingFile(t *testing.T) {
 	}
 }
 
-// TestDocNewRecordsWorktreeTask walks the whole chain 025 §12 needs: `lode
-// worktree next` binds a worktree to a task, and a `lode doc new` run from inside that
+// TestDocAddRecordsWorktreeTask walks the whole chain 025 §12 needs: `lode
+// worktree next` binds a worktree to a task, and a `lode doc add` run from inside that
 // worktree records the binding on the document. The CLI reads the task the
 // same way every other worktree-aware command does, so claiming into a
 // worktree is the only setup a document author does.
-func TestDocNewRecordsWorktreeTask(t *testing.T) {
+func TestDocAddRecordsWorktreeTask(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	task := createTestTask(t, c, "Write the spec")
@@ -926,10 +926,10 @@ func TestDocNewRecordsWorktreeTask(t *testing.T) {
 	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-write-the-spec"))
 
 	file := writeDocFile(t, docTestBody)
-	out, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	out, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--number", "1", "--slug", "test-spec", "--file", file, "--json")
 	if err != nil {
-		t.Fatalf("doc new: %v\noutput: %s", err, out)
+		t.Fatalf("doc add: %v\noutput: %s", err, out)
 	}
 	if got := docJSON(t, out).GeneratedByTask; got != task.ID {
 		t.Errorf("generated_by_task = %q, want %q: a document written under a "+
@@ -939,10 +939,10 @@ func TestDocNewRecordsWorktreeTask(t *testing.T) {
 	// The same command outside any worktree records no task and still creates
 	// the document — an ad hoc author is not refused (migration 0044).
 	t.Chdir(t.TempDir())
-	out, err = runLode(t, "doc", "new", "--project", "proj", "--kind", "adr",
+	out, err = runLode(t, "doc", "add", "--project", "proj", "--kind", "adr",
 		"--number", "1", "--slug", "test-adr", "--file", file, "--json")
 	if err != nil {
-		t.Fatalf("doc new outside a worktree: %v\noutput: %s", err, out)
+		t.Fatalf("doc add outside a worktree: %v\noutput: %s", err, out)
 	}
 	if got := docJSON(t, out).GeneratedByTask; got != "" {
 		t.Errorf("generated_by_task = %q, want empty outside a bound worktree", got)

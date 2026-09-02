@@ -50,7 +50,7 @@ while brainstorming's `YYYY-MM-DD-<topic>-design.md` did not match a corpus
 requiring `NNN-kebab-slug.md` with frontmatter and frozen `{#sec-N}` anchors —
 and it has been removed ahead of the corpus cutover, since a write target that
 is about to be deleted is worse than none. The authoring path in this repo is
-`lode doc new`; §5's deliverables still stand for the vendored skills
+`lode doc add`; §5's deliverables still stand for the vendored skills
 themselves.
 
 **What `lode` gives us.** Not the git → backbone sync this brief was drafted
@@ -58,9 +58,9 @@ against: `lode doc sync` and `POST /api/v1/docs/sync` were deleted, and 025 §16
 and §5.1 are withdrawn. What shipped instead is 025's authoring surface, with
 the backbone — not git — as the place a document lives:
 
-- `lode doc new` / `edit` / `submit` / `accept` / `revise` — create a spec, ADR
+- `lode doc add` / `edit` / `submit` / `accept` / `revise` — create a spec, ADR
   or plan in the backbone and move it through its lifecycle.
-- `lode doc list` / `lode doc get` — list documents, and read one back with its
+- `lode doc list` / `lode doc show` — list documents, and read one back with its
   body, sections and edges.
 - `lode doc import` — the one-shot, admin-gated corpus walker that seeded the
   backbone from git. A migration, not a standing sync.
@@ -75,7 +75,7 @@ the backbone — not git — as the place a document lives:
   `body` (frontmatter included), `sections`, `edges` and a `version` integer.
 
 Both gaps this brief named have since closed. There is a CLI read path from the
-backbone — `lode doc get`, and `lode show` reading through the same API — and
+backbone — `lode doc show`, and `lode show` reading through the same API — and
 there is an authoring path, so "write a lode spec" no longer means "write a
 file and sync it". What has *not* moved is the corpus of record: `docs/specs/`
 and `docs/plans/` are still where these documents are edited in this repo, so
@@ -264,7 +264,7 @@ The sequencing consequence this brief stated has since been discharged. 025 as
 written made the backbone a projection of reviewed git, so lode-first authoring
 needed that model amended and a write path built before these skills had
 anywhere to write. Both landed: the projection model is withdrawn with §16, and
-`lode doc new`/`edit`/`submit`/`accept`/`revise` is the write path. Track B is
+`lode doc add`/`edit`/`submit`/`accept`/`revise` is the write path. Track B is
 no longer blocked on `lode` — what remains is the vendoring itself, and the fact
 that this repo still edits its own corpus as files, so a skill writing only to
 the backbone would bypass the reviewed corpus rather than replace it.
@@ -352,7 +352,7 @@ shipped; the first three do not exist yet.
    `.claude/settings.local.json`, unconditionally and idempotently.
 4. ~~**A lode-first document authoring path** (§5) — create and edit specs and
    plans through the API, and the 025 amendment that permits it.~~ Shipped:
-   `POST /api/v1/docs` and the lifecycle routes behind `lode doc new`/`edit`/
+   `POST /api/v1/docs` and the lifecycle routes behind `lode doc add`/`edit`/
    `submit`/`accept`/`revise`, with 025 §16 withdrawn.
 
 ## 8. Open questions

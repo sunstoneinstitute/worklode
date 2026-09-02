@@ -1,6 +1,6 @@
 ---
 name: worklode-docs-authoring
-description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc new", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
+description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc add", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
 ---
 
 # Authoring specs and plans
@@ -19,7 +19,7 @@ included — in a scratch file, then:
 
 ```bash
 lode doc anchors <file>                             # local lint: anchors, plan ## Tasks
-lode doc new --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
+lode doc add --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body
 lode doc revise <ref> --file <file>          # candidate revision on an accepted doc
 lode doc revise <ref> --discard              # withdraw it unlanded: owner or its author
@@ -29,9 +29,9 @@ lode doc transfer <ref> --to <actor>         # owner-gated; move ownership to an
 ```
 
 Read one back with `lode show <ref>` (`WL-SPEC-25`, `WL-SPEC-25#sec-9`, or
-`-s <anchor>`) or `lode doc get <ref> --json` for the body plus parsed
+`-s <anchor>`) or `lode doc show <ref> --json` for the body plus parsed
 sections and edges. The scratch file is an editor buffer, not a copy of record
-— nothing reads it after `lode doc new`.
+— nothing reads it after `lode doc add`.
 
 ## Frontmatter is mandatory
 
@@ -53,7 +53,7 @@ Frontmatter keys are ontology property names, ordered lifecycle → `covers` →
 `defers` → dependency → amendment → supersession. A `covers:` reference the project
 resolves becomes an edge on creation; one it does not is kept verbatim as an
 external reference — a typo therefore reads as an unplanned section rather
-than an error, so check `lode doc get <slug> --json` for the edges you meant.
+than an error, so check `lode doc show <slug> --json` for the edges you meant.
 
 ## Section anchors are frozen
 
@@ -61,7 +61,7 @@ Spec sections carry `{#sec-N}` anchors that are **frozen once the spec is
 accepted** — amend or supersede a section, never renumber it. `lode doc
 anchors <file>` checks the numbering and anchors before you create or edit a
 document. There is no inlined view: what a section says *now* is the section
-plus whatever amends it, and `lode doc get <ref> --json` names that in
+plus whatever amends it, and `lode doc show <ref> --json` names that in
 `edges_in` (`amendedBy`, `isReplacedBy`) — follow those before treating the
 body as current.
 

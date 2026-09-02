@@ -135,7 +135,7 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 //
 // A ref carrying no key — a slug, a path, a number form — has no tier 2 of
 // its own, and used to stop at the current project's documents while `lode
-// doc get` resolved the same string org-wide (WL-358: `lode doc get
+// doc show` resolved the same string org-wide (WL-358: `lode doc show
 // 001-zero-trust-gateway` worked from a worklode checkout and `lode doc todo`
 // on the same string did not). It now falls through to the backbone's own
 // resolver — the endpoint `lode doc <verb>` already calls — so the four doc
