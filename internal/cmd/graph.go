@@ -67,7 +67,7 @@ func newGraphProjectionStatusCmd() *cobra.Command {
 // §11) for the server-side projector; this command is the first thing that
 // writes them to a file or stdout instead.
 func newGraphTriplesCmd() *cobra.Command {
-	var allProjects bool
+	var scope scopeFlags
 	var output string
 	cmd := &cobra.Command{
 		Use:   "triples",
@@ -78,6 +78,10 @@ func newGraphTriplesCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
 
 			projResp, _, err := c.ListProjects(cmd.Context())
 			if err != nil {
@@ -85,13 +89,8 @@ func newGraphTriplesCmd() *cobra.Command {
 			}
 			projects := projResp.Projects
 
-			var filter cli.TaskListFilter
-			if !allProjects {
-				sc := currentScope(cmd.Context(), c, cfg)
-				if sc.Project == "" {
-					return errNoProject
-				}
-				filter.Project = sc.Project
+			filter := cli.TaskListFilter{Project: sc.Project}
+			if sc.Project != "" {
 				projects = nil
 				for _, p := range projResp.Projects {
 					if p.ID == sc.Project {
@@ -104,9 +103,8 @@ func newGraphTriplesCmd() *cobra.Command {
 				}
 			}
 
-			// Not filtered by state (--all-projects or not): a done or
-			// released task must stay in the graph, or a resolved blocker
-			// reads as an open one.
+			// Not filtered by state: a done or released task must stay in
+			// the graph, or a resolved blocker reads as an open one.
 			tasks, _, err := c.ListTasksDetail(cmd.Context(), filter)
 			if err != nil {
 				return err
@@ -129,7 +127,7 @@ func newGraphTriplesCmd() *cobra.Command {
 			return err
 		},
 	}
-	cmd.Flags().BoolVar(&allProjects, "all-projects", false, "export every project instead of just the current one")
+	addScopeFlags(cmd, &scope, "limit the export to one project id")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "write to this file instead of stdout")
 	return cmd
 }

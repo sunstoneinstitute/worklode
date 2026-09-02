@@ -798,9 +798,9 @@ Slashes inside a local id remain permissible (slash namespace, opaque path), as 
 > stays a bare, untyped object IRI in that graph; the projector emits no type
 > stub and mirrors no foreign task.
 >
-> **Amended by ADR 057.** The projection table gains a `wl:humanOnly` row: the
-> backbone `tasks.human_only` flag is projected as a Task property, emitted
-> only when true.
+> **Amended by ADR 057.** The backbone `tasks.human_only` flag is projected as
+> a `wl:humanOnly` Task property, on the existing Task node row, emitted only
+> when true.
 
 **Authority stays split**: the **backbone owns execution facts** (task state, leases,
 `blocks`/`child_of`); the **graph owns design facts** (Component, DesignDoc, `governs`,

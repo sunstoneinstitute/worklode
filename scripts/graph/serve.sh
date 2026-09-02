@@ -26,7 +26,7 @@ for pidfile in "$DIR"/raw.pid "$DIR"/materialized.pid; do
 	rm -f "$pidfile"
 done
 
-"$REPO/bin/lode" graph triples --all-projects -o "$DIR/tasks.nt"
+"$REPO/bin/lode" graph triples --project= -o "$DIR/tasks.nt"
 cp "$REPO/ns/ontology.ttl" "$REPO/ns/concept.ttl" "$DIR/"
 # shapes.ttl is SHACL, which HornDB does not evaluate, so it is left out.
 

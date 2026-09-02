@@ -37,12 +37,19 @@ make graph-query Q=gates
 Both are needed because materialization erases the distinction between an
 asserted and an inferred edge, and worklode's own "is it blocked" rule
 (`blockedCondition`, `internal/store/tasks.go`) looks only at direct edges: a
-task whose direct blocker is merged is startable even when something further up
-the chain is open.
+task whose direct blocker is merged clears that check even when something
+further up the chain is open. `gates.rq` reproduces only this direct-blocker
+clause, not the full `readyCandidates` ready-set rule, which also excludes
+draft states and container tasks, so an unclaimable container can sort to
+the top of its results.
 
 Fan-out answers agree across the two, and agree with `store.BlockingFanOut`
 (`lode task frontier`). Three independent implementations is a useful check
-that an export is faithful.
+that an export is faithful. One known divergence: `store.ListEdgesForTasks`
+does not filter the far end of an edge by `deleted_at`, so a live task can
+export a `wl:dependsOn` naming a deleted blocker. On the materialized
+endpoint, `owl:inverseOf` plus transitivity turns that into a `wl:blocks` hop,
+which `BlockingFanOut` explicitly excludes.
 
 ## Notes
 
