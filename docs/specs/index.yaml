@@ -733,9 +733,3 @@ docs/specs/056-nav-shell-and-cross-project-inbox.md:
     sec-3.4: "### 3.4 Decisions are not a bucket yet"
     sec-4: "## 4. The inbox indicator"
     sec-5: "## 5. Non-goals"
-docs/specs/057-project-human-only-tasks-into-the-graph.md:
-  sections:
-    sec-0: "## 0. Decision"
-    sec-1: "## 1. Why"
-    sec-2: "## 2. Amendment to 006 §11"
-    sec-3: "## 3. Scope"

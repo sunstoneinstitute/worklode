@@ -794,18 +794,13 @@ Slashes inside a local id remain permissible (slash namespace, opaque path), as 
 
 ## 11. Projection: backbone → graph
 
-> Pending `049-validate-project-graphs-as-a-union.md#sec-2` (not yet effective)  
-> Pending `057-project-human-only-tasks-into-the-graph.md#sec-2` (not yet effective)
+> Pending `049-validate-project-graphs-as-a-union.md#sec-2` (not yet effective)
 
 > **Amended by ADR 049.** A project's named graph is subject-complete and
 > object-open: every projected triple whose subject the project owns, and no
 > triple about any other subject. A cross-project edge's foreign endpoint
 > stays a bare, untyped object IRI in that graph; the projector emits no type
 > stub and mirrors no foreign task.
->
-> **Amended by ADR 057.** The backbone `tasks.human_only` flag is projected as
-> a `wl:humanOnly` Task property, on the existing Task node row, emitted only
-> when true.
 
 **Authority stays split**: the **backbone owns execution facts** (task state, leases,
 `blocks`/`child_of`); the **graph owns design facts** (Component, DesignDoc, `governs`,
