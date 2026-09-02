@@ -1022,8 +1022,10 @@ over unchanged.
 ### 9.2 Acceptance mints the plan's tasks
 
 `lode doc accept` on a plan runs one transaction: create the tasks its `## Tasks` section
-declares (§9.1), `draft`, each carrying a reference to the document, and wire the declared
-`blockedBy` numbers as `blocks` edges between them. **Nothing is minted above them.** The invariant is
+declares (§9.1), `ready`, each carrying a reference to the document, and wire the declared
+`blockedBy` numbers as `blocks` edges between them. Minting a task is the acceptance gate
+itself, so it needs no further `draft → ready` step of its own. **Nothing is minted above
+them.** The invariant is
 `doc.status = accepted ⟺ its tasks exist`, by construction, with nothing to keep in sync by
 hand.
 

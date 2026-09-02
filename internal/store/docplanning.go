@@ -67,7 +67,6 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 			Kind:        def.Kind,
 			Skills:      def.Skills,
 			CreatedBy:   actorID,
-			Draft:       true,
 			PlanDoc:     id,
 			PlanTaskKey: def.Title,
 		}, eventID)
