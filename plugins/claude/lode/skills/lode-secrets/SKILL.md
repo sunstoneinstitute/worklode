@@ -22,9 +22,11 @@ materialized into the OS keystore at claim time; you never see or handle them.
   starting `LD_` or `DYLD_`, and not `PATH`, `IFS`, `ENV`, `BASH_ENV`,
   `PYTHONPATH`, `NODE_OPTIONS`, `CLASSPATH` and friends (ADR 047).
 - A catalog entry holds a credential, not a whole credentialed asset — on
-  macOS and Windows a keystore item is capped at ~2.5-3 KB, so an asset like a
-  full kubeconfig has to be split into a plaintext template plus the client
-  credential that actually needs protecting.
+  macOS and Windows a keystore item is capped at ~2.5-3 KB. An asset like a
+  full kubeconfig is a *templated* entry (spec 042): the operator splits it
+  into a plaintext template plus the client credentials that actually need
+  protecting. Declare it the same way you declare any other entry, by its one
+  name; the credentials inside it are plumbing you never name.
 
 ## Executing tasks
 
@@ -38,7 +40,14 @@ materialized into the OS keystore at claim time; you never see or handle them.
   handled below. A stripped non-credential — `AWS_REGION` and its kind go with
   their namespace — is a report that the pattern is too broad: say so and
   block, do not re-export it and do not declare it as a secret.
-- `lode secrets status` shows declared vs materialized names.
+- A templated entry exports the name its consuming tool expects, pointing at a
+  rendered file rather than carrying a value: `lode secrets exec -- kubectl
+  get pods` works because exec sets `KUBECONFIG` to a file it rendered under
+  `.worklode/secrets/`. Never read, copy, or commit anything in that
+  directory — it is the plaintext copy of the credentials, git ignores it, and
+  purge deletes it. Pass the variable through; do not open it.
+- `lode secrets status` shows declared vs materialized names, and for a
+  templated entry its credentials and whether the rendered file is present.
 - NEVER probe `op`, ask the operator for a value, or read
   `.worklode/secrets.env` expecting values — it holds `op://` references only.
 - Items survive leaving the worktree — the lease is still yours. Only `lode
