@@ -4,7 +4,7 @@
 
 > **This is a generated consolidated view, not a spec.** It is one spec's
 > text with every amendment and supersession that is in force folded in.
-> Source of record: [`docs/specs/042-secret-templates.md`](../042-secret-templates.md) — status **draft**.
+> Source of record: [`docs/specs/042-secret-templates.md`](../042-secret-templates.md) — status **accepted**.
 >
 > Inlined blocks are marked `**[amending …]**` or `**[superseding …]**`
 > and name the section they came from. Claims from documents that are not

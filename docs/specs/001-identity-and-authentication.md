@@ -4,6 +4,9 @@ issued: 2026-07-31
 replaces:
   ".":
     - docs/plans/2026-07-19-keycloak-sso-3-cli-login.md
+amendedBy:
+  "#sec-2.1":
+    - 054-agent-actors.md#sec-4
 ---
 # Spec 001 — Identity & authentication
 
