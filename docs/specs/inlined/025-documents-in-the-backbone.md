@@ -522,6 +522,18 @@ to point at — has **no representation in the document store**: neither `doc_se
 `wl:status wlc:superseded` plus `dct:description`, and it lands with the rest of section-level
 supersession there rather than by adding a column here.
 
+The reason text is authored in frontmatter, on the document that supersedes the section without
+naming a successor for it — the same place `amends`/`replaces` are already authored and read —
+under a `sectionDescriptions` key mapping an anchor to its explanation:
+
+    sectionDescriptions:
+      "#sec-4": "Dropped rather than replaced: the rate limiter this section specified was
+        never built (025 §6.2)."
+
+Whichever projector mints `wl:Section` nodes (§18, WL-150) reads that key the way it already
+reads `replaces`, and emits it as the section's `dct:description`. No store column follows from
+it, matching the rest of this rule.
+
 ## 7. Editorial lifecycle
 
 ```
@@ -1022,8 +1034,10 @@ over unchanged.
 ### 9.2 Acceptance mints the plan's tasks
 
 `lode doc accept` on a plan runs one transaction: create the tasks its `## Tasks` section
-declares (§9.1), `draft`, each carrying a reference to the document, and wire the declared
-`blockedBy` numbers as `blocks` edges between them. **Nothing is minted above them.** The invariant is
+declares (§9.1), `ready`, each carrying a reference to the document, and wire the declared
+`blockedBy` numbers as `blocks` edges between them. Minting a task is the acceptance gate
+itself, so it needs no further `draft → ready` step of its own. **Nothing is minted above
+them.** The invariant is
 `doc.status = accepted ⟺ its tasks exist`, by construction, with nothing to keep in sync by
 hand.
 
@@ -2040,6 +2054,14 @@ anchors (§9), with whatever SKOS or shape terms the synced kind needs, validate
 the spec first, then mirror the term in `ns/`.
 
 ## 18. Surfaces
+
+> Amended by `WL-SPEC-61#sec-2`
+
+> **Amended by spec 061 §2.** The spellings below are replaced; the surface
+> they describe is unchanged. `lode doc new` → `lode doc add`,
+> `lode doc anchors` → `lode doc lint`, `lode drift --docs` →
+> `lode graph drift --docs`. `lode doc show` is restored as the read verb the
+> implementation had drifted to `get`.
 
 The document and event surface, backed by the backbone store:
 

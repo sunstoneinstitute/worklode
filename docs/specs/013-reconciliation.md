@@ -3,6 +3,9 @@ status: draft
 issued: 2026-07-25
 requires:
 - docs/specs/004-execution-backbone.md
+amendedBy:
+  "#sec-1":
+    - WL-SPEC-61#sec-2
 ---
 # Spec 013 — Reconciliation & setup diagnosis
 
@@ -33,6 +36,11 @@ must stay distinct.
 ---
 
 ## 1. Command surface {#sec-1}
+
+> **Amended by spec 061 §2.** `lode reconcile` → `lode task reconcile` and
+> `lode project doctor` → `lode project health`; `lode doctor` keeps its name.
+> The permission boundary this section draws is unchanged, and the rename
+> applies wherever this spec spells the old names, §2's heading included.
 
 | Command | Audience | Auth | Job |
 |---|---|---|---|
@@ -76,6 +84,9 @@ delivery predates its mapping, is the signal that sends an operator to `lode rec
 ---
 
 ## 2. `lode reconcile` {#sec-2}
+
+> **Renamed.** 061 §2.3 spells this command `lode task reconcile` (see §1's
+> amendment note). The heading keeps the name it was published under.
 
 Two engines behind one command, run in order, cheapest first. Facts are repaired; findings are
 reported. `--dry-run` suppresses the writes of both.

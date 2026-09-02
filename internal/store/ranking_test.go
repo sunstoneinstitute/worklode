@@ -616,8 +616,9 @@ Do it.
 `
 }
 
-// mintReadyPlan creates a plan from body, accepts it, and moves every minted
-// task to ready, returning the minted ids in definition order.
+// mintReadyPlan creates a plan from body, accepts it, and returns the minted
+// ids in definition order. Minted tasks start ready (025 §9.2), so there is
+// no promotion step.
 func mintReadyPlan(t *testing.T, s *Store, slug, body string) []string {
 	t.Helper()
 	doc := mustCreateDoc(t, s, DocInput{
@@ -629,9 +630,6 @@ func mintReadyPlan(t *testing.T, s *Store, slug, body string) []string {
 	}
 	ids := make([]string, 0, len(minted))
 	for _, task := range minted {
-		if err := transition(t, s, taskTestNow, task.ID, "draft", "ready"); err != nil {
-			t.Fatalf("transition %s to ready: %v", task.ID, err)
-		}
 		ids = append(ids, task.ID)
 	}
 	return ids

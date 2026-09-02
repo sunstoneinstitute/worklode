@@ -336,6 +336,16 @@ Weighted critical path stays **v2** (optional, low priority).
 
 ## 5. Overview / CLI surface
 
+> Amended by `WL-SPEC-61#sec-2`
+
+> **Amended by spec 061 §2.** The spellings below are replaced; what each
+> command returns is unchanged. `lode overview` → `lode project overview`
+> (shortcut `lode overview` kept), `lode drift` → `lode graph drift`,
+> `lode gaps` → `lode graph gaps`, `lode frontier` → `lode task frontier`,
+> `lode critical-path` → `lode task critical-path`; `lode ready` and
+> `lode status` are dropped. The same rename reaches §8's acceptance criteria,
+> which name `lode frontier --json` and `lode drift --acknowledged`.
+
 Everything is a read; nothing here mutates the graph. All commands honor determinism:
 `--json` gives greppable, stable output; the compiled `lode` binary is the only dependency.
 
