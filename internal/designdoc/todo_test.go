@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 	"testing"
 
@@ -42,7 +43,7 @@ func renderItems(items []designdoc.TodoItem) []string {
 		if len(it.Anchors) > 0 {
 			where = strings.Join(it.Anchors, ",")
 		}
-		out[i] = fmt.Sprintf("%s %s#%s plan=%s task=%s", it.Type, it.Doc, where, it.Plan, it.Task)
+		out[i] = fmt.Sprintf("%s %s#%s plan=%s tasks=%s", it.Type, it.Doc, where, it.Plan, strings.Join(it.Tasks, ","))
 	}
 	return out
 }
@@ -74,27 +75,40 @@ Body.
 
 const todoSpecRef = "docs/specs/001-example.md"
 
-func closedSet(ids ...string) func(string) (bool, bool) {
-	set := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		set[id] = true
-	}
-	return func(id string) (bool, bool) { return set[id], true }
+// taskSet is a fixture's whole tracker: the tasks each plan's acceptance
+// minted, keyed by the plan filename the fixtures write ("a.md"). A plan the
+// map does not name minted none, which is a real state and not a gap.
+type taskSet = map[string][]designdoc.ExecutionTask
+
+// planTasks is the lookup Todo takes. A non-nil one is the online case,
+// whatever it answers; TodoOptions{} alone is offline.
+func planTasks(byPlan taskSet) func(string) []designdoc.ExecutionTask {
+	return func(planPath string) []designdoc.ExecutionTask { return byPlan[path.Base(planPath)] }
 }
 
-// allKnownOpen answers every task as open and known — the "server reachable,
-// nothing closed" baseline.
-func allKnownOpen(string) (bool, bool) { return false, true }
+// open, draft and closed build one plan's minted tasks: claimable work,
+// minted-but-unpublished work, and the server's "nothing left to own".
+func open(ids ...string) []designdoc.ExecutionTask   { return mint("ready", false, ids) }
+func draft(ids ...string) []designdoc.ExecutionTask  { return mint("draft", false, ids) }
+func closed(ids ...string) []designdoc.ExecutionTask { return mint("merged", true, ids) }
+
+func mint(state string, isClosed bool, ids []string) []designdoc.ExecutionTask {
+	out := make([]designdoc.ExecutionTask, len(ids))
+	for i, id := range ids {
+		out[i] = designdoc.ExecutionTask{ID: id, State: state, Closed: isClosed}
+	}
+	return out
+}
 
 func TestTodoUnplannedSectionsCollapse(t *testing.T) {
 	docs := buildTodoCorpus(t, map[string]string{"001-example.md": twoSectionSpec}, nil)
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	// One item for the document, not one per section: writing a plan is a
 	// single act and one plan covers many sections (026 §2.4).
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
 	if items[0].Anchor != "" {
 		t.Errorf("Anchor = %q, want empty on a collapsed item", items[0].Anchor)
 	}
@@ -112,18 +126,18 @@ func TestTodoPartialSection(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
 				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: none\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: closedSet("WL-1")})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	// sec-2 is bound only: no item at any plan status. The accepted plan's
 	// task is closed, so it owes no execution item either.
-	checkItems(t, items, []string{"partial " + todoSpecRef + "#sec-1 plan= task="})
+	checkItems(t, items, []string{"partial " + todoSpecRef + "#sec-1 plan= tasks="})
 }
 
 // A bound-only section is not owed work (026 §2.4): the accepted plan read
@@ -132,12 +146,12 @@ func TestTodoBoundOnlyEmitsNothing(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: none\n" +
 				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: none\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: closedSet("WL-1")})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -162,7 +176,7 @@ func TestTodoDeferredEmitsNothing(t *testing.T) {
 				"    to: docs/specs/006-knowledge-graph.md\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -183,11 +197,11 @@ func TestTodoDraftDefersIsStillUnplanned(t *testing.T) {
 				"    to: docs/specs/006-knowledge-graph.md\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
 }
 
 // A *draft* plan's `none` claim emits no item either: 026 §2.4 suppresses a
@@ -204,11 +218,11 @@ func TestTodoDraftBoundOnlyEmitsNothing(t *testing.T) {
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: none\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-2 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-2 plan= tasks="})
 }
 
 func TestTodoPlanDraftReplacesTheSectionGap(t *testing.T) {
@@ -219,42 +233,42 @@ func TestTodoPlanDraftReplacesTheSectionGap(t *testing.T) {
 				"  - " + todoSpecRef + "#sec-1\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	// The collapsed gap ranks ahead of the document's plan items: nothing
 	// blocks writing a plan (026 §2.4).
 	checkItems(t, items, []string{
-		"unplanned " + todoSpecRef + "#sec-2 plan= task=",
-		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=",
+		"unplanned " + todoSpecRef + "#sec-2 plan= tasks=",
+		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=",
 	})
 }
 
 func TestTodoUnexecuted(t *testing.T) {
 	plans := map[string]string{
 		"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n---\n# A\n\nBody.\n",
-		"b.md": "---\nstatus: accepted\ntask: WL-2\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
+		"b.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
 	}
 	docs := buildTodoCorpus(t, map[string]string{"001-example.md": twoSectionSpec}, plans)
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"b.md": open("WL-2")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=",
-		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md task=WL-2",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=",
+		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md tasks=WL-2",
 	})
 	if items[0].Heading != "First" {
 		t.Errorf("Heading = %q, want the section heading on a plan-level item", items[0].Heading)
 	}
 
 	// Closing WL-2 discharges b entirely; a still names no task.
-	items, _, err = designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: closedSet("WL-2")})
+	items, _, err = designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"b.md": closed("WL-2")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task="})
+	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks="})
 }
 
 // One accepted plan covering several sections owes one execution item, not
@@ -263,15 +277,15 @@ func TestTodoUnexecutedIsPerPlan(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - " + todoSpecRef + "#sec-1\n  - " + todoSpecRef + "#sec-2\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1"})
+	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1"})
 }
 
 func TestTodoSupersededPlanEmitsNothing(t *testing.T) {
@@ -282,7 +296,7 @@ func TestTodoSupersededPlanEmitsNothing(t *testing.T) {
 				"  - " + todoSpecRef + "#sec-1\n  - " + todoSpecRef + "#sec-2\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -293,30 +307,30 @@ func TestTodoBlockedByUndischargedRequirement(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n" +
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n" +
 				"requires:\n  - b.md\n---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: accepted\ntask: WL-2\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
+			"b.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1"), "b.md": open("WL-2")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	// b ranks before a: a requires it, and topological order beats the
 	// spec's own section order.
 	checkItems(t, items, []string{
-		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md task=WL-2",
-		"blocked " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md tasks=WL-2",
+		"blocked " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
 	})
 	if !strings.Contains(items[1].Detail, "docs/plans/b.md") {
 		t.Errorf("blocked Detail = %q, want it to name the blocking plan", items[1].Detail)
 	}
 
 	// Closing b's task discharges it, so a is merely unexecuted.
-	items, _, err = designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: closedSet("WL-2")})
+	items, _, err = designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1"), "b.md": closed("WL-2")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1"})
+	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1"})
 }
 
 // A draft spec leads with the acceptance decision and still reports its
@@ -324,13 +338,13 @@ func TestTodoBlockedByUndischargedRequirement(t *testing.T) {
 func TestTodoDraftSpecLeadsWithAcceptanceItem(t *testing.T) {
 	draft := strings.Replace(twoSectionSpec, "status: accepted", "status: draft", 1)
 	docs := buildTodoCorpus(t, map[string]string{"001-example.md": draft}, nil)
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"plan-draft " + todoSpecRef + "# plan= task=",
-		"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task=",
+		"plan-draft " + todoSpecRef + "# plan= tasks=",
+		"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks=",
 	})
 }
 
@@ -341,16 +355,16 @@ func TestTodoDraftSpecAcceptanceItemIsFirst(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": draft},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n---\n# A\n\nBody.\n",
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"plan-draft " + todoSpecRef + "# plan= task=",
-		"unplanned " + todoSpecRef + "#sec-2 plan= task=",
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"plan-draft " + todoSpecRef + "# plan= tasks=",
+		"unplanned " + todoSpecRef + "#sec-2 plan= tasks=",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
 	})
 	if items[0].Anchor != "" || len(items[0].Anchors) != 0 {
 		t.Errorf("leading item addresses %q/%v, want the document itself", items[0].Anchor, items[0].Anchors)
@@ -368,15 +382,15 @@ func TestTodoCurrentSections(t *testing.T) {
 		status string
 		want   []string
 	}{
-		{"accepted", []string{"unplanned " + todoSpecRef + "#sec-1 plan= task="}},
-		{"draft", []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="}},
+		{"accepted", []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="}},
+		{"draft", []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="}},
 	} {
 		t.Run(tc.status, func(t *testing.T) {
 			docs := buildTodoCorpus(t, map[string]string{
 				"001-example.md":  twoSectionSpec,
 				"002-replacer.md": replacer(tc.status),
 			}, nil)
-			items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+			items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 			if err != nil {
 				t.Fatalf("Todo: %v", err)
 			}
@@ -391,7 +405,7 @@ func TestTodoSupersededSpec(t *testing.T) {
 	docs := buildTodoCorpus(t, map[string]string{
 		"001-example.md": strings.Replace(twoSectionSpec, "status: accepted", "status: superseded", 1),
 	}, nil)
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -433,11 +447,11 @@ func TestTodoWithoutDepsListsUnfollowed(t *testing.T) {
 		"001-example.md": requiresSpecA,
 		"002-bee.md":     requiresSpecB,
 	}, nil)
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="})
 	// Every outgoing edge, not just the first: the narrower answer must
 	// never be mistaken for the whole one.
 	want := []string{
@@ -456,13 +470,13 @@ func TestTodoDepsToleratesCycles(t *testing.T) {
 		"002-bee.md":     requiresSpecB,
 	}, nil)
 	items, diag, err := designdoc.Todo(docs, todoSpecRef,
-		designdoc.TodoOptions{Deps: true, Closed: allKnownOpen})
+		designdoc.TodoOptions{Deps: true, Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"unplanned " + todoSpecRef + "#sec-1 plan= task=",
-		"unplanned docs/specs/002-bee.md#sec-1 plan= task=",
+		"unplanned " + todoSpecRef + "#sec-1 plan= tasks=",
+		"unplanned docs/specs/002-bee.md#sec-1 plan= tasks=",
 	})
 	if len(diag.Cycles) != 1 || !strings.Contains(diag.Cycles[0], "001-example.md") {
 		t.Errorf("Cycles = %v, want the 001/002 cycle recorded", diag.Cycles)
@@ -483,13 +497,15 @@ func TestTodoOutputIsStableAcrossRuns(t *testing.T) {
 		"002-bee.md":     requiresSpecB,
 	}
 	plans := map[string]string{}
+	minted := taskSet{}
 	for _, name := range []string{"a", "b", "c", "d", "e"} {
-		plans[name+".md"] = "---\nstatus: accepted\ntask: WL-" + name + "\ncovers:\n" +
+		plans[name+".md"] = "---\nstatus: accepted\ncovers:\n" +
 			"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
 			"---\n# Plan " + name + "\n\nBody.\n"
+		minted[name+".md"] = open("WL-" + name)
 	}
 	docs := buildTodoCorpus(t, specs, plans)
-	opts := designdoc.TodoOptions{Deps: true, Closed: allKnownOpen}
+	opts := designdoc.TodoOptions{Deps: true, Tasks: planTasks(minted)}
 	first, firstDiag, err := designdoc.Todo(docs, todoSpecRef, opts)
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
@@ -508,47 +524,81 @@ func TestTodoOutputIsStableAcrossRuns(t *testing.T) {
 	}
 }
 
-// Without a closure lookup the planning half still answers; the task level
+// Without a task lookup the planning half still answers; the execution level
 // degrades to "unknown" and the footer says so.
 func TestTodoOffline(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - " + todoSpecRef + "#sec-1\n  - " + todoSpecRef + "#sec-2\n---\n# A\n\nBody.\n",
 		})
 	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1"})
+	// Offline the plan's tasks cannot be read at all, so none are named and
+	// the item says exactly that rather than "no task".
+	checkItems(t, items, []string{"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks="})
 	if len(diag.Notes) == 0 {
 		t.Error("Notes is empty, want the offline degradation noted")
 	}
 	if !strings.Contains(items[0].Detail, "unknown") {
-		t.Errorf("Detail = %q, want it to name the unknown task state", items[0].Detail)
+		t.Errorf("Detail = %q, want it to name the unknown execution state", items[0].Detail)
 	}
 }
 
-// A task the tracker does not know is not evidence of closure.
-func TestTodoUnknownTaskIsUnexecuted(t *testing.T) {
+// A plan whose acceptance minted tasks that are still `draft` is not a plan
+// with no execution task (WL-616). Both are `unexecuted` — draft work is
+// unclaimable, so it is not discharged — but the detail must let a reader
+// tell "publish these" from "nobody ever planned this into tasks", which is
+// the confusion that had whole minted plan series re-implemented.
+func TestTodoDraftTasksAreMintedNotMissing(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n---\n# A\n\nBody.\n",
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n---\n# A\n\nBody.\n",
+			"b.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
 		})
 	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{
-		Closed: func(string) (bool, bool) { return false, false },
+		Tasks: planTasks(taskSet{"a.md": draft("WL-1", "WL-2")}),
 	})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"unplanned " + todoSpecRef + "#sec-2 plan= task=",
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1,WL-2",
+		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md tasks=",
 	})
-	if !strings.Contains(items[1].Detail, "unknown") {
-		t.Errorf("Detail = %q, want it to name the unknown task state", items[1].Detail)
+	if items[0].Detail != "2 tasks minted, still draft: WL-1, WL-2" {
+		t.Errorf("minted-draft Detail = %q", items[0].Detail)
+	}
+	if items[1].Detail != "plan minted no execution task" {
+		t.Errorf("taskless plan Detail = %q", items[1].Detail)
+	}
+}
+
+// A plan's open tasks are named, its closed ones are not, and a long set is
+// counted rather than listed whole.
+func TestTodoNamesOpenTasks(t *testing.T) {
+	docs := buildTodoCorpus(t,
+		map[string]string{"001-example.md": twoSectionSpec},
+		map[string]string{
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
+				"  - " + todoSpecRef + "#sec-1\n  - " + todoSpecRef + "#sec-2\n---\n# A\n\nBody.\n",
+		})
+	minted := append(closed("WL-1"), open("WL-2", "WL-3", "WL-4", "WL-5")...)
+	minted = append(minted, draft("WL-6")...)
+	items, _, err := designdoc.Todo(docs, todoSpecRef,
+		designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": minted})})
+	if err != nil {
+		t.Fatalf("Todo: %v", err)
+	}
+	checkItems(t, items, []string{
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-2,WL-3,WL-4,WL-5,WL-6",
+	})
+	if items[0].Detail != "5 tasks open: WL-2, WL-3, WL-4, +2 more (1 draft)" {
+		t.Errorf("Detail = %q", items[0].Detail)
 	}
 }
 
@@ -575,7 +625,7 @@ func TestTodoRefForms(t *testing.T) {
 		"/docs/specs/001-example.md",
 		"docs/specs/001-example.md#sec-1",
 	} {
-		items, _, err := designdoc.Todo(docs, ref, designdoc.TodoOptions{Closed: allKnownOpen})
+		items, _, err := designdoc.Todo(docs, ref, designdoc.TodoOptions{Tasks: planTasks(nil)})
 		if err != nil {
 			t.Fatalf("Todo(%q): %v", ref, err)
 		}
@@ -592,11 +642,11 @@ func TestTodoOfflineNeverBlocked(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n" +
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n" +
 				"requires:\n  - b.md\n---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: accepted\ntask: WL-2\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
+			"b.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
 		})
-	online, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	online, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1"), "b.md": open("WL-2")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -607,9 +657,11 @@ func TestTodoOfflineNeverBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
+	// Offline names no task on either item — the tasks are the backbone's —
+	// but both plans still report as unexecuted rather than as blocked.
 	checkItems(t, items, []string{
-		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md task=WL-2",
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"unexecuted " + todoSpecRef + "#sec-2 plan=docs/plans/b.md tasks=",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=",
 	})
 	if len(diag.Notes) == 0 {
 		t.Error("Notes is empty, want the degradation named")
@@ -623,12 +675,12 @@ func TestTodoPlanRequiresCycle(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n" +
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n" +
 				"requires:\n  - b.md\n---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: accepted\ntask: WL-2\ncovers: " + todoSpecRef + "#sec-2\n" +
+			"b.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-2\n" +
 				"requires:\n  - a.md\n---\n# B\n\nBody.\n",
 		})
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1"), "b.md": open("WL-2")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -636,8 +688,8 @@ func TestTodoPlanRequiresCycle(t *testing.T) {
 	// from ranks the cycle makes arbitrary — but the walk fixes the entry
 	// point, so it is the same order every run.
 	checkItems(t, items, []string{
-		"blocked " + todoSpecRef + "#sec-2 plan=docs/plans/b.md task=WL-2",
-		"blocked " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"blocked " + todoSpecRef + "#sec-2 plan=docs/plans/b.md tasks=WL-2",
+		"blocked " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
 	})
 	if len(diag.Cycles) != 1 || !strings.Contains(diag.Cycles[0], "a.md -> b.md -> a.md") {
 		t.Errorf("Cycles = %v, want the a/b plan cycle recorded once", diag.Cycles)
@@ -650,16 +702,16 @@ func TestTodoSupersededRequirementDoesNotBlock(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n" +
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n" +
 				"requires:\n  - b.md\n---\n# A\n\nBody.\n",
 			"b.md": "---\nstatus: superseded\ncovers: " + todoSpecRef + "#sec-2\n---\n# B\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
 	})
 }
 
@@ -669,16 +721,16 @@ func TestTodoRequirementOutsideCorpusDoesNotBlock(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - " + todoSpecRef + "#sec-1\n  - " + todoSpecRef + "#sec-2\n" +
 				"requires:\n  - elsewhere.md\n---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
 	})
 }
 
@@ -690,11 +742,11 @@ func TestTodoAmendedSectionIsKept(t *testing.T) {
 		"002-amender.md": "---\nstatus: accepted\nissued: 2026-01-01\namends:\n  \"#sec-1\":\n    - " +
 			todoSpecRef + "#sec-2\n---\n# Spec 002 — Amender\n\n## 1. More {#sec-1}\n\nBody.\n",
 	}, nil)
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1,sec-2 plan= tasks="})
 }
 
 // The supersession reading unions both directions, so the mirror edge alone
@@ -706,11 +758,11 @@ func TestTodoIsReplacedByDropsSection(t *testing.T) {
 		"001-example.md":  spec,
 		"002-replacer.md": "---\nstatus: accepted\nissued: 2026-01-01\n---\n# Spec 002 — Replacer\n\n## 1. Instead {#sec-1}\n\nBody.\n",
 	}, nil)
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
-	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= task="})
+	checkItems(t, items, []string{"unplanned " + todoSpecRef + "#sec-1 plan= tasks="})
 }
 
 // A replaces with no fragment names the whole document, which drops all of it.
@@ -720,7 +772,7 @@ func TestTodoDocumentLevelReplaceDropsEverything(t *testing.T) {
 		"002-replacer.md": "---\nstatus: accepted\nissued: 2026-01-01\nreplaces:\n  \".\":\n    - " +
 			todoSpecRef + "\n---\n# Spec 002 — Replacer\n\n## 1. Instead {#sec-1}\n\nBody.\n",
 	}, nil)
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -739,7 +791,7 @@ func TestTodoDepsSkipsPlanRequires(t *testing.T) {
 		map[string]string{"001-example.md": spec},
 		map[string]string{"a.md": "---\nstatus: accepted\ncovers: NO-SPEC\n---\n# A\n\nBody.\n"})
 	_, diag, err := designdoc.Todo(docs, todoSpecRef,
-		designdoc.TodoOptions{Deps: true, Closed: allKnownOpen})
+		designdoc.TodoOptions{Deps: true, Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -754,9 +806,9 @@ func TestTodoPlanRequiresCycleOffline(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers: " + todoSpecRef + "#sec-1\n" +
+			"a.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-1\n" +
 				"requires:\n  - b.md\n---\n# A\n\nBody.\n",
-			"b.md": "---\nstatus: accepted\ntask: WL-2\ncovers: " + todoSpecRef + "#sec-2\n" +
+			"b.md": "---\nstatus: accepted\ncovers: " + todoSpecRef + "#sec-2\n" +
 				"requires:\n  - a.md\n---\n# B\n\nBody.\n",
 		})
 	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{})
@@ -784,7 +836,7 @@ func TestTodoDraftPlanRequiresCycle(t *testing.T) {
 			"b.md": "---\nstatus: draft\ncovers: " + todoSpecRef + "#sec-2\n" +
 				"requires:\n  - a.md\n---\n# B\n\nBody.\n",
 		})
-	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
@@ -803,18 +855,18 @@ func TestTodoAcceptedPartialPlanStillNeedsExecuting(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
 				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: partial\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": open("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"partial " + todoSpecRef + "#sec-1,sec-2 plan= task=",
-		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md task=WL-1",
+		"partial " + todoSpecRef + "#sec-1,sec-2 plan= tasks=",
+		"unexecuted " + todoSpecRef + "#sec-1 plan=docs/plans/a.md tasks=WL-1",
 	})
 	if items[0].Detail != "2 sections are only partly covered, and no plan completes them" {
 		t.Errorf("collapsed partial Detail = %q; want the plural form", items[0].Detail)
@@ -826,17 +878,17 @@ func TestTodoUnplannedPrecedesPartial(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
 				"---\n# A\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: closedSet("WL-1")})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	checkItems(t, items, []string{
-		"unplanned " + todoSpecRef + "#sec-2 plan= task=",
-		"partial " + todoSpecRef + "#sec-1 plan= task=",
+		"unplanned " + todoSpecRef + "#sec-2 plan= tasks=",
+		"partial " + todoSpecRef + "#sec-1 plan= tasks=",
 	})
 	// The CLI prints Detail verbatim, so it has to read correctly at one
 	// section as well as at fifty.
@@ -854,20 +906,20 @@ func TestTodoDraftFullPlanSuppressesPartial(t *testing.T) {
 	docs := buildTodoCorpus(t,
 		map[string]string{"001-example.md": twoSectionSpec},
 		map[string]string{
-			"a.md": "---\nstatus: accepted\ntask: WL-1\ncovers:\n" +
+			"a.md": "---\nstatus: accepted\ncovers:\n" +
 				"  - spec: " + todoSpecRef + "#sec-1\n    coverage: partial\n" +
 				"  - spec: " + todoSpecRef + "#sec-2\n    coverage: partial\n" +
 				"---\n# A\n\nBody.\n",
 			"b.md": "---\nstatus: draft\ncovers: " + todoSpecRef + "#sec-1\n---\n# B\n\nBody.\n",
 		})
-	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: closedSet("WL-1")})
+	items, _, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(taskSet{"a.md": closed("WL-1")})})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}
 	// sec-1's partial item is gone; only sec-2 remains in the collapsed gap.
 	checkItems(t, items, []string{
-		"partial " + todoSpecRef + "#sec-2 plan= task=",
-		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/b.md task=",
+		"partial " + todoSpecRef + "#sec-2 plan= tasks=",
+		"plan-draft " + todoSpecRef + "#sec-1 plan=docs/plans/b.md tasks=",
 	})
 }
 
@@ -879,7 +931,7 @@ func TestTodoUnfollowedIsDeduplicated(t *testing.T) {
 		"001-example.md": spec,
 		"002-bee.md":     requiresSpecB,
 	}, nil)
-	_, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Closed: allKnownOpen})
+	_, diag, err := designdoc.Todo(docs, todoSpecRef, designdoc.TodoOptions{Tasks: planTasks(nil)})
 	if err != nil {
 		t.Fatalf("Todo: %v", err)
 	}

@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-19
 covers: docs/specs/021-images-in-task-bodies.md
 ---
 # Blobs 3 — Rendering, GC, and import mirroring Implementation Plan

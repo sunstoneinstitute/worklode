@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-14
 covers: docs/specs/017-task-secrets.md
 ---
 # Task secrets 1/3: server core — Implementation Plan

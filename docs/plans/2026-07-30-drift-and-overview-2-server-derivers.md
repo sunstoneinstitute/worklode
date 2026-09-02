@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-29
 covers: docs/specs/007-drift-and-overview.md
 ---
 # Drift & overview 2/3 (spec 007): server-side derivers — Implementation Plan

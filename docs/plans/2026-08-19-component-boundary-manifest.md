@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-120
 covers:
   - spec: docs/specs/007-drift-and-overview.md#sec-2.2
     coverage: partial

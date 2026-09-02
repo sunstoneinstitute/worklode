@@ -315,7 +315,7 @@ lode doc todo <ref> [--deps] [--json]
 ```
 spec -> its current sections (§2.3's "still states the design" set)
      -> plans whose covers names each section, with the §2.1 outcome
-     -> each plan's execution task, and whether it is closed
+     -> the tasks each plan's acceptance minted, and whether they are closed
 ```
 
 and emits one ordered work list. Every item is typed by **the act that
@@ -326,7 +326,7 @@ discharges it**, because the act decides who can perform it:
 | `unplanned` | no plan covers the section | writing a plan |
 | `partial` | covered only `partial`, and the governing spec is not decomposed (§5.4) | running `lode decompose` |
 | `plan-draft` | a plan covers it at `full` or `partial`, `status: draft` | a human accepting the plan (025 §7) |
-| `unexecuted` | covering plan accepted, task absent or open | executing the plan |
+| `unexecuted` | covering plan accepted, it minted no task or one is still open | executing the plan |
 | `blocked` | covering plan accepted, a plan it `requires` is not discharged | the blocking plan |
 
 A section covered `none` contributes no item, at any plan status: §5 gives the
@@ -383,8 +383,18 @@ cycle in the footer instead of failing: two specs that need each other are a
 real and legitimate state of the corpus, and refusing to answer would make the
 flag useless on exactly the pair that motivates it.
 
-**Closure is the server's answer, never a state string.** A plan's `task`
-(§5.2) is closed per 004 §1.3's per-repo predicate, which no client can
+**A plan's tasks are the rows its acceptance minted, never a frontmatter key.**
+The tasks belonging to a plan are the ones carrying its `plan_doc` (025 §9.2) —
+the same set `lode task list --plan` answers with. Reading the retired `task:`
+key instead (§5.2) reported every plan minted since acceptance started minting
+as having no execution task, which is the confident wrong answer that had
+whole minted plan series re-implemented (WL-616). A plan owes one item while
+any of its tasks is open; a minted task still in `draft` is unclaimable work,
+so the item stands and its detail says the tasks are minted rather than
+missing.
+
+**Closure is the server's answer, never a state string.** A plan's task
+is closed per 004 §1.3's per-repo predicate, which no client can
 evaluate: the same `merged` task is closed where `done_state = 'merged'` and
 open where the repo gates on `released`. `model.Task` therefore carries a
 server-computed `closed` boolean, and this command reads it. Deriving closure
@@ -402,11 +412,11 @@ come from one source, an unreachable server is an error per §2.2, and a walk
 reading files would answer about a corpus a checkout is about to stop having.
 
 The cost is a request per document: only `GET /docs/{id}` carries a body, and
-frontmatter — a plan's `covers` levels, its `requires`, its `task` — is what
+frontmatter — a plan's `covers` levels, its `requires` — is what
 the walk reads. The fetches are issued concurrently, and the alternative is
 worse: the backbone's own section and edge rows are its index of that same
 frontmatter, and reading them instead would put two readings of one document in
-the tree, free to disagree. Task closure stays one request for the whole
+the tree, free to disagree. The plans' tasks stay one request for the whole
 project, never one per plan.
 
 **An empty list means the spec is finished, and nothing else may print one.**
@@ -924,9 +934,9 @@ The object form is **required** where more than one accepted plan covers the
 same section, because that is exactly the case the bare form cannot express.
 Series parts therefore use it from the first part.
 
-### 5.2 Plans carry `status` and `task` {#sec-5.2}
+### 5.2 Plans carry `status` {#sec-5.2}
 
-Two frontmatter keys move from optional to expected on plans.
+One frontmatter key moves from optional to expected on plans.
 
 **`status`** — 025 §9 gives plans the same draft → review → accept gate as specs, and §2.2
 needs the accepted state to be readable. `wl:status`'s domain is
@@ -935,14 +945,15 @@ needs the accepted state to be readable. `wl:status`'s domain is
 addressable sections. A plan is `draft` while it is being written and reviewed, and
 `accepted` from the moment its execution is authorised.
 
-**`task`** — already documented as transitional (`docs/authoring-design-docs.md`), already
-carried by one spec. On a plan it names the task the plan's execution hangs off in today's
-tracker — the git-mirror stand-in for the `plan_doc` reference 025 §9.2's accept transaction will
-put on each of the plan's tasks, which is why a single id suffices here and nothing is built on
-it being one row. It retires with the files.
+`status` is backfilled across the existing corpus (§2.2): every plan carries one.
 
-Both keys are backfilled across the existing corpus (§2.2): every plan carries a `status`, and
-the seventeen with a stand-in execution task carry a `task` naming it.
+**`task` is retired.** It was the git-mirror stand-in naming the one task a plan's execution
+hung off, until 025 §9.2's accept transaction put a `plan_doc` reference on each task the plan
+mints. Acceptance does that now, so the stand-in is gone: the key is removed from every plan,
+read by nothing, and a plan's tasks come from `plan_doc` (§2.5). A single id never described a
+plan that mints twelve tasks, and nothing was ever built on it being one row. Parsers keep
+accepting the key, because the bodies the backbone stores are verbatim and never rewritten, so
+every plan authored before minting still carries it.
 
 ### 5.3 `defers` hands a section to a named owner {#sec-5.3}
 

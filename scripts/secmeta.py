@@ -98,6 +98,8 @@ LIST_REFS = {"requires", "isRequiredBy"} | PLAN_COVERAGE | PLAN_ORDERING
 MAP_REFS = {"amends", "amendedBy", "replaces", "isReplacedBy"}
 # `artifact` is a catalog address (or list of them) the document is verified
 # by (029 §3.1, WL-255) -- URIs, not document refs, so it gets no ref checks.
+# `task` is retired (026 §5.2) and read by nothing; it stays accepted here
+# because plan bodies written before acceptance minted tasks still carry it.
 PLAIN = {"status", "issued", "task", "kind", "artifact"}
 SPEC_ONLY = {"wasDerivedFrom"}
 PLAN_ONLY = PLAN_COVERAGE | PLAN_ORDERING | DEFERS
