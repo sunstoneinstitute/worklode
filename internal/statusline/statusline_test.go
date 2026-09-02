@@ -243,7 +243,7 @@ func TestRenderUsageAppendsResetCountdownToRateLimitFields(t *testing.T) {
 		SevenDay: &RateLimitWindow{UsedPercentage: 24, ResetsAt: now.Add(24*time.Hour + 2*time.Hour + 3*time.Minute + 30*time.Second).Unix()},
 	}}
 	got := stripANSI(renderUsage(p, t.TempDir(), ""))
-	want := " [Sess 56% ⟲2h3m] [Week 24% ⟲1d2h]"
+	want := " [Sess 56% ⟲ 2h3m] [Week 24% ⟲ 1d2h]"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -406,8 +406,8 @@ func TestFormatLocation(t *testing.T) {
 		want       string
 	}{
 		{"main checkout", "worklode", false, "main", "worklode ⎇ main"},
-		{"linked worktree", "worklode", true, "WL-7-fix", "worklode ⎇⧉ WL-7-fix"},
-		{"detached worktree", "worklode", true, "HEAD", "worklode ⧉"},
+		{"linked worktree", "worklode", true, "WL-7-fix", "worklode ⎇⧉  WL-7-fix"},
+		{"detached worktree", "worklode", true, "HEAD", "worklode ⧉ "},
 		{"detached main", "worklode", false, "HEAD", "worklode"},
 	}
 	for _, tt := range tests {
@@ -462,7 +462,7 @@ func TestRenderLocationPrefersTheTaskID(t *testing.T) {
 	if want := "WL-7 worklode fix-the-thing"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
-	if strings.ContainsAny(got, branchSymbol+worktreeSymbol) {
+	if strings.ContainsAny(got, branchSymbol+strings.TrimSpace(worktreeSymbol)) {
 		t.Fatalf("got %q, want no branch or worktree symbols alongside the task id", got)
 	}
 }
@@ -532,8 +532,8 @@ func TestRenderLocationWithoutTaskIDShowsBranchAndWorktree(t *testing.T) {
 
 	wt := filepath.Join(root, ".worktrees", "spike")
 	gitIn(t, root, "worktree", "add", "-b", "spike", wt)
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false); got != "worklode ⎇⧉ spike" {
-		t.Fatalf("got %q, want %q", got, "worklode ⎇⧉ spike")
+	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false); got != "worklode ⎇⧉  spike" {
+		t.Fatalf("got %q, want %q", got, "worklode ⎇⧉  spike")
 	}
 }
 
@@ -546,7 +546,7 @@ func TestRenderLocationWithoutTheWorktreeConfigExtension(t *testing.T) {
 	wt := filepath.Join(root, ".worktrees", "spike")
 	gitIn(t, root, "worktree", "add", "-b", "spike", wt)
 
-	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false); got != "worklode ⎇⧉ spike" {
+	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false); got != "worklode ⎇⧉  spike" {
 		t.Fatalf("got %q, want the branch rendering", got)
 	}
 }
