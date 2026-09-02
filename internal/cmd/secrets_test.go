@@ -393,6 +393,236 @@ func TestSecretsExecRequiresWorktree(t *testing.T) {
 	}
 }
 
+// bigTemplate is a kubeconfig-shaped template over the OS keystore's ~2.9 KB
+// item cap — the asset spec 042 exists for. Only the two credentials in it
+// are secrets, and each is comfortably under the cap.
+func bigTemplate() string {
+	return "apiVersion: v1\nclusters:\n- cluster:\n    certificate-authority-data: " +
+		strings.Repeat("A", 5000) +
+		"\n    server: https://hzdev.example\nusers:\n- user:\n" +
+		"    client-certificate-data: {{ CLIENT_CERT }}\n" +
+		"    client-key-data: {{ CLIENT_KEY }}\n"
+}
+
+// templatedManifest is what the ceremony leaves behind for a templated entry:
+// one keystore item per credential, an exported name, and the template text.
+func templatedManifest(taskID, name, env, template string, placeholders ...string) secrets.Manifest {
+	e := secrets.ManifestEntry{Name: name, Env: env, Template: template}
+	for _, p := range placeholders {
+		e.Items = append(e.Items, secrets.ItemName(name, p))
+	}
+	return secrets.Manifest{Task: taskID, Materialized: []string{name}, Entries: []secrets.ManifestEntry{e}}
+}
+
+// execCapture runs `lode secrets exec -- env` with syscall.Exec stubbed and
+// returns the environment the child would have received.
+func execCapture(t *testing.T, args ...string) ([]string, error) {
+	t.Helper()
+	var gotEnv []string
+	restore := execFn
+	execFn = func(bin string, argv, env []string) error {
+		gotEnv = env
+		return nil
+	}
+	defer func() { execFn = restore }()
+
+	cmd := newSecretsExecCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs(args)
+	return gotEnv, cmd.Execute()
+}
+
+// TestSecretsExecRendersTemplate is spec 042 acceptance 4: the child sees the
+// exported name pointing at a 0600 file holding the full rendered document,
+// the credential values never reach the environment, and git stays clean.
+func TestSecretsExecRendersTemplate(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	dir := initSecretsWorktree(t, "WL-9")
+
+	cert, key := strings.Repeat("C", 1200), strings.Repeat("K", 1200)
+	for item, v := range map[string]string{
+		"KUBECONFIG_HZDEV__CLIENT_CERT": cert,
+		"KUBECONFIG_HZDEV__CLIENT_KEY":  key,
+	} {
+		if err := secrets.Put("WL-9", item, v); err != nil {
+			t.Fatalf("put %s: %v", item, err)
+		}
+	}
+	m := templatedManifest("WL-9", "KUBECONFIG_HZDEV", "KUBECONFIG", bigTemplate(),
+		"CLIENT_CERT", "CLIENT_KEY")
+	if err := secrets.SaveManifest(m); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	gotEnv, err := execCapture(t, "--", "env")
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	paths := envValues(gotEnv, "KUBECONFIG")
+	if len(paths) != 1 {
+		t.Fatalf("KUBECONFIG = %v; want exactly one entry", paths)
+	}
+	// The entry name is plumbing: only the exported name reaches the child.
+	if got := envValues(gotEnv, "KUBECONFIG_HZDEV"); len(got) != 0 {
+		t.Errorf("entry name reached the child as %v", got)
+	}
+	want := filepath.Join(dir, ".worklode", "secrets", "KUBECONFIG_HZDEV")
+	if paths[0] != want {
+		t.Fatalf("KUBECONFIG = %q; want %q", paths[0], want)
+	}
+	info, err := os.Stat(want)
+	if err != nil {
+		t.Fatalf("stat rendered: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("rendered perm = %o; want 0600", info.Mode().Perm())
+	}
+	if info.Size() < 4096 {
+		t.Fatalf("rendered size = %d; want the full >4 KB document", info.Size())
+	}
+	data, err := os.ReadFile(want)
+	if err != nil {
+		t.Fatalf("read rendered: %v", err)
+	}
+	if !strings.Contains(string(data), cert) || !strings.Contains(string(data), key) ||
+		strings.Contains(string(data), "{{") {
+		t.Fatal("rendered file did not substitute both credentials")
+	}
+	// No credential value reaches the environment: the whole point of the
+	// file is that a multi-kilobyte value never becomes an env var.
+	for _, kv := range gotEnv {
+		if strings.Contains(kv, cert) || strings.Contains(kv, key) {
+			t.Fatalf("a credential value reached the child environment: %.40q…", kv)
+		}
+	}
+	// The manifest records the path purge unlinks, and holds no value.
+	saved, ok := secrets.LoadManifest("WL-9")
+	if !ok || saved.Entries[0].Rendered != want {
+		t.Fatalf("manifest = %+v; want the rendered path recorded", saved)
+	}
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git status: %v\n%s", err, out)
+	}
+	if len(out) != 0 {
+		t.Fatalf("rendering dirtied the worktree:\n%s", out)
+	}
+}
+
+// TestSecretsExecRerendersDeletedFile is spec 042 acceptance 6: the file is
+// re-rendered on every exec, so deleting it heals rather than breaks.
+func TestSecretsExecRerendersDeletedFile(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	dir := initSecretsWorktree(t, "WL-9")
+
+	if err := secrets.Put("WL-9", "KUBECONFIG_HZDEV__CLIENT_CERT", "CERT"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(templatedManifest("WL-9", "KUBECONFIG_HZDEV", "KUBECONFIG",
+		"cert: {{ CLIENT_CERT }}\n", "CLIENT_CERT")); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	path := filepath.Join(dir, ".worklode", "secrets", "KUBECONFIG_HZDEV")
+	if _, err := execCapture(t, "--", "env"); err != nil {
+		t.Fatalf("first exec: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove rendered: %v", err)
+	}
+	if _, err := execCapture(t, "--", "env"); err != nil {
+		t.Fatalf("second exec: %v", err)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "cert: CERT\n" {
+		t.Fatalf("rendered = %q, %v; want it re-rendered", data, err)
+	}
+}
+
+// TestSecretsExecRejectsDuplicateExportedName is spec 042 §5: two entries
+// resolving to one exported name would silently pick a winner in the child.
+func TestSecretsExecRejectsDuplicateExportedName(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	initSecretsWorktree(t, "WL-9")
+
+	m := plainManifest("WL-9", "KUBECONFIG_HZDEV", "KUBECONFIG_HZPROD")
+	m.Entries[0].Env, m.Entries[1].Env = "KUBECONFIG", "KUBECONFIG"
+	if err := secrets.SaveManifest(m); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+
+	_, err := execCapture(t, "--", "env")
+	if err == nil || !strings.Contains(err.Error(), "KUBECONFIG_HZDEV") ||
+		!strings.Contains(err.Error(), "KUBECONFIG_HZPROD") {
+		t.Fatalf("exec with a collision: %v; want an error naming both entries", err)
+	}
+}
+
+// TestSecretsExecRejectsPre042Manifest is spec 042 §5: a manifest with no
+// entries cannot say which items or template a name needs, so it reads as
+// unmaterialized and `lode worktree resume` re-runs the ceremony.
+func TestSecretsExecRejectsPre042Manifest(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	initSecretsWorktree(t, "WL-9")
+
+	if err := secrets.Put("WL-9", "A_TOKEN", "v"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(secrets.Manifest{
+		Task: "WL-9", Materialized: []string{"A_TOKEN"},
+	}); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	if _, err := execCapture(t, "--", "env"); err == nil ||
+		!strings.Contains(err.Error(), "no secrets materialized") {
+		t.Fatalf("exec on a pre-042 manifest: %v; want the re-materialize hint", err)
+	}
+	if secretsSatisfied("WL-9", []string{"A_TOKEN"}) {
+		t.Fatal("a pre-042 manifest counted as satisfied; resume would never re-run the ceremony")
+	}
+}
+
+// TestSecretsPurgeRemovesRenderedFiles is spec 042 acceptance 5: purge takes
+// the rendered plaintext with the keystore items, and the directory with it.
+func TestSecretsPurgeRemovesRenderedFiles(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	dir := initSecretsWorktree(t, "WL-9")
+
+	if err := secrets.Put("WL-9", "KUBECONFIG_HZDEV__CLIENT_CERT", "CERT"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	if err := secrets.SaveManifest(templatedManifest("WL-9", "KUBECONFIG_HZDEV", "KUBECONFIG",
+		"cert: {{ CLIENT_CERT }}\n", "CLIENT_CERT")); err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	if _, err := execCapture(t, "--", "env"); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+
+	cmd := newSecretsPurgeCmd()
+	cmd.SetOut(io.Discard)
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".worklode", "secrets")); !os.IsNotExist(err) {
+		t.Fatalf("rendered directory survived purge: %v", err)
+	}
+	if _, err := secrets.Fetch("WL-9", "KUBECONFIG_HZDEV__CLIENT_CERT"); err == nil {
+		t.Fatal("credential item survived purge")
+	}
+	// A subsequent exec fails with the materialize hint (acceptance 5).
+	if _, err := execCapture(t, "--", "env"); err == nil ||
+		!strings.Contains(err.Error(), "no secrets materialized") {
+		t.Fatalf("exec after purge: %v; want the materialize hint", err)
+	}
+}
+
 func TestSecretsCatalogLegendOnlyWithEntries(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -177,6 +177,84 @@ func TestWriteEnvFile(t *testing.T) {
 	}
 }
 
+// TestWriteEnvFileTemplatedEntry: a templated entry contributes one line per
+// credential under its ITEM name (spec 042 §3), so op resolves each into the
+// environment pack reads it back out of.
+func TestWriteEnvFileTemplatedEntry(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".worklode", "secrets.env")
+	entries := []Entry{
+		{Name: "KUBECONFIG_HZDEV", Template: "kubeconfig-hzdev.yaml", Env: "KUBECONFIG", Creds: []Cred{
+			{Placeholder: "CLIENT_CERT", Ref: "op://Infrastructure/hzdev kubeconfig/client-cert"},
+			{Placeholder: "CLIENT_KEY", Ref: "op://Infrastructure/hzdev kubeconfig/client-key"},
+		}},
+		{Name: "GITHUB_TOKEN", Ref: "op://Employee/GitHub agent token/credential"},
+	}
+	if err := WriteEnvFile(path, entries); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	want := "GITHUB_TOKEN=op://Employee/GitHub agent token/credential\n" +
+		"KUBECONFIG_HZDEV__CLIENT_CERT=op://Infrastructure/hzdev kubeconfig/client-cert\n" +
+		"KUBECONFIG_HZDEV__CLIENT_KEY=op://Infrastructure/hzdev kubeconfig/client-key\n"
+	if string(data) != want {
+		t.Fatalf("env file:\n%s\nwant:\n%s", data, want)
+	}
+	// The entry name itself is never an item of a templated entry: nothing
+	// resolves it, so a line under it would fail pack on every claim.
+	if strings.Contains(string(data), "\nKUBECONFIG_HZDEV=") {
+		t.Fatal("templated entry got a line under its own name")
+	}
+}
+
+// TestPurgeTaskUnlinksRenderedFiles is spec 042 §4.1: the rendered file is
+// plaintext at rest, the least-protected copy of the credentials on the
+// machine, and purge is what bounds its lifetime to the worktree's.
+func TestPurgeTaskUnlinksRenderedFiles(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	wt := t.TempDir()
+
+	e := ManifestEntry{
+		Name: "KUBECONFIG_HZDEV", Env: "KUBECONFIG",
+		Template: "cert: {{ CLIENT_CERT }}\n",
+		Items:    []string{"KUBECONFIG_HZDEV__CLIENT_CERT"},
+	}
+	if err := Put("WL-7", e.Items[0], "CERT"); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	path, err := RenderEntry(wt, e, map[string]string{"CLIENT_CERT": "CERT"})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	e.Rendered = path
+	if err := SaveManifest(Manifest{
+		Task: "WL-7", Materialized: []string{e.Name}, Entries: []ManifestEntry{e}, At: time.Now(),
+	}); err != nil {
+		t.Fatalf("save manifest: %v", err)
+	}
+
+	names, err := PurgeTask("WL-7")
+	if err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if !slices.Equal(names, []string{"KUBECONFIG_HZDEV"}) {
+		t.Fatalf("purged %v; want the entry name", names)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("rendered file survived purge: %v", err)
+	}
+	if _, err := Fetch("WL-7", e.Items[0]); err == nil {
+		t.Fatal("credential item survived purge")
+	}
+	// A rendered file already gone is fine: release hooks run more than once.
+	if _, err := PurgeTask("WL-7"); err != nil {
+		t.Fatalf("second purge: %v", err)
+	}
+}
+
 // TestMaterializedTasks: the manifest directory is the machine's only
 // inventory of materialized secrets (keyring cannot enumerate), so a
 // machine-wide sweep depends on reading it exactly.

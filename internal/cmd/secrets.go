@@ -324,6 +324,13 @@ func newSecretsExecCmd() *cobra.Command {
 				exported[e.EnvName()] = e.Name
 			}
 
+			// The ceremony excludes .worklode/secrets/ when it writes the env
+			// file, but exec is what puts plaintext there — so it re-asserts
+			// the exclusion rather than trusting a worktree whose exclude
+			// file predates this spec. Best-effort and idempotent.
+			if slices.ContainsFunc(m.Entries, secrets.ManifestEntry.Templated) {
+				excludeSecretsPaths(root)
+			}
 			injected := make([]string, 0, len(m.Entries))
 			for i := range m.Entries {
 				e := &m.Entries[i]

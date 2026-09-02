@@ -156,6 +156,84 @@ func TestCeremonyOneOpRunMaterializesAll(t *testing.T) {
 	}
 }
 
+// ceremonyTemplatedCatalogJSON is the spec 042 §2 entry as the catalog
+// endpoint serves it: template TEXT, exported name, placeholder → ref map.
+const ceremonyTemplatedCatalogJSON = `{"secrets":[
+  {"name":"KUBECONFIG_HZDEV","description":"hzdev","baseline":false,
+   "template":"cert: {{ CLIENT_CERT }}\nkey: {{ CLIENT_KEY }}\n","env":"KUBECONFIG",
+   "creds":{"CLIENT_CERT":"op://Infrastructure/hzdev kubeconfig/client-cert",
+            "CLIENT_KEY":"op://Infrastructure/hzdev kubeconfig/client-key"}}
+]}`
+
+// TestCeremonyMaterializesTemplatedEntry is spec 042 acceptance 3: one
+// authorization, one keystore item per credential under NAME__PLACEHOLDER,
+// and one event naming the ENTRY only — placeholders are plumbing, not audit.
+func TestCeremonyMaterializesTemplatedEntry(t *testing.T) {
+	keyring.MockInit()
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	c, cmd, _, _, recorded := ceremonyFixtureWithCatalog(t, http.StatusOK, ceremonyTemplatedCatalogJSON, "y\n")
+
+	calls, envFile := 0, ""
+	restore := opRunFunc
+	opRunFunc = fakeOp(t, &calls, &envFile)
+	defer func() { opRunFunc = restore }()
+	restoreLookPath := opLookPathFunc
+	opLookPathFunc = func() (string, error) { return "op", nil }
+	defer func() { opLookPathFunc = restoreLookPath }()
+
+	runSecretsCeremony(context.Background(), cmd, c, "WL-7", dir, []string{"KUBECONFIG_HZDEV"})
+
+	if calls != 1 {
+		t.Fatalf("op run called %d times; want exactly 1 (one authorization)", calls)
+	}
+	// The env file addresses each credential by its item name, so op
+	// resolves both under one authorization.
+	want := "KUBECONFIG_HZDEV__CLIENT_CERT=op://Infrastructure/hzdev kubeconfig/client-cert\n" +
+		"KUBECONFIG_HZDEV__CLIENT_KEY=op://Infrastructure/hzdev kubeconfig/client-key\n"
+	if envFile != want {
+		t.Fatalf("env file:\n%s\nwant:\n%s", envFile, want)
+	}
+
+	m, ok := secrets.LoadManifest("WL-7")
+	if !ok || len(m.Entries) != 1 {
+		t.Fatalf("manifest = %+v, %v", m, ok)
+	}
+	e := m.Entries[0]
+	if e.Env != "KUBECONFIG" || !e.Templated() ||
+		!strings.Contains(e.Template, "{{ CLIENT_CERT }}") {
+		t.Fatalf("manifest entry = %+v; want the exported name and template text", e)
+	}
+	if !slices.Equal(e.Items, []string{"KUBECONFIG_HZDEV__CLIENT_CERT", "KUBECONFIG_HZDEV__CLIENT_KEY"}) {
+		t.Fatalf("items = %v", e.Items)
+	}
+	for _, item := range e.Items {
+		if _, err := secrets.Fetch("WL-7", item); err != nil {
+			t.Errorf("credential %s not in the keystore: %v", item, err)
+		}
+	}
+	// The audit event stays entry-granular: item names never enter it.
+	if !slices.Equal(*recorded, []string{"KUBECONFIG_HZDEV"}) {
+		t.Fatalf("recorded = %v; want the entry name only", *recorded)
+	}
+	// Persisting the template locally is what keeps exec offline; no value
+	// or op:// ref may ride along with it.
+	if strings.Contains(e.Template, "op://") || strings.Contains(e.Template, "resolved-") {
+		t.Fatalf("manifest template carries a ref or a value: %q", e.Template)
+	}
+	if secretsSatisfied("WL-7", []string{"KUBECONFIG_HZDEV"}) != true {
+		t.Fatal("a fully materialized templated entry read as unsatisfied")
+	}
+	// Losing one credential is enough to re-run the ceremony: exec cannot
+	// render a template it can only half-fill.
+	if err := secrets.Del("WL-7", e.Items[1]); err != nil {
+		t.Fatalf("del: %v", err)
+	}
+	if secretsSatisfied("WL-7", []string{"KUBECONFIG_HZDEV"}) {
+		t.Fatal("a missing credential item still read as satisfied")
+	}
+}
+
 func TestCeremonyDeclineSkipsConsentedSet(t *testing.T) {
 	keyring.MockInit()
 	t.Setenv("HOME", t.TempDir())
