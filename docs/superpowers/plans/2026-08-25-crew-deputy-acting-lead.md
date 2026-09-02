@@ -17,9 +17,8 @@ exclusive with `--lead`.
 
 **Tech Stack:** Go, PostgreSQL (golang-migrate), Cobra CLI.
 
-**Spec:** `docs/specs/029-research-work-in-the-backbone.md` §6.1 (edited
-directly by Task 5 below — the spec is still `status: draft`, so this is a
-direct edit, not an amendment).
+**Spec:** `WL-SPEC-29` §6.1 (edited directly by Task 5 below — the spec is
+still `status: draft`, so this is a direct edit, not an amendment).
 
 ## Global Constraints
 
@@ -33,10 +32,8 @@ direct edit, not an amendment).
   commands that match CI; never run bare `go build`/`go test`.
 - Store tests need `TEST_POSTGRES_DSN` reachable Postgres with pgvector; they
   skip silently otherwise unless `CI` is set.
-- Editing `docs/specs/029-research-work-in-the-backbone.md` triggers the
-  pre-commit hook that regenerates `docs/specs/inlined/`; run
-  `./scripts/secfmt.py -l -w && ./scripts/inlinespec.py` before committing to
-  avoid a fail-then-restage cycle.
+- Spec 029 is a backbone document, not a file. Read it with `lode show
+  WL-SPEC-29` and write it with `lode doc edit WL-SPEC-29 --file <path>`.
 
 ---
 
@@ -767,19 +764,19 @@ git commit -m "cli: add --deputy to lode project crew add"
 ### Task 5: Spec — 029 §6.1 direct edit
 
 **Files:**
-- Modify: `docs/specs/029-research-work-in-the-backbone.md`
+- Modify: the backbone document `WL-SPEC-29`
 
 **Interfaces:**
 - Consumes: nothing (documents the mechanism Tasks 1-4 built).
 - Produces: updated prose in §6.1. No new section, no new anchor — the spec
   is `status: draft`, so this is a direct edit rather than an amendment (the
-  freeze/amend machinery in `docs/authoring-design-docs.md` only applies once
-  a document is `accepted`).
+  freeze/amend machinery applies once a document is `accepted`; see the
+  `worklode-docs-authoring` skill).
 
 - [ ] **Step 1: Read the current section for exact context**
 
-Read `docs/specs/029-research-work-in-the-backbone.md:246-284` (the "6.
-People" / "6.1 Assignee, participants, contributors" section) before editing.
+Run `lode show WL-SPEC-29` and read §6.1 ("6. People" / "6.1 Assignee,
+participants, contributors") before editing.
 
 - [ ] **Step 2: Insert the deputy/acting-lead paragraph**
 
@@ -803,26 +800,17 @@ vocabulary above — a role of `acting-lead` is refused the same way any other
 unrecognized role is.
 ```
 
-- [ ] **Step 3: Regenerate the derived views and check formatting**
+- [ ] **Step 3: Lint and write it back**
 
 ```bash
-./scripts/secfmt.py -l -w
-./scripts/inlinespec.py
+lode doc anchors <edited-file>
+lode doc edit WL-SPEC-29 --file <edited-file>
 ```
 
-Expected: `secfmt.py` reports no change to numbering/anchors (this edit adds
-prose to an existing section, no heading changed); `inlinespec.py` rewrites
-`docs/specs/inlined/029-research-work-in-the-backbone.md` to include the new
-paragraph.
+Expected: no anchor problems (this edit adds prose to an existing section, no
+heading changed), and the edit is accepted.
 
-- [ ] **Step 4: Verify the inlined view picked up the change**
+- [ ] **Step 4: Verify the document took the change**
 
-Run: `grep -n "acting-lead" docs/specs/inlined/029-research-work-in-the-backbone.md`
+Run: `lode show WL-SPEC-29 | grep -n "acting-lead"`
 Expected: at least one match, inside §6.1.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add docs/specs/029-research-work-in-the-backbone.md docs/specs/inlined/029-research-work-in-the-backbone.md
-git commit -m "spec: add deputy / acting-lead designation to 029 §6.1"
-```

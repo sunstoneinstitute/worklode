@@ -8,8 +8,8 @@ see the root `CLAUDE.md`'s "`www/` copy style" section.
 
 ## Accuracy
 
-Copy must describe what's implemented, not what a spec proposes. Every
-spec under `docs/specs/` carries `status: draft` regardless of whether the
+Copy must describe what's implemented, not what a spec proposes. Nearly every
+spec carries `status: draft` regardless of whether the
 feature shipped, so that field is not a signal of anything: check the
 actual code (the `internal/cmd` command tree, `internal/watcher`, event
 types in `internal/eventbus`) before writing a sentence in the present

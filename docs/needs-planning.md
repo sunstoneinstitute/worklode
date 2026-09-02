@@ -11,12 +11,10 @@ out to already be implemented without ever going through a formal plan.
 state directly** — WL-PLAN-106 ("Retroactive coverage backfill", `lode show
 WL-PLAN-106`) records every already-shipped or purely-procedural section as
 `coverage: full`/`none`, so the two commands agree with the table below
-instead of still flagging 518 sections. It's backbone-only, no git file: four
-of the specs it covers (053–055, 057) have none either, and the git-side
-`doc-frontmatter` pre-commit hook can't resolve a reference to a spec with no
-file on disk, so mirroring this plan into `docs/plans/` would fail that hook
-on commit. Its body explains the mechanics (canonical corpus paths, the
-`WL-SPEC-N` shorthand gap) for anyone extending it.
+instead of still flagging 518 sections. Its body explains the mechanics
+(canonical corpus paths, the `WL-SPEC-N` shorthand gap) for anyone extending
+it. It was backbone-only from the start, which is now true of every document
+(055).
 
 **16 specs had genuine, unplanned gaps.** A `design`-kind planning task was
 minted for each (WL-387 through WL-402); WL-398 (spec 046) blocks on WL-397

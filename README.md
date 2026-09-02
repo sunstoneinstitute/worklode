@@ -10,9 +10,9 @@ giving full provenance for every state change. Work arrives from three
 sources — a GitHub App (issues, PRs, reviews, CI, releases), a Flux
 notification-controller webhook (deployments), and a Kubernetes pod watcher
 (crash loops, OOM kills) — and is read back through the `lode` CLI or a
-read-only web UI. See `docs/specs/` for the design — `docs/specs/index.yaml`
-maps every document's sections, and `004-execution-backbone.md` is the
-foundation the rest builds on.
+read-only web UI. The design lives in the backbone itself: `lode doc list
+--kind spec` maps it, and `lode show WL-SPEC-4` is the execution backbone the
+rest builds on.
 
 ## Quickstart
 
@@ -810,7 +810,6 @@ because changing it can break something no other job would catch:
 
 | Exempt path | What would go unchecked |
 |---|---|
-| `docs/specs/`, `docs/plans/` | the `internal/designdoc` parser, `secfmt.py -l`, `inlinespec.py --check` |
 | `plugins/` | the Codex marketplace mirror check |
 | `CLAUDE.md`, `internal/cmd/CLAUDE.md`, `.claude/skills/`, `docs/agent-surfaces.md` | `TestAgentSurfaces`, which catches agent instructions naming `lode` commands or flags that no longer exist |
 

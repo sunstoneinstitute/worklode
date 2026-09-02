@@ -12,62 +12,10 @@ repos:
         language: system
         types: [go]
         pass_filenames: false
-      # Rewrites like gofmt above: fixes the files, lists them and fails, so the
-      # author can `git add` and commit again. Docs-only PRs skip CI, so this is
-      # the primary enforcement. It only normalises numbering that already
-      # exists, and refuses (exit 2) rather than move an anchor an accepted spec
-      # has published.
-      - id: section-numbers
-        name: section numbers & anchors
-        entry: scripts/secfmt.py -l -w
-        language: script
-        files: ^docs/specs/.*\.md$
-      # REFUSES RATHER THAN REWRITES — the opposite of section-numbers above.
-      # There is no correct automatic repair for a deleted published anchor,
-      # so there is no fix-and-retry loop here: fix the document by hand
-      # (letter-suffix inserts; superseded sections keep their heading and
-      # anchor) and commit again. Checks the whole corpus against HEAD:
-      # anchor permanence on accepted/superseded docs, reference and
-      # mirror-edge integrity, amends/replaces acyclicity (026 §4.1).
-      - id: section-permanence
-        name: anchor permanence & corpus integrity
-        entry: scripts/secfrozen.py
-        language: script
-        files: ^docs/(specs|plans)/.*\.md$
-        pass_filenames: false
-      # Rewrites like secfmt above. The views are a function of the *whole*
-      # corpus — an amendment added to one spec changes another spec's view — so
-      # this regenerates all of them whenever any spec changes, and never just
-      # the files this commit touched. Exits 1 after writing, so the author
-      # stages the regenerated views with the edit that caused them.
-      - id: inlined-specs
-        name: consolidated spec views
-        entry: scripts/inlinespec.py
-        language: script
-        files: ^docs/specs/.*\.md$
-        pass_filenames: false
-      # Rewrites like inlined-specs above. always_run: a commit that only
-      # deletes a document still invalidates the index, and pre-commit drops
-      # deleted paths from the file list, so `files:` alone would miss it.
-      - id: section-index
-        name: docs section index
-        entry: scripts/secindex.py
-        language: script
-        pass_filenames: false
-        always_run: true
-      # Reports, never rewrites: a frontmatter value is a claim about the corpus,
-      # so a wrong one is fixed by deciding what it should say. Runs over the
-      # whole corpus because a reference breaks from the far end — deleting an
-      # anchor dangles inbound refs in files this commit does not touch.
-      # Roots are explicit because pass_filenames is false: `files:` decides
-      # whether the hook fires, not what it checks, so a widened pattern alone
-      # would still scan DEFAULT_ROOTS.
-      - id: doc-frontmatter
-        name: design-doc frontmatter
-        entry: scripts/secmeta.py docs/specs docs/plans
-        language: script
-        files: ^docs/(specs|plans)/.*\.md$
-        pass_filenames: false
+      # Specs and plans live in the backbone, not the tree (055). The five hooks
+      # that used to lint docs/specs and docs/plans went with them; the server
+      # enforces the same rules on write, through `lode doc new` and `lode doc
+      # edit`.
       # always_run: a rebase can create a collision in a commit that touches no
       # migration at all, so matching on changed files would miss it.
       - id: migration-numbers
