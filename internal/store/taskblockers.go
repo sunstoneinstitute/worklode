@@ -110,7 +110,7 @@ SELECT id, title, state, project_id, via, MIN(depth), bool_or(is_cycle)
 // chain prints once from its top instead of once per task on it. When every
 // seed is covered but seeds exist, the blocker graph is one or more cycles
 // among the seeds themselves; all of them are kept rather than reporting
-// nothing, and `lode critical-path` is what names the cycle.
+// nothing, and `lode task critical-path` is what names the cycle.
 func (s *Store) BlockerForest(ctx context.Context, projectID string) ([]model.BlockerTree, error) {
 	seeds, err := s.blockedTaskIDsIn(ctx, projectID)
 	if err != nil {
