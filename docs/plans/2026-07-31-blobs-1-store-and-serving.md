@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-17
 covers: docs/specs/021-images-in-task-bodies.md
 ---
 # Blobs 1 — Object store and serving Implementation Plan

@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-3
 covers:
   - docs/specs/006-knowledge-graph.md#sec-13
   - docs/specs/006-knowledge-graph.md#sec-13.1

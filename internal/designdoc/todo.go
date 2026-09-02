@@ -25,7 +25,7 @@ type TodoItem struct {
 	Anchors []string // the sections a collapsed unplanned/partial item names, in document order
 	Heading string   // section heading on a plan-level item, document title otherwise
 	Plan    string   // repo-relative plan path; empty for unplanned and partial
-	Task    string   // "WL-42"; empty when the plan names none
+	Tasks   []string // the plan's still-open minted tasks; empty when it minted none
 	Detail  string   // one line naming why
 }
 
@@ -46,17 +46,29 @@ type Diagnostics struct {
 	Notes      []string // degradations, e.g. no closure lookup
 }
 
-// TodoOptions configures one walk. Closed is the injected task-closure
-// lookup: closure is the server's answer, never a state string (026 §2.4),
-// so this package never derives it. A nil Closed is the offline case — the
-// planning half still answers and every task state reads as unknown.
+// ExecutionTask is one task a plan's acceptance minted (025 §9.2), as this
+// walk needs to read it. Closed is the server's per-repo answer, never a
+// state string (026 §2.4), so this package never derives it; State is kept
+// only to tell a minted-but-unpublished `draft` task from a claimable one,
+// which is a different act to ask for, not a different closure.
+type ExecutionTask struct {
+	ID     string
+	State  string
+	Closed bool
+}
+
+// TodoOptions configures one walk. Tasks is the injected plan → minted-tasks
+// lookup, keyed by the plan's canonical repo-relative path: a plan's tasks
+// are the rows carrying its `plan_doc` (025 §9.2), which only the backbone
+// holds. A nil Tasks is the offline case — the planning half still answers
+// and every plan's execution state reads as unknown.
 // ProjectKey is the current repo's project key ("WL"), for resolving a
 // covers/defers/requires/amends entry written as a <KEY>-<TYPE>-<n>
 // shorthand (WL-409) — "" declines every shorthand rather than guessing one,
 // which is every offline caller's answer and every caller predating this.
 type TodoOptions struct {
 	Deps       bool
-	Closed     func(taskID string) (closed bool, known bool)
+	Tasks      func(planPath string) []ExecutionTask
 	ProjectKey string
 }
 
@@ -74,9 +86,9 @@ func Todo(docs []CorpusDoc, specPath string, opts TodoOptions) ([]TodoItem, Diag
 	if err != nil {
 		return nil, Diagnostics{}, err
 	}
-	if opts.Closed == nil {
+	if opts.Tasks == nil {
 		w.diag.Notes = append(w.diag.Notes,
-			"no task-closure lookup: every plan's execution state reads as unknown, "+
+			"no task lookup: every plan's execution state reads as unknown, "+
 				"and no `blocked` item is emitted (026 §2.4)")
 	}
 	w.walk(start)
@@ -477,15 +489,14 @@ func coveredFullByDraft(covering []CoveringPlan) bool {
 }
 
 // emitAcceptedPlan decides what an accepted covering plan still owes:
-// nothing when its task is closed, `blocked` when a plan it requires is not
-// itself discharged, `unexecuted` otherwise.
+// nothing when every task it minted is closed, `blocked` when a plan it
+// requires is not itself discharged, `unexecuted` otherwise.
 func (w *todoWalk) emitAcceptedPlan(docPath string, sec SectionMeta, plan CoveringPlan) {
 	if w.decidedPlan[plan.Path] {
 		return
 	}
-	task := w.taskOf(plan.Path)
-	closed, known := w.closed(task)
-	if closed {
+	tasks := w.tasksOf(plan.Path)
+	if w.executed(tasks) {
 		w.decidedPlan[plan.Path] = true
 		return
 	}
@@ -494,21 +505,69 @@ func (w *todoWalk) emitAcceptedPlan(docPath string, sec SectionMeta, plan Coveri
 	// unavailable. Letting it through would make an item's type depend on
 	// the caller's connectivity, so the same corpus would describe the same
 	// work differently from a laptop on a train.
-	if w.opts.Closed != nil {
+	if w.opts.Tasks != nil {
 		if blockers := w.blockers(plan.Path); len(blockers) > 0 {
 			w.emitPlan(docPath, sec, plan, TodoBlocked,
 				"requires "+strings.Join(blockers, ", ")+", not discharged")
 			return
 		}
 	}
-	switch {
-	case task == "":
-		w.emitPlan(docPath, sec, plan, TodoUnexecuted, "plan names no execution task")
-	case !known:
-		w.emitPlan(docPath, sec, plan, TodoUnexecuted, "task "+task+": state unknown")
-	default:
-		w.emitPlan(docPath, sec, plan, TodoUnexecuted, "task "+task+" is open")
+	w.emitPlan(docPath, sec, plan, TodoUnexecuted, w.executionDetail(tasks))
+}
+
+// executionDetail says why an accepted plan still owes work, in the terms
+// 025 §9.2 leaves it: the tasks its acceptance minted. Minting none is the
+// one case that reads as a defect. Every other line names the open ones and
+// marks those still `draft`, because a draft task is minted work nobody can
+// claim yet — publishing it is a different act from executing it, and a
+// reader who cannot tell the two apart re-plans work that already exists.
+func (w *todoWalk) executionDetail(tasks []ExecutionTask) string {
+	if w.opts.Tasks == nil {
+		return "execution state unknown: no task lookup"
 	}
+	if len(tasks) == 0 {
+		return "plan minted no execution task"
+	}
+	var open, draft []string
+	for _, t := range tasks {
+		if t.Closed {
+			continue
+		}
+		open = append(open, t.ID)
+		if t.State == "draft" {
+			draft = append(draft, t.ID)
+		}
+	}
+	if len(draft) == len(open) {
+		return fmt.Sprintf("%s minted, still draft: %s",
+			plural(len(open), "task"), taskIDList(open))
+	}
+	detail := fmt.Sprintf("%s open: %s", plural(len(open), "task"), taskIDList(open))
+	if len(draft) > 0 {
+		detail += fmt.Sprintf(" (%d draft)", len(draft))
+	}
+	return detail
+}
+
+// listedTasks bounds the ids one detail line names. A plan mints a dozen
+// tasks; naming all of them wraps the line, and the count is the part that
+// carries.
+const listedTasks = 3
+
+func taskIDList(ids []string) string {
+	if len(ids) <= listedTasks {
+		return strings.Join(ids, ", ")
+	}
+	return fmt.Sprintf("%s, +%d more",
+		strings.Join(ids[:listedTasks], ", "), len(ids)-listedTasks)
+}
+
+// plural renders a count with its noun, "s" added past one.
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
 }
 
 // emitPlan records one plan-level item, attributed to the first section of
@@ -523,7 +582,7 @@ func (w *todoWalk) emitPlan(docPath string, sec SectionMeta, plan CoveringPlan, 
 	w.add(rankedItem{
 		item: TodoItem{
 			Type: typ, Doc: docPath, Anchor: sec.Anchor, Heading: sec.Heading,
-			Plan: plan.Path, Task: w.taskOf(plan.Path), Detail: detail,
+			Plan: plan.Path, Tasks: openTaskIDs(w.tasksOf(plan.Path)), Detail: detail,
 		},
 		rank:     w.planRank(plan.Path),
 		docOrder: w.docOrder[docPath],
@@ -535,22 +594,41 @@ func (w *todoWalk) add(it rankedItem) {
 	w.items = append(w.items, it)
 }
 
-// taskOf is the plan's transitional `task` key (026 §5.2), naming the task
-// its execution hangs off in today's tracker.
-func (w *todoWalk) taskOf(planPath string) string {
-	if fm := w.frontmatter[planPath]; fm != nil {
-		return fm.Task
+// tasksOf is the set of tasks the plan's acceptance minted (025 §9.2), read
+// from the injected lookup. Offline there is no set to read, which is never
+// evidence that the plan minted none.
+func (w *todoWalk) tasksOf(planPath string) []ExecutionTask {
+	if w.opts.Tasks == nil {
+		return nil
 	}
-	return ""
+	return w.opts.Tasks(planPath)
 }
 
-// closed asks the injected lookup. No lookup, or no task to ask about,
-// leaves closure unknown — which is never evidence of closure.
-func (w *todoWalk) closed(task string) (closed, known bool) {
-	if task == "" || w.opts.Closed == nil {
-		return false, false
+// executed reports whether a plan's minted tasks leave no work: at least one
+// task, every one of them closed. An empty set is not execution — it is
+// either a plan whose acceptance minted nothing, or an offline walk that
+// cannot see the tasks — and neither is evidence of closure.
+func (w *todoWalk) executed(tasks []ExecutionTask) bool {
+	if len(tasks) == 0 {
+		return false
 	}
-	return w.opts.Closed(task)
+	for _, t := range tasks {
+		if !t.Closed {
+			return false
+		}
+	}
+	return true
+}
+
+// openTaskIDs names the minted tasks that still carry work.
+func openTaskIDs(tasks []ExecutionTask) []string {
+	var out []string
+	for _, t := range tasks {
+		if !t.Closed {
+			out = append(out, t.ID)
+		}
+	}
+	return out
 }
 
 // blockers lists the plans planPath requires that are not themselves
@@ -595,8 +673,7 @@ func (w *todoWalk) planDischarged(planPath string) bool {
 	case "superseded":
 		return true
 	case "accepted":
-		closed, known := w.closed(w.taskOf(planPath))
-		return closed && known
+		return w.executed(w.tasksOf(planPath))
 	}
 	return false
 }

@@ -384,7 +384,6 @@ scalar `implements`, no `status` (legacy shape):
 ```markdown
 ---
 implements: docs/specs/001-alpha.md
-task: WL-1
 ---
 # Alpha plan
 
@@ -399,7 +398,6 @@ Covers alpha wholesale.
 status: accepted
 covers:
   - ../specs/002-beta.md#sec-1
-task: WL-2
 ---
 # Beta plan
 

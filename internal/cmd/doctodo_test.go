@@ -36,11 +36,12 @@ Body.
 Body.
 `
 
-// todoPlanOpen covers sec-1 in full and names an execution task, so its item
-// type depends entirely on what the closure lookup says about WL-1.
+// todoPlanOpen covers sec-1 in full. Its item type depends entirely on the
+// tasks the backbone says its acceptance minted (025 §9.2) — this document is
+// id 2 in every fixture that pairs it with one spec, so a task carrying
+// "plan_doc":2 is one of its.
 const todoPlanOpen = `---
 status: accepted
-task: WL-1
 covers:
   - spec: docs/specs/001-example.md#sec-1
     coverage: full
@@ -161,17 +162,18 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 	return srv
 }
 
-// noTasks is the empty task list: every plan's task reads as unknown, which
-// is the state a fixture that says nothing about tasks wants.
+// noTasks is the empty task list: no plan minted anything, which is the state
+// a fixture that says nothing about tasks wants.
 const noTasks = `{"tasks":[]}`
 
 // TestDocTodoTable covers the table: both item shapes and the document
-// header. The task list is empty, so the covering plan's task reads as
-// unknown rather than dropping its item.
+// header. The covering plan minted one open task, so its item stands and the
+// detail names the task.
 func TestDocTodoTable(t *testing.T) {
 	setupTodoCorpus(t,
 		map[string]string{"001-example.md": todoSpec},
-		map[string]string{"001-1-first.md": todoPlanOpen}, noTasks)
+		map[string]string{"001-1-first.md": todoPlanOpen},
+		`{"tasks":[{"id":"WL-1","project":"proj","title":"one","state":"ready","closed":false,"plan_doc":2}]}`)
 
 	out, err := runLode(t, "doc", "todo", "WL-SPEC-1")
 	if err != nil {
@@ -187,7 +189,7 @@ func TestDocTodoTable(t *testing.T) {
 		// The plan column drops the corpus directory the reader already
 		// knows; the --json items keep the full path (TestDocTodoJSON).
 		"001-1-first.md",
-		"task WL-1: state unknown",
+		"1 task open: WL-1",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q\noutput:\n%s", want, out)
@@ -202,13 +204,13 @@ func TestDocTodoTable(t *testing.T) {
 	}
 }
 
-// TestDocTodoClosureCostsOneRequest covers the online path: one list call
-// answers every plan's task, a closed task drops its item, and an item whose
-// task the response does not carry reports the state as unknown.
-func TestDocTodoClosureCostsOneRequest(t *testing.T) {
+// TestDocTodoPlanTasksCostOneRequest covers the online path: one list call
+// answers every plan's tasks, a plan whose tasks are all closed drops its
+// item, and a plan whose minted tasks are still draft reports as minted
+// rather than as missing (WL-616).
+func TestDocTodoPlanTasksCostOneRequest(t *testing.T) {
 	const plans = `---
 status: accepted
-task: WL-1
 covers:
   - spec: docs/specs/001-example.md#sec-1
     coverage: full
@@ -219,7 +221,6 @@ Body.
 `
 	const secondPlan = `---
 status: accepted
-task: WL-9
 covers:
   - spec: docs/specs/001-example.md#sec-2
     coverage: full
@@ -228,15 +229,19 @@ covers:
 
 Body.
 `
-	// WL-1's state does not look done and the server calls it closed anyway:
-	// closure is the server's per-repo predicate, never a state string
-	// (026 §2.5), so an implementation reading `state` fails here.
+	// The spec is document 1, the two plans 2 and 3, in the order
+	// setupTodoCorpus assigns ids. WL-1's state does not look done and the
+	// server calls it closed anyway: closure is the server's per-repo
+	// predicate, never a state string (026 §2.5), so an implementation
+	// reading `state` fails here. WL-2 belongs to no plan, so it must not
+	// reach either item.
 	srv := setupTodoCorpus(t,
 		map[string]string{"001-example.md": todoSpec},
 		map[string]string{"001-1-first.md": plans, "001-2-second.md": secondPlan},
 		`{"tasks":[`+
-			`{"id":"WL-1","project":"proj","title":"one","state":"ready","closed":true},`+
-			`{"id":"WL-2","project":"proj","title":"two","state":"merged","closed":false}`+
+			`{"id":"WL-1","project":"proj","title":"one","state":"ready","closed":true,"plan_doc":2},`+
+			`{"id":"WL-2","project":"proj","title":"two","state":"merged","closed":false},`+
+			`{"id":"WL-9","project":"proj","title":"nine","state":"draft","closed":false,"plan_doc":3}`+
 			`]}`)
 
 	out, err := runLode(t, "doc", "todo", "WL-SPEC-1")
@@ -245,7 +250,8 @@ Body.
 	}
 	// One list, one body per document, one task list: the corpus costs a
 	// request per document because only GET /docs/{id} carries frontmatter,
-	// but closure is asked once for the whole project, never per plan.
+	// but the plans' tasks are asked for once for the whole project, never
+	// per plan.
 	list, body, task := srv.listCalls.Load(), srv.bodyCalls.Load(), srv.taskCalls.Load()
 	if list != 1 || body != 3 || task != 1 {
 		t.Errorf("requests = %d list, %d body, %d task; want 1, 3, 1",
@@ -255,9 +261,13 @@ Body.
 	if strings.Contains(out, "001-1-first.md") {
 		t.Errorf("closed task's plan still reported:\n%s", out)
 	}
-	// WL-9 is absent from the response: known == false.
-	if !strings.Contains(out, "task WL-9: state unknown") {
-		t.Errorf("absent task not reported as unknown:\n%s", out)
+	// The second plan's task is minted and unpublished, which is work to
+	// publish — never "plan minted no execution task".
+	if !strings.Contains(out, "1 task minted, still draft: WL-9") {
+		t.Errorf("draft task not reported as minted:\n%s", out)
+	}
+	if strings.Contains(out, "no execution task") {
+		t.Errorf("minted plan reported as having no task:\n%s", out)
 	}
 }
 
@@ -267,7 +277,6 @@ Body.
 // its whole life (WL-478).
 const todoPlanStaleDraftBody = `---
 status: draft
-task: WL-1
 covers:
   - spec: docs/specs/001-example.md#sec-1
     coverage: full
@@ -339,7 +348,8 @@ func TestDocTodoUnreachableServerFails(t *testing.T) {
 func TestDocTodoJSON(t *testing.T) {
 	setupTodoCorpus(t,
 		map[string]string{"001-example.md": todoSpec},
-		map[string]string{"001-1-first.md": todoPlanOpen}, noTasks)
+		map[string]string{"001-1-first.md": todoPlanOpen},
+		`{"tasks":[{"id":"WL-1","project":"proj","title":"one","state":"ready","closed":false,"plan_doc":2}]}`)
 
 	out, err := runLode(t, "doc", "todo", "WL-SPEC-1", "--json")
 	if err != nil {
@@ -353,7 +363,7 @@ func TestDocTodoJSON(t *testing.T) {
 			Anchors []string `json:"anchors"`
 			Heading string   `json:"heading"`
 			Plan    string   `json:"plan"`
-			Task    string   `json:"task"`
+			Tasks   []string `json:"tasks"`
 			Detail  string   `json:"detail"`
 		} `json:"items"`
 		Diagnostics struct {
@@ -375,7 +385,8 @@ func TestDocTodoJSON(t *testing.T) {
 		t.Errorf("first item = %+v; want doc, heading and detail populated", got.Items[0])
 	}
 	if got.Items[1].Type != "unexecuted" || got.Items[1].Anchor != "sec-1" ||
-		got.Items[1].Plan != "docs/plans/001-1-first.md" || got.Items[1].Task != "WL-1" {
+		got.Items[1].Plan != "docs/plans/001-1-first.md" ||
+		len(got.Items[1].Tasks) != 1 || got.Items[1].Tasks[0] != "WL-1" {
 		t.Errorf("second item = %+v; want the unexecuted plan item", got.Items[1])
 	}
 	// The keys themselves are the contract: decoding into a struct proves
@@ -402,14 +413,14 @@ func TestDocTodoJSON(t *testing.T) {
 	if err := json.Unmarshal(doc["items"], &items); err != nil {
 		t.Fatalf("decode items: %v", err)
 	}
-	// The collapsed gap carries anchors and no anchor/plan/task; the plan
+	// The collapsed gap carries anchors and no anchor/plan/tasks; the plan
 	// item is the mirror image. Both sets of names are pinned.
 	for _, want := range []string{"type", "doc", "anchors", "heading", "detail"} {
 		if _, ok := items[0][want]; !ok {
 			t.Errorf("collapsed item has no %q key: %s", want, out)
 		}
 	}
-	for _, want := range []string{"type", "doc", "anchor", "heading", "plan", "task", "detail"} {
+	for _, want := range []string{"type", "doc", "anchor", "heading", "plan", "tasks", "detail"} {
 		if _, ok := items[1][want]; !ok {
 			t.Errorf("plan item has no %q key: %s", want, out)
 		}
@@ -585,7 +596,6 @@ Body.
 `
 	const donePlan = `---
 status: accepted
-task: WL-1
 covers:
   - spec: docs/specs/004-done.md#sec-1
     coverage: full
@@ -594,11 +604,13 @@ covers:
 
 Body.
 `
-	// Again a closed task whose state string does not look done.
+	// Again a closed task whose state string does not look done. It carries
+	// the plan's document id (the spec is 1, the plan 2), which is what makes
+	// it the plan's task.
 	setupTodoCorpus(t,
 		map[string]string{"004-done.md": covered},
 		map[string]string{"004-1-done.md": donePlan},
-		`{"tasks":[{"id":"WL-1","project":"proj","title":"one","state":"ready","closed":true}]}`)
+		`{"tasks":[{"id":"WL-1","project":"proj","title":"one","state":"ready","closed":true,"plan_doc":2}]}`)
 
 	out, err := runLode(t, "doc", "todo", "WL-SPEC-4")
 	if err != nil {

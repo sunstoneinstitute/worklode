@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-25
 covers:
   - spec: docs/specs/006-knowledge-graph.md#sec-3
     coverage: partial

@@ -32,9 +32,14 @@ type Frontmatter struct {
 	AmendedBy      AnchorMap    `yaml:"amendedBy,omitempty"`      // 025 §14
 	Replaces       AnchorMap    `yaml:"replaces,omitempty"`       // dct:replaces
 	IsReplacedBy   AnchorMap    `yaml:"isReplacedBy,omitempty"`   // dct:isReplacedBy
-	Task           string       `yaml:"task,omitempty"`           // transitional, no term
-	Kind           string       `yaml:"kind,omitempty"`           // transitional, no term; 026 §4.2 — "adr" or absent (spec)
-	Artifact       RefList      `yaml:"artifact,omitempty"`       // transitional, no term; catalog address(es) verifying this doc (029 §3.1) — URIs, not doc refs
+	// Task is the retired `task:` key (026 §5.2). Nothing reads it: a plan's
+	// tasks are the rows carrying its plan_doc (025 §9.2). It is still
+	// declared because the decoder rejects unknown fields and the bodies the
+	// backbone stores are verbatim and never rewritten, so every plan
+	// authored before acceptance minted tasks still carries the key.
+	Task     string  `yaml:"task,omitempty"`
+	Kind     string  `yaml:"kind,omitempty"`     // transitional, no term; 026 §4.2 — "adr" or absent (spec)
+	Artifact RefList `yaml:"artifact,omitempty"` // transitional, no term; catalog address(es) verifying this doc (029 §3.1) — URIs, not doc refs
 
 	// raw is the header exactly as it appeared, fences and all, and inner
 	// the YAML between them. raw is emitted verbatim until a field is

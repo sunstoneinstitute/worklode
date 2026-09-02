@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-16
 covers: docs/specs/017-task-secrets.md
 ---
 # Task secrets 3/3: ceremony and rollout — Implementation Plan
