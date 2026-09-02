@@ -46,10 +46,14 @@ type TaskListFilter struct {
 	// Deleted switches the list to tombstoned tasks (044 §5): they replace
 	// the live ones rather than joining them, so a list never mixes the two.
 	Deleted bool
+	// Detail asks the server for each task's edges alongside its row
+	// (GET /api/v1/tasks?detail=true). Set it, or call ListTasksDetail, which
+	// forces it regardless of this field.
+	Detail bool
 }
 
-// ListTasks calls GET /api/v1/tasks.
-func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskListResponse, []byte, error) {
+// query renders f as the query string ListTasks and ListTasksDetail send.
+func (f TaskListFilter) query() url.Values {
 	q := url.Values{}
 	if f.Project != "" {
 		q.Set("project", f.Project)
@@ -84,7 +88,22 @@ func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskLis
 	if f.Deleted {
 		q.Set("deleted", "true")
 	}
-	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", q), nil, "task list")
+	if f.Detail {
+		q.Set("detail", "true")
+	}
+	return q
+}
+
+// ListTasks calls GET /api/v1/tasks.
+func (c *Client) ListTasks(ctx context.Context, f TaskListFilter) (model.TaskListResponse, []byte, error) {
+	return doJSON[model.TaskListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", f.query()), nil, "task list")
+}
+
+// ListTasksDetail calls GET /api/v1/tasks?detail=true: every task in scope
+// with its in/out edges, in one response. Forces Detail regardless of f.
+func (c *Client) ListTasksDetail(ctx context.Context, f TaskListFilter) (model.TaskListDetailResponse, []byte, error) {
+	f.Detail = true
+	return doJSON[model.TaskListDetailResponse](ctx, c, http.MethodGet, withQuery("/api/v1/tasks", f.query()), nil, "task list detail")
 }
 
 // TaskTreeFilter selects the hierarchy TaskTree returns. Root names a single

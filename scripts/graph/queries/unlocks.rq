@@ -1,0 +1,26 @@
+# How much open work does each open task unlock?
+#
+# Fan-out over the transitive blocks closure, counting only tasks still open at
+# both ends. Correct against either endpoint: on :3840 the property path does
+# the closure at query time, on :3841 OWL RL's prp-trp has already done it and
+# the path is idempotent over an already-transitive relation. The two agreeing
+# is a useful check that the reasoner and the export are both behaving.
+PREFIX wl:  <https://worklode.io/ns/ontology#>
+PREFIX dct: <http://purl.org/dc/terms/>
+
+SELECT ?task ?project ?kind ?priority ?state (COUNT(DISTINCT ?blocked) AS ?unlocks) ?title
+WHERE {
+  ?task a wl:Task ;
+        dct:title     ?title ;
+        wl:taskKind   ?kind ;
+        wl:priority   ?priority ;
+        wl:taskState  ?state ;
+        wl:inProject  ?project ;
+        wl:blocks+    ?blocked .
+  ?blocked wl:taskState ?bstate .
+  FILTER(?state  NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released"))
+  FILTER(?bstate NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released"))
+}
+GROUP BY ?task ?project ?kind ?priority ?state ?title
+ORDER BY DESC(?unlocks)
+LIMIT 25
