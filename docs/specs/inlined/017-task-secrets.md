@@ -6,6 +6,8 @@
 > text with every amendment and supersession that is in force folded in.
 > Source of record: [`docs/specs/017-task-secrets.md`](../017-task-secrets.md) — status **draft**.
 >
+> Text was drawn from: `042-secret-templates.md`.
+>
 > Inlined blocks are marked `**[amending …]**` or `**[superseding …]**`
 > and name the section they came from. Claims from documents that are not
 > yet accepted are listed as `pending` and are not folded in.
@@ -42,7 +44,7 @@ forward-compatible.
 
 ## 1. Names & catalog
 
-> Pending `042-secret-templates.md#sec-2` (not yet effective)  
+> Amended by `042-secret-templates.md#sec-2`  
 > Pending `043-secrets-catalog-home.md#sec-2` (not yet effective)  
 > Pending `047-loader-sensitive-secret-names.md#sec-2` (not yet effective)
 
@@ -95,6 +97,95 @@ description = "Kubernetes access to the hzdev cluster, for troubleshooting tasks
 - The catalog carries no values and no per-user state. Per-operator resolution comes from
   `op://Employee/…` naming.
 
+**[amending 042-secret-templates.md#sec-2]:**<br>
+
+**2. Catalog declaration**
+
+> **Amended by ADR 043 §2.** A `template` names a sibling key of the projected
+> `worklode-secrets-catalog` **Secret**, not of a ConfigMap: the catalog and
+> its templates are field labels on a 1Password item, extracted into that
+> Secret per environment. The mechanism below is otherwise unchanged — only the
+> object kind and how it gets provisioned.
+
+> **Amended by ADR 047 §2.** The secret-name grammar this section borrows for
+> `cred.<PLACEHOLDER>` and `env` now also blocks loader-sensitive names
+> (`LD_*`, `DYLD_*`, `PATH`, `IFS`, `ENV`, `BASH_ENV`, `PYTHONPATH`, …). An
+> `env` name is what an entry is exported under at exec time, so the deny-list
+> is load-bearing there.
+
+Amends 017 §1. A templated entry replaces `ref` with a `template` key naming a
+sibling file and one `cred.<PLACEHOLDER>` key per credential:
+
+```toml
+[KUBECONFIG_HZDEV]
+description = "Kubernetes access to the hzdev cluster, for troubleshooting tasks"
+template = "kubeconfig-hzdev.yaml"   # sibling ConfigMap key holding the template
+env = "KUBECONFIG"                   # exported name at exec (default: the entry name)
+cred.CLIENT_CERT = "op://Infrastructure/hzdev kubeconfig/client-cert"
+cred.CLIENT_KEY = "op://Infrastructure/hzdev kubeconfig/client-key"
+```
+
+Key rules, extending the hand-rolled TOML subset (`internal/secrets.ParseCatalog`):
+
+- `template` names another key **in the same ConfigMap**
+  (`worklode-secrets-catalog`), holding the template text. `template` and
+  `ref` are mutually exclusive; an entry must have exactly one of them.
+- `cred.<PLACEHOLDER>` maps a placeholder to an `op://` reference. Placeholder
+  grammar is the secret-name grammar, `^[A-Z][A-Z0-9_]*$`. At least one
+  `cred.` key is required with `template`, and `cred.` keys are invalid
+  without it. The parser change is a `strings.Cut` on the key — no dotted-key
+  or multi-line-string machinery is added.
+- `env` (optional, any entry shape) is the environment-variable name the
+  entry is exported under at exec time; it defaults to the entry name and
+  takes the same grammar. It exists because the consumer of a rendered file is
+  usually a tool with a fixed env contract (`kubectl` reads `KUBECONFIG`, not
+  `KUBECONFIG_HZDEV`); without it, `lode secrets exec -- kubectl …` cannot
+  work unassisted. Two entries materialized for one task that resolve to the
+  same exported name are an exec-time error naming both entries.
+- `baseline` and `description` keep their 017 meanings on both shapes.
+
+**Template syntax.** A placeholder is `{{ PLACEHOLDER }}` (inner whitespace
+optional). Rendering is verbatim byte substitution — no escaping, no
+conditionals, no nesting. Every placeholder in the template must have a
+matching `cred.` key and every `cred.` key must be used by the template; any
+other `{{` sequence is an error, so a typo fails catalog validation instead of
+rendering a broken artifact. There is no escape for a literal `{{` in v1; no
+motivating asset needs one. Rendering is a **single pass**: a credential value
+that itself contains a `{{ … }}` sequence is substituted literally, never
+re-expanded.
+
+**Why a sibling ConfigMap key, not an inline TOML string.** The template is a
+multi-kilobyte, multi-line document. Inlining it would force multi-line-string
+support into a deliberately minimal parser and reduce the template to an
+escaped blob in review diffs. As a sibling key it stays a plain file: a
+kubeconfig template is valid YAML an admin can read, lint, and diff in the
+deployment repo's PR flow, and the ConfigMap (1 MiB cap) has room for many.
+The server already mounts the ConfigMap to read `catalog.toml`
+(`LODE_SECRETS_CATALOG_PATH`); template files are read from the same mount
+directory, so no new deployment surface appears.
+
+**Why not per-credential catalog entries.** Modelling `CLIENT_CERT` and
+`CLIENT_KEY` as free-standing entries would leave composition — which
+credentials belong to which template, and what file they render into — with
+no owner. The entry is the unit of declaration, consent, and audit; a task
+declares `KUBECONFIG_HZDEV`, not its parts.
+
+**Serving.** `GET /api/v1/secrets/catalog` (unchanged route, auth, and guard)
+inlines each templated entry's template text, exported name, and
+placeholder → `op://` map in its response entry. The response stays a few KB;
+a separate template endpoint would add a route and a failure mode to save
+nothing. The server validates the catalog when it reads it: the template file
+must be present, the placeholder set must match the `cred.` set exactly, and
+the template text must be valid UTF-8 (it crosses two JSON round-trips, the
+catalog response and the manifest, where Go's encoder would silently replace
+invalid bytes and corrupt "verbatim"). It also checks that the §3 item names
+(`<NAME>__<PLACEHOLDER>`) are unique catalog-wide and disjoint from every
+entry name (the name grammar permits `__`, so nothing else stops a plain
+entry named `X__Y` from colliding with a templated entry's item). A
+validation failure is a 500 with a log line naming the entry: the catalog
+is admin-controlled, and a broken entry should fail loudly at the source
+rather than degrade per-claim.
+
 ## 2. Declaration
 
 Mirrors 016's skill pins exactly:
@@ -111,7 +202,7 @@ names the executor will need. The `lode-secrets` skill (below) makes that a stan
 
 ## 3. Claim-time ceremony & materialization
 
-> Pending `042-secret-templates.md#sec-3` (not yet effective)  
+> Amended by `042-secret-templates.md#sec-3`  
 > Pending `048-exit-purge-on-a-gone-lease.md#sec-2` (not yet effective)
 
 > **Amended by spec 042 §3.** A templated entry materializes one keystore item
@@ -161,9 +252,43 @@ re-runs steps 1–5 if items are missing or the declaration changed. The lease-e
 server-side and cannot purge a laptop keystore; stale items are removed by the next local hook
 that notices the lease is gone (resume, exit, or `lode doctor`).
 
+**[amending 042-secret-templates.md#sec-3]:**<br>
+
+**3. Materialization**
+
+Amends 017 §3. The ceremony is unchanged in shape — one consent for the
+non-baseline set, one `op run`, one names-only event. What changes is what a
+templated entry contributes:
+
+- **Env file.** Each credential contributes one line to
+  `.worklode/secrets.env`, under the **item name** `<NAME>__<PLACEHOLDER>`
+  (e.g. `KUBECONFIG_HZDEV__CLIENT_KEY=op://…`). The double underscore keeps
+  item names inside the existing name grammar, so pack, keystore validation,
+  and the v1.5 remote packing format need no new cases.
+- **Keystore.** `lode secrets pack` stores one item per credential under the
+  item name. Each credential is well under every OS cap; the entry's size is
+  no longer bounded by any single item. Storing the credentials as one
+  JSON-encoded item was rejected: an RSA client cert+key pair can itself
+  approach the macOS cap, which would re-create this defect one level down.
+- **Consent and audit.** The consent prompt lists the entry once, by name and
+  description — placeholders are plumbing, not a consent surface. The
+  `secrets_materialized` event records **entry names only**, exactly as
+  before; item names, templates, and refs stay out of the event log.
+- **Manifest.** The local manifest (0600, outside the worktree) records, per
+  materialized templated entry: its item names (purge's only enumeration,
+  as before), its exported env name, its **template text**, and — once exec
+  has rendered — the rendered file's **absolute path**, which exec rewrites
+  on every render (§4) so the recorded path always names the file that
+  actually exists, worktree moves included. Persisting
+  the template locally is what keeps `lode secrets exec` offline — exec never
+  fetches the catalog. The template is catalog-sensitivity data in a 0600
+  file already holding vault-adjacent names; no value ever enters it.
+  Re-materialization (`lode worktree resume`) refreshes it, so a catalog template edit
+  propagates the same way a `ref` edit does.
+
 ## 4. Execution: `lode secrets exec`
 
-> Pending `042-secret-templates.md#sec-4` (not yet effective)  
+> Amended by `042-secret-templates.md#sec-4`  
 > Pending `048-exit-purge-on-a-gone-lease.md#sec-2` (not yet effective)  
 > Pending `050-scrub-inherited-environment.md#sec-2` (not yet effective)
 
@@ -219,6 +344,71 @@ by mistake costs a whole consent ceremony to restore, while one purged a run lat
 It is the one trigger a human runs without the worktree needing to be entered, left, or removed,
 which is why ADR 048 §4 could leave the never-revisited worktree to it.
 
+**[amending 042-secret-templates.md#sec-4]:**<br>
+
+**4. Rendering & execution**
+
+Amends 017 §4. For each materialized templated entry, `lode secrets exec`:
+
+1. Fetches the entry's credential items from the keystore (a missing item is
+   the existing block-signal failure).
+2. Renders the manifest's template, substituting each placeholder's value.
+3. Writes the result to `.worklode/secrets/<NAME>` in the worktree — directory
+   mode 0700, file mode 0600, written to a temp file and renamed so concurrent
+   execs never expose a partial file and the path stays stable — and records
+   the file's absolute path in the manifest (§3), rewriting any previous one.
+4. Injects `<env>=<absolute path>` into the child environment (stripping any
+   ambient assignment of the exported name, as 017 §4 already requires) and
+   execs as before. Plain entries still inject a **value**, never a path —
+   under the exported name, which is the entry name unless `env` overrides it
+   (§2).
+
+The rendered path is stable and re-rendered on every exec: rendering is
+microseconds of work, and re-rendering makes the file self-healing after
+deletion, worktree moves, or re-materialization — there is no staleness state
+to track. `.worklode/secrets/` is added to the repo's local git exclude the
+same way `.worklode/secrets.env` is today, and `lode secrets status` reports
+each templated entry's credentials and whether a rendered file exists.
+
+**4.1 Rendered-file lifetime**
+
+The rendered file holds real secret bytes on disk, and `lode secrets exec`
+ends in `syscall.Exec` — the process is replaced, so nothing survives to
+clean up after the child. Two contracts were on the table: make exec
+fork/wait so a cleanup hook can unlink the file when the child exits, or let
+the file live until an explicit purge. **The file lives until purge.**
+
+- **Deleting per-invocation requires fork/wait**, which changes process
+  semantics every caller currently gets for free: the child is no longer the
+  caller's direct child (PID expectations in scripts and hooks), signals and
+  the exit code must be forwarded by a parent that must itself never die
+  first — and a SIGKILLed parent leaks the file anyway, so purge must exist
+  as the backstop regardless. Fork/wait would buy a shorter on-disk window at
+  the cost of a changed contract plus the same cleanup machinery.
+- **A stable file also outlives the exec on purpose.** A long-running child
+  that spawns its own subprocesses (anything reading `KUBECONFIG` late)
+  needs the path valid for its whole lifetime, which per-invocation cleanup
+  cannot know.
+
+So the lifetime contract is the one 017 already gives keystore items:
+**materialized lifetime equals worktree lifetime**. `lode secrets purge`
+unlinks each rendered file recorded in the manifest (by absolute path, so
+`--task` purges from anywhere) alongside the keystore items; when purge runs
+bound to a worktree it also removes that worktree's `.worklode/secrets/`
+directory, catching a file a worktree move stranded before any exec re-rendered
+and re-recorded it. Purge already follows every release path — `lode worktree done`,
+`lode worktree block`, worktree removal, exit hooks. The residual exposure is a 0600
+file, on the operator's own single-user machine, inside a directory git
+ignores, for exactly the window the same task's credentials sit in the local
+keystore. Unlike those items — ciphertext at rest in the macOS keychain and
+in 017's ssh-agent-keyed Linux file store alike — the rendered file is
+plaintext at rest, the least-protected copy of the credentials on the
+machine. That marginal exposure is accepted, not waved away: purge follows every
+release path, the window equals the keystore items' own, and the fork/wait
+alternative both changes the exec contract and still needs purge as its
+backstop. Q17.2's staleness question (force re-materialization after N days)
+covers the rendered file for free, since re-materialization re-renders.
+
 ## 5. The `lode-secrets` skill
 
 The convention lives in a skill loaded in **both** contexts the feature touches:
@@ -237,7 +427,7 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 
 ## 6. Degradation
 
-> Pending `042-secret-templates.md#sec-5` (not yet effective)  
+> Amended by `042-secret-templates.md#sec-5`  
 > Pending `048-exit-purge-on-a-gone-lease.md#sec-3` (not yet effective)
 
 > **Amended by spec 042 §5.** Adds the templated-entry failure rows: catalog
@@ -257,6 +447,21 @@ also be a pinned org-wide skill, which is what "always loaded" ultimately means 
 | `op` not installed / not signed in | Ceremony fails fast at claim with an install/signin hint — while the operator is still present. |
 | Keystore read fails unattended | `lode secrets exec` exits non-zero with the missing name; the skill directs the agent to `/lode-block`, not to retry or work around. |
 | Lease expires, worktree remains | Items persist until the next local hook purges or re-materializes; server cannot reach the laptop keystore. |
+
+**[amending 042-secret-templates.md#sec-5]:**<br>
+
+**5. Degradation**
+
+Amends 017 §6 with the templated-entry rows; every 017 row still applies.
+
+| Condition | Behavior |
+|---|---|
+| `template` names a missing ConfigMap key, placeholder set ≠ `cred.` set, template not valid UTF-8, or an item-name collision (§2) | Catalog read fails server-side: 500 + log naming the entry. Claims degrade per 017 ("catalog unavailable"); the fix is an admin PR. |
+| A `cred.*` value exceeds the OS keystore cap at pack | `lode secrets pack` fails naming the item — 017's original oversized-value failure, reappearing because the value was mis-modelled as a credential. The fix is catalog modelling: what exceeds the cap is scaffolding around a smaller secret (§1). |
+| Credential item missing from keystore at exec | Existing 017 row: exit non-zero naming it; the skill directs `lode worktree block`, never a workaround. |
+| Rendered-file write fails (permissions, disk) | Exec exits non-zero naming the path; block signal, not a retry loop. |
+| Two entries export the same `env` name for one task | Exec exits non-zero naming both entries; fix is the task's declaration or the catalog. |
+| Manifest predates this spec (no template recorded) | Templated entry is reported unmaterialized; `lode worktree resume` re-runs the ceremony. |
 
 ## 7. Later phases (non-normative)
 

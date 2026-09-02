@@ -69,6 +69,8 @@ spec.
 
 ### 2.1 Task-scoped tokens
 
+> Pending `054-agent-actors.md#sec-4` (not yet effective)
+
 > **Amended by spec 054 §4.** The minting actor is recorded in
 > `tokens.minted_by` rather than in the token's description prose. Spec 054
 > also defines which agent actor a task token acts as: one shared `sandbox`

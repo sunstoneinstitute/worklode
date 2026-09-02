@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 covers:
   - spec: docs/specs/025-documents-in-the-backbone.md#sec-6.1
     coverage: full
@@ -57,12 +57,15 @@ its side, per docs/authoring-design-docs.md): its §8.6 stale-marking runs off
 this plan's edit path. The interfaces it builds on are listed below; keep
 their names as stated or update that plan in the same breath.
 
-**This plan supersedes WL-359** ("Documents have no stored reviewer set: 025
-§7.3's accept gate is not mechanical"). Task 5 here is that task's exact
-scope — the reviewer set stored, `RequestDocApproval` reading it instead of
-taking `reviewers []string`, and "who still owes a review" answerable from
-stored state. A human accepting this plan should close WL-359 as superseded
-by Task 5's minted task.
+**WL-359 has already shipped** ("Documents have no stored reviewer set: 025
+§7.3's accept gate is not mechanical") — PR #367, merged, task closed
+`deployed_dev`. It landed the `doc_reviewers` table (migration 0059),
+`RequestDocApproval` reading the stored set instead of taking
+`reviewers []string`, `SetDocReviewers` (whole-list replace), and
+`lode doc reviewers <ref> --set a,b,c`. This plan no longer builds any of
+that (WL-451 caught the two tasks below still describing it as unbuilt);
+Task 5 is now a small adaptation checkpoint confirming Tasks 6-7 call the
+real shipped shapes.
 
 **Coordination with `2026-08-25-approvals-3-revision-binding-and-gates`
 (draft, tasks unminted):** its Task 11 plans an accept gate over approvals
@@ -133,8 +136,10 @@ document. Task numbers in parentheses.
 - File naming: this feature's stems already exist
   (`model/doc.go`, `store/docs.go`, `api/docs.go`, `cli/docs.go`,
   `cmd/doc.go`); new store code that would push `store/docs.go` past the
-  2000-line ceiling goes in feature-named siblings (`store/docreviewers.go`,
-  `store/docnotes.go`, `store/docpatch.go`).
+  2000-line ceiling goes in feature-named siblings (`store/docnotes.go`,
+  `store/docpatch.go` — WL-359 already put the reviewer-set code in
+  `store/approvals.go` rather than a `docreviewers.go` this plan does not
+  create).
 
 ## Decisions this plan executes (made against the spec; do not reopen)
 
@@ -199,7 +204,7 @@ document. Task numbers in parentheses.
 
 ## Tasks
 
-### Task 1 — Migration: doc_reviewers, doc_notes, doc_sections.patched
+### Task 1 — Migration: doc_notes, doc_sections.patched
 
 ```yaml
 kind: feature
@@ -208,21 +213,18 @@ skills:
   - worklode-migrations
 ```
 
-One migration pair at the next free number (0058 at time of writing — run
+**WL-451 note:** this task originally also created `doc_reviewers` — that
+table shipped independently via WL-359 (migration 0059, merged before this
+plan's acceptance) and is dropped from here. `doc_notes` and
+`doc_sections.patched` are still unbuilt as of this revision; re-verify
+against `origin/main` before executing, the way this correction did,
+rather than trusting this document's word for it.
+
+One migration pair at the next free number (run
 `./scripts/check-migrations.sh --no-fix`; sibling plans are claiming numbers
 concurrently). Up:
 
 ```sql
--- 025 §7.3: the stored reviewer set. Durable across versions: a §8.2 patch
--- re-requests review from this set, so it must outlive the version bump.
-CREATE TABLE doc_reviewers (
-    doc_id   bigint NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
-    reviewer text NOT NULL REFERENCES actors(id),
-    added_by text REFERENCES actors(id),
-    added_at timestamptz NOT NULL,
-    PRIMARY KEY (doc_id, reviewer)
-);
-
 -- 025 §8.5: anchored, non-blocking notes. task_id/session_id link the note
 -- to what raised it; both nullable — a human at a prompt has neither.
 CREATE TABLE doc_notes (
@@ -242,14 +244,14 @@ CREATE INDEX doc_notes_doc_anchor ON doc_notes (doc_id, anchor);
 ALTER TABLE doc_sections ADD COLUMN patched boolean NOT NULL DEFAULT false;
 ```
 
-Down drops the two tables and the column. List both files in
+Down drops the table and the column. List both files in
 `deploy/base/kustomization.yaml`. No Go code in this task beyond what the
 migration test harness already applies.
 
 - [ ] `./scripts/check-migrations.sh --no-fix` — no collision reported.
 - [ ] `make test` against Postgres — existing store tests still green (they
       apply all migrations).
-- [ ] Commit: `Migration: doc_reviewers, doc_notes, doc_sections.patched (025 §7.3, §8.5)`.
+- [ ] Commit: `Migration: doc_notes, doc_sections.patched (025 §8.5, §7.3)`.
 
 ### Task 2 — Pure edit classification: designdoc.MechanicalFindings
 
@@ -401,51 +403,46 @@ ErrInvalidInput; `--has-notes` filter returns exactly the noted doc.
       `lode show WL-SPEC-25 -s sec-8.5` shows the note inline.
 - [ ] Commit: `lode doc note: anchored non-blocking notes with doc_notes (025 §8.5)`.
 
-### Task 5 — Stored reviewer set; RequestDocApproval reads it (supersedes WL-359)
+### Task 5 — Adapt to the shipped reviewer-set storage (WL-359 landed independently)
 
 ```yaml
-kind: feature
+kind: chore
 priority: high
 skills:
   - superpowers:test-driven-development
 blockedBy: [1]
 ```
 
-WL-359's scope, verbatim: the reviewer set is stored, `RequestDocApproval`
-reads it instead of taking it as a parameter, and "who still owes a review on
-this document" is a query. This task's minted row replaces WL-359 — the plan
-reviewer closes WL-359 when accepting this plan.
+**WL-451 correction:** this task originally re-specified WL-359's whole
+scope (a `doc_reviewers` table, `RequestDocApproval` reading it,
+`SetDocReviewers`, `lode doc reviewers`) as unbuilt. WL-359 shipped
+independently (PR #367, merged, migration `0059_doc_reviewers`) before
+this plan reached acceptance. Nothing here builds that storage again —
+this task is a checkpoint confirming Tasks 6-7 call the real shipped
+shapes, since they differ from what this task originally proposed:
 
-- `internal/model/doc.go`: `DocReviewer{Reviewer, AddedBy string, AddedAt
-  time.Time}`; request `SetDocReviewersInput{Add, Remove []string}`.
-- `internal/store/docreviewers.go`: `SetDocReviewers(tx, now, docID, add,
-  remove, actorID)` — validates each name with the existing
-  `checkActorExists`; `ListDocReviewers(ctx/tx, docID)`; `RecordDocOp` op
-  `reviewers`.
-- `internal/store/approvals.go`: `RequestDocApproval(tx, now, docID, version)`
-  drops the `reviewers []string` parameter and reads `doc_reviewers`; an
-  empty set is the existing refusal, now worded
-  `assign reviewers first: lode doc reviewers <ref> --add <actor>`. Update
-  the API request-approval handler and its `model` input shape (the field
-  goes away — a caller naming reviewers at request time is exactly what
-  WL-359 exists to end) and the CLI flag with it. "Who still owes a review"
-  = the existing open-lane query over `approvals` at the current version,
-  now guaranteed to have been materialized from the stored set.
-- `internal/api/docs.go`: `POST /api/v1/docs/{id}/reviewers`
-  (`guardedAny(permDocWrite)`, event `doc.reviewers_changed`) and
-  `GET /api/v1/docs/{id}/reviewers` (`guardedAny(permDocRead)`).
-- CLI: `lode doc reviewers <ref>` lists;
-  `--add <actor>` / `--remove <actor>` (repeatable) mutate;
-  `cli.DocReviewersTable`.
+- `internal/store/approvals.go`'s `RequestDocApproval(tx, now, docID,
+  version) error` — no `reviewers` parameter; it reads the stored set
+  internally and refuses `"doc %d has no assigned reviewers; set them
+  with `lode doc reviewers` first"` when empty. Task 7's re-request-review
+  call site must match this signature (four args, no reviewer list).
+- `internal/store/approvals.go`'s `SetDocReviewers(tx, now, docID,
+  actorID, reviewers []string, eventID)` — a **whole-list replace**, owner-
+  or-admin gated, not an add/remove diff. Nothing in this plan calls it
+  directly (Task 6's gate only reads approvals, never assigns reviewers),
+  so this is a read-only confirmation, not new code.
+- `internal/cmd/docreviewers.go`'s `lode doc reviewers <ref> [--set
+  a,b,c]` and `POST /api/v1/docs/{id}/reviewers` already exist and need no
+  changes from this plan.
 
-First store test: set `{a, b}` on a draft spec → `RequestDocApproval` opens
-exactly lanes `a` and `b` at the current version; re-run is a no-op;
-`--add c` then re-request opens only `c`'s lane; empty set → ErrInvalidInput
-naming the command; unknown actor → ErrInvalidInput naming it.
+Re-verify against `origin/main` before starting Task 6 — this section is a
+snapshot at revision time, not a live source of truth.
 
-- [ ] `go test -trimpath ./internal/store -run 'TestDocReviewers|TestRequestDocApproval' -count=1` against Postgres — `ok`.
-- [ ] `go test -trimpath ./internal/api ./internal/cmd -run Reviewer -count=1` — `ok`.
-- [ ] Commit: `Stored reviewer set: doc_reviewers, RequestDocApproval reads it (025 §7.3, supersedes WL-359)`.
+- [ ] Diff Task 6's and Task 7's draft implementations against the real
+      `RequestDocApproval`/`SetDocReviewers` signatures above; adjust call
+      sites, not the store functions themselves.
+- [ ] `go test -trimpath ./internal/store -run 'TestRequestDocApproval|TestSetDocReviewers' -count=1` against Postgres — `ok` (no new tests; confirms the existing WL-359 tests still cover what this plan leans on).
+- [ ] Commit only if a call-site adjustment was needed: `Adapt to WL-359's shipped reviewer-set storage`.
 
 ### Task 6 — The mechanical accept gate
 
@@ -537,7 +534,8 @@ plans keep `UpdateDocBody`; superseded is refused):
    flags and setting `last_revised_in = newVersion` on exactly the changed
    anchors (§6 rule 5), `rebuildEdges`, `logDocChange`.
 6. `in.Substantive == true`: set `patched = true` on the changed anchors and
-   call Task 5's `RequestDocApproval(tx, now, id, newVersion)` — review
+   call the already-shipped `RequestDocApproval(tx, now, id, newVersion)`
+   (WL-359; confirmed by Task 5) — review
    re-requested for the original approvers; the document **stays
    `accepted`** (§7.3). A substantive patch on a document with no stored
    reviewers is refused up front — there is no one to re-approve it, so the
