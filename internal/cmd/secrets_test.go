@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,30 @@ func initSecretsWorktree(t *testing.T, taskID string) string {
 	return dir
 }
 
+// plainManifest is the spec-017 shape in spec-042 terms: one plain entry per
+// name, its single keystore item the name itself.
+func plainManifest(taskID string, names ...string) secrets.Manifest {
+	m := secrets.Manifest{Task: taskID, Materialized: names}
+	for _, n := range names {
+		m.Entries = append(m.Entries, secrets.ManifestEntry{Name: n, Items: []string{n}})
+	}
+	return m
+}
+
+// packPlanFile writes the pending manifest `lode secrets pack --plan` reads.
+func packPlanFile(t *testing.T, m secrets.Manifest) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "plan.json")
+	data, err := json.Marshal(m)
+	if err != nil {
+		t.Fatalf("encode plan: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+	return path
+}
+
 func TestSecretsPackWritesKeystoreNotDisk(t *testing.T) {
 	keyring.MockInit()
 	home := t.TempDir()
@@ -40,8 +65,10 @@ func TestSecretsPackWritesKeystoreNotDisk(t *testing.T) {
 	t.Setenv("A_TOKEN", "value-a")
 	t.Setenv("B_KEY", "value-b")
 
+	plan := plainManifest("WL-7", "A_TOKEN", "B_KEY")
+	plan.Declined = []string{"C_SECRET"}
 	cmd := newSecretsPackCmd()
-	cmd.SetArgs([]string{"--task", "WL-7", "--names", "A_TOKEN,B_KEY", "--declined", "C_SECRET"})
+	cmd.SetArgs([]string{"--task", "WL-7", "--plan", packPlanFile(t, plan)})
 	cmd.SetOut(new(bytes.Buffer))
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("pack: %v", err)
@@ -75,7 +102,7 @@ func TestSecretsPackFailsOnUnresolvedName(t *testing.T) {
 	os.Unsetenv("NOT_RESOLVED")
 
 	cmd := newSecretsPackCmd()
-	cmd.SetArgs([]string{"--task", "WL-7", "--names", "NOT_RESOLVED"})
+	cmd.SetArgs([]string{"--task", "WL-7", "--plan", packPlanFile(t, plainManifest("WL-7", "NOT_RESOLVED"))})
 	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "NOT_RESOLVED") {
 		t.Fatalf("pack with unresolved name: %v; want error naming it", err)
 	}
@@ -90,16 +117,24 @@ func TestSecretsPackRejectsMalformedNames(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("A_TOKEN", "value-a")
 
+	declined := plainManifest("WL-7", "A_TOKEN")
+	declined.Declined = []string{"not a name"}
+	badItem := plainManifest("WL-7", "A_TOKEN")
+	badItem.Entries[0].Items = []string{"A_TOKEN=INJECTED"}
+
 	for _, tc := range []struct {
 		bad  string
-		args []string
+		plan secrets.Manifest
 	}{
-		{"A_TOKEN=INJECTED", []string{"--task", "WL-7", "--names", "A_TOKEN=INJECTED"}},
-		{"lowercase", []string{"--task", "WL-7", "--names", "lowercase"}},
-		{"not a name", []string{"--task", "WL-7", "--names", "A_TOKEN", "--declined", "not a name"}},
+		{"A_TOKEN=INJECTED", plainManifest("WL-7", "A_TOKEN=INJECTED")},
+		{"lowercase", plainManifest("WL-7", "lowercase")},
+		{"not a name", declined},
+		// An item name is what actually reaches the keystore, so the gate
+		// has to cover it and not just the entry name it derives from.
+		{"A_TOKEN=INJECTED", badItem},
 	} {
 		cmd := newSecretsPackCmd()
-		cmd.SetArgs(tc.args)
+		cmd.SetArgs([]string{"--task", "WL-7", "--plan", packPlanFile(t, tc.plan)})
 		cmd.SetOut(io.Discard)
 		err := cmd.Execute()
 		// The rejection must be about the grammar: "not resolved in the
@@ -107,7 +142,7 @@ func TestSecretsPackRejectsMalformedNames(t *testing.T) {
 		// well-exported malformed name through.
 		if err == nil || !strings.Contains(err.Error(), "invalid secret name") ||
 			!strings.Contains(err.Error(), tc.bad) {
-			t.Errorf("pack %v: err = %v; want an invalid-secret-name rejection naming %q", tc.args, err, tc.bad)
+			t.Errorf("pack %+v: err = %v; want an invalid-secret-name rejection naming %q", tc.plan, err, tc.bad)
 		}
 	}
 }
@@ -122,16 +157,16 @@ func TestSecretsPackPurgesNarrowedNames(t *testing.T) {
 	t.Setenv("A_TOKEN", "value-a")
 	t.Setenv("B_KEY", "value-b")
 
-	pack := func(names string) {
+	pack := func(names ...string) {
 		t.Helper()
 		cmd := newSecretsPackCmd()
-		cmd.SetArgs([]string{"--task", "WL-7", "--names", names})
+		cmd.SetArgs([]string{"--task", "WL-7", "--plan", packPlanFile(t, plainManifest("WL-7", names...))})
 		cmd.SetOut(io.Discard)
 		if err := cmd.Execute(); err != nil {
-			t.Fatalf("pack %s: %v", names, err)
+			t.Fatalf("pack %v: %v", names, err)
 		}
 	}
-	pack("A_TOKEN,B_KEY")
+	pack("A_TOKEN", "B_KEY")
 	pack("A_TOKEN") // the declaration narrowed: B_KEY is no longer needed
 
 	if _, err := secrets.Fetch("WL-7", "B_KEY"); err == nil {
@@ -150,7 +185,7 @@ func TestSecretsPurgeCommand(t *testing.T) {
 	if err := secrets.Put("WL-9", "A_TOKEN", "v"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"A_TOKEN"}}); err != nil {
+	if err := secrets.SaveManifest(plainManifest("WL-9", "A_TOKEN")); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 
@@ -195,14 +230,14 @@ func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
 			t.Fatalf("put: %v", err)
 		}
 	}
-	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"A_TOKEN", "B_KEY"}}); err != nil {
+	if err := secrets.SaveManifest(plainManifest("WL-9", "A_TOKEN", "B_KEY")); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 	// Another task's materialized secret must not leak into this child.
 	if err := secrets.Put("WL-10", "OTHER_TOKEN", "val-other"); err != nil {
 		t.Fatalf("put other task: %v", err)
 	}
-	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-10", Materialized: []string{"OTHER_TOKEN"}}); err != nil {
+	if err := secrets.SaveManifest(plainManifest("WL-10", "OTHER_TOKEN")); err != nil {
 		t.Fatalf("manifest other task: %v", err)
 	}
 
@@ -249,7 +284,7 @@ func TestSecretsExecScrubsAmbientCredentials(t *testing.T) {
 	if err := secrets.Put("WL-9", "A_TOKEN", "val-A_TOKEN"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"A_TOKEN"}}); err != nil {
+	if err := secrets.SaveManifest(plainManifest("WL-9", "A_TOKEN")); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 
@@ -299,7 +334,7 @@ func TestSecretsExecPassesFlagsToTheChild(t *testing.T) {
 	if err := secrets.Put("WL-9", "A_TOKEN", "v"); err != nil {
 		t.Fatalf("put: %v", err)
 	}
-	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"A_TOKEN"}}); err != nil {
+	if err := secrets.SaveManifest(plainManifest("WL-9", "A_TOKEN")); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 
@@ -327,7 +362,7 @@ func TestSecretsExecFailsOnMissingKeystoreItem(t *testing.T) {
 	keyring.MockInit()
 	t.Setenv("HOME", t.TempDir())
 	initSecretsWorktree(t, "WL-9")
-	if err := secrets.SaveManifest(secrets.Manifest{Task: "WL-9", Materialized: []string{"GONE_TOKEN"}}); err != nil {
+	if err := secrets.SaveManifest(plainManifest("WL-9", "GONE_TOKEN")); err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 

@@ -3,9 +3,12 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
@@ -41,13 +44,51 @@ func (s *server) secretsCatalog(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	dir := filepath.Dir(s.cfg.SecretsCatalogPath)
 	out := model.SecretCatalogResponse{Secrets: make([]model.SecretCatalogEntry, 0, len(cat.Entries))}
 	for _, e := range cat.Entries {
-		out.Secrets = append(out.Secrets, model.SecretCatalogEntry{
-			Name: e.Name, Ref: e.Ref, Description: e.Description, Baseline: e.Baseline,
-		})
+		wire := model.SecretCatalogEntry{
+			Name: e.Name, Ref: e.Ref, Env: e.Env,
+			Description: e.Description, Baseline: e.Baseline,
+		}
+		if e.Templated() {
+			text, err := readTemplate(dir, e)
+			if err != nil {
+				// The catalog is admin-controlled: a broken entry fails
+				// loudly at the source rather than degrading per claim
+				// (spec 042 §5). The fix is a deployment-repo PR.
+				s.log.Error("secrets catalog template", "entry", e.Name, "err", err)
+				writeErr(w, http.StatusInternalServerError, "internal error")
+				return
+			}
+			wire.Template = text
+			wire.Creds = make(map[string]string, len(e.Creds))
+			for _, c := range e.Creds {
+				wire.Creds[c.Placeholder] = c.Ref
+			}
+		}
+		out.Secrets = append(out.Secrets, wire)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// readTemplate loads and validates a templated entry's template. The template
+// key names a sibling key of the projected catalog Secret, which surfaces as a
+// file in the same mount directory — never a path, so a separator or ".." in
+// it is a rejection rather than a traversal.
+func readTemplate(dir string, e secrets.Entry) (string, error) {
+	if strings.ContainsAny(e.Template, `/\`) || e.Template == ".." || e.Template == "." {
+		return "", fmt.Errorf("template %q must name a sibling catalog key, not a path", e.Template)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, e.Template))
+	if err != nil {
+		return "", err
+	}
+	text := string(data)
+	if err := secrets.ValidateTemplate(e, text); err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 // secretsMaterialized handles POST /api/v1/tasks/{id}/secrets-materialized:

@@ -16,11 +16,64 @@ import (
 // names only, never values or op:// refs. It lives outside the worktree
 // (~/.cache/worklode/secrets/<task-id>.json) because purge must still work
 // after the worktree is deleted, and keyring cannot enumerate its own items.
+// Materialized and Declined stay entry-granular — they are what the consent
+// prompt, the audit event and `lode secrets status` speak in. Entries carries
+// the per-entry structure spec 042 needs; a manifest without it predates that
+// spec and its entries report unmaterialized (042 §5).
 type Manifest struct {
-	Task         string    `json:"task"`
-	Materialized []string  `json:"materialized,omitempty"`
-	Declined     []string  `json:"declined,omitempty"`
-	At           time.Time `json:"at"`
+	Task         string          `json:"task"`
+	Materialized []string        `json:"materialized,omitempty"`
+	Declined     []string        `json:"declined,omitempty"`
+	Entries      []ManifestEntry `json:"entries,omitempty"`
+	At           time.Time       `json:"at"`
+}
+
+// ManifestEntry records one materialized entry: the keystore items it holds
+// (purge's only enumeration — keyring cannot enumerate), the name it is
+// exported under at exec, the template text (what keeps `lode secrets exec`
+// offline: exec never fetches the catalog), and the rendered file's absolute
+// path, which exec rewrites on every render and purge unlinks. No value ever
+// enters it.
+type ManifestEntry struct {
+	Name     string   `json:"name"`
+	Env      string   `json:"env,omitempty"`
+	Template string   `json:"template,omitempty"`
+	Items    []string `json:"items"`
+	Rendered string   `json:"rendered,omitempty"`
+}
+
+// Templated reports whether the entry renders a file rather than injecting a
+// single value.
+func (e ManifestEntry) Templated() bool { return e.Template != "" }
+
+// EnvName is the name the entry is exported under at exec time.
+func (e ManifestEntry) EnvName() string {
+	if e.Env != "" {
+		return e.Env
+	}
+	return e.Name
+}
+
+// AllItems lists every keystore item the manifest records, across entries.
+func (m Manifest) AllItems() []string {
+	var out []string
+	for _, e := range m.Entries {
+		out = append(out, e.Items...)
+	}
+	return out
+}
+
+// PlanEntries projects catalog entries to the manifest shape the ceremony
+// hands `lode secrets pack`. Template holds the text, never the catalog key:
+// the key is a server-side lookup, the text is what exec renders.
+func PlanEntries(entries []Entry) []ManifestEntry {
+	out := make([]ManifestEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, ManifestEntry{
+			Name: e.Name, Env: e.Env, Template: e.TemplateText, Items: Items(e),
+		})
+	}
+	return out
 }
 
 // manifestDir returns ~/.cache/worklode/secrets, the directory holding one
@@ -110,6 +163,15 @@ func SaveManifest(m Manifest) error {
 	for _, n := range slices.Concat(m.Materialized, m.Declined) {
 		if !ValidName(n) {
 			return fmt.Errorf("invalid secret name %q", n)
+		}
+	}
+	// Item and env names leave here for the keystore and for an exec child's
+	// environment, so they are gated on the same grammar the entry names are.
+	for _, e := range m.Entries {
+		for _, n := range slices.Concat([]string{e.Name, e.EnvName()}, e.Items) {
+			if !ValidName(n) {
+				return fmt.Errorf("invalid secret name %q", n)
+			}
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

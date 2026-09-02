@@ -73,26 +73,35 @@ func ceremonyFixtureWithCatalog(t *testing.T, catalogStatus int, catalogJSON, st
 	return cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_test"}), cmd, outBuf, errBuf, &recorded
 }
 
-// fakeOp simulates op run + lode secrets pack: it stores a dummy value per
-// name, writes the manifest, and prints pack's own success line to the stdout
-// writer it is handed — exactly as the real pack child would.
-func fakeOp(t *testing.T, calls *int, capturedEnvFile *string) func(dir, envFile, taskID string, names, declined []string, stdout, stderr io.Writer) error {
-	return func(dir, envFile, taskID string, names, declined []string, stdout, stderr io.Writer) error {
+// fakeOp simulates op run + lode secrets pack: it reads the ceremony's plan,
+// stores a dummy value per keystore item, saves the manifest, and prints
+// pack's own success line to the stdout writer it is handed — exactly as the
+// real pack child would.
+func fakeOp(t *testing.T, calls *int, capturedEnvFile *string) func(dir, envFile, planFile, taskID string, stdout, stderr io.Writer) error {
+	return func(dir, envFile, planFile, taskID string, stdout, stderr io.Writer) error {
 		*calls++
 		data, err := os.ReadFile(envFile)
 		if err != nil {
 			t.Errorf("read env file: %v", err)
 		}
 		*capturedEnvFile = string(data)
-		for _, n := range names {
+		planData, err := os.ReadFile(planFile)
+		if err != nil {
+			t.Errorf("read plan file: %v", err)
+		}
+		var plan secrets.Manifest
+		if err := json.Unmarshal(planData, &plan); err != nil {
+			t.Errorf("decode plan file: %v", err)
+		}
+		for _, n := range plan.AllItems() {
 			if err := secrets.Put(taskID, n, "resolved-"+n); err != nil {
 				return err
 			}
 		}
-		if err := secrets.SaveManifest(secrets.Manifest{Task: taskID, Materialized: names, Declined: declined}); err != nil {
+		if err := secrets.SaveManifest(plan); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "packed %d secrets for %s\n", len(names), taskID)
+		fmt.Fprintf(stdout, "packed %d secrets for %s\n", len(plan.Materialized), taskID)
 		return nil
 	}
 }
