@@ -463,6 +463,14 @@ wl:concern a owl:DatatypeProperty ;
         scheme — the backbone owns the enum (006 Open Q3). The legal values are the tasks.concern
         CHECK constraint (migration 0002_prioritization).""" .
 
+wl:humanOnly a owl:DatatypeProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range xsd:boolean ;
+    rdfs:comment """Projected mirror of the backbone tasks.human_only flag (migration
+        0060_task_human_only): the task is reserved for a human and no agent may claim it.
+        Emitted only when true; absent means false.""" .
+
 wl:unmatchedPath a owl:DatatypeProperty ;
     wl:layer wlc:execution ;
     rdfs:domain doap:Project ;

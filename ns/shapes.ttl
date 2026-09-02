@@ -194,6 +194,12 @@ wl:TaskShape a sh:NodeShape ;
         sh:message "A Task's wl:concern, when present, is drawn from the tasks.concern CHECK set." ;
     ] ;
     sh:property [
+        sh:path wl:humanOnly ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:message "A Task's wl:humanOnly, when present, is the boolean true (absent means false)." ;
+    ] ;
+    sh:property [
         sh:path wl:duplicateOf ;
         sh:class wl:Task ;
         sh:maxCount 1 ;

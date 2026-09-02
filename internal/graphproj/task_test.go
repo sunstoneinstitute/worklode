@@ -34,6 +34,7 @@ func TestTaskTriples(t *testing.T) {
 		Kind:      "bug",
 		State:     "in_progress",
 		Concern:   "security",
+		HumanOnly: true,
 		CreatedBy: "stig",
 		CreatedAt: created,
 		UpdatedAt: updated,
@@ -68,6 +69,7 @@ func TestTaskTriples(t *testing.T) {
 		iri.Term("taskKind") + " " + IRIRef(iri.Concept("bug")).String():                    true,
 		iri.Term("priority") + " " + Text("high").String():                                  true,
 		iri.Term("concern") + " " + Text("security").String():                               true,
+		iri.Term("humanOnly") + " " + Typed("true", XSDBoolean).String():                    true,
 		iri.Term("inProject") + " " + IRIRef(iri.Project("worklode")).String():              true,
 		ProvWasAssociatedWith + " " + IRIRef(iri.Agent("stig")).String():                    true,
 		DCTCreated + " " + Typed(created.UTC().Format(time.RFC3339), XSDDateTime).String():  true,
@@ -94,7 +96,7 @@ func TestTaskTriples(t *testing.T) {
 	}
 }
 
-func TestTaskTriplesOmitsEmptyConcernAndCreatedBy(t *testing.T) {
+func TestTaskTriplesOmitsUnsetOptionalFields(t *testing.T) {
 	task := model.Task{
 		ID:        "WL-1",
 		Project:   "worklode",
@@ -103,6 +105,7 @@ func TestTaskTriplesOmitsEmptyConcernAndCreatedBy(t *testing.T) {
 		Kind:      "chore",
 		State:     "draft",
 		Concern:   "",
+		HumanOnly: false,
 		CreatedBy: "",
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -113,6 +116,9 @@ func TestTaskTriplesOmitsEmptyConcernAndCreatedBy(t *testing.T) {
 	for _, tr := range triples {
 		if tr.P == iri.Term("concern") {
 			t.Errorf("unexpected wl:concern triple for empty Concern: %v", tr)
+		}
+		if tr.P == iri.Term("humanOnly") {
+			t.Errorf("unexpected wl:humanOnly triple for a task that is not human-only: %v", tr)
 		}
 		if tr.P == ProvWasAssociatedWith {
 			t.Errorf("unexpected prov:wasAssociatedWith triple for empty CreatedBy: %v", tr)

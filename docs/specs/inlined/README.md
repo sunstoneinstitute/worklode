@@ -53,3 +53,4 @@ These files do that resolution once.
 - [`052-project-overhead-cost.md`](052-project-overhead-cost.md) — Spec 052 — Project overhead cost (draft)
 - [`054-agent-actors.md`](054-agent-actors.md) — Spec 054 — Agent actors (draft)
 - [`056-nav-shell-and-cross-project-inbox.md`](056-nav-shell-and-cross-project-inbox.md) — Spec 056 — Navigation shell and the cross-project inbox (draft)
+- [`057-project-human-only-tasks-into-the-graph.md`](057-project-human-only-tasks-into-the-graph.md) — ADR 057 — Project the human-only flag into the graph as `wl:humanOnly` (draft)
