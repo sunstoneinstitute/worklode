@@ -77,9 +77,9 @@ func TestDocTransferByRefs(t *testing.T) {
 		t.Fatalf("create actor bob: %v", err)
 	}
 	specFile := writeDocFile(t, docTestBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "ref-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 
 	out, err := runLode(t, "doc", "transfer", "ref-spec", "--to", "bob")
@@ -90,9 +90,9 @@ func TestDocTransferByRefs(t *testing.T) {
 		t.Fatalf("doc transfer output = %q, want it to report the move", out)
 	}
 
-	out, err = runLode(t, "doc", "get", "ref-spec", "--json")
+	out, err = runLode(t, "doc", "show", "ref-spec", "--json")
 	if err != nil {
-		t.Fatalf("doc get: %v\noutput: %s", err, out)
+		t.Fatalf("doc show: %v\noutput: %s", err, out)
 	}
 	if got := docJSON(t, out).Owner; got != "bob" {
 		t.Errorf("owner after transfer = %q, want bob", got)
@@ -113,9 +113,9 @@ func TestDocTransferJSONReportsNewOwner(t *testing.T) {
 		t.Fatalf("create actor ada: %v", err)
 	}
 	specFile := writeDocFile(t, docTestBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "ref-json-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 
 	// By ref.
@@ -132,9 +132,9 @@ func TestDocTransferJSONReportsNewOwner(t *testing.T) {
 	}
 
 	// By --from.
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "from-json-spec", "--owner", "bob", "--file", specFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 	// --from's confirmDocTransfer prints its preview to stderr even under
 	// --json (it only skips the interactive question); split streams so
@@ -172,9 +172,9 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 		t.Fatalf("create actor ada: %v", err)
 	}
 	specFile := writeDocFile(t, docTestBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "from-spec", "--owner", "bob", "--file", specFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 
 	rootCmd.SetIn(strings.NewReader("n\n"))
@@ -186,9 +186,9 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 	if !strings.Contains(out, "aborted") {
 		t.Fatalf("decline output = %q, want it to report the abort", out)
 	}
-	out, err = runLode(t, "doc", "get", "from-spec", "--json")
+	out, err = runLode(t, "doc", "show", "from-spec", "--json")
 	if err != nil {
-		t.Fatalf("doc get: %v", err)
+		t.Fatalf("doc show: %v", err)
 	}
 	if got := docJSON(t, out).Owner; got != "bob" {
 		t.Errorf("owner after a declined transfer = %q, want still bob", got)
@@ -199,9 +199,9 @@ func TestDocTransferFromPromptsOnTTYAndRespectsDecline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v\noutput: %s", err, out)
 	}
-	out, err = runLode(t, "doc", "get", "from-spec", "--json")
+	out, err = runLode(t, "doc", "show", "from-spec", "--json")
 	if err != nil {
-		t.Fatalf("doc get: %v", err)
+		t.Fatalf("doc show: %v", err)
 	}
 	if got := docJSON(t, out).Owner; got != "ada" {
 		t.Errorf("owner after an accepted transfer = %q, want ada", got)
@@ -255,9 +255,9 @@ func TestDocTransferPartialFailureThenRetryFinishes(t *testing.T) {
 	}
 	specFile := writeDocFile(t, docTestBody)
 	for _, slug := range []string{"doc-a", "doc-b"} {
-		if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+		if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 			"--slug", slug, "--owner", "bob", "--file", specFile); err != nil {
-			t.Fatalf("doc new %s: %v", slug, err)
+			t.Fatalf("doc add %s: %v", slug, err)
 		}
 	}
 

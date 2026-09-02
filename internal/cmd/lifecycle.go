@@ -89,7 +89,7 @@ func resolveWorktreeTask(l worktree.Layout, dir, byName string) (taskID, root st
 // bound worktree — not inside a repo, not under the worktree base, no
 // binding. Every failure is the same answer because the caller is a command
 // for which task context is provenance it records if it has it, not a
-// precondition it enforces: `lode doc new` run from a plain checkout still
+// precondition it enforces: `lode doc add` run from a plain checkout still
 // creates the document (025 §12, migration 0044). Commands that genuinely
 // need the binding use resolveWorktreeTask and get its diagnosis.
 func currentTaskID() string {

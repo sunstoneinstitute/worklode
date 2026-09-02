@@ -99,11 +99,11 @@ fully planned whatever its level says. None of that is built — no
 still read `fullCoverageWith`. Keep writing it. When §5.4 ships, the key
 disappears and the completeness rule replaces this subsection.
 
-`lode doc anchors <file>` lints a draft locally before `lode doc new` — anchors,
+`lode doc anchors <file>` lints a draft locally before `lode doc add` — anchors,
 and a plan's `## Tasks` definitions. Creating the document is what turns
 `covers:` into edges: a reference no document in the project resolves to is
 kept as an external reference instead, which is a silently unplanned section,
-so check `lode doc get <slug> --json` for `edges` you expected.
+so check `lode doc show <slug> --json` for `edges` you expected.
 
 Note the layer this sits in: **planning** coverage is declared intent on a plan.
 025 §11's `<component> wl:implements <section>` is **implementation** coverage,
@@ -111,7 +111,7 @@ observed from `.worklode/implements.yaml`. Different question, different owner.
 
 ## 2. Choosing the split
 
-1. **List the anchors.** `lode doc get WL-SPEC-<N> --json | jq -r '.sections[].anchor'`
+1. **List the anchors.** `lode doc show WL-SPEC-<N> --json | jq -r '.sections[].anchor'`
    (or read the rendered spec with `lode show WL-SPEC-<N>`). Account
    for every anchor across the series: one or more parts claim `full` or
    `partial`, or the section is deliberately unplanned. A standing constraint

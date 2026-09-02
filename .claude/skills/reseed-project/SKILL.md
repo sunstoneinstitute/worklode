@@ -103,7 +103,7 @@ COMMIT;
    tasks — acceptance mints the task set in one transaction (025 §9.2):
 
    ```bash
-   lode doc new --kind plan --slug <slug> --file <path|->   # if not already imported; lands draft
+   lode doc add --kind plan --slug <slug> --file <path|->   # if not already imported; lands draft
    lode doc accept <ref>                             # mints the tasks; owner-gated
    ```
 

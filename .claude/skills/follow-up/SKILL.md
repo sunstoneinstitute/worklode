@@ -56,7 +56,7 @@ registry_package webhooks`) are not — regardless of their priority tag.
 
    ```bash
    lode doc anchors <scratch.md>                                  # local lint
-   lode doc new --kind plan --slug YYYY-MM-DD-<slug> --file <scratch.md>
+   lode doc add --kind plan --slug YYYY-MM-DD-<slug> --file <scratch.md>
    ```
 
    Leave it draft: accepting it mints its tasks, which is a decision for

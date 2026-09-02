@@ -18,7 +18,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// docKinds lists the valid --kind values for `lode doc new`, mirroring
+// docKinds lists the valid --kind values for `lode doc add`, mirroring
 // validDocKinds in internal/api/docs.go (the server re-checks; this catches a
 // typo before the round trip).
 var docKinds = []string{"spec", "adr", "plan"}
@@ -62,9 +62,9 @@ func newDocCmd() *cobra.Command {
 		Short: "Create and inspect design documents: specs, ADRs, and plans",
 	}
 	cmd.AddCommand(
-		newDocNewCmd(),
+		newDocAddCmd(),
 		newDocListCmd(),
-		newDocGetCmd(),
+		newDocShowCmd(),
 		newDocVersionsCmd(),
 		newDocEditCmd(),
 		newDocAcceptCmd(),
@@ -85,12 +85,12 @@ func init() {
 	rootCmd.AddCommand(newDocCmd())
 }
 
-func newDocNewCmd() *cobra.Command {
+func newDocAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind, slug, owner, file string
 	var number int
 	cmd := &cobra.Command{
-		Use:   "new",
+		Use:   "add",
 		Short: "Create a document (spec, ADR, or plan) in draft",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !slices.Contains(docKinds, kind) {
@@ -322,23 +322,22 @@ func isPlanFile(doc *designdoc.Document) bool {
 		len(fm.Blocks) > 0 || len(fm.BlockedBy) > 0
 }
 
-// newDocGetCmd reads back one document: body, sections, and edges. It is
-// named "get" rather than "show" deliberately: 026 §3 consolidated document
-// reading into `lode show`, and internal/cmd/show_test.go's
-// TestDocHasNoShowVerb pins that `lode doc` must never grow a "show" child.
+// newDocShowCmd reads back one document: body, sections, and edges. Spec 061
+// §2 (L7) requires every entity to keep its own typed "show", superseding
+// 026 §3's rule that "show" stay exclusive to `lode show`.
 //
 // The split with `lode show` is settled (WL-129): both read the backbone,
 // and a slug names the same document in either. `lode show` is the rendered
 // read — human ref forms (shorthand, number, slug, path), body text out —
-// while `get` is the structural read: id or slug in, the full DocDetail
+// while `doc show` is the structural read: id or slug in, the full DocDetail
 // (frontmatter-derived fields, sections, edges) out, and the only reader
 // for plans. Neither is an alias of the other because they answer different
 // questions about the same row.
-func newDocGetCmd() *cobra.Command {
+func newDocShowCmd() *cobra.Command {
 	var version int
 	cmd := &cobra.Command{
-		Use:   "get <ref>",
-		Short: "Get a document: its body, sections, and edges",
+		Use:   "show <ref>",
+		Short: "Show a document: its body, sections, and edges",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

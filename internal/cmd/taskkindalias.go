@@ -10,7 +10,7 @@ import (
 
 // warnDeprecatedTaskKind tells the person that a --kind value has been
 // renamed. Named for the TASK kind specifically: "spec" is deprecated as a
-// task kind, but `lode doc new --kind spec` and `lode doc list --kind spec`
+// task kind, but `lode doc add --kind spec` and `lode doc list --kind spec`
 // are valid document kinds, so a helper named for "kind" generally would be
 // a trap. The server does the normalising (see api.normalizeTaskKind); the
 // CLI only warns, and it warns on stderr so --json consumers and anything
