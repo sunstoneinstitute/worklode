@@ -522,6 +522,18 @@ to point at — has **no representation in the document store**: neither `doc_se
 `wl:status wlc:superseded` plus `dct:description`, and it lands with the rest of section-level
 supersession there rather than by adding a column here.
 
+The reason text is authored in frontmatter, on the document that supersedes the section without
+naming a successor for it — the same place `amends`/`replaces` are already authored and read —
+under a `sectionDescriptions` key mapping an anchor to its explanation:
+
+    sectionDescriptions:
+      "#sec-4": "Dropped rather than replaced: the rate limiter this section specified was
+        never built (025 §6.2)."
+
+Whichever projector mints `wl:Section` nodes (§18, WL-150) reads that key the way it already
+reads `replaces`, and emits it as the section's `dct:description`. No store column follows from
+it, matching the rest of this rule.
+
 ## 7. Editorial lifecycle
 
 ```
