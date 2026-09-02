@@ -1,0 +1,37 @@
+# Gating work you could resolve right now, ranked by what resolving it releases.
+#
+# A "gate" is a spike, a design call, or a review: work whose output is a
+# decision, not shipped code. Restricted to gates that are themselves startable,
+# meaning no DIRECT open blocker. That is worklode's own rule (blockedCondition,
+# internal/store/tasks.go): a task whose direct blocker is merged is startable
+# even when something further up the chain is still open. Direct-vs-transitive
+# has to stay visible for that, so run this against the RAW endpoint on :3840.
+#
+# Two shapes here are workarounds for HornDB 0.6.0, which implements neither
+# FILTER NOT EXISTS nor MINUS:
+#   - "no open direct blocker" is OPTIONAL + FILTER(!BOUND(?blocker))
+#   - the fan-out join is OPTIONAL so gates that block nothing still appear
+#     with unlocks=0, which is itself the finding worth seeing
+PREFIX wl:  <https://worklode.io/ns/ontology#>
+PREFIX wlc: <https://worklode.io/ns/concept/>
+PREFIX dct: <http://purl.org/dc/terms/>
+
+SELECT ?task ?kind ?state ?priority (COUNT(DISTINCT ?blocked) AS ?unlocks) ?title
+WHERE {
+  VALUES ?kind { wlc:spike wlc:design wlc:review }
+  ?task a wl:Task ;
+        dct:title    ?title ;
+        wl:taskKind  ?kind ;
+        wl:priority  ?priority ;
+        wl:taskState ?state .
+  FILTER(?state NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released"))
+
+  OPTIONAL { ?task wl:blocks+ ?blocked . ?blocked wl:taskState ?bstate .
+             FILTER(?bstate NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released")) }
+
+  OPTIONAL { ?task wl:dependsOn ?blocker . ?blocker wl:taskState ?blockerState .
+             FILTER(?blockerState NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released")) }
+  FILTER(!BOUND(?blocker))
+}
+GROUP BY ?task ?kind ?state ?priority ?title
+ORDER BY DESC(?unlocks)

@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-e2e vet clean FORCE
+.PHONY: build build-user build-all install test test-e2e vet clean graph-serve graph-query FORCE
 
 # 053 §1: six executables from one module. The three user binaries are what
 # Homebrew and Scoop install; the other three ship in the container images.
@@ -39,3 +39,9 @@ clean: ## Remove build output
 	rm -rf bin
 
 .DEFAULT_GOAL := build
+
+graph-serve: build ## Export the task graph and serve it over SPARQL (HornDB on :3840/:3841)
+	scripts/graph/serve.sh
+
+graph-query: ## Run one query: make graph-query Q=gates [PORT=3840]
+	scripts/graph/sparql.py $(or $(PORT),3840) scripts/graph/queries/$(Q).rq
