@@ -106,7 +106,7 @@ func TestNextEndToEnd(t *testing.T) {
 	root := initE2EGitRepo(t)
 	t.Chdir(root)
 
-	out, err := runLodeCLI(t, "worktree", "next", task.ID, "--json")
+	out, err := runLodeCLI(t, "work", "next", task.ID, "--json")
 	if err != nil {
 		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
@@ -169,7 +169,7 @@ func TestNextEndToEnd(t *testing.T) {
 		t.Fatalf("claim decoy onto %s: %v", decoyIdentity, err)
 	}
 
-	if _, err := runLodeCLI(t, "worktree", "next", task2.ID, "--json"); err == nil {
+	if _, err := runLodeCLI(t, "work", "next", task2.ID, "--json"); err == nil {
 		t.Fatalf("lode work next task2: err = nil, want a rebind-conflict error")
 	}
 
