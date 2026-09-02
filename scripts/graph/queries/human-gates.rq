@@ -1,0 +1,23 @@
+# What is waiting on a human, ranked by what unblocking it releases.
+#
+# wl:humanOnly mirrors tasks.human_only: reserved for a human, no agent may
+# claim it. Emitted only when true, so there is nothing to compare against.
+# The fan-out join is OPTIONAL so human gates that block nothing still appear
+# with unlocks=0. Run against either endpoint.
+PREFIX wl:  <https://worklode.io/ns/ontology#>
+PREFIX dct: <http://purl.org/dc/terms/>
+
+SELECT ?task ?kind ?state ?priority (COUNT(DISTINCT ?blocked) AS ?unlocks) ?title
+WHERE {
+  ?task a wl:Task ;
+        wl:humanOnly true ;
+        dct:title    ?title ;
+        wl:taskKind  ?kind ;
+        wl:priority  ?priority ;
+        wl:taskState ?state .
+  FILTER(?state NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released"))
+  OPTIONAL { ?task wl:blocks+ ?blocked . ?blocked wl:taskState ?bstate .
+             FILTER(?bstate NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released")) }
+}
+GROUP BY ?task ?kind ?state ?priority ?title
+ORDER BY DESC(?unlocks)

@@ -1,0 +1,21 @@
+# Critical-path proxy: how deep is each open task buried?
+#
+# Counts the open tasks a task transitively waits on. A high count means a long
+# chain has to clear before this can start, so its head is worth attacking.
+PREFIX wl:  <https://worklode.io/ns/ontology#>
+PREFIX dct: <http://purl.org/dc/terms/>
+
+SELECT ?task ?title ?priority (COUNT(DISTINCT ?dep) AS ?waits_on)
+WHERE {
+  ?task a wl:Task ;
+        dct:title     ?title ;
+        wl:priority   ?priority ;
+        wl:taskState  ?state ;
+        wl:dependsOn+ ?dep .
+  ?dep wl:taskState ?dstate .
+  FILTER(?state  NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released"))
+  FILTER(?dstate NOT IN ("abandoned","merged","deployed_dev","deployed_prod","released"))
+}
+GROUP BY ?task ?title ?priority
+ORDER BY DESC(?waits_on)
+LIMIT 40
