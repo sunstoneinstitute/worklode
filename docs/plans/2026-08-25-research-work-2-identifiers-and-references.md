@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 covers:
   - spec: docs/specs/029-research-work-in-the-backbone.md#sec-1
     coverage: none

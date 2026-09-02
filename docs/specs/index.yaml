@@ -706,6 +706,21 @@ docs/specs/052-project-overhead-cost.md:
     sec-4: "## 4. Wire model and cockpit"
     sec-5: "## 5. Testing"
     sec-6: "## 6. Out of scope"
+docs/specs/054-agent-actors.md:
+  sections:
+    sec-0: "## 0. Problem"
+    sec-1: "## 1. What an actor is for"
+    sec-2: "## 2. Dimensions that are not identities"
+    sec-2.1: "### 2.1 Specialty"
+    sec-2.2: "### 2.2 Harness"
+    sec-2.3: "### 2.3 Model and effort"
+    sec-3: "## 3. The roster"
+    sec-3.1: "### 3.1 Human-dispatched work"
+    sec-3.2: "### 3.2 Unattended automation"
+    sec-3.3: "### 3.3 Naming"
+    sec-4: "## 4. The dispatching human"
+    sec-5: "## 5. Launch profiles are configuration"
+    sec-6: "## 6. Non-goals"
 docs/specs/056-nav-shell-and-cross-project-inbox.md:
   sections:
     sec-0: "## 0. Purpose"

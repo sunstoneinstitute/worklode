@@ -22,3 +22,4 @@ CLAUDE.local.md
 
 # crit live-mode session cookies
 .crit/
+.env

@@ -5,6 +5,7 @@ covers:
 - docs/specs/042-secret-templates.md#sec-2
 - docs/specs/042-secret-templates.md#sec-3
 - docs/specs/042-secret-templates.md#sec-4
+- docs/specs/042-secret-templates.md#sec-4.1
 - docs/specs/042-secret-templates.md#sec-5
 - docs/specs/042-secret-templates.md#sec-6
 ---

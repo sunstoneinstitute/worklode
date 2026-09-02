@@ -181,7 +181,8 @@ def check_ref(ref, home, where, out, anchors):
             out.append(("error", f"{where}: {ref} zero-pads its number; "
                                  "worklode's shorthand is unpadded"))
             return
-        out.append(("unresolved", f"{where}: {ref} names another project"))
+        out.append(("unresolved", f"{where}: {ref} has no file in this corpus "
+                                  "— another project, or a backbone-only document"))
         return
     if not REFERENCE.match(ref):
         out.append(("error", f"{where}: {ref!r} is not a reference "

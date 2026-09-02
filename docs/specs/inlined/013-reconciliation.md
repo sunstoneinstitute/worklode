@@ -41,6 +41,13 @@ must stay distinct.
 
 ## 1. Command surface
 
+> Amended by `WL-SPEC-61#sec-2`
+
+> **Amended by spec 061 §2.** `lode reconcile` → `lode task reconcile` and
+> `lode project doctor` → `lode project health`; `lode doctor` keeps its name.
+> The permission boundary this section draws is unchanged, and the rename
+> applies wherever this spec spells the old names, §2's heading included.
+
 | Command | Audience | Auth | Job |
 |---|---|---|---|
 | `lode doctor` | developer | none (works offline) | is *my* setup correct |
@@ -83,6 +90,9 @@ delivery predates its mapping, is the signal that sends an operator to `lode rec
 ---
 
 ## 2. `lode reconcile`
+
+> **Renamed.** 061 §2.3 spells this command `lode task reconcile` (see §1's
+> amendment note). The heading keeps the name it was published under.
 
 Two engines behind one command, run in order, cheapest first. Facts are repaired; findings are
 reported. `--dry-run` suppresses the writes of both.

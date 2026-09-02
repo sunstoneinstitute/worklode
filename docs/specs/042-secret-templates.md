@@ -1,5 +1,5 @@
 ---
-status: draft
+status: accepted
 issued: 2026-08-20
 requires:
 - 017-task-secrets.md

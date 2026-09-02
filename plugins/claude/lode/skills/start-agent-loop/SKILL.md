@@ -70,6 +70,11 @@ reshapes the rest.
    an agent and not a shell script. Confirm the commits actually landed on that
    worktree's branch (`git -C <worktree> log --oneline origin/main..HEAD`)
    before believing a DONE. Then `lode worktree done --json`, or `lode worktree
-   block --on <id> --json` when the report names a real blocker. Back to 1.
+   block --on <id> --json` when the report names a real blocker. Neither
+   command removes the worktree itself (`lode worktree` only ever creates
+   one) — from the main repo, run `git worktree remove <worktree>` (add
+   `--force` only if it refuses over untracked build artifacts, never over
+   uncommitted edits) so an unattended run doesn't leave one behind per task.
+   Back to 1.
 
 Load the working-under-worklode skill before the first task.

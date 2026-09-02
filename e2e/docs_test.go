@@ -516,7 +516,8 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 		t.Fatalf("plan-beta inbound edges = %+v, want a blockedBy edge from doc %d", betaDoc.EdgesIn, alpha.ID)
 	}
 
-	// 3. Accept alpha: one draft task, minted in the accept transaction.
+	// 3. Accept alpha: one ready task, minted in the accept transaction
+	// (025 §9.2: minting is itself the acceptance gate, no draft step).
 	alphaAccepted, _, err := planner.AcceptDoc(ctx, alpha.ID)
 	if err != nil {
 		t.Fatalf("accept plan-alpha: %v", err)
@@ -528,11 +529,11 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 		t.Fatalf("plan-alpha minted %d tasks, want 1: %+v", len(alphaAccepted.Tasks), alphaAccepted.Tasks)
 	}
 	alphaTask := alphaAccepted.Tasks[0]
-	if alphaTask.PlanDoc != alpha.ID || alphaTask.State != "draft" || alphaTask.Kind != "chore" {
-		t.Fatalf("plan-alpha task = %+v, want a draft chore carrying plan_doc %d", alphaTask, alpha.ID)
+	if alphaTask.PlanDoc != alpha.ID || alphaTask.State != "ready" || alphaTask.Kind != "chore" {
+		t.Fatalf("plan-alpha task = %+v, want a ready chore carrying plan_doc %d", alphaTask, alpha.ID)
 	}
 
-	// 4. Accept beta: two draft tasks, in definition order, each carrying its
+	// 4. Accept beta: two ready tasks, in definition order, each carrying its
 	// declared metadata.
 	betaAccepted, _, err := planner.AcceptDoc(ctx, beta.ID)
 	if err != nil {
@@ -554,8 +555,8 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 		}},
 	} {
 		got := want.task
-		if got.State != "draft" {
-			t.Fatalf("minted task %s state = %q, want draft (025 §9.2)", got.ID, got.State)
+		if got.State != "ready" {
+			t.Fatalf("minted task %s state = %q, want ready (025 §9.2)", got.ID, got.State)
 		}
 		if got.PlanDoc != beta.ID {
 			t.Fatalf("minted task %s plan_doc = %d, want %d", got.ID, got.PlanDoc, beta.ID)
@@ -613,13 +614,8 @@ func TestPlanAcceptanceMintsTasks(t *testing.T) {
 	// Both plans are accepted with open sets, so both need execution.
 	assertNeedsExecution(t, "plans", alpha.ID, beta.ID)
 
-	// 7. Ready the whole set. Beta's tasks are ready and unleased, and would
-	// be pickable but for the plan-to-plan edge.
-	for _, id := range []string{alphaTask.ID, first.ID, second.ID} {
-		if _, _, err := planner.ReadyTask(ctx, id); err != nil {
-			t.Fatalf("ready task %s: %v", id, err)
-		}
-	}
+	// 7. The whole set minted ready and unleased (025 §9.2); beta's tasks
+	// would be pickable but for the plan-to-plan edge.
 	assertBlocked(ctx, t, planner, first.ID, true, "plan-alpha's set is still open")
 	assertBlocked(ctx, t, planner, second.ID, true, "plan-alpha's set is still open")
 
