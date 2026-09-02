@@ -1,3 +1,7 @@
+---
+name: anti-smartass
+description: Use when writing or editing specs, plans, docs, READMEs, AGENTS.md files, or other prose in this repo — plain language, precise meaning. Triggers on any prose authoring or editing task, not just design docs.
+---
 
 ## Writing Style: Plain Language, Precise Meaning
 
