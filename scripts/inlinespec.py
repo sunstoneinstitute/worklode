@@ -182,6 +182,11 @@ def consolidate(corpus, path, anchor, seen, drew_from, depth=0):
         for src_path, src_anchor in corpus.acting(edge, path, anchor)[0]:
             if not src_anchor:  # a doc-scoped claim is a banner, never inlined
                 continue
+            # A source outside this corpus -- a backbone-only spec, referenced
+            # by shorthand -- has no text to fold in. notes() still names it,
+            # so the section says it was amended and by what.
+            if src_path not in corpus.docs:
+                continue
             _, secs = corpus.sections(src_path)
             text = subtree(secs, src_anchor)
             if text is None:

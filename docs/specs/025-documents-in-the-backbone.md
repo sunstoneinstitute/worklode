@@ -14,6 +14,8 @@ amendedBy:
     - 029-research-work-in-the-backbone.md#sec-4
   "#sec-16.3":
     - 029-research-work-in-the-backbone.md#sec-4
+  "#sec-18":
+    - WL-SPEC-61#sec-2
 amends:
   "#sec-10":
     - 004-execution-backbone.md#sec-6.3
@@ -2060,6 +2062,12 @@ anchors (§9), with whatever SKOS or shape terms the synced kind needs, validate
 the spec first, then mirror the term in `ns/`.
 
 ## 18. Surfaces {#sec-18}
+
+> **Amended by spec 061 §2.** The spellings below are replaced; the surface
+> they describe is unchanged. `lode doc new` → `lode doc add`,
+> `lode doc anchors` → `lode doc lint`, `lode drift --docs` →
+> `lode graph drift --docs`. `lode doc show` is restored as the read verb the
+> implementation had drifted to `get`.
 
 The document and event surface, backed by the backbone store:
 
