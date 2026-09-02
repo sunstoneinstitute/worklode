@@ -14,7 +14,7 @@ repos:
         pass_filenames: false
       # Specs and plans live in the backbone, not the tree (055). The five hooks
       # that used to lint docs/specs and docs/plans went with them; the server
-      # enforces the same rules on write, through `lode doc new` and `lode doc
+      # enforces the same rules on write, through `lode doc add` and `lode doc
       # edit`.
       # always_run: a rebase can create a collision in a commit that touches no
       # migration at all, so matching on changed files would miss it.

@@ -842,9 +842,9 @@ func TestDocLint(t *testing.T) {
 	setupProject(t, c)
 
 	specFile := writeDocFile(t, docSpecTwoSections)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "my-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new spec: %v", err)
+		t.Fatalf("doc add spec: %v", err)
 	}
 
 	lintPlanBody := `---
@@ -858,9 +858,9 @@ covers:
 # Plan under lint
 `
 	planFile := writeDocFile(t, lintPlanBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "plan",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
 		"--slug", "lint-plan", "--file", planFile); err != nil {
-		t.Fatalf("doc new plan: %v", err)
+		t.Fatalf("doc add plan: %v", err)
 	}
 
 	out, err := runLode(t, "doc", "lint", "--project", "proj")

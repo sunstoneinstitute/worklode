@@ -21,7 +21,7 @@ the execution backbone.
 **To read what a spec says, use `lode show <ref> --inline`.** That folds every
 in-force amendment and supersession into the text, attributed to the section it
 came from. A bare `lode show WL-SPEC-4` gives you what 004 said when it was
-written; four other specs have amended it since. Write with `lode doc new` and
+written; four other specs have amended it since. Write with `lode doc add` and
 `lode doc edit`; an accepted document is changed by `lode doc revise`, never in
 place. `docs/follow-ups.md` holds known non-blocking gaps — check it before
 filing something as new.
