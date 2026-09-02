@@ -63,12 +63,12 @@ func runLodeCLI(t *testing.T, args ...string) (string, error) {
 	return <-done, runErr
 }
 
-// TestNextEndToEnd drives `lode worktree next <id>` through the real CLI entry point
+// TestNextEndToEnd drives `lode work next <id>` through the real CLI entry point
 // against a real temp git repo and an ephemeral store: the worktree is
 // actually created via `git worktree add`, the lease is rebound to its real
 // worktree.Identity path, and the resulting brief is printed. It then forces
 // the rebind step to collide with another actively-leased worktree and
-// verifies `lode worktree next` rolls back cleanly (lease released, worktree removed).
+// verifies `lode work next` rolls back cleanly (lease released, worktree removed).
 func TestNextEndToEnd(t *testing.T) {
 	ctx := context.Background()
 
@@ -108,7 +108,7 @@ func TestNextEndToEnd(t *testing.T) {
 
 	out, err := runLodeCLI(t, "worktree", "next", task.ID, "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 
 	wantDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-wire-up-the-widget")
@@ -141,7 +141,7 @@ func TestNextEndToEnd(t *testing.T) {
 	}
 
 	// --- forced rebind failure: another task's lease already occupies the
-	// exact worktree identity a second claim would rebind to. `lode worktree next`
+	// exact worktree identity a second claim would rebind to. `lode work next`
 	// must claim, fail at the rebind step, then roll back: release its
 	// lease and best-effort remove the worktree it just created.
 	task2, _, err := agent.CreateTask(ctx, model.CreateTaskInput{
@@ -170,7 +170,7 @@ func TestNextEndToEnd(t *testing.T) {
 	}
 
 	if _, err := runLodeCLI(t, "worktree", "next", task2.ID, "--json"); err == nil {
-		t.Fatalf("lode worktree next task2: err = nil, want a rebind-conflict error")
+		t.Fatalf("lode work next task2: err = nil, want a rebind-conflict error")
 	}
 
 	if _, statErr := os.Stat(task2Dir); !os.IsNotExist(statErr) {

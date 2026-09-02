@@ -157,7 +157,7 @@ func setupProject(t *testing.T, c *cli.Client) {
 	}
 }
 
-// --- lode worktree next --------------------------------------------------------
+// --- lode work next --------------------------------------------------------
 
 // testLayout is the default (.worktrees) layout, for tests that need to
 // resolve a worktree path the way the commands under test do.
@@ -185,7 +185,7 @@ func TestResolveWorktreeTaskRejectsNonWorktree(t *testing.T) {
 	}
 	// The failure is about the checkout holding no task, and its way out is
 	// naming one — not a lecture on the two resolution rules that just missed.
-	for _, want := range []string{"not bound to a Worklode task", "lode task set state merged <id>", "lode worktree next [id]"} {
+	for _, want := range []string{"not bound to a Worklode task", "lode task set state merged <id>", "lode work next [id]"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -207,7 +207,7 @@ func TestResolveWorktreeTaskOmitsTheByNameFormWhenAbsent(t *testing.T) {
 	if strings.Contains(err.Error(), "say which task to act on") {
 		t.Errorf("error %q offers a by-name form the caller does not have", err)
 	}
-	if !strings.Contains(err.Error(), "lode worktree next [id]") {
+	if !strings.Contains(err.Error(), "lode work next [id]") {
 		t.Errorf("error %q drops the claim-a-task suggestion", err)
 	}
 }
@@ -222,7 +222,7 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", task.ID, "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 
 	var result struct {
@@ -335,7 +335,7 @@ func TestNextErrorsWhenServerReturnsEmptyBranch(t *testing.T) {
 				out, err = runLode(t, "worktree", "next")
 			}
 			if err == nil {
-				t.Fatalf("lode worktree next: err = nil, want error (output: %s)", out)
+				t.Fatalf("lode work next: err = nil, want error (output: %s)", out)
 			}
 			if !strings.Contains(err.Error(), "no branch") {
 				t.Fatalf("error = %q, want it to mention the missing branch", err)
@@ -370,7 +370,7 @@ func TestNextPrintsWorktreePathAsSoonAsCreated(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", task.ID)
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 
 	wantDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-early-worktree-print")
@@ -388,7 +388,7 @@ func TestNextPrintsWorktreePathAsSoonAsCreated(t *testing.T) {
 	}
 }
 
-// TestNextHonorsConfiguredWorktreeDir proves `lode worktree next` resolves its layout
+// TestNextHonorsConfiguredWorktreeDir proves `lode work next` resolves its layout
 // from the repo-scoped worktree_dir (LODE_WORKTREE_DIR here, cheapest to set)
 // rather than hardcoding worktree.DefaultBase — the one thing layoutFrom
 // exists to do. It fails if layoutFrom ignores the configured value.
@@ -403,7 +403,7 @@ func TestNextHonorsConfiguredWorktreeDir(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", task.ID, "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 
 	var result struct {
@@ -449,7 +449,7 @@ func dirExists(path string) bool {
 // otherwise only proved by composing separate unit tests: a server configured
 // with a "/"-containing LODE_BRANCH_TEMPLATE keeps the "/" in the BRANCH but
 // gets a flat directory one level below the base, which the path guard then
-// recognises as bound. `lode worktree next` from inside that worktree refusing with
+// recognises as bound. `lode work next` from inside that worktree refusing with
 // "already inside a worktree" is the guard proof — layoutFrom(cwd) resolved
 // the base dir and ParseDir read the flattened name back to a task id.
 func TestNextFlattensTemplateWorktree(t *testing.T) {
@@ -462,7 +462,7 @@ func TestNextFlattensTemplateWorktree(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", task.ID, "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 	var result struct {
 		Claimed bool   `json:"claimed"`
@@ -486,7 +486,7 @@ func TestNextFlattensTemplateWorktree(t *testing.T) {
 
 	t.Chdir(wantDir)
 	if _, err := runLode(t, "worktree", "next", "--json"); err == nil {
-		t.Fatalf("lode worktree next from inside the worktree: err = nil, want error (guard should have recognised %s)", wantDir)
+		t.Fatalf("lode work next from inside the worktree: err = nil, want error (guard should have recognised %s)", wantDir)
 	}
 }
 
@@ -500,7 +500,7 @@ func TestNextClaimsTopRankedWithNoID(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 	var result struct {
 		Claimed bool   `json:"claimed"`
@@ -542,7 +542,7 @@ func TestNextKindFilter(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", "--kind", "chore", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next --kind chore: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next --kind chore: %v\noutput: %s", err, out)
 	}
 	var result struct {
 		Claimed bool   `json:"claimed"`
@@ -569,7 +569,7 @@ func TestNextNoReadyTask(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "next", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 	var result struct {
 		Claimed bool   `json:"claimed"`
@@ -591,14 +591,14 @@ func TestNextRefusesInsideExistingWorktree(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if out, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next (setup): %v\noutput: %s", err, out)
+		t.Fatalf("lode work next (setup): %v\noutput: %s", err, out)
 	}
 
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-already-claimed")
 	t.Chdir(dir)
 
 	if _, err := runLode(t, "worktree", "next", "--json"); err == nil {
-		t.Fatalf("lode worktree next from inside a worktree: err = nil, want error")
+		t.Fatalf("lode work next from inside a worktree: err = nil, want error")
 	}
 }
 
@@ -621,7 +621,7 @@ func TestNextRollsBackOnWorktreeAddFailure(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err == nil {
-		t.Fatalf("lode worktree next with a pre-occupied worktree path: err = nil, want error")
+		t.Fatalf("lode work next with a pre-occupied worktree path: err = nil, want error")
 	}
 
 	detail, _, err := c.GetTask(context.Background(), task.ID)
@@ -645,7 +645,7 @@ func TestNextStampsTaskIDInWorktreeGitConfig(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 
 	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-stamp-task-id")
@@ -667,7 +667,7 @@ func TestNextStampsTaskIDInWorktreeGitConfig(t *testing.T) {
 }
 
 // TestNextStampsTaskIDAcrossTwoWorktrees is the multi-worktree case
-// extensions.worktreeConfig exists for: a second `lode worktree next` in the same repo
+// extensions.worktreeConfig exists for: a second `lode work next` in the same repo
 // must stamp its own worktree without disturbing the first, once the repo
 // already has a worktree and the extension already enabled.
 func TestNextStampsTaskIDAcrossTwoWorktrees(t *testing.T) {
@@ -680,10 +680,10 @@ func TestNextStampsTaskIDAcrossTwoWorktrees(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "next", first.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next (first): %v", err)
+		t.Fatalf("lode work next (first): %v", err)
 	}
 	if _, err := runLode(t, "worktree", "next", second.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next (second): %v", err)
+		t.Fatalf("lode work next (second): %v", err)
 	}
 
 	l := testLayout(t)
@@ -709,7 +709,7 @@ func TestNextStampsTaskIDAcrossTwoWorktrees(t *testing.T) {
 	}
 }
 
-// TestNextMirrorsLocalClaudeHooksWhenRootOptedIn proves `lode worktree next` treats a
+// TestNextMirrorsLocalClaudeHooksWhenRootOptedIn proves `lode work next` treats a
 // developer's own `lode install` (local scope) as a standing choice: every
 // worktree it creates afterward gets the same Claude Code bindings, not just
 // the main checkout — settings.local.json is gitignored, so a linked
@@ -727,7 +727,7 @@ func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 
 	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-mirror-hooks")
@@ -746,7 +746,7 @@ func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
 }
 
 // TestNextLeavesWorktreeSettingsAloneWhenRootNeverOptedIn is the converse:
-// `lode worktree next` must never opt a worktree into Claude Code hooks on its own —
+// `lode work next` must never opt a worktree into Claude Code hooks on its own —
 // only mirror a choice already made at root.
 func TestNextLeavesWorktreeSettingsAloneWhenRootNeverOptedIn(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -757,7 +757,7 @@ func TestNextLeavesWorktreeSettingsAloneWhenRootNeverOptedIn(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 
 	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-no-hooks")
@@ -766,7 +766,7 @@ func TestNextLeavesWorktreeSettingsAloneWhenRootNeverOptedIn(t *testing.T) {
 	}
 }
 
-// --- lode worktree resume --------------------------------------------------------
+// --- lode work resume --------------------------------------------------------
 
 func TestResumeRenewsHeldLease(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -776,7 +776,7 @@ func TestResumeRenewsHeldLease(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	before, _, err := c.GetTask(context.Background(), task.ID)
 	if err != nil {
@@ -789,7 +789,7 @@ func TestResumeRenewsHeldLease(t *testing.T) {
 	// Renewal only bumps renewed_at/expires_at meaningfully once time has
 	// moved on; assert it succeeds and keeps the same worktree binding.
 	if _, err := runLode(t, "worktree", "resume", "--json"); err != nil {
-		t.Fatalf("lode worktree resume: %v", err)
+		t.Fatalf("lode work resume: %v", err)
 	}
 	after, _, err := c.GetTask(context.Background(), task.ID)
 	if err != nil {
@@ -811,7 +811,7 @@ func TestResumeReclaimsAfterSweeperExpiry(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-expired-lease")
 
@@ -829,7 +829,7 @@ func TestResumeReclaimsAfterSweeperExpiry(t *testing.T) {
 
 	t.Chdir(dir)
 	if _, err := runLode(t, "worktree", "resume", "--json"); err != nil {
-		t.Fatalf("lode worktree resume after sweep: %v", err)
+		t.Fatalf("lode work resume after sweep: %v", err)
 	}
 	detail, _, err = c.GetTask(context.Background(), task.ID)
 	if err != nil {
@@ -859,7 +859,7 @@ func TestResumeErrorsWhenLeasedElsewhere(t *testing.T) {
 	t.Chdir(dir)
 
 	if _, err := runLode(t, "worktree", "resume", "--json"); err == nil {
-		t.Fatalf("lode worktree resume on a lease held elsewhere: err = nil, want error")
+		t.Fatalf("lode work resume on a lease held elsewhere: err = nil, want error")
 	}
 }
 
@@ -872,7 +872,7 @@ func TestResumeRefusesOutsideWorktree(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "resume", "--json"); err == nil {
-		t.Fatalf("lode worktree resume outside a worktree: err = nil, want error")
+		t.Fatalf("lode work resume outside a worktree: err = nil, want error")
 	}
 }
 
@@ -906,7 +906,7 @@ func TestResumeResolvesLayoutFromTargetDirNotCwd(t *testing.T) {
 	writeWorktreeDirConfig(t, target, "target-worktrees")
 	t.Chdir(target)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(target, "target-worktrees", task.ID+"-cross-repo-resume")
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
@@ -920,7 +920,7 @@ func TestResumeResolvesLayoutFromTargetDirNotCwd(t *testing.T) {
 	t.Chdir(other)
 
 	if out, err := runLode(t, "worktree", "resume", dir, "--json"); err != nil {
-		t.Fatalf("lode worktree resume %s from a different repo (cwd %s): %v\noutput: %s", dir, other, err, out)
+		t.Fatalf("lode work resume %s from a different repo (cwd %s): %v\noutput: %s", dir, other, err, out)
 	}
 
 	detail, _, err := c.GetTask(context.Background(), task.ID)
@@ -932,9 +932,9 @@ func TestResumeResolvesLayoutFromTargetDirNotCwd(t *testing.T) {
 	}
 }
 
-// --- lode worktree done ----------------------------------------------------------
+// --- lode work done ----------------------------------------------------------
 
-// TestDoneSubmitsForReviewAndReleasesLease: `lode worktree done` hands the worktree's
+// TestDoneSubmitsForReviewAndReleasesLease: `lode work done` hands the worktree's
 // task off for review and closes the lease. It is the WL-96 regression — the
 // task is in_progress with no PR anywhere, and `done` must not claim `merged`,
 // which asserts the work landed on the default branch.
@@ -946,18 +946,18 @@ func TestDoneSubmitsForReviewAndReleasesLease(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-finish-this")
 
 	t.Chdir(dir)
 	out, err := runLode(t, "worktree", "done", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree done: %v\noutput: %s", err, out)
+		t.Fatalf("lode work done: %v\noutput: %s", err, out)
 	}
 	var reported model.Task
 	if err := json.Unmarshal([]byte(out), &reported); err != nil {
-		t.Fatalf("decode lode worktree done --json %q: %v", out, err)
+		t.Fatalf("decode lode work done --json %q: %v", out, err)
 	}
 	if reported.State != "in_review" {
 		t.Errorf("reported state = %q, want in_review", reported.State)
@@ -968,7 +968,7 @@ func TestDoneSubmitsForReviewAndReleasesLease(t *testing.T) {
 		t.Fatalf("get task: %v", err)
 	}
 	if detail.State == "merged" {
-		t.Fatalf("task state = merged: lode worktree done jumped to merged with no PR opened")
+		t.Fatalf("task state = merged: lode work done jumped to merged with no PR opened")
 	}
 	if detail.State != "in_review" {
 		t.Fatalf("task state = %q, want in_review", detail.State)
@@ -979,7 +979,7 @@ func TestDoneSubmitsForReviewAndReleasesLease(t *testing.T) {
 }
 
 // TestDoneOnAlreadySubmittedTask: a worker that ran `lode task submit` before
-// `lode worktree done` still gets its lease released instead of a transition error.
+// `lode work done` still gets its lease released instead of a transition error.
 func TestDoneOnAlreadySubmittedTask(t *testing.T) {
 	st, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -988,7 +988,7 @@ func TestDoneOnAlreadySubmittedTask(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-finish-this")
 	moveToReview(t, st, task.ID)
@@ -996,7 +996,7 @@ func TestDoneOnAlreadySubmittedTask(t *testing.T) {
 	t.Chdir(dir)
 	out, err := runLode(t, "worktree", "done", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree done on an in_review task: %v\noutput: %s", err, out)
+		t.Fatalf("lode work done on an in_review task: %v\noutput: %s", err, out)
 	}
 
 	detail, _, err := c.GetTask(context.Background(), task.ID)
@@ -1020,11 +1020,11 @@ func TestDoneRefusesOutsideWorktree(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "done", "--json"); err == nil {
-		t.Fatalf("lode worktree done outside a worktree: err = nil, want error")
+		t.Fatalf("lode work done outside a worktree: err = nil, want error")
 	}
 }
 
-// --- lode worktree block ----------------------------------------------------------
+// --- lode work block ----------------------------------------------------------
 
 func TestBlockRecordsEdgeAndReleasesLease(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -1035,14 +1035,14 @@ func TestBlockRecordsEdgeAndReleasesLease(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-needs-a-blocker")
 	t.Chdir(dir)
 
 	out, err := runLode(t, "worktree", "block", "--on", blocker.ID, "--json")
 	if err != nil {
-		t.Fatalf("lode worktree block: %v\noutput: %s", err, out)
+		t.Fatalf("lode work block: %v\noutput: %s", err, out)
 	}
 
 	detail, _, err := c.GetTask(context.Background(), task.ID)
@@ -1067,11 +1067,11 @@ func TestBlockRefusesOutsideWorktree(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "block", "--on", blocker.ID, "--json"); err == nil {
-		t.Fatalf("lode worktree block outside a worktree: err = nil, want error")
+		t.Fatalf("lode work block outside a worktree: err = nil, want error")
 	}
 }
 
-// --- lode worktree status ----------------------------------------------------------
+// --- lode work status ----------------------------------------------------------
 
 func TestStatusReportsStateWithoutMutating(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -1081,7 +1081,7 @@ func TestStatusReportsStateWithoutMutating(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-just-looking")
 	t.Chdir(dir)
@@ -1093,7 +1093,7 @@ func TestStatusReportsStateWithoutMutating(t *testing.T) {
 
 	out, err := runLode(t, "worktree", "status", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree status: %v\noutput: %s", err, out)
+		t.Fatalf("lode work status: %v\noutput: %s", err, out)
 	}
 	var result statusResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -1129,13 +1129,13 @@ func TestStatusReportsResolvedProject(t *testing.T) {
 	addOrigin(t, root, "git@github.com:acme/proj.git")
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-scoped-status"))
 
 	out, err := runLode(t, "worktree", "status", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree status: %v\noutput: %s", err, out)
+		t.Fatalf("lode work status: %v\noutput: %s", err, out)
 	}
 	var result statusResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -1165,7 +1165,7 @@ func TestStatusReportsSessionMarkerPresence(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if _, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v", err)
+		t.Fatalf("lode work next: %v", err)
 	}
 	dir := filepath.Join(root, worktree.DefaultBase, task.ID+"-has-a-session")
 
@@ -1181,7 +1181,7 @@ func TestStatusReportsSessionMarkerPresence(t *testing.T) {
 	t.Chdir(dir)
 	out, err := runLode(t, "worktree", "status", "--json")
 	if err != nil {
-		t.Fatalf("lode worktree status: %v\noutput: %s", err, out)
+		t.Fatalf("lode work status: %v\noutput: %s", err, out)
 	}
 	var result statusResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -1201,7 +1201,7 @@ func TestStatusRefusesOutsideWorktree(t *testing.T) {
 	t.Chdir(root)
 
 	if _, err := runLode(t, "worktree", "status", "--json"); err == nil {
-		t.Fatalf("lode worktree status outside a worktree: err = nil, want error")
+		t.Fatalf("lode work status outside a worktree: err = nil, want error")
 	}
 }
 

@@ -22,23 +22,16 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
-// This file implements the worktree-aware lifecycle commands, grouped under
-// `lode worktree`: `next`, `resume`, `done`, `block`, and `status`. Unlike the
-// lower-level `lode task claim/renew/release/done/block` commands (task.go),
-// these are the ONE way an agent enters, resumes, and exits Worklode work:
-// they own the git worktree (creating it on `next`, never removing it
-// themselves) and speak in terms of "the task in the worktree I'm standing in"
-// rather than an explicit task id. The grouping is also what keeps `lode
-// worktree done` (submit for review, release the lease) from colliding in
-// meaning with `lode task set state merged <id>` (the work landed).
+// This file implements the `lode work` group's commands. See WL-SPEC-61#sec-1
+// L8 for what belongs here and why.
 
 func init() {
-	rootCmd.AddCommand(newWorktreeCmd())
+	rootCmd.AddCommand(newWorkCmd())
 }
 
-func newWorktreeCmd() *cobra.Command {
+func newWorkCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "worktree",
+		Use:   "work",
 		Short: "Enter, resume, and exit work in the current git worktree",
 	}
 	cmd.AddCommand(
@@ -113,7 +106,7 @@ func currentTaskID() string {
 // column is sized to the widest form so a long one (`lode task block <id>
 // --by <blocker-id>`) does not shear the alignment.
 func unboundHelp(l worktree.Layout, byName string) string {
-	const claim = "lode worktree next [id]"
+	const claim = "lode work next [id]"
 	width := max(len(claim), len(byName))
 	var b strings.Builder
 	if byName != "" {
@@ -202,7 +195,7 @@ func purgeTaskSecrets(cmd *cobra.Command, taskID string) {
 	}
 }
 
-// rollbackClaim undoes a `lode worktree next` claim after a later step (worktree add,
+// rollbackClaim undoes a `lode work next` claim after a later step (worktree add,
 // rebind, or brief fetch) fails: it releases the lease and best-effort
 // removes a half-created worktree, clearing the task stamp first in case the
 // removal is the step that fails. All three are best-effort — the caller is
@@ -215,7 +208,7 @@ func rollbackClaim(ctx context.Context, c *cli.Client, taskID, root, dir string)
 	c.ReleaseLease(ctx, taskID) //nolint:errcheck
 }
 
-// newNextCmd builds `lode worktree next`.
+// newNextCmd builds `lode work next`.
 func newNextCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind string
@@ -267,7 +260,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		return fmt.Errorf("not inside a git repository")
 	}
 	if inside, ok := layout.TaskID(root); ok {
-		return fmt.Errorf("already inside a worktree for %s; run `lode worktree next` from the main repository, not from %s/", inside, layout.Base())
+		return fmt.Errorf("already inside a worktree for %s; run `lode work next` from the main repository, not from %s/", inside, layout.Base())
 	}
 
 	pending, err := pendingIdentity(root)
@@ -372,7 +365,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 	return nil
 }
 
-// printNoReadyTask reports the "nothing to claim" outcome of `lode worktree next`
+// printNoReadyTask reports the "nothing to claim" outcome of `lode work next`
 // without --id: not an error, just nothing ready.
 func printNoReadyTask(cmd *cobra.Command) error {
 	if jsonOut(cmd) {
@@ -383,7 +376,7 @@ func printNoReadyTask(cmd *cobra.Command) error {
 	return nil
 }
 
-// newResumeCmd builds `lode worktree resume`.
+// newResumeCmd builds `lode work resume`.
 func newResumeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "resume [dir]",
@@ -418,7 +411,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 	if err != nil {
 		return err
 	}
-	taskID, root, err := resolveWorktreeTask(layout, dir, "lode worktree resume <dir>")
+	taskID, root, err := resolveWorktreeTask(layout, dir, "lode work resume <dir>")
 	if err != nil {
 		return err
 	}
@@ -453,7 +446,7 @@ func runResume(cmd *cobra.Command, dir string) error {
 	return nil
 }
 
-// newDoneCmd builds `lode worktree done`: the worktree's "my work here is finished"
+// newDoneCmd builds `lode work done`: the worktree's "my work here is finished"
 // verb. It submits the task for review (in_progress -> in_review) and closes
 // the lease; it never moves the task to `merged`. `merged` means the work
 // landed on the default branch (spec 004 §5.1) — a fact only the PR-merge
@@ -508,7 +501,7 @@ func newDoneCmd() *cobra.Command {
 }
 
 // submitForReview moves taskID to in_review, tolerating a task already there:
-// a worker that ran `lode task submit` before `lode worktree done` should still get its
+// a worker that ran `lode task submit` before `lode work done` should still get its
 // lease released rather than a transition error. Any other refusal is the
 // server's to report, unchanged.
 func submitForReview(ctx context.Context, c *cli.Client, taskID string) (model.Task, []byte, error) {
@@ -527,7 +520,7 @@ func submitForReview(ctx context.Context, c *cli.Client, taskID string) (model.T
 	return detail.Task, raw, nil
 }
 
-// newBlockCmd builds `lode worktree block --on <blocker-id>`.
+// newBlockCmd builds `lode work block --on <blocker-id>`.
 func newBlockCmd() *cobra.Command {
 	var on string
 	cmd := &cobra.Command{
@@ -574,7 +567,7 @@ func newBlockCmd() *cobra.Command {
 	return cmd
 }
 
-// nextResult is the --json shape of `lode worktree next`. Brief is the brief response
+// nextResult is the --json shape of `lode work next`. Brief is the brief response
 // forwarded verbatim, so the two never disagree about its shape.
 type nextResult struct {
 	Claimed  bool            `json:"claimed"`
@@ -583,7 +576,7 @@ type nextResult struct {
 	Brief    json.RawMessage `json:"brief"`
 }
 
-// statusResult is the --json shape of `lode worktree status`.
+// statusResult is the --json shape of `lode work status`.
 type statusResult struct {
 	Worktree      string               `json:"worktree"`
 	Task          model.Task           `json:"task"`
@@ -621,7 +614,7 @@ func hasSessionMarker(root string) bool {
 	return err == nil
 }
 
-// newStatusCmd builds `lode worktree status`: read-only, never claims/renews/releases.
+// newStatusCmd builds `lode work status`: read-only, never claims/renews/releases.
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -633,7 +626,7 @@ func newStatusCmd() *cobra.Command {
 	}
 }
 
-// runStatus is `lode worktree status`'s body: read the worktree's task, classify its
+// runStatus is `lode work status`'s body: read the worktree's task, classify its
 // lease, and report both with the project the directory scopes to.
 func runStatus(cmd *cobra.Command) error {
 	c, cfg, err := newAPIClientWithConfig()

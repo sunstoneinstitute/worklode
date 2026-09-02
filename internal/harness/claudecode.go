@@ -206,7 +206,7 @@ func installClaudeHooks(path string) error {
 // see the note at the copy.
 //
 // This only ever mirrors a choice the developer already made at root: a repo
-// where `lode install` was never run locally is left alone, so `lode worktree next`
+// where `lode install` was never run locally is left alone, so `lode work next`
 // never opts a worktree into Claude Code hooks on its own.
 func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 	rootPath, err := claudeSettingsPath(root, ScopeLocal)

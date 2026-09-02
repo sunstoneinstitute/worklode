@@ -225,7 +225,7 @@ func (c *Client) ReleaseLease(ctx context.Context, id string) ([]byte, error) {
 // nominally ours), re-claim when no lease exists (the sweeper reclaimed it),
 // and error when it is actively leased to a different worktree. lease is the
 // current lease from a freshly-fetched brief (nil ⇒ none). This is the shared
-// resume/auto-resume core used by both `lode worktree resume` and the hook handlers.
+// resume/auto-resume core used by both `lode work resume` and the hook handlers.
 func ReacquireOrRenew(ctx context.Context, c *Client, taskID, identity string, lease *model.Lease) error {
 	switch {
 	case lease == nil:
@@ -559,7 +559,7 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 }
 
 // BriefRender prints a task's brief as a readable summary — the `lode task
-// brief` and `lode worktree next` view.
+// brief` and `lode work next` view.
 func BriefRender(w io.Writer, b model.Brief) {
 	fmt.Fprintf(w, "%s: %s\n", b.Task.ID, b.Task.Title)
 	fmt.Fprintf(w, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
@@ -593,7 +593,7 @@ func BriefRender(w io.Writer, b model.Brief) {
 }
 
 // BlockersRender prints what is holding a task up, shared by `lode task
-// brief`, `lode worktree next` and `lode worktree status`. Each section is
+// brief`, `lode work next` and `lode work status`. Each section is
 // omitted when empty.
 func BlockersRender(w io.Writer, blockers []model.BriefBlocker, plans []model.DocRef) {
 	if len(blockers) > 0 {
@@ -679,7 +679,7 @@ func WorkerPickHeader(w io.Writer) {
 	fmt.Fprintf(w, workerPickRowFmt, "ID", "PRIORITY", "CONCERN", "PROJECT", "BRANCH")
 }
 
-// WorkerPickRow prints one dry-run claim-next pick — what `lode worktree next` would
+// WorkerPickRow prints one dry-run claim-next pick — what `lode work next` would
 // take right now. Concern is dashed when the task carries none, matching how
 // every other view renders an unset optional field.
 func WorkerPickRow(w io.Writer, p model.ClaimNextPick) {

@@ -21,12 +21,12 @@ unbounded.
 
 | $ARGUMENTS | Focus | Selection rule |
 |---|---|---|
-| nothing | any ready task | `lode worktree next --json` |
+| nothing | any ready task | `lode work next --json` |
 | `--kind <k>`, `--strict-focus` | narrowed frontier | the same, with those flags |
 | bugs, bugfixes, chores, "clean up" | maintenance | `lode task list --status ready --kind bug --json`, then `--kind chore` once bugs run dry |
 | a spec (`032`, `WL-SPEC-32`, `docs/specs/032-*.md`), a plan slug, or "finish <feature>" | one spec through to done | see **Spec focus** |
 | unblock, unblocking, "get things moving" | clear blockers | see **Unblock focus** |
-| a bare task id (`WL-429`) | that task, then stop | `lode worktree next WL-429 --json` |
+| a bare task id (`WL-429`) | that task, then stop | `lode work next WL-429 --json` |
 
 Anything else in $ARGUMENTS is context for the work, not command input: never
 pass it to `lode`. Carry it to each task's subagent as standing guidance, and
@@ -53,13 +53,13 @@ reshapes the rest.
 
 1. Run the selection rule. Nothing selected, or `--max` reached: report why and
    stop.
-2. Claim: `lode worktree next <id> --json` when the rule picked an id (the
+2. Claim: `lode work next <id> --json` when the rule picked an id (the
    default rule claims on its own). `"claimed": false` means another worker
    took it — reselect.
 3. `cd` into the JSON's `worktree`. The `brief` is the context contract; do not
    spelunk the repo to reconstruct it. A brief too thin to work from is a
    decomposition signal, not a research prompt: `lode task edit <id>
-   --needs-decomposition=true`, `lode worktree block`, back to 1.
+   --needs-decomposition=true`, `lode work block`, back to 1.
 4. Dispatch **one subagent per task** to do the work in that worktree, handing
    it the worktree path, the brief verbatim, and any standing guidance from
    $ARGUMENTS. Tier it per the delegation table in the working-under-worklode
@@ -69,9 +69,9 @@ reshapes the rest.
 5. Judge its report yourself — that judgment is the whole reason this loop is
    an agent and not a shell script. Confirm the commits actually landed on that
    worktree's branch (`git -C <worktree> log --oneline origin/main..HEAD`)
-   before believing a DONE. Then `lode worktree done --json`, or `lode worktree
+   before believing a DONE. Then `lode work done --json`, or `lode work
    block --on <id> --json` when the report names a real blocker. Neither
-   command removes the worktree itself (`lode worktree` only ever creates
+   command removes the worktree itself (`lode work` only ever creates
    one) — from the main repo, run `git worktree remove <worktree>` (add
    `--force` only if it refuses over untracked build artifacts, never over
    uncommitted edits) so an unattended run doesn't leave one behind per task.

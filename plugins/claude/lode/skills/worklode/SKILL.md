@@ -82,7 +82,7 @@ lode task add --title "..." --kind bug --priority high   # kind: feature, bug, c
 lode task list                          # open tasks; --status for delivered/abandoned too
 lode task show <id>                     # body, edges, blocked status, lease holder
 lode task claim [<id>]                  # lease it, create its worktree
-lode worktree next                      # claim the top-ranked ready task
+lode work next                      # claim the top-ranked ready task
 lode task start [<id>]                  # ready->in_progress, no worktree/lease (e.g. a design/review call)
 lode task submit [<id>]                 # in_progress->in_review
 lode task set state merged <id>         # in_review->merged

@@ -37,7 +37,7 @@ func ceremonyFixture(t *testing.T, catalogStatus int, stdin string) (*cli.Client
 // command's stdout and stderr buffers, and the recorded names.
 //
 // stdout is a real buffer rather than io.Discard because the ceremony's
-// contract is that it leaves it untouched: `lode worktree next --json` marshals its
+// contract is that it leaves it untouched: `lode work next --json` marshals its
 // document to the same stream.
 func ceremonyFixtureWithCatalog(t *testing.T, catalogStatus int, catalogJSON, stdin string) (*cli.Client, *cobra.Command, *bytes.Buffer, *bytes.Buffer, *[]string) {
 	t.Helper()
@@ -139,7 +139,7 @@ func TestCeremonyOneOpRunMaterializesAll(t *testing.T) {
 	if _, err := secrets.Fetch("WL-7", "GITHUB_TOKEN"); err != nil {
 		t.Fatalf("baseline secret not in keystore: %v", err)
 	}
-	// `lode worktree next --json` marshals its document to this stream after the
+	// `lode work next --json` marshals its document to this stream after the
 	// ceremony returns; a single stray line from the pack child breaks every
 	// parser downstream.
 	if outBuf.Len() != 0 {
@@ -208,7 +208,7 @@ func TestCeremonyCatalogUnavailableDegrades(t *testing.T) {
 
 // TestCeremonyAutoDeclineLeavesDeclaredUnsatisfied covers the agent path:
 // `/lode:next` runs from a non-tty Bash tool, so consent is auto-declined. A
-// persisted decline would satisfy the declared name forever and `lode worktree resume`
+// persisted decline would satisfy the declared name forever and `lode work resume`
 // would never retry — so an auto-decline must record nothing.
 func TestCeremonyAutoDeclineLeavesDeclaredUnsatisfied(t *testing.T) {
 	keyring.MockInit()
@@ -216,7 +216,7 @@ func TestCeremonyAutoDeclineLeavesDeclaredUnsatisfied(t *testing.T) {
 	dir := t.TempDir()
 	c, cmd, _, _, _ := ceremonyFixture(t, http.StatusOK, "")
 
-	// An *os.File that is not a terminal — what an agent-run `lode worktree next` gets.
+	// An *os.File that is not a terminal — what an agent-run `lode work next` gets.
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -243,7 +243,7 @@ func TestCeremonyAutoDeclineLeavesDeclaredUnsatisfied(t *testing.T) {
 		t.Fatalf("auto-decline was persisted as Declined %v", m.Declined)
 	}
 	if secretsSatisfied("WL-8", []string{"KUBECONFIG_HZDEV"}) {
-		t.Fatal("auto-decline satisfied the declared name; `lode worktree resume` would never retry")
+		t.Fatal("auto-decline satisfied the declared name; `lode work resume` would never retry")
 	}
 }
 
@@ -277,7 +277,7 @@ func TestCeremonyJSONNeverPrompts(t *testing.T) {
 	}
 }
 
-// TestSecretsSatisfiedRequiresAManifest: `lode worktree next` packs the baseline set
+// TestSecretsSatisfiedRequiresAManifest: `lode work next` packs the baseline set
 // whether or not the task declares anything, so "no manifest" is unfinished
 // work even for a task with no declarations — resume must run the ceremony.
 func TestSecretsSatisfiedRequiresAManifest(t *testing.T) {

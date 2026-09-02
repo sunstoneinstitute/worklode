@@ -702,7 +702,7 @@ func TestTaskDuplicateCommands(t *testing.T) {
 	}
 	// The edge is provenance, not scheduling (004): the duplicate stays
 	// claimable, so the confirmation has to say that closing is a second act.
-	// Without it the message reads as if triage were finished while lode worktree next
+	// Without it the message reads as if triage were finished while lode work next
 	// is still handing the duplicate out.
 	if !strings.Contains(out, "stays claimable") {
 		t.Errorf("duplicate confirmation = %q, want it to say the task stays claimable", out)
@@ -872,7 +872,7 @@ func TestTaskEditSendsSecrets(t *testing.T) {
 
 // TestTaskClaimRefusesMainCheckout guards WL-383: claiming from the main
 // checkout used to bind the lease straight to the clone path — a lease
-// `lode worktree resume`/`lode worktree status` can never resolve back to a
+// `lode work resume`/`lode work status` can never resolve back to a
 // task worktree, and a second claim from the same place then collides with it.
 func TestTaskClaimRefusesMainCheckout(t *testing.T) {
 	_, c := lifecycleTestServer(t)
@@ -886,7 +886,7 @@ func TestTaskClaimRefusesMainCheckout(t *testing.T) {
 	if err == nil {
 		t.Fatalf("lode task claim from the main checkout succeeded, want refusal\noutput: %s", out)
 	}
-	for _, want := range []string{"main checkout", "lode worktree next", "--worktree"} {
+	for _, want := range []string{"main checkout", "lode work next", "--worktree"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err, want)
 		}
@@ -895,7 +895,7 @@ func TestTaskClaimRefusesMainCheckout(t *testing.T) {
 
 // TestTaskClaimFromLinkedWorktreeBindsLease is the case that must keep
 // working: claiming from inside a worktree that already exists (by hand, or
-// from an earlier `lode worktree next`) binds the lease to that worktree, not to the
+// from an earlier `lode work next`) binds the lease to that worktree, not to the
 // main checkout it lives under.
 func TestTaskClaimFromLinkedWorktreeBindsLease(t *testing.T) {
 	_, c := lifecycleTestServer(t)

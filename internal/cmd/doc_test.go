@@ -921,7 +921,7 @@ func TestDocNewRecordsWorktreeTask(t *testing.T) {
 	root := initGitRepo(t)
 	t.Chdir(root)
 	if out, err := runLode(t, "worktree", "next", task.ID, "--json"); err != nil {
-		t.Fatalf("lode worktree next: %v\noutput: %s", err, out)
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
 	}
 	t.Chdir(filepath.Join(root, worktree.DefaultBase, task.ID+"-write-the-spec"))
 

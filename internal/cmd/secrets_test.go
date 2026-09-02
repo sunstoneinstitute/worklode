@@ -19,7 +19,7 @@ import (
 
 // initSecretsWorktree adds a linked worktree named "<taskID>-fix" under the
 // default base (.worktrees) of a fresh repo and chdirs into it — the shape
-// `lode worktree next` produces, so worktree.Root + Layout.TaskID resolve the task id
+// `lode work next` produces, so worktree.Root + Layout.TaskID resolve the task id
 // the way production does. Returns the worktree directory.
 func initSecretsWorktree(t *testing.T, taskID string) string {
 	t.Helper()
