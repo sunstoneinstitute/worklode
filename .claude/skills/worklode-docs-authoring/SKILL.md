@@ -65,6 +65,24 @@ plus whatever amends it, and `lode doc get <ref> --json` names that in
 `edges_in` (`amendedBy`, `isReplacedBy`) — follow those before treating the
 body as current.
 
+## Amending a spec that still has a file
+
+The corpus is split until 055 lands: newer specs exist only in the backbone,
+older ones also have a file under `docs/specs/`. `inlinespec.py` builds
+`docs/specs/inlined/` from `docs/specs/index.yaml` alone, so an amendment made
+by a backbone-only spec is **invisible** in the view `CLAUDE.md` sends every
+reader to — the target's file shows the superseded text with nothing marking it.
+
+So when a backbone-only document amends a spec that still has a file, do the
+other two of `docs/authoring-design-docs.md`'s three edits **in that file**:
+the inline `> **Amended by spec NNN §M.**` note next to the heading, saying
+what changed, and an `amendedBy` entry keyed by the amended section. Reference
+the amending document by shorthand (`WL-SPEC-61#sec-2`) — it has no filename to
+point at. `secmeta.py` reports that as `unresolved` on stderr and does not fail.
+
+Renamed command spellings elsewhere in the corpus are a separate question, and
+the answer is "leave them": `docs/agent-surfaces.md` has the rule.
+
 ## The `ns/` ontology
 
 `ns/` holds the `wl:` ontology extracted from specs 006/016/025/026:

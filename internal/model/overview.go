@@ -51,7 +51,7 @@ type FrontierList struct {
 	Tasks []FrontierTask `json:"tasks"`
 }
 
-// CriticalPath is the `lode critical-path` payload.
+// CriticalPath is the `lode task critical-path` payload.
 type CriticalPath struct {
 	MaxDepth int `json:"max_depth"`
 	// Tasks are the critical tasks by depth. The rows come from the DAG, not

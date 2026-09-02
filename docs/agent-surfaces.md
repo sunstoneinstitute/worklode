@@ -93,8 +93,28 @@ agent docs must not use it.
 
 It says nothing about whether the surrounding explanation is still true, whether
 a `--json` field an agent parses still exists, or what a command now does
-differently. It also does not read `docs/specs/` or `docs/plans/`, which record
-what was intended at the time they were written and are allowed to go stale.
+differently. It also does not read `docs/specs/` or `docs/plans/`, for the
+reason below.
+
+### Specs and plans are not corrected for a rename
+
+A rename leaves old spellings behind in the corpus. **They stay.** A spec states
+what was decided; a spent plan records what someone did. Rewriting either to use
+today's spelling makes it describe a decision that was not taken or an execution
+that did not happen, and the git history that would have shown the substitution
+is one more diff to read past. Spec 061 §2 states the same rule from the other
+end: command names appearing incidentally in a spec are illustration, not
+specification.
+
+What a rename does owe the corpus is a **pointer**, and only where a section's
+subject *is* the command surface — a table of spellings, a "command surface"
+heading. That is an ordinary amendment (`docs/authoring-design-docs.md`): the
+inline `> **Amended by spec NNN.**` note next to the heading, `amends` on the
+renaming spec, `amendedBy` on the renamed one. A section that merely mentions a
+command in passing gets nothing.
+
+The current surface is `lode --help`, the generated command catalog, and 061
+§2.5. No spec is a substitute for any of the three.
 
 An invocation that is deliberately unresolvable — documenting a command before
 it ships — goes in `internal/cmd/testdata/agent-surface-exempt.txt` with a
