@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-18
 covers: docs/specs/021-images-in-task-bodies.md
 ---
 # Blobs 2 — Task references and CLI Implementation Plan

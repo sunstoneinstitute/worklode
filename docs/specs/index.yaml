@@ -398,7 +398,7 @@ docs/specs/026-design-doc-queries.md:
     sec-4.3: "### 4.3 `NO-SPEC` means \"no governing spec\""
     sec-5: "## 5. A plan covers sections; it implements none"
     sec-5.1: "### 5.1 Frontmatter shape"
-    sec-5.2: "### 5.2 Plans carry `status` and `task`"
+    sec-5.2: "### 5.2 Plans carry `status`"
     sec-5.3: "### 5.3 `defers` hands a section to a named owner"
     sec-5.4: "### 5.4 Decomposition is complete, or it is not"
     sec-6: "## 6. Ontology"

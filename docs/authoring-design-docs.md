@@ -92,7 +92,6 @@ three specs.
 | `wasDerivedFrom` | `prov:wasDerivedFrom` | scalar reference | specs |
 | `amends` / `amendedBy` | — (see 025 §14) | **map**, see below | both |
 | `replaces` / `isReplacedBy` | `dct:replaces` / `dct:isReplacedBy` | **map**, see below | both |
-| `task` | — | `WL-<n>` | transitional only |
 | `kind` | — | `adr` on ADRs, absent on specs (026 §4.2) | specs, ADRs |
 | `artifact` | — (029 §3.3 defers the term to acceptance) | catalog address or list of them (`bigquery://…`, `gs://…`) the document is verified by (029 §3.1); declares additively — removing the key undeclares nothing | any |
 
@@ -115,11 +114,12 @@ one row is stored either way, and both ends must already exist either way.
 Writing a numbered series, reach for `blockedBy` on the later plan: the
 alternative is going back to amend an earlier plan that may already be accepted.
 
-`task` records the lode task that implements a spec while plans still live in
-git. It is not an ontology term and goes away when plan acceptance mints the
-tasks (spec 025 §9.2 — the binding becomes the minted tasks' doc reference).
-**If you set it, the lode task body and the document must stay in sync** —
-nothing enforces that yet.
+The retired `task` key named one lode task a plan's execution hung off, as a
+stand-in until plan acceptance minted the tasks itself. Acceptance does that
+now (025 §9.2), so the binding is the minted tasks' own `plan_doc` reference —
+read it with `lode task list --plan <plan>`. Do not write the key: nothing
+reads it. It is still parsed without complaint, because the bodies the
+backbone stores are verbatim and the plans written before minting carry it.
 
 Order keys as in the table: lifecycle, then `covers`, then `defers`, then
 dependency (`requires`, then `blocks`), then amendment, then supersession.

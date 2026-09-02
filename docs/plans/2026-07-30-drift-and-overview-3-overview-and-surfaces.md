@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-30
 covers: docs/specs/007-drift-and-overview.md
 ---
 # Drift & overview 3/3 (spec 007): overview engine & surfaces — Implementation Plan

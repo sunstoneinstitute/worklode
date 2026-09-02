@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-44
 covers: docs/specs/025-documents-in-the-backbone.md
 defers:
   - spec: docs/specs/025-documents-in-the-backbone.md#sec-12
