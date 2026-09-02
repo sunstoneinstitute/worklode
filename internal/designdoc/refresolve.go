@@ -26,7 +26,7 @@ import (
 //
 //  1. a path — matched by its basename, which is the document's slug;
 //  2. a document number, optionally with slug text after it;
-//  3. a bare slug — the same name `lode doc get` and the other doc verbs
+//  3. a bare slug — the same name `lode doc show` and the other doc verbs
 //     resolve, so the two readers cannot disagree about what a name means;
 //  4. the <KEY>-<TYPE>-<n> shorthand, whose <TYPE> token is kind-checked.
 //
@@ -93,7 +93,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 
 	// Form 3: bare slug. Digit-leading refs never reach here — the number
 	// form already returned — so this is the letter-leading names the
-	// backbone mints (`lode doc new --slug`). Exact match first, so a slug
+	// backbone mints (`lode doc add --slug`). Exact match first, so a slug
 	// that is a prefix of another still names itself.
 	if slugFormRef.MatchString(base) {
 		if m := matchRefSlug(candidates, base); len(m) > 0 {
@@ -178,7 +178,7 @@ func LooksLikePath(base string) bool {
 }
 
 // slugFormRef is ref form 3's shape: a letter-leading document slug. It is
-// deliberately looser than the slug grammar `lode doc new` enforces — a
+// deliberately looser than the slug grammar `lode doc add` enforces — a
 // near-miss should resolve to nothing, not fall through to the shorthand
 // form's grammar error.
 var slugFormRef = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)

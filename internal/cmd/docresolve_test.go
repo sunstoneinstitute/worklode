@@ -117,7 +117,7 @@ func TestResolveDocRefAmbiguous(t *testing.T) {
 }
 
 // TestResolveDocRefSlugForm covers ref form 3: the letter-leading slugs the
-// backbone mints (`lode doc new --slug`), which carry no number prefix.
+// backbone mints (`lode doc add --slug`), which carry no number prefix.
 func TestResolveDocRefSlugForm(t *testing.T) {
 	docs := []model.Doc{
 		{ID: 1, Kind: "spec", Number: 45, Slug: "per-project-workflows"},
@@ -387,7 +387,7 @@ func TestResolveDocRefForeignNumberLedSlugIsNotFound(t *testing.T) {
 // WL-358, second round: the four doc surfaces resolve one grammar over one
 // corpus. A ref with no project key of its own — a slug, a path, a number-led
 // slug — used to stop at the current project's documents in `lode show` and
-// `lode doc todo` while `lode doc get` resolved the same string org-wide.
+// `lode doc todo` while `lode doc show` resolved the same string org-wide.
 // resolveDocRefTiers now falls through to the backbone's own resolver, the
 // endpoint the doc verbs already call.
 //

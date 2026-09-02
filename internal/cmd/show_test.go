@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/spf13/cobra"
-
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -359,7 +357,7 @@ func TestShowResolvesForeignShorthand(t *testing.T) {
 
 // TestShowDocBySlugAndPath covers the positional doc-ref shapes beyond the
 // typed shorthand (WL-129): a backbone slug with no number prefix, its
-// prefix, and a corpus path — all rendering the same way `lode doc get`
+// prefix, and a corpus path — all rendering the same way `lode doc show`
 // would resolve the name.
 func TestShowDocBySlugAndPath(t *testing.T) {
 	setupDocServer(t, "WL", map[string]string{
@@ -1037,31 +1035,5 @@ func TestShowAdrFlagKeylessStillChecksKind(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ref names a spec, document is an ADR") {
 		t.Fatalf("err = %v; want the kind-mismatch message", err)
-	}
-}
-
-// TestDocHasNoShowVerb pins that the "show" verb was consolidated out of
-// `lode doc` and into `lode show`'s kind flags (026 §3), and guards against
-// it creeping back in as `lode doc show`.
-//
-// `lode doc` exists (it owns `todo`, 026 §2.4); the assertion stays
-// conditional so it survives the verb set changing again. (An unrecognized
-// subcommand of a non-root parent, e.g. `lode doc show`, prints help and
-// exits 0 by cobra default — see `lode task bogus` — so that path isn't
-// asserted here.)
-func TestDocHasNoShowVerb(t *testing.T) {
-	var doc *cobra.Command
-	for _, c := range rootCmd.Commands() {
-		if c.Name() == "doc" {
-			doc = c
-		}
-	}
-	if doc == nil {
-		return
-	}
-	for _, c := range doc.Commands() {
-		if c.Name() == "show" {
-			t.Fatalf(`"doc" still has a %q child command; lode doc show was consolidated into lode show (026 §3)`, c.Name())
-		}
 	}
 }

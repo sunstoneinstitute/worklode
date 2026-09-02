@@ -31,23 +31,23 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
+- `lode doc add` — Create a document (spec, ADR, or plan) in draft
+  Flags: --file, --kind, --number, --owner, --project, --repo, --slug
 - `lode doc anchors` — Lint a markdown file's anchors (and, for a plan, its task definitions)
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
 - `lode doc edit` — Replace a document's body (a draft, or a plan at any status)
   Flags: --file
-- `lode doc get` — Get a document: its body, sections, and edges
-  Flags: --version
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
   Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
-- `lode doc new` — Create a document (spec, ADR, or plan) in draft
-  Flags: --file, --kind, --number, --owner, --project, --repo, --slug
 - `lode doc reviewers` — Show or replace a document's assigned reviewer set
   Flags: --set
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision
   Flags: --accept, --discard, --file
+- `lode doc show` — Show a document: its body, sections, and edges
+  Flags: --version
 - `lode doc submit` — Submit a document for review (records a review event; the document's status does not change)
 - `lode doc todo` — What is left before a spec is fully implemented
   Flags: --deps

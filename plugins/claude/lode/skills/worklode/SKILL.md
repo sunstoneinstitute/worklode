@@ -93,10 +93,10 @@ lode board                              # in-progress / in-review / blocked / re
 lode show <ref>                         # any entity by id: task, doc, project
 lode task timeline <id>                 # full history: states, PRs, CI, deploys
 
-lode doc new --kind spec --slug <slug> --file <draft.md>   # kind: spec, adr, plan
+lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, adr, plan
 lode doc list --needs-planning     # accepted specs with a section no accepted plan covers
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
-lode doc get <ref> --json        # body, sections, edges
+lode doc show <ref> --json        # body, sections, edges
 lode doc todo <slug> --deps             # one spec's remaining work, recursively
 lode doc submit <id>
 lode doc accept <id>
@@ -112,7 +112,7 @@ Three kinds — `spec`, `adr`, `plan` — each `draft → accepted → supersede
 A spec/ADR's `{#sec-N}` section anchors are frozen once accepted: amend or
 supersede a section, never renumber it. **There is no consolidated "current
 text" view** — what a section says now is that section plus whatever amends
-it; `lode doc get <ref> --json`'s `edges_in` names `amendedBy`/`isReplacedBy`,
+it; `lode doc show <ref> --json`'s `edges_in` names `amendedBy`/`isReplacedBy`,
 and following those is how you find out. Frontmatter is mandatory, always;
 a plan's `covers` is how coverage becomes a query (`--needs-planning`) rather
 than a status someone remembers to flip. Full frontmatter schema, the

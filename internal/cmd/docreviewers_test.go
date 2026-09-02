@@ -16,9 +16,9 @@ func TestDocReviewersSetAndShow(t *testing.T) {
 		t.Fatalf("create actor bob: %v", err)
 	}
 	specFile := writeDocFile(t, docTestBody)
-	if _, err := runLode(t, "doc", "new", "--project", "proj", "--kind", "spec",
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
 		"--slug", "rev-spec", "--file", specFile); err != nil {
-		t.Fatalf("doc new: %v", err)
+		t.Fatalf("doc add: %v", err)
 	}
 
 	out, err := runLode(t, "doc", "reviewers", "rev-spec", "--set", "bob")
