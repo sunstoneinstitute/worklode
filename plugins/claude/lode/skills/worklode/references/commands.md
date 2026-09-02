@@ -76,6 +76,8 @@ Flags: --acknowledged, --component
 
 - `lode graph projection` — The backbone→graph projector's state
 - `lode graph projection status` — Show the projects the projector has quarantined, since when, and why
+- `lode graph triples` — Write the task graph as N-Triples, for loading into an external RDF store
+  Flags: --all-projects, --output
 
 ## `lode inbox` — Triage GitHub issues into tasks
 
