@@ -328,7 +328,8 @@ func newSecretsExecCmd() *cobra.Command {
 			// file, but exec is what puts plaintext there — so it re-asserts
 			// the exclusion rather than trusting a worktree whose exclude
 			// file predates this spec. Best-effort and idempotent.
-			if slices.ContainsFunc(m.Entries, secrets.ManifestEntry.Templated) {
+			renders := slices.ContainsFunc(m.Entries, secrets.ManifestEntry.Templated)
+			if renders {
 				excludeSecretsPaths(root)
 			}
 			injected := make([]string, 0, len(m.Entries))
@@ -361,9 +362,12 @@ func newSecretsExecCmd() *cobra.Command {
 				injected = append(injected, e.EnvName()+"="+path)
 			}
 			// The recorded path is what purge unlinks, so it is saved before
-			// the exec that replaces this process.
-			if err := secrets.SaveManifest(m); err != nil {
-				return err
+			// the exec that replaces this process — and only when a render
+			// changed it, so a plain-entry exec rewrites nothing.
+			if renders {
+				if err := secrets.SaveManifest(m); err != nil {
+					return err
+				}
 			}
 			bin, err := exec.LookPath(args[0])
 			if err != nil {
@@ -377,15 +381,4 @@ func newSecretsExecCmd() *cobra.Command {
 	// `lode secrets exec kubectl get pods -n foo`'s -n and fails.
 	cmd.Flags().SetInterspersed(false)
 	return cmd
-}
-
-// splitNames splits a comma-separated name list, dropping empties.
-func splitNames(csv string) []string {
-	var out []string
-	for _, s := range strings.Split(csv, ",") {
-		if s = strings.TrimSpace(s); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
