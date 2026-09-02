@@ -1,6 +1,5 @@
 ---
 status: accepted
-task: WL-27
 covers: docs/specs/006-knowledge-graph.md
 ---
 # Runtime layer (spec 015, folded into 006) — Implementation Plan

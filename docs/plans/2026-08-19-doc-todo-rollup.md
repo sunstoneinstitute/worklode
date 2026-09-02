@@ -7,7 +7,6 @@ covers:
     coverage: partial
   - spec: docs/specs/026-design-doc-queries.md#sec-5
     coverage: none
-task: WL-105
 ---
 # Plan — `lode doc todo`: one spec's remaining work
 

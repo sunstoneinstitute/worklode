@@ -57,8 +57,12 @@ type docTodoItem struct {
 	Anchors []string `json:"anchors,omitempty"`
 	Heading string   `json:"heading"`
 	Plan    string   `json:"plan,omitempty"`
-	Task    string   `json:"task,omitempty"`
-	Detail  string   `json:"detail"`
+	// Tasks names the plan's still-open minted tasks (025 §9.2). It replaces
+	// the single `task` key, which read the plan body's retired `task:`
+	// frontmatter: a plan mints as many tasks as it declares, and only the
+	// backbone knows which.
+	Tasks  []string `json:"tasks,omitempty"`
+	Detail string   `json:"detail"`
 }
 
 // docTodoDiagnostics is the footer as JSON: what the walk did not do, and why
@@ -111,12 +115,12 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 		return err
 	}
 
-	closed, err := docTodoClosure(cmd, c, cfg)
+	tasks, err := docTodoPlanTasks(cmd, c, cfg, resp.Docs)
 	if err != nil {
 		return err
 	}
 	items, diag, err := designdoc.Todo(docs, designdoc.CorpusPath(target.Kind, target.Slug),
-		designdoc.TodoOptions{Deps: deps, Closed: closed, ProjectKey: cfg.ProjectKey})
+		designdoc.TodoOptions{Deps: deps, Tasks: tasks, ProjectKey: cfg.ProjectKey})
 	if err != nil {
 		return err
 	}
@@ -136,8 +140,8 @@ const docTodoCorpusConcurrency = 8
 // docTodoCorpus loads every document the backbone serves as a CorpusDoc, so
 // the walk of 026 §2.5 reads the same corpus `lode doc list` does.
 //
-// The walk is a pure function over parsed documents, and the facts it needs —
-// a plan's covers levels, its requires, its task — live in frontmatter, which
+// The walk is a pure function over parsed documents, and the corpus facts it
+// needs — a plan's covers levels, its requires — live in frontmatter, which
 // only the body carries. Each document is therefore fetched and re-parsed
 // rather than read from the backbone's own section and edge rows: those rows
 // are the server's index of the same frontmatter, and reading the source keeps
@@ -172,28 +176,39 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 	return out, nil
 }
 
-// docTodoClosure builds the task-closure lookup from one task list: closure is
-// the server's answer, never a state string (026 §2.5), so the whole project's
-// tasks are fetched once and indexed rather than asked for one at a time. A
-// task the response does not carry is unknown, which is never evidence of
-// closure.
-func docTodoClosure(cmd *cobra.Command, c *cli.Client, cfg cli.Config) (func(string) (bool, bool), error) {
+// docTodoPlanTasks builds the plan → minted-tasks lookup from one task list.
+// A plan's tasks are the rows its acceptance minted with `plan_doc` set to it
+// (025 §9.2) — the same fact `lode task list --plan` reads — so the whole
+// project's tasks are fetched once and indexed by plan rather than asked for
+// one plan at a time. A plan no task names minted none, which is a real
+// answer here and not a gap in the lookup.
+//
+// Closure travels with each task because it is the server's per-repo answer,
+// never a state string (026 §2.5).
+func docTodoPlanTasks(cmd *cobra.Command, c *cli.Client, cfg cli.Config, docs []model.Doc) (func(string) []designdoc.ExecutionTask, error) {
 	// No working directory: the git-remote fallback would cost a subprocess
 	// to narrow a list this command wants wide anyway. Unscoped returns every
-	// project's tasks, which resolves strictly more of the plans' task ids.
+	// project's tasks, which resolves strictly more of the plans' tasks.
 	scope := cli.ResolveScope(cmd.Context(), c, cfg, "")
 	resp, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Project: scope.Project})
 	if err != nil {
 		return nil, err
 	}
-	closed := make(map[string]bool, len(resp.Tasks))
-	for _, t := range resp.Tasks {
-		closed[t.ID] = t.Closed
+	planPath := make(map[int64]string, len(docs))
+	for _, d := range docs {
+		planPath[d.ID] = designdoc.CorpusPath(d.Kind, d.Slug)
 	}
-	return func(taskID string) (bool, bool) {
-		c, known := closed[taskID]
-		return c, known
-	}, nil
+	byPlan := make(map[string][]designdoc.ExecutionTask)
+	for _, t := range resp.Tasks {
+		p, ok := planPath[t.PlanDoc]
+		if !ok {
+			continue
+		}
+		byPlan[p] = append(byPlan[p], designdoc.ExecutionTask{
+			ID: t.ID, State: t.State, Closed: t.Closed,
+		})
+	}
+	return func(plan string) []designdoc.ExecutionTask { return byPlan[plan] }, nil
 }
 
 func writeDocTodoJSON(cmd *cobra.Command, items []designdoc.TodoItem, diag designdoc.Diagnostics) error {
@@ -208,7 +223,7 @@ func writeDocTodoJSON(cmd *cobra.Command, items []designdoc.TodoItem, diag desig
 	for _, it := range items {
 		res.Items = append(res.Items, docTodoItem{
 			Type: it.Type, Doc: it.Doc, Anchor: it.Anchor, Anchors: it.Anchors,
-			Heading: it.Heading, Plan: it.Plan, Task: it.Task, Detail: it.Detail,
+			Heading: it.Heading, Plan: it.Plan, Tasks: it.Tasks, Detail: it.Detail,
 		})
 	}
 	b, err := json.Marshal(res)
