@@ -31,7 +31,7 @@ func TestDocAcceptPlanRejected(t *testing.T) {
 	}
 }
 
-// TestDocAcceptPlanMintsTasks: accepting a plan mints one draft task per
+// TestDocAcceptPlanMintsTasks: accepting a plan mints one ready task per
 // ## Tasks definition, in the plan's project, carrying plan_doc, title, body,
 // kind, priority and skills from its definition and created_by the accepting
 // actor — and nothing above them: no child_of edge is written for any of
@@ -58,8 +58,8 @@ func TestDocAcceptPlanMintsTasks(t *testing.T) {
 	wantKinds := []string{"feature", "bug", "chore"}
 	wantPriorities := []string{"high", "medium", "low"}
 	for i, task := range minted {
-		if task.State != "draft" {
-			t.Errorf("minted task %d state = %q, want draft", i, task.State)
+		if task.State != "ready" {
+			t.Errorf("minted task %d state = %q, want ready", i, task.State)
 		}
 		if task.Project != "p1" {
 			t.Errorf("minted task %d project = %q, want p1", i, task.Project)
@@ -174,15 +174,8 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 		t.Fatalf("edge %s -> %s type = %q, want blocks", task1, task2, edgeType)
 	}
 
-	// Promote both minted tasks out of draft so the ready-set check exercises
-	// blockedCondition rather than the draft-state filter.
-	if err := transition(t, s, taskTestNow, task1, "draft", "ready"); err != nil {
-		t.Fatalf("transition task1 to ready: %v", err)
-	}
-	if err := transition(t, s, taskTestNow, task2, "draft", "ready"); err != nil {
-		t.Fatalf("transition task2 to ready: %v", err)
-	}
-
+	// Minted tasks start ready (025 §9.2), so the ready-set check below already
+	// exercises blockedCondition rather than any draft-state filter.
 	if !isBlocked(t, s, task2) {
 		t.Fatalf("IsBlocked(%s): want true while task1 open", task2)
 	}
@@ -219,9 +212,9 @@ func TestDocAcceptPlanBlockedByMintsBlocksEdge(t *testing.T) {
 // TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations: an accepted plan stays
 // freely mutable, so re-accepting one mints the declarations that have no row
 // yet and leaves every existing row alone (025 §9.2) — including a row whose
-// declaration's prose changed, and one that has since left draft. The new
-// task's declared blockedBy is wired even though its blocker was minted by the
-// first accept.
+// declaration's prose changed, and one that has since moved past ready. The
+// new task's declared blockedBy is wired even though its blocker was minted
+// by the first accept.
 func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -237,8 +230,8 @@ func TestDocAcceptPlanReAcceptMintsOnlyNewDeclarations(t *testing.T) {
 		t.Fatalf("first accept minted %d tasks, want 3", len(minted))
 	}
 	// Execution has started on task 1: a re-accept must not walk it back.
-	if err := transition(t, s, taskTestNow, minted[0].ID, "draft", "ready"); err != nil {
-		t.Fatalf("transition %s to ready: %v", minted[0].ID, err)
+	if err := transition(t, s, taskTestNow, minted[0].ID, "ready", "in_progress"); err != nil {
+		t.Fatalf("transition %s to in_progress: %v", minted[0].ID, err)
 	}
 	before := map[string]taskSnapshot{}
 	for _, task := range minted {
@@ -1227,9 +1220,6 @@ func TestDocNeedsExecutionAllTasksClosed(t *testing.T) {
 		t.Fatalf("AcceptDoc: %v", err)
 	}
 	for i, task := range minted {
-		if err := transition(t, s, taskTestNow, task.ID, "draft", "ready"); err != nil {
-			t.Fatalf("ready %s: %v", task.ID, err)
-		}
 		if i == 0 {
 			walkTo(t, s, task.ID, "abandoned")
 			continue
