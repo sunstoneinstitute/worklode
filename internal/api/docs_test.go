@@ -353,7 +353,7 @@ func TestReplaceDocEdges(t *testing.T) {
 }
 
 // TestDocDetailEdgesIncludeCompletedWith: GET /api/v1/docs/{id} (what
-// `lode doc get --json` shows) must carry a partial covers entry's
+// `lode doc show --json` shows) must carry a partial covers entry's
 // fullCoverageWith closure and a defers entry's owner (026 §5, §5.3) — both
 // live in the doc_coverage_completed_with side-table, not doc_edges itself,
 // so a document's own edge listing previously understated what its

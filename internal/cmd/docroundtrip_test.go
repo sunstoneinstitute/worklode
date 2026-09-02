@@ -127,7 +127,7 @@ requires: other-corpus:SPEC-99
 // reported success. An edge that resolves, an edge kept verbatim in
 // to_external, and a reference named on stderr are all fine; vanishing is not.
 //
-// Read-back is `doc get`'s edge lists rather than a reconstructed header,
+// Read-back is `doc show`'s edge lists rather than a reconstructed header,
 // because the store already presents an incoming edge in the reading
 // document's frame under its inverse spelling (store.docEdgeInverse) — which
 // is exactly how the corpus authors the bidirectional pairs (025 §14.2). So

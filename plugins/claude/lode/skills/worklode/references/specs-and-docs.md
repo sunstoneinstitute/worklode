@@ -25,7 +25,7 @@ superseded`; `proposed` was retired — a document under review just stays
 
 ```bash
 lode doc anchors <file>                                    # local lint before creating/editing
-lode doc new --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
+lode doc add --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
 lode doc edit <ref> --file <file>                    # replace a draft's body
 lode doc revise <ref> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it
 lode doc revise <ref> --discard                      # withdraw it without landing: owner or its author
@@ -35,8 +35,8 @@ lode doc transfer <ref> --to <actor>                 # owner-gated; reassigns th
 ```
 
 Draft the markdown — frontmatter included — in a scratch file first; it's an
-editor buffer, nothing reads it again after `lode doc new`. Read a document
-back with `lode show <ref>` (see shorthand below) or `lode doc get
+editor buffer, nothing reads it again after `lode doc add`. Read a document
+back with `lode show <ref>` (see shorthand below) or `lode doc show
 <ref> --json` for the body plus parsed sections and edges.
 
 ## Frontmatter
@@ -87,7 +87,7 @@ linked it.
 
 There is no consolidated/inlined document that folds amendments into one
 reading. **What a section says now is that section plus whatever amends it**
-— `lode doc get <ref> --json`'s `edges_in` names `amendedBy` and
+— `lode doc show <ref> --json`'s `edges_in` names `amendedBy` and
 `isReplacedBy` on it; follow those before treating the body on screen as
 current. Both directions of an amendment are always recorded (the amending
 doc's `amends`, the amended doc's `amendedBy`) so either document alone

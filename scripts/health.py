@@ -20,7 +20,7 @@ Every source is the worklode backbone, read through the `lode` CLI:
                                   sections no accepted plan discharges
                                   (026 sec-2.1), each classified unplanned,
                                   partial or bound-only
-  lode doc get <id>               a spec's section count and a plan's `covers`
+  lode doc show <id>              a spec's section count and a plan's `covers`
                                   edges -- one round trip per document, so it
                                   is issued only where a list cannot answer
   lode task list                  the live task rows, each naming the plan it
@@ -97,7 +97,7 @@ def fetch_details(ids, workers=8):
     """{doc id: detail}. A document whose fetch fails is simply absent."""
     def one(doc_id):
         try:
-            return doc_id, run_lode(["doc", "get", str(doc_id), "--json"])
+            return doc_id, run_lode(["doc", "show", str(doc_id), "--json"])
         except Exception:
             return doc_id, None
 
@@ -132,7 +132,7 @@ def fetch_timelines(ids, workers=8):
 def collect(project, workers=8):
     """Every backbone read, in one place: (specs, plans, tasks, timelines).
 
-    Three list calls answer most of it. `lode doc get` is a round trip per
+    Three list calls answer most of it. `lode doc show` is a round trip per
     document, so it is issued only where a list cannot answer: a plan's
     `covers` edges, and the section count of a live spec that --needs-planning
     did not already report one for.
