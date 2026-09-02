@@ -1,12 +1,20 @@
 package model
 
 // SecretCatalogEntry is the wire form of one org secrets-catalog entry
-// (spec 017): a symbolic name mapped to a 1Password reference plus policy.
+// (spec 017): a symbolic name mapped to a 1Password reference plus policy, or
+// (spec 042) to a plaintext template plus one reference per credential.
+//
+// Template is the template TEXT, not the catalog key naming it: the key is a
+// server-side lookup and never crosses the wire. The templated fields are
+// omitempty, so a plain entry stays wire-identical to spec 017.
 type SecretCatalogEntry struct {
-	Name        string `json:"name"`
-	Ref         string `json:"ref"`
-	Description string `json:"description"`
-	Baseline    bool   `json:"baseline"`
+	Name        string            `json:"name"`
+	Ref         string            `json:"ref,omitempty"`
+	Template    string            `json:"template,omitempty"`
+	Env         string            `json:"env,omitempty"`
+	Creds       map[string]string `json:"creds,omitempty"` // placeholder → op:// ref
+	Description string            `json:"description"`
+	Baseline    bool              `json:"baseline"`
 }
 
 // SecretCatalogResponse is the response body of GET /api/v1/secrets/catalog.

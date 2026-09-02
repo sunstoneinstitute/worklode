@@ -57,6 +57,31 @@ func LoaderSensitive(s string) bool {
 // deny-list from being three lists that drift.
 func ValidName(s string) bool { return nameRE.MatchString(s) && !LoaderSensitive(s) }
 
+// ItemName is the keystore item one credential of a templated entry is stored
+// under (spec 042 §3). The double underscore keeps the item inside the secret
+// name grammar, so pack, keystore validation and the v1.5 remote packing
+// format need no new cases.
+func ItemName(entry, placeholder string) string { return entry + "__" + placeholder }
+
+// ItemPlaceholder is ItemName's inverse: the placeholder an item name encodes
+// for an entry, and whether it encoded one at all.
+func ItemPlaceholder(entry, item string) (string, bool) {
+	return strings.CutPrefix(item, entry+"__")
+}
+
+// Items lists the keystore items an entry materializes into: one per
+// credential for a templated entry, the entry name itself for a plain one.
+func Items(e Entry) []string {
+	if !e.Templated() {
+		return []string{e.Name}
+	}
+	out := make([]string, 0, len(e.Creds))
+	for _, c := range e.Creds {
+		out = append(out, ItemName(e.Name, c.Placeholder))
+	}
+	return out
+}
+
 // taskIDRE is the task-id grammar, anchored. internal/worktree has the same
 // pattern unanchored, because there it extracts an id from a directory name
 // rather than validating one; borrowing it here would accept "../WL-1/..".

@@ -3,8 +3,10 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,16 +32,13 @@ var opRunFunc = runOpPack
 // running the suite (it is not part of this repo's CI image).
 var opLookPathFunc = func() (string, error) { return exec.LookPath("op") }
 
-func runOpPack(dir, envFile, taskID string, names, declined []string, stdout, stderr io.Writer) error {
+func runOpPack(dir, envFile, planFile, taskID string, stdout, stderr io.Writer) error {
 	self, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("locate lode binary: %w", err)
 	}
 	args := []string{"run", "--env-file", envFile, "--",
-		self, "secrets", "pack", "--task", taskID, "--names", strings.Join(names, ",")}
-	if len(declined) > 0 {
-		args = append(args, "--declined", strings.Join(declined, ","))
-	}
+		self, "secrets", "pack", "--task", taskID, "--plan", planFile}
 	cmd := exec.Command("op", args...)
 	cmd.Dir = dir
 	cmd.Stdout = stdout
@@ -67,8 +66,15 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 	}
 	catalog := &secrets.Catalog{Entries: make([]secrets.Entry, 0, len(resp.Secrets))}
 	for _, e := range resp.Secrets {
+		// Creds arrive as a map; sorting is what keeps item lists and the
+		// env file byte-identical across runs of an unchanged catalog.
+		creds := make([]secrets.Cred, 0, len(e.Creds))
+		for _, p := range slices.Sorted(maps.Keys(e.Creds)) {
+			creds = append(creds, secrets.Cred{Placeholder: p, Ref: e.Creds[p]})
+		}
 		catalog.Entries = append(catalog.Entries, secrets.Entry{
-			Name: e.Name, Ref: e.Ref, Description: e.Description, Baseline: e.Baseline,
+			Name: e.Name, Ref: e.Ref, TemplateText: e.Template, Env: e.Env, Creds: creds,
+			Description: e.Description, Baseline: e.Baseline,
 		})
 	}
 
@@ -127,13 +133,25 @@ func runSecretsCeremony(ctx context.Context, cmd *cobra.Command, c *cli.Client, 
 		fmt.Fprintf(errw, "secrets: %v\n", err)
 		return
 	}
-	excludeSecretsEnv(dir)
+	excludeSecretsPaths(dir)
 
 	names := entryNames(pack)
+	// The plan is everything pack needs but the resolved values: entry
+	// structure, item names, templates, declined names. It goes through a
+	// 0600 file rather than flags because a template is multi-kilobyte
+	// multi-line text.
+	planFile, err := writePackPlan(secrets.Manifest{
+		Task: taskID, Materialized: names, Declined: declined, Entries: secrets.PlanEntries(pack),
+	})
+	if err != nil {
+		fmt.Fprintf(errw, "secrets: %v\n", err)
+		return
+	}
+	defer os.Remove(planFile)
 	// The child's own stdout (pack's "packed N secrets for X") is operator
 	// feedback, not data: it goes to stderr so a `--json` caller's stdout
 	// carries nothing but the JSON document it is about to print.
-	if err := opRunFunc(dir, envFile, taskID, names, declined, errw, errw); err != nil {
+	if err := opRunFunc(dir, envFile, planFile, taskID, errw, errw); err != nil {
 		fmt.Fprintf(errw, "secrets: materialization failed: %v — signed in to op? `lode worktree resume` re-runs the ceremony\n", err)
 		return
 	}
@@ -194,7 +212,13 @@ func secretsSatisfied(taskID string, declared []string) bool {
 	if !ok {
 		return false
 	}
-	for _, n := range m.Materialized {
+	// A manifest that materialized names but records no entries predates
+	// spec 042: it cannot say which items or template each name needs, so
+	// the ceremony re-runs (042 §5).
+	if len(m.Materialized) > 0 && len(m.Entries) == 0 {
+		return false
+	}
+	for _, n := range m.AllItems() {
 		if _, err := secrets.Fetch(taskID, n); err != nil {
 			return false
 		}
@@ -207,17 +231,44 @@ func secretsSatisfied(taskID string, declared []string) bool {
 	return true
 }
 
-// excludeSecretsEnv adds .worklode/secrets.env to the repo's local ignore
-// file (info/exclude in the common git dir) so the refs-only template is
-// never committed. Best-effort: any failure is silent.
-func excludeSecretsEnv(dir string) {
+// writePackPlan writes the pending manifest pack is about to fill in, to a
+// 0600 temp file outside the worktree. It holds names, item names and
+// template text — never a value, and never a resolved reference.
+func writePackPlan(m secrets.Manifest) (string, error) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", fmt.Errorf("encode pack plan: %w", err)
+	}
+	f, err := os.CreateTemp("", "lode-secrets-plan-*.json") // CreateTemp opens at 0600
+	if err != nil {
+		return "", fmt.Errorf("create pack plan: %w", err)
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		os.Remove(f.Name())
+		return "", fmt.Errorf("write pack plan: %w", err)
+	}
+	return f.Name(), nil
+}
+
+// excludeSecretsPaths adds the ceremony's two machine-state paths to the
+// repo's local ignore file (info/exclude in the common git dir): the
+// refs-only env file, and the directory `lode secrets exec` renders templates
+// into. Best-effort: any failure is silent.
+func excludeSecretsPaths(dir string) {
 	common, ok := gitexec.Line(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
 	if !ok {
 		return
 	}
 	exclude := filepath.Join(common, "info", "exclude")
-	const line = ".worklode/secrets.env"
-	if data, err := os.ReadFile(exclude); err == nil && strings.Contains(string(data), line) {
+	data, _ := os.ReadFile(exclude)
+	var missing []string
+	for _, line := range []string{".worklode/secrets.env", ".worklode/secrets/"} {
+		if !strings.Contains(string(data), line+"\n") {
+			missing = append(missing, line)
+		}
+	}
+	if len(missing) == 0 {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(exclude), 0o755); err != nil {
@@ -228,7 +279,9 @@ func excludeSecretsEnv(dir string) {
 		return
 	}
 	defer f.Close()
-	fmt.Fprintln(f, line)
+	for _, line := range missing {
+		fmt.Fprintln(f, line)
+	}
 }
 
 // entryNames projects entries to their names.

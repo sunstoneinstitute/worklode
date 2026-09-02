@@ -83,10 +83,10 @@ template, template without cred, bad placeholder grammar, bad env, duplicate
 cred); `Placeholders` on whitespace variants and on a stray `{{`;
 `ValidateTemplate` both mismatch directions; `Render` round-trip.
 
-- [ ] Extend `Entry` + `ParseCatalog` with tests
-- [ ] Add `template.go` + tests
-- [ ] Add `ItemName`/`Items` + tests
-- [ ] `go test -trimpath ./internal/secrets`
+- [x] Extend `Entry` + `ParseCatalog` with tests
+- [x] Add `template.go` + tests
+- [x] Add `ItemName`/`Items` + tests
+- [x] `go test -trimpath ./internal/secrets`
 
 ### Task 2 — Serve templates through the catalog endpoint
 
@@ -121,9 +121,9 @@ creds for a templated entry alongside an unchanged plain entry; missing
 template file → 500; placeholder/cred mismatch → 500; auth posture untouched
 (existing guard tests keep passing).
 
-- [ ] Extend `SecretCatalogEntry` (+ obsidian mirror check)
-- [ ] Template loading + validation in `secretsCatalog`, with tests
-- [ ] `go test -trimpath ./internal/api ./internal/model`
+- [x] Extend `SecretCatalogEntry` (+ obsidian mirror check)
+- [x] Template loading + validation in `secretsCatalog`, with tests
+- [x] `go test -trimpath ./internal/api ./internal/model`
 
 ### Task 3 — Ceremony and pack materialize credential items
 
@@ -165,9 +165,9 @@ stores one keystore item per credential (mock keyring), saves the manifest
 with entries and templates, and prunes dropped items; ceremony records
 entry names only; `secretsSatisfied` false when one credential item is gone.
 
-- [ ] Manifest reshape + envfile item lines, with tests
-- [ ] Ceremony builds the plan file; pack takes `--plan`, with tests
-- [ ] `go test -trimpath ./internal/cmd ./internal/secrets`
+- [x] Manifest reshape + envfile item lines, with tests
+- [x] Ceremony builds the plan file; pack takes `--plan`, with tests
+- [x] `go test -trimpath ./internal/cmd ./internal/secrets`
 
 ### Task 4 — Exec renders, purge unlinks, status reports
 
@@ -207,10 +207,10 @@ file holds the rendered content at 0600; a >4 KB template round-trips
 collision fails naming both entries; purge unlinks the rendered file and
 items; `git status` clean in a worktree fixture after rendering.
 
-- [ ] Render helper + exec wiring, with tests
-- [ ] Purge unlinks rendered files; gitignore/exclude lines, with tests
-- [ ] Status rows for templated entries, with tests
-- [ ] `make test`
+- [x] Render helper + exec wiring, with tests
+- [x] Purge unlinks rendered files; gitignore/exclude lines, with tests
+- [x] Status rows for templated entries, with tests
+- [x] `make test`
 
 ### Task 5 — Deployment example, skill, and surfaces
 
@@ -236,6 +236,6 @@ Roll the new shape out to the surfaces that describe the old one.
 - `docs/agent-surfaces.md` checklist pass for the pack flag change (task 3)
   and the new `.worklode/secrets/` path.
 
-- [ ] Deployment example
-- [ ] Skill text + codex mirror
-- [ ] Agent-surfaces checklist, `make test`
+- [x] Deployment example
+- [x] Skill text + codex mirror
+- [x] Agent-surfaces checklist, `make test`

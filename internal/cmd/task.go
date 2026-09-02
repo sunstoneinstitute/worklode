@@ -1634,3 +1634,14 @@ func newTaskDetachCmd() *cobra.Command {
 		},
 	}
 }
+
+// splitNames splits a comma-separated name list, dropping empties.
+func splitNames(csv string) []string {
+	var out []string
+	for _, s := range strings.Split(csv, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}

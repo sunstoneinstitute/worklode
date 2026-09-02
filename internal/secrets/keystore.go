@@ -3,6 +3,7 @@ package secrets
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/zalando/go-keyring"
 )
@@ -82,10 +83,13 @@ func Del(taskID, name string) error {
 	return nil
 }
 
-// PurgeTask removes every keystore item recorded in the task's manifest and
-// the manifest itself, returning the removed names. keyring has no
-// enumeration API, so the manifest is the authority on what to remove; no
-// manifest means nothing to purge.
+// PurgeTask removes every rendered file and keystore item recorded in the
+// task's manifest and the manifest itself, returning the removed entry names.
+// keyring has no enumeration API, so the manifest is the authority on what to
+// remove; no manifest means nothing to purge.
+//
+// Rendered files go first and by absolute path, so `--task` purges them from
+// anywhere (spec 042 §4.1); a file already gone is fine.
 func PurgeTask(taskID string) ([]string, error) {
 	if !ValidTaskID(taskID) {
 		return nil, fmt.Errorf("invalid task id %q", taskID)
@@ -94,7 +98,21 @@ func PurgeTask(taskID string) ([]string, error) {
 	if !ok {
 		return nil, nil
 	}
-	for _, n := range m.Materialized {
+	for _, e := range m.Entries {
+		if e.Rendered == "" {
+			continue
+		}
+		if err := os.Remove(e.Rendered); err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf("remove rendered %s: %w", e.Rendered, err)
+		}
+	}
+	// A pre-042 manifest records no entries; its materialized names are its
+	// item names, which is exactly what AllItems degrades to being empty for.
+	items := m.AllItems()
+	if len(items) == 0 {
+		items = m.Materialized
+	}
+	for _, n := range items {
 		if err := Del(taskID, n); err != nil {
 			return nil, err
 		}
