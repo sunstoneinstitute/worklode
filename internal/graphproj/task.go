@@ -18,6 +18,7 @@ const (
 	DCTIsPartOf           = "http://purl.org/dc/terms/isPartOf"
 	ProvWasAssociatedWith = "http://www.w3.org/ns/prov#wasAssociatedWith"
 	XSDDateTime           = "http://www.w3.org/2001/XMLSchema#dateTime"
+	XSDBoolean            = "http://www.w3.org/2001/XMLSchema#boolean"
 )
 
 // TaskTriples projects a backbone task row, plus its outgoing and incoming
@@ -57,6 +58,9 @@ func TaskTriples(t model.Task, out, in []model.Edge) []Triple {
 
 	if t.Concern != "" {
 		triples = append(triples, Triple{S: subj, P: iri.Term("concern"), O: Text(t.Concern)})
+	}
+	if t.HumanOnly {
+		triples = append(triples, Triple{S: subj, P: iri.Term("humanOnly"), O: Typed("true", XSDBoolean)})
 	}
 	if t.CreatedBy != "" {
 		triples = append(triples, Triple{S: subj, P: ProvWasAssociatedWith, O: IRIRef(iri.Agent(t.CreatedBy))})
