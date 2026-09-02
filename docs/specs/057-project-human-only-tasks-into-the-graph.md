@@ -36,20 +36,20 @@ for a human, so the two are independent and neither derives the other.
 `wl:taskState` does not carry it either: a human-only task sits in `ready`
 alongside every other pickable task.
 
-Because the flag lives in the backbone and nothing projected it, the graph
-answered "which tasks unlock the most work" without being able to answer
-"which of those wait on a person". One extra triple closes that gap.
-
 ## 2. Amendment to 006 §11 {#sec-2}
 
-Spec 006 §11 holds the table of what the projector emits. Add this row, after
-the Task node row:
+Spec 006 §11 holds the table of what the projector emits. `wl:humanOnly` is a
+Task attribute, not an entity or an edge, so it joins the property list on the
+existing Task node row rather than getting a row of its own. That row reads:
 
 | Entity / edge | Layer | Authority | v1? | Projected? | Trigger |
 |---|---|---|---|---|---|
-| `wl:humanOnly` (Task, emitted only when true) | 2 | backbone | v1 | yes | task lifecycle event (create/edit) |
+| Task node + `wl:concern`/`wl:priority`/`wl:taskState`/`wl:taskKind`/`wl:humanOnly` (only when true) + `dct:title`/`created`/`modified` + `prov:wasAssociatedWith` | 2 | backbone | v1 | **yes** | task lifecycle event (create/claim/transition/done/block) |
 
-Everything else in §11 is unchanged.
+The Trigger cell is unchanged because the trigger is unchanged: the projector
+re-renders every task of a dirty project and replaces the project's named
+graph wholesale, so any lifecycle event that dirties the project rewrites this
+triple with the rest of the task. Everything else in §11 is unchanged.
 
 ## 3. Scope {#sec-3}
 
@@ -64,7 +64,3 @@ how the projection already treats `wl:concern`: an absent optional, not a
 present empty one. The cost is that a consumer must read absence as false
 rather than as unknown, which is what the ontology comment and the
 `wl:TaskShape` message both say.
-
-`ns/ontology.ttl` declares the term (`owl:DatatypeProperty`,
-`owl:FunctionalProperty`, domain `wl:Task`, range `xsd:boolean`) and
-`ns/shapes.ttl` constrains it on `wl:TaskShape` with `sh:maxCount 1`.

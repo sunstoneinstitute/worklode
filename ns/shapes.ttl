@@ -197,6 +197,7 @@ wl:TaskShape a sh:NodeShape ;
         sh:path wl:humanOnly ;
         sh:datatype xsd:boolean ;
         sh:maxCount 1 ;
+        sh:in ( true ) ;
         sh:message "A Task's wl:humanOnly, when present, is the boolean true (absent means false)." ;
     ] ;
     sh:property [

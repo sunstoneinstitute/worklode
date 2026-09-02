@@ -100,7 +100,7 @@ func TestTaskTriplesOmitsUnsetOptionalFields(t *testing.T) {
 	task := model.Task{
 		ID:        "WL-1",
 		Project:   "worklode",
-		Title:     "No concern, no author",
+		Title:     "Nothing optional set",
 		Priority:  "low",
 		Kind:      "chore",
 		State:     "draft",
