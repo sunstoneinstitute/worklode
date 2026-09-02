@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-/lode:anti-smartass
+Apply the `lode:anti-smartass` skill's plain-language style whenever writing
+specs, plans, docs, or other prose in this repo.
 
 ## What this is
 
