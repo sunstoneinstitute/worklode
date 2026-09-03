@@ -765,3 +765,14 @@ Recorded by WL-347's housekeeping pass over the doc-version-history plan:
   diff between two versions was declined by the doc-version-history plan and
   025 §4.5 (versions are immutable snapshots read whole). Check here before
   filing a diffing feature request as new.
+
+Recorded by WL-643's pass over spec 040 §5 and §7:
+
+- `[P3]` **A chunker change does not make the index stale.** `content_hash`
+  (040 §5, §7) covers a subject's source columns only, so `ChunkRunes`,
+  `ChunkOverlap` or a `context_header` format change leaves every existing
+  chunk row looking fresh while the text it holds no longer matches what the
+  chunker would produce today. §8 handles the sibling case for the provider,
+  by nulling `embedding`; nothing handles it for the chunker. Re-indexing is
+  a manual truncate until it does. Folding a chunker version into the hashed
+  expression would fix it, at the cost of one full re-embed per bump.
