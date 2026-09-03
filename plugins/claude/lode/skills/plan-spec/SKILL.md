@@ -43,7 +43,7 @@ Draft each plan in a scratch file, lint it, then create the document — the
 backbone is where the plan lives, the scratch file is just the editor buffer:
 
 ```bash
-lode doc anchors <path>                      # local lint: anchors and ## Tasks
+lode doc lint <path>                          # local lint: anchors and ## Tasks
 lode doc add --kind plan --slug <slug> --file <path>
 ```
 

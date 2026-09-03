@@ -24,7 +24,7 @@ superseded`; `proposed` was retired — a document under review just stays
 ## Authoring flow
 
 ```bash
-lode doc anchors <file>                                    # local lint before creating/editing
+lode doc lint <file>                                       # local lint before creating/editing
 lode doc add --kind spec --slug <slug> --file <file>       # kind: spec, adr, plan — creates it, draft
 lode doc edit <ref> --file <file>                    # replace a draft's body
 lode doc revise <ref> --file <file>                  # open a candidate revision on an accepted doc; --accept lands it

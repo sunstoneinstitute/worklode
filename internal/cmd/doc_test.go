@@ -832,11 +832,11 @@ func TestDocListByOwner(t *testing.T) {
 	}
 }
 
-// TestDocLint covers `lode doc lint` end to end: an unresolved covers ref
-// and a resolved-but-bad-anchor covers ref are both reported, in both human
-// and --json output, and the command exits non-zero while findings exist
-// (matching `lode doc anchors`, its local/file-based sibling) — clean of
-// them, it exits zero.
+// TestDocLint covers `lode doc lint` (no file argument) end to end: an
+// unresolved covers ref and a resolved-but-bad-anchor covers ref are both
+// reported, in both human and --json output, and the command exits non-zero
+// while findings exist (matching `lode doc lint <file>`, its local/file-based
+// sibling) — clean of them, it exits zero.
 func TestDocLint(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
@@ -895,9 +895,9 @@ covers:
 	}
 }
 
-// --- lode doc anchors (the local pre-accept lint, 025 §18) ---------------
+// --- lode doc lint <file> (the local pre-accept lint, 025 §18) -----------
 
-func TestDocAnchors(t *testing.T) {
+func TestDocLintFile(t *testing.T) {
 	cases := map[string]struct {
 		body     string
 		wantErr  bool
@@ -943,7 +943,7 @@ func TestDocAnchors(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			file := writeDocFile(t, tc.body)
-			cmd := newDocAnchorsCmd()
+			cmd := newDocLintCmd()
 			out := &strings.Builder{}
 			cmd.SetArgs([]string{file})
 			cmd.SetOut(out)
@@ -961,8 +961,8 @@ func TestDocAnchors(t *testing.T) {
 	}
 }
 
-func TestDocAnchorsMissingFile(t *testing.T) {
-	cmd := newDocAnchorsCmd()
+func TestDocLintFileMissingFile(t *testing.T) {
+	cmd := newDocLintCmd()
 	cmd.SetArgs([]string{filepath.Join(t.TempDir(), "nope.md")})
 	cmd.SetOut(io.Discard)
 	cmd.SetErr(io.Discard)

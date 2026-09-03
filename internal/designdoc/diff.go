@@ -72,7 +72,7 @@ func CompareSections(accepted, candidate *Document, depthLimit int) SectionDiff 
 // DepthViolations reports the 025 §6.1 depth rule over one document: an
 // anchored section deeper than limit is unaddressable content masquerading as
 // a node. It needs no prior version, which makes it the whole gate wherever
-// there is nothing to diff against — a first accept, and `lode doc anchors`.
+// there is nothing to diff against — a first accept, and `lode doc lint <file>`.
 // Strings are the same ones SectionDiff.Violations() would emit for TooDeep.
 func DepthViolations(d *Document, limit int) []string {
 	var out []string
