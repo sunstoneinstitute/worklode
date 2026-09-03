@@ -11,26 +11,27 @@ multi-agent, multi-repo work. It ships as six Go executables from one module
 hot paths), and `lode-server`, `lode-watch`, `lode-migrate` (operator side),
 backed by Postgres with an append-only event log for provenance. The old
 subcommand shims (hook, statusline, serve, watch, migrate) were removed
-after the first split release shipped (053 §3, WL-319). Design lives
-in `docs/specs/` (numbered, flat); start with
-`004-execution-backbone.md`; `docs/specs/index.yaml` is the generated map of
-every document's sections.
+after the first split release shipped (053 §3, WL-319).
 
-**To read what a spec says, open `docs/specs/inlined/` — not `docs/specs/`.**
-Each file there is one spec with every in-force amendment and supersession
-already folded into the text, attributed to the section it came from. Reading
-004 in `docs/specs/` tells you what 004 said when it was written; four other
-specs have amended it since. `docs/specs/` stays the corpus of record — **edit
-there, never in `inlined/`** — and a pre-commit hook regenerates the views.
-Implementation plans live in `docs/plans/`; `docs/follow-ups.md` holds known
-non-blocking gaps — check it before filing something as new.
+**Design documents live in the backbone, not in this tree (055).** Specs,
+ADRs and plans are rows in Postgres, read and written through `lode doc`.
+`lode doc list --kind spec` is the map; `lode show WL-SPEC-4` starts you on
+the execution backbone.
+
+**To read what a spec says, use `lode show <ref> --inline`.** That folds every
+in-force amendment and supersession into the text, attributed to the section it
+came from. A bare `lode show WL-SPEC-4` gives you what 004 said when it was
+written; four other specs have amended it since. Write with `lode doc add` and
+`lode doc edit`; an accepted document is changed by `lode doc revise`, never in
+place. `docs/follow-ups.md` holds known non-blocking gaps — check it before
+filing something as new.
 
 ## Where the rest of the guidance lives
 
 Each area below has a skill that carries its detail; it fires on the work
 itself, but load it by name if it has not:
 
-- **Writing or editing anything under `docs/specs/` or `docs/plans/`** —
+- **Writing or editing a spec, ADR or plan through `lode doc`** —
   frontmatter, `covers:`, `{#sec-N}` anchors, amend/supersede, the `ns/`
   `wl:` ontology and its camelCase term naming, and the spec/plan/task model
   (what is a claimable task vs a document status). See
@@ -89,8 +90,8 @@ run either bare** — for both reasons above:
 ```bash
 go test -trimpath ./internal/store -run TestClaim   # single test
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
-./scripts/secfmt.py -l              # spec section numbering + anchor check
-./scripts/inlinespec.py             # regenerate docs/specs/inlined/
+lode doc anchors <file>             # lint a draft's anchors before posting it
+lode doc lint                       # report the corpus's dangling references
 ./scripts/nsgen.py                  # regenerate internal/ns/gen.go from ns/concept.ttl
 ./scripts/gen-emoji.py              # regenerate internal/ui/assets/emoji.json (editor completion)
 ```
@@ -254,6 +255,6 @@ for the accuracy bar that copy is also held to.
 Server-side changes that add an HTTP endpoint, background loop, outbound
 call, or store operation with meaningful outcomes must add or extend
 `worklode_*` Prometheus metrics in the owning package, with tests. Follow the
-conventions in `docs/specs/022-prometheus-metrics.md`: nil-safe metrics
+conventions in `WL-SPEC-22` (Prometheus metrics): nil-safe metrics
 struct in the owning package's `metrics.go`, `prometheus.Registerer`
 threaded from `serve.go`, bounded label values, `worklode_` prefix.

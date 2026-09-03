@@ -47,7 +47,7 @@ registry_package webhooks`) are not — regardless of their priority tag.
 
 **If it is too big, do not attempt it.** Instead:
 
-1. Draft the plan in a scratch file per `docs/authoring-design-docs.md` —
+1. Draft the plan in a scratch file per the `worklode-docs-authoring` skill —
    frontmatter first, keys ordered lifecycle → `covers` → dependency:
    `status: draft`, then `covers:` naming the spec sections it undertakes, or
    `covers: NO-SPEC` when nothing governs it. Load

@@ -189,14 +189,14 @@ Calibrated from the 032 comparison, where the same part drew plans from 474 to
 
 Quote exact values from the spec in Global Constraints — palette hexes, label
 spellings, ordered destination lists. Do not restate spec prose; a plan
-carrying durable rationale means the spec was incomplete
-(`docs/authoring-design-docs.md`).
+carrying durable rationale means the spec was incomplete (see the
+`worklode-docs-authoring` skill).
 
 ## 5. Worklode plan conventions
 
-Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), slug and
-reference syntax: `docs/authoring-design-docs.md` §"Declaring a plan's tasks",
-and the `worklode-docs-authoring` skill for how a document is created. A series
+Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), and
+reference syntax: the `worklode-docs-authoring` skill's "Declaring a plan's
+tasks" section, which also covers how a document is created. A series
 part restarts task numbering at 1; ordering across parts is a document-level
 edge, never a task number. Declare it with `blockedBy:` on the later part
 (WL-143): it writes the same single `blocks` row with the ends swapped, and it

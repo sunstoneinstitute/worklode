@@ -1801,3 +1801,74 @@ func TestResolveDocRefFullGrammar(t *testing.T) {
 		t.Errorf("error = %q, want both real candidates named", msg)
 	}
 }
+
+// TestLintDocsAPI covers GET /api/v1/docs/lint end to end: an unresolved
+// covers ref and a resolved-but-bad-anchor covers ref are both reported for
+// the project scope, project scoping excludes another project's findings,
+// and the response stays a plain array (never null) on an empty scope.
+func TestLintDocsAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 25,
+		Slug: "025-documents-in-the-backbone", Body: docSpecBody,
+	})
+	lintPlanBody := `---
+status: draft
+covers:
+  - 025-documents-in-the-backbone.md#sec-1
+  - 025-documents-in-the-backbone.md#sec-99
+  - 999-nowhere.md#sec-1
+---
+
+# Plan under lint
+`
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "lint-plan", Body: lintPlanBody,
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/docs/lint?project=proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("lint docs status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var findings []model.DocLintFinding
+	decodeInto(t, rr, &findings)
+
+	var planFindings []model.DocLintFinding
+	for _, f := range findings {
+		if f.Doc == plan.ID {
+			planFindings = append(planFindings, f)
+		}
+	}
+	if len(planFindings) != 2 {
+		t.Fatalf("planFindings = %+v, want exactly 2 (sec-1 resolves cleanly and is excluded)", planFindings)
+	}
+	var unresolved, missingAnchor *model.DocLintFinding
+	for i := range planFindings {
+		switch planFindings[i].Kind {
+		case "unresolved":
+			unresolved = &planFindings[i]
+		case "missing-anchor":
+			missingAnchor = &planFindings[i]
+		}
+	}
+	if unresolved == nil || unresolved.Ref != "999-nowhere.md#sec-1" {
+		t.Errorf("unresolved = %+v, want the 999-nowhere.md#sec-1 ref", unresolved)
+	}
+	if missingAnchor == nil || missingAnchor.ToDoc != spec.ID || missingAnchor.ToAnchor != "sec-99" {
+		t.Errorf("missingAnchor = %+v, want plan %d -> spec %d#sec-99", missingAnchor, plan.ID, spec.ID)
+	}
+
+	// Project scoping: "other" carries no documents, so its findings are empty
+	// — and JSON-encoded as [], never null.
+	rr = doReq(t, h, "GET", "/api/v1/docs/lint?project=other", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("lint docs (other) status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := strings.TrimSpace(rr.Body.String()); got != "[]" {
+		t.Errorf("lint docs (other) body = %q, want []", got)
+	}
+}

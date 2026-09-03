@@ -93,8 +93,8 @@ agent docs must not use it.
 
 It says nothing about whether the surrounding explanation is still true, whether
 a `--json` field an agent parses still exists, or what a command now does
-differently. It also does not read `docs/specs/` or `docs/plans/`, for the
-reason below.
+differently. It also does not read the design corpus, which lives in the
+backbone rather than this tree (055), for the reason below.
 
 ### Specs and plans are not corrected for a rename
 
@@ -108,7 +108,8 @@ specification.
 
 What a rename does owe the corpus is a **pointer**, and only where a section's
 subject *is* the command surface — a table of spellings, a "command surface"
-heading. That is an ordinary amendment (`docs/authoring-design-docs.md`): the
+heading. That is an ordinary amendment (see the `worklode-docs-authoring`
+skill): the
 inline `> **Amended by spec NNN.**` note next to the heading, `amends` on the
 renaming spec, `amendedBy` on the renamed one. A section that merely mentions a
 command in passing gets nothing.

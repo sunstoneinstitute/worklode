@@ -1,6 +1,6 @@
 ---
 name: worklode-ci
-description: Use when changing CI workflows or asking why a check did or did not run — "CI skipped my PR", "docs-only PR", "can-be-tested label", "the obsidian job did not run", "add a CI check", "the workflow", "paths filter", "www/ deploy", "e2e suite". Covers the docs-only skip and its docs/specs, docs/plans, plugins exemptions, and the subtree-scoped obsidian gate.
+description: Use when changing CI workflows or asking why a check did or did not run — "CI skipped my PR", "docs-only PR", "can-be-tested label", "the obsidian job did not run", "add a CI check", "the workflow", "paths filter", "www/ deploy", "e2e suite". Covers the docs-only skip and its plugins and agent-surface exemptions, and the subtree-scoped obsidian gate.
 ---
 
 # CI, workflows, and repo layout
@@ -13,8 +13,6 @@ Docs-only PRs (only `*.md`, `docs/`, `www/`) skip CI checks; the
 Some markdown is input, not prose, and is **exempt** from that skip — a PR
 touching only these still runs CI:
 
-- `docs/specs/`, `docs/plans/` — parsed by `internal/designdoc`; `secfmt` and
-  `inlinespec --check` run over them in `_lint.yml`
 - `plugins/` — shipped content behind the Codex mirror check
 - `CLAUDE.md`, `internal/cmd/CLAUDE.md`, `.claude/skills/`,
   `docs/agent-surfaces.md` — the agent surfaces `TestAgentSurfaces` checks for

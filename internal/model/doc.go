@@ -253,6 +253,39 @@ type DocSupersessionGap struct {
 	Unexplained []string `json:"unexplained"` // anchors, in document order
 }
 
+// DocLintFinding is one dangling frontmatter reference the corpus lint
+// found: a reference that resolved to nothing when its document's edges
+// were last built ("unresolved" — doc_edges.to_external or
+// doc_coverage_completed_with.to_external is set), or one that resolved but
+// whose anchor names no section of the target document
+// ("missing-anchor" — doc_edges.to_doc resolved, but to_anchor is not
+// among the target's doc_sections rows).
+//
+// Storing an unresolved reference verbatim is correct — a document created
+// later can still repoint it — so this is a read-only report, not a
+// refusal: nothing about writing an edge changes because of it.
+//
+// Doc/Project/Number/Slug/DocKind name the document whose frontmatter
+// declared the reference; FromAnchor is the section it was declared from,
+// "" for a document-level reference. Type is the edge's relation (covers,
+// requires, ...). Ref carries the verbatim unresolved reference and is set
+// only for "unresolved"; ToDoc/ToSlug/ToAnchor name the resolved-but-missing
+// target and are set only for "missing-anchor".
+type DocLintFinding struct {
+	Kind       string `json:"kind"` // unresolved | missing-anchor
+	Doc        int64  `json:"doc"`
+	Project    string `json:"project"`
+	Number     int    `json:"number"`
+	Slug       string `json:"slug"`
+	DocKind    string `json:"doc_kind"` // spec | adr | plan
+	FromAnchor string `json:"from_anchor,omitempty"`
+	Type       string `json:"type"`
+	Ref        string `json:"ref,omitempty"`
+	ToDoc      int64  `json:"to_doc,omitempty"`
+	ToSlug     string `json:"to_slug,omitempty"`
+	ToAnchor   string `json:"to_anchor,omitempty"`
+}
+
 // DocListResponse is the response body of GET /api/v1/docs. PlanningGaps is
 // populated only for ?needs_planning=true, one entry per document in Docs;
 // SupersessionGaps only for ?bare_superseded=true.

@@ -71,6 +71,7 @@ func newDocCmd() *cobra.Command {
 		newDocSubmitCmd(),
 		newDocReviseCmd(),
 		newDocAnchorsCmd(),
+		newDocLintCmd(),
 		newDocImportCmd(),
 		newDocTodoCmd(),
 		newDocDeleteCmd(),
@@ -320,6 +321,49 @@ func isPlanFile(doc *designdoc.Document) bool {
 	}
 	return fm.Kind == "plan" || len(fm.CoverageEntries()) > 0 ||
 		len(fm.Blocks) > 0 || len(fm.BlockedBy) > 0
+}
+
+// newDocLintCmd is newDocAnchorsCmd's corpus-wide sibling (055 §4.1): where
+// `doc anchors` lints one file on disk before it is ever posted, `doc lint`
+// reports the dangling frontmatter references already stored in the
+// backbone — a reference that resolved to nothing (store.LintDocs'
+// "unresolved"), or one that resolved but names an anchor its target
+// document does not have ("missing-anchor"). Both are stored deliberately —
+// a later document can still repoint an unresolved one — so this changes
+// nothing; only its exit code says whether the project's corpus is clean,
+// matching newDocAnchorsCmd's own convention.
+func newDocLintCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "lint",
+		Short: "Report dangling frontmatter references across the corpus",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			findings, raw, err := c.LintDocs(cmd.Context(), sc.Project)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+			} else {
+				cli.DocLintTable(cmd.OutOrStdout(), findings)
+			}
+			if len(findings) > 0 {
+				return fmt.Errorf("%d dangling reference(s)", len(findings))
+			}
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "filter by project id")
+	return cmd
 }
 
 // newDocShowCmd reads back one document: body, sections, and edges. Spec 061
