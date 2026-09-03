@@ -77,7 +77,7 @@ func TestHelpGroups(t *testing.T) {
 	}
 	help := out.String()
 
-	for _, want := range []string{"Available Commands:", "Shortcuts:\n  board"} {
+	for _, want := range []string{"Available Commands:", "Shortcuts:\n  board", "\n  next", "\n  status"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("lode --help is missing %q:\n%s", want, help)
 		}
@@ -85,8 +85,10 @@ func TestHelpGroups(t *testing.T) {
 	if strings.Contains(help, "Additional Commands:") {
 		t.Errorf("lode --help has ungrouped top-level commands:\n%s", help)
 	}
-	// A shortcut is listed once, under its own heading.
-	if n := strings.Count(help, "\n  board "); n != 1 {
-		t.Errorf("`board` appears %d times in lode --help, want 1:\n%s", n, help)
+	// Each shortcut is listed once, under its own heading.
+	for _, name := range []string{"board", "next", "status"} {
+		if n := strings.Count(help, "\n  "+name+" "); n != 1 {
+			t.Errorf("%q appears %d times in lode --help, want 1:\n%s", name, n, help)
+		}
 	}
 }
