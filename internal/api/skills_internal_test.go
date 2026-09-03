@@ -60,7 +60,7 @@ func TestRecommendationPins(t *testing.T) {
 
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
 	}))
 	t.Cleanup(fakeSrv.Close)
 
@@ -72,7 +72,7 @@ func TestRecommendationPins(t *testing.T) {
 	}
 
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
-	if err := st.ReplaceSkillEmbeddings(context.Background(), pinned.ID, [][]float32{{1, 0}}); err != nil {
+	if err := st.SeedSkillChunksForTests(context.Background(), pinned.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 
@@ -140,7 +140,7 @@ func TestRecommendationNoPins(t *testing.T) {
 	st := store.OpenTestStore(t)
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
 	}))
 	t.Cleanup(fakeSrv.Close)
 
@@ -151,7 +151,7 @@ func TestRecommendationNoPins(t *testing.T) {
 		embedder:   &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
-	if err := st.ReplaceSkillEmbeddings(context.Background(), sk.ID, [][]float32{{1, 0}}); err != nil {
+	if err := st.SeedSkillChunksForTests(context.Background(), sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 
@@ -223,7 +223,7 @@ func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
 	st := store.OpenTestStore(t)
 	ctx := context.Background()
 	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
-	if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+	if err := st.SeedSkillChunksForTests(ctx, sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 	if err := st.SetEmbeddingProviderID(ctx, "openai:old-model@example.com/v1/embeddings"); err != nil {
@@ -302,7 +302,7 @@ func TestNewServerSkillsSourcesWithGitHubApp(t *testing.T) {
 func TestDefaultSkillScoreFloor(t *testing.T) {
 	t.Parallel()
 	cosVector := func(cos float64) []float32 {
-		return []float32{float32(cos), float32(math.Sqrt(1 - cos*cos))}
+		return store.VecForTests(float32(cos), float32(math.Sqrt(1-cos*cos)))
 	}
 
 	if n := recommendMatchCountAtCosine(t, cosVector(0.30)); n != 0 {
@@ -347,7 +347,7 @@ func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	// attribute to the configured provider, and a store seeded out of band is
 	// exactly that case.
 	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
-	if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+	if err := st.SeedSkillChunksForTests(ctx, sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 
@@ -429,13 +429,13 @@ func TestSkillMatchesLimitClamped(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < maxSkillLimit+5; i++ {
 		sk := seedSkillDirect(t, st, fmt.Sprintf("skill-%02d", i), "matches everything")
-		if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{{1, 0}}); err != nil {
+		if err := st.SeedSkillChunksForTests(ctx, sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 			t.Fatalf("replace embeddings: %v", err)
 		}
 	}
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
 	}))
 	t.Cleanup(fakeSrv.Close)
 	s := &server{
@@ -452,36 +452,25 @@ func TestSkillMatchesLimitClamped(t *testing.T) {
 	}
 }
 
-// seedMixedDimensionCorpus leaves the store in the one state that makes
-// every cosine query fail: two skills whose vectors have different
-// dimensions. ReplaceSkillEmbeddings validates within a call, not across
-// them, so a provider swap that outran an invalidation produces exactly this.
-func seedMixedDimensionCorpus(t *testing.T, st *store.Store) {
-	t.Helper()
-	ctx := context.Background()
-	two := seedSkillDirect(t, st, "two-dim", "Vectors from the old model")
-	three := seedSkillDirect(t, st, "three-dim", "Vectors from the new model")
-	if err := st.ReplaceSkillEmbeddings(ctx, two.ID, [][]float32{{1, 0}}); err != nil {
-		t.Fatalf("replace 2-dim embeddings: %v", err)
-	}
-	if err := st.ReplaceSkillEmbeddings(ctx, three.ID, [][]float32{{1, 0, 0}}); err != nil {
-		t.Fatalf("replace 3-dim embeddings: %v", err)
-	}
-	if _, err := st.RecommendSkills(ctx, []float32{1, 0}, 5, 0.35); err == nil {
-		t.Fatal("setup: want the corpus to make vector queries fail")
-	}
-}
-
 // TestRecommendationPinsSurviveMatchQueryFailure is the store-side half of
-// the degradation contract: a mixed-dimension corpus makes RecommendSkills
-// error, and that must degrade to pins-only exactly like a provider failure
-// rather than 500. The brief path shares skillMatches, so a 500 here would
-// mean nobody could get a brief either.
+// the degradation contract: a cosine query that errors must degrade to
+// pins-only exactly like a provider failure rather than 500. The brief path
+// shares skillMatches, so a 500 here would mean nobody could get a brief
+// either.
+//
+// The failure is provoked with a query vector of the wrong width. 0061's
+// vector(768) typmod makes the old trigger — a corpus holding two widths at
+// once — unreachable, but a provider swap that outran an invalidation still
+// produces a query the stored vectors cannot be compared against.
 func TestRecommendationPinsSurviveMatchQueryFailure(t *testing.T) {
 	t.Parallel()
 	st := store.OpenTestStore(t)
+	ctx := context.Background()
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
-	seedMixedDimensionCorpus(t, st)
+	other := seedSkillDirect(t, st, "debugging", "Systematic debugging")
+	if err := st.SeedSkillChunksForTests(ctx, other.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
+		t.Fatalf("seed chunks: %v", err)
+	}
 
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

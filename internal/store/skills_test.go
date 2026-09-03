@@ -255,7 +255,7 @@ func TestSkillsMissingEmbeddings(t *testing.T) {
 		}
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
-	if err := s.ReplaceSkillEmbeddings(ctx, tdd.ID, [][]float32{{1, 0, 0}}); err != nil {
+	if err := s.SeedSkillChunksForTests(ctx, tdd.ID, [][]float32{vec(1, 0, 0)}); err != nil {
 		t.Fatalf("embed tdd: %v", err)
 	}
 	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", []string{"p:tdd", "p:debugging"}); err != nil {
@@ -274,7 +274,7 @@ func TestSkillsMissingEmbeddings(t *testing.T) {
 	}
 
 	// Embedding the last one empties the set.
-	if err := s.ReplaceSkillEmbeddings(ctx, got[0].ID, [][]float32{{0, 1, 0}}); err != nil {
+	if err := s.SeedSkillChunksForTests(ctx, got[0].ID, [][]float32{vec(0, 1, 0)}); err != nil {
 		t.Fatalf("embed debugging: %v", err)
 	}
 	got, err = s.SkillsMissingEmbeddings(ctx)

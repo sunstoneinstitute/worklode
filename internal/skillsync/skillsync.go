@@ -17,7 +17,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -122,7 +124,7 @@ func InvalidateOnProviderChange(ctx context.Context, st *store.Store, p embed.Pr
 	if stored == id {
 		return nil
 	}
-	n, err := st.ClearAllSkillEmbeddings(ctx)
+	n, err := st.ClearAllChunkVectors(ctx)
 	if err != nil {
 		return err
 	}
@@ -150,7 +152,10 @@ func (sy *Syncer) embedMissing(ctx context.Context) (int, error) {
 	}
 	n := 0
 	for _, sk := range skills {
-		if err := sy.embedSkill(ctx, sk.ID, sk.Description, sk.SkillMD); err != nil {
+		if err := sy.embedSkill(ctx, skillToEmbed{
+			id: sk.ID, name: sk.Name, description: sk.Description,
+			contentHash: sk.ContentHash, skillMD: sk.SkillMD,
+		}); err != nil {
 			sy.log().Warn("skill embed failed", "repo", sk.SourceRepo, "skill", sk.Name, "err", err)
 			continue
 		}
@@ -201,7 +206,10 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 		if changed {
 			sum.Changed++
 			if sy.Embed != nil {
-				if err := sy.reembed(ctx, id, u.Description, u.SkillMD); err != nil {
+				if err := sy.reembed(ctx, skillToEmbed{
+					id: id, name: u.Name, description: u.Description,
+					contentHash: u.ContentHash, skillMD: u.SkillMD,
+				}); err != nil {
 					sy.warn(src, "skill embed failed", "skill", u.Name, "err", err)
 				} else {
 					sum.Embedded++
@@ -256,20 +264,47 @@ func (sy *Syncer) liveCount(ctx context.Context, repo string) int {
 // instead would, on failure, leave vectors describing content the skill no
 // longer has — and its content hash now matches, so nothing would ever
 // replace them. Missing vectors are repairable; stale ones are invisible.
-func (sy *Syncer) reembed(ctx context.Context, skillID int64, description, skillMD string) error {
-	if err := sy.Store.ReplaceSkillEmbeddings(ctx, skillID, nil); err != nil {
+func (sy *Syncer) reembed(ctx context.Context, sk skillToEmbed) error {
+	if err := sy.Store.ReplaceSubjectChunks(ctx, sk.subject(), nil, nil); err != nil {
 		return err
 	}
-	return sy.embedSkill(ctx, skillID, description, skillMD)
+	return sy.embedSkill(ctx, sk)
 }
 
-func (sy *Syncer) embedSkill(ctx context.Context, skillID int64, description, skillMD string) error {
-	chunks := embed.Chunks(description+"\n\n"+skillMD, embed.ChunkRunes, embed.ChunkOverlap)
-	vecs, err := sy.Embed.Embed(ctx, embed.RoleDocument, chunks)
+// skillToEmbed is what embedding one skill needs, from either the upsert that
+// just changed it or the row embedMissing found.
+type skillToEmbed struct {
+	id          int64
+	name        string
+	description string
+	contentHash string
+	skillMD     string
+}
+
+func (sk skillToEmbed) subject() store.ChunkSubject {
+	return store.ChunkSubject{
+		Kind:        store.SubjectSkill,
+		SkillID:     sk.id,
+		ContentHash: sk.contentHash,
+	}
+}
+
+// embedSkill chunks a skill the way spec 040 §4 does for every subject kind
+// and writes the result to index_chunks. Interim glue: the convergence loop
+// takes this over and skillsync stops embedding entirely (040 §7).
+func (sy *Syncer) embedSkill(ctx context.Context, sk skillToEmbed) error {
+	chunks := corpusindex.ChunkSkill(model.Skill{Name: sk.name, Description: sk.description}, sk.skillMD)
+	// The header is prepended to the text as the embed input, so the vector is
+	// conditioned on where the text lives (§4.3); the two are stored apart.
+	texts := make([]string, len(chunks))
+	for i, c := range chunks {
+		texts[i] = c.Header + "\n\n" + c.Text
+	}
+	vecs, err := sy.Embed.Embed(ctx, embed.RoleDocument, texts)
 	if err != nil {
 		return err
 	}
-	return sy.Store.ReplaceSkillEmbeddings(ctx, skillID, vecs)
+	return sy.Store.ReplaceSubjectChunks(ctx, sk.subject(), chunks, vecs)
 }
 
 // file is one file inside a skill dir. exec carries the executable bit, which
