@@ -398,7 +398,7 @@ func TestProjectShowWithNoCurrentProject(t *testing.T) {
 	}
 }
 
-func TestProjectDoctorRendersReport(t *testing.T) {
+func TestProjectHealthRendersReport(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/repos/doctor" {
 			w.WriteHeader(http.StatusNotFound)
@@ -432,9 +432,9 @@ func TestProjectDoctorRendersReport(t *testing.T) {
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", "wl_test")
 
-	out, err := runLode(t, "project", "doctor")
+	out, err := runLode(t, "project", "health")
 	if err != nil {
-		t.Fatalf("project doctor: %v\n%s", err, out)
+		t.Fatalf("project health: %v\n%s", err, out)
 	}
 	// A null app_installed renders as unchecked either way, but the reason
 	// separates "no App configured" from "the check did not finish"; only a
@@ -450,9 +450,9 @@ func TestProjectDoctorRendersReport(t *testing.T) {
 		}
 	}
 
-	out, err = runLode(t, "project", "doctor", "--json")
+	out, err = runLode(t, "project", "health", "--json")
 	if err != nil {
-		t.Fatalf("project doctor --json: %v\n%s", err, out)
+		t.Fatalf("project health --json: %v\n%s", err, out)
 	}
 	if !strings.Contains(out, `"stale": true`) && !strings.Contains(out, `"stale":true`) {
 		t.Fatalf("--json output does not round-trip stale:\n%s", out)
