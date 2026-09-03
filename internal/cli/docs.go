@@ -71,6 +71,17 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
 }
 
+// LintDocs calls GET /api/v1/docs/lint?project=: the corpus-wide report of
+// dangling frontmatter references (055 §4.1). project narrows the answer;
+// "" answers over every project the caller may read.
+func (c *Client) LintDocs(ctx context.Context, project string) ([]model.DocLintFinding, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	return doJSON[[]model.DocLintFinding](ctx, c, http.MethodGet, withQuery("/api/v1/docs/lint", q), nil, "doc lint")
+}
+
 // ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
 // reference names — an id or an exact slug (025 §14.3). The server owns the
 // grammar and its ambiguity rule, so a ref costs one indexed lookup rather
@@ -343,6 +354,30 @@ func docGapTable(w io.Writer, ratioHeader, anchorHeader string, docs []model.Doc
 		tbl.add(DocRef(d), d.Title,
 			fmt.Sprintf("%d/%d", len(anchors), sections),
 			strings.Join(anchors, " "))
+	}
+	tbl.flush(w)
+}
+
+// DocLintTable prints `lode doc lint`'s corpus-wide dangling-reference
+// report: one row per finding — the source document by slug (a finding
+// carries no project key to build the 025 §14.3 shorthand from, unlike a
+// document listing), the section it was declared from, the edge type, and
+// what's wrong: the verbatim unresolved reference, or the anchor missing
+// from its resolved target.
+func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
+	tbl := newTable(
+		column{header: "DOC"},
+		column{header: "KIND"},
+		column{header: "FROM"},
+		column{header: "TYPE"},
+		column{header: "DETAIL"},
+	)
+	for _, f := range findings {
+		detail := f.Ref
+		if f.Kind == "missing-anchor" {
+			detail = fmt.Sprintf("%s#%s: no such section", f.ToSlug, f.ToAnchor)
+		}
+		tbl.add(f.Slug, f.Kind, dash(f.FromAnchor), f.Type, detail)
 	}
 	tbl.flush(w)
 }

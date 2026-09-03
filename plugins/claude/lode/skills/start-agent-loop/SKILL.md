@@ -24,7 +24,7 @@ unbounded.
 | nothing | any ready task | `lode work next --json` |
 | `--kind <k>`, `--strict-focus` | narrowed frontier | the same, with those flags |
 | bugs, bugfixes, chores, "clean up" | maintenance | `lode task list --status ready --kind bug --json`, then `--kind chore` once bugs run dry |
-| a spec (`032`, `WL-SPEC-32`, `docs/specs/032-*.md`), a plan slug, or "finish <feature>" | one spec through to done | see **Spec focus** |
+| a spec (`032`, `WL-SPEC-32`), a plan slug, or "finish <feature>" | one spec through to done | see **Spec focus** |
 | unblock, unblocking, "get things moving" | clear blockers | see **Unblock focus** |
 | a bare task id (`WL-429`) | that task, then stop | `lode work next WL-429 --json` |
 

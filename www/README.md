@@ -50,10 +50,10 @@ Apply the `can-be-tested` label to force a full run.
 ## Content
 
 The copy was derived from the umbrella spec, which has since been removed
-(the corpus is its own map — `docs/specs/index.yaml`). The two-store split and
-the ambition-reconciliation thesis are stated in `docs/specs/006-knowledge-graph.md`;
-the layer model in `docs/specs/007-drift-and-overview.md`; the document lifecycle
-in `docs/specs/025-documents-in-the-backbone.md`. When the architecture changes
+(`lode doc list --kind spec` is the map). The two-store split and
+the ambition-reconciliation thesis are stated in `WL-SPEC-6` (knowledge graph);
+the layer model in `WL-SPEC-7` (drift and overview); the document lifecycle
+in `WL-SPEC-25` (documents in the backbone). When the architecture changes
 materially, update this copy too — nothing derives it automatically.
 
 The Escalation section (`#ladder`) describes 025 §8, which is fully specified

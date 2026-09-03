@@ -832,6 +832,69 @@ func TestDocListByOwner(t *testing.T) {
 	}
 }
 
+// TestDocLint covers `lode doc lint` end to end: an unresolved covers ref
+// and a resolved-but-bad-anchor covers ref are both reported, in both human
+// and --json output, and the command exits non-zero while findings exist
+// (matching `lode doc anchors`, its local/file-based sibling) — clean of
+// them, it exits zero.
+func TestDocLint(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	specFile := writeDocFile(t, docSpecTwoSections)
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--slug", "my-spec", "--file", specFile); err != nil {
+		t.Fatalf("doc add spec: %v", err)
+	}
+
+	lintPlanBody := `---
+status: draft
+covers:
+  - my-spec#sec-1
+  - my-spec#sec-99
+  - 999-nowhere.md#sec-1
+---
+
+# Plan under lint
+`
+	planFile := writeDocFile(t, lintPlanBody)
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "plan",
+		"--slug", "lint-plan", "--file", planFile); err != nil {
+		t.Fatalf("doc add plan: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "lint", "--project", "proj")
+	if err == nil {
+		t.Fatalf("doc lint: err = nil, want a non-zero exit while findings exist\noutput: %s", out)
+	}
+	if !strings.Contains(out, "999-nowhere.md#sec-1") || !strings.Contains(out, "sec-99") {
+		t.Errorf("doc lint output = %q, want both dangling references named", out)
+	}
+	if strings.Contains(out, "my-spec#sec-1\n") || strings.Contains(out, " sec-1 ") {
+		t.Errorf("doc lint output = %q, want the resolved sec-1 ref omitted", out)
+	}
+
+	out, err = runLode(t, "doc", "lint", "--project", "proj", "--json")
+	if err == nil {
+		t.Fatalf("doc lint --json: err = nil, want a non-zero exit while findings exist\noutput: %s", out)
+	}
+	var findings []model.DocLintFinding
+	if err := json.Unmarshal([]byte(out), &findings); err != nil {
+		t.Fatalf("decode doc lint --json %q: %v", out, err)
+	}
+	if len(findings) != 2 {
+		t.Fatalf("findings = %+v, want exactly 2", findings)
+	}
+
+	// A project with no documents at all is clean: exit 0.
+	if _, _, err := c.CreateProject(context.Background(), model.CreateProjectInput{ID: "clean", Name: "Clean", Key: "CLEAN"}); err != nil {
+		t.Fatalf("create project clean: %v", err)
+	}
+	if out, err := runLode(t, "doc", "lint", "--project", "clean"); err != nil {
+		t.Fatalf("doc lint (clean project): %v\noutput: %s", err, out)
+	}
+}
+
 // --- lode doc anchors (the local pre-accept lint, 025 §18) ---------------
 
 func TestDocAnchors(t *testing.T) {
