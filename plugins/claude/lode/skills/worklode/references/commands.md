@@ -210,8 +210,6 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task stop` — Put a started task back to ready; keeps the assignment.
 - `lode task submit` — Move your in-progress task to review.
 - `lode task timeline` — Show a task's full history: state changes, PRs, CI, reviews, deployments, runtime events
-- `lode task token` — Mint a task-scoped bearer token (printed once — save it now)
-  Flags: --actor, --ttl
 - `lode task tree` — Show tasks with children, and their children, with per-parent progress
   Flags: --project, --repo
 - `lode task unassign` — Clear a task's assignee
@@ -224,8 +222,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 
 ## `lode token` — Manage bearer tokens
 
-- `lode token create` — Mint a bearer token for an actor (printed once — save it now)
-  Flags: --actor, --description, --expires-at
+- `lode token add` — Mint a bearer token for an actor (printed once — save it now)
+  Flags: --actor, --description, --expires-at, --task, --ttl
 - `lode token revoke` — Revoke a bearer token
 
 ## `lode uninstall` — Remove Worklode's hooks from this repo's VCS and coding agent
