@@ -132,3 +132,5 @@ configMapGenerator:
       - migrations/0059_doc_reviewers.down.sql
       - migrations/0060_task_human_only.up.sql
       - migrations/0060_task_human_only.down.sql
+      - migrations/0061_index_chunks.up.sql
+      - migrations/0061_index_chunks.down.sql

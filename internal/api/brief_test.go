@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 func TestTaskBrief(t *testing.T) {
@@ -303,7 +304,7 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
 	}))
 	defer fakeSrv.Close()
 
@@ -315,7 +316,7 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get skill: %v", err)
 	}
-	if err := st.ReplaceSkillEmbeddings(context.Background(), sk.ID, [][]float32{{1, 0}}); err != nil {
+	if err := st.SeedSkillChunksForTests(context.Background(), sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 
@@ -353,7 +354,7 @@ func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		embedCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
 	}))
 	defer fakeSrv.Close()
 
@@ -393,9 +394,11 @@ func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
 }
 
 // TestTaskBriefMatchQueryFailureDegrades is the brief-path half of the
-// degradation contract. A corpus left at two vector dimensions makes every
-// cosine query error; the brief is the gate on starting work, so it must
-// still serve pins with a warning rather than 500.
+// degradation contract. A query vector of the wrong width makes every cosine
+// comparison error; the brief is the gate on starting work, so it must still
+// serve pins with a warning rather than 500. (Before 0061 the trigger was a
+// corpus holding two widths at once; vector(768) makes that unreachable, so
+// the query side stands in for a provider swap that outran invalidation.)
 func TestTaskBriefMatchQueryFailureDegrades(t *testing.T) {
 	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -407,17 +410,14 @@ func TestTaskBriefMatchQueryFailureDegrades(t *testing.T) {
 	st, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
 	createProject(t, st, "proj")
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
-	seedSkill(t, st, "two-dim", "Vectors from the old model")
-	seedSkill(t, st, "three-dim", "Vectors from the new model")
+	seedSkill(t, st, "debugging", "Systematic debugging")
 	ctx := context.Background()
-	for name, vec := range map[string][]float32{"two-dim": {1, 0}, "three-dim": {1, 0, 0}} {
-		sk, err := st.GetSkill(ctx, name)
-		if err != nil {
-			t.Fatalf("get skill %s: %v", name, err)
-		}
-		if err := st.ReplaceSkillEmbeddings(ctx, sk.ID, [][]float32{vec}); err != nil {
-			t.Fatalf("replace embeddings %s: %v", name, err)
-		}
+	sk, err := st.GetSkill(ctx, "debugging")
+	if err != nil {
+		t.Fatalf("get skill: %v", err)
+	}
+	if err := st.SeedSkillChunksForTests(ctx, sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
+		t.Fatalf("seed chunks: %v", err)
 	}
 
 	task := createTaskViaAPI(t, h, token, map[string]any{

@@ -133,7 +133,7 @@ func TestRecommendWithProvider(t *testing.T) {
 	t.Parallel()
 	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
 	}))
 	defer fakeSrv.Close()
 
@@ -145,7 +145,7 @@ func TestRecommendWithProvider(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get skill: %v", err)
 	}
-	if err := st.ReplaceSkillEmbeddings(context.Background(), sk.ID, [][]float32{{1, 0}}); err != nil {
+	if err := st.SeedSkillChunksForTests(context.Background(), sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
 		t.Fatalf("replace embeddings: %v", err)
 	}
 
