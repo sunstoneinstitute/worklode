@@ -37,7 +37,7 @@ func newWorkCmd() *cobra.Command {
 	cmd.AddCommand(
 		newNextCmd(),
 		newResumeCmd(),
-		newDoneCmd(),
+		newSubmitCmd(),
 		newBlockCmd(),
 		newStatusCmd(),
 	)
@@ -446,16 +446,17 @@ func runResume(cmd *cobra.Command, dir string) error {
 	return nil
 }
 
-// newDoneCmd builds `lode work done`: the worktree's "my work here is finished"
-// verb. It submits the task for review (in_progress -> in_review) and closes
-// the lease; it never moves the task to `merged`. `merged` means the work
-// landed on the default branch (spec 004 §5.1) — a fact only the PR-merge
-// webhook, the delivery resolver, or a human running `lode task set state
-// merged <id>` for a change that carries no PR can know. An agent finishing in
-// a worktree knows none of it: the branch may not even be pushed yet.
-func newDoneCmd() *cobra.Command {
+// newSubmitCmd builds `lode work submit`: the worktree's "my work here is
+// finished" verb. It submits the task for review (in_progress -> in_review)
+// and closes the lease; it never moves the task to `merged`. `merged` means
+// the work landed on the default branch (spec 004 §5.1) — a fact only the
+// PR-merge webhook, the delivery resolver, or a human running `lode task set
+// state merged <id>` for a change that carries no PR can know. An agent
+// finishing in a worktree knows none of it: the branch may not even be
+// pushed yet.
+func newSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "done",
+		Use:   "submit",
 		Short: "Submit the current worktree's task for review and release its lease",
 		Long: "Submit the current worktree's task for review and release its lease.\n\n" +
 			"The task moves to in_review, not merged: `merged` records that the\n" +
@@ -501,7 +502,7 @@ func newDoneCmd() *cobra.Command {
 }
 
 // submitForReview moves taskID to in_review, tolerating a task already there:
-// a worker that ran `lode task submit` before `lode work done` should still get its
+// a worker that ran `lode task submit` before `lode work submit` should still get its
 // lease released rather than a transition error. Any other refusal is the
 // server's to report, unchanged.
 func submitForReview(ctx context.Context, c *cli.Client, taskID string) (model.Task, []byte, error) {

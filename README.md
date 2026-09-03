@@ -377,7 +377,7 @@ without ever storing a value in worklode (spec 017).
   `lode work resume` run in a terminal.
 - **Running:** `lode secrets exec -- <command>` injects exactly the task's
   materialized names into the child's environment; `lode secrets status`
-  shows declared vs. materialized state. Items are purged on `lode work done`,
+  shows declared vs. materialized state. Items are purged on `lode work submit`,
   `lode work block`, and worktree removal — merely leaving a worktree keeps them,
   since the lease is still yours; `lode secrets purge --task <id>` is the
   manual escape hatch.
@@ -724,7 +724,7 @@ picking up work:
 - `/lode:next` — claim the next ready task, create its `.worktrees/<id>-<slug>`
   git worktree, bind the lease to it, and start from the injected task brief.
 - `/lode:resume` — re-acquire the task already bound to the current worktree.
-- `/lode:done` — mark the task done, release the lease, and print a
+- `/lode:done` — submit the task for review, release the lease, and print a
   worktree-cleanup hint.
 - `/lode:block --on <id>` — record a real blocker on another task and
   release the lease.
@@ -732,7 +732,7 @@ picking up work:
   heartbeat state.
 
 These are thin wrappers over the underlying `lode` subcommands: `lode work
-next`, `lode work resume`, `lode work done`, `lode work block`,
+next`, `lode work resume`, `lode work submit`, `lode work block`,
 `lode work status`, and `lode task brief <id>`.
 
 ## Development
