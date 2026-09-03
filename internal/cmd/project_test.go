@@ -36,19 +36,19 @@ func projectRepos(t *testing.T, id string) []model.RepoMapping {
 	return nil
 }
 
-// TestProjectRepoDoneState covers `lode project add-repo --done-state` and
-// `lode project set-repo --done-state` end to end against a real server.
+// TestProjectRepoDoneState covers `lode project repo add --done-state` and
+// `lode project repo edit --done-state` end to end against a real server.
 func TestProjectRepoDoneState(t *testing.T) {
 	_, c := lifecycleTestServer(t)
 	setupProject(t, c)
 
 	// runLode reuses rootCmd, so a flag value set by one call leaks into a
 	// later call that omits it: exercise the omitted-flag case first.
-	if out, err := runLode(t, "project", "add-repo", "proj", "acme/widgets"); err != nil {
-		t.Fatalf("add-repo: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "project", "repo", "add", "proj", "acme/widgets"); err != nil {
+		t.Fatalf("repo add: %v\noutput: %s", err, out)
 	}
-	if out, err := runLode(t, "project", "add-repo", "proj", "acme/docs", "--done-state", "released"); err != nil {
-		t.Fatalf("add-repo --done-state: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "project", "repo", "add", "proj", "acme/docs", "--done-state", "released"); err != nil {
+		t.Fatalf("repo add --done-state: %v\noutput: %s", err, out)
 	}
 
 	want := map[string]string{"acme/widgets": "merged", "acme/docs": "released"}
@@ -62,12 +62,12 @@ func TestProjectRepoDoneState(t *testing.T) {
 		t.Fatalf("repos missing from project list: %v", want)
 	}
 
-	out, err := runLode(t, "project", "set-repo", "acme/widgets", "--done-state", "deployed_prod")
+	out, err := runLode(t, "project", "repo", "edit", "acme/widgets", "--done-state", "deployed_prod")
 	if err != nil {
-		t.Fatalf("set-repo: %v\noutput: %s", err, out)
+		t.Fatalf("repo edit: %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(out, "deployed_prod") {
-		t.Fatalf("set-repo output = %q, want it to mention deployed_prod", out)
+		t.Fatalf("repo edit output = %q, want it to mention deployed_prod", out)
 	}
 	for _, m := range projectRepos(t, "proj") {
 		if m.Repo == "acme/widgets" && m.DoneState != "deployed_prod" {
@@ -76,13 +76,40 @@ func TestProjectRepoDoneState(t *testing.T) {
 	}
 
 	// The server rejects an unknown state, and the CLI surfaces the failure.
-	if out, err := runLode(t, "project", "set-repo", "acme/widgets", "--done-state", "bogus"); err == nil {
-		t.Fatalf("set-repo bogus: want error, got nil\noutput: %s", out)
+	if out, err := runLode(t, "project", "repo", "edit", "acme/widgets", "--done-state", "bogus"); err == nil {
+		t.Fatalf("repo edit bogus: want error, got nil\noutput: %s", out)
 	}
 	for _, m := range projectRepos(t, "proj") {
 		if m.Repo == "acme/widgets" && m.DoneState != "deployed_prod" {
 			t.Fatalf("acme/widgets done_state after rejected set = %q, want deployed_prod", m.DoneState)
 		}
+	}
+}
+
+// TestProjectRepoRemove covers `lode project repo remove`: the mapping goes,
+// the task filed against the repo keeps its project.
+func TestProjectRepoRemove(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	if out, err := runLode(t, "project", "repo", "add", "proj", "acme/widgets"); err != nil {
+		t.Fatalf("repo add: %v\noutput: %s", err, out)
+	}
+	out, err := runLode(t, "project", "repo", "remove", "acme/widgets")
+	if err != nil {
+		t.Fatalf("repo remove: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "acme/widgets") {
+		t.Fatalf("repo remove output = %q, want it to name the repo", out)
+	}
+	if repos := projectRepos(t, "proj"); len(repos) != 0 {
+		t.Fatalf("project repos after remove = %v, want none", repos)
+	}
+
+	// Unmapping something that was never mapped fails rather than reporting
+	// a removal that did not happen.
+	if out, err := runLode(t, "project", "repo", "remove", "acme/widgets"); err == nil {
+		t.Fatalf("repo remove unmapped: want error, got nil\noutput: %s", out)
 	}
 }
 
@@ -649,7 +676,7 @@ func TestProjectCrewRemove(t *testing.T) {
 		t.Fatalf("second removal: want an error, got nil\noutput: %s", out)
 	}
 
-	// --json is honored like the sibling 204-returning set-repo command: the
+	// --json is honored like the sibling 204-returning repo edit command: the
 	// server's empty body means printRaw writes nothing, not the prose message.
 	if out, err := runLode(t, "project", "crew", "add", "proj", "bob", "--role", "reporter"); err != nil {
 		t.Fatalf("re-seed bob: %v\noutput: %s", err, out)

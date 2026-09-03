@@ -358,6 +358,11 @@ type server struct {
 	// a metric.
 	crewChanges *prometheus.CounterVec
 
+	// repoMappings counts project/repo mapping changes, by action (add, edit,
+	// remove) and outcome; see admin.go and observeRepoMapping. The repo and
+	// the project are deliberately not labels: both are unbounded.
+	repoMappings *prometheus.CounterVec
+
 	// authzDecisions counts policy decisions by permission and outcome; see
 	// authz.go and observeAuthz.
 	authzDecisions *prometheus.CounterVec
@@ -713,6 +718,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/projects/{id}/session-usage", s.reportProjectSessionUsage)
 	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
 	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
+	r.api("DELETE /api/v1/repos/{owner}/{name}", s.removeRepo)
 	r.api("GET /api/v1/repos/doctor", s.reposDoctor)
 
 	r.api("POST /api/v1/actors", s.createActor)

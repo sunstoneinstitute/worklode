@@ -272,7 +272,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // handledEvents are the GitHub event names applyFunc routes. It is the single
-// source of truth: applyFunc switches over these names, and the add-repo
+// source of truth: applyFunc switches over these names, and the repo-add
 // subscription check compares an installation's subscriptions against them, so
 // adding a ninth event cannot leave the check behind.
 var handledEvents = []string{

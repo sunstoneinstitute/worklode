@@ -111,8 +111,6 @@ Flags: --project, --repo
 
 - `lode project add` — Create a project
   Flags: --key, --name
-- `lode project add-repo` — Map a GitHub repo to a project
-  Flags: --done-state
 - `lode project crew` — List, or manage, a project's Crew
 - `lode project crew add` — Add an actor to a project's Crew
   Flags: --deputy, --lead, --role
@@ -120,6 +118,12 @@ Flags: --project, --repo
 - `lode project doctor` — Report webhook-ingestion health per mapped repo
 - `lode project focus` — Show a project's ranking focus (ordered list of concerns)
 - `lode project list` — List projects
+- `lode project repo` — Map, edit, and unmap a project's GitHub repos
+- `lode project repo add` — Map a GitHub repo to a project
+  Flags: --done-state
+- `lode project repo edit` — Update settings on an already-mapped repo
+  Flags: --done-state
+- `lode project repo remove` — Unmap a repo from its project
 - `lode project resolve` — Show which project this directory scopes to, and why
   Flags: --refresh
 - `lode project set` — Set one field on a project: decision, focus, or focus-note
@@ -129,8 +133,6 @@ Flags: --project, --repo
   Flags: --clear
 - `lode project set focus-note` — Set or clear a project's pinned-focus note (cockpit card)
   Flags: --by, --clear, --note
-- `lode project set-repo` — Update settings on an already-mapped repo
-  Flags: --done-state
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 

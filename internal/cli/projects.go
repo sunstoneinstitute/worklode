@@ -116,7 +116,7 @@ func (c *Client) ResolveRemote(ctx context.Context, remote string) (model.Projec
 // AddRepo calls POST /api/v1/projects/{id}/repos. An empty doneState leaves
 // the mapping at the server's default terminal delivery state.
 func (c *Client) AddRepo(ctx context.Context, projectID, repo, doneState string) (model.AddRepoResult, []byte, error) {
-	return doJSON[model.AddRepoResult](ctx, c, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", model.AddRepoInput{Repo: repo, DoneState: doneState}, "add-repo response")
+	return doJSON[model.AddRepoResult](ctx, c, http.MethodPost, "/api/v1/projects/"+url.PathEscape(projectID)+"/repos", model.AddRepoInput{Repo: repo, DoneState: doneState}, "repo add response")
 }
 
 // ReposDoctor calls GET /api/v1/repos/doctor. An empty repo reports every
@@ -181,6 +181,19 @@ func (c *Client) SetRepoDoneState(ctx context.Context, repo, doneState string) (
 	return c.do(ctx, http.MethodPatch,
 		"/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name),
 		model.SetRepoDoneStateInput{DoneState: doneState})
+}
+
+// RemoveRepo calls DELETE /api/v1/repos/{owner}/{name} (204, no body),
+// unmapping a repo from its project. The repo's tasks, documents and
+// ingestion history keep the project they were filed under; only future
+// ingestion stops resolving through the mapping.
+func (c *Client) RemoveRepo(ctx context.Context, repo string) ([]byte, error) {
+	owner, name, ok := strings.Cut(repo, "/")
+	if !ok || owner == "" || name == "" {
+		return nil, fmt.Errorf("repo must be owner/name, got %q", repo)
+	}
+	return c.do(ctx, http.MethodDelete,
+		"/api/v1/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(name), nil)
 }
 
 // ProjectTable prints one row per project: id, key, name, repos. Each repo is
