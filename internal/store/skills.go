@@ -200,15 +200,18 @@ func (s *Store) ListSkills(ctx context.Context, includeDeleted bool) ([]Skill, e
 	return collectRows(rows, "list skills", byValue(scanSkill))
 }
 
-// SkillsMissingEmbeddings returns live skills with no stored vectors at all,
+// SkillsMissingEmbeddings returns live skills with no stored vector at all,
 // ordered by name — the set a sync must embed to converge, whether they were
 // never embedded, lost their vectors to a provider change, or failed a
 // transient embed call. Description and SkillMD come along so the caller can
-// embed without a second query.
+// embed without a second query. A skill with chunk rows but no vector counts
+// as missing: 040 §8 invalidates by nulling the column, leaving the text in
+// place for the lexical arm.
 func (s *Store) SkillsMissingEmbeddings(ctx context.Context) ([]Skill, error) {
 	rows, err := s.db.QueryContext(ctx, skillSelect+`
 		WHERE s.deleted_at IS NULL
-		  AND NOT EXISTS (SELECT 1 FROM skill_embeddings e WHERE e.skill_id = s.id)
+		  AND NOT EXISTS (SELECT 1 FROM index_chunks e
+		                   WHERE e.skill_id = s.id AND e.embedding IS NOT NULL)
 		ORDER BY s.name`)
 	if err != nil {
 		return nil, fmt.Errorf("skills missing embeddings: %w", err)

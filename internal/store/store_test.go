@@ -26,7 +26,7 @@ var wantTables = []string{
 	"agent_sessions",
 	"skills",
 	"skill_versions",
-	"skill_embeddings",
+	"index_chunks",
 	"embedding_config",
 	"docs",
 	"doc_sections",
