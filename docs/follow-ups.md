@@ -615,7 +615,7 @@ while dogfooding it against the real corpus.
   and is a content-free run. Harmless, but arguably still "nothing to do".
   Tightening it means teaching the shared guard which of its two callers
   honours the flag, which is more structure than the corner case is worth.
-- `[P3]` **`lode skills install --link` reports skips more thinly than
+- `[P3]` **`lode skill install --link` reports skips more thinly than
   `lode install --skills` does.** `publishLinked` (`internal/cmd/skills.go`)
   prints only id, action and path, and never reads `PublishResult.Skips`, where
   `reportInstall` (`internal/cmd/install.go`) names a reason. So `--link all`

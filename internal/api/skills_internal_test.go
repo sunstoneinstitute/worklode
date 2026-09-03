@@ -616,7 +616,7 @@ func TestSyncOnceLogsFailureAtError(t *testing.T) {
 }
 
 // TestSyncSkillsCoalescesPendingPush: a webhook push arriving during an
-// operator's `lode skills sync` finds the mutex held, so runSkillSync only
+// operator's `lode skill sync` finds the mutex held, so runSkillSync only
 // records it in skillSyncPending. The admin handler holds that mutex without
 // runSkillSync's drain loop, so it has to consume the flag itself — otherwise
 // the push is dropped, and on a quiet repo the next trigger may be a restart.

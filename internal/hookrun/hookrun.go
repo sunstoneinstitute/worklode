@@ -749,7 +749,7 @@ func ensureSkills(ctx context.Context, opts Options, c *cli.Client, b model.Brie
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
-				warn(opts, "skill %s: %v (run: lode skills install %s)", name, err, name)
+				warn(opts, "skill %s: %v (run: lode skill install %s)", name, err, name)
 				return nil // one skill's failure must never abort the others
 			}
 			paths[name] = p
@@ -1247,7 +1247,7 @@ func skillLocation(name, path string) string {
 	if path != "" {
 		return filepath.Join(path, "SKILL.md")
 	}
-	return "lode skills install " + name
+	return "lode skill install " + name
 }
 
 // humanKB renders a byte count in kilobytes to one decimal place.

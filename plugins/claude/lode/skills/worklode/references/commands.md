@@ -146,14 +146,14 @@ Flags: --project, --repo
 
 Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage
 
-## `lode skills` — Org-wide agent skills: list, recommend, install, sync
+## `lode skill` — Org-wide agent skills: list, recommend, install, sync
 
-- `lode skills install` — Install a skill into the local store (~/.worklode/store)
+- `lode skill install` — Install a skill into the local store (~/.worklode/store)
   Flags: --link
-- `lode skills list` — List org skills known to the server
-- `lode skills recommend` — Recommend skills for a task or free text
+- `lode skill list` — List org skills known to the server
+- `lode skill recommend` — Recommend skills for a task or free text
   Flags: --file, --limit, --task, --text
-- `lode skills sync` — Trigger a full server-side skill sync (admin)
+- `lode skill sync` — Trigger a full server-side skill sync (admin)
 
 ## `lode task` — Create, inspect, and drive tasks through their lifecycle
 

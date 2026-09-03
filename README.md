@@ -546,16 +546,16 @@ no backup mechanism of its own.
 
 ## Org skills
 
-`lode skills` manages the org-wide agent skill registry, synced from git
+`lode skill` manages the org-wide agent skill registry, synced from git
 source repos named in `LODE_SKILL_SOURCES` (comma-separated
 `owner/repo@ref:glob` entries, e.g.
 `sunstoneinstitute/claude-plugins@main:plugins/*/skills/*`; requires the
 GitHub App):
 
-- `lode skills sync` — trigger a full server-side re-sync (admin).
-- `lode skills list` — list skills known to the server.
-- `lode skills recommend` — cosine-similarity matches for a task or free text.
-- `lode skills install <name>[@<hash>]` — fetch a skill into the local
+- `lode skill sync` — trigger a full server-side re-sync (admin).
+- `lode skill list` — list skills known to the server.
+- `lode skill recommend` — cosine-similarity matches for a task or free text.
+- `lode skill install <name>[@<hash>]` — fetch a skill into the local
   content-addressed store (`~/.worklode/store`), linked by name from
   `~/.worklode/skills`. Add `--link <harness>|all` to publish it into that
   harness's own skills directory.

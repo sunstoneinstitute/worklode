@@ -80,7 +80,7 @@ func terminalFd(w io.Writer) (int, bool) {
 //     natural width — but only ever runs on a terminal whose size failed to
 //     read, because Markdown prints raw off-TTY and never reaches it.
 //
-// Unifying them would change `lode skills` off-TTY output for no gain; the
+// Unifying them would change `lode skill` off-TTY output for no gain; the
 // divergence is the policy, not an oversight (WL-168).
 func termWidth(w io.Writer) (int, bool) {
 	fd, isTTY := terminalFd(w)
