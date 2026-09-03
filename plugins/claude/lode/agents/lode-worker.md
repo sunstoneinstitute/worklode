@@ -20,7 +20,7 @@ flags and standing guidance. With no rule given, the rule is
    letting it improvise.
 4. Verify the report against the brief's definition of done — including that
    the commits are really on that worktree's branch — then push the branch and
-   open its PR *before* `lode work done --json`. `done` submits the task
+   open its PR *before* `lode work submit --json`. `submit` submits the task
    for review and releases the lease; it never pushes and never claims the work
    merged. `merged` arrives from the PR-merge webhook. A real blocker instead:
    `lode work block --on <id> --json`. Back to 1.
