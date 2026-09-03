@@ -238,7 +238,7 @@ func FocusLine(w io.Writer, focus []string) {
 	fmt.Fprintf(w, "focus: %s\n", strings.Join(focus, ", "))
 }
 
-// ReposDoctorRender prints `lode project doctor`: per mapped repo, whether the
+// ReposDoctorRender prints `lode project health`: per mapped repo, whether the
 // GitHub App check ran and what it found, when the last delivery arrived, and
 // the reconcile hint for a repo that has never delivered. Senders that map to
 // no project follow.

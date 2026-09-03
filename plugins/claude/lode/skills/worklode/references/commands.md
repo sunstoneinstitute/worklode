@@ -115,8 +115,8 @@ Flags: --project, --repo
 - `lode project crew add` — Add an actor to a project's Crew
   Flags: --deputy, --lead, --role
 - `lode project crew remove` — Remove an actor from a project's Crew
-- `lode project doctor` — Report webhook-ingestion health per mapped repo
 - `lode project focus` — Show a project's ranking focus (ordered list of concerns)
+- `lode project health` — Report webhook-ingestion health per mapped repo
 - `lode project list` — List projects
 - `lode project repo` — Map, edit, and unmap a project's GitHub repos
 - `lode project repo add` — Map a GitHub repo to a project
