@@ -42,14 +42,14 @@ materialized into the OS keystore at claim time; you never see or handle them.
 - NEVER probe `op`, ask the operator for a value, or read
   `.worklode/secrets.env` expecting values — it holds `op://` references only.
 - Items survive leaving the worktree — the lease is still yours. Only `lode
-  worktree done`, `lode worktree block` and worktree removal purge them;
+  worktree done`, `lode work block` and worktree removal purge them;
   `lode secrets purge --task <id>` is the manual escape hatch.
 - A needed-but-unavailable secret is a BLOCK signal, not something to work
-  around. `lode worktree block` takes a blocking task id, so mint one and block on it:
+  around. `lode work block` takes a blocking task id, so mint one and block on it:
 
   ```
   lode task add --title "Add catalog entry NAME to the secrets catalog" --kind chore
-  lode worktree block --on <the id printed by the previous command>
+  lode work block --on <the id printed by the previous command>
   ```
 
   Then stop. Do not retry, do not improvise.

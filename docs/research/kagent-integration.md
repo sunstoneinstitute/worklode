@@ -213,7 +213,7 @@ comparison is between two things that do not exist yet.
 `git clone --depth 1 --branch <ref>` to populate `/skills` at pod start
 (`go/core/internal/skillsinit/git.go`). It is read-only knowledge loading.
 There is no branch-per-task working copy, no commit, no push, no PR. Worklode's
-entire execution model — `lode worktree next` creates a worktree, commits are the
+entire execution model — `lode work next` creates a worktree, commits are the
 heartbeat, `worktree.Layout.TaskID` resolves the bound task from the
 filesystem, `lode secrets exec`'s guard refuses to run outside one — hangs off
 exactly the concept kagent does not have.
@@ -248,12 +248,12 @@ container launcher.
 ### 3.4 What worklode would actually need behind the seam
 
 038 §5 already names the four dispatch seams — image selection, provisioning
-(`bootstrap.sh`), token acquisition, entry point (`lode worktree next --json`) — and
+(`bootstrap.sh`), token acquisition, entry point (`lode work next --json`) — and
 states the goal: dispatch should be "the human path parameterised, not a second
 implementation".
 
 What that seam needs from an executor is: *start a container from tag T, inject
-`LODE_SERVER`/`LODE_TOKEN`, run `lode worktree next --json`, let it exit.* That is a
+`LODE_SERVER`/`LODE_TOKEN`, run `lode work next --json`, let it exit.* That is a
 Kubernetes Job. Worklode already has a Kubernetes client and a pod informer
 (`internal/watch`), and 039 already puts both instances in clusters we run.
 

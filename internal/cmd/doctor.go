@@ -206,7 +206,7 @@ func leaseGone(ctx context.Context, c *cli.Client, taskID string) (gone, known b
 // whose lease is definitely gone.
 //
 // This is the reaper for the abandoned worktree. Every other purge trigger
-// rides an event in the worktree — removal, `lode worktree done`, `lode
+// rides an event in the worktree — removal, `lode work done`, `lode
 // worktree block`, and ADR 048's conditional purge on exit — so a worktree
 // left sitting while its lease expires keeps live credentials on the laptop
 // until someone visits it again. ADR 048 §4 names that residual and leaves it

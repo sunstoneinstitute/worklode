@@ -20,7 +20,7 @@ func TestGroupRejectsUnknownSubcommand(t *testing.T) {
 		{"task", "bogusnothing"},
 		{"doc", "bogusnothing"},
 		{"project", "bogusnothing"},
-		{"worktree", "bogusnothing"},
+		{"work", "bogusnothing"},
 		{"graph", "projection", "bogusnothing"},
 	} {
 		path := strings.Join(args, " ")
@@ -40,7 +40,7 @@ func TestGroupRejectsUnknownSubcommand(t *testing.T) {
 func TestGroupAcceptsBareInvocation(t *testing.T) {
 	groupTopLevel()
 	rejectStrayGroupArgs(rootCmd)
-	for _, name := range []string{"task", "doc", "project", "worktree"} {
+	for _, name := range []string{"task", "doc", "project", "work"} {
 		if _, err := runLode(t, name); err != nil {
 			t.Errorf("lode %s: want help and no error, got %v", name, err)
 		}
