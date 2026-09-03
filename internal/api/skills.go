@@ -176,7 +176,7 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 	}
 	ectx, cancel := context.WithTimeout(ctx, recommendTimeout)
 	defer cancel()
-	vecs, err := s.embedder.Embed(ectx, []string{embed.Truncate(text, embed.ChunkRunes)})
+	vecs, err := s.embedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
 	if err != nil {
 		return matches, []string{"embedding provider unavailable; matches omitted"}
 	}
