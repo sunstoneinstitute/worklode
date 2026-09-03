@@ -365,7 +365,7 @@ without ever storing a value in worklode (spec 017).
 
 - **Declaring:** `lode task add --secrets KUBECONFIG_HZDEV,OPENALEX_API_KEY …`
   or `lode task edit <id> --secrets …` (`--secrets none` clears). Names come
-  from `lode secrets catalog`; a declared name missing from the catalog is a
+  from `lode secret catalog`; a declared name missing from the catalog is a
   claim-time warning, never a failure.
 - **The ceremony:** `lode work next`/`lode work resume` take one consent for the
   task's non-baseline names, then one `op run` authorization that resolves
@@ -375,11 +375,11 @@ without ever storing a value in worklode (spec 017).
   credentialed steps then block; having no operator to ask (an agent-driven or
   `--json` `lode work next`) records nothing and defers the ceremony to a later
   `lode work resume` run in a terminal.
-- **Running:** `lode secrets exec -- <command>` injects exactly the task's
-  materialized names into the child's environment; `lode secrets status`
+- **Running:** `lode secret exec -- <command>` injects exactly the task's
+  materialized names into the child's environment; `lode secret status`
   shows declared vs. materialized state. Items are purged on `lode work submit`,
   `lode work block`, and worktree removal — merely leaving a worktree keeps them,
-  since the lease is still yours; `lode secrets purge --task <id>` is the
+  since the lease is still yours; `lode secret purge --task <id>` is the
   manual escape hatch.
 - **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, projected
   from the `worklode-secrets-catalog` 1Password item into a per-environment

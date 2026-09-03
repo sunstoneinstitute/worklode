@@ -35,7 +35,7 @@ var loaderNames = map[string]bool{
 }
 
 // LoaderSensitive reports whether s names a variable that redirects how a
-// process loads or resolves code. `lode secrets exec` assigns every
+// process loads or resolves code. `lode secret exec` assigns every
 // materialized name into the child environment (017 §4), so such a name would
 // make the secret's value code the child loads rather than a credential it
 // holds. Exact and case-sensitive: the grammar admits upper-case only, so

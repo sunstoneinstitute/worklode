@@ -15,14 +15,14 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
 
-// This file implements `lode secrets`: the runtime surface of spec 017.
+// This file implements `lode secret`: the runtime surface of spec 017.
 // Values pass through exactly two places here — the pack command's inherited
 // environment (as the child of `op run`) and the exec command's child
 // environment. Neither is ever written, logged, or echoed.
 
 func init() {
 	cmd := &cobra.Command{
-		Use:   "secrets",
+		Use:   "secret",
 		Short: "Task-declared secrets: catalog, status, exec, purge (spec 017)",
 	}
 	cmd.AddCommand(newSecretsCatalogCmd(), newSecretsStatusCmd(), newSecretsExecCmd(),
@@ -136,7 +136,7 @@ func newSecretsPurgeCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				id, _, err = resolveWorktreeTask(layout, ".", "lode secrets purge --task <id>")
+				id, _, err = resolveWorktreeTask(layout, ".", "lode secret purge --task <id>")
 				if err != nil {
 					return err
 				}
@@ -271,7 +271,7 @@ func newSecretsExecCmd() *cobra.Command {
 		},
 	}
 	// The wrapped command's flags are its own: without this, cobra claims
-	// `lode secrets exec kubectl get pods -n foo`'s -n and fails.
+	// `lode secret exec kubectl get pods -n foo`'s -n and fails.
 	cmd.Flags().SetInterspersed(false)
 	return cmd
 }

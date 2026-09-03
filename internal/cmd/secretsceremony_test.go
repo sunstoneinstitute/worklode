@@ -73,7 +73,7 @@ func ceremonyFixtureWithCatalog(t *testing.T, catalogStatus int, catalogJSON, st
 	return cli.NewClient(cli.Config{ServerURL: srv.URL, Token: "wl_test"}), cmd, outBuf, errBuf, &recorded
 }
 
-// fakeOp simulates op run + lode secrets pack: it stores a dummy value per
+// fakeOp simulates op run + lode secret pack: it stores a dummy value per
 // name, writes the manifest, and prints pack's own success line to the stdout
 // writer it is handed — exactly as the real pack child would.
 func fakeOp(t *testing.T, calls *int, capturedEnvFile *string) func(dir, envFile, taskID string, names, declined []string, stdout, stderr io.Writer) error {

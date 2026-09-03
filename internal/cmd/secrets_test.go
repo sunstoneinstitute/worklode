@@ -235,7 +235,7 @@ func TestSecretsExecInjectsExactlyMaterializedNames(t *testing.T) {
 
 // TestSecretsExecScrubsAmbientCredentials is 017 §4's acceptance criterion as
 // amended by ADR 050, run end to end: with the operator's shell exporting
-// ANTHROPIC_API_KEY, `lode secrets exec -- env` in a claimed worktree hands the
+// ANTHROPIC_API_KEY, `lode secret exec -- env` in a claimed worktree hands the
 // child the materialized names and the shell plumbing, and not that key.
 func TestSecretsExecScrubsAmbientCredentials(t *testing.T) {
 	keyring.MockInit()
@@ -289,7 +289,7 @@ func TestSecretsExecScrubsAmbientCredentials(t *testing.T) {
 	}
 }
 
-// TestSecretsExecPassesFlagsToTheChild: an agent writes `lode secrets exec
+// TestSecretsExecPassesFlagsToTheChild: an agent writes `lode secret exec
 // kubectl get pods -n foo`, not the `--` form. Cobra must not claim the
 // wrapped command's flags as its own.
 func TestSecretsExecPassesFlagsToTheChild(t *testing.T) {

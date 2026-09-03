@@ -57,7 +57,7 @@ var denyTokens = []string{
 }
 
 // CredentialShaped reports whether an inherited environment variable name
-// looks like a credential and must not reach a `lode secrets exec` child.
+// looks like a credential and must not reach a `lode secret exec` child.
 // Case-insensitive: the secret-name grammar is upper-case only (017 §1), but
 // an inherited name is whatever the operator's shell exported.
 //
@@ -94,7 +94,7 @@ func CredentialShaped(name string) bool {
 	return strings.HasSuffix(n, "_KEY") || strings.Contains(n, "_KEY_")
 }
 
-// ChildEnv returns the environment for a `lode secrets exec` child: parent
+// ChildEnv returns the environment for a `lode secret exec` child: parent
 // minus every assignment whose name is materialized or credential-shaped, then
 // injected appended.
 //
