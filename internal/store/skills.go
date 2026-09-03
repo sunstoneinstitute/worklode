@@ -28,14 +28,6 @@ type Skill struct {
 	Deleted     bool
 }
 
-// SkillMatch is one embedding-recommendation hit.
-type SkillMatch struct {
-	Name        string
-	Description string
-	ContentHash string
-	Score       float64
-}
-
 // SkillUpsert is one skill dir as found in a source repo at sync time.
 type SkillUpsert struct {
 	Qualifier   string
