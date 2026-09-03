@@ -134,13 +134,13 @@ Flags: --project, --repo
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
-## `lode secrets` — Task-declared secrets: catalog, status, exec, purge (spec 017)
+## `lode secret` — Task-declared secrets: catalog, status, exec, purge (spec 017)
 
-- `lode secrets catalog` — List the org secrets catalog: names, baseline flag, descriptions
-- `lode secrets exec` — Run a command with the bound task's materialized secrets in its environment
-- `lode secrets purge` — Remove the task's keystore items (invoked by release hooks)
+- `lode secret catalog` — List the org secrets catalog: names, baseline flag, descriptions
+- `lode secret exec` — Run a command with the bound task's materialized secrets in its environment
+- `lode secret purge` — Remove the task's keystore items (invoked by release hooks)
   Flags: --task
-- `lode secrets status` — Show declared vs materialized secret names for the bound task (names only)
+- `lode secret status` — Show declared vs materialized secret names for the bound task (names only)
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 

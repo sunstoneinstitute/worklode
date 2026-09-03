@@ -350,7 +350,7 @@ func TestCheckInvocation(t *testing.T) {
 		{"lode", false},
 		{"lode work next --json", false},
 		{"lode task add --title \"use --force here\" --kind bug", false},
-		{"lode secrets exec -- <command> [args...]", false},
+		{"lode secret exec -- <command> [args...]", false},
 		{"lode task block <part-N-id> --by <part-N-1-id>", false},
 		{"lode doc", false},
 		{"lode task tree", false},

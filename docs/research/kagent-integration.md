@@ -165,7 +165,7 @@ shell command. `_sanitize_env()` in
 … — plus a regex over secret-looking names, so LLM credentials are not visible
 to code the agent runs.
 
-`lode secrets exec` today injects exactly the task's materialized names into
+`lode secret exec` today injects exactly the task's materialized names into
 the child (017 §4), which is the right *positive* rule. It says nothing about
 what else is already in the operator's environment and gets inherited. A
 denylist pass on inherited variables is a small, contained hardening.
@@ -215,7 +215,7 @@ comparison is between two things that do not exist yet.
 There is no branch-per-task working copy, no commit, no push, no PR. Worklode's
 entire execution model — `lode work next` creates a worktree, commits are the
 heartbeat, `worktree.Layout.TaskID` resolves the bound task from the
-filesystem, `lode secrets exec`'s guard refuses to run outside one — hangs off
+filesystem, `lode secret exec`'s guard refuses to run outside one — hangs off
 exactly the concept kagent does not have.
 
 **No work-item lifecycle.** kagent's `task` table is
@@ -313,7 +313,7 @@ worklode's own code.
 
 ### 4.3 Follow-ups to file (not spec changes)
 
-1. `[P3]` **Scrub inherited credentials in `lode secrets exec`.** 017 §4
+1. `[P3]` **Scrub inherited credentials in `lode secret exec`.** 017 §4
    specifies which names are injected; it does not say what inherited
    environment is stripped. Add a denylist pass over inherited variables
    (`ANTHROPIC_API_KEY`, `AWS_*`, `GOOGLE_APPLICATION_CREDENTIALS`, …) so a

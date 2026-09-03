@@ -29,7 +29,7 @@ func checkItem(taskID, name string) error {
 }
 
 // Put stores one secret value for a task. The value comes from the op-run
-// child environment (see `lode secrets pack`) and goes nowhere else.
+// child environment (see `lode secret pack`) and goes nowhere else.
 //
 // OS keystores cap an item's size — macOS at roughly 2.9 KB of raw value
 // (security(1) rejects an add-generic-password command over 4096 bytes, and
