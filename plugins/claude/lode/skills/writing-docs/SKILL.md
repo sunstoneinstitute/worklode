@@ -1,5 +1,5 @@
 ---
-name: worklode-docs-authoring
+name: writing-docs
 description: Use when creating or editing a worklode spec, ADR or plan with lode doc, or editing ns/*.ttl — "write a new spec", "add a plan", "lode doc add", "what goes in the frontmatter", "covers vs implements", "NO-SPEC", "renumber the sections", "amend a spec", "supersede a section", "{#sec-N} anchors", "add a wl: property", "SKOS concept", "is spec NNN implemented" — and for the spec/plan/task model (design tasks, minted tasks, why groupings are queries not rows). For splitting one spec across a numbered plan series, use lode:splitting-specs-into-plans instead.
 ---
 
@@ -42,6 +42,11 @@ it once the command above succeeds. `lode doc edit` only works on a draft,
 or on a plan (plans are edited in place at any status — 025 §9); an
 accepted spec or ADR instead goes through `lode doc revise`: open a
 candidate, edit it, `--accept` to land it or `--discard` to drop it.
+
+**The backbone assigns the number, not you.** Never hand-create a file for a
+document, and never read the next number off filenames. The corpus lives in
+the backbone (055), so a draft that has no file anywhere still holds its
+number. `lode doc list` is the authority.
 
 ## Frontmatter is mandatory
 
