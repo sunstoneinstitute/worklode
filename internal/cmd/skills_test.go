@@ -446,14 +446,14 @@ func TestSkillsInstallLink(t *testing.T) {
 // default-vs---json branch, which WL-175 fixed: it used to print the raw
 // body unconditionally.
 func TestSkillsSyncHumanAndJSON(t *testing.T) {
-	const body = `{"synced":12,"changed":3,"deleted":1,"embedded":3}`
+	const body = `{"synced":12,"changed":3,"deleted":1}`
 	_, _, _, _ = skillsTestServerWithSync(t, body)
 
 	out, err := runLode(t, "skill", "sync")
 	if err != nil {
 		t.Fatalf("skill sync: %v\noutput: %s", err, out)
 	}
-	want := "synced 12 skill(s): 3 changed, 1 deleted, 3 embedded\n"
+	want := "synced 12 skill(s): 3 changed, 1 deleted\n"
 	if out != want {
 		t.Fatalf("skill sync output = %q, want %q", out, want)
 	}
