@@ -190,12 +190,12 @@ Calibrated from the 032 comparison, where the same part drew plans from 474 to
 Quote exact values from the spec in Global Constraints — palette hexes, label
 spellings, ordered destination lists. Do not restate spec prose; a plan
 carrying durable rationale means the spec was incomplete (see the
-`worklode-docs-authoring` skill).
+`lode:writing-docs` skill).
 
 ## 5. Worklode plan conventions
 
 Body format, task YAML keys (`kind`/`priority`/`skills`/`blockedBy`), and
-reference syntax: the `worklode-docs-authoring` skill's "Declaring a plan's
+reference syntax: the `lode:writing-docs` skill's "Declaring a plan's
 tasks" section, which also covers how a document is created. A series
 part restarts task numbering at 1; ordering across parts is a document-level
 edge, never a task number. Declare it with `blockedBy:` on the later part

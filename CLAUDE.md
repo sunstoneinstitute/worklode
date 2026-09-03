@@ -35,7 +35,7 @@ itself, but load it by name if it has not:
   frontmatter, `covers:`, `{#sec-N}` anchors, amend/supersede, the `ns/`
   `wl:` ontology and its camelCase term naming, and the spec/plan/task model
   (what is a claimable task vs a document status). See
-  the `worklode-docs-authoring` skill.
+  the `lode:writing-docs` skill.
 - **Adding or changing a database migration** under `deploy/base/migrations/`.
   See the `worklode-migrations` skill.
 - **Touching `plugins/obsidian/`** — the TypeScript Obsidian plugin, its pnpm
