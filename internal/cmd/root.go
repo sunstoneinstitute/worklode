@@ -58,6 +58,10 @@ var shortcuts = []shortcut{
 	// The board is the first thing read on entering a project and re-read
 	// after every state change.
 	{target: []string{"task", "board"}, build: newBoardCmd, reason: "read many times per session"},
+	// next is how an agent enters Worklode mode: run once per task claimed.
+	{target: []string{"work", "next"}, build: newNextCmd, reason: "run many times per session"},
+	// status is the standing "where am I" check, run constantly during work.
+	{target: []string{"work", "status"}, build: newStatusCmd, reason: "run many times per session"},
 }
 
 func init() {
