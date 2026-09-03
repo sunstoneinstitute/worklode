@@ -130,6 +130,9 @@ func (f *fakeEmbed) Embed(ctx context.Context, role embed.Role, texts []string) 
 	if v == nil {
 		v = []float32{1, 0, 0}
 	}
+	// index_chunks.embedding is vector(768) (040 §2.2), so a fixture written
+	// as {1, 0, 0} has to reach the store at full width.
+	v = store.VecForTests(v...)
 	out := make([][]float32, len(texts))
 	for i := range texts {
 		out[i] = v
@@ -610,10 +613,10 @@ func TestSyncAllProviderChangeReembeds(t *testing.T) {
 	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != "fake:b" {
 		t.Fatalf("provider id = %q err=%v, want fake:b", id, err)
 	}
-	if got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5); err != nil || len(got) != 0 {
+	if got, err := st.RecommendSkills(ctx, store.VecForTests(1, 0, 0), 5, 0.5); err != nil || len(got) != 0 {
 		t.Fatalf("old-space vectors survived: %+v err=%v", got, err)
 	}
-	got, err := st.RecommendSkills(ctx, []float32{0, 1, 0}, 5, 0.5)
+	got, err := st.RecommendSkills(ctx, store.VecForTests(0, 1, 0), 5, 0.5)
 	if err != nil || len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("new-space recommend: %+v err=%v", got, err)
 	}
@@ -672,7 +675,7 @@ func TestSyncAllUnchangedProviderKeepsEmbeddings(t *testing.T) {
 	if emb.calls != 1 || sum.Embedded != 0 {
 		t.Fatalf("re-embedded unchanged corpus: calls=%d summary=%+v", emb.calls, sum)
 	}
-	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
+	got, err := st.RecommendSkills(ctx, store.VecForTests(1, 0, 0), 5, 0.5)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("embeddings lost: %+v err=%v", got, err)
 	}
@@ -695,7 +698,7 @@ func TestSyncAllRetriesFailedEmbed(t *testing.T) {
 	if sum.Synced != 1 || sum.Embedded != 0 {
 		t.Fatalf("first summary: %+v", sum)
 	}
-	if got, _ := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5); len(got) != 0 {
+	if got, _ := st.RecommendSkills(ctx, store.VecForTests(1, 0, 0), 5, 0.5); len(got) != 0 {
 		t.Fatalf("embedded despite failure: %+v", got)
 	}
 
@@ -706,7 +709,7 @@ func TestSyncAllRetriesFailedEmbed(t *testing.T) {
 	if sum.Changed != 0 || sum.Embedded != 1 {
 		t.Fatalf("second summary: %+v", sum)
 	}
-	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
+	got, err := st.RecommendSkills(ctx, store.VecForTests(1, 0, 0), 5, 0.5)
 	if err != nil || len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("convergence did not embed: %+v err=%v", got, err)
 	}
@@ -738,10 +741,10 @@ func TestSyncAllFailedReembedDropsStaleVectors(t *testing.T) {
 	if _, err := sy.SyncAll(ctx, src); err != nil {
 		t.Fatalf("v2 sync: %v", err)
 	}
-	if got, _ := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5); len(got) != 0 {
+	if got, _ := st.RecommendSkills(ctx, store.VecForTests(1, 0, 0), 5, 0.5); len(got) != 0 {
 		t.Fatalf("v1 vectors survived a failed re-embed of v2: %+v", got)
 	}
-	got, err := st.RecommendSkills(ctx, []float32{0, 1, 0}, 5, 0.5)
+	got, err := st.RecommendSkills(ctx, store.VecForTests(0, 1, 0), 5, 0.5)
 	if err != nil || len(got) != 1 || got[0].Name != "p:tdd" {
 		t.Fatalf("v2 not embedded by the same pass: %+v err=%v", got, err)
 	}
@@ -766,7 +769,7 @@ func TestSyncAllWithoutProviderLeavesEmbeddings(t *testing.T) {
 	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != "fake:a" {
 		t.Fatalf("provider id = %q err=%v, want fake:a", id, err)
 	}
-	got, err := st.RecommendSkills(ctx, []float32{1, 0, 0}, 5, 0.5)
+	got, err := st.RecommendSkills(ctx, store.VecForTests(1, 0, 0), 5, 0.5)
 	if err != nil || len(got) != 1 {
 		t.Fatalf("embeddings cleared without a provider: %+v err=%v", got, err)
 	}

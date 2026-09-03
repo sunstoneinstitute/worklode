@@ -13,12 +13,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
 )
 
 // TestDSN returns the Postgres DSN test databases are created under.
@@ -145,6 +149,43 @@ func openTestDB(t *testing.T, dbName string, opts ...Option) *Store {
 // packages can make raw SQL assertions against a store's database.
 func (s *Store) DBForTests() *sql.DB {
 	return s.db
+}
+
+// VecForTests returns vals right-padded with zeros to IndexDim, so a test can
+// keep writing readable fixtures like {1, 0, 0} against a vector(768) column.
+func VecForTests(vals ...float32) []float32 {
+	v := make([]float32, IndexDim)
+	copy(v, vals)
+	return v
+}
+
+// VecJSONForTests renders VecForTests(vals...) as a JSON array, for the fake
+// /v1/embeddings endpoints tests stand up: a query vector narrower than
+// IndexDim makes every cosine comparison error, which is a confusing way for
+// an unrelated test to fail.
+func VecJSONForTests(vals ...float32) string {
+	var b strings.Builder
+	b.WriteByte('[')
+	for i, f := range VecForTests(vals...) {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.FormatFloat(float64(f), 'f', -1, 32))
+	}
+	b.WriteByte(']')
+	return b.String()
+}
+
+// SeedSkillChunksForTests gives skillID one chunk row per vector, for tests
+// that exercise the dense arm and do not care what text the chunks carry.
+// Production writes go through ReplaceSubjectChunks with real chunks.
+func (s *Store) SeedSkillChunksForTests(ctx context.Context, skillID int64, vecs [][]float32) error {
+	chunks := make([]corpusindex.Chunk, len(vecs))
+	for i := range vecs {
+		chunks[i] = corpusindex.Chunk{Index: i, Text: fmt.Sprintf("chunk %d", i)}
+	}
+	return s.ReplaceSubjectChunks(ctx,
+		ChunkSubject{Kind: SubjectSkill, SkillID: skillID, ContentHash: "seed"}, chunks, vecs)
 }
 
 // moduleRoot/moduleRootErr cache this module's root, captured once from
