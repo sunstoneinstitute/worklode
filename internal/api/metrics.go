@@ -50,6 +50,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_crew_changes_total",
 		Help: "Project Crew membership changes, by surface (api, web), action (add, remove), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
 	}, []string{"surface", "action", "outcome"})
+	s.milestoneChanges = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_milestone_changes_total",
+		Help: "Milestone changes (spec 029 §2), by action (" + strings.Join(milestoneChangeActions, ", ") +
+			") and outcome (" + strings.Join(milestoneChangeOutcomes, ", ") +
+			"). Labels are bounded: the project, the milestone and the actor are deliberately not among them.",
+	}, []string{"action", "outcome"})
 	s.repoMappings = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_repo_mapping_changes_total",
 		Help: "Project/repo mapping changes, by action (add, edit, remove) and outcome (ok, rejected, error). Labels are bounded: the repo and the project are deliberately not among them.",
@@ -234,6 +240,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
+		s.milestoneChanges,
 		s.repoMappings,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
@@ -274,6 +281,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			for _, outcome := range crewChangeOutcomes {
 				s.crewChanges.WithLabelValues(surface, action, outcome)
 			}
+		}
+	}
+	for _, action := range milestoneChangeActions {
+		for _, outcome := range milestoneChangeOutcomes {
+			s.milestoneChanges.WithLabelValues(action, outcome)
 		}
 	}
 	for _, action := range repoMappingActions {
@@ -506,6 +518,36 @@ func (s *server) observeCrewChange(surface, action, outcome string) {
 		return
 	}
 	s.crewChanges.WithLabelValues(surface, action, outcome).Inc()
+}
+
+// milestoneChangeActions and milestoneChangeOutcomes are every label
+// worklode_milestone_changes_total carries, pinned by the milestones plan and
+// pre-initialised so an instance where nobody has touched a milestone reads
+// as a flat zero rather than as no-data. task_attach and deliverable_attach
+// belong to the attach mutations that land alongside this counter.
+var (
+	milestoneChangeActions  = []string{"create", "task_attach", "deliverable_attach"}
+	milestoneChangeOutcomes = []string{"ok", "rejected", "error"}
+)
+
+// observeMilestoneChange records one attempted milestone change, called
+// exactly once per attempt with the error the attempt returned. A refused
+// change — a blank or over-long title, an unknown project, a child in another
+// project — is "rejected": the caller's input, not a fault.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeMilestoneChange(action string, err error) {
+	if s.milestoneChanges == nil {
+		return
+	}
+	outcome := "ok"
+	switch {
+	case err == nil:
+	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrInvalidInput):
+		outcome = "rejected"
+	default:
+		outcome = "error"
+	}
+	s.milestoneChanges.WithLabelValues(action, outcome).Inc()
 }
 
 // repoMappingActions are every action label worklode_repo_mapping_changes_total
