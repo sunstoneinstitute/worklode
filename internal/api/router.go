@@ -238,6 +238,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/skills/recommend":            guardedAny(permSkillRead),
 	"POST /api/v1/skills/sync":                 guarded(permSkillAdmin),
 
+	// --- search ----------------------------------------------------------------
+	// guardedAny, not guarded: search is worker surface carrying no task id,
+	// like the skills reads above.
+	"GET /api/v1/search": guardedAny(permSearchRead),
+
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
