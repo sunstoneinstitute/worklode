@@ -497,15 +497,15 @@ Derivers split by what they read. The repo-local ones (`go-imports`,
 `repo-layout`) need a checkout, so each repo runs them from its own CI:
 
 ```bash
-lode derive                 # writes observed/<source>/<host>/<owner>/<repo>
-lode derive --dry-run       # print the N-Triples instead of writing
+lode graph derive                 # writes observed/<source>/<host>/<owner>/<repo>
+lode graph derive --dry-run       # print the N-Triples instead of writing
 ```
 
 The server-side ones (`pr-affects`, `deploy`) read the backbone's own rows and
 run in one place, admin-only:
 
 ```bash
-lode derive --server        # POST /api/v1/derive
+lode graph derive --server        # POST /api/v1/derive
 ```
 
 Reading the result — every command takes `--json`, which passes the server's
@@ -515,8 +515,8 @@ narrowed it client-side:
 | Command | Shows |
 |---|---|
 | `lode overview` | one-screen roll-up: drift counts, gaps, frontier size, critical head |
-| `lode drift [--component IRI] [--acknowledged]` | violations and stale intent; accepted deviations, marked expired |
-| `lode gaps` | components with no governing document, and repo paths no component claims |
+| `lode graph drift [--component IRI] [--acknowledged]` | violations and stale intent; accepted deviations, marked expired |
+| `lode graph gaps` | components with no governing document, and repo paths no component claims |
 | `lode task frontier` | the ranked ready set, annotated with depth and fan-out |
 | `lode task critical-path [--task ID]` | the estimate-free critical path, plus any dependency cycles |
 
