@@ -16,7 +16,7 @@
     ],
     "soft_deny": [
       "$defaults",
-      "Never push to main, or to any branch that is not the task branch lode worktree next created for the claimed task.",
+      "Never push to main, or to any branch that is not the task branch lode work next created for the claimed task.",
       "Never force-push, and never rewrite history on a branch that already exists on the remote."
     ]
   }

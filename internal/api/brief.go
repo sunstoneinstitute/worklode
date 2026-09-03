@@ -57,7 +57,7 @@ func toBriefJSON(b *store.Brief) model.Brief {
 func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// skills=false is for callers that want the task row or the lease and
-	// nothing else (lode worktree status, the pre-renew fetch in lode worktree
+	// nothing else (lode work status, the pre-renew fetch in lode work
 	// resume). It skips pin resolution, the inlined bodies, and the embedding
 	// round trip.
 	withSkills := r.URL.Query().Get("skills") != "false"

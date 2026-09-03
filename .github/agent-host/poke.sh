@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # poke.sh — the sidecar for one supervisor window.
 #
-# The lode-worker loop stops when `lode worktree next` reports no ready work, which
+# The lode-worker loop stops when `lode work next` reports no ready work, which
 # leaves the supervisor session idle forever. This waits for work to appear
 # and nudges the supervisor back into the loop.
 #
-# Usage: poke.sh <window> [lode worktree next filter flags...]
+# Usage: poke.sh <window> [lode work next filter flags...]
 #   e.g. poke.sh gha-chore1 --project worklode --kind chore
 #
 # The filter is passed through to `lode worker listen` unchanged, and is the
@@ -66,7 +66,7 @@ is_idle() {
   [ "$before" = "$after" ]
 }
 
-poke_text="Ready work is available. Start a lode-worker agent and run the loop again: \`lode worktree next --json $*\`, then work the claimed task from its brief as in your initial instructions."
+poke_text="Ready work is available. Start a lode-worker agent and run the loop again: \`lode work next --json $*\`, then work the claimed task from its brief as in your initial instructions."
 
 while :; do
   # The window disappearing means the babysitter is rebuilding it, or the
