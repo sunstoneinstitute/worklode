@@ -35,7 +35,7 @@ var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 // review tasks are created by the review lifecycle and spikes are inputs to
 // planning, so neither is plan-declarable. Membership is tested with
 // slices.Contains, so the list is also the lookup — there is nothing to drift.
-var planMintableKinds = []string{"feature", "bug", "chore", "design"}
+var planMintableKinds = []string{"feature", "bug", "chore", "design", "decision"}
 
 // planPriorities is the priority values a task definition may declare
 // (docs/authoring-design-docs.md's key table); "medium" is the default when
