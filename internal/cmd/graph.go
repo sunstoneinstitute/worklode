@@ -26,7 +26,7 @@ func newGraphCmd() *cobra.Command {
 		Use:   "graph",
 		Short: "The knowledge-graph projection: its health, and what it owes",
 	}
-	cmd.AddCommand(newGraphProjectionCmd())
+	cmd.AddCommand(newGraphQuarantinesCmd())
 	cmd.AddCommand(newGraphTriplesCmd())
 	cmd.AddCommand(newGraphDriftCmd())
 	cmd.AddCommand(newGraphGapsCmd())
@@ -36,18 +36,12 @@ func newGraphCmd() *cobra.Command {
 
 func init() { rootCmd.AddCommand(newGraphCmd()) }
 
-func newGraphProjectionCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "projection",
-		Short: "The backbone→graph projector's state",
-	}
-	cmd.AddCommand(newGraphProjectionStatusCmd())
-	return cmd
-}
-
-func newGraphProjectionStatusCmd() *cobra.Command {
+// newGraphQuarantinesCmd wires `lode graph quarantines` (061 §2.4, §5 rule
+// 4): `graph projection` had exactly one child, `status`, which is pointless
+// depth under the single-child rule — flattened straight onto `graph`.
+func newGraphQuarantinesCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
+		Use:   "quarantines",
 		Short: "Show the projects the projector has quarantined, since when, and why",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -74,7 +68,7 @@ func newGraphProjectionStatusCmd() *cobra.Command {
 // external RDF store and querying with SPARQL. Named "triples", not "export":
 // internal/cmd/CLAUDE.md's Naming L3 closes the set of non-CRUD verbs a
 // command may use, and "export" is not in it; "triples" is a named view (L6),
-// the same pattern as the existing "graph projection status".
+// the same pattern as the existing "graph quarantines".
 //
 // internal/graphproj already builds and serializes these triples (spec 006
 // §11) for the server-side projector; this command is the first thing that
