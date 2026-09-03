@@ -1,5 +1,5 @@
 # Image for worklode agents: a Claude Code or Codex session working this
-# repo's checkout (running `lode worktree next`/`lode worktree done` etc.
+# repo's checkout (running `lode work next`/`lode work done` etc.
 # against the backbone). Build context is the repo root:
 #
 #   docker build -f .worklode/Dockerfile -t worklode-agent .

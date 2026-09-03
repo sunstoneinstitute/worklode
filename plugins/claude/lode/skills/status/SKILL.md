@@ -6,7 +6,7 @@ allowed-tools: Bash(lode *) Bash(git *)
 ---
 
 ## Status
-!`lode worktree status --json`
+!`lode work status --json`
 
 Report the task, lease state (held/expired/none, expiry, renewal freshness),
 and session-marker/heartbeat state from the JSON. This is read-only — never

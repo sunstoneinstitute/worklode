@@ -108,7 +108,7 @@ everything else behaves exactly as before.
 ### Project scoping
 
 Commands that act on a set of tasks — `lode task list`, `lode task add`,
-`lode task claim --next`, `lode worktree next`, `lode board`, `lode inbox list` — scope
+`lode task claim --next`, `lode work next`, `lode board`, `lode inbox list` — scope
 themselves to the project of the repo you are in. The project is resolved in
 this order, first hit wins:
 
@@ -350,7 +350,7 @@ shaped after the Flux hook and will be settled against the first real one.
 
 Task branches are rendered from `LODE_BRANCH_TEMPLATE` on the server (default
 `{{ .id }}-{{ .slug }}`, e.g. `WL-7-fix-the-thing`). The server is the
-authority: `lode worktree next` and `lode task claim` use the branch the claim response
+authority: `lode work next` and `lode task claim` use the branch the claim response
 returns. Worktrees live under `worktree_dir` (default `.worktrees`),
 configurable per repo in `.worklode/config.toml`. `LODE_WORKTREE_DIR` overrides
 `worktree_dir` on the client, but it is for one-off and CI use only: it does
@@ -367,18 +367,18 @@ without ever storing a value in worklode (spec 017).
   or `lode task edit <id> --secrets …` (`--secrets none` clears). Names come
   from `lode secrets catalog`; a declared name missing from the catalog is a
   claim-time warning, never a failure.
-- **The ceremony:** `lode worktree next`/`lode worktree resume` take one consent for the
+- **The ceremony:** `lode work next`/`lode work resume` take one consent for the
   task's non-baseline names, then one `op run` authorization that resolves
   every reference under a single 1Password sign-in. Values go straight into
   the OS keystore (service `worklode:<task-id>`); `.worklode/secrets.env`
   holds `op://` references only, never values. Declining is recorded and
   credentialed steps then block; having no operator to ask (an agent-driven or
-  `--json` `lode worktree next`) records nothing and defers the ceremony to a later
-  `lode worktree resume` run in a terminal.
+  `--json` `lode work next`) records nothing and defers the ceremony to a later
+  `lode work resume` run in a terminal.
 - **Running:** `lode secrets exec -- <command>` injects exactly the task's
   materialized names into the child's environment; `lode secrets status`
-  shows declared vs. materialized state. Items are purged on `lode worktree done`,
-  `lode worktree block`, and worktree removal — merely leaving a worktree keeps them,
+  shows declared vs. materialized state. Items are purged on `lode work done`,
+  `lode work block`, and worktree removal — merely leaving a worktree keeps them,
   since the lease is still yours; `lode secrets purge --task <id>` is the
   manual escape hatch.
 - **Server side:** the catalog is a `LODE_SECRETS_CATALOG_PATH` file, projected
@@ -654,12 +654,12 @@ forms, so third-party hooks on the same events are left alone.
 
 `.claude/settings.local.json` is gitignored, so a linked worktree's own
 checkout never receives it via git the way it would a committed file. `lode
-worktree next` mirrors it anyway when the local scope is already installed at
+work next` mirrors it anyway when the local scope is already installed at
 the
 repo root: it writes the same bindings (and status line, if that's ours too)
 into the new worktree, so a developer who ran `lode install` once keeps
 Claude Code integration in every worktree. A repo where local scope was never
-installed is left alone — `lode worktree next` mirrors an existing choice, it never
+installed is left alone — `lode work next` mirrors an existing choice, it never
 makes one.
 
 Heartbeats are debounced to one per minute per worktree, so binding `Stop` is
@@ -731,9 +731,9 @@ picking up work:
 - `/lode:status` — read-only report of the current task, lease, and
   heartbeat state.
 
-These are thin wrappers over the underlying `lode` subcommands: `lode worktree
-next`, `lode worktree resume`, `lode worktree done`, `lode worktree block`,
-`lode worktree status`, and `lode task brief <id>`.
+These are thin wrappers over the underlying `lode` subcommands: `lode work
+next`, `lode work resume`, `lode work done`, `lode work block`,
+`lode work status`, and `lode task brief <id>`.
 
 ## Development
 

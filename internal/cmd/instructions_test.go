@@ -22,7 +22,7 @@ func TestEnsureAgentsMDCreatesAndConverges(t *testing.T) {
 		t.Fatalf("first run: %s %v", action, err)
 	}
 	first := readFile(t, filepath.Join(root, agentsFile))
-	if !strings.Contains(first, "lode worktree next") {
+	if !strings.Contains(first, "lode work next") {
 		t.Fatalf("block does not name the entry command: %s", first)
 	}
 	if !strings.Contains(first, agentsBlockBegin) || !strings.Contains(first, agentsBlockEnd) {
@@ -71,7 +71,7 @@ func TestEnsureAgentsMDPreservesForeignContent(t *testing.T) {
 
 	// A stale block is replaced in place, not duplicated, and the prose on
 	// both sides of it survives.
-	stale := strings.Replace(got, "lode worktree next", "lode obsolete", 1)
+	stale := strings.Replace(got, "lode work next", "lode obsolete", 1)
 	if stale == got {
 		t.Fatal("could not corrupt the block body")
 	}
@@ -491,7 +491,7 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 }
 
 // linkedWorktree creates <root>/.worktrees/<name> as a real linked worktree —
-// the layout `lode worktree next` produces — and returns its path.
+// the layout `lode work next` produces — and returns its path.
 func linkedWorktree(t *testing.T, root, name string) string {
 	t.Helper()
 	dir := filepath.Join(root, ".worktrees", name)

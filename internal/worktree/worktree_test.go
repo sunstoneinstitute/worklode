@@ -870,12 +870,12 @@ func TestContainsResolvesSymlinks(t *testing.T) {
 // The agent host (docs/self-hosted-runner.md) gives each unattended worker its
 // own linked worktree at agents/<id>, off one shared .git, so several agents
 // never contend over a single working tree. That layout only works because
-// `lode worktree next` treats "am I already in a task worktree?" as a question about
+// `lode work next` treats "am I already in a task worktree?" as a question about
 // the path — exactly one segment below the configured base — rather than
 // "am I the main checkout?".
 //
 // A worker's base worktree is not under the base, so it answers no and
-// `lode worktree next` proceeds there. Tightening this guard to compare against
+// `lode work next` proceeds there. Tightening this guard to compare against
 // MainRoot would silently strand every agent on the host, so it is pinned
 // here rather than left to the guard's current wording.
 func TestTaskIDIsFalseForAWorktreeOutsideTheBase(t *testing.T) {
@@ -905,13 +905,13 @@ func TestTaskIDIsFalseForAWorktreeOutsideTheBase(t *testing.T) {
 	}
 	if id, ok := mustLayout(t).TaskID(root); ok {
 		t.Fatalf("TaskID(%s) = (%q, true), want ok=false: an agent's base worktree "+
-			"is not a task worktree, and `lode worktree next` must run there", root, id)
+			"is not a task worktree, and `lode work next` must run there", root, id)
 	}
 }
 
 // The other half of the same contract: a task worktree created from inside an
 // agent's base worktree still resolves, even though it is nested two worktrees
-// deep. `lode worktree next` run in agents/<id> creates agents/<id>/.worktrees/<branch>,
+// deep. `lode work next` run in agents/<id> creates agents/<id>/.worktrees/<branch>,
 // and every hook that fires there has to recognise it.
 func TestTaskIDResolvesInsideANestedAgentWorktree(t *testing.T) {
 	dir := initGitRepo(t)

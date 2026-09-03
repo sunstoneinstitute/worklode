@@ -344,8 +344,8 @@ func TestTaskBriefPinnedExcludedFromMatches(t *testing.T) {
 }
 
 // TestTaskBriefSkillsFalseSkipsTheWork: ?skills=false is for callers that
-// read only the task row or the lease (lode worktree status, the pre-renew fetch in
-// lode worktree resume). It must skip the work, not just trim the output — no pin
+// read only the task row or the lease (lode work status, the pre-renew fetch in
+// lode work resume). It must skip the work, not just trim the output — no pin
 // resolution, no inlined bodies, and no embedding round trip.
 func TestTaskBriefSkillsFalseSkipsTheWork(t *testing.T) {
 	t.Parallel()
