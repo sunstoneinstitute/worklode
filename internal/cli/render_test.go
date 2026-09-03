@@ -294,8 +294,8 @@ func TestSkillTableLongNameKeepsColumn(t *testing.T) {
 
 func TestSkillSyncRender(t *testing.T) {
 	var buf bytes.Buffer
-	SkillSyncRender(&buf, model.SkillSyncReport{Synced: 12, Changed: 3, Deleted: 1, Embedded: 3})
-	want := "synced 12 skill(s): 3 changed, 1 deleted, 3 embedded\n"
+	SkillSyncRender(&buf, model.SkillSyncReport{Synced: 12, Changed: 3, Deleted: 1})
+	want := "synced 12 skill(s): 3 changed, 1 deleted\n"
 	if got := buf.String(); got != want {
 		t.Fatalf("SkillSyncRender = %q, want %q", got, want)
 	}
@@ -311,7 +311,7 @@ func TestSkillSyncRenderPartialFailure(t *testing.T) {
 	})
 	out := buf.String()
 	for _, want := range []string{
-		"synced 5 skill(s): 2 changed, 0 deleted, 0 embedded",
+		"synced 5 skill(s): 2 changed, 0 deleted",
 		"  error: acme/other: not installed",
 	} {
 		if !strings.Contains(out, want) {

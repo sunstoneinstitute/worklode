@@ -227,7 +227,7 @@ func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {
 		go s.runSkillSync(s.bgCtx, "coalesced after admin sync")
 	}
 	report := model.SkillSyncReport{
-		Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted, Embedded: sum.Embedded,
+		Synced: sum.Synced, Changed: sum.Changed, Deleted: sum.Deleted,
 	}
 	if err != nil {
 		// Logged unconditionally: a caller that drops the response (or gets

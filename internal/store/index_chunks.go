@@ -178,27 +178,35 @@ var liveHashSQL = map[string]string{
 }
 
 // staleSubjectsSQL is the per-kind query behind StaleSubjects. The LEFT JOIN
-// LATERAL reads one chunk row's hash per subject — every chunk of a subject
-// carries the same one — and IS DISTINCT FROM makes a subject with no chunk
-// rows at all stale, which is what makes a never-indexed subject converge
-// (§7).
+// LATERAL aggregates a subject's chunk rows into its hash — every chunk of a
+// subject carries the same one, so max() is that hash — and whether any of
+// them lacks a vector. IS DISTINCT FROM makes a subject with no chunk rows at
+// all stale, which is what makes a never-indexed subject converge (§7); the
+// $2 disjunct is what makes a provider change converge, since invalidation
+// nulls vectors without touching the text or its hash (§8).
 var staleSubjectsSQL = map[string]string{
 	SubjectDoc: `
 		SELECT d.id::text, d.project_id, ` + liveHashSQL[SubjectDoc] + `
 		  FROM docs d
 		  LEFT JOIN LATERAL (
-		       SELECT content_hash FROM index_chunks c WHERE c.doc_id = d.id LIMIT 1
+		       SELECT max(content_hash) AS content_hash,
+		              bool_or(embedding IS NULL) AS no_vector
+		         FROM index_chunks c WHERE c.doc_id = d.id
 		  ) ic ON true
 		 WHERE ic.content_hash IS DISTINCT FROM ` + liveHashSQL[SubjectDoc] + `
+		    OR ($2 AND ic.no_vector)
 		 ORDER BY d.id
 		 LIMIT $1`,
 	SubjectTask: `
 		SELECT t.id, t.project_id, ` + liveHashSQL[SubjectTask] + `
 		  FROM tasks t
 		  LEFT JOIN LATERAL (
-		       SELECT content_hash FROM index_chunks c WHERE c.task_id = t.id LIMIT 1
+		       SELECT max(content_hash) AS content_hash,
+		              bool_or(embedding IS NULL) AS no_vector
+		         FROM index_chunks c WHERE c.task_id = t.id
 		  ) ic ON true
 		 WHERE ic.content_hash IS DISTINCT FROM ` + liveHashSQL[SubjectTask] + `
+		    OR ($2 AND ic.no_vector)
 		 ORDER BY t.id
 		 LIMIT $1`,
 	// Skills are org-wide, so they carry no project. Soft-deleted ones are
@@ -209,19 +217,26 @@ var staleSubjectsSQL = map[string]string{
 		  FROM skills s
 		  JOIN skill_versions v ON v.id = s.latest_version_id
 		  LEFT JOIN LATERAL (
-		       SELECT content_hash FROM index_chunks c WHERE c.skill_id = s.id LIMIT 1
+		       SELECT max(content_hash) AS content_hash,
+		              bool_or(embedding IS NULL) AS no_vector
+		         FROM index_chunks c WHERE c.skill_id = s.id
 		  ) ic ON true
 		 WHERE s.deleted_at IS NULL
-		   AND ic.content_hash IS DISTINCT FROM ` + liveHashSQL[SubjectSkill] + `
+		   AND (ic.content_hash IS DISTINCT FROM ` + liveHashSQL[SubjectSkill] + `
+		        OR ($2 AND ic.no_vector))
 		 ORDER BY s.name
 		 LIMIT $1`,
 }
 
-// StaleSubjects returns up to limit subjects of kind whose indexed text no
-// longer matches the live row, never-indexed ones included. The returned
-// ContentHash is the live hash the caller writes back through
-// ReplaceSubjectChunks.
-func (s *Store) StaleSubjects(ctx context.Context, kind string, limit int) ([]ChunkSubject, error) {
+// StaleSubjects returns up to limit subjects of kind that need indexing:
+// those whose indexed text no longer matches the live row, never-indexed ones
+// included, plus — when needVectors is set, meaning an embedding provider is
+// configured — those whose chunk rows carry no vector. That second set is
+// what a provider change leaves behind (§8) and what a failed embed call
+// leaves behind mid-pass; with no provider it is every row, so a lexical-only
+// instance passes false and converges. The returned ContentHash is the live
+// hash the caller writes back through ReplaceSubjectChunks.
+func (s *Store) StaleSubjects(ctx context.Context, kind string, limit int, needVectors bool) ([]ChunkSubject, error) {
 	q, ok := staleSubjectsSQL[kind]
 	if !ok {
 		return nil, fmt.Errorf("stale subjects: unknown subject kind %q: %w", kind, ErrInvalidInput)
@@ -229,7 +244,7 @@ func (s *Store) StaleSubjects(ctx context.Context, kind string, limit int) ([]Ch
 	if limit <= 0 {
 		return nil, fmt.Errorf("stale subjects: limit must be positive, got %d: %w", limit, ErrInvalidInput)
 	}
-	rows, err := s.db.QueryContext(ctx, q, limit)
+	rows, err := s.db.QueryContext(ctx, q, limit, needVectors)
 	if err != nil {
 		return nil, fmt.Errorf("stale subjects %s: %w", kind, err)
 	}

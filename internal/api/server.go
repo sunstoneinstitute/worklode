@@ -30,6 +30,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/githubauth"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
+	"github.com/sunstoneinstitute/worklode/internal/indexer"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
@@ -118,6 +119,12 @@ type Config struct {
 	EmbeddingModel string
 	// EmbeddingAPIKey authenticates against EmbeddingURL. LODE_EMBEDDING_API_KEY.
 	EmbeddingAPIKey string
+	// IndexInterval is how often the corpus convergence loop runs
+	// (LODE_INDEX_INTERVAL, default indexer.DefaultInterval). The loop runs
+	// with or without an embedding provider — with none it still writes the
+	// chunk text the lexical arm needs (040 §7, §11) — but only when the
+	// caller passes a BackgroundCtx.
+	IndexInterval time.Duration
 	// SkillScoreFloor is the minimum cosine similarity for a recommendation,
 	// default 0.35. LODE_SKILL_SCORE_FLOOR.
 	SkillScoreFloor string
@@ -868,14 +875,20 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
 		}
 		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey, Metrics: embed.NewMetrics(reg)}
+		// index_chunks.embedding is vector(768) (040 §2.2), so a provider of
+		// any other width cannot store a single row. Refuse the boot rather
+		// than fail every write of every convergence pass.
+		if dim := s.embedder.Dim(); dim != store.IndexDim {
+			return nil, nil, fmt.Errorf("embedding provider produces %d-wide vectors, the index stores %d", dim, store.IndexDim)
+		}
 		// At boot, before the first request and regardless of whether skill
 		// sources are configured. Vectors from a previous provider are not
 		// comparable with this one's, and dropping the sources (or swapping the
 		// model on an instance that has none) leaves no sync to notice. Fatal
 		// like the bootstrap below: refusing to start beats serving matches
 		// from the wrong embedding space.
-		if err := skillsync.InvalidateOnProviderChange(context.Background(), st, s.embedder, s.log); err != nil {
-			return nil, nil, fmt.Errorf("invalidate skill embeddings: %w", err)
+		if err := indexer.InvalidateOnProviderChange(context.Background(), st, s.embedder, s.log); err != nil {
+			return nil, nil, fmt.Errorf("invalidate index vectors: %w", err)
 		}
 	}
 	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
@@ -887,7 +900,7 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES requires the GitHub App (LODE_GITHUB_APP_ID/LODE_GITHUB_APP_PRIVATE_KEY)")
 		}
 		s.skillSources = skillSources
-		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Embed: s.embedder, Log: s.log}
+		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Log: s.log}
 	}
 
 	// Blob storage (spec 021). The feature is off unless an endpoint and a
@@ -977,6 +990,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if err := st.EnsureServiceActor(context.Background(), watcherActorID, "doc-lifecycle watcher"); err != nil {
 			return nil, nil, fmt.Errorf("ensure %s actor: %w", watcherActorID, err)
 		}
+		// The corpus convergence loop (040 §7), gated the same way and for
+		// the same reason: it is a background loop with no configuration of
+		// its own to switch it on. It runs with no embedding provider too,
+		// writing the chunk text the lexical arm needs (§11).
+		go (&indexer.Indexer{
+			Store: st, Embed: s.embedder, Metrics: indexer.NewMetrics(reg), Log: s.log,
+		}).Loop(cfg.BackgroundCtx, cfg.IndexInterval)
+
 		s.watcherMetrics = watcher.NewMetrics(reg)
 		// First and only registration of the eventbus instruments: this is
 		// the process's one subscriber loop. The horizon collector in
@@ -1045,7 +1066,7 @@ func (s *server) syncOnce(ctx context.Context, reason string) {
 		return
 	}
 	s.log.Info("skill sync", "reason", reason, "synced", sum.Synced,
-		"changed", sum.Changed, "embedded", sum.Embedded, "deleted", sum.Deleted)
+		"changed", sum.Changed, "deleted", sum.Deleted)
 }
 
 func (s *server) healthz(w http.ResponseWriter, _ *http.Request) {

@@ -438,10 +438,9 @@ func (s *server) observeSkillSync(sum skillsync.Summary, err error, d time.Durat
 	}
 	s.syncRuns.WithLabelValues(result).Inc()
 	for action, n := range map[string]int{
-		"synced":   sum.Synced,
-		"changed":  sum.Changed,
-		"embedded": sum.Embedded,
-		"deleted":  sum.Deleted,
+		"synced":  sum.Synced,
+		"changed": sum.Changed,
+		"deleted": sum.Deleted,
 	} {
 		s.syncItems.WithLabelValues(action).Add(float64(n))
 	}
