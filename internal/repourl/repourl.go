@@ -56,7 +56,7 @@ func Normalize(raw string) (string, error) {
 }
 
 // Host extracts the forge host from a git remote URL, for the callers that
-// do need it — `lode derive` puts it in the repo instance IRI
+// do need it — `lode graph derive` puts it in the repo instance IRI
 // (iri.Repo(host, owner, name), WL-269) — while Normalize keeps discarding
 // it. A remote that carries no host (a bare owner/name) returns "", and the
 // caller chooses its default; input that Normalize would reject returns
