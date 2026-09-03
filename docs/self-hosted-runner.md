@@ -415,7 +415,7 @@ one filter string:
 ```
 
 That string is used twice — `supervisor.sh` substitutes it for `$ARGUMENTS` in
-the `start-agent-loop` skill body, and `poke.sh` passes it to `lode worker
+the `start-agent-loop` skill body, and `poke.sh` passes it to `lode work
 listen` — so the sidecar wakes on exactly the work its supervisor could claim.
 Only flags the skill accepts belong in it: `--project`, `--kind`,
 `--strict-focus`.

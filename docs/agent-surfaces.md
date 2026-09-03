@@ -43,7 +43,7 @@ does not merely invoke `lode`: it reads
 and hands the body to a model as its opening prompt. Moving or renaming that
 skill, or changing the `$ARGUMENTS` placeholder it substitutes, breaks the
 agent host silently — the session still starts, it just has nothing to do.
-`poke.sh` hardcodes `lode worker listen` and the filter vocabulary it shares
+`poke.sh` hardcodes `lode work listen` and the filter vocabulary it shares
 with the skill (`--project`, `--kind`, `--strict-focus`); a flag that leaves one
 side has to leave the other. `TestAgentSurfaces` sees the `lode` invocations in
 both, but not the skill path, so that one is on you.
