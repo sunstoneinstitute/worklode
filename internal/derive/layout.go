@@ -70,7 +70,7 @@ func LayoutTriples(ctx context.Context, root, host, owner, name string, m *manif
 // paths, and the document's content hash then depends on whether anyone ran a
 // build. That breaks spec 007 §2's deriver contract ("Deterministic. Same
 // inputs -> same triples") both ways: Run's hash short-circuit never fires, so
-// every run re-PUTs, and `lode gaps` reports `bin` to a user as a component
+// every run re-PUTs, and `lode graph gaps` reports `bin` to a user as a component
 // coverage gap. Untracked files are not part of the repo's layout; the tracked
 // set is, and it is the same set on every machine.
 //

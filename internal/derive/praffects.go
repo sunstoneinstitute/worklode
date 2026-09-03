@@ -50,7 +50,7 @@ type RepoReader interface {
 // The edge only — never `<component> a wl:Component` (WL-273, on ADR 049's
 // principle): the type is asserted by deriver 2 in the repo's own
 // observed/repo-layout graph. A repo with a manifest but no CI running
-// `lode derive` therefore fails wl:affectsShape's sh:class under union
+// `lode graph derive` therefore fails wl:affectsShape's sh:class under union
 // validation, and that violation is the wiring gap made visible (007 §2.3),
 // not something to stub over here.
 func PRAffectsTriples(ctx context.Context, prs []PRRef, rr RepoReader) (doc []byte, skippedRepos []string, err error) {

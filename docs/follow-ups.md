@@ -250,7 +250,7 @@ outright once it is fixed over annotating it as resolved.
   (`crates/graph-server/src/gsp.rs` `parse_precondition`, 412 on mismatch).
   Needed before a second work-graph writer exists; spec 006 should-have 6.
   Adding it changes `PutGraph`'s signature. WL-266 (spec 007 §1.1) scoped this
-  as hardening, not a prerequisite: the multi-repo `lode derive` case is solved
+  as hardening, not a prerequisite: the multi-repo `lode graph derive` case is solved
   by per-repo graph partitioning, and same-graph races are last-write-wins over
   fully recomputed documents — at worst one run stale, self-healing on the next
   run.

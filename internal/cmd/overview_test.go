@@ -219,7 +219,7 @@ func TestDriftCommandJSON(t *testing.T) {
 	fakeOverviewServer(t, func(*http.Request) (int, string) {
 		return http.StatusOK, `{"violations":[{"from":"urn:a","to":"urn:b"}],"stale_intent":[]}`
 	})
-	out, err := runLode(t, "drift", "--json")
+	out, err := runLode(t, "graph", "drift", "--json")
 	if err != nil {
 		t.Fatalf("drift --json: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestDriftJSONHonoursComponentFilter(t *testing.T) {
 		return http.StatusOK, `{"violations":[{"from":"urn:a","to":"urn:b"},{"from":"urn:x","to":"urn:y"}],` +
 			`"stale_intent":[{"from":"urn:x","to":"urn:z"}]}`
 	})
-	out, err := runLode(t, "drift", "--json", "--component", "urn:a")
+	out, err := runLode(t, "graph", "drift", "--json", "--component", "urn:a")
 	if err != nil {
 		t.Fatalf("drift --json --component: %v", err)
 	}
@@ -277,7 +277,7 @@ func TestDriftAcknowledgedFlag(t *testing.T) {
 		gotQuery = r.URL.RawQuery
 		return http.StatusOK, `{"violations":[],"stale_intent":[],"acknowledged":[]}`
 	})
-	if _, err := runLode(t, "drift", "--acknowledged", "--json"); err != nil {
+	if _, err := runLode(t, "graph", "drift", "--acknowledged", "--json"); err != nil {
 		t.Fatalf("drift --acknowledged: %v", err)
 	}
 	if !strings.Contains(gotQuery, "acknowledged=1") {
@@ -294,7 +294,7 @@ func TestDeriveServerFlagPostsToTheAPI(t *testing.T) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		return http.StatusOK, `{"results":[{"graph":"urn:g","hash":"sha256:abc","skipped":false,"empty":false,"bytes":42}]}`
 	})
-	out, err := runLode(t, "derive", "--server")
+	out, err := runLode(t, "graph", "derive", "--server")
 	if err != nil {
 		t.Fatalf("derive --server: %v", err)
 	}
@@ -311,9 +311,9 @@ func TestDeriveServerFlagPostsToTheAPI(t *testing.T) {
 // must fail rather than silently ignore them.
 func TestDeriveServerRejectsRepoLocalFlags(t *testing.T) {
 	for _, args := range [][]string{
-		{"derive", "--server", "--dry-run"},
-		{"derive", "--server", "--graph-url", "http://example.invalid"},
-		{"derive", "--server", "--allow-empty"},
+		{"graph", "derive", "--server", "--dry-run"},
+		{"graph", "derive", "--server", "--graph-url", "http://example.invalid"},
+		{"graph", "derive", "--server", "--allow-empty"},
 	} {
 		_, err := runLode(t, args...)
 		if err == nil || !strings.Contains(err.Error(), "none of the others can be") {

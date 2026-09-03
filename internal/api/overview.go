@@ -138,7 +138,7 @@ func deriveFailureStatus(err error) int {
 // runServerDerivers runs the two derivers that need the server's own inputs:
 // deploy (the store's deployment rows) and pr-affects (every task-bound PR's
 // files, read through the GitHub App). The repo-local derivers run from a
-// checkout instead — see `lode derive`.
+// checkout instead — see `lode graph derive`.
 //
 // Callers must have established that both s.cfg.Graph and s.appAuth are
 // configured; postDerive is the only one and refuses with 503 otherwise. A
@@ -183,7 +183,7 @@ func (s *server) runServerDerivers(ctx context.Context) ([]model.DeriveResult, e
 	// org-wide manifest or installation outage is otherwise silent
 	// until the guard below turns it into an opaque
 	// ErrWouldEmptyGraph. The local derivers report their non-fatal
-	// skips in `lode derive`'s output (runDeriveLocal's `notes`);
+	// skips in `lode graph derive`'s output (runDeriveLocal's `notes`);
 	// this is the server-side equivalent — logged for the operator,
 	// and named in the error the admin's POST comes back with.
 	if len(skipped) > 0 {
