@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -56,16 +57,33 @@ func newTokenCmd() *cobra.Command {
 		Use:   "token",
 		Short: "Manage bearer tokens",
 	}
-	cmd.AddCommand(newTokenCreateCmd(), newTokenRevokeCmd())
+	cmd.AddCommand(newTokenAddCmd(), newTokenRevokeCmd())
 	return cmd
 }
 
-func newTokenCreateCmd() *cobra.Command {
-	var actor, description, expiresAt string
+// newTokenAddCmd mints a bearer token: an actor-scoped one by default (POST
+// /api/v1/actors/{id}/tokens), or, with --task, a token bound to one task's
+// routes instead (001 §2.1, formerly `lode task token`) that expires with
+// the task's lease.
+func newTokenAddCmd() *cobra.Command {
+	var actor, description, expiresAt, task string
+	var ttl time.Duration
 	cmd := &cobra.Command{
-		Use:   "create",
+		Use:   "add",
 		Short: "Mint a bearer token for an actor (printed once — save it now)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if task != "" {
+				if cmd.Flags().Changed("description") || cmd.Flags().Changed("expires-at") {
+					return fmt.Errorf("--description and --expires-at do not apply with --task")
+				}
+				return runTaskTokenAdd(cmd, task, actor, ttl)
+			}
+			if cmd.Flags().Changed("ttl") {
+				return fmt.Errorf("--ttl only applies with --task")
+			}
+			if actor == "" {
+				return fmt.Errorf("--actor is required")
+			}
 			var exp *time.Time
 			if expiresAt != "" {
 				t, err := time.Parse(time.RFC3339, expiresAt)
@@ -90,11 +108,38 @@ func newTokenCreateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&actor, "actor", "", "actor id to mint the token for (required)")
+	cmd.Flags().StringVar(&actor, "actor", "", "actor id to mint the token for (required, unless --task: agent actor to act as, default sandbox)")
 	cmd.Flags().StringVar(&description, "description", "", "human-readable note about this token's purpose")
 	cmd.Flags().StringVar(&expiresAt, "expires-at", "", "RFC3339 expiry (default: never expires)")
-	cmd.MarkFlagRequired("actor")
+	cmd.Flags().StringVar(&task, "task", "", "mint a task-scoped token bound to this task instead (001 §2.1)")
+	cmd.Flags().DurationVar(&ttl, "ttl", 0, "task-scoped token lifetime, e.g. 2h (default: the lease TTL; max 24h; --task only)")
 	return cmd
+}
+
+// runTaskTokenAdd is `lode token add --task`'s body: mint a task-scoped
+// token (001 §2.1), the same request `lode task token` used to make.
+func runTaskTokenAdd(cmd *cobra.Command, task, actor string, ttl time.Duration) error {
+	c, cfg, err := newAPIClientWithConfig()
+	if err != nil {
+		return err
+	}
+	id, err := resolveTaskID(cmd.Context(), task, c, cfg)
+	if err != nil {
+		return err
+	}
+	in := model.TaskTokenInput{Actor: actor, TTLSeconds: int(ttl / time.Second)}
+	resp, raw, err := c.MintTaskToken(cmd.Context(), id, in)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), resp.Token)
+	fmt.Fprintf(cmd.ErrOrStderr(), "acts as %s, bound to %s, expires %s (extends with lease renewals)\n",
+		resp.Actor, resp.Task, cli.LocalTime(resp.ExpiresAt))
+	return nil
 }
 
 func newTokenRevokeCmd() *cobra.Command {

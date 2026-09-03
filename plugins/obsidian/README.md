@@ -73,7 +73,7 @@ build.
 
 - **Base URL** — the worklode server, e.g. `https://worklode.example.com`.
 - **Token** — a bearer token for an actor with read access, minted with
-  `lode token create --actor <id>`.
+  `lode token add --actor <id>`.
 - **Mount root** — the vault folder the mirror owns (default `Worklode`).
   May be nested, e.g. `Team/Worklode`; every folder name in it has to be a
   plain name, see Limits below. Saved a moment after you
