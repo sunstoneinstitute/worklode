@@ -308,10 +308,10 @@ Design items landed in spec 025. These are the mechanical leftovers.
   transcript.
 - `[gated]` **One door for authoring.** A worklode skill owns the terminal write step and
   delegates the interview to `superpowers:brainstorming` / `grill-with-docs`;
-  `/lode:spec` is the entry point; a pre-commit script rejects *new* files under
-  `docs/specs/` and `docs/plans/` once the store is authoritative; `lode doc
-  export` regenerates the tree as a read-only artifact so git history and grep
-  survive. Customising or hook-patching the brainstorming skill is the wrong
+  `/lode:spec` is the entry point. The file corpus it wanted gated is gone
+  (055), so what is left of this item is the single authoring door and, if
+  anyone still wants grep over the corpus, a `lode doc export`. Customising or
+  hook-patching the brainstorming skill is the wrong
   lever — it forks a skill we do not own, or makes behaviour depend on invisible
   mutation.
 - `[P3]` **The copy of the `lode` plugin in `claude-public-plugins` still documents
@@ -442,8 +442,7 @@ one pass.
   covering the rest of a section, and self-naming is a roundabout spelling of
   `coverage: full` rather than a real closure, so the rule probably wants
   narrowing to exclude the naming plan. That is an amendment to 026 §2.1, not
-  a query fix — `scripts/secmeta.py`'s §7 check does not catch it either, so
-  both would move together once the spec decides.
+  a query fix.
 
 ## From WL-148 — `lode task cost` (2026-08-20)
 
@@ -497,17 +496,9 @@ one pass.
 `internal/cmd/doctodo.go`) landed. These are the mechanical leftovers surfaced
 while dogfooding it against the real corpus.
 
-- `[P1]` **`scripts/secmeta.py` has drifted from the amended 026 §2.1.** It is
-  a second implementation of the same plan-coverage rule `designdoc.PlanIndex`
-  now implements in Go, and it now lags in two ways: it does not treat
-  `superseded` plans as discharging a section (the amendment this plan made to
-  026 §2.1), and its `resolve_ref` implements only the bare-filename arm of
-  §4, not the `./` or `../` relative-path arms the Go side handles. Two
-  implementations of one spec rule disagreeing is what produced two separate
-  defects during this plan's execution. `secmeta.py` reports and never
-  rewrites (by design), so this is a script fix, not a data fix — but it
-  should happen before the next amendment to 026 §2.1 has to be applied
-  twice.
+- ~~`[P1]` **`scripts/secmeta.py` has drifted from the amended 026 §2.1.**~~
+  Resolved by deletion: the script went with the file corpus (055), leaving
+  `designdoc.PlanIndex` as the only implementation of the rule.
 - `[P2]` **`TodoItem` should carry structured `Blockers []string`** instead of
   `internal/cmd/doctodo.go`'s `shortenPlanRefs` doing `strings.ReplaceAll` over
   prose that `internal/designdoc/todo.go` wrote into `Detail`. The rendering
@@ -529,8 +520,8 @@ while dogfooding it against the real corpus.
   `plugins/obsidian/src/api/types.ts` from `internal/model` instead of hand-mirroring)
   is the real fix; noting it here because this plan's `model.Task.Closed`
   read is what surfaced the gap.
-- `[P4]` **Every spec in `docs/specs/` is `status: draft`** — all 24 files,
-  including several long since built (e.g. 004, 005, 017, 022). This is why
+- `[P4]` **Nearly every spec is `status: draft`**, including several long
+  since built (e.g. 004, 005, 017, 022). This is why
   `lode doc todo` leads every answer with a `plan-draft (document)`
   acceptance item: with no spec ever marked `accepted`, the "document is
   draft: acceptance is the first act" gap fires universally rather than
@@ -601,7 +592,7 @@ while dogfooding it against the real corpus.
   `internal/harness/jsonhooks.go` and `internal/harness/codex_test.go`
   ("spec 024 acceptance 6"), `internal/hookrun/hookrun_test.go` ("024
   acceptance 3") and `internal/store/agent_sessions_test.go` ("spec 024 adds
-  it as a harness"). There is no `docs/specs/024-*.md`; 024 was an earlier
+  it as a harness"). There is no spec 024; it was an earlier
   number for what became 008 §17, so each should name the 008 criterion it
   means. They landed with the adapter core (WL-46) and were left alone here
   rather than rewritten under an unrelated task. Note the open-question ids

@@ -1843,3 +1843,105 @@ func TestFrontmatterEdgesBlockedByBecomesInverseBlocks(t *testing.T) {
 		t.Fatalf("frontmatterEdges = %+v, want %+v", got, want)
 	}
 }
+
+// TestLintDocs covers the dangling-reference report (055 §4.1): an unresolved
+// reference is reported, a resolved one is not, the NO-SPEC sentinel (026
+// §4.3) is not, a resolved edge whose anchor names no section of its target
+// is reported, and a deleted document's edges are excluded entirely (044
+// §4) — from the referring end.
+func TestLintDocs(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-documents-in-the-backbone",
+		Body: specBody, CreatedBy: "stig",
+	})
+
+	// sec-1 resolves and exists (not reported); sec-99 resolves to the spec
+	// but names no section of it (missing-anchor); 999-nowhere.md resolves to
+	// nothing (unresolved); NO-SPEC resolves to nothing too, but is the
+	// documented sentinel, not a defect.
+	lintPlanBody := `---
+status: draft
+covers:
+  - 025-documents-in-the-backbone.md#sec-1
+  - 025-documents-in-the-backbone.md#sec-99
+  - 999-nowhere.md#sec-1
+  - NO-SPEC
+---
+
+# Plan under lint
+`
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "lint-plan", Body: lintPlanBody, CreatedBy: "stig",
+	})
+
+	// A second plan whose only edge is unresolved, then tombstoned: it must
+	// contribute no finding at all.
+	deletedPlanBody := `---
+status: draft
+covers:
+  - 999-elsewhere.md#sec-1
+---
+
+# Deleted plan under lint
+`
+	deletedPlan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "lint-plan-deleted", Body: deletedPlanBody, CreatedBy: "stig",
+	})
+	if err := deleteDoc(t, s, deletedPlan.ID, "stig", "out of scope"); err != nil {
+		t.Fatalf("DeleteDoc(deletedPlan): %v", err)
+	}
+
+	findings, err := s.LintDocs(t.Context(), "p1")
+	if err != nil {
+		t.Fatalf("LintDocs: %v", err)
+	}
+
+	// specBody (shared with other tests in this file) carries its own
+	// unresolved requires: ref, so filter to the plan under test rather than
+	// asserting a total count. Exactly two are expected from it: the
+	// unresolved 999-nowhere.md ref and the sec-99 missing-anchor. sec-1
+	// (resolved and present) and NO-SPEC (the sentinel) contribute nothing.
+	var planFindings []model.DocLintFinding
+	for _, f := range findings {
+		if f.Doc == plan.ID {
+			planFindings = append(planFindings, f)
+		}
+	}
+	if len(planFindings) != 2 {
+		t.Fatalf("planFindings = %+v, want exactly 2", planFindings)
+	}
+
+	var unresolved, missingAnchor *model.DocLintFinding
+	for i := range planFindings {
+		switch planFindings[i].Kind {
+		case "unresolved":
+			unresolved = &planFindings[i]
+		case "missing-anchor":
+			missingAnchor = &planFindings[i]
+		}
+	}
+	if unresolved == nil {
+		t.Fatalf("findings = %+v, want an unresolved finding", findings)
+	}
+	if unresolved.Doc != plan.ID || unresolved.Slug != "lint-plan" || unresolved.DocKind != "plan" ||
+		unresolved.Type != "covers" || unresolved.Ref != "999-nowhere.md#sec-1" {
+		t.Errorf("unresolved finding = %+v, want it naming plan %d's 999-nowhere.md#sec-1 covers ref",
+			unresolved, plan.ID)
+	}
+	if missingAnchor == nil {
+		t.Fatalf("findings = %+v, want a missing-anchor finding", findings)
+	}
+	if missingAnchor.Doc != plan.ID || missingAnchor.Type != "covers" ||
+		missingAnchor.ToDoc != spec.ID || missingAnchor.ToSlug != spec.Slug || missingAnchor.ToAnchor != "sec-99" {
+		t.Errorf("missing-anchor finding = %+v, want it naming plan %d -> spec %d#sec-99",
+			missingAnchor, plan.ID, spec.ID)
+	}
+
+	for _, f := range findings {
+		if f.Doc == deletedPlan.ID {
+			t.Errorf("finding %+v belongs to deleted doc %d, want it excluded (044 §4)", f, deletedPlan.ID)
+		}
+	}
+}

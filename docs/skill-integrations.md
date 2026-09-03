@@ -77,9 +77,8 @@ the backbone — not git — as the place a document lives:
 Both gaps this brief named have since closed. There is a CLI read path from the
 backbone — `lode doc show`, and `lode show` reading through the same API — and
 there is an authoring path, so "write a lode spec" no longer means "write a
-file and sync it". What has *not* moved is the corpus of record: `docs/specs/`
-and `docs/plans/` are still where these documents are edited in this repo, so
-the backbone and the files coexist.
+file and sync it". The corpus of record has since moved too: `docs/specs/` and
+`docs/plans/` were deleted under 055, and the backbone is the only copy.
 
 ## 2. Skill inventory and conflicts
 

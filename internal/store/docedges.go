@@ -826,6 +826,92 @@ func (s *Store) ResolveDocRef(ctx context.Context, ref string) (*model.Doc, erro
 	}
 }
 
+// LintDocs reports the corpus's dangling frontmatter references (055 §4.1):
+// every doc_edges/doc_coverage_completed_with row that stayed unresolved
+// (to_external set) after rebuildEdges last ran, plus every doc_edges row
+// that resolved but whose to_anchor names no row in the target document's
+// doc_sections. project narrows the answer to the referring document's
+// project; "" answers over every project.
+//
+// Both cases are stored deliberately — rebuildEdges resolves a reference
+// once, at write time, and repointExternalEdges (WL-133) repairs an
+// unresolved one once its target is created — so this is a read of what
+// stands right now, not a defect in what was written. A reference is never
+// refused for staying unresolved; it went unreported before this, which is
+// the gap 055 §4.1 closes.
+//
+// The `NO-SPEC` sentinel (026 §4.3) is not a finding: every other resolver
+// in this codebase (designdoc.PlanTasks, designdoc.Coverage,
+// designdoc.ResolveRef) treats a base ref of exactly "NO-SPEC" as the
+// deliberate "no governing spec" marker rather than a dangling reference,
+// and this filters it out the same way rather than inventing a second rule.
+//
+// Deleted documents (docs.deleted_at IS NOT NULL) are excluded on both
+// ends: a tombstoned referrer's edges are hidden the way ListDocEdges
+// already hides them, and a tombstoned target is not reported as a
+// missing-anchor defect — 044 §4 leaves it addressable by id, not by a
+// section that still has to resolve.
+func (s *Store) LintDocs(ctx context.Context, project string) ([]model.DocLintFinding, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT 'unresolved', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
+		        coalesce(e.from_anchor,''), e.type, e.to_external,
+		        0::bigint, '', ''
+		   FROM doc_edges e
+		   JOIN docs d ON d.id = e.from_doc
+		  WHERE e.to_external IS NOT NULL AND d.deleted_at IS NULL
+		    AND ($1 = '' OR d.project_id = $1)
+
+		 UNION ALL
+
+		 SELECT 'unresolved', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
+		        coalesce(e.from_anchor,''), e.type, w.to_external,
+		        0::bigint, '', ''
+		   FROM doc_coverage_completed_with w
+		   JOIN doc_edges e ON e.id = w.edge_id
+		   JOIN docs d ON d.id = e.from_doc
+		  WHERE w.to_external IS NOT NULL AND d.deleted_at IS NULL
+		    AND ($1 = '' OR d.project_id = $1)
+
+		 UNION ALL
+
+		 SELECT 'missing-anchor', d.id, d.project_id, coalesce(d.number,0), d.slug, d.kind,
+		        coalesce(e.from_anchor,''), e.type, '',
+		        e.to_doc, td.slug, e.to_anchor
+		   FROM doc_edges e
+		   JOIN docs d ON d.id = e.from_doc
+		   JOIN docs td ON td.id = e.to_doc
+		  WHERE e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		    AND d.deleted_at IS NULL AND td.deleted_at IS NULL
+		    AND ($1 = '' OR d.project_id = $1)
+		    AND NOT EXISTS (SELECT 1 FROM doc_sections sec
+		                      WHERE sec.doc_id = e.to_doc AND sec.anchor = e.to_anchor)
+
+		  ORDER BY 3, 4, 5, 1, 7, 8, 9`, project)
+	if err != nil {
+		return nil, fmt.Errorf("lint docs: %w", err)
+	}
+	findings, err := collectRows(rows, "lint docs", func(r rowScanner) (model.DocLintFinding, error) {
+		var f model.DocLintFinding
+		err := r.Scan(&f.Kind, &f.Doc, &f.Project, &f.Number, &f.Slug, &f.DocKind,
+			&f.FromAnchor, &f.Type, &f.Ref, &f.ToDoc, &f.ToSlug, &f.ToAnchor)
+		return f, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := findings[:0]
+	for _, f := range findings {
+		if f.Kind == "unresolved" {
+			base, _ := designdoc.SplitFragment(f.Ref)
+			if base == "NO-SPEC" {
+				continue
+			}
+		}
+		out = append(out, f)
+	}
+	return out, nil
+}
+
 // docEdgeInverse names the reading of each edge type from the far end (025
 // §14): one row carries both directions, so an inbound edge is the stored row
 // relabelled rather than a second row that could disagree. Every type in the

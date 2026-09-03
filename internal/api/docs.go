@@ -286,6 +286,23 @@ func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, d)
 }
 
+// lintDocs handles GET /api/v1/docs/lint?project=: the corpus-wide read-only
+// report of dangling frontmatter references (055 §4.1) — store.LintDocs does
+// the work; this just reads the query filter and shapes the response the
+// same way every other doc list route does (?project= narrows, "" answers
+// over every project).
+func (s *server) lintDocs(w http.ResponseWriter, r *http.Request) {
+	findings, err := s.st.LintDocs(r.Context(), r.URL.Query().Get("project"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if findings == nil {
+		findings = []model.DocLintFinding{}
+	}
+	writeJSON(w, http.StatusOK, findings)
+}
+
 // withoutDocBodies blanks the markdown source on a list projection. A corpus
 // is tens of documents of tens of kilobytes each, and no list consumer reads
 // the text — the one endpoint that serves a body is GET /api/v1/docs/{id},

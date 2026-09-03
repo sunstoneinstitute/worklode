@@ -1,5 +1,4 @@
 *.png filter=lfs diff=lfs merge=lfs -text
-docs/specs/inlined/*.md linguist-generated=true -diff
 docs/mockups/cockpit/index.html filter=lfs diff=lfs merge=lfs -text
 internal/api/*_templ.go linguist-generated=true -diff
 internal/ui/*_templ.go linguist-generated=true -diff

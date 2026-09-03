@@ -23,8 +23,8 @@ func newDocTodoCmd() *cobra.Command {
 		Long: `Join a spec's planning gap, its unexecuted plans, and the ordering
 between them into one work list (026 §2.5).
 
-<ref> is any reference §4 resolves: a filename, a repo-relative path, or
-the WL-SPEC-25 shorthand. Every item is typed by the act that discharges
+<ref> is any reference §4 resolves: a slug, a bare number, or the
+WL-SPEC-25 shorthand. Every item is typed by the act that discharges
 it — writing a plan (unplanned, partial), a human accepting one
 (plan-draft), executing one (unexecuted), or landing the plan that holds
 it up (blocked).
@@ -379,7 +379,7 @@ func docTodoRowFor(it designdoc.TodoItem) docTodoRow {
 // shortenPlanRefs drops the plan corpus's own directory from every plan
 // reference in s — the column and the "requires ..." reasons alike, so one
 // rule covers both. What is left is the plan's canonical reference, its bare
-// filename (docs/authoring-design-docs.md); the directory it shares with every
+// slug; the directory it shares with every
 // other plan is the one part a reader gains nothing from. The --json items
 // keep the full repo-relative paths.
 func shortenPlanRefs(s string) string {

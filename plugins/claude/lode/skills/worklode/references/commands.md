@@ -40,6 +40,8 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
   Flags: --file
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
+- `lode doc lint` — Report dangling frontmatter references across the corpus
+  Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
   Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
 - `lode doc reviewers` — Show or replace a document's assigned reviewer set
