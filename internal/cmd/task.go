@@ -48,7 +48,6 @@ func newTaskCmd() *cobra.Command {
 		newTaskAbandonCmd(),
 		newTaskDeleteCmd(),
 		newTaskUndeleteCmd(),
-		newTaskTokenCmd(),
 		newTaskBlockCmd(),
 		newTaskBlockersCmd(),
 		newTaskUnblockCmd(),
@@ -569,49 +568,6 @@ func newTaskSkillsCmd() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-// newTaskTokenCmd mints a task-scoped token (001 §2.1): a wl_ credential
-// usable only against the named task's routes, expiring with its lease.
-func newTaskTokenCmd() *cobra.Command {
-	var actor string
-	var ttl time.Duration
-	cmd := &cobra.Command{
-		Use:   "token <task>",
-		Short: "Mint a task-scoped bearer token (printed once — save it now)",
-		Long: `Mint a bearer token bound to one task (001 §2.1): it authenticates as an
-agent actor but only reaches that task's own routes plus the shared
-read-mostly surface. It expires with the task's lease — renewals extend it,
-and closing the lease revokes it. Hand it to a sandboxed worker instead of
-your own token.`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				return err
-			}
-			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
-			if err != nil {
-				return err
-			}
-			in := model.TaskTokenInput{Actor: actor, TTLSeconds: int(ttl / time.Second)}
-			resp, raw, err := c.MintTaskToken(cmd.Context(), id, in)
-			if err != nil {
-				return err
-			}
-			if jsonOut(cmd) {
-				printRaw(cmd, raw)
-				return nil
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), resp.Token)
-			fmt.Fprintf(cmd.ErrOrStderr(), "acts as %s, bound to %s, expires %s (extends with lease renewals)\n",
-				resp.Actor, resp.Task, cli.LocalTime(resp.ExpiresAt))
-			return nil
-		},
-	}
-	cmd.Flags().StringVar(&actor, "actor", "", "agent actor the token acts as (default: sandbox, auto-provisioned)")
-	cmd.Flags().DurationVar(&ttl, "ttl", 0, "token lifetime, e.g. 2h (default: the lease TTL; max 24h)")
-	return cmd
 }
 
 func newTaskEditCmd() *cobra.Command {
