@@ -471,7 +471,7 @@ func TestStaleSubjectsConverges(t *testing.T) {
 	}
 
 	// Never indexed: stale, with no chunk rows at all.
-	stale, err := s.StaleSubjects(ctx, SubjectTask, 10)
+	stale, err := s.StaleSubjects(ctx, SubjectTask, 10, false)
 	if err != nil {
 		t.Fatalf("stale: %v", err)
 	}
@@ -489,7 +489,7 @@ func TestStaleSubjectsConverges(t *testing.T) {
 	index(stale[0])
 
 	// Second pass over an unchanged corpus: nothing.
-	if stale, err = s.StaleSubjects(ctx, SubjectTask, 10); err != nil || len(stale) != 0 {
+	if stale, err = s.StaleSubjects(ctx, SubjectTask, 10, false); err != nil || len(stale) != 0 {
 		t.Fatalf("second pass: %+v err=%v", stale, err)
 	}
 
@@ -498,13 +498,52 @@ func TestStaleSubjectsConverges(t *testing.T) {
 		`UPDATE tasks SET title = 'edited' WHERE id = 'WL-1'`); err != nil {
 		t.Fatalf("edit task: %v", err)
 	}
-	stale, err = s.StaleSubjects(ctx, SubjectTask, 10)
+	stale, err = s.StaleSubjects(ctx, SubjectTask, 10, false)
 	if err != nil || len(stale) != 1 {
 		t.Fatalf("after edit: %+v err=%v", stale, err)
 	}
 	index(stale[0])
-	if stale, err = s.StaleSubjects(ctx, SubjectTask, 10); err != nil || len(stale) != 0 {
+	if stale, err = s.StaleSubjects(ctx, SubjectTask, 10, false); err != nil || len(stale) != 0 {
 		t.Fatalf("after re-index: %+v err=%v", stale, err)
+	}
+}
+
+// TestStaleSubjectsNeedVectors is the other half of 040 §8: invalidation
+// nulls vectors without touching the text or its hash, so a row with no
+// vector has to count as needing work — but only on an instance that has a
+// provider to compute one with (§11).
+func TestStaleSubjectsNeedVectors(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := context.Background()
+
+	if err := seedTask(t, s, "WL-1"); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+	stale, err := s.StaleSubjects(ctx, SubjectTask, 10, true)
+	if err != nil || len(stale) != 1 {
+		t.Fatalf("never-indexed task: %+v err=%v", stale, err)
+	}
+	// Indexed with a vector: not stale either way.
+	chunks := []corpusindex.Chunk{{Index: 0, Text: "body"}}
+	if err := s.ReplaceSubjectChunks(ctx, stale[0], chunks, [][]float32{vec(1, 0, 0)}); err != nil {
+		t.Fatalf("index: %v", err)
+	}
+	for _, needVectors := range []bool{false, true} {
+		if got, err := s.StaleSubjects(ctx, SubjectTask, 10, needVectors); err != nil || len(got) != 0 {
+			t.Fatalf("indexed with a vector, needVectors=%v: %+v err=%v", needVectors, got, err)
+		}
+	}
+
+	if _, err := s.ClearAllChunkVectors(ctx); err != nil {
+		t.Fatalf("clear vectors: %v", err)
+	}
+	if got, err := s.StaleSubjects(ctx, SubjectTask, 10, false); err != nil || len(got) != 0 {
+		t.Fatalf("no provider: a null vector is finished work, got %+v err=%v", got, err)
+	}
+	got, err := s.StaleSubjects(ctx, SubjectTask, 10, true)
+	if err != nil || len(got) != 1 || got[0].TaskID != "WL-1" {
+		t.Fatalf("with a provider: want WL-1 back for re-embedding, got %+v err=%v", got, err)
 	}
 }
 
@@ -521,7 +560,7 @@ func TestStaleSubjectsSkills(t *testing.T) {
 	}
 	tdd, _ := s.GetSkill(ctx, "tdd")
 
-	stale, err := s.StaleSubjects(ctx, SubjectSkill, 10)
+	stale, err := s.StaleSubjects(ctx, SubjectSkill, 10, false)
 	if err != nil || len(stale) != 1 || stale[0].SkillID != tdd.ID || stale[0].ContentHash != "h1" {
 		t.Fatalf("never-indexed skill: %+v err=%v", stale, err)
 	}
@@ -533,14 +572,14 @@ func TestStaleSubjectsSkills(t *testing.T) {
 		[]corpusindex.Chunk{{Index: 0, Text: "body"}}, nil); err != nil {
 		t.Fatalf("index skill: %v", err)
 	}
-	if stale, err = s.StaleSubjects(ctx, SubjectSkill, 10); err != nil || len(stale) != 0 {
+	if stale, err = s.StaleSubjects(ctx, SubjectSkill, 10, false); err != nil || len(stale) != 0 {
 		t.Fatalf("second pass: %+v err=%v", stale, err)
 	}
 
 	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", nil); err != nil {
 		t.Fatalf("soft delete: %v", err)
 	}
-	if stale, err = s.StaleSubjects(ctx, SubjectSkill, 10); err != nil || len(stale) != 0 {
+	if stale, err = s.StaleSubjects(ctx, SubjectSkill, 10, false); err != nil || len(stale) != 0 {
 		t.Fatalf("soft-deleted skill is stale: %+v err=%v", stale, err)
 	}
 }
@@ -552,10 +591,10 @@ func TestStaleSubjectsRejectsUnknownKind(t *testing.T) {
 	s := OpenTestStore(t)
 	ctx := context.Background()
 
-	if _, err := s.StaleSubjects(ctx, "event", 10); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.StaleSubjects(ctx, "event", 10, false); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("unknown kind: want ErrInvalidInput, got %v", err)
 	}
-	if _, err := s.StaleSubjects(ctx, SubjectTask, 0); !errors.Is(err, ErrInvalidInput) {
+	if _, err := s.StaleSubjects(ctx, SubjectTask, 0, false); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("limit=0: want ErrInvalidInput, got %v", err)
 	}
 }

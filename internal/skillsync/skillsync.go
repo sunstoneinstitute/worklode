@@ -1,6 +1,7 @@
 // Package skillsync ingests skill directories from configured git source
 // repos into the backbone: parse SKILL.md frontmatter, content-hash the dir,
-// archive it, and (when a provider is configured) embed the SKILL.md body.
+// and archive it. Its job ends at the upserted row — the convergence loop in
+// internal/indexer chunks and embeds what it finds (040 §7).
 package skillsync
 
 import (
@@ -17,9 +18,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
-	"github.com/sunstoneinstitute/worklode/internal/embed"
-	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillhash"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -47,15 +45,13 @@ type FetchFunc func(ctx context.Context, repo, ref string) ([]byte, error)
 type Syncer struct {
 	Store *store.Store
 	Fetch FetchFunc
-	Embed embed.Provider // nil = pins-only instance, skip embedding
-	Log   *slog.Logger   // nil = slog.Default()
+	Log   *slog.Logger // nil = slog.Default()
 }
 
 type Summary struct {
-	Synced   int `json:"synced"`  // skills found and upserted
-	Changed  int `json:"changed"` // of those, new content this sync
-	Deleted  int `json:"deleted"`
-	Embedded int `json:"embedded"` // skills embedded, on content change or by convergence
+	Synced  int `json:"synced"`  // skills found and upserted
+	Changed int `json:"changed"` // of those, new content this sync
+	Deleted int `json:"deleted"`
 }
 
 func (sy *Syncer) log() *slog.Logger {
@@ -65,103 +61,25 @@ func (sy *Syncer) log() *slog.Logger {
 	return slog.Default()
 }
 
-// SyncAll fully syncs every source: upsert found skills, soft-delete the
-// missing, re-embed the changed, and embed whatever still has no vectors.
-// A failing source does not stop the others — a 5xx or a rate limit on one
-// repo should not leave the rest unsynced — so the returned Summary covers
-// whatever did sync alongside the joined errors. A failed embedding
-// invalidation is the exception: it returns before any source is synced, so
-// a zero Summary with an error means nothing happened at all.
+// SyncAll fully syncs every source: upsert found skills and soft-delete the
+// missing. A failing source does not stop the others — a 5xx or a rate limit
+// on one repo should not leave the rest unsynced — so the returned Summary
+// covers whatever did sync alongside the joined errors. Nothing here embeds:
+// a changed skill is stale to the convergence loop by its content hash, and
+// the next pass indexes it (040 §7).
 func (sy *Syncer) SyncAll(ctx context.Context, sources []Source) (Summary, error) {
 	var sum Summary
 	var errs []error
-	if sy.Embed != nil {
-		// Before anything is embedded: syncing first would write vectors of the
-		// new model into a table still holding the old model's, which mixes two
-		// incomparable spaces and, on a dimension change, breaks every query.
-		if err := InvalidateOnProviderChange(ctx, sy.Store, sy.Embed, sy.Log); err != nil {
-			return sum, err
-		}
-	}
 	for _, src := range sources {
 		s, err := sy.syncSource(ctx, src)
 		sum.Synced += s.Synced
 		sum.Changed += s.Changed
 		sum.Deleted += s.Deleted
-		sum.Embedded += s.Embedded
 		if err != nil {
 			errs = append(errs, fmt.Errorf("sync %s@%s: %w", src.Repo, src.Ref, err))
 		}
 	}
-	if sy.Embed != nil {
-		n, err := sy.embedMissing(ctx)
-		sum.Embedded += n
-		if err != nil {
-			errs = append(errs, fmt.Errorf("converge embeddings: %w", err))
-		}
-	}
 	return sum, errors.Join(errs...)
-}
-
-// InvalidateOnProviderChange drops every stored vector when p is not the
-// provider they were computed with, and records p as the new one. Re-embedding
-// on content change alone cannot recover from a swap: a skill whose content
-// did not change is never re-embedded, and vectors from two models are not
-// comparable — at two dimensions they make every query error outright.
-//
-// It takes a Store and a Provider rather than a Syncer because it must also
-// run at boot on an instance with no skill sources configured, where there is
-// no Syncer. A caller may pass a nil log.
-func InvalidateOnProviderChange(ctx context.Context, st *store.Store, p embed.Provider, log *slog.Logger) error {
-	if log == nil {
-		log = slog.Default()
-	}
-	id := p.ID()
-	stored, err := st.EmbeddingProviderID(ctx)
-	if err != nil {
-		return err
-	}
-	if stored == id {
-		return nil
-	}
-	n, err := st.ClearAllChunkVectors(ctx)
-	if err != nil {
-		return err
-	}
-	if err := st.SetEmbeddingProviderID(ctx, id); err != nil {
-		return err
-	}
-	// Silent only on the usual first boot: no id recorded and nothing stored.
-	// A real swap that finds zero vectors still gets logged — that is exactly
-	// the state an operator debugging empty recommendations needs to see.
-	if stored != "" || n > 0 {
-		log.Info("embedding provider changed, cleared embeddings",
-			"from", stored, "to", id, "cleared", n)
-	}
-	return nil
-}
-
-// embedMissing embeds every live skill that has no vectors, returning how
-// many it embedded. This is what makes the corpus converge: it re-embeds
-// after an invalidation, and retries skills whose embed call failed on an
-// earlier sync — those keep their content hash, so nothing else would.
-func (sy *Syncer) embedMissing(ctx context.Context) (int, error) {
-	skills, err := sy.Store.SkillsMissingEmbeddings(ctx)
-	if err != nil {
-		return 0, err
-	}
-	n := 0
-	for _, sk := range skills {
-		if err := sy.embedSkill(ctx, skillToEmbed{
-			id: sk.ID, name: sk.Name, description: sk.Description,
-			contentHash: sk.ContentHash, skillMD: sk.SkillMD,
-		}); err != nil {
-			sy.log().Warn("skill embed failed", "repo", sk.SourceRepo, "skill", sk.Name, "err", err)
-			continue
-		}
-		n++
-	}
-	return n, nil
 }
 
 // syncSource aborts on a tarball-level failure (fetch, gunzip, read) because
@@ -186,7 +104,7 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 			sy.warn(src, "skipping skill dir", "dir", d.dir, "err", err)
 			continue
 		}
-		id, changed, err := sy.Store.UpsertSkill(ctx, *u)
+		_, changed, err := sy.Store.UpsertSkill(ctx, *u)
 		if err != nil {
 			sy.warn(src, "skill upsert failed", "skill", u.Name, "dir", d.dir, "err", err)
 			continue
@@ -205,16 +123,6 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 		sum.Synced++
 		if changed {
 			sum.Changed++
-			if sy.Embed != nil {
-				if err := sy.reembed(ctx, skillToEmbed{
-					id: id, name: u.Name, description: u.Description,
-					contentHash: u.ContentHash, skillMD: u.SkillMD,
-				}); err != nil {
-					sy.warn(src, "skill embed failed", "skill", u.Name, "err", err)
-				} else {
-					sum.Embedded++
-				}
-			}
 		}
 	}
 	if len(dirs) == 0 {
@@ -231,7 +139,7 @@ func (sy *Syncer) syncSource(ctx context.Context, src Source) (Summary, error) {
 	sum.Deleted = int(n)
 	sy.log().Info("synced skill source", "repo", src.Repo, "ref", src.Ref, "commit", commit,
 		"dirs", len(dirs), "synced", sum.Synced, "changed", sum.Changed,
-		"embedded", sum.Embedded, "deleted", sum.Deleted)
+		"deleted", sum.Deleted)
 	return sum, nil
 }
 
@@ -256,55 +164,6 @@ func (sy *Syncer) liveCount(ctx context.Context, repo string) int {
 		}
 	}
 	return n
-}
-
-// reembed replaces the vectors of a skill whose content just changed. The
-// old vectors go first, so a provider failure leaves the skill with none and
-// embedMissing retries it later in this same SyncAll pass. Embedding in place
-// instead would, on failure, leave vectors describing content the skill no
-// longer has — and its content hash now matches, so nothing would ever
-// replace them. Missing vectors are repairable; stale ones are invisible.
-func (sy *Syncer) reembed(ctx context.Context, sk skillToEmbed) error {
-	if err := sy.Store.ReplaceSubjectChunks(ctx, sk.subject(), nil, nil); err != nil {
-		return err
-	}
-	return sy.embedSkill(ctx, sk)
-}
-
-// skillToEmbed is what embedding one skill needs, from either the upsert that
-// just changed it or the row embedMissing found.
-type skillToEmbed struct {
-	id          int64
-	name        string
-	description string
-	contentHash string
-	skillMD     string
-}
-
-func (sk skillToEmbed) subject() store.ChunkSubject {
-	return store.ChunkSubject{
-		Kind:        store.SubjectSkill,
-		SkillID:     sk.id,
-		ContentHash: sk.contentHash,
-	}
-}
-
-// embedSkill chunks a skill the way spec 040 §4 does for every subject kind
-// and writes the result to index_chunks. Interim glue: the convergence loop
-// takes this over and skillsync stops embedding entirely (040 §7).
-func (sy *Syncer) embedSkill(ctx context.Context, sk skillToEmbed) error {
-	chunks := corpusindex.ChunkSkill(model.Skill{Name: sk.name, Description: sk.description}, sk.skillMD)
-	// The header is prepended to the text as the embed input, so the vector is
-	// conditioned on where the text lives (§4.3); the two are stored apart.
-	texts := make([]string, len(chunks))
-	for i, c := range chunks {
-		texts[i] = c.Header + "\n\n" + c.Text
-	}
-	vecs, err := sy.Embed.Embed(ctx, embed.RoleDocument, texts)
-	if err != nil {
-		return err
-	}
-	return sy.Store.ReplaceSubjectChunks(ctx, sk.subject(), chunks, vecs)
 }
 
 // file is one file inside a skill dir. exec carries the executable bit, which

@@ -44,11 +44,10 @@ type SkillRecommendation struct {
 // messages — the counts are real work done and must not be thrown away just
 // because another source in the same request failed.
 type SkillSyncReport struct {
-	Synced   int      `json:"synced"`
-	Changed  int      `json:"changed"`
-	Deleted  int      `json:"deleted"`
-	Embedded int      `json:"embedded"`
-	Errors   []string `json:"errors,omitempty"`
+	Synced  int      `json:"synced"`
+	Changed int      `json:"changed"`
+	Deleted int      `json:"deleted"`
+	Errors  []string `json:"errors,omitempty"`
 }
 
 // RecommendInput is the request body for RecommendSkills (POST

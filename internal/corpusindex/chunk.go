@@ -55,6 +55,13 @@ func windowed(anchor, header, text string, start int) []Chunk {
 		budget = 1 // pathological: a header alone at or past the budget
 	}
 	pieces := embed.Chunks(text, budget, ChunkOverlap)
+	if len(pieces) == 0 {
+		// Empty text still yields one chunk. The header alone carries the
+		// subject's title and address, and more importantly a subject with no
+		// chunk rows is stale forever — the convergence loop would retry an
+		// empty document on every pass (§7).
+		pieces = []string{""}
+	}
 	out := make([]Chunk, len(pieces))
 	for i, p := range pieces {
 		out[i] = Chunk{Anchor: anchor, Index: start + i, Header: header, Text: p}

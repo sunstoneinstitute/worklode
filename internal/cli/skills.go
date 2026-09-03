@@ -52,8 +52,8 @@ func (c *Client) SyncSkills(ctx context.Context) (model.SkillSyncReport, []byte,
 // "error:" line per per-source failure (real work can still have happened
 // alongside those, per SkillSyncReport's doc comment).
 func SkillSyncRender(w io.Writer, report model.SkillSyncReport) {
-	fmt.Fprintf(w, "synced %d skill(s): %d changed, %d deleted, %d embedded\n",
-		report.Synced, report.Changed, report.Deleted, report.Embedded)
+	fmt.Fprintf(w, "synced %d skill(s): %d changed, %d deleted\n",
+		report.Synced, report.Changed, report.Deleted)
 	for _, e := range report.Errors {
 		fmt.Fprintf(w, "  error: %s\n", e)
 	}
