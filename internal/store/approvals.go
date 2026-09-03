@@ -37,22 +37,34 @@ func DocEntityID(docID int64) string {
 }
 
 // InsertAwaitingApproval materializes the requirement as an 'awaiting' row.
-// The ON CONFLICT list is migration 0057's whole unique key, lane columns
-// included, so two reviewer lanes on one document revision coexist while a
-// redelivered or reopened PR — which writes the same NULL/NULL lane — still
-// does not duplicate the requirement. That last part holds only because the
-// key is NULLS NOT DISTINCT.
+// The ON CONFLICT list is migration 0064's whole unique key: entity_kind,
+// entity_id, subject_revision and lane, so two reviewer lanes on one
+// document revision coexist while a redelivered or reopened PR — which
+// writes the same no-lane row — still does not duplicate the requirement.
+//
+// No caller sets an explicit lane yet (029 §7.2's flow-rule lane names are a
+// later task), so lane is derived from required_actor/required_role here
+// only to keep each row distinct the way the old required_role/required_actor
+// key did: required_actor for a per-reviewer row (RequestDocApproval), empty
+// for a PR-ingest row with neither set. A future task that names real flow
+// lanes replaces this derivation, not the constraint.
 func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 	entityKind, entityID, subjectRevision string,
 	requiredRole, requiredActor *string) error {
+	lane := ""
+	switch {
+	case requiredActor != nil:
+		lane = *requiredActor
+	case requiredRole != nil:
+		lane = *requiredRole
+	}
 	_, err := tx.Exec(
 		`INSERT INTO approvals
 		   (entity_kind, entity_id, subject_revision, required_role,
-		    required_actor, state, created_at)
-		 VALUES ($1, $2, $3, $4, $5, 'awaiting', $6)
-		 ON CONFLICT (entity_kind, entity_id, subject_revision, required_role,
-		              required_actor) DO NOTHING`,
-		entityKind, entityID, subjectRevision, requiredRole, requiredActor,
+		    required_actor, lane, state, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'awaiting', $7)
+		 ON CONFLICT (entity_kind, entity_id, subject_revision, lane) DO NOTHING`,
+		entityKind, entityID, subjectRevision, requiredRole, requiredActor, lane,
 		now.UTC())
 	if err != nil {
 		return fmt.Errorf("insert awaiting approval %s %s@%s: %w",
@@ -65,14 +77,14 @@ func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 // doc_reviewers, assigned separately via SetDocReviewers) for one document
 // revision: one 'awaiting' row per assigned reviewer, all on the same
 // subject_revision (the docs.version the reviewers see), which is exactly the
-// shape migration 0057's per-lane unique key permits. Re-running it for the
+// shape migration 0064's per-lane unique key permits. Re-running it for the
 // same version is a no-op, and a reviewer assigned later gets only the new
 // lane the next time this runs.
 //
 // 029 §7.2's role-scoped lanes (a flow requiring "someone in this group")
 // call InsertAwaitingApproval directly with a required_role: that assignment
 // is project policy, not a document's own reviewer set, and the two lane
-// kinds coexist on one revision under 0057's key without conflict.
+// kinds coexist on one revision under 0064's key without conflict.
 func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) error {
 	reviewers, err := docReviewers(tx, docID)
 	if err != nil {
