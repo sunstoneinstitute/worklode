@@ -19,7 +19,7 @@ func TestValidName(t *testing.T) {
 }
 
 // TestValidNameDeniesLoaderSensitive covers ADR 047: names that satisfy the
-// grammar but redirect how a `lode secrets exec` child loads code.
+// grammar but redirect how a `lode secret exec` child loads code.
 func TestValidNameDeniesLoaderSensitive(t *testing.T) {
 	denied := []string{
 		// glibc and dyld namespaces, by prefix.

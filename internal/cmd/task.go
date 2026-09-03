@@ -348,7 +348,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
 		"record that this task was spun out of the work on that task")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
-		"org-catalog secret names this task needs, comma-separated (see `lode secrets catalog`)")
+		"org-catalog secret names this task needs, comma-separated (see `lode secret catalog`)")
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
