@@ -1,7 +1,7 @@
-// worker.go: `lode worker` — what an unattended worker loop needs beyond the
-// lifecycle pair in lifecycle.go. Today that is `listen`: block until the
-// backbone holds work this worker could claim, so a supervisor can sleep
-// instead of spinning on `lode work next`.
+// worklisten.go: `lode work listen` — what an unattended worker loop needs
+// beyond the lifecycle pair in lifecycle.go. Block until the backbone holds
+// work this worker could claim, so a supervisor can sleep instead of
+// spinning on `lode work next`.
 //
 // `listen` asks the same question `lode work next` asks, through the same endpoint
 // with DryRun set, rather than reconstructing "is there ready work" from a
@@ -27,23 +27,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-func newWorkerCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "worker",
-		Short: "Unattended worker-loop helpers",
-	}
-	cmd.AddCommand(newWorkerListenCmd())
-	return cmd
-}
-
-func init() { rootCmd.AddCommand(newWorkerCmd()) }
-
 // listenRetryFloor is the first backoff after a transport failure. It doubles
 // up to the poll interval, so a server that is down briefly costs one short
 // retry and a server that is down for hours costs one poll per interval.
 const listenRetryFloor = 5 * time.Second
 
-func newWorkerListenCmd() *cobra.Command {
+func newListenCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind string
 	var strictFocus bool
@@ -76,7 +65,7 @@ func newWorkerListenCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runWorkerListen(cmd, c, model.ClaimNextInput{
+			return runListen(cmd, c, model.ClaimNextInput{
 				Project:     sc.Project,
 				Kind:        kind,
 				StrictFocus: strictFocus,
@@ -93,11 +82,11 @@ func newWorkerListenCmd() *cobra.Command {
 	return cmd
 }
 
-// runWorkerListen polls until a pick appears, printing each new one.
+// runListen polls until a pick appears, printing each new one.
 //
 // Signals end it as a success: a listener is meant to be stopped, and a
 // supervisor restarting one should not read SIGTERM as a failure.
-func runWorkerListen(cmd *cobra.Command, c *cli.Client, in model.ClaimNextInput, interval time.Duration, once bool) error {
+func runListen(cmd *cobra.Command, c *cli.Client, in model.ClaimNextInput, interval time.Duration, once bool) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
