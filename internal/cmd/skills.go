@@ -12,16 +12,16 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
 )
 
-func newSkillsCmd() *cobra.Command {
+func newSkillCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "skills",
+		Use:   "skill",
 		Short: "Org-wide agent skills: list, recommend, install, sync",
 	}
 	cmd.AddCommand(newSkillsListCmd(), newSkillsRecommendCmd(), newSkillsInstallCmd(), newSkillsSyncCmd())
 	return cmd
 }
 
-func init() { rootCmd.AddCommand(newSkillsCmd()) }
+func init() { rootCmd.AddCommand(newSkillCmd()) }
 
 func newSkillsListCmd() *cobra.Command {
 	return &cobra.Command{

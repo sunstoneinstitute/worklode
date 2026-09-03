@@ -234,7 +234,7 @@ func TestSessionStartSkillsArchiveFetchFailure(t *testing.T) {
 	// The failed match falls back to the install hint, never a local path —
 	// whatever shape a successful path would have taken.
 	loc := extractMatchLocation(t, ctx, "diagnose")
-	if loc != "lode skills install diagnose" {
+	if loc != "lode skill install diagnose" {
 		t.Fatalf("match location for a failed install = %q, want the install hint", loc)
 	}
 
@@ -429,7 +429,7 @@ func TestSessionStartSkillsPinnedByteCapFallsBackToInstallHint(t *testing.T) {
 	ctx := additionalContext(t, stdout)
 
 	got := pinnedBodyLine(t, ctx, "big")
-	want := "(content omitted — " + humanKB(len(big)) + "; read it at lode skills install big)"
+	want := "(content omitted — " + humanKB(len(big)) + "; read it at lode skill install big)"
 	if got != want {
 		t.Fatalf("pinned body line = %q, want %q", got, want)
 	}
