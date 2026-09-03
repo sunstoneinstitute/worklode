@@ -108,7 +108,7 @@ specification.
 
 What a rename does owe the corpus is a **pointer**, and only where a section's
 subject *is* the command surface — a table of spellings, a "command surface"
-heading. That is an ordinary amendment (see the `worklode-docs-authoring`
+heading. That is an ordinary amendment (see the `lode:writing-docs`
 skill): the
 inline `> **Amended by spec NNN.**` note next to the heading, `amends` on the
 renaming spec, `amendedBy` on the renamed one. A section that merely mentions a
