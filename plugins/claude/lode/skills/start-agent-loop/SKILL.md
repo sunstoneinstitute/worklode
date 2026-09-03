@@ -64,12 +64,12 @@ reshapes the rest.
    it the worktree path, the brief verbatim, and any standing guidance from
    $ARGUMENTS. Tier it per the delegation table in the working-under-worklode
    skill. It commits, pushes the branch, and opens the PR; it does not call
-   `done`. One task per subagent is what keeps this loop's own context from
+   `submit`. One task per subagent is what keeps this loop's own context from
    filling up over a long run.
 5. Judge its report yourself — that judgment is the whole reason this loop is
    an agent and not a shell script. Confirm the commits actually landed on that
    worktree's branch (`git -C <worktree> log --oneline origin/main..HEAD`)
-   before believing a DONE. Then `lode work done --json`, or `lode work
+   before believing a DONE. Then `lode work submit --json`, or `lode work
    block --on <id> --json` when the report names a real blocker. Neither
    command removes the worktree itself (`lode work` only ever creates
    one) — from the main repo, run `git worktree remove <worktree>` (add

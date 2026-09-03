@@ -236,11 +236,11 @@ Flags: --agent, --no-agent, --no-statusline, --no-vcs, --scope, --skills, --stat
 
 - `lode work block` — Record that another task blocks the current worktree's task, and release its lease
   Flags: --on
-- `lode work done` — Submit the current worktree's task for review and release its lease
 - `lode work next` — Claim a task (or the top-ranked ready one), set up its worktree, and print its brief
   Flags: --kind, --project, --repo, --strict-focus
 - `lode work resume` — Re-acquire the lease on the current (or given) worktree's task
 - `lode work status` — Show the current worktree's task, lease, and session-marker state (read-only)
+- `lode work submit` — Submit the current worktree's task for review and release its lease
 
 ## `lode worker` — Unattended worker-loop helpers
 
