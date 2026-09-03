@@ -16,8 +16,8 @@ func newProjectCmd() *cobra.Command {
 		Use:   "project",
 		Short: "Manage projects and their repos",
 	}
-	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
-		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectSetCmd(),
+	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectRepoCmd(),
+		newProjectFocusCmd(), newProjectSetCmd(),
 		newProjectResolveCmd(), newProjectShowCmd(),
 		newProjectDoctorCmd(), newProjectCrewCmd())
 	return cmd
@@ -87,10 +87,23 @@ func newProjectListCmd() *cobra.Command {
 // doneStateFlagUsage documents --done-state on the repo subcommands.
 const doneStateFlagUsage = "terminal delivery state for the repo: merged, deployed_prod, or released"
 
-func newProjectAddRepoCmd() *cobra.Command {
+// newProjectRepoCmd groups the repo-mapping subcommands (061 §2.2, WL-490):
+// a project's repos are a sub-collection of the project, nested the same way
+// `project crew add`/`remove` are. `remove` unmaps a repo and nothing else —
+// it is not `delete`, which tombstones an entity (044).
+func newProjectRepoCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "repo",
+		Short: "Map, edit, and unmap a project's GitHub repos",
+	}
+	cmd.AddCommand(newProjectRepoAddCmd(), newProjectRepoEditCmd(), newProjectRepoRemoveCmd())
+	return cmd
+}
+
+func newProjectRepoAddCmd() *cobra.Command {
 	var doneState string
 	cmd := &cobra.Command{
-		Use:   "add-repo <id> <owner/name>",
+		Use:   "add <project> <owner/name>",
 		Short: "Map a GitHub repo to a project",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -230,10 +243,10 @@ func newProjectCrewRemoveCmd() *cobra.Command {
 	}
 }
 
-func newProjectSetRepoCmd() *cobra.Command {
+func newProjectRepoEditCmd() *cobra.Command {
 	var doneState string
 	cmd := &cobra.Command{
-		Use:   "set-repo <owner/name>",
+		Use:   "edit <owner/name>",
 		Short: "Update settings on an already-mapped repo",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -256,6 +269,37 @@ func newProjectSetRepoCmd() *cobra.Command {
 	cmd.Flags().StringVar(&doneState, "done-state", "", doneStateFlagUsage)
 	cmd.MarkFlagRequired("done-state")
 	return cmd
+}
+
+// newProjectRepoRemoveCmd unmaps a repo from its project. A repo maps to at
+// most one project, so the repo names the mapping on its own.
+func newProjectRepoRemoveCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "remove <owner/name>",
+		Short: "Unmap a repo from its project",
+		Long: "Unmap a repo from its project.\n\n" +
+			"Only the mapping goes. Tasks, documents and ingestion history filed\n" +
+			"while the repo was mapped keep their project and stay addressable;\n" +
+			"future webhook traffic for the repo stops resolving to a project.\n" +
+			"This is not a delete: nothing is tombstoned.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			raw, err := c.RemoveRepo(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "unmapped %s\n", args[0])
+			return nil
+		},
+	}
 }
 
 // newProjectFocusCmd is `lode project focus <id>`: the read-only view of a
@@ -467,7 +511,7 @@ func newProjectResolveCmd() *cobra.Command {
 			o := cmd.OutOrStdout()
 			if sc.Project == "" {
 				fmt.Fprintln(o, "no current project: commands run across every project")
-				fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
+				fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project repo add"`)
 				return nil
 			}
 			fmt.Fprintf(o, "%s%s — from %s\n", sc.Project, cli.KeySuffix(sc.Key), scopeOrigin(sc))
@@ -515,7 +559,7 @@ func runProjectShow(cmd *cobra.Command, project string, days int) error {
 	if id == "" {
 		o := cmd.OutOrStdout()
 		fmt.Fprintln(o, "no current project: pass --project <id> to name one")
-		fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project add-repo"`)
+		fmt.Fprintln(o, `set current_project in .worklode/config.toml, or map this repo with "lode project repo add"`)
 		return nil
 	}
 

@@ -285,6 +285,7 @@ var routeGuards = map[string]routeGuard{
 	"PATCH /api/v1/projects/{id}":              guarded(permProjectAdmin),
 	"POST /api/v1/projects/{id}/repos":         guarded(permProjectAdmin),
 	"PATCH /api/v1/repos/{owner}/{name}":       guarded(permProjectAdmin),
+	"DELETE /api/v1/repos/{owner}/{name}":      guarded(permProjectAdmin),
 	"POST /api/v1/actors":                      guarded(permActorAdmin),
 	"POST /api/v1/tasks/{id}/tokens":           guarded(permTaskToken),
 	"POST /api/v1/actors/{id}/tokens":          guarded(permActorAdmin),

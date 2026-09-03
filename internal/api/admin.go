@@ -315,9 +315,11 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.st.AddRepo(r.Context(), id, req.Repo); err != nil {
+		s.observeRepoMapping("add", repoMappingOutcome(err))
 		s.mapStoreErr(w, err)
 		return
 	}
+	s.observeRepoMapping("add", "ok")
 	doneState := store.DefaultDoneState
 	var warnings []string
 	switch {
@@ -421,9 +423,28 @@ func (s *server) patchRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.st.SetRepoDoneState(r.Context(), repo, req.DoneState); err != nil {
+		s.observeRepoMapping("edit", repoMappingOutcome(err))
 		s.mapStoreErr(w, err)
 		return
 	}
+	s.observeRepoMapping("edit", "ok")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeRepo handles DELETE /api/v1/repos/{owner}/{name}: unmap the repo from
+// its project. Only the mapping goes — the repo's tasks, documents and
+// ingestion history keep the project they were filed under, and future
+// webhook traffic for the repo simply stops resolving to one. This is not
+// `delete` in the 044 sense; nothing is tombstoned. 204 on success,
+// 404 when the repo is not mapped.
+func (s *server) removeRepo(w http.ResponseWriter, r *http.Request) {
+	repo := r.PathValue("owner") + "/" + r.PathValue("name")
+	if err := s.st.RemoveRepo(r.Context(), repo); err != nil {
+		s.observeRepoMapping("remove", repoMappingOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeRepoMapping("remove", "ok")
 	w.WriteHeader(http.StatusNoContent)
 }
 

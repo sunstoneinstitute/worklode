@@ -268,6 +268,48 @@ func TestAddRepoDoneState(t *testing.T) {
 	}
 }
 
+// TestDeleteRepo covers DELETE /api/v1/repos/{owner}/{name}: the mapping goes
+// and nothing else does.
+func TestDeleteRepo(t *testing.T) {
+	t.Parallel()
+	_, h, admin, token := newTestServerWithAdmin(t)
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{"id": "proj", "name": "Project", "key": "PROJ"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/repos", token, map[string]any{"repo": "acme/widgets"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("add repo status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "DELETE", "/api/v1/repos/acme/widgets", token, nil)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("delete repo status = %d, want 204; body %s", rr.Code, rr.Body.String())
+	}
+	if got := listedDoneState(t, h, token, "acme/widgets"); got != "" {
+		t.Fatalf("acme/widgets still mapped after delete (done_state %q)", got)
+	}
+
+	// A repo that is not mapped is a 404, not a silent success.
+	rr = doReq(t, h, "DELETE", "/api/v1/repos/acme/widgets", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("delete unmapped repo status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	for _, want := range []string{
+		`worklode_repo_mapping_changes_total{action="add",outcome="ok"} 1`,
+		`worklode_repo_mapping_changes_total{action="remove",outcome="ok"} 1`,
+		`worklode_repo_mapping_changes_total{action="remove",outcome="rejected"} 1`,
+		// Pre-initialised, so an untouched action reads as zero, not no-data.
+		`worklode_repo_mapping_changes_total{action="edit",outcome="error"} 0`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("metrics missing %s:\n%s", want, metrics)
+		}
+	}
+}
+
 // TestPatchRepoDoneState covers PATCH /api/v1/repos/{owner}/{name}.
 func TestPatchRepoDoneState(t *testing.T) {
 	t.Parallel()
