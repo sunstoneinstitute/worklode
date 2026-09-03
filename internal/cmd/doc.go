@@ -70,7 +70,6 @@ func newDocCmd() *cobra.Command {
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
 		newDocReviseCmd(),
-		newDocAnchorsCmd(),
 		newDocLintCmd(),
 		newDocImportCmd(),
 		newDocTodoCmd(),
@@ -241,58 +240,6 @@ func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareS
 	return nil
 }
 
-// newDocAnchorsCmd is the author's local pre-accept lint (025 §18, §10): it
-// parses a markdown file and reports every anchor defect the backbone would
-// refuse — duplicate anchors, an anchor disagreeing with its heading number,
-// and a section deeper than designdoc.DepthLimit — plus, for a plan, the
-// errors designdoc.PlanTasks reports. No server is involved, so it runs on a
-// file that has never been posted.
-func newDocAnchorsCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "anchors <file>",
-		Short: "Lint a markdown file's anchors (and, for a plan, its task definitions)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path := args[0]
-			src, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			doc, err := designdoc.Parse(src)
-			if err != nil {
-				return fmt.Errorf("parse %s: %w", path, err)
-			}
-			findings := lintDocFile(doc)
-			out := cmd.OutOrStdout()
-			if jsonOut(cmd) {
-				if findings == nil {
-					findings = []string{}
-				}
-				return json.NewEncoder(out).Encode(docAnchorsReport{
-					File: path, Plan: isPlanFile(doc), Findings: findings,
-				})
-			}
-			if len(findings) == 0 {
-				fmt.Fprintf(out, "%s: no problems\n", path)
-				return nil
-			}
-			for _, f := range findings {
-				fmt.Fprintf(out, "%s: %s\n", path, f)
-			}
-			return fmt.Errorf("%s: %d problem(s)", path, len(findings))
-		},
-	}
-	return cmd
-}
-
-// docAnchorsReport is `lode doc anchors --json`'s stdout contract. Findings is
-// empty when the file is clean; Plan says whether the plan-task check ran.
-type docAnchorsReport struct {
-	File     string   `json:"file"`
-	Plan     bool     `json:"plan"`
-	Findings []string `json:"findings"`
-}
-
 // lintDocFile collects every finding for one parsed file. The anchor lint and
 // the depth gate are the store's own accept-time checks (designdoc.LintAnchors
 // and designdoc.DepthViolations), reused rather than restated. The rest of the
@@ -323,22 +270,35 @@ func isPlanFile(doc *designdoc.Document) bool {
 		len(fm.Blocks) > 0 || len(fm.BlockedBy) > 0
 }
 
-// newDocLintCmd is newDocAnchorsCmd's corpus-wide sibling (055 §4.1): where
-// `doc anchors` lints one file on disk before it is ever posted, `doc lint`
-// reports the dangling frontmatter references already stored in the
-// backbone — a reference that resolved to nothing (store.LintDocs'
-// "unresolved"), or one that resolved but names an anchor its target
-// document does not have ("missing-anchor"). Both are stored deliberately —
-// a later document can still repoint an unresolved one — so this changes
-// nothing; only its exit code says whether the project's corpus is clean,
-// matching newDocAnchorsCmd's own convention.
+// newDocLintCmd is `lode doc lint` (WL-SPEC-61 §2.2 L4 renamed `doc anchors`
+// to this name; 055 §4.1 independently gave the same name to the corpus-wide
+// check below — the two land here as one command, dispatched on whether a
+// file argument is given, rather than colliding).
+//
+// With a file argument, it is the author's local pre-accept lint (025 §18,
+// §10): it parses a markdown file and reports every anchor defect the
+// backbone would refuse — duplicate anchors, an anchor disagreeing with its
+// heading number, and a section deeper than designdoc.DepthLimit — plus, for
+// a plan, the errors designdoc.PlanTasks reports. No server is involved, so
+// it runs on a file that has never been posted.
+//
+// With no argument, it reports the dangling frontmatter references already
+// stored in the backbone — a reference that resolved to nothing
+// (store.LintDocs' "unresolved"), or one that resolved but names an anchor
+// its target document does not have ("missing-anchor"). Both are stored
+// deliberately — a later document can still repoint an unresolved one — so
+// this changes nothing; only its exit code says whether the project's corpus
+// is clean, matching the file-based mode's own convention.
 func newDocLintCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "lint",
-		Short: "Report dangling frontmatter references across the corpus",
-		Args:  cobra.NoArgs,
+		Use:   "lint [file]",
+		Short: "Lint a local file's anchors and task definitions, or the corpus's dangling references",
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				return runDocLintFile(cmd, args[0])
+			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
 				return err
@@ -364,6 +324,46 @@ func newDocLintCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
 	return cmd
+}
+
+// runDocLintFile is `lode doc lint <file>`, the local pre-accept lint newDocLintCmd
+// documents.
+func runDocLintFile(cmd *cobra.Command, path string) error {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	doc, err := designdoc.Parse(src)
+	if err != nil {
+		return fmt.Errorf("parse %s: %w", path, err)
+	}
+	findings := lintDocFile(doc)
+	out := cmd.OutOrStdout()
+	if jsonOut(cmd) {
+		if findings == nil {
+			findings = []string{}
+		}
+		return json.NewEncoder(out).Encode(docLintFileReport{
+			File: path, Plan: isPlanFile(doc), Findings: findings,
+		})
+	}
+	if len(findings) == 0 {
+		fmt.Fprintf(out, "%s: no problems\n", path)
+		return nil
+	}
+	for _, f := range findings {
+		fmt.Fprintf(out, "%s: %s\n", path, f)
+	}
+	return fmt.Errorf("%s: %d problem(s)", path, len(findings))
+}
+
+// docLintFileReport is `lode doc lint <file> --json`'s stdout contract.
+// Findings is empty when the file is clean; Plan says whether the plan-task
+// check ran.
+type docLintFileReport struct {
+	File     string   `json:"file"`
+	Plan     bool     `json:"plan"`
+	Findings []string `json:"findings"`
 }
 
 // newDocShowCmd reads back one document: body, sections, and edges. Spec 061
