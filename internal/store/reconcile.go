@@ -138,8 +138,8 @@ func (s *Store) PollCandidates(ctx context.Context, repo, task string, since *ti
 	return out, nil
 }
 
-// RepoIngestion is one mapped repo's ingestion health: what project doctor
-// reports (spec 013 §lode project doctor).
+// RepoIngestion is one mapped repo's ingestion health: what project health
+// reports (spec 013 §lode project health).
 type RepoIngestion struct {
 	Repo        string
 	ProjectID   string
