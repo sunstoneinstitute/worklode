@@ -36,3 +36,18 @@ type SearchHit struct {
 	DenseRank   int     `json:"dense_rank"`
 	LexicalRank int     `json:"lexical_rank"`
 }
+
+// SearchResponse is one search result page (040 §9). Provider and Mode are
+// the response's own report of how it was answered: a degraded instance with
+// no embedding provider answers provider "none", mode "lexical" and returns
+// real results rather than an empty set (§11), and a caller can tell that
+// apart from a well-configured instance without log-diving.
+type SearchResponse struct {
+	// Provider is "none" on an instance with no embedding provider
+	// configured, "openai-compatible" otherwise.
+	Provider string `json:"provider"`
+	// Mode is the mode the search actually ran in, which is not always the
+	// one asked for: with no usable provider every mode degrades to lexical.
+	Mode string      `json:"mode"`
+	Hits []SearchHit `json:"hits"`
+}
