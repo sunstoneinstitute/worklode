@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -119,7 +120,7 @@ type fakeEmbed struct {
 	fails int
 }
 
-func (f *fakeEmbed) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+func (f *fakeEmbed) Embed(ctx context.Context, role embed.Role, texts []string) ([][]float32, error) {
 	f.calls++
 	if f.fails > 0 {
 		f.fails--
@@ -142,6 +143,8 @@ func (f *fakeEmbed) ID() string {
 	}
 	return f.id
 }
+
+func (f *fakeEmbed) Dim() int { return 768 }
 
 func TestSyncAll(t *testing.T) {
 	st := store.OpenTestStore(t)

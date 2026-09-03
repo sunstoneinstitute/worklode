@@ -3,6 +3,7 @@ package embed
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,7 +68,7 @@ func TestOpenAIEmbed(t *testing.T) {
 	defer srv.Close()
 
 	p := &OpenAI{URL: srv.URL, Model: "test-model", Key: "sk-x"}
-	vecs, err := p.Embed(context.Background(), []string{"a", "b"})
+	vecs, err := p.Embed(context.Background(), RoleDocument, []string{"a", "b"})
 	if err != nil {
 		t.Fatalf("embed: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestOpenAIEmbedNoKey(t *testing.T) {
 	defer srv.Close()
 
 	p := &OpenAI{URL: srv.URL, Model: "m"}
-	if _, err := p.Embed(context.Background(), []string{"a"}); err != nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"a"}); err != nil {
 		t.Fatalf("embed: %v", err)
 	}
 	if !gotAuthSet {
@@ -113,7 +114,7 @@ func TestOpenAIEmbedEmptyTexts(t *testing.T) {
 	defer srv.Close()
 
 	p := &OpenAI{URL: srv.URL, Model: "m"}
-	vecs, err := p.Embed(context.Background(), nil)
+	vecs, err := p.Embed(context.Background(), RoleDocument, nil)
 	if err != nil {
 		t.Fatalf("embed: %v", err)
 	}
@@ -131,7 +132,7 @@ func TestOpenAIEmbedMalformedJSON(t *testing.T) {
 	defer srv.Close()
 
 	p := &OpenAI{URL: srv.URL, Model: "m"}
-	if _, err := p.Embed(context.Background(), []string{"a"}); err == nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"a"}); err == nil {
 		t.Fatal("want error for malformed JSON body")
 	}
 }
@@ -142,7 +143,7 @@ func TestOpenAIEmbedError(t *testing.T) {
 	}))
 	defer srv.Close()
 	p := &OpenAI{URL: srv.URL, Model: "m"}
-	if _, err := p.Embed(context.Background(), []string{"a"}); err == nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"a"}); err == nil {
 		t.Fatal("want error")
 	}
 }
@@ -159,7 +160,7 @@ func TestOpenAIEmbedBadIndices(t *testing.T) {
 	defer srv.Close()
 
 	p := &OpenAI{URL: srv.URL, Model: "m"}
-	if _, err := p.Embed(context.Background(), []string{"a", "b"}); err == nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"a", "b"}); err == nil {
 		t.Fatal("want error for duplicated indices")
 	}
 }
@@ -175,7 +176,7 @@ func TestOpenAIEmbedEmptyVector(t *testing.T) {
 	defer srv.Close()
 
 	p := &OpenAI{URL: srv.URL, Model: "m"}
-	if _, err := p.Embed(context.Background(), []string{"a", "b"}); err == nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"a", "b"}); err == nil {
 		t.Fatal("want error for empty embedding vector")
 	}
 }
@@ -207,16 +208,16 @@ func TestEmbedMetrics(t *testing.T) {
 	m := NewMetrics(reg)
 	p := &OpenAI{URL: srv.URL, Model: "test-model", Metrics: m}
 
-	if _, err := p.Embed(context.Background(), []string{"hello"}); err != nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"hello"}); err != nil {
 		t.Fatalf("embed: %v", err)
 	}
 	// Second call against a closed server → error.
 	srv.Close()
-	if _, err := p.Embed(context.Background(), []string{"hello"}); err == nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"hello"}); err == nil {
 		t.Fatal("embed against closed server: want error")
 	}
 	// Empty input makes no HTTP call and records nothing.
-	if _, err := p.Embed(context.Background(), nil); err != nil {
+	if _, err := p.Embed(context.Background(), RoleDocument, nil); err != nil {
 		t.Fatalf("embed empty: %v", err)
 	}
 
@@ -277,7 +278,7 @@ func TestOpenAIID(t *testing.T) {
 	if strings.Contains(userinfo.ID(), "hunter2") || strings.Contains(userinfo.ID(), "user:") {
 		t.Fatalf("ID must not leak URL userinfo: %q", userinfo.ID())
 	}
-	if userinfo.ID() != "openai:m@api.example.com/v1/embeddings" {
+	if userinfo.ID() != "openai:m@768@api.example.com/v1/embeddings" {
 		t.Fatalf("unexpected ID for userinfo URL: %q", userinfo.ID())
 	}
 
@@ -297,6 +298,127 @@ func TestOpenAIID(t *testing.T) {
 		}
 		if strings.Contains(got, "SECRET") || strings.Contains(got, "pass") {
 			t.Fatalf("ID(%q) leaked credentials: %q", u, got)
+		}
+	}
+}
+
+// TestOpenAIIDWidth covers the width component of ID(): the same model at a
+// different truncation is a different, incomparable space, so ID must
+// change with it (spec 040 §3, §8).
+func TestOpenAIIDWidth(t *testing.T) {
+	base := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m"}
+	truncated := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", Dimensions: 512}
+	if base.Dim() != 768 {
+		t.Fatalf("Dim() with Dimensions unset: got %d, want 768", base.Dim())
+	}
+	if truncated.Dim() != 512 {
+		t.Fatalf("Dim() with Dimensions=512: got %d, want 512", truncated.Dim())
+	}
+	if base.ID() == truncated.ID() {
+		t.Fatalf("same model at a different width must produce different IDs: %q == %q", base.ID(), truncated.ID())
+	}
+	if base.ID() != "openai:m@768@api.openai.com/v1/embeddings" {
+		t.Fatalf("unexpected ID: %q", base.ID())
+	}
+	if truncated.ID() != "openai:m@512@api.openai.com/v1/embeddings" {
+		t.Fatalf("unexpected ID: %q", truncated.ID())
+	}
+}
+
+// TestOpenAIEmbedRolePrefix asserts DocumentPrefix is applied to
+// RoleDocument texts and QueryPrefix to RoleQuery texts, and never the
+// other way around.
+func TestOpenAIEmbedRolePrefix(t *testing.T) {
+	var gotInput []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		gotInput = req.Input
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer srv.Close()
+
+	p := &OpenAI{URL: srv.URL, Model: "m", QueryPrefix: "query: ", DocumentPrefix: "title: none | text: "}
+
+	if _, err := p.Embed(context.Background(), RoleDocument, []string{"hello"}); err != nil {
+		t.Fatalf("embed document: %v", err)
+	}
+	if len(gotInput) != 1 || gotInput[0] != "title: none | text: hello" {
+		t.Fatalf("RoleDocument input: %v", gotInput)
+	}
+
+	if _, err := p.Embed(context.Background(), RoleQuery, []string{"hello"}); err != nil {
+		t.Fatalf("embed query: %v", err)
+	}
+	if len(gotInput) != 1 || gotInput[0] != "query: hello" {
+		t.Fatalf("RoleQuery input: %v", gotInput)
+	}
+}
+
+// TestOpenAIEmbedDimensions asserts "dimensions" appears in the request body
+// exactly when Dimensions > 0, and is absent (not sent as 0) otherwise — a
+// sidecar that rejects the parameter must never see it.
+func TestOpenAIEmbedDimensions(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody = nil
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]}]}`))
+	}))
+	defer srv.Close()
+
+	withDim := &OpenAI{URL: srv.URL, Model: "m", Dimensions: 512}
+	if _, err := withDim.Embed(context.Background(), RoleDocument, []string{"a"}); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	if v, ok := gotBody["dimensions"]; !ok || v != float64(512) {
+		t.Fatalf("want dimensions=512 in body, got %v (present=%v)", v, ok)
+	}
+
+	noDim := &OpenAI{URL: srv.URL, Model: "m"}
+	if _, err := noDim.Embed(context.Background(), RoleDocument, []string{"a"}); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	if _, ok := gotBody["dimensions"]; ok {
+		t.Fatalf("want no dimensions field in body, got %v", gotBody)
+	}
+}
+
+// TestOpenAIEmbedEmptyPrefixesMatchLegacyBytes proves that a provider with
+// both prefixes empty and Dimensions unset sends exactly the request bytes
+// today's (pre-role) callers sent — the zero value is the explicit form of
+// the old implicit behaviour.
+func TestOpenAIEmbedEmptyPrefixesMatchLegacyBytes(t *testing.T) {
+	for _, role := range []Role{RoleDocument, RoleQuery} {
+		var gotBody []byte
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			gotBody, err = io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"data":[{"index":0,"embedding":[1,0]},{"index":1,"embedding":[0,1]}]}`))
+		}))
+
+		p := &OpenAI{URL: srv.URL, Model: "test-model"}
+		if _, err := p.Embed(context.Background(), role, []string{"a", "b"}); err != nil {
+			srv.Close()
+			t.Fatalf("role %v: embed: %v", role, err)
+		}
+		srv.Close()
+
+		want := `{"input":["a","b"],"model":"test-model"}`
+		if string(gotBody) != want {
+			t.Fatalf("role %v: request body = %s, want %s", role, gotBody, want)
 		}
 	}
 }
