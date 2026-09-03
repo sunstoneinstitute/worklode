@@ -19,7 +19,7 @@ func newProjectCmd() *cobra.Command {
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectRepoCmd(),
 		newProjectFocusCmd(), newProjectSetCmd(),
 		newProjectResolveCmd(), newProjectShowCmd(),
-		newProjectHealthCmd(), newProjectCrewCmd())
+		newProjectHealthCmd(), newProjectCrewCmd(), newProjectOverviewCmd())
 	return cmd
 }
 
@@ -621,6 +621,41 @@ func newProjectHealthCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// newProjectOverviewCmd builds `lode project overview`, the one-screen
+// roll-up (drift counts, gaps, frontier, critical head). Already
+// `--project`-scoped, so it was never cross-entity (061 §2.3). `lode work
+// status` is a different view and stays as it is. Also registered at the
+// root as the `lode overview` shortcut (061 §1 L9).
+func newProjectOverviewCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "overview",
+		Short: "One-screen roll-up: drift counts, gaps, frontier, critical head",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			resp, raw, err := c.Overview(cmd.Context(), sc.Project)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.OverviewRender(cmd.OutOrStdout(), resp)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "roll up one project")
+	return cmd
 }
 
 // scopeOrigin describes where a scope came from, for humans.

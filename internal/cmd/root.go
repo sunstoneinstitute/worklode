@@ -62,6 +62,8 @@ var shortcuts = []shortcut{
 	{target: []string{"work", "next"}, build: newNextCmd, reason: "run many times per session"},
 	// status is the standing "where am I" check, run constantly during work.
 	{target: []string{"work", "status"}, build: newStatusCmd, reason: "run many times per session"},
+	// overview is the one-screen roll-up, read many times per session.
+	{target: []string{"project", "overview"}, build: newProjectOverviewCmd, reason: "read many times per session"},
 }
 
 func init() {
