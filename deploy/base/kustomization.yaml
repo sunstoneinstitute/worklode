@@ -142,3 +142,5 @@ configMapGenerator:
       - migrations/0064_approvals_lanes.down.sql
       - migrations/0065_doc_notes.up.sql
       - migrations/0065_doc_notes.down.sql
+      - migrations/0066_decision_kind.up.sql
+      - migrations/0066_decision_kind.down.sql

@@ -114,7 +114,7 @@ func newInboxPromoteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&title, "title", "", "task title (default: the issue's title)")
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low (required)")
-	cmd.Flags().StringVar(&kind, "kind", "bug", "kind: feature, bug, chore, design, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "bug", "kind: feature, bug, chore, design, review, spike, decision")
 	completeFlagValues(cmd, "priority", taskPriorities)
 	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().StringVar(&appliesTo, "applies-to", "", "comma-separated versions this issue applies to, e.g. v1.2,v1.3")
