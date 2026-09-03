@@ -10,29 +10,24 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-// newDocReviewersCmd is `lode doc reviewers`: shows or replaces a document's
-// durable reviewer set (025 §7.3, WL-359) — the actors `lode approval
-// request` opens an awaiting lane for on the document's current version. The
-// set is not versioned: it survives an accept/revise cycle, which is what
-// lets a review task minted for a §8.2 in-place amendment name "the original
-// approvers" without the caller re-assigning them.
+// newDocReviewersCmd is `lode doc reviewers`: the read-only view of a
+// document's durable reviewer set (025 §7.3, WL-359) — the actors `lode
+// approval request` opens an awaiting lane for on the document's current
+// version. The set is not versioned: it survives an accept/revise cycle,
+// which is what lets a review task minted for a §8.2 in-place amendment name
+// "the original approvers" without the caller re-assigning them.
 //
-// There is no add/remove verb, matching --set: replacing the whole set is
-// the operation, the same as `lode task edit --secrets` — "who reviews
-// stays a social choice" (§7.3), decided afresh each time rather than
-// accumulated a name at a time.
+// A view never writes (061 §1 rule L6): the paired write is `lode doc set
+// reviewers <reviewer…> <ref>` (WL-487), matching `lode task set skills`.
 func newDocReviewersCmd() *cobra.Command {
-	var set []string
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "reviewers <ref>",
-		Short: "Show or replace a document's assigned reviewer set",
-		Long: "Show or replace the durable reviewer set spec 025 §7.3 assigns to a\n" +
-			"document (WL-359) — independent of any one revision, and what\n" +
-			"`lode approval request` reads when it opens an awaiting lane per\n" +
-			"reviewer.\n\n" +
-			"With no flag, prints the current set and who still owes a review on\n" +
-			"the document's current version. --set replaces the whole set; the\n" +
-			"current owner or an admin may call it.",
+		Short: "Show a document's assigned reviewer set",
+		Long: "Show the durable reviewer set spec 025 §7.3 assigns to a document\n" +
+			"(WL-359) — independent of any one revision, and what `lode approval\n" +
+			"request` reads when it opens an awaiting lane per reviewer.\n\n" +
+			"Prints the current set and who still owes a review on the document's\n" +
+			"current version. The paired write is `lode doc set reviewers`.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
@@ -43,21 +38,7 @@ func newDocReviewersCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-
-			if !cmd.Flags().Changed("set") {
-				d, raw, err := c.GetDoc(cmd.Context(), id)
-				if err != nil {
-					return err
-				}
-				if jsonOut(cmd) {
-					printRaw(cmd, raw)
-					return nil
-				}
-				printDocReviewers(cmd, d.Doc)
-				return nil
-			}
-
-			d, raw, err := c.SetDocReviewers(cmd.Context(), id, set)
+			d, raw, err := c.GetDoc(cmd.Context(), id)
 			if err != nil {
 				return err
 			}
@@ -65,13 +46,10 @@ func newDocReviewersCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "reviewers for %s: %s\n", cli.DocRef(d), reviewerList(d.Reviewers))
+			printDocReviewers(cmd, d.Doc)
 			return nil
 		},
 	}
-	cmd.Flags().StringSliceVar(&set, "set", nil,
-		"replace the reviewer set with these actor ids (comma-separated)")
-	return cmd
 }
 
 // printDocReviewers renders the no-flag "show" form: the assigned set, and
@@ -91,4 +69,54 @@ func reviewerList(reviewers []string) string {
 		return "(none assigned)"
 	}
 	return strings.Join(reviewers, ", ")
+}
+
+// newDocSetCmd is `lode doc set <field> <value…> <ref>` (061 §2.1, WL-487):
+// write one named field on a document. The field and the values are
+// arguments, not part of the verb, matching `lode task set` — this is the
+// doc half of the same rename `lode task set skills` made for tasks, and the
+// two commands are shaped identically so they don't surprise each other.
+//
+// The document ref is always the LAST argument, matching `lode task set`, so
+// a field can take more than one value: "reviewers" takes any number of
+// actor ids, and naming none clears the set.
+func newDocSetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set <field> <value…> <ref>",
+		Short: "Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`",
+		Long: `Set one named field on a document. The document ref is always the last
+argument; everything between the field and the ref is the value.
+
+  reviewers  any number of actor ids, replacing whatever was assigned:
+               lode doc set reviewers alice bob rev-spec
+             naming none clears the document's reviewer set:
+               lode doc set reviewers rev-spec`,
+		Args: cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			field, values, ref := args[0], args[1:len(args)-1], args[len(args)-1]
+			switch field {
+			case "reviewers":
+			default:
+				return fmt.Errorf("unknown field %q: settable fields are \"reviewers\"", field)
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, ref)
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.SetDocReviewers(cmd.Context(), id, values)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "reviewers for %s: %s\n", cli.DocRef(d), reviewerList(d.Reviewers))
+			return nil
+		},
+	}
 }
