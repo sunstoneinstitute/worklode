@@ -79,7 +79,7 @@ func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) err
 		return err
 	}
 	if len(reviewers) == 0 {
-		return fmt.Errorf("%w: doc %d has no assigned reviewers; set them with `lode doc reviewers` first", ErrInvalidInput, docID)
+		return fmt.Errorf("%w: doc %d has no assigned reviewers; set them with `lode doc set reviewers` first", ErrInvalidInput, docID)
 	}
 	entityID := DocEntityID(docID)
 	revision := strconv.Itoa(version)

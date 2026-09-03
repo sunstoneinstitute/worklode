@@ -34,17 +34,17 @@ func init() { rootCmd.AddCommand(newApprovalCmd()) }
 
 // newApprovalRequestCmd opens one awaiting lane per reviewer in the
 // document's durable reviewer set (025 §7.3) on its current version. The set
-// itself is assigned separately, with `lode doc reviewers` (WL-359) — this
-// command only materializes the lanes.
+// itself is assigned separately, with `lode doc set reviewers` (WL-359,
+// WL-487) — this command only materializes the lanes.
 func newApprovalRequestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "request <id-or-slug>",
 		Short: "Open an approval lane for each of a document's assigned reviewers",
 		Long: "Open an approval lane for each of a document's assigned reviewers,\n" +
 			"on its current version (025 §7.3). Assign the reviewer set first with\n" +
-			"`lode doc reviewers <ref> --set <actor>,<actor>,...`; re-running this\n" +
-			"after a later `lode doc reviewers` call adds only the newly assigned\n" +
-			"lanes.",
+			"`lode doc set reviewers <actor> <actor> ... <ref>`; re-running this\n" +
+			"after a later `lode doc set reviewers` call adds only the newly\n" +
+			"assigned lanes.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

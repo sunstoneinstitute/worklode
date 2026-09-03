@@ -43,10 +43,10 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
   Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
   Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
-- `lode doc reviewers` — Show or replace a document's assigned reviewer set
-  Flags: --set
+- `lode doc reviewers` — Show a document's assigned reviewer set
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision
   Flags: --accept, --discard, --file
+- `lode doc set` — Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`
 - `lode doc show` — Show a document: its body, sections, and edges
   Flags: --version
 - `lode doc submit` — Submit a document for review (records a review event; the document's status does not change)
