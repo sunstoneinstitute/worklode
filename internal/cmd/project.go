@@ -17,8 +17,8 @@ func newProjectCmd() *cobra.Command {
 		Short: "Manage projects and their repos",
 	}
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectAddRepoCmd(),
-		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectFocusNoteCmd(),
-		newProjectDecisionCmd(), newProjectResolveCmd(), newProjectShowCmd(),
+		newProjectSetRepoCmd(), newProjectFocusCmd(), newProjectSetCmd(),
+		newProjectResolveCmd(), newProjectShowCmd(),
 		newProjectDoctorCmd(), newProjectCrewCmd())
 	return cmd
 }
@@ -258,58 +258,91 @@ func newProjectSetRepoCmd() *cobra.Command {
 	return cmd
 }
 
+// newProjectFocusCmd is `lode project focus <id>`: the read-only view of a
+// project's ranking focus (ordered list of concerns) (061 §2.2, WL-489). A
+// view never writes (L6); the paired write is `lode project set focus`.
 func newProjectFocusCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "focus <id>",
+		Short: "Show a project's ranking focus (ordered list of concerns)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			p, err := c.GetProject(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				return printJSON(cmd, map[string]any{"id": p.ID, "focus": p.Focus})
+			}
+			cli.FocusLine(cmd.OutOrStdout(), p.Focus)
+			return nil
+		},
+	}
+}
+
+// newProjectSetCmd is `lode project set <field>` (061 §2.2, WL-489): write
+// one named field on a project's cockpit cards. Each field takes its own
+// flags rather than a uniform value list (unlike `task set`/`doc set`), so
+// the field is a subcommand rather than a leading argument — nested the same
+// way `project crew add`/`remove` group under `crew`.
+func newProjectSetCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "set",
+		Short: "Set one field on a project: decision, focus, or focus-note",
+	}
+	cmd.AddCommand(newProjectSetFocusCmd(), newProjectSetFocusNoteCmd(), newProjectSetDecisionCmd())
+	return cmd
+}
+
+// newProjectSetFocusCmd is `lode project set focus <concern…> <id>`: set or
+// clear a project's ranking focus. The id is last, matching `task set
+// skills`, because the concern list is variadic. --clear (or naming no
+// concerns) empties it.
+func newProjectSetFocusCmd() *cobra.Command {
 	var clear bool
 	cmd := &cobra.Command{
-		Use:   "focus <id> [<concern> ...]",
-		Short: "Show, set, or clear a project's ranking focus (ordered list of concerns)",
+		Use:   "focus <concern…> <id>",
+		Short: "Set or clear a project's ranking focus (ordered list of concerns)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
-			concerns := args[1:]
+			id := args[len(args)-1]
+			concerns := args[:len(args)-1]
 			if clear && len(concerns) > 0 {
 				return fmt.Errorf("--clear takes no concerns")
+			}
+			if !clear && len(concerns) == 0 {
+				return fmt.Errorf("provide one or more concerns, or --clear to clear the focus")
 			}
 
 			c, err := newAPIClient()
 			if err != nil {
 				return err
 			}
-
-			switch {
-			// --clear is "set to no concerns": args[1:] is already empty, and
-			// the guard above rejects the one input where the two differ.
-			case clear || len(concerns) > 0:
-				p, raw, err := c.SetProjectFocus(cmd.Context(), id, concerns)
-				if err != nil {
-					return err
-				}
-				if jsonOut(cmd) {
-					printRaw(cmd, raw)
-					return nil
-				}
-				cli.FocusLine(cmd.OutOrStdout(), p.Focus)
-				return nil
-			default:
-				p, err := c.GetProject(cmd.Context(), id)
-				if err != nil {
-					return err
-				}
-				if jsonOut(cmd) {
-					return printJSON(cmd, map[string]any{"id": p.ID, "focus": p.Focus})
-				}
-				cli.FocusLine(cmd.OutOrStdout(), p.Focus)
+			p, raw, err := c.SetProjectFocus(cmd.Context(), id, concerns)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
 				return nil
 			}
+			cli.FocusLine(cmd.OutOrStdout(), p.Focus)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&clear, "clear", false, "clear the project's focus")
 	return cmd
 }
 
-// newProjectFocusNoteCmd is `lode project focus-note <id>`: set or clear the
-// cockpit's curated pinned-focus note. --clear (or an empty --note) clears it.
-func newProjectFocusNoteCmd() *cobra.Command {
+// newProjectSetFocusNoteCmd is `lode project set focus-note <id>`: set or
+// clear the cockpit's curated pinned-focus note. --clear (or an empty --note)
+// clears it. "focus-note" is a field name argument here, not a verb, so L4's
+// no-hyphenated-verbs rule does not apply to it.
+func newProjectSetFocusNoteCmd() *cobra.Command {
 	var note, by string
 	var clear bool
 	cmd := &cobra.Command{
@@ -348,10 +381,10 @@ func newProjectFocusNoteCmd() *cobra.Command {
 	return cmd
 }
 
-// newProjectDecisionCmd is `lode project decision <id>`: set or clear the
-// cockpit's curated next-decision card. --clear (or an empty --title) clears
-// it; --rests-on carries the readiness note.
-func newProjectDecisionCmd() *cobra.Command {
+// newProjectSetDecisionCmd is `lode project set decision <id>`: set or clear
+// the cockpit's curated next-decision card. --clear (or an empty --title)
+// clears it; --rests-on carries the readiness note.
+func newProjectSetDecisionCmd() *cobra.Command {
 	var title, accountable, restsOn string
 	var clear bool
 	cmd := &cobra.Command{

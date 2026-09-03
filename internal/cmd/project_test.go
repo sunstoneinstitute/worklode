@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -85,20 +86,21 @@ func TestProjectRepoDoneState(t *testing.T) {
 	}
 }
 
-// TestProjectCuratedCards covers `lode project focus-note` and `lode project
-// decision` end to end: setting them lands in the store, --clear removes them,
-// and a bare invocation (no value, no --clear) is a usage error.
+// TestProjectCuratedCards covers `lode project set focus-note` and `lode
+// project set decision` end to end: setting them lands in the store, --clear
+// removes them, and a bare invocation (no value, no --clear) is a usage
+// error.
 func TestProjectCuratedCards(t *testing.T) {
 	st, c := lifecycleTestServer(t)
 	setupProject(t, c)
 	ctx := context.Background()
 
-	if out, err := runLode(t, "project", "focus-note", "proj", "--note", "Ship the cockpit", "--by", "alice"); err != nil {
-		t.Fatalf("focus-note: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "project", "set", "focus-note", "proj", "--note", "Ship the cockpit", "--by", "alice"); err != nil {
+		t.Fatalf("set focus-note: %v\noutput: %s", err, out)
 	}
-	if out, err := runLode(t, "project", "decision", "proj",
+	if out, err := runLode(t, "project", "set", "decision", "proj",
 		"--title", "Pick a datastore", "--accountable", "alice", "--rests-on", "blocked on benchmark"); err != nil {
-		t.Fatalf("decision: %v\noutput: %s", err, out)
+		t.Fatalf("set decision: %v\noutput: %s", err, out)
 	}
 
 	p, err := st.GetProject(ctx, "proj")
@@ -114,11 +116,11 @@ func TestProjectCuratedCards(t *testing.T) {
 	}
 
 	// --clear removes each card.
-	if out, err := runLode(t, "project", "focus-note", "proj", "--clear"); err != nil {
-		t.Fatalf("focus-note --clear: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "project", "set", "focus-note", "proj", "--clear"); err != nil {
+		t.Fatalf("set focus-note --clear: %v\noutput: %s", err, out)
 	}
-	if out, err := runLode(t, "project", "decision", "proj", "--clear"); err != nil {
-		t.Fatalf("decision --clear: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "project", "set", "decision", "proj", "--clear"); err != nil {
+		t.Fatalf("set decision --clear: %v\noutput: %s", err, out)
 	}
 	if p, err = st.GetProject(ctx, "proj"); err != nil {
 		t.Fatalf("GetProject after clear: %v", err)
@@ -129,11 +131,59 @@ func TestProjectCuratedCards(t *testing.T) {
 
 	// A bare set with neither a value nor --clear is a usage error, not a
 	// silent clear.
-	if out, err := runLode(t, "project", "focus-note", "proj"); err == nil {
-		t.Fatalf("focus-note with no --note/--clear: want error\noutput: %s", out)
+	if out, err := runLode(t, "project", "set", "focus-note", "proj"); err == nil {
+		t.Fatalf("set focus-note with no --note/--clear: want error\noutput: %s", out)
 	}
-	if out, err := runLode(t, "project", "decision", "proj"); err == nil {
-		t.Fatalf("decision with no --title/--clear: want error\noutput: %s", out)
+	if out, err := runLode(t, "project", "set", "decision", "proj"); err == nil {
+		t.Fatalf("set decision with no --title/--clear: want error\noutput: %s", out)
+	}
+}
+
+// TestProjectFocus covers `lode project set focus` (the write, concern list
+// then id, per `task set skills`) and `lode project focus` (the read-only
+// view, L6): setting lands in the store, --clear empties it, a bare set with
+// neither concerns nor --clear is a usage error, and the view never writes.
+func TestProjectFocus(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+
+	if out, err := runLode(t, "project", "set", "focus", "security", "completeness", "proj"); err != nil {
+		t.Fatalf("set focus: %v\noutput: %s", err, out)
+	}
+	p, err := st.GetProject(ctx, "proj")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if !slices.Equal(p.Focus, []string{"security", "completeness"}) {
+		t.Fatalf("focus = %v, want [security completeness]", p.Focus)
+	}
+
+	out, err := runLode(t, "project", "focus", "proj")
+	if err != nil {
+		t.Fatalf("focus (view): %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "security") || !strings.Contains(out, "completeness") {
+		t.Fatalf("focus view output = %q, want it to name both concerns", out)
+	}
+
+	if out, err := runLode(t, "project", "set", "focus", "--clear", "proj"); err != nil {
+		t.Fatalf("set focus --clear: %v\noutput: %s", err, out)
+	}
+	if p, err = st.GetProject(ctx, "proj"); err != nil {
+		t.Fatalf("GetProject after clear: %v", err)
+	}
+	if len(p.Focus) != 0 {
+		t.Fatalf("focus after clear = %v, want empty", p.Focus)
+	}
+
+	// A bare set with neither concerns nor --clear is a usage error.
+	if out, err := runLode(t, "project", "set", "focus", "proj"); err == nil {
+		t.Fatalf("set focus with no concerns/--clear: want error\noutput: %s", out)
+	}
+	// --clear takes no concerns.
+	if out, err := runLode(t, "project", "set", "focus", "--clear", "security", "proj"); err == nil {
+		t.Fatalf("set focus --clear with a concern: want error\noutput: %s", out)
 	}
 }
 
