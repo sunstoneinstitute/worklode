@@ -55,7 +55,7 @@ registry_package webhooks`) are not — regardless of their priority tag.
    the backbone, which is where plans live:
 
    ```bash
-   lode doc anchors <scratch.md>                                  # local lint
+   lode doc lint <scratch.md>                                     # local lint
    lode doc add --kind plan --slug YYYY-MM-DD-<slug> --file <scratch.md>
    ```
 

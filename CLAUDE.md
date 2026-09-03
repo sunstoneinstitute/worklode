@@ -90,8 +90,8 @@ run either bare** — for both reasons above:
 ```bash
 go test -trimpath ./internal/store -run TestClaim   # single test
 ./scripts/check-migrations.sh --no-fix    # migration-number collision check
-lode doc anchors <file>             # lint a draft's anchors before posting it
-lode doc lint                       # report the corpus's dangling references
+lode doc lint <file>                 # lint a draft's anchors before posting it
+lode doc lint                        # report the corpus's dangling references
 ./scripts/nsgen.py                  # regenerate internal/ns/gen.go from ns/concept.ttl
 ./scripts/gen-emoji.py              # regenerate internal/ui/assets/emoji.json (editor completion)
 ```
