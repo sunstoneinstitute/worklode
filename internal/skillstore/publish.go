@@ -87,7 +87,7 @@ func PublishPerSkill(dirs Dirs, target string) (PublishResult, error) {
 	}
 	entries, err := os.ReadDir(dirs.Links)
 	if errors.Is(err, fs.ErrNotExist) {
-		// No links dir yet: `lode install --skills` ran before `lode skills
+		// No links dir yet: `lode install --skills` ran before `lode skill
 		// install`, the normal first-run order. Nothing to publish, not an
 		// error — ~/.agents/skills self-heals on the next Ensure.
 		res.Action = "unchanged"
