@@ -160,27 +160,27 @@ func TestSkillsListTableAndJSON(t *testing.T) {
 	seedSkill(t, st, "tdd", "Red-green-refactor discipline")
 	seedSkill(t, st, "debugging", "Systematic debugging loop")
 
-	out, err := runLode(t, "skills", "list")
+	out, err := runLode(t, "skill", "list")
 	if err != nil {
-		t.Fatalf("skills list: %v\noutput: %s", err, out)
+		t.Fatalf("skill list: %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(out, "tdd        Red-green-refactor discipline\n") ||
 		!strings.Contains(out, "debugging  Systematic debugging loop\n") {
-		t.Fatalf("skills list table output = %q", out)
+		t.Fatalf("skill list table output = %q", out)
 	}
 
-	out, err = runLode(t, "skills", "list", "--json")
+	out, err = runLode(t, "skill", "list", "--json")
 	if err != nil {
-		t.Fatalf("skills list --json: %v\noutput: %s", err, out)
+		t.Fatalf("skill list --json: %v\noutput: %s", err, out)
 	}
 	var resp struct {
 		Skills []model.Skill `json:"skills"`
 	}
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
-		t.Fatalf("decode skills list --json output %q: %v", out, err)
+		t.Fatalf("decode skill list --json output %q: %v", out, err)
 	}
 	if len(resp.Skills) != 2 {
-		t.Fatalf("skills list --json = %+v, want 2 skills", resp.Skills)
+		t.Fatalf("skill list --json = %+v, want 2 skills", resp.Skills)
 	}
 }
 
@@ -199,13 +199,13 @@ func TestSkillsRecommendFlagValidation(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			args := append([]string{"skills", "recommend"}, tc.args...)
+			args := append([]string{"skill", "recommend"}, tc.args...)
 			_, err := runLode(t, args...)
 			if tc.wantErr && err == nil {
-				t.Fatalf("skills recommend %v: want error, got nil", tc.args)
+				t.Fatalf("skill recommend %v: want error, got nil", tc.args)
 			}
 			if !tc.wantErr && err != nil {
-				t.Fatalf("skills recommend %v: %v", tc.args, err)
+				t.Fatalf("skill recommend %v: %v", tc.args, err)
 			}
 		})
 	}
@@ -217,8 +217,8 @@ func TestSkillsRecommendFileFlag(t *testing.T) {
 	if err := os.WriteFile(path, []byte("write tests first"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	if _, err := runLode(t, "skills", "recommend", "--file", path); err != nil {
-		t.Fatalf("skills recommend --file: %v", err)
+	if _, err := runLode(t, "skill", "recommend", "--file", path); err != nil {
+		t.Fatalf("skill recommend --file: %v", err)
 	}
 }
 
@@ -228,9 +228,9 @@ func TestSkillsRecommendEmptyFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("   \n"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
-	_, err := runLode(t, "skills", "recommend", "--file", path)
+	_, err := runLode(t, "skill", "recommend", "--file", path)
 	if err == nil || !strings.Contains(err.Error(), "is empty") {
-		t.Fatalf("skills recommend --file (empty): want an 'is empty' error, got %v", err)
+		t.Fatalf("skill recommend --file (empty): want an 'is empty' error, got %v", err)
 	}
 }
 
@@ -248,9 +248,9 @@ func TestSkillsRecommendWarningsOnStderr(t *testing.T) {
 		t.Fatalf("create task: %v", err)
 	}
 
-	stdout, stderr, err := runLodeOutErr(t, "skills", "recommend", "--task", task.ID)
+	stdout, stderr, err := runLodeOutErr(t, "skill", "recommend", "--task", task.ID)
 	if err != nil {
-		t.Fatalf("skills recommend --task: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+		t.Fatalf("skill recommend --task: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "pinned\tacme:tdd\t") {
 		t.Fatalf("stdout = %q, want a pinned tdd line", stdout)
@@ -270,9 +270,9 @@ func TestSkillsInstallResolvesHash(t *testing.T) {
 	st, _, archiveHits, _ := skillsTestServer(t)
 	_, content := seedInstallableSkill(t, st, "tdd")
 
-	out, err := runLode(t, "skills", "install", "tdd")
+	out, err := runLode(t, "skill", "install", "tdd")
 	if err != nil {
-		t.Fatalf("skills install tdd: %v\noutput: %s", err, out)
+		t.Fatalf("skill install tdd: %v\noutput: %s", err, out)
 	}
 	if atomic.LoadInt32(archiveHits) != 1 {
 		t.Fatalf("archive hits = %d, want 1", atomic.LoadInt32(archiveHits))
@@ -291,14 +291,14 @@ func TestSkillsInstallIdempotent(t *testing.T) {
 	st, _, archiveHits, _ := skillsTestServer(t)
 	hash, _ := seedInstallableSkill(t, st, "tdd")
 
-	if _, err := runLode(t, "skills", "install", "tdd@"+hash); err != nil {
+	if _, err := runLode(t, "skill", "install", "tdd@"+hash); err != nil {
 		t.Fatalf("first install: %v", err)
 	}
 	if atomic.LoadInt32(archiveHits) != 1 {
 		t.Fatalf("archive hits after first install = %d, want 1", atomic.LoadInt32(archiveHits))
 	}
 
-	if _, err := runLode(t, "skills", "install", "tdd@"+hash); err != nil {
+	if _, err := runLode(t, "skill", "install", "tdd@"+hash); err != nil {
 		t.Fatalf("second install: %v", err)
 	}
 	if atomic.LoadInt32(archiveHits) != 1 {
@@ -316,19 +316,19 @@ func TestSkillsInstallHashMismatch(t *testing.T) {
 	// Asserted precisely, not just "some error": a wrong error here (e.g.
 	// from a broken hash-resolution step upstream) would let this test pass
 	// for the wrong reason while proving nothing about hash verification.
-	_, err := runLode(t, "skills", "install", "tdd")
+	_, err := runLode(t, "skill", "install", "tdd")
 	if err == nil || !strings.Contains(err.Error(), "content hash mismatch") {
-		t.Fatalf("skills install: want a content-hash mismatch error, got %v", err)
+		t.Fatalf("skill install: want a content-hash mismatch error, got %v", err)
 	}
 
 	if _, err := os.Lstat(filepath.Join(root, "tdd")); err == nil {
-		t.Fatalf("skills install left a symlink at %s despite the hash mismatch", filepath.Join(root, "tdd"))
+		t.Fatalf("skill install left a symlink at %s despite the hash mismatch", filepath.Join(root, "tdd"))
 	}
 	storeDir := filepath.Join(filepath.Dir(root), "store")
 	entries, _ := os.ReadDir(storeDir)
 	for _, e := range entries {
 		if e.Name() == badHash {
-			t.Fatalf("skills install left a store dir for the mismatched hash: %s", e.Name())
+			t.Fatalf("skill install left a store dir for the mismatched hash: %s", e.Name())
 		}
 	}
 }
@@ -336,9 +336,9 @@ func TestSkillsInstallHashMismatch(t *testing.T) {
 func TestSkillsInstallNameRequired(t *testing.T) {
 	skillsTestServer(t)
 	for _, arg := range []string{"", "@somehash"} {
-		_, err := runLode(t, "skills", "install", arg)
+		_, err := runLode(t, "skill", "install", arg)
 		if err == nil || !strings.Contains(err.Error(), "skill name is required") {
-			t.Fatalf("skills install %q: want a name-required error, got %v", arg, err)
+			t.Fatalf("skill install %q: want a name-required error, got %v", arg, err)
 		}
 	}
 }
@@ -350,9 +350,9 @@ func TestSkillsInstallDeletedWarnsOnStderr(t *testing.T) {
 		t.Fatalf("soft delete: %v", err)
 	}
 
-	stdout, stderr, err := runLodeOutErr(t, "skills", "install", "tdd")
+	stdout, stderr, err := runLodeOutErr(t, "skill", "install", "tdd")
 	if err != nil {
-		t.Fatalf("skills install tdd (deleted): %v\nstderr: %s", err, stderr)
+		t.Fatalf("skill install tdd (deleted): %v\nstderr: %s", err, stderr)
 	}
 	if !strings.Contains(stderr, "warning: tdd was removed from its source repo") {
 		t.Fatalf("stderr = %q, want a removed-from-source-repo warning", stderr)
@@ -367,7 +367,7 @@ func TestSkillsInstallDeletedWarnsOnStderr(t *testing.T) {
 	}
 }
 
-// TestSkillsInstallLink drives `skills install --link`, which needs a real
+// TestSkillsInstallLink drives `skill install --link`, which needs a real
 // store.Store behind skillsTestServer, so it needs Postgres — it skips on
 // this machine and runs for real in CI (pgvector runner).
 func TestSkillsInstallLink(t *testing.T) {
@@ -376,9 +376,9 @@ func TestSkillsInstallLink(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 	_, content := seedInstallableSkill(t, st, "tdd")
 
-	out, err := runLode(t, "skills", "install", "tdd", "--link", claudeCode)
+	out, err := runLode(t, "skill", "install", "tdd", "--link", claudeCode)
 	if err != nil {
-		t.Fatalf("skills install --link claude-code: %v\noutput: %s", err, out)
+		t.Fatalf("skill install --link claude-code: %v\noutput: %s", err, out)
 	}
 	linkedSkill := filepath.Join(homeDir, ".claude", "skills", "tdd")
 	got, err := os.ReadFile(filepath.Join(linkedSkill, "SKILL.md"))
@@ -393,8 +393,8 @@ func TestSkillsInstallLink(t *testing.T) {
 	// just claude-code's.
 	homeDir2 := t.TempDir()
 	t.Setenv("HOME", homeDir2)
-	if out, err := runLode(t, "skills", "install", "tdd", "--link", "all"); err != nil {
-		t.Fatalf("skills install --link all: %v\noutput: %s", err, out)
+	if out, err := runLode(t, "skill", "install", "tdd", "--link", "all"); err != nil {
+		t.Fatalf("skill install --link all: %v\noutput: %s", err, out)
 	}
 	for _, id := range harness.IDs() {
 		h, ok := harness.Get(id)
@@ -417,9 +417,9 @@ func TestSkillsInstallLink(t *testing.T) {
 	}
 
 	// --link nonsense errors naming the registered ids and "all".
-	_, err = runLode(t, "skills", "install", "tdd", "--link", "nonsense")
+	_, err = runLode(t, "skill", "install", "tdd", "--link", "nonsense")
 	if err == nil {
-		t.Fatal("skills install --link nonsense: want an error")
+		t.Fatal("skill install --link nonsense: want an error")
 	}
 	for _, id := range harness.IDs() {
 		if !strings.Contains(err.Error(), id) {
@@ -439,7 +439,7 @@ func TestSkillsInstallLink(t *testing.T) {
 // command must still succeed and still publish to claude-code's target —
 // one bad target must not stop --link all from reaching the rest. Needs
 // Postgres via skillsTestServer; skips locally, runs in CI.
-// TestSkillsSyncHumanAndJSON drives `lode skills sync` against a wrapper that
+// TestSkillsSyncHumanAndJSON drives `lode skill sync` against a wrapper that
 // intercepts POST /api/v1/skills/sync and returns a canned report, rather
 // than configuring a real skill source (LODE_SKILL_SOURCES needs a live
 // GitHub-shaped server) — this test is only about the command's own
@@ -449,21 +449,21 @@ func TestSkillsSyncHumanAndJSON(t *testing.T) {
 	const body = `{"synced":12,"changed":3,"deleted":1,"embedded":3}`
 	_, _, _, _ = skillsTestServerWithSync(t, body)
 
-	out, err := runLode(t, "skills", "sync")
+	out, err := runLode(t, "skill", "sync")
 	if err != nil {
-		t.Fatalf("skills sync: %v\noutput: %s", err, out)
+		t.Fatalf("skill sync: %v\noutput: %s", err, out)
 	}
 	want := "synced 12 skill(s): 3 changed, 1 deleted, 3 embedded\n"
 	if out != want {
-		t.Fatalf("skills sync output = %q, want %q", out, want)
+		t.Fatalf("skill sync output = %q, want %q", out, want)
 	}
 
-	out, err = runLode(t, "skills", "sync", "--json")
+	out, err = runLode(t, "skill", "sync", "--json")
 	if err != nil {
-		t.Fatalf("skills sync --json: %v\noutput: %s", err, out)
+		t.Fatalf("skill sync --json: %v\noutput: %s", err, out)
 	}
 	if strings.TrimSpace(out) != body {
-		t.Fatalf("skills sync --json output = %q, want the raw body %q", out, body)
+		t.Fatalf("skill sync --json output = %q, want the raw body %q", out, body)
 	}
 }
 
@@ -507,9 +507,9 @@ func TestSkillsInstallLinkContinuesAfterOneTargetFails(t *testing.T) {
 		t.Fatalf("seed foreign .agents file: %v", err)
 	}
 
-	out, err := runLode(t, "skills", "install", "tdd", "--link", "all")
+	out, err := runLode(t, "skill", "install", "tdd", "--link", "all")
 	if err != nil {
-		t.Fatalf("skills install --link all (one target blocked): %v\noutput: %s", err, out)
+		t.Fatalf("skill install --link all (one target blocked): %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(out, "amp:") {
 		t.Fatalf("output = %q, want a reported failure for amp's blocked target", out)
