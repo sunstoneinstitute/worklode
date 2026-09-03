@@ -50,6 +50,10 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_crew_changes_total",
 		Help: "Project Crew membership changes, by surface (api, web), action (add, remove), and outcome (ok, rejected, error). Labels are bounded: the project, the actor and the role label are deliberately not among them.",
 	}, []string{"surface", "action", "outcome"})
+	s.repoMappings = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_repo_mapping_changes_total",
+		Help: "Project/repo mapping changes, by action (add, edit, remove) and outcome (ok, rejected, error). Labels are bounded: the repo and the project are deliberately not among them.",
+	}, []string{"action", "outcome"})
 	s.cockpitProjections = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_cockpit_projection_requests_total",
 		Help: "Project cockpit projection assembly attempts, by surface (api, web) and outcome (ok, not_found, error).",
@@ -230,6 +234,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions,
 		s.crewChanges,
+		s.repoMappings,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.posterExtractions, s.taskBlobRefs,
@@ -269,6 +274,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			for _, outcome := range crewChangeOutcomes {
 				s.crewChanges.WithLabelValues(surface, action, outcome)
 			}
+		}
+	}
+	for _, action := range repoMappingActions {
+		for _, outcome := range repoMappingOutcomes {
+			s.repoMappings.WithLabelValues(action, outcome)
 		}
 	}
 	// All three Home modes, so "nobody has hit the empty state" reads as a
@@ -497,6 +507,40 @@ func (s *server) observeCrewChange(surface, action, outcome string) {
 		return
 	}
 	s.crewChanges.WithLabelValues(surface, action, outcome).Inc()
+}
+
+// repoMappingActions are every action label worklode_repo_mapping_changes_total
+// carries: the three mutations `lode project repo` offers.
+var repoMappingActions = []string{"add", "edit", "remove"}
+
+// repoMappingOutcomes are every outcome label
+// worklode_repo_mapping_changes_total carries, pre-initialised so an instance
+// where nobody has touched a mapping reads as a flat zero rather than as
+// no-data.
+var repoMappingOutcomes = []string{"ok", "rejected", "error"}
+
+// repoMappingOutcome classifies a mapping-change error for the outcome label.
+// An unmapped repo, a repo already taken, an unusable done_state: all the
+// caller's input, so "rejected", not a fault.
+func repoMappingOutcome(err error) string {
+	if err == nil {
+		return "ok"
+	}
+	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrInvalidInput) ||
+		errors.Is(err, store.ErrRepoTaken) {
+		return "rejected"
+	}
+	return "error"
+}
+
+// observeRepoMapping records one attempted project/repo mapping change,
+// called exactly once per attempt. Nil-safe: tests build a *server directly
+// without initMetrics.
+func (s *server) observeRepoMapping(action, outcome string) {
+	if s.repoMappings == nil {
+		return
+	}
+	s.repoMappings.WithLabelValues(action, outcome).Inc()
 }
 
 // recordLocalMerge records the result of one task named in a local merge

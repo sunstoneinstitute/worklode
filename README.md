@@ -59,7 +59,7 @@ Then create a project, map a repo to it, add a task, and claim it:
 
 ```bash
 lode project add sunstone-web --name "Sunstone Web"
-lode project add-repo sunstone-web sunstoneinstitute/sunstone-web
+lode project repo add sunstone-web sunstoneinstitute/sunstone-web
 lode project crew add sunstone-web ada --role editor --lead
 lode task add --project sunstone-web --title "Fix the footer link"
 lode task claim <task-id>
@@ -118,7 +118,7 @@ this order, first hit wins:
    found by walking up from the working directory.
 3. `current_project` in `~/.config/worklode/config.toml`.
 4. The repo's `origin` git remote, resolved against the repo → project
-   mappings created by `lode project add-repo`.
+   mappings created by `lode project repo add`.
 5. Nothing — the command runs across every project.
 
 Step 4 needs no setup beyond the mapping already on the server, so a fresh
@@ -156,11 +156,11 @@ number: `lode task show 12` means `WL-12`. Full ids work everywhere.
 
 ### Importing an existing backlog
 
-`add-repo` only wires up new webhook traffic — issues and PRs that predate
+`repo add` only wires up new webhook traffic — issues and PRs that predate
 the mapping stay invisible until backfilled:
 
 ```bash
-lode project add-repo myproject acme/widgets
+lode project repo add myproject acme/widgets
 lode inbox import acme/widgets --dry-run
 lode inbox import acme/widgets
 lode task add --project myproject --kind chore --title "acme/widgets backlog" --priority medium

@@ -55,7 +55,7 @@ func resolveScope(ctx context.Context, cmd *cobra.Command, c *cli.Client, cfg cl
 
 // errNoProject is what every project-scoped create command returns when the
 // resolution chain came up empty.
-var errNoProject = errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project add-repo"`)
+var errNoProject = errors.New(`no project: pass --project or --repo, set current_project in .worklode/config.toml or ~/.config/worklode/config.toml, or map this repo with "lode project repo add"`)
 
 // bareTaskNumber matches a task number without its project key, as accepted
 // by every id-taking command.

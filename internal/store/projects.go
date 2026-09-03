@@ -266,6 +266,24 @@ func (s *Store) AddRepo(ctx context.Context, projectID, repo string) error {
 	return nil
 }
 
+// RemoveRepo unmaps repo from whatever project it belongs to. A repo maps to
+// at most one project (project_repos.repo is UNIQUE), so the project id is
+// not needed to name the mapping. Only the mapping row goes: tasks, documents
+// and ingested deliveries carry their own project_id and keep it, so
+// everything already recorded for the repo stays addressable and only future
+// webhook traffic stops resolving to a project. This is not a delete in the
+// 044 sense — nothing is tombstoned. Returns ErrNotFound if the repo is not
+// mapped to any project.
+func (s *Store) RemoveRepo(ctx context.Context, repo string) error {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM project_repos WHERE repo = $1`, repo)
+	if err != nil {
+		return fmt.Errorf("remove repo %s: %w", repo, err)
+	}
+	return requireOneAffected(res, "remove repo",
+		fmt.Errorf("repo %s: %w", repo, ErrNotFound))
+}
+
 // ProjectForRepo looks up the project a repo is mapped to. Returns
 // ErrNotFound if the repo is not mapped to any project.
 func (s *Store) ProjectForRepo(ctx context.Context, repo string) (*Project, error) {
