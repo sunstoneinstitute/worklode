@@ -19,7 +19,7 @@ func newProjectCmd() *cobra.Command {
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectRepoCmd(),
 		newProjectFocusCmd(), newProjectSetCmd(),
 		newProjectResolveCmd(), newProjectShowCmd(),
-		newProjectDoctorCmd(), newProjectCrewCmd())
+		newProjectHealthCmd(), newProjectCrewCmd())
 	return cmd
 }
 
@@ -593,11 +593,11 @@ func costWindowLabel(days int) string {
 	return fmt.Sprintf("last %d days", days)
 }
 
-// newProjectDoctorCmd builds `lode project doctor [repo]`: is ingestion
+// newProjectHealthCmd builds `lode project health [repo]`: is ingestion
 // working for this repo (operator view, admin token required).
-func newProjectDoctorCmd() *cobra.Command {
+func newProjectHealthCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "doctor [repo]",
+		Use:   "health [repo]",
 		Short: "Report webhook-ingestion health per mapped repo",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

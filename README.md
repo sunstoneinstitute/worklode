@@ -244,7 +244,7 @@ Three commands answer "is this wired up, and did anything get missed" (spec
   reachability, `current_project`, git hooks, worktree lease. It exits
   non-zero on any failure and names the fix for each, and still reports what
   it can with the server unreachable.
-- `lode project doctor [repo]` — per-repo webhook-ingestion health, admin
+- `lode project health [repo]` — per-repo webhook-ingestion health, admin
   only: App installation, last delivery, unapplied events, and repos that
   send webhooks but map to no project. A repo flagged `STALE` — no delivery
   since it was mapped — is the cue to reconcile.
@@ -256,7 +256,7 @@ Three commands answer "is this wired up, and did anything get missed" (spec
   server has no GitHub App configured.
 
 ```bash
-lode project doctor                            # every mapped repo
+lode project health                            # every mapped repo
 lode task reconcile --repo acme/app --dry-run  # what would be repaired
 lode task reconcile --since 720h               # org-wide, last 30 days
 ```
