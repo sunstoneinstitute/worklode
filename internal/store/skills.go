@@ -200,23 +200,19 @@ func (s *Store) ListSkills(ctx context.Context, includeDeleted bool) ([]Skill, e
 	return collectRows(rows, "list skills", byValue(scanSkill))
 }
 
-// SkillsMissingEmbeddings returns live skills with no stored vector at all,
-// ordered by name — the set a sync must embed to converge, whether they were
-// never embedded, lost their vectors to a provider change, or failed a
-// transient embed call. Description and SkillMD come along so the caller can
-// embed without a second query. A skill with chunk rows but no vector counts
-// as missing: 040 §8 invalidates by nulling the column, leaving the text in
-// place for the lexical arm.
-func (s *Store) SkillsMissingEmbeddings(ctx context.Context) ([]Skill, error) {
-	rows, err := s.db.QueryContext(ctx, skillSelect+`
-		WHERE s.deleted_at IS NULL
-		  AND NOT EXISTS (SELECT 1 FROM index_chunks e
-		                   WHERE e.skill_id = s.id AND e.embedding IS NOT NULL)
-		ORDER BY s.name`)
-	if err != nil {
-		return nil, fmt.Errorf("skills missing embeddings: %w", err)
+// SkillByID returns one skill by primary key, soft-deleted ones included:
+// the convergence loop resolves the ids StaleSubjects hands it (040 §7), and
+// a skill soft-deleted between the two queries is indexed once more rather
+// than failing the pass.
+func (s *Store) SkillByID(ctx context.Context, id int64) (*Skill, error) {
+	sk, err := scanSkill(s.db.QueryRowContext(ctx, skillSelect+` WHERE s.id = $1`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("skill %d: %w", id, ErrNotFound)
 	}
-	return collectRows(rows, "skills missing embeddings", byValue(scanSkill))
+	if err != nil {
+		return nil, fmt.Errorf("skill %d: %w", id, err)
+	}
+	return sk, nil
 }
 
 // SkillsByNames returns the named skills (deleted included, so brief pins can
