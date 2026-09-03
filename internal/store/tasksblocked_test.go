@@ -347,7 +347,7 @@ func TestBlockedTaskIDsContainerWithOwnCommits(t *testing.T) {
 
 // TestBlockedTaskIDsDoneStateFlipAfterDelivery pins that raising a repo's
 // done_state after a task delivered cannot strand that task's dependents.
-// Discovery runs only at add-repo (004 §5.4), so `lode project set-repo
+// Discovery runs only at repo-add time (004 §5.4), so `lode project repo edit
 // --done-state` on a repo that started cutting releases is the expected path,
 // and a task already at deployed_prod has no legal transition left.
 func TestBlockedTaskIDsDoneStateFlipAfterDelivery(t *testing.T) {

@@ -1015,7 +1015,7 @@ func (s *Store) ListEdgesForTasks(ctx context.Context, ids []string) (map[string
 // prod repo walks merged → deployed_dev → deployed_prod, a release repo walks
 // merged → deployed_dev → released, and `deployed_prod → released` is not a
 // legal transition. Ordering one terminal above the other would wedge a task
-// that reached the *other* branch's terminal — after `lode project set-repo
+// that reached the *other* branch's terminal — after `lode project repo edit
 // --done-state` (§5.4), or when a multi-repo task's prod deploy lands before
 // its release — permanently open with no state left to advance to. Calling
 // them peers under-blocks in that corner instead, which is where the old

@@ -581,3 +581,53 @@ func TestListReposForProjects(t *testing.T) {
 		t.Fatalf("ListReposForProjects(nil): got %v, want empty non-nil map", empty)
 	}
 }
+
+// TestRemoveRepoKeepsTasks pins the contract of `lode project repo remove`:
+// it unmaps the repo and nothing else. The tasks that were filed while the
+// repo was mapped keep their project and stay addressable; only future
+// ingestion stops resolving through the mapping.
+func TestRemoveRepoKeepsTasks(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	if err := s.AddRepo(ctx, "horndb", "sunstoneinstitute/horndb"); err != nil {
+		t.Fatalf("AddRepo: %v", err)
+	}
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := s.RemoveRepo(ctx, "sunstoneinstitute/horndb"); err != nil {
+		t.Fatalf("RemoveRepo: %v", err)
+	}
+
+	// The mapping is gone: nothing resolves the repo to a project any more.
+	if _, err := s.ProjectForRepo(ctx, "sunstoneinstitute/horndb"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ProjectForRepo after remove: want ErrNotFound, got %v", err)
+	}
+	repos, err := s.ListRepos(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("ListRepos: %v", err)
+	}
+	if len(repos) != 0 {
+		t.Fatalf("ListRepos after remove: got %v, want none", repos)
+	}
+
+	// The task filed against it is untouched, project and all.
+	got, err := s.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask after RemoveRepo: %v", err)
+	}
+	if got.Project != "horndb" {
+		t.Fatalf("task project after RemoveRepo = %q, want horndb", got.Project)
+	}
+}
+
+func TestRemoveRepoUnmapped(t *testing.T) {
+	t.Parallel()
+	s := openTestStore(t)
+
+	err := s.RemoveRepo(t.Context(), "sunstoneinstitute/nope")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("RemoveRepo unmapped: want ErrNotFound, got %v", err)
+	}
+}

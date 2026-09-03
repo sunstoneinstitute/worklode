@@ -76,7 +76,7 @@ outright once it is fixed over annotating it as resolved.
   means keying on the digest and treating the tag as a pointer.
 - `[P1]` **The GitHub App needs `Packages: read` and a `registry_package`
   subscription** (operator action, not a code change): `registry_package` is in
-  `handledEvents`, so `lode project add-repo` warns "github app is not
+  `handledEvents`, so `lode project repo add` warns "github app is not
   subscribed to: registry_package" on every existing install until the App
   gains the permission — and a GitHub App permission change requires each
   installation to approve it. Until then no `docker_image` artifacts are minted
