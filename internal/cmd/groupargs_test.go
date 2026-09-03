@@ -21,7 +21,7 @@ func TestGroupRejectsUnknownSubcommand(t *testing.T) {
 		{"doc", "bogusnothing"},
 		{"project", "bogusnothing"},
 		{"work", "bogusnothing"},
-		{"graph", "projection", "bogusnothing"},
+		{"project", "repo", "bogusnothing"},
 	} {
 		path := strings.Join(args, " ")
 		out, err := runLode(t, args...)
