@@ -54,10 +54,10 @@ const (
 
 // listen must never claim: a dry-run pick that reserved the task would take
 // work away from the loop it is supposed to be waking.
-func TestWorkerListenAlwaysAsksDryRun(t *testing.T) {
+func TestWorkListenAlwaysAsksDryRun(t *testing.T) {
 	_, bodies := fakeClaimNext(t, dryRunPick)
 
-	if _, err := runLode(t, "worker", "listen", "--once", "--project", "worklode"); err != nil {
+	if _, err := runLode(t, "work", "listen", "--once", "--project", "worklode"); err != nil {
 		t.Fatalf("listen --once: %v", err)
 	}
 	if len(*bodies) != 1 {
@@ -73,10 +73,10 @@ func TestWorkerListenAlwaysAsksDryRun(t *testing.T) {
 
 // The filter flags must reach the server unchanged — that is what lets one
 // filter string drive both a listener and the loop it wakes.
-func TestWorkerListenForwardsFilter(t *testing.T) {
+func TestWorkListenForwardsFilter(t *testing.T) {
 	_, bodies := fakeClaimNext(t, dryRunPick)
 
-	if _, err := runLode(t, "worker", "listen", "--once",
+	if _, err := runLode(t, "work", "listen", "--once",
 		"--project", "worklode", "--kind", "chore", "--strict-focus"); err != nil {
 		t.Fatalf("listen --once: %v", err)
 	}
@@ -86,10 +86,10 @@ func TestWorkerListenForwardsFilter(t *testing.T) {
 	}
 }
 
-func TestWorkerListenOncePrintsPick(t *testing.T) {
+func TestWorkListenOncePrintsPick(t *testing.T) {
 	fakeClaimNext(t, dryRunPick)
 
-	out, err := runLode(t, "worker", "listen", "--once", "--project", "worklode")
+	out, err := runLode(t, "work", "listen", "--once", "--project", "worklode")
 	if err != nil {
 		t.Fatalf("listen --once: %v", err)
 	}
@@ -100,10 +100,10 @@ func TestWorkerListenOncePrintsPick(t *testing.T) {
 	}
 }
 
-func TestWorkerListenOnceJSONIsThePick(t *testing.T) {
+func TestWorkListenOnceJSONIsThePick(t *testing.T) {
 	fakeClaimNext(t, dryRunPick)
 
-	out, err := runLode(t, "worker", "listen", "--once", "--project", "worklode", "--json")
+	out, err := runLode(t, "work", "listen", "--once", "--project", "worklode", "--json")
 	if err != nil {
 		t.Fatalf("listen --once --json: %v", err)
 	}
@@ -118,10 +118,10 @@ func TestWorkerListenOnceJSONIsThePick(t *testing.T) {
 
 // An empty queue must keep the listener waiting rather than exiting 0 with
 // nothing — a caller that restarted on every quiet poll would spin.
-func TestWorkerListenWaitsThroughEmptyQueue(t *testing.T) {
+func TestWorkListenWaitsThroughEmptyQueue(t *testing.T) {
 	calls, _ := fakeClaimNext(t, noReadyTask, noReadyTask, dryRunPick)
 
-	out, err := runLode(t, "worker", "listen", "--once",
+	out, err := runLode(t, "work", "listen", "--once",
 		"--project", "worklode", "--interval", "1ms")
 	if err != nil {
 		t.Fatalf("listen --once: %v", err)
@@ -136,7 +136,7 @@ func TestWorkerListenWaitsThroughEmptyQueue(t *testing.T) {
 
 // A rejected token will be rejected on every retry, so it must end the watch
 // instead of being buried in a warning loop.
-func TestWorkerListenFailsFastOnRejectedToken(t *testing.T) {
+func TestWorkListenFailsFastOnRejectedToken(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		io.WriteString(w, `{"error":"unauthorized"}`)
@@ -145,15 +145,15 @@ func TestWorkerListenFailsFastOnRejectedToken(t *testing.T) {
 	t.Setenv("LODE_SERVER", srv.URL)
 	t.Setenv("LODE_TOKEN", "wl_test")
 
-	if _, err := runLode(t, "worker", "listen", "--project", "worklode", "--interval", "1ms"); err == nil {
+	if _, err := runLode(t, "work", "listen", "--project", "worklode", "--interval", "1ms"); err == nil {
 		t.Fatal("listen exited 0 on a 401; want the error surfaced")
 	}
 }
 
-func TestWorkerListenRejectsNonPositiveInterval(t *testing.T) {
+func TestWorkListenRejectsNonPositiveInterval(t *testing.T) {
 	fakeClaimNext(t, noReadyTask)
 
-	if _, err := runLode(t, "worker", "listen", "--project", "worklode", "--interval", "0s"); err == nil {
+	if _, err := runLode(t, "work", "listen", "--project", "worklode", "--interval", "0s"); err == nil {
 		t.Fatal("--interval 0s accepted; want an error")
 	}
 }
@@ -161,7 +161,7 @@ func TestWorkerListenRejectsNonPositiveInterval(t *testing.T) {
 // Without --once the same unclaimed pick is returned by every poll. Reprinting
 // it each interval would bury the transitions a reader is watching for, so
 // only a change is printed — and the pick is reported again after a lull.
-func TestWorkerListenPrintsOnlyPickChanges(t *testing.T) {
+func TestWorkListenPrintsOnlyPickChanges(t *testing.T) {
 	fakeClaimNext(t, dryRunPick, dryRunPick, noReadyTask, dryRunPick)
 
 	c, _, err := newAPIClientWithConfig()
@@ -181,7 +181,7 @@ func TestWorkerListenPrintsOnlyPickChanges(t *testing.T) {
 		time.Sleep(60 * time.Millisecond)
 		cancel()
 	}()
-	if err := runWorkerListen(cmd, c, model.ClaimNextInput{DryRun: true}, time.Millisecond, false); err != nil {
+	if err := runListen(cmd, c, model.ClaimNextInput{DryRun: true}, time.Millisecond, false); err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 

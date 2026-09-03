@@ -687,7 +687,7 @@ func InstructionTable(w io.Writer, ins []model.Instruction) {
 	tw.Flush()
 }
 
-// workerPickRowFmt lays out one `lode worker listen` row. Fixed widths for
+// workerPickRowFmt lays out one `lode work listen` row. Fixed widths for
 // the same reason eventStreamRowFmt uses them: this is a stream, so there is
 // no complete row set to measure and a tabwriter's columns would jitter as
 // picks arrive.
