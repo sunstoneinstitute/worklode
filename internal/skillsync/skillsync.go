@@ -265,7 +265,7 @@ func (sy *Syncer) reembed(ctx context.Context, skillID int64, description, skill
 
 func (sy *Syncer) embedSkill(ctx context.Context, skillID int64, description, skillMD string) error {
 	chunks := embed.Chunks(description+"\n\n"+skillMD, embed.ChunkRunes, embed.ChunkOverlap)
-	vecs, err := sy.Embed.Embed(ctx, chunks)
+	vecs, err := sy.Embed.Embed(ctx, embed.RoleDocument, chunks)
 	if err != nil {
 		return err
 	}
