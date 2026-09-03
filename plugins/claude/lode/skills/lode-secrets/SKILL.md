@@ -42,7 +42,7 @@ materialized into the OS keystore at claim time; you never see or handle them.
 - NEVER probe `op`, ask the operator for a value, or read
   `.worklode/secrets.env` expecting values — it holds `op://` references only.
 - Items survive leaving the worktree — the lease is still yours. Only `lode
-  worktree done`, `lode work block` and worktree removal purge them;
+  work submit`, `lode work block` and worktree removal purge them;
   `lode secrets purge --task <id>` is the manual escape hatch.
 - A needed-but-unavailable secret is a BLOCK signal, not something to work
   around. `lode work block` takes a blocking task id, so mint one and block on it:
