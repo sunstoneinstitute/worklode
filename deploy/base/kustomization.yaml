@@ -134,3 +134,5 @@ configMapGenerator:
       - migrations/0060_task_human_only.down.sql
       - migrations/0061_index_chunks.up.sql
       - migrations/0061_index_chunks.down.sql
+      - migrations/0062_milestones.up.sql
+      - migrations/0062_milestones.down.sql
