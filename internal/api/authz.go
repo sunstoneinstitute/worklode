@@ -126,6 +126,12 @@ const (
 	permSkillRead  Permission = "skill.read"
 	permSkillAdmin Permission = "skill.admin"
 
+	// permSearchRead covers GET /api/v1/search, which spans docs, tasks and
+	// skills in one query (040 §9). It is its own permission, not a reuse of
+	// permDocRead/permTaskRead/permSkillRead, so a future project-scoped role
+	// can gate it independently of the three reads it currently mirrors.
+	permSearchRead Permission = "search.read"
+
 	permInboxRead   Permission = "inbox.read"
 	permInboxTriage Permission = "inbox.triage"
 	permInboxAdmin  Permission = "inbox.admin"
@@ -276,6 +282,13 @@ var grants = map[Permission][]Role{
 
 	permSkillRead:  {RoleUser, RoleAdmin},
 	permSkillAdmin: {RoleAdmin},
+
+	// The same grant permDocRead, permTaskRead and permSkillRead already
+	// carry, so this adds a permission without changing who can see what.
+	// When project-scoped roles arrive, this is the endpoint to revisit: one
+	// permission over three subject kinds is only honest while all three
+	// reads are granted identically (040 §9).
+	permSearchRead: {RoleUser, RoleAdmin},
 
 	permInboxRead:   {RoleUser, RoleAdmin},
 	permInboxTriage: {RoleUser, RoleAdmin},

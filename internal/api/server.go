@@ -698,6 +698,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/skills/recommend", s.recommendSkills)
 	r.api("POST /api/v1/skills/sync", s.syncSkills)
 
+	r.api("GET /api/v1/search", s.search)
+
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
 
 	r.api("POST /api/v1/blobs", s.uploadBlob)
