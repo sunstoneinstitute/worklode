@@ -140,3 +140,5 @@ configMapGenerator:
       - migrations/0063_project_approval_flow.down.sql
       - migrations/0064_approvals_lanes.up.sql
       - migrations/0064_approvals_lanes.down.sql
+      - migrations/0065_doc_notes.up.sql
+      - migrations/0065_doc_notes.down.sql
