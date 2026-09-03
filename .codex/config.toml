@@ -1,0 +1,6 @@
+[marketplaces.worklode]
+source_type = "local"
+source = "."
+
+[plugins."lode@worklode"]
+enabled = true

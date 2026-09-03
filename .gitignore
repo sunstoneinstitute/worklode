@@ -18,7 +18,8 @@ settings.local.json
 
 graphify-out
 CLAUDE.local.md
-.codex
+.codex/*
+!.codex/config.toml
 
 # crit live-mode session cookies
 .crit/
