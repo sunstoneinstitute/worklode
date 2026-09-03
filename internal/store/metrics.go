@@ -38,6 +38,9 @@ type storeMetrics struct {
 	skillAmbiguous        prometheus.Counter
 	instructions          *prometheus.CounterVec
 	instructionsDelivered prometheus.Counter
+	searchRequests        *prometheus.CounterVec
+	searchSeconds         *prometheus.HistogramVec
+	searchArmEmpties      *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -86,8 +89,31 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_task_instructions_delivered_total",
 			Help: "Instructions handed to a session by a claim.",
 		}),
+		searchRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_search_requests_total",
+			Help: "Corpus searches by mode (hybrid|dense|lexical|invalid) and outcome (ok|error|empty).",
+		}, []string{"mode", "outcome"}),
+		// 040 §10 asks for worklode_search_arm_duration_seconds{arm}. §6
+		// mandates one statement for both arms, so no arm has a duration of
+		// its own to report; this times the statement and labels it by mode,
+		// which is the arm in the two single-arm modes and honestly not one
+		// in hybrid.
+		searchSeconds: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "worklode_search_duration_seconds",
+			Help:    "Corpus search query duration by mode.",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"mode"}),
+		searchArmEmpties: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_search_arm_empty_total",
+			Help: "Searches where an arm that ran offered no candidates, by arm (dense|lexical).",
+		}, []string{"arm"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.searchRequests, m.searchSeconds, m.searchArmEmpties)
+	// Pre-initialise both arms: a lexical arm that has never gone empty and
+	// one nobody has searched with look identical otherwise, and the alert in
+	// 040 §10 is about the first of those becoming the second.
+	m.searchArmEmpties.WithLabelValues("dense")
+	m.searchArmEmpties.WithLabelValues("lexical")
 	// Pre-initialise both sweeper series so alert expressions see 0, not
 	// no-data, on a server whose sweeper has not ticked yet.
 	m.sweeperRuns.WithLabelValues("ok")
@@ -193,6 +219,35 @@ func (m *storeMetrics) deliverInstructions(n int) {
 		return
 	}
 	m.instructionsDelivered.Add(float64(n))
+}
+
+// searchRequest records one Search by mode and outcome. An unrecognised mode
+// is folded to "invalid": the mode is caller input, and 022 wants bounded
+// label values.
+func (m *storeMetrics) searchRequest(mode, outcome string) {
+	if m == nil {
+		return
+	}
+	if !validSearchMode(mode) {
+		mode = "invalid"
+	}
+	m.searchRequests.WithLabelValues(mode, outcome).Inc()
+}
+
+// searchDuration records how long one search statement took.
+func (m *storeMetrics) searchDuration(mode string, d time.Duration) {
+	if m == nil {
+		return
+	}
+	m.searchSeconds.WithLabelValues(mode).Observe(d.Seconds())
+}
+
+// searchArmEmpty records one search where arm ran and returned no candidates.
+func (m *storeMetrics) searchArmEmpty(arm string) {
+	if m == nil {
+		return
+	}
+	m.searchArmEmpties.WithLabelValues(arm).Inc()
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the
