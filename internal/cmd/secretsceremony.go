@@ -22,7 +22,7 @@ import (
 
 // opRunFunc executes the materialization step: ONE `op run` resolving every
 // reference in envFile under a single 1Password authorization, with
-// `lode secrets pack` as the child. Swapped in tests.
+// `lode secret pack` as the child. Swapped in tests.
 var opRunFunc = runOpPack
 
 // opLookPathFunc locates the op binary. Swapped in tests so they never
@@ -36,7 +36,7 @@ func runOpPack(dir, envFile, taskID string, names, declined []string, stdout, st
 		return fmt.Errorf("locate lode binary: %w", err)
 	}
 	args := []string{"run", "--env-file", envFile, "--",
-		self, "secrets", "pack", "--task", taskID, "--names", strings.Join(names, ",")}
+		self, "secret", "pack", "--task", taskID, "--names", strings.Join(names, ",")}
 	if len(declined) > 0 {
 		args = append(args, "--declined", strings.Join(declined, ","))
 	}

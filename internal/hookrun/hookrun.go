@@ -1181,7 +1181,7 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 		fmt.Fprintf(&sb, "\nbranch: %s", b.Branch)
 	}
 	if len(b.Task.Secrets) > 0 {
-		fmt.Fprintf(&sb, "\nsecrets: %s (use `lode secrets exec`)", strings.Join(b.Task.Secrets, ", "))
+		fmt.Fprintf(&sb, "\nsecrets: %s (use `lode secret exec`)", strings.Join(b.Task.Secrets, ", "))
 	}
 	if body := strings.TrimSpace(b.Body); body != "" {
 		if i := strings.IndexByte(body, '\n'); i >= 0 {

@@ -1477,7 +1477,7 @@ func TestTaskSecretsRejectsBadNames(t *testing.T) {
 		t.Fatalf("create project: %d %s", rec.Code, rec.Body.String())
 	}
 	// A value or ref smuggled into the name field, then names that satisfy the
-	// grammar but redirect loading in a `lode secrets exec` child (ADR 047).
+	// grammar but redirect loading in a `lode secret exec` child (ADR 047).
 	for _, name := range []string{
 		"op://Employee/GitHub token/credential",
 		"LD_PRELOAD", "DYLD_INSERT_LIBRARIES", "PATH", "IFS", "BASH_ENV",

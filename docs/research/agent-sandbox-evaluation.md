@@ -294,7 +294,7 @@ Confirmed: agent-sandbox does no secret handling of any kind. Nothing in the fou
 CRDs references Kubernetes `Secret`s, and 017's design is unaffected.
 
 There is more to say than "unaffected". 017 materialises values into the
-executor's OS keystore at claim time and injects them per-child via `lode secrets
+executor's OS keystore at claim time and injects them per-child via `lode secret
 exec` (017 §3, §4). That is an in-pod, post-start mechanism — precisely the shape
 §4 shows warm pools require, and precisely the shape 038 §4.3's environment-injected
 `LODE_TOKEN` is not. **Synthesis: if warm pools are ever adopted, 017 needs no

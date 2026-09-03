@@ -260,7 +260,7 @@ func sweepSecrets(ctx context.Context, c *cli.Client, serverReachable bool) doct
 	if len(failed) > 0 {
 		return fail("secrets",
 			"could not purge "+strings.Join(failed, ", ")+" (lease gone); "+strings.Join(parts, "; "),
-			"run `lode secrets purge --task <id>` for each, then re-run `lode doctor`")
+			"run `lode secret purge --task <id>` for each, then re-run `lode doctor`")
 	}
 	return pass("secrets", strings.Join(parts, "; "))
 }

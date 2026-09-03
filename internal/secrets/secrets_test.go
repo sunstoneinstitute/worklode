@@ -60,7 +60,7 @@ func TestManifestRoundTrip(t *testing.T) {
 }
 
 // TestManifestRejectsTraversingTaskID: the task id becomes a path segment, so
-// an id carrying ".." would let `lode secrets purge --task ../../x` unlink and
+// an id carrying ".." would let `lode secret purge --task ../../x` unlink and
 // SaveManifest write outside the secrets directory.
 func TestManifestRejectsTraversingTaskID(t *testing.T) {
 	home := t.TempDir()

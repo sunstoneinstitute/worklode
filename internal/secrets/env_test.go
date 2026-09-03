@@ -50,7 +50,7 @@ func TestCredentialShaped(t *testing.T) {
 }
 
 // TestChildEnvStripsAmbientCredentials is the acceptance criterion (017 §4, as
-// amended by ADR 050): a child of `lode secrets exec` sees its materialized
+// amended by ADR 050): a child of `lode secret exec` sees its materialized
 // names plus the shell plumbing, and never the operator's ambient credentials.
 func TestChildEnvStripsAmbientCredentials(t *testing.T) {
 	parent := []string{
