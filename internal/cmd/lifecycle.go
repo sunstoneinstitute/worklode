@@ -40,6 +40,7 @@ func newWorkCmd() *cobra.Command {
 		newSubmitCmd(),
 		newBlockCmd(),
 		newStatusCmd(),
+		newListenCmd(),
 	)
 	return cmd
 }

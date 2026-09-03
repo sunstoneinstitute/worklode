@@ -47,7 +47,7 @@ var taskKindCommands = []string{
 	"lode task claim",
 	"lode task edit",
 	"lode task list",
-	"lode worker listen",
+	"lode work listen",
 }
 
 // TestTaskKindCommandsArePinned walks the full cobra tree for every command

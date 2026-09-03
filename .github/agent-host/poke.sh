@@ -8,7 +8,7 @@
 # Usage: poke.sh <window> [lode work next filter flags...]
 #   e.g. poke.sh gha-chore1 --project worklode --kind chore
 #
-# The filter is passed through to `lode worker listen` unchanged, and is the
+# The filter is passed through to `lode work listen` unchanged, and is the
 # same string supervisor.sh substitutes into the skill body. That is the point
 # of the two sharing a vocabulary: the sidecar wakes on exactly the work its
 # supervisor could claim.
@@ -24,7 +24,7 @@ IDLE_SETTLE=${IDLE_SETTLE:-4}
 # After poking, wait before listening again: the supervisor needs a moment to
 # claim, and re-poking the same task in the meantime is pure noise.
 POKE_COOLDOWN=${POKE_COOLDOWN:-120}
-# Backoff after `lode worker listen` exits non-zero (a rejected token, an
+# Backoff after `lode work listen` exits non-zero (a rejected token, an
 # unknown project). Long enough that a misconfigured sidecar does not hammer
 # the backbone.
 ERROR_BACKOFF=${ERROR_BACKOFF:-60}
@@ -78,8 +78,8 @@ while :; do
   fi
 
   # --once so restart policy lives here rather than inside the command.
-  if ! lode worker listen --once "$@"; then
-    echo "poke: lode worker listen failed; retrying in ${ERROR_BACKOFF}s" >&2
+  if ! lode work listen --once "$@"; then
+    echo "poke: lode work listen failed; retrying in ${ERROR_BACKOFF}s" >&2
     sleep "$ERROR_BACKOFF"
     continue
   fi
