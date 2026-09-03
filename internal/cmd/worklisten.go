@@ -74,7 +74,7 @@ func newListenCmd() *cobra.Command {
 		},
 	}
 	addScopeFlags(cmd, &scope, "watch this project")
-	cmd.Flags().StringVar(&kind, "kind", "", "only wake for this kind: feature, bug, chore, design, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "", "only wake for this kind: feature, bug, chore, design, review, spike, decision")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false,
 		"restrict the watch to the project's focus concerns only, the way lode work next --strict-focus does")
 	cmd.Flags().DurationVar(&interval, "interval", 5*time.Minute, "how often to ask (e.g. 30s, 5m)")

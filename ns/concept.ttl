@@ -73,6 +73,8 @@ wlc:review a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "review"
     skos:definition "Review/evaluate someone else's work." .
 wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
     skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
+wlc:decision a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "decision" ;
+    skos:definition "Answer a posed question and record the answer on the task; the deliverable is the recorded answer in task_decisions, never a document or a diff." .
 
 
 # ---------------------------------------------------------------------------

@@ -136,3 +136,5 @@ configMapGenerator:
       - migrations/0061_index_chunks.down.sql
       - migrations/0062_milestones.up.sql
       - migrations/0062_milestones.down.sql
+      - migrations/0066_decision_kind.up.sql
+      - migrations/0066_decision_kind.down.sql

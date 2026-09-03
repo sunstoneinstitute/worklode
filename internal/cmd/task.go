@@ -340,7 +340,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
 	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
-	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike, decision")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task publish`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
@@ -402,7 +402,7 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&statuses, "status", nil, "filter by status: draft, ready, in_progress, in_review, merged, deployed_dev, deployed_prod, released, abandoned, or all (repeatable; default hides merged, deployed_dev, deployed_prod, released, and abandoned)")
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this task")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
-	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: feature, bug, chore, design, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: feature, bug, chore, design, review, spike, decision")
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
@@ -658,7 +658,7 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
-	cmd.Flags().StringVar(&kindFlag, "kind", "", "retag the task's kind: feature, bug, chore, design, review, spike")
+	cmd.Flags().StringVar(&kindFlag, "kind", "", "retag the task's kind: feature, bug, chore, design, review, spike, decision")
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	cmd.Flags().BoolVar(&humanOnly, "human-only", false, "mark (or unmark) the task as human-only: never offered by lode next or the frontier, still claimable by id")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
@@ -832,7 +832,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().DurationVar(&ttl, "ttl", 0, "lease TTL (default 2h)")
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
 	addScopeFlags(cmd, &scope, "the project a bare task number belongs to; with --next, restrict the pick to a project")
-	cmd.Flags().StringVar(&kind, "kind", "", "with --next, restrict the pick to a kind: feature, bug, chore, design, review, spike")
+	cmd.Flags().StringVar(&kind, "kind", "", "with --next, restrict the pick to a kind: feature, bug, chore, design, review, spike, decision")
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd

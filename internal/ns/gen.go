@@ -9,7 +9,7 @@ package ns
 
 // TaskKinds mirrors wlc:TaskKind and the tasks.kind CHECK constraint,
 // alphabetically.
-var TaskKinds = []string{"bug", "chore", "design", "feature", "review", "spike"}
+var TaskKinds = []string{"bug", "chore", "decision", "design", "feature", "review", "spike"}
 
 // DesignDocStatuses mirrors wlc:DesignDocStatus and the docs.status CHECK
 // constraint, in the lifecycle order of wlc:DesignDocStatusOrder.
