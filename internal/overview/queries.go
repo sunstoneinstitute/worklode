@@ -80,7 +80,7 @@ func staleIntentQuery() string {
 }
 
 // acknowledgedQuery lists every deviation, active and expired
-// (`lode drift --acknowledged`). It carries violationsQuery's declared-only
+// (`lode graph drift --acknowledged`). It carries violationsQuery's declared-only
 // confinement so the listing is exactly the set that suppresses violations —
 // a deviation the report showed but the suppression ignored would be worse
 // than not listing it.

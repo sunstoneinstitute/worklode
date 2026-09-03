@@ -39,7 +39,7 @@ func TestNormalize(t *testing.T) {
 	}
 }
 
-// TestHost covers WL-269: the host component `lode derive` puts in the repo
+// TestHost covers WL-269: the host component `lode graph derive` puts in the repo
 // instance IRI, extracted from the same remote forms Normalize accepts.
 func TestHost(t *testing.T) {
 	cases := []struct {

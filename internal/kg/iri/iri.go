@@ -125,7 +125,7 @@ func DeclaredGraph(docSlug string) string { return GraphNS + "declared/" + docSl
 func ObservedGraph(source string) string { return GraphNS + "observed/" + source }
 
 // RepoObservedGraph returns the per-repo named graph of a repo-local deriver
-// source (go-imports, repo-layout). `lode derive` runs from each repo's
+// source (go-imports, repo-layout). `lode graph derive` runs from each repo's
 // checkout, and the whole-graph-replace contract needs one graph per writer
 // (spec 007 §1.1); the repo segment mirrors Repo's <host>/<owner>/<name>.
 func RepoObservedGraph(source, host, owner, name string) string {

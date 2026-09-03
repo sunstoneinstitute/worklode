@@ -58,7 +58,7 @@ func (c *Client) CriticalPath(ctx context.Context) (model.CriticalPath, []byte, 
 
 // RunDerive calls POST /api/v1/derive: run the server-side derivers
 // (pr-affects, deploy). The repo-local derivers run from a checkout instead,
-// through `lode derive` without --server.
+// through `lode graph derive` without --server.
 func (c *Client) RunDerive(ctx context.Context) (model.DeriveResponse, []byte, error) {
 	return doJSON[model.DeriveResponse](ctx, c, http.MethodPost, "/api/v1/derive", nil, "derive results")
 }
@@ -126,7 +126,7 @@ func CriticalPathFiltered(cp model.CriticalPath, task string) model.CriticalPath
 	return out
 }
 
-// DriftRender prints `lode drift`: the violations, the stale intent, and —
+// DriftRender prints `lode graph drift`: the violations, the stale intent, and —
 // when the caller asked for them — the accepted deviations. component filters
 // both edge sections to the edges leaving that component IRI.
 func DriftRender(w io.Writer, d model.Drift, component string, acknowledged bool) {
@@ -154,7 +154,7 @@ func DriftRender(w io.Writer, d model.Drift, component string, acknowledged bool
 	tw.Flush()
 }
 
-// GapTable prints `lode gaps`: one line per finding. The two kinds carry
+// GapTable prints `lode graph gaps`: one line per finding. The two kinds carry
 // different fields — a component with no governing doc, or a repo path no
 // component claims — so the kind leads each row rather than being a column.
 func GapTable(w io.Writer, gaps []model.Gap) {

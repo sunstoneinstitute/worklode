@@ -24,10 +24,6 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
-## `lode derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones
-
-Flags: --allow-empty, --dry-run, --graph-url, --server
-
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
@@ -59,10 +55,6 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 
 ## `lode doctor` — Diagnose this machine's lode setup
 
-## `lode drift` — Architectural drift: violations and stale intent (spec 007 §3.1)
-
-Flags: --acknowledged, --component
-
 ## `lode event` — The ordered event log: tail, subscriber status, admin seek
 
 - `lode event seek` — Move a subscriber's offsets (admin; a replay relies on handler idempotency)
@@ -71,10 +63,13 @@ Flags: --acknowledged, --component
 - `lode event tail` — List recent events, newest last (--follow to keep watching)
   Flags: --follow, --limit, --since, --type
 
-## `lode gaps` — Doc gaps and unmatched-path coverage gaps
-
 ## `lode graph` — The knowledge-graph projection: its health, and what it owes
 
+- `lode graph derive` — Run the repo-local observed-layer derivers (go-imports, repo-layout), or --server for the server-side ones
+  Flags: --allow-empty, --dry-run, --graph-url, --server
+- `lode graph drift` — Architectural drift: violations and stale intent (spec 007 §3.1)
+  Flags: --acknowledged, --component
+- `lode graph gaps` — Doc gaps and unmatched-path coverage gaps
 - `lode graph projection` — The backbone→graph projector's state
 - `lode graph projection status` — Show the projects the projector has quarantined, since when, and why
 - `lode graph triples` — Write the task graph as N-Triples, for loading into an external RDF store
