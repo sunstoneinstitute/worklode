@@ -99,7 +99,7 @@ fully planned whatever its level says. None of that is built — no
 still read `fullCoverageWith`. Keep writing it. When §5.4 ships, the key
 disappears and the completeness rule replaces this subsection.
 
-`lode doc anchors <file>` lints a draft locally before `lode doc add` — anchors,
+`lode doc lint <file>` lints a draft locally before `lode doc add` — anchors,
 and a plan's `## Tasks` definitions. Creating the document is what turns
 `covers:` into edges: a reference no document in the project resolves to is
 kept as an external reference instead, which is a silently unplanned section,

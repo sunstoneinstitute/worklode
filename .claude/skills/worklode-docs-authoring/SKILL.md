@@ -16,7 +16,7 @@ amend/supersede, and how a plan declares its tasks.
 Draft the markdown — frontmatter included — in a scratch file, then:
 
 ```bash
-lode doc anchors <file>                             # local lint: anchors, plan ## Tasks
+lode doc lint <file>                                # local lint: anchors, plan ## Tasks
 lode doc add --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
 lode doc revise <ref>                        # open a candidate revision on an accepted doc
@@ -34,8 +34,8 @@ sections and edges. `lode show <ref> --inline` folds every in-force amendment
 and supersession into the section it acts on. `lode doc list`, `lode doc
 versions <ref>`, and `lode doc todo <ref>` (what's left before a spec counts
 as fully planned and executed) round out the reading surface; `lode doc
-lint` reports the whole corpus's dangling references, unlike `doc anchors`,
-which only lints one local file.
+lint` with no argument reports the whole corpus's dangling references,
+unlike `lode doc lint <file>`, which only lints one local file.
 
 The scratch file is an editor buffer, not a copy of record — nothing reads
 it once the command above succeeds. `lode doc edit` only works on a draft,
@@ -105,7 +105,7 @@ Every numbered heading in a spec or ADR carries a `{#sec-N}` anchor —
 `## 2. Lease lifecycle {#sec-2}`, `### 2.1 Renewal {#sec-2.1}`. Depth is
 capped at 3 levels (H2/H3/H4); a heading deeper than that is legal content
 but takes no number and no anchor — it belongs to its nearest anchored
-ancestor. `lode doc anchors <file>` checks numbering, anchors, and depth
+ancestor. `lode doc lint <file>` checks numbering, anchors, and depth
 before you post.
 
 **An anchor is frozen once its document is `accepted`.** A revision that
@@ -199,7 +199,7 @@ with no task yet, leaving every existing task alone (025 §9.2). Append a
 declaration to add work to an accepted plan; retitle one only to withdraw
 that task and declare a new one. Ordering across files (series parts, other
 plans) is the document-level `blocks`/`blockedBy` above, never a task
-number — `lode doc anchors <file>` runs this whole parse first, so a
+number — `lode doc lint <file>` runs this whole parse first, so a
 malformed task block is caught locally.
 
 ## The `ns/` ontology

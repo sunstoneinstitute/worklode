@@ -33,14 +33,13 @@ Flags: --allow-empty, --dry-run, --graph-url, --server
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
 - `lode doc add` — Create a document (spec, ADR, or plan) in draft
   Flags: --file, --kind, --number, --owner, --project, --repo, --slug
-- `lode doc anchors` — Lint a markdown file's anchors (and, for a plan, its task definitions)
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
 - `lode doc edit` — Replace a document's body (a draft, or a plan at any status)
   Flags: --file
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
-- `lode doc lint` — Report dangling frontmatter references across the corpus
+- `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
   Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
   Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
