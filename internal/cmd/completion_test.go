@@ -196,8 +196,9 @@ func TestTaskIDCompletionIsSilentOnFailure(t *testing.T) {
 // whose task id is not the first argument. Wiring a completion function that
 // only ever fires at position 0 would leave `lode task set state merged WL-…`
 // silently uncompletable while still looking wired, so the position is a
-// property of the wiring (taskIDAt/taskIDLast) and is checked here per shape:
-// ref-first, ref-mid, and the trailing ref of `task set`.
+// property of the wiring (taskIDAt, and taskSetArgs for the field-dispatched
+// arguments of `task set`) and is checked here per shape: ref-first, ref-mid,
+// and the trailing ref of `task set`.
 func TestTaskIDCompletionFiresAtTheRightPosition(t *testing.T) {
 	tests := []struct {
 		name string
