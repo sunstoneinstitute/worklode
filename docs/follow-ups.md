@@ -830,3 +830,14 @@ Recorded by WL-532 (the project Milestones page, 029 §2 and 032 §10):
   shape was covered by store and `internal/ui` tests rather than by an
   `internal/api` one. `lode task edit --milestone` and `lode milestone
   attach`/`detach` now write `milestone_id` from both sides.
+
+Recorded by WL-647's pass over spec 040 §2.3:
+
+- `[P3]` **The embedding space ID does not cover the task prefixes.**
+  `embed.OpenAI.ID()` is `provider:model@width@endpoint` (040 §3), which was
+  complete while the prefixes were compile-time-empty. They are now
+  configuration (`LODE_EMBEDDING_QUERY_PREFIX`,
+  `LODE_EMBEDDING_DOCUMENT_PREFIX`), and a document prefix change produces
+  vectors that are not comparable with the stored ones, without tripping §8's
+  invalidation. Folding the prefixes into `ID()` would fix it, but §3 fixes
+  that string's shape, so it wants an amendment rather than a quiet change.

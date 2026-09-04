@@ -569,7 +569,10 @@ Recommendations and `lode search` share one retrieval path over the corpus
 index (040). Its dense arm needs `LODE_EMBEDDING_URL` and
 `LODE_EMBEDDING_MODEL` on the server, and, if the endpoint requires auth,
 `LODE_EMBEDDING_API_KEY`; the default deployment points the URL at a CPU
-embeddings sidecar rather than a third-party API. `LODE_INDEX_INTERVAL` sets
+embeddings sidecar rather than a third-party API. An asymmetric model wants a
+different instruction on a query than on a stored document, so it also reads
+`LODE_EMBEDDING_QUERY_PREFIX` and `LODE_EMBEDDING_DOCUMENT_PREFIX` (both empty
+for a symmetric model). `LODE_INDEX_INTERVAL` sets
 how often the background loop indexes new documents, tasks and skills
 (default `5m`).
 

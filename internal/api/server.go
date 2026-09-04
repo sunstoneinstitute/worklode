@@ -127,6 +127,13 @@ type Config struct {
 	EmbeddingModel string
 	// EmbeddingAPIKey authenticates against EmbeddingURL. LODE_EMBEDDING_API_KEY.
 	EmbeddingAPIKey string
+	// EmbeddingQueryPrefix and EmbeddingDocumentPrefix are the model's
+	// asymmetric task instructions (040 §3), prepended per role.
+	// LODE_EMBEDDING_QUERY_PREFIX and LODE_EMBEDDING_DOCUMENT_PREFIX. Both
+	// unset is correct for a symmetric model and wrong for EmbeddingGemma,
+	// where the mismatch costs retrieval quality silently rather than erroring.
+	EmbeddingQueryPrefix    string
+	EmbeddingDocumentPrefix string
 	// IndexInterval is how often the corpus convergence loop runs
 	// (LODE_INDEX_INTERVAL, default indexer.DefaultInterval). The loop runs
 	// with or without an embedding provider — with none it still writes the
@@ -917,7 +924,11 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if cfg.EmbeddingModel == "" {
 			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
 		}
-		s.embedder = &embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey, Metrics: embed.NewMetrics(reg)}
+		s.embedder = &embed.OpenAI{
+			URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey,
+			QueryPrefix: cfg.EmbeddingQueryPrefix, DocumentPrefix: cfg.EmbeddingDocumentPrefix,
+			Metrics: embed.NewMetrics(reg),
+		}
 		// index_chunks.embedding is vector(768) (040 §2.2), so a provider of
 		// any other width cannot store a single row. Refuse the boot rather
 		// than fail every write of every convergence pass.
