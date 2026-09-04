@@ -122,6 +122,16 @@ func (c *Client) GetDocVersion(ctx context.Context, id int64, version int) (mode
 	return doJSON[model.DocVersion](ctx, c, http.MethodGet, docPath(id, "/versions/"+strconv.Itoa(version)), nil, "doc version")
 }
 
+// DocSectionReferrers calls GET /api/v1/docs/{id}/referrers?anchor=: the
+// open work pointing at one section of a document (025 §8.2). The anchor is
+// required by the server — a referrer is a section-level fact.
+func (c *Client) DocSectionReferrers(ctx context.Context, id int64, anchor string) (model.DocReferrersResponse, []byte, error) {
+	q := url.Values{}
+	q.Set("anchor", anchor)
+	return doJSON[model.DocReferrersResponse](ctx, c, http.MethodGet,
+		withQuery(docPath(id, "/referrers"), q), nil, "doc referrers")
+}
+
 // UpdateDocBody calls PUT /api/v1/docs/{id}/body: an in-place edit, which the
 // server allows on a draft and on a plan at any status. An accepted spec or
 // ADR is revised instead (see ReviseDoc).
@@ -399,6 +409,23 @@ func DocLintTable(w io.Writer, findings []model.DocLintFinding) {
 			detail = fmt.Sprintf("%s#%s: no such section", f.ToSlug, f.ToAnchor)
 		}
 		tbl.add(f.Slug, f.Kind, dash(f.FromAnchor), f.Type, detail)
+	}
+	tbl.flush(w)
+}
+
+// DocReferrersTable prints one row per referrer of a section — the
+// `lode doc referrers` view. KIND says which surface to go look at (a
+// document to re-read, a task whose worker is mid-flight), REF is the id to
+// cite it by, and REL is the relation that does the pointing.
+func DocReferrersTable(w io.Writer, refs []model.DocReferrer) {
+	tbl := newTable(
+		column{header: "KIND"},
+		column{header: "REF"},
+		column{header: "REL"},
+		titleColumn("TITLE"),
+	)
+	for _, r := range refs {
+		tbl.add(r.Kind, r.Ref, r.Rel, r.Title)
 	}
 	tbl.flush(w)
 }

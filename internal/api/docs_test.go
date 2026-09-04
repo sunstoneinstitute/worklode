@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -1870,5 +1871,51 @@ covers:
 	}
 	if got := strings.TrimSpace(rr.Body.String()); got != "[]" {
 		t.Errorf("lint docs (other) body = %q, want []", got)
+	}
+}
+
+// TestDocReferrers covers GET /api/v1/docs/{id}/referrers (025 §8.2): the
+// open work pointing at one section, and the refusal to answer for a whole
+// document — a referrer is a section-level fact.
+func TestDocReferrers(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	referring := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 26, Slug: "026-referring",
+		Body: strings.Replace(docSpecBody,
+			"requires: 004-execution-backbone.md#sec-6",
+			"requires: 025-documents-in-the-backbone.md#sec-2", 1),
+	})
+	if rr := doReq(t, h, "POST", docPath(referring.ID, "/accept"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("accept referring spec status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr := doReq(t, h, "GET", docPath(spec.ID, "/referrers?anchor=sec-2"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("referrers status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var got model.DocReferrersResponse
+	decodeInto(t, rr, &got)
+	want := []model.DocReferrer{{
+		Kind: "doc", Ref: "026-referring", Rel: "requires", Title: "Documents in the backbone",
+	}}
+	if !reflect.DeepEqual(got.Referrers, want) {
+		t.Errorf("referrers = %+v, want %+v", got.Referrers, want)
+	}
+
+	// A section nothing points at answers [], not null.
+	rr = doReq(t, h, "GET", docPath(spec.ID, "/referrers?anchor=sec-1"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("empty referrers status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if body := strings.TrimSpace(rr.Body.String()); body != `{"referrers":[]}` {
+		t.Errorf("empty referrers body = %s, want {\"referrers\":[]}", body)
+	}
+
+	if rr := doReq(t, h, "GET", docPath(spec.ID, "/referrers"), token, nil); rr.Code != http.StatusBadRequest {
+		t.Errorf("referrers without anchor status = %d, want 400", rr.Code)
 	}
 }

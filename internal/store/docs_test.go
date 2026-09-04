@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -1622,5 +1623,99 @@ func TestCreateDocRecordsGeneratedByTask(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "P1-404") {
 		t.Errorf("err = %q, want it to name the task", err)
+	}
+}
+
+// referrerSpecBody is an accepted-shaped spec body pointing at one section of
+// another document: the `requires` half of a 025 §8.2 referrer. anchor is ""
+// for a document-level reference, which claims the document rather than a
+// section and is therefore not a referrer.
+func referrerSpecBody(target, anchor string) string {
+	ref := target + ".md"
+	if anchor != "" {
+		ref += "#" + anchor
+	}
+	return "---\nstatus: draft\nrequires: " + ref + "\n---\n\n# Referring spec\n\n## 1. Scope {#sec-1}\n\nBody.\n"
+}
+
+// referrerPlanBody is a plan covering one section of a spec: the `covers`
+// half, which reaches §8.2 through the plan's claimed tasks rather than as a
+// document of its own.
+func referrerPlanBody(target, anchor string) string {
+	return "---\nstatus: draft\ncovers:\n  - " + target + ".md#" + anchor + "\n---\n\n# Covering plan\n\n## Tasks\n\n### Task 1 — Do it\n\nBody.\n"
+}
+
+// TestDocSectionReferrers covers 025 §8.2: which open work points at one
+// section. An accepted document's anchored requires/covers/amends/replaces
+// edge counts; a draft's does not; a document-level edge claims the document,
+// not the section. A covering plan reaches the section through its claimed
+// tasks — never as a document itself — so a plan whose tasks are all
+// unclaimed or already delivered contributes nothing.
+func TestDocSectionReferrers(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+
+	specA := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-a", Body: specBody, CreatedBy: "stig",
+	})
+	setDocStatus(t, s, specA.ID, "accepted")
+
+	accepted := func(kind string, number int, slug, body string) *model.Doc {
+		t.Helper()
+		d := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: kind, Number: number, Slug: slug, Body: body, CreatedBy: "stig",
+		})
+		setDocStatus(t, s, d.ID, "accepted")
+		return d
+	}
+
+	accepted("spec", 26, "026-b", referrerSpecBody("025-a", "sec-2"))
+	// Draft: same edge, no claim on accepted text.
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 27, Slug: "027-c", Body: referrerSpecBody("025-a", "sec-2"), CreatedBy: "stig",
+	})
+	// Document-level: claims the document, not the section.
+	accepted("spec", 28, "028-d", referrerSpecBody("025-a", ""))
+	// Another section: not this one.
+	accepted("spec", 29, "029-e", referrerSpecBody("025-a", "sec-1"))
+
+	planP := accepted("plan", 30, "030-p", referrerPlanBody("025-a", "sec-2"))
+	planQ := accepted("plan", 31, "031-q", referrerPlanBody("025-a", "sec-2"))
+
+	planTask := func(plan *model.Doc, key, title, state string) *model.Task {
+		t.Helper()
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "p1", Title: title, Body: "body", Priority: "medium", Kind: "feature",
+			CreatedBy: "stig", PlanDoc: plan.ID, PlanTaskKey: key,
+		})
+		walkTo(t, s, task.ID, state)
+		return task
+	}
+
+	claimed := planTask(planP, "Task 1", "the claimed one", "in_progress")
+	planTask(planP, "Task 2", "already delivered", "merged")
+	planTask(planQ, "Task 1", "never claimed", "ready")
+
+	got, err := s.DocSectionReferrers(ctx, specA.ID, "sec-2")
+	if err != nil {
+		t.Fatalf("DocSectionReferrers: %v", err)
+	}
+	want := []model.DocReferrer{
+		{Kind: "doc", Ref: "026-b", Rel: "requires", Title: "Referring spec"},
+		{Kind: "task", Ref: claimed.ID, Rel: "covers", Title: "the claimed one"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("DocSectionReferrers = %+v, want %+v", got, want)
+	}
+
+	// A section nothing points at has no referrers, and the result is empty
+	// rather than nil so the JSON reads [].
+	got, err = s.DocSectionReferrers(ctx, specA.ID, "sec-2.1")
+	if err != nil {
+		t.Fatalf("DocSectionReferrers(sec-2.1): %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("DocSectionReferrers(sec-2.1) = %+v, want none", got)
 	}
 }
