@@ -429,7 +429,7 @@ func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	task := createTask(t, s, claimNextTestNow, defaultTaskInput())
 
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, claimNextTestNow, task.ID, nil, nil, nil, nil, nil, boolPtr(true), nil, nil)
+		return UpdateTaskFields(tx, claimNextTestNow, task.ID, nil, nil, nil, nil, nil, boolPtr(true), nil, nil, nil)
 	}); err != nil {
 		t.Fatalf("set needs_decomposition: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestHumanOnlySkippedByRankButClaimableByID(t *testing.T) {
 	runnerUp := createTask(t, s, claimNextTestNow, next)
 
 	if err := s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, claimNextTestNow, human.ID, nil, nil, nil, nil, nil, nil, boolPtr(true), nil)
+		return UpdateTaskFields(tx, claimNextTestNow, human.ID, nil, nil, nil, nil, nil, nil, boolPtr(true), nil, nil)
 	}); err != nil {
 		t.Fatalf("set human_only: %v", err)
 	}

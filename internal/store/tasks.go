@@ -387,8 +387,12 @@ func secretsJSON(names []string) ([]byte, error) {
 // the ranked ready set (readyCandidates) without blocking a claim by id. kind,
 // when non-nil, retags the task (WL-101) — validated against validKinds
 // here as well as at the API gate, so no store caller can write a kind the
-// CHECK constraint would refuse with a raw error.
-func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind *string) error {
+// CHECK constraint would refuse with a raw error. milestone, when non-nil,
+// follows concern's clearing rule ("" or "none" clears it to NULL); any
+// other value must name a milestone in the task's own project (029 §2) — a
+// cross-project attach and an unknown milestone are both ErrInvalidInput,
+// checked inside this transaction against the task's current project.
+func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priority, concern *string, secretNames *[]string, needsDecomposition, humanOnly *bool, kind, milestone *string) error {
 	if title != nil && strings.TrimSpace(*title) == "" {
 		return fmt.Errorf("title must not be blank: %w", ErrInvalidInput)
 	}
@@ -400,6 +404,28 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	}
 	if kind != nil && !validTaskKinds[*kind] {
 		return fmt.Errorf("unknown kind %q: %w", *kind, ErrInvalidInput)
+	}
+	if milestone != nil && *milestone != "" && *milestone != "none" {
+		var milestoneProject string
+		if err := tx.QueryRow(`SELECT project_id FROM milestones WHERE id = $1`, *milestone).
+			Scan(&milestoneProject); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("unknown milestone %s: %w", *milestone, ErrInvalidInput)
+			}
+			return fmt.Errorf("look up milestone %s: %w", *milestone, err)
+		}
+		var taskProject string
+		if err := tx.QueryRow(`SELECT project_id FROM tasks WHERE id = $1`, id).
+			Scan(&taskProject); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("task %s: %w", id, ErrNotFound)
+			}
+			return fmt.Errorf("look up task %s project: %w", id, err)
+		}
+		if milestoneProject != taskProject {
+			return fmt.Errorf("cross-project milestone %s (%s) for task %s (%s): %w",
+				*milestone, milestoneProject, id, taskProject, ErrInvalidInput)
+		}
 	}
 	if body != nil {
 		// The lint depends on the task's concern, and this call may be
@@ -460,6 +486,13 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	if kind != nil {
 		set("kind", *kind)
 	}
+	if milestone != nil {
+		if *milestone == "" || *milestone == "none" {
+			set("milestone_id", sql.NullString{})
+		} else {
+			set("milestone_id", sql.NullString{String: *milestone, Valid: true})
+		}
+	}
 	set("updated_at", now.UTC())
 	args = append(args, id)
 
@@ -479,10 +512,11 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // DEFAULT '[]'" (see migrations 0007 and 0024), so a bare cast is enough — no
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
 // 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
-// (migration 0034) are all-null or all-set together, and human_only
-// (migration 0060) is last for the same append-only reason.
+// (migration 0034) are all-null or all-set together, human_only (migration
+// 0060) and milestone_id (migration 0062) are last for the same append-only
+// reason.
 // prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only`
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -499,9 +533,10 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var planDoc, aboutDoc sql.NullInt64
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
+	var milestone sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
-		&deletedAt, &deletedBy, &justification, &t.HumanOnly); err != nil {
+		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone); err != nil {
 		return nil, err
 	}
 	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
@@ -510,6 +545,7 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	t.Body = body.String
 	t.Concern = concern.String
 	t.Assignee = assignee.String
+	t.Milestone = milestone.String
 	t.CreatedBy = createdBy.String
 	t.CreatedAt = t.CreatedAt.UTC()
 	t.UpdatedAt = t.UpdatedAt.UTC()

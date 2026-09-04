@@ -197,8 +197,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task detach` — Remove an attached blob from a task
 - `lode task duplicate` — Mark a task as a duplicate of the canonical task for the same request
   Flags: --of
-- `lode task edit` — Edit a task's title, body, concern, priority, needs-decomposition or human-only flag, or declare an artifact it is verified by
-  Flags: --artifact, --body, --body-file, --concern, --human-only, --kind, --needs-decomposition, --no-upload, --priority, --secrets, --title
+- `lode task edit` — Edit a task's title, body, concern, priority, milestone, needs-decomposition or human-only flag, or declare an artifact it is verified by
+  Flags: --artifact, --body, --body-file, --concern, --human-only, --kind, --milestone, --needs-decomposition, --no-upload, --priority, --secrets, --title
 - `lode task follow-up` — Record that a task was spun out of the work on another task
   Flags: --of
 - `lode task frontier` — Ready, unblocked tasks in pickup order

@@ -51,6 +51,7 @@ export interface Task {
   skills: string[];
   assignee: string;
   branch: string;
+  milestone?: string;
   tombstone?: Tombstone;
 }
 

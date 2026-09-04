@@ -282,19 +282,18 @@ func (s *Store) milestoneTasks(ctx context.Context, id string) ([]model.Task, er
 func (s *Store) ListMilestoneChildren(ctx context.Context, projectID string) (map[string][]model.Task, map[string][]model.Deliverable, error) {
 	what := "milestone tasks for " + projectID
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+taskColumns+`, milestone_id FROM tasks
+		`SELECT `+taskColumns+` FROM tasks
 		  WHERE project_id = $1 AND milestone_id IS NOT NULL AND deleted_at IS NULL`+
 			taskListOrder("tasks"), projectID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", what, err)
 	}
 	tasks, err := groupRows(rows, what, func(r rowScanner) (string, model.Task, error) {
-		var milestoneID string
-		t, err := scanTask(appendScan{r, []any{&milestoneID}})
+		t, err := scanTask(r)
 		if err != nil {
 			return "", model.Task{}, err
 		}
-		return milestoneID, *t, nil
+		return t.Milestone, *t, nil
 	})
 	if err != nil {
 		return nil, nil, err

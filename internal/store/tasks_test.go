@@ -465,7 +465,7 @@ func updateTaskFields(t *testing.T, s *Store, now time.Time, id string, title, b
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
-			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil, nil)
+			return UpdateTaskFields(tx, now, id, title, body, priority, concern, nil, needsDecomposition, nil, nil, nil)
 		})
 	return err
 }
@@ -545,6 +545,79 @@ func TestUpdateTaskFieldsConcernAndNeedsDecomposition(t *testing.T) {
 	err = updateTaskFields(t, s, taskTestNow, task.ID, nil, nil, nil, strPtr("not-a-concern"), nil)
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("update with invalid concern: want ErrInvalidInput, got %v", err)
+	}
+}
+
+// TestUpdateTaskMilestone pins spec 029 §2's containment rule as it applies
+// to UpdateTaskFields: a milestone attach must name a milestone in the
+// task's own project, an unknown milestone is ErrInvalidInput just like a
+// cross-project one, and detaching (milestone "") is always legal.
+func TestUpdateTaskMilestone(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if err := s.CreateProject(ctx, "p1", "Project One", "P1"); err != nil {
+		t.Fatalf("create project p1: %v", err)
+	}
+	if err := s.CreateProject(ctx, "p2", "Project Two", "P2"); err != nil {
+		t.Fatalf("create project p2: %v", err)
+	}
+	if err := s.EnsureActor(ctx, "ada", "human", "Ada"); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	mile, err := createMilestone(s, "p1", "Internal review", 0)
+	if err != nil {
+		t.Fatalf("create milestone: %v", err)
+	}
+
+	in1 := defaultTaskInput()
+	in1.ProjectID = "p1"
+	in1.CreatedBy = "ada"
+	t1 := createTask(t, s, taskTestNow, in1)
+
+	in2 := defaultTaskInput()
+	in2.ProjectID = "p2"
+	in2.CreatedBy = "ada"
+	t2 := createTask(t, s, taskTestNow, in2)
+
+	set := func(task, milestone string) error {
+		_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.updated", nil,
+			func(tx *sql.Tx, _ int64) error {
+				return UpdateTaskFields(tx, taskTestNow, task, nil, nil, nil, nil, nil, nil, nil, nil, &milestone)
+			})
+		return err
+	}
+
+	if err := set(t1.ID, mile.ID); err != nil {
+		t.Fatalf("attach in same project: %v", err)
+	}
+	got, err := s.GetTask(ctx, t1.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Milestone != mile.ID {
+		t.Fatalf("milestone not stored: %+v", got)
+	}
+
+	// 029 §5: containment never crosses a project boundary.
+	if err := set(t2.ID, mile.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("cross-project attach: got %v, want ErrInvalidInput", err)
+	}
+	if err := set(t1.ID, "P1-MILE-9"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown milestone: got %v, want ErrInvalidInput", err)
+	}
+
+	// Detach is always legal (029 §2).
+	if err := set(t1.ID, ""); err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+	got, err = s.GetTask(ctx, t1.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Milestone != "" {
+		t.Fatalf("milestone after detach: got %q, want empty", got.Milestone)
 	}
 }
 
@@ -819,7 +892,7 @@ func TestTaskSecretsRoundTrip(t *testing.T) {
 	// Update replaces the whole list; empty clears.
 	next := []string{"GITHUB_TOKEN"}
 	err = s.Tx(ctx, func(tx *sql.Tx) error {
-		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil, nil, nil)
+		return UpdateTaskFields(tx, s.Now(), created.ID, nil, nil, nil, nil, &next, nil, nil, nil, nil)
 	})
 	if err != nil {
 		t.Fatalf("update secrets: %v", err)

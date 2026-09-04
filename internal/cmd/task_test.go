@@ -870,6 +870,52 @@ func TestTaskEditSendsSecrets(t *testing.T) {
 	}
 }
 
+// TestTaskEditMilestone covers --milestone on `lode task edit`: a value sets
+// it, "none" clears it, and leaving the flag off carries no milestone field
+// at all so an unrelated edit cannot attach or detach one by accident.
+func TestTaskEditMilestone(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"ME-1","project":"mileproj","title":"t","priority":"medium","kind":"chore","state":"ready"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	for _, tc := range []struct{ flag, want string }{
+		{"MILEPROJ-MILE-1", `"milestone":"MILEPROJ-MILE-1"`},
+		{"none", `"milestone":"none"`},
+	} {
+		gotBody = ""
+		cmd := newTaskEditCmd()
+		cmd.SetArgs([]string{"ME-1", "--milestone", tc.flag})
+		cmd.SetOut(io.Discard)
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("task edit --milestone %s: %v", tc.flag, err)
+		}
+		if !strings.Contains(gotBody, tc.want) {
+			t.Errorf("--milestone %s sent %q; want it to carry %s", tc.flag, gotBody, tc.want)
+		}
+	}
+
+	// Without the flag the field stays absent, matching --secrets: an
+	// unrelated edit must not touch the milestone.
+	gotBody = ""
+	cmd := newTaskEditCmd()
+	cmd.SetArgs([]string{"ME-1", "--priority", "low"})
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task edit --priority: %v", err)
+	}
+	if strings.Contains(gotBody, `"milestone"`) {
+		t.Errorf("unrelated edit sent %q; want no milestone field", gotBody)
+	}
+}
+
 // TestTaskClaimRefusesMainCheckout guards WL-383: claiming from the main
 // checkout used to bind the lease straight to the clone path — a lease
 // `lode work resume`/`lode work status` can never resolve back to a

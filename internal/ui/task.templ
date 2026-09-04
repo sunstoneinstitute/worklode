@@ -34,6 +34,9 @@ templ Task(v TaskView) {
 						<span class="chip plain">{ v.Task.Priority }</span>
 						<span class="chip plain">{ v.Task.Kind }</span>
 						<span class="muted">&nbsp;project: <a href={ "/projects/" + v.Task.Project }>{ v.Task.Project }</a></span>
+						if v.Task.Milestone != "" {
+							<span class="muted">&nbsp;milestone: <a href={ "/projects/" + v.Task.Project + "/milestones" }>{ v.Task.Milestone }</a></span>
+						}
 					</p>
 					<p class="muted small">Created { fmtTime(v.Task.CreatedAt) } by { v.Task.CreatedBy } &mdash; updated { fmtTime(v.Task.UpdatedAt) }</p>
 					if v.Task.Assignee != "" {
