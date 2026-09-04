@@ -1504,3 +1504,37 @@ func TestChildrenOfIsBulk(t *testing.T) {
 		t.Fatalf("ChildrenOf(nil): %v", err)
 	}
 }
+
+// TestChildrenOfOrderMatchesModelCompareTaskIDs pins ChildrenOf's ordering to
+// model.CompareTaskIDs too: it shares taskListOrder with ListTasks (see the
+// comment on that function), so a second listing cannot silently drift from
+// the first. See TestListTasksOrderMatchesModelCompareTaskIDs for why this
+// particular id set exercises the boundary a lexical sort gets wrong.
+func TestChildrenOfOrderMatchesModelCompareTaskIDs(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+	parent := createTask(t, s, taskTestNow, containerInput())
+
+	ids := []string{"WL-10", "WL-2", "WL-9", "AB-100", "AB-9", "WL-1"}
+	for _, id := range ids {
+		insertBareTask(t, s, id)
+		if err := addEdge(t, s, id, parent.ID, "child_of"); err != nil {
+			t.Fatalf("addEdge %s: %v", id, err)
+		}
+	}
+
+	got, err := s.ChildrenOf(ctx, []string{parent.ID})
+	if err != nil {
+		t.Fatalf("ChildrenOf: %v", err)
+	}
+	var gotIDs []string
+	for _, task := range got[parent.ID] {
+		gotIDs = append(gotIDs, task.ID)
+	}
+
+	want := slices.SortedFunc(slices.Values(ids), model.CompareTaskIDs)
+	if !slices.Equal(gotIDs, want) {
+		t.Fatalf("ChildrenOf order = %v, want %v (model.CompareTaskIDs order)", gotIDs, want)
+	}
+}
