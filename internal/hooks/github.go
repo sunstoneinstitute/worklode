@@ -545,10 +545,13 @@ func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewer
 
 // resolveApprovalForReview closes the open approval a review decides. Only
 // approved and changes_requested decide anything: a commented review leaves
-// the row awaiting, because a merged-but-unreviewed PR must stay visible as
-// waiting on someone (029 §7.1). resolving_actor is NULL when the reviewer
-// maps to no actor. A PR with no open row, or none correlated to a task, is
-// a no-op — a correlation must never fail the delivery.
+// the row awaiting in the table, so a late real review can still resolve it
+// (029 §7.1). Once the PR itself closes, WL-663's approvalPROpen hides that
+// still-awaiting row from every display reader — tasks carry no review
+// requirement by default (029 §7.3), so a closed PR with no review was never
+// a bypassed gate, just nothing left to act on. resolving_actor is NULL when
+// the reviewer maps to no actor. A PR with no open row, or none correlated
+// to a task, is a no-op — a correlation must never fail the delivery.
 func (a *applier) resolveApprovalForReview(tx *sql.Tx, repo string, number int64, reviewState, reviewerLogin string, at time.Time) error {
 	if reviewState != "approved" && reviewState != "changes_requested" {
 		return nil

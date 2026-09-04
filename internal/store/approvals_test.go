@@ -648,6 +648,203 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 	}
 }
 
+// TestListAwaitingApprovalsExcludesMergedOrClosedPR is WL-663's regression: a
+// PR's approval row must drop out of the queue once the PR itself is
+// merged/closed, even though the approval is still 'awaiting'. A PR-kind
+// approval with no pull_requests row yet (not ingested) must still list --
+// that's the existing invariant approvalEntityJoins documents, not something
+// this fix may break.
+func TestListAwaitingApprovalsExcludesMergedOrClosedPR(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // project "horndb", actor "stig"
+	ctx := t.Context()
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+
+	prOpen := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 1, Title: "open pr", State: "open",
+		HeadRef: task.ID + "-open", HeadSHA: "sha-open",
+		URL: "https://github.com/sunstoneinstitute/q/pull/1", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prOpen, ""); err != nil {
+		t.Fatal(err)
+	}
+	prMerged := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 2, Title: "merged pr", State: "merged",
+		HeadRef: task.ID + "-merged", HeadSHA: "sha-merged",
+		URL: "https://github.com/sunstoneinstitute/q/pull/2", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prMerged, ""); err != nil {
+		t.Fatal(err)
+	}
+	prClosed := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 3, Title: "closed pr", State: "closed",
+		HeadRef: task.ID + "-closed", HeadSHA: "sha-closed",
+		URL: "https://github.com/sunstoneinstitute/q/pull/3", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prClosed, ""); err != nil {
+		t.Fatal(err)
+	}
+	noRowEntityID := PREntityID("sunstoneinstitute/q", 4)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range []struct {
+		entityID, revision string
+	}{
+		{PREntityID(prOpen.Repo, prOpen.Number), "sha-open"},
+		{PREntityID(prMerged.Repo, prMerged.Number), "sha-merged"},
+		{PREntityID(prClosed.Repo, prClosed.Number), "sha-closed"},
+		{noRowEntityID, "sha-none"},
+	} {
+		if err := InsertAwaitingApproval(tx, taskTestNow, "pr", in.entityID, in.revision, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListAwaitingApprovals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, r := range got {
+		ids[r.EntityID] = true
+	}
+	if !ids[PREntityID(prOpen.Repo, prOpen.Number)] {
+		t.Errorf("open PR's approval missing from %+v", got)
+	}
+	if !ids[noRowEntityID] {
+		t.Errorf("no-pull_requests-row approval missing from %+v", got)
+	}
+	if ids[PREntityID(prMerged.Repo, prMerged.Number)] || ids[PREntityID(prClosed.Repo, prClosed.Number)] {
+		t.Errorf("merged/closed PR approvals must not appear: %+v", got)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d rows, want 2: %+v", len(got), got)
+	}
+}
+
+// TestApprovalsAwaitingExcludesMergedPR is the same regression against the
+// per-project badge count: a merged PR's approval must not add to the tally.
+func TestApprovalsAwaitingExcludesMergedPR(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // project "horndb", actor "stig"
+	ctx := t.Context()
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+	prOpen := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 1, Title: "open pr", State: "open",
+		HeadRef: task.ID + "-open", HeadSHA: "sha-open",
+		URL: "https://github.com/sunstoneinstitute/q/pull/1", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prOpen, ""); err != nil {
+		t.Fatal(err)
+	}
+	prMerged := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 2, Title: "merged pr", State: "merged",
+		HeadRef: task.ID + "-merged", HeadSHA: "sha-merged",
+		URL: "https://github.com/sunstoneinstitute/q/pull/2", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prMerged, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	actorStig := "stig"
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prOpen.Repo, prOpen.Number), "sha-open", nil, &actorStig); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prMerged.Repo, prMerged.Number), "sha-merged", nil, &actorStig); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ApprovalsAwaiting(ctx, "stig", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	for _, c := range got {
+		total += c.Count
+	}
+	if total != 1 {
+		t.Fatalf("got total %d, want 1 (the merged PR's approval must not count): %+v", total, got)
+	}
+}
+
+// TestListInboxReviewsExcludesMergedOrClosedPR is the same regression against
+// GET /inbox's review bucket reader.
+func TestListInboxReviewsExcludesMergedOrClosedPR(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+	prOpen := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 1, Title: "open pr", State: "open",
+		HeadRef: task.ID + "-open", HeadSHA: "sha-open",
+		URL: "https://github.com/sunstoneinstitute/q/pull/1", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prOpen, ""); err != nil {
+		t.Fatal(err)
+	}
+	prMerged := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 2, Title: "merged pr", State: "merged",
+		HeadRef: task.ID + "-merged", HeadSHA: "sha-merged",
+		URL: "https://github.com/sunstoneinstitute/q/pull/2", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, prMerged, ""); err != nil {
+		t.Fatal(err)
+	}
+	noRowEntityID := PREntityID("sunstoneinstitute/q", 3)
+
+	seedApprovalRow(t, s, "pr", PREntityID(prOpen.Repo, prOpen.Number), "sha-open",
+		nil, nil, "awaiting", taskTestNow)
+	seedApprovalRow(t, s, "pr", PREntityID(prMerged.Repo, prMerged.Number), "sha-merged",
+		nil, nil, "changes_requested", taskTestNow)
+	seedApprovalRow(t, s, "pr", noRowEntityID, "sha-none",
+		nil, nil, "awaiting", taskTestNow)
+
+	got, err := s.ListInboxReviews(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, r := range got {
+		ids[r.EntityID] = true
+	}
+	if !ids[PREntityID(prOpen.Repo, prOpen.Number)] {
+		t.Errorf("open PR's review missing from %+v", got)
+	}
+	if !ids[noRowEntityID] {
+		t.Errorf("no-pull_requests-row review missing from %+v", got)
+	}
+	if ids[PREntityID(prMerged.Repo, prMerged.Number)] {
+		t.Errorf("merged PR's review must not appear: %+v", got)
+	}
+	if len(got) != 2 {
+		t.Errorf("got %d rows, want 2: %+v", len(got), got)
+	}
+}
+
 // seedApprovalRow inserts one approvals row directly, committed against s.db
 // rather than an open tx -- ListInboxReviews and HasInboxItems both read
 // through s.db, and these fixtures need states (changes_requested, resolved)
@@ -844,6 +1041,45 @@ func TestHasInboxItems(t *testing.T) {
 		}
 	})
 
+	// WL-663 regression: bucket 2 (unassigned, led project) must not fire
+	// once the PR itself is merged, even though the approval is still
+	// 'awaiting'. Bucket 2 inner-joins pull_requests, so unlike bucket 1
+	// there is no not-yet-correlated case to cover here.
+	t.Run("unassigned review in a led project, PR merged", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig" leads it
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "creator6", "human", "Creator Six", false); err != nil {
+			t.Fatal(err)
+		}
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "creator6",
+		})
+		// Bucket 6 (other active-state work in a member project) must not
+		// mask what this test checks -- park the task in a terminal state so
+		// only bucket 2's own PR-state filter is exercised.
+		setTaskState(t, s, task.ID, "merged")
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 1, Title: "pr", State: "merged",
+			HeadRef: task.ID + "-fix", HeadSHA: "sha1",
+			URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha1",
+			nil, nil, "awaiting", taskTestNow)
+
+		got, err := s.HasInboxItems(ctx, "stig")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Error("got true, want false: the review's PR is merged")
+		}
+	})
+
 	t.Run("non-member with nothing", func(t *testing.T) {
 		t.Parallel()
 		s := openTaskStore(t) // project "horndb", actor "stig" leads it
@@ -898,6 +1134,63 @@ func TestHasInboxItems(t *testing.T) {
 		}
 		if !got {
 			t.Error("got false, want true: creator3 created an active task")
+		}
+	})
+
+	// WL-663 regression: bucket 1 (required_actor) must not fire once the
+	// PR itself is merged, even though the approval is still 'awaiting'.
+	t.Run("assigned review on a merged PR", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig"
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "reviewer4", "human", "Reviewer Four", false); err != nil {
+			t.Fatal(err)
+		}
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "stig",
+		})
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 1, Title: "pr", State: "merged",
+			HeadRef: task.ID + "-fix", HeadSHA: "sha1",
+			URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		reviewer := "reviewer4"
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha1",
+			nil, &reviewer, "awaiting", taskTestNow)
+
+		got, err := s.HasInboxItems(ctx, "reviewer4")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Error("got true, want false: the review's PR is merged")
+		}
+	})
+
+	// A PR-kind approval whose pull_requests row hasn't been ingested yet
+	// must still match -- the same not-yet-correlated invariant
+	// approvalEntityJoins documents for the queue readers.
+	t.Run("assigned review with no pull_requests row", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t)
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "reviewer5", "human", "Reviewer Five", false); err != nil {
+			t.Fatal(err)
+		}
+		reviewer := "reviewer5"
+		seedApprovalRow(t, s, "pr", "sunstoneinstitute/h#99", "sha1",
+			nil, &reviewer, "awaiting", taskTestNow)
+
+		got, err := s.HasInboxItems(ctx, "reviewer5")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got {
+			t.Error("got false, want true: no pull_requests row must still match")
 		}
 	})
 }

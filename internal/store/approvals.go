@@ -448,7 +448,10 @@ func (s *Store) GetApproval(ctx context.Context, id int64) (*Approval, error) {
 // it and its project, and an entity_kind added later has no join here at all.
 // An inner join would silently drop those rows from the queue — the one thing
 // 029 §7.1's "a missing approval is a visible row" cannot afford. A row whose
-// kind nothing correlates still lists, with empty columns.
+// kind nothing correlates still lists, with empty columns. (approvalPROpen
+// below adds a narrower, deliberate exclusion on top of these joins — a
+// pr-kind row whose PR has closed — which is a display decision, not a
+// correlation failure; see its comment.)
 const approvalEntityJoins = `LEFT JOIN pull_requests pr
 		ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number
 	LEFT JOIN tasks t ON t.id = pr.task_id
@@ -457,6 +460,20 @@ const approvalEntityJoins = `LEFT JOIN pull_requests pr
 // approvalProjectID is the project an approvals row belongs to under those
 // joins: through its task for a PR, directly for a doc.
 const approvalProjectID = `coalesce(t.project_id, d.project_id)`
+
+// approvalPROpen is true for every non-pr approval, every pr-kind approval
+// not yet correlated to a pull_requests row, and every pr-kind approval
+// whose PR is still open. Shared so the open-approval readers below cannot
+// spell "hide a closed PR's stale approval" three different ways.
+//
+// This is a display filter, not a resolution: it never marks a row decided,
+// and OpenApprovalForEntity (unfiltered, ingest-only) still finds it if a
+// late review lands. Tasks carry no review requirement by default (029
+// §7.3) — the requirement pull_request_review ingest materializes as an
+// awaiting row on every task-correlated PR open, regardless of policy — so
+// a closed PR's still-awaiting row is not evidence a required sign-off was
+// skipped, only that nobody can act on it any more (WL-663).
+const approvalPROpen = `(a.entity_kind <> 'pr' OR pr.state IS NULL OR pr.state = 'open')`
 
 // AwaitingApproval is one queue row: the approval plus what a person needs to
 // act on it. Declared in internal/model for the same reason Approval is; see
@@ -490,9 +507,10 @@ func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
 }
 
 // ListAwaitingApprovals returns every awaiting approval with the entity it
-// governs, oldest first. Title/URL/Author come from whichever entity join
-// matched: a PR jumps out to GitHub, a doc links to its cockpit page (its
-// SubjectRevision names the version reviewed).
+// governs, oldest first, excluding a pr-kind row whose PR has closed
+// (approvalPROpen — WL-663). Title/URL/Author come from whichever entity
+// join matched: a PR jumps out to GitHub, a doc links to its cockpit page
+// (its SubjectRevision names the version reviewed).
 func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+qualifyColumns(approvalColumns, "a")+`,
@@ -503,6 +521,7 @@ func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, 
 		 LEFT JOIN projects p ON p.id = `+approvalProjectID+`
 		 LEFT JOIN actors ra ON ra.id = a.required_actor
 		 WHERE a.state = 'awaiting'
+		   AND `+approvalPROpen+`
 		 ORDER BY a.created_at, a.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list awaiting approvals: %w", err)
@@ -520,7 +539,8 @@ type ApprovalCount struct {
 
 // ApprovalsAwaiting counts awaiting approvals whose required_actor is
 // actorID or whose required_role names a group actorID belongs to, grouped
-// by project. An empty actorID with no groups (the open-instance subject)
+// by project, excluding a pr-kind row whose PR has closed (approvalPROpen —
+// WL-663). An empty actorID with no groups (the open-instance subject)
 // matches nothing, by design. Unlike the queue, a row no entity join
 // correlates is dropped rather than listed: this feeds a per-project badge,
 // and a row with no project has no badge to land on.
@@ -537,6 +557,7 @@ func (s *Store) ApprovalsAwaiting(ctx context.Context,
 		 FROM approvals a
 		 `+approvalEntityJoins+`
 		 WHERE a.state = 'awaiting'
+		   AND `+approvalPROpen+`
 		   AND (a.required_actor = $1 OR a.required_role = ANY($2))
 		   AND `+approvalProjectID+` IS NOT NULL
 		 GROUP BY 1`,
@@ -580,10 +601,11 @@ func scanInboxReview(row rowScanner) (*InboxReview, error) {
 }
 
 // ListInboxReviews returns every open ('awaiting' | 'changes_requested')
-// pr-kind approval across all projects, oldest first, id tiebreak — the
-// membership scoping happens in the pure assembly (056 §3.3's
-// score-wide-filter-late rule applied uniformly). Join shape is
-// approvalEntityJoins/approvalProjectID, the same as ListAwaitingApprovals,
+// pr-kind approval whose PR is still open (approvalPROpen — WL-663) across
+// all projects, oldest first, id tiebreak — the membership scoping happens
+// in the pure assembly (056 §3.3's score-wide-filter-late rule applied
+// uniformly). Join shape is approvalEntityJoins/approvalProjectID, the same
+// as ListAwaitingApprovals,
 // plus the PR's author column.
 func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
 	rows, err := s.db.QueryContext(ctx,
@@ -593,6 +615,7 @@ func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
 		 FROM approvals a
 		 `+approvalEntityJoins+`
 		 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
+		   AND `+approvalPROpen+`
 		 ORDER BY a.created_at, a.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list inbox reviews: %w", err)
@@ -606,15 +629,22 @@ func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
 // the pure assembly (internal/api's assembleInbox, over ListInboxReviews and
 // ListProjectWorkFacts) cannot silently diverge. Postgres evaluates an
 // EXISTS(... UNION ALL ...) lazily and stops at the first row produced, so
-// this never runs the full ranked query.
+// this never runs the full ranked query. Every PR-kind branch excludes a
+// closed PR's approval (WL-663), the same rule as ListInboxReviews: bucket 1
+// left-joins pull_requests (so `pr.state IS NULL` still counts an
+// approval not yet correlated to a PR row), buckets 2 and 3 already inner-join
+// it, so a bare `pr.state = 'open'` is enough — there is no NULL case to
+// spell there.
 func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error) {
 	var exists bool
 	err := s.db.QueryRowContext(ctx,
 		`SELECT EXISTS (
 			-- §3.2 bucket 1: reviews assigned to the actor
 			SELECT 1 FROM approvals a
+			 LEFT JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND a.required_actor = $1
+			   AND (pr.state IS NULL OR pr.state = 'open')
 
 			UNION ALL
 
@@ -626,6 +656,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			   ON pp.project_id = t.project_id AND pp.actor_id = $1 AND pp.is_lead
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND a.required_actor IS NULL
+			   AND pr.state = 'open'
 
 			UNION ALL
 
@@ -638,6 +669,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			   AND pr.author IS NOT NULL AND act.expected_github_login IS NOT NULL
 			   AND lower(pr.author) = lower(act.expected_github_login)
 			   AND (a.required_actor IS NULL OR a.required_actor <> $1)
+			   AND pr.state = 'open'
 
 			UNION ALL
 
