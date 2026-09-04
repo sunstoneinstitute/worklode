@@ -8,6 +8,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // TestWithMetricsRegisters asserts WithMetrics registers the store's
@@ -55,6 +57,60 @@ func TestClaimOutcomeMapping(t *testing.T) {
 	}
 }
 
+// TestDecisionMetrics drives AddDecision and EditDecision through a store
+// with metrics attached and asserts worklode_decisions_total counts both ops
+// by outcome, refusals included.
+func TestDecisionMetrics(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+	task := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	posed := model.DecisionInput{Key: "x-distribution", Question: "Do we ship X?", ResponseType: "yes_no"}
+	if _, err := s.AddDecision(ctx, task.ID, "stig", posed); err != nil {
+		t.Fatalf("pose decision: %v", err)
+	}
+	if _, err := s.AddDecision(ctx, task.ID, "stig", posed); !errors.Is(err, ErrDecisionExists) {
+		t.Fatalf("duplicate pose err = %v, want ErrDecisionExists", err)
+	}
+	q := "Do we ship X in October?"
+	if _, err := s.EditDecision(ctx, task.ID, "x-distribution", "stig",
+		model.DecisionInput{Question: q}); err != nil {
+		t.Fatalf("edit decision: %v", err)
+	}
+	if _, err := s.EditDecision(ctx, task.ID, "nope", "stig",
+		model.DecisionInput{Question: q}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("edit unknown row err = %v, want ErrNotFound", err)
+	}
+
+	for _, tc := range []struct{ op, outcome string }{
+		{"pose", "ok"}, {"pose", "refused"}, {"edit", "ok"}, {"edit", "refused"},
+	} {
+		if got := testutil.ToFloat64(s.metrics.decisions.WithLabelValues(tc.op, tc.outcome)); got != 1 {
+			t.Errorf("decisions{%s,%s} = %v, want 1", tc.op, tc.outcome, got)
+		}
+	}
+	if !strings.Contains(gatheredNames(t, reg), "worklode_decisions_total") {
+		t.Error("worklode_decisions_total is not registered")
+	}
+}
+
+// gatheredNames joins the metric family names a registry reports.
+func gatheredNames(t *testing.T, reg *prometheus.Registry) string {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var names []string
+	for _, f := range families {
+		names = append(names, f.GetName())
+	}
+	return strings.Join(names, "\n")
+}
+
 // TestStoreMetricsNilSafe asserts a store opened without WithMetrics (nil
 // storeMetrics) records nothing and does not panic.
 func TestStoreMetricsNilSafe(t *testing.T) {
@@ -70,6 +126,7 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.projectWorkRead(errors.New("boom"))
 	m.instruction("enqueue", "ok")
 	m.deliverInstructions(3)
+	m.decision("pose", "ok")
 }
 
 // TestLeaseMetricsCounters drives claim/renew/release/expire through a store

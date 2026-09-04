@@ -35,6 +35,9 @@ var (
 	// ErrDocExists means the project already holds a document with that slug
 	// or that (kind, number).
 	ErrDocExists = errors.New("document already exists")
+	// ErrDecisionExists means the task already poses a question under that
+	// key; (task, key) is how a decision row is addressed (025 §10.1).
+	ErrDecisionExists = errors.New("decision key already used on this task")
 	// ErrForbidden means the actor may not perform this operation on this
 	// entity — a document accept is the owner's act (025 §7).
 	ErrForbidden = errors.New("forbidden")

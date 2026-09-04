@@ -68,6 +68,9 @@ type TaskDetail struct {
 	// blobs appear nowhere in the body markdown, so a reader that only
 	// renders Body would never learn they exist.
 	Blobs []TaskBlob `json:"blobs,omitempty"`
+	// Decisions are the questions posed on the task, in authored order
+	// (025 §10.1). Any kind may carry them.
+	Decisions []Decision `json:"decisions,omitempty"`
 }
 
 // TaskListDetail is one row of GET /api/v1/tasks?detail=true: the base task
