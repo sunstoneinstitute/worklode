@@ -15,6 +15,10 @@ data:
   LODE_SKILL_SOURCES: ""
   LODE_EMBEDDING_URL: ""
   LODE_EMBEDDING_MODEL: ""
+  # How often the corpus index converges (040 §7); empty means 5m. The default
+  # deployment points LODE_EMBEDDING_URL at a CPU embeddings sidecar (040
+  # §2.3), and the loop runs with or without one.
+  LODE_INDEX_INTERVAL: ""
   LODE_SECRETS_CATALOG_PATH: "/etc/worklode/secrets-catalog/catalog.toml"
   # Must match the blob-spool volumeMount in deployment.yaml; unset means
   # os.TempDir(), which is on the read-only root.

@@ -27,6 +27,33 @@ func denseSkillHits(t *testing.T, s *Store, ctx context.Context, query []float32
 	return hits
 }
 
+// TestIndexChunksHasBothIndexes is the other half of spec 040 §13.5: the
+// fixed width buys an HNSW index the 016 schema could not have, and the
+// lexical arm is only cheap because of the GIN index over tsv. Both are what
+// make §6's two arms one statement rather than two scans, and neither is
+// visible from any query result — a dropped index changes the plan, not the
+// answer, so nothing else would notice.
+func TestIndexChunksHasBothIndexes(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+
+	want := map[string]string{
+		"index_chunks_embedding": "hnsw",
+		"index_chunks_tsv":       "gin",
+	}
+	for name, method := range want {
+		var def string
+		if err := s.db.QueryRowContext(context.Background(),
+			`SELECT indexdef FROM pg_indexes WHERE tablename = 'index_chunks' AND indexname = $1`,
+			name).Scan(&def); err != nil {
+			t.Fatalf("index %s on index_chunks: %v", name, err)
+		}
+		if !strings.Contains(def, "USING "+method) {
+			t.Fatalf("index %s is %q, want a %s index", name, def, method)
+		}
+	}
+}
+
 // TestReplaceSubjectChunksWrongWidth is spec 040 §13.5: the vector(768)
 // typmod is what refuses a wrong-shaped vector, not a Go length check. 016
 // had no typmod and needed the guard in the store; 0061 moved the invariant

@@ -173,7 +173,13 @@ worktree-bound leases (`internal/worktree`,
 `internal/hookrun`), agent-session tracking priced from the agent's own
 transcript (`internal/transcript`, `store/pricing` — rates are effective-dated
 rows in `model_prices`, never hardcoded), the org skill registry with pgvector
-embeddings (`internal/skillsync`, `skillstore`), and `internal/eventbus`
+embeddings (`internal/skillsync`, `skillstore`), the corpus index over
+documents, tasks and skills (`internal/corpusindex` chunks a subject on its
+own section anchors, `internal/indexer` is the background convergence loop
+that keeps `index_chunks` agreeing with the corpus, and `store.Search` runs
+both retrieval arms — dense over pgvector, lexical over a `simple` tsvector —
+fused by reciprocal rank behind `GET /api/v1/search` and `lode search`, spec
+040), and `internal/eventbus`
 (offset-tracked subscribers over the events log, read via `lode event tail
 --follow`). Its one subscriber, `doc-lifecycle`, mints the review and planning
 tasks a document's lifecycle calls for (025 §15.4): the rules are a pure
