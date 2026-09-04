@@ -320,6 +320,60 @@ func TestDeliverablesPageEmptyState(t *testing.T) {
 	}
 }
 
+// TestDeliverablesPageGroupsByMilestone pins the grouped shape (spec 029
+// §2): two milestones each holding one deliverable, plus one unattached
+// deliverable, render as three groups in the project's milestone order,
+// unattached last — and every declared deliverable still shows, whichever
+// group it lands in.
+func TestDeliverablesPageGroupsByMilestone(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	mkMilestone := func(title string) string {
+		rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token, map[string]any{"title": title})
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("create milestone %s status = %d, body %s", title, rr.Code, rr.Body.String())
+		}
+		return decodeMap(t, rr)["id"].(string)
+	}
+	first := mkMilestone("First review")
+	second := mkMilestone("Second review")
+
+	mkDeliverable := func(name, milestone string) {
+		rr := doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token,
+			map[string]any{"name": name, "milestone": milestone})
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("create deliverable %s status = %d, body %s", name, rr.Code, rr.Body.String())
+		}
+	}
+	mkDeliverable("Second output", second)
+	mkDeliverable("Unattached output", "")
+	mkDeliverable("First output", first)
+
+	body := doReq(t, h, "GET", "/projects/proj/deliverables", "", nil).Body.String()
+	bodyContains(t, body, "First review", "First output",
+		"Second review", "Second output", "No milestone", "Unattached output")
+
+	pos := func(s string) int {
+		i := strings.Index(body, s)
+		if i < 0 {
+			t.Fatalf("page is missing %q", s)
+		}
+		return i
+	}
+	// Milestone groups in position order (declaration order here), then the
+	// unattached group last — never the deliverable declaration order, which
+	// put the unattached one second.
+	if !(pos("First review") < pos("First output") &&
+		pos("First output") < pos("Second review") &&
+		pos("Second review") < pos("Second output") &&
+		pos("Second output") < pos("No milestone") &&
+		pos("No milestone") < pos("Unattached output")) {
+		t.Errorf("groups are not in milestone-position-then-unattached order:\n%s", body)
+	}
+}
+
 // TestCreateDeliverableFromForm checks the happy path: the deliverable lands
 // with its descriptive fields — including the artifact address the catalog
 // ingest routes reports by (WL-254) — the response 303s back to the list, and

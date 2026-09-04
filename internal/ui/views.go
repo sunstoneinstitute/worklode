@@ -412,14 +412,45 @@ type CockpitDecision struct {
 
 // DeliverablesView is a project's declared deliverables (spec 029 §3), the
 // project-local Deliverables destination. NewURL is the "Declare a
-// deliverable" form; an empty Deliverables slice renders an honest empty
+// deliverable" form; Groups holding no row at all renders an honest empty
 // state next to that form, never a fabricated row.
 type DeliverablesView struct {
 	Page         PageProps
 	CanonicalURL string
 	Project      CockpitProject
 	NewURL       string
-	Deliverables []DeliverableRow
+	// Groups is the page's deliverables, grouped by milestone (spec 029 §2):
+	// one group per milestone that holds one, in the project's milestone
+	// order, then an unattached group last. A single group renders with no
+	// header — the flat list a project with no milestones has always shown.
+	Groups []DeliverableGroup
+}
+
+// DeliverableGroup is one milestone's worth of deliverables on the
+// Deliverables page, or the unattached group when MilestoneID is "".
+type DeliverableGroup struct {
+	MilestoneID    string
+	MilestoneTitle string
+	Rows           []DeliverableRow
+}
+
+// totalRows sums every group's rows, for the page's empty-state check: it is
+// distinct from "no groups" because the unattached group is always present.
+func (v DeliverablesView) totalRows() int {
+	n := 0
+	for _, g := range v.Groups {
+		n += len(g.Rows)
+	}
+	return n
+}
+
+// header is the group's subsection heading: the milestone's title, or "No
+// milestone" for the unattached group.
+func (g DeliverableGroup) header() string {
+	if g.MilestoneTitle == "" {
+		return "No milestone"
+	}
+	return g.MilestoneTitle
 }
 
 // DeliverableRow is one declared deliverable. Spec 029 §3.2 makes deliverable
@@ -795,6 +826,9 @@ type NewDeliverableView struct {
 	Description string
 	URL         string
 	Artifact    string
+	// Milestones is the project's milestones as a select menu, "No
+	// milestone" leading and selected by default (spec 029 §2).
+	Milestones []FormOption
 }
 
 // --- presentation helpers ---------------------------------------------------

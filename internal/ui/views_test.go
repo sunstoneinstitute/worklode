@@ -161,14 +161,14 @@ func TestDeliverablesPageShowsTheReport(t *testing.T) {
 	err := Deliverables(DeliverablesView{
 		Page:    PageProps{Title: "Deliverables"},
 		Project: CockpitProject{ID: "p", Name: "Project", Key: "P"},
-		Deliverables: []DeliverableRow{
+		Groups: []DeliverableGroup{{Rows: []DeliverableRow{
 			{
 				ID: "P-DEL-1", Name: "Casualties", CreatedAt: reportedAt,
 				Artifact:      "bigquery://sunstone-prod/cow/casualties",
 				ReportedState: "published", ReportedAt: &reportedAt,
 			},
 			{ID: "P-DEL-2", Name: "Methodology", CreatedAt: reportedAt},
-		},
+		}}},
 	}).Render(context.Background(), &b)
 	if err != nil {
 		t.Fatalf("render Deliverables: %v", err)
