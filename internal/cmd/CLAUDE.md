@@ -37,7 +37,7 @@ adjective from a verb or a view from an action.
   `import`, `install`, `recommend`, `resolve`, `decompose`, `instruct`,
   `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`,
   `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`,
-  `attach`, `detach`, `assign`, `block`, `parent`, `duplicate`.
+  `attach`, `detach`, `assign`, `block`, `parent`, `duplicate`, `request`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
   `task publish`. No hyphenated verbs, with exceptions named in the spec 061
   §5 allowlist. `set` is a verb like any other: the field it writes is an
@@ -52,9 +52,11 @@ adjective from a verb or a view from an action.
   `project overview`, `project health`, `project focus`, `project crew`. A
   view never writes; the paired write is `set <field>` (L3), never a `--set`
   flag on the view.
-- **L7** — One polymorphic reader. `lode show <ref>` dispatches on the
-  reference or `--kind` and is the only cross-entity command. Every entity
-  also keeps its typed `show`.
+- **L7** — Cross-entity readers sit at the top level, and there are two.
+  `lode show <ref>` dispatches on a known reference or `--kind` and returns
+  one subject; `lode search <query>` takes an unknown one and returns a
+  ranking over docs, tasks and skills (040 §9). Every entity also keeps its
+  typed `show`. Adding a third requires amending spec 061 §1.
 - **L8** — One workflow group, `lode work`. Commands acting on the task in
   the worktree the caller is standing in, rather than on a named entity, live
   under `work` and nowhere else.
@@ -70,16 +72,9 @@ The resulting top-level, twenty-one commands and four shortcuts:
 |---|---|
 | Entities (L1) | `actor`, `approval`, `blob`, `channel`, `doc`, `event`, `graph`, `inbox`, `project`, `secret`, `skill`, `task`, `token` |
 | Workflow (L8) | `work` |
-| Polymorphic reader (L7) | `show` |
+| Cross-entity readers (L7) | `show`, `search` |
 | Machine (L2) | `doctor`, `install`, `uninstall`, `login`, `logout` |
-| Corpus search (040 §9) | `search` |
 | Shortcuts (L9) | `board`, `next`, `overview`, `status` |
-
-`search` is the one row no rule above explains. It ranks documents, tasks and
-skills together, so L1 has no true spelling for it, and L7's reader takes one
-known reference and returns one subject where search takes an unknown one and
-returns a ranking. 040 §9 names it `lode search`; 061 §1's L2 list has not yet
-been amended to carry it (`docs/follow-ups.md`).
 
 `lode work` holds `next`, `resume`, `submit`, `block`, `status`, `listen`.
 
