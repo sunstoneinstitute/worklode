@@ -570,12 +570,12 @@ func newTaskSkillsCmd() *cobra.Command {
 }
 
 func newTaskEditCmd() *cobra.Command {
-	var title, body, bodyFile, concern, priority, kindFlag string
+	var title, body, bodyFile, concern, priority, kindFlag, milestone string
 	var needsDecomposition, humanOnly, noUpload bool
 	var secretNames, artifacts []string
 	cmd := &cobra.Command{
 		Use:               "edit <id>",
-		Short:             "Edit a task's title, body, concern, priority, needs-decomposition or human-only flag, or declare an artifact it is verified by",
+		Short:             "Edit a task's title, body, concern, priority, milestone, needs-decomposition or human-only flag, or declare an artifact it is verified by",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -621,8 +621,11 @@ func newTaskEditCmd() *cobra.Command {
 			if cmd.Flags().Changed("artifact") {
 				in.Artifacts = &artifacts
 			}
-			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.HumanOnly == nil && in.Secrets == nil && in.Artifacts == nil && in.Kind == nil {
-				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --kind, --needs-decomposition, --human-only, --secrets, or --artifact")
+			if cmd.Flags().Changed("milestone") {
+				in.Milestone = &milestone
+			}
+			if in.Title == nil && in.Body == nil && in.Concern == nil && in.Priority == nil && in.NeedsDecomposition == nil && in.HumanOnly == nil && in.Secrets == nil && in.Artifacts == nil && in.Kind == nil && in.Milestone == nil {
+				return fmt.Errorf("nothing to edit: set --title, --body, --body-file, --concern, --priority, --kind, --needs-decomposition, --human-only, --secrets, --artifact, or --milestone")
 			}
 
 			c, cfg, err := newAPIClientWithConfig()
@@ -667,6 +670,8 @@ func newTaskEditCmd() *cobra.Command {
 		"replace the task's declared secret names (comma-separated; 'none' clears)")
 	cmd.Flags().StringArrayVar(&artifacts, "artifact", nil,
 		"declare a catalog address this task is verified by (repeat the flag for each; additive, never removes)")
+	cmd.Flags().StringVar(&milestone, "milestone", "",
+		"attach the task to a milestone in its own project (029 §2), or none to detach")
 	return cmd
 }
 

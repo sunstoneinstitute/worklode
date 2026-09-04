@@ -520,6 +520,9 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	if t.Concern != "" {
 		fmt.Fprintf(w, "  concern:  %s\n", t.Concern)
 	}
+	if t.Milestone != "" {
+		fmt.Fprintf(w, "  milestone: %s\n", t.Milestone)
+	}
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")
 	}
