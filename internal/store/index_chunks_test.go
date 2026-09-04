@@ -7,66 +7,24 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // vec is VecForTests under a shorter name, since every fixture here needs it.
 func vec(vals ...float32) []float32 { return VecForTests(vals...) }
 
-func TestRecommendSkillsOverIndexChunks(t *testing.T) {
-	t.Parallel()
-	s := OpenTestStore(t)
-	ctx := context.Background()
-
-	for _, name := range []string{"tdd", "debugging"} {
-		if _, _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
-			t.Fatalf("seed %s: %v", name, err)
-		}
-	}
-	tdd, _ := s.GetSkill(ctx, "tdd")
-	dbg, _ := s.GetSkill(ctx, "debugging")
-
-	// Orthogonal-ish unit vectors: query matches tdd chunk 1 best.
-	if err := s.SeedSkillChunksForTests(ctx, tdd.ID, [][]float32{vec(1, 0, 0), vec(0.9, 0.1, 0)}); err != nil {
-		t.Fatalf("embed tdd: %v", err)
-	}
-	if err := s.SeedSkillChunksForTests(ctx, dbg.ID, [][]float32{vec(0, 1, 0)}); err != nil {
-		t.Fatalf("embed dbg: %v", err)
-	}
-
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0.5)
+// denseSkillHits asks the dense arm alone which skills match query. These
+// tests are about what ReplaceSubjectChunks and ClearAllChunkVectors write,
+// so the dense arm is the observation, not the subject.
+func denseSkillHits(t *testing.T, s *Store, ctx context.Context, query []float32) []model.SearchHit {
+	t.Helper()
+	hits, err := s.Search(ctx, SearchQuery{
+		Vector: query, Kinds: []string{SubjectSkill}, Limit: 5, Mode: model.SearchDense,
+	})
 	if err != nil {
-		t.Fatalf("recommend: %v", err)
+		t.Fatalf("dense search: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "p:tdd" || got[0].Score < 0.99 {
-		t.Fatalf("recommend: %+v", got)
-	}
-
-	// Floor at 0 returns both, best-first, max over chunks.
-	got, err = s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0)
-	if err != nil || len(got) != 2 || got[0].Name != "p:tdd" {
-		t.Fatalf("recommend all: %+v err=%v", got, err)
-	}
-
-	// Replace wipes old chunks.
-	if err := s.SeedSkillChunksForTests(ctx, tdd.ID, [][]float32{vec(0, 0, 1)}); err != nil {
-		t.Fatalf("re-embed: %v", err)
-	}
-	got, _ = s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0.5)
-	if len(got) != 0 {
-		t.Fatalf("after replace: %+v", got)
-	}
-
-	// Soft-deleted skills are never recommended.
-	if err := s.SeedSkillChunksForTests(ctx, dbg.ID, [][]float32{vec(1, 0, 0)}); err != nil {
-		t.Fatalf("re-embed dbg: %v", err)
-	}
-	if _, err := s.SoftDeleteSkillsExcept(ctx, "acme/claude-plugins", nil); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-	got, _ = s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0.5)
-	if len(got) != 0 {
-		t.Fatalf("deleted still recommended: %+v", got)
-	}
+	return hits
 }
 
 // TestReplaceSubjectChunksWrongWidth is spec 040 §13.5: the vector(768)
@@ -124,77 +82,8 @@ func TestReplaceSubjectChunksZeroNorm(t *testing.T) {
 		t.Fatalf("zero-norm vector: want ErrInvalidInput, got %v", err)
 	}
 
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("expected no embeddings written: %+v err=%v", got, err)
-	}
-}
-
-// TestRecommendSkillsZeroNormQuery guards the same NaN failure mode from
-// the query side: a zero query vector would otherwise score every skill
-// NaN and return the whole corpus in arbitrary order.
-func TestRecommendSkillsZeroNormQuery(t *testing.T) {
-	t.Parallel()
-	s := OpenTestStore(t)
-	ctx := context.Background()
-
-	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	tdd, _ := s.GetSkill(ctx, "tdd")
-	if err := s.SeedSkillChunksForTests(ctx, tdd.ID, [][]float32{vec(1, 0, 0)}); err != nil {
-		t.Fatalf("embed: %v", err)
-	}
-
-	if _, err := s.RecommendSkills(ctx, vec(), 5, 0); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("zero-norm query: want ErrInvalidInput, got %v", err)
-	}
-	if _, err := s.RecommendSkills(ctx, nil, 5, 0); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("zero-length query: want ErrInvalidInput, got %v", err)
-	}
-}
-
-// TestRecommendSkillsInvalidLimit guards limit<=0, which would otherwise
-// reach Postgres as a raw, unclassified "LIMIT must not be negative" error.
-func TestRecommendSkillsInvalidLimit(t *testing.T) {
-	t.Parallel()
-	s := OpenTestStore(t)
-	ctx := context.Background()
-
-	if _, err := s.RecommendSkills(ctx, vec(1, 0, 0), 0, 0); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("limit=0: want ErrInvalidInput, got %v", err)
-	}
-	if _, err := s.RecommendSkills(ctx, vec(1, 0, 0), -1, 0); !errors.Is(err, ErrInvalidInput) {
-		t.Fatalf("limit=-1: want ErrInvalidInput, got %v", err)
-	}
-}
-
-// TestRecommendSkillsLimitTruncates guards that limit is actually passed
-// through to the query, not just accepted: with three matching skills and
-// limit=2, only the two best-scoring should come back.
-func TestRecommendSkillsLimitTruncates(t *testing.T) {
-	t.Parallel()
-	s := OpenTestStore(t)
-	ctx := context.Background()
-
-	names := []string{"tdd", "debugging", "diagnose"}
-	vecs := [][]float32{vec(1, 0, 0), vec(0.9, 0.1, 0), vec(0.8, 0.2, 0)}
-	for i, name := range names {
-		if _, _, err := s.UpsertSkill(ctx, testSkillUpsert(name, "h-"+name)); err != nil {
-			t.Fatalf("seed %s: %v", name, err)
-		}
-		sk, _ := s.GetSkill(ctx, name)
-		if err := s.SeedSkillChunksForTests(ctx, sk.ID, [][]float32{vecs[i]}); err != nil {
-			t.Fatalf("embed %s: %v", name, err)
-		}
-	}
-
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 2, 0)
-	if err != nil {
-		t.Fatalf("recommend: %v", err)
-	}
-	if len(got) != 2 || got[0].Name != "p:tdd" || got[1].Name != "p:debugging" {
-		t.Fatalf("limit truncation: %+v", got)
+	if got := denseSkillHits(t, s, ctx, vec(1, 0, 0)); len(got) != 0 {
+		t.Fatalf("expected no embeddings written: %+v", got)
 	}
 }
 
@@ -218,9 +107,8 @@ func TestReplaceSubjectChunksEmptyClears(t *testing.T) {
 		t.Fatalf("clear with nil: %v", err)
 	}
 
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("expected embeddings cleared: %+v err=%v", got, err)
+	if got := denseSkillHits(t, s, ctx, vec(1, 0, 0)); len(got) != 0 {
+		t.Fatalf("expected embeddings cleared: %+v", got)
 	}
 }
 
@@ -251,9 +139,8 @@ func TestReplaceSubjectChunksNilVectors(t *testing.T) {
 		t.Fatalf("counts = %+v, want 1 skill chunk with no vector", counts)
 	}
 
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("null-vector rows must not reach the dense arm: %+v err=%v", got, err)
+	if got := denseSkillHits(t, s, ctx, vec(1, 0, 0)); len(got) != 0 {
+		t.Fatalf("null-vector rows must not reach the dense arm: %+v", got)
 	}
 }
 
@@ -307,34 +194,6 @@ func TestReplaceSubjectChunksKeepsChunkOrder(t *testing.T) {
 	}
 }
 
-// TestRecommendSkillsSkipsSkillWithoutEmbeddings pins the inner JOIN:
-// a live skill that was never embedded must not appear in results
-// (LEFT JOIN would incorrectly surface it with a null score).
-func TestRecommendSkillsSkipsSkillWithoutEmbeddings(t *testing.T) {
-	t.Parallel()
-	s := OpenTestStore(t)
-	ctx := context.Background()
-
-	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("tdd", "h1")); err != nil {
-		t.Fatalf("seed tdd: %v", err)
-	}
-	tdd, _ := s.GetSkill(ctx, "tdd")
-	if err := s.SeedSkillChunksForTests(ctx, tdd.ID, [][]float32{vec(1, 0, 0)}); err != nil {
-		t.Fatalf("embed tdd: %v", err)
-	}
-	if _, _, err := s.UpsertSkill(ctx, testSkillUpsert("debugging", "h2")); err != nil {
-		t.Fatalf("seed debugging (never embedded): %v", err)
-	}
-
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0)
-	if err != nil {
-		t.Fatalf("recommend: %v", err)
-	}
-	if len(got) != 1 || got[0].Name != "p:tdd" {
-		t.Fatalf("expected only the embedded skill: %+v", got)
-	}
-}
-
 func TestVectorLiteral(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -378,9 +237,8 @@ func TestClearAllChunkVectors(t *testing.T) {
 	if err != nil || n != 4 {
 		t.Fatalf("clear = %d err=%v, want 4", n, err)
 	}
-	got, err := s.RecommendSkills(ctx, vec(1, 0, 0), 5, 0)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("after clear: %+v err=%v", got, err)
+	if got := denseSkillHits(t, s, ctx, vec(1, 0, 0)); len(got) != 0 {
+		t.Fatalf("after clear: %+v", got)
 	}
 
 	// The rows themselves are still there, text intact.
