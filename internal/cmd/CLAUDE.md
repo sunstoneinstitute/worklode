@@ -16,10 +16,10 @@ picks the targets, calls one of them, and reports the result.
 ## Naming
 
 Every command name follows one of nine rules (`WL-SPEC-61` §1 has the
-reasoning). L1–L3, L5, L7–L9 are enforced by `internal/cmd/namerule_test.go`
-(arriving in plan part 4); L4 ("verbs are imperative verbs") and L6 ("named
-views are nouns, never verbs") are enforced by review — a test cannot tell an
-adjective from a verb or a view from an action.
+reasoning). L1–L3, L5, L7–L9 are enforced by
+`internal/cmd/namerule_test.go`; L4 ("verbs are imperative verbs") and L6
+("named views are nouns, never verbs") are enforced by review — a test cannot
+tell an adjective from a verb or a view from an action.
 
 - **L1** — Entity commands are `lode <entity> <verb>`. Entity nouns are
   singular and exactly what the backbone models: `actor`, `approval`, `blob`,
@@ -37,7 +37,8 @@ adjective from a verb or a view from an action.
   `import`, `install`, `recommend`, `resolve`, `decompose`, `instruct`,
   `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`,
   `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`,
-  `attach`, `detach`, `assign`, `block`, `parent`, `duplicate`, `request`.
+  `attach`, `detach`, `assign`, `block`, `parent`, `duplicate`, `request`,
+  `pack`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
   `task publish`. No hyphenated verbs, with exceptions named in the spec 061
   §5 allowlist. `set` is a verb like any other: the field it writes is an
