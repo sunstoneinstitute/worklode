@@ -128,6 +128,10 @@ Flags: --server
 - `lode project show` — Show a project's repos, focus, and token cost
   Flags: --days, --project
 
+## `lode search` — Search documents, tasks and skills by meaning and by exact token
+
+Flags: --kind, --limit, --mode, --project, --repo
+
 ## `lode secret` — Task-declared secrets: catalog, status, exec, purge (spec 017)
 
 - `lode secret catalog` — List the org secrets catalog: names, baseline flag, descriptions

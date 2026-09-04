@@ -64,7 +64,7 @@ adjective from a verb or a view from an action.
   (`project overview`). These are permanent API, not compatibility aliases.
   Adding a fifth requires amending spec 061 §1.
 
-The resulting top-level, twenty commands and four shortcuts:
+The resulting top-level, twenty-one commands and four shortcuts:
 
 | Class | Commands |
 |---|---|
@@ -72,7 +72,14 @@ The resulting top-level, twenty commands and four shortcuts:
 | Workflow (L8) | `work` |
 | Polymorphic reader (L7) | `show` |
 | Machine (L2) | `doctor`, `install`, `uninstall`, `login`, `logout` |
+| Corpus search (040 §9) | `search` |
 | Shortcuts (L9) | `board`, `next`, `overview`, `status` |
+
+`search` is the one row no rule above explains. It ranks documents, tasks and
+skills together, so L1 has no true spelling for it, and L7's reader takes one
+known reference and returns one subject where search takes an unknown one and
+returns a ranking. 040 §9 names it `lode search`; 061 §1's L2 list has not yet
+been amended to carry it (`docs/follow-ups.md`).
 
 `lode work` holds `next`, `resume`, `submit`, `block`, `status`, `listen`.
 
