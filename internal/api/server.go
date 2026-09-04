@@ -107,6 +107,13 @@ type Config struct {
 	// mildly sensitive, so it is only ever served authenticated.
 	SecretsCatalogPath string
 
+	// ApprovalFlowsDir (LODE_APPROVAL_FLOWS_DIR) holds instance approval-flow
+	// overrides as *.json, layered over the shipped defaults by flow name
+	// (029 §7.2). Empty means defaults only. An unreadable or invalid file
+	// there fails the boot: it changes what the server demands of a review,
+	// so a typo must not be read as a weaker requirement.
+	ApprovalFlowsDir string
+
 	// SkillSources configures org skill source repos, comma-separated
 	// "owner/repo@ref:glob" entries. LODE_SKILL_SOURCES. Requires the GitHub
 	// App to be configured. Unset: skill sync off.
@@ -278,6 +285,11 @@ type server struct {
 	skillSources     []skillsync.Source
 	skillSyncMu      sync.Mutex
 	skillSyncPending atomic.Bool
+
+	// flows is the effective approval-flow set, read once at boot from the
+	// embedded defaults plus cfg.ApprovalFlowsDir. Instance configuration, so
+	// it never changes while the process runs.
+	flows []model.ApprovalFlow
 
 	// bgCtx governs background goroutines started by NewServer (boot sync,
 	// webhook-triggered syncs) — cfg.BackgroundCtx, or context.Background()
@@ -825,6 +837,18 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 
 	if err := store.SetBranchTemplate(cfg.BranchTemplate); err != nil {
 		return nil, nil, err
+	}
+
+	// Instance configuration, read before anything serves: a flow decides
+	// what a review demands, so a bad file fails the boot (see the field).
+	// The 'worklode' actor owns every row the rules mint — 029 §7.2 credits
+	// the policy, not whoever filed the idea.
+	s.flows, err = LoadApprovalFlows(cfg.ApprovalFlowsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := st.EnsureServiceActor(context.Background(), flowActorID, "approval flow rules"); err != nil {
+		return nil, nil, fmt.Errorf("ensure %s actor: %w", flowActorID, err)
 	}
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
