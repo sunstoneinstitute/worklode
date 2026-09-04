@@ -983,7 +983,7 @@ func TestTaskSetState(t *testing.T) {
 		{"unknown state", []string{"task", "set", "state", "shipped", walk.ID},
 			[]string{`unknown state "shipped"`, "merged", "deployed_dev", "deployed_prod", "released"}},
 		{"unknown field", []string{"task", "set", "colour", "red", walk.ID},
-			[]string{`unknown field "colour"`, `"state"`}},
+			[]string{`unknown field "colour"`, "state, skills, checklist"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := runLode(t, tc.args...)

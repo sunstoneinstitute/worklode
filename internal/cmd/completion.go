@@ -128,25 +128,72 @@ func taskIDAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion,
 	}
 }
 
-// taskIDLast completes the trailing task id of a command whose id sits after
-// a variable-length value list — `lode task set <field> <value…> <id>`, where
-// it lands at position 2 for `set state`, 3 for `set checklist`, and anywhere
-// from 2 on for `set skills`. n is the earliest position it can occupy and
-// every position from there on offers it, so n is set one past the last
-// position that certainly holds a value: offering an id in a value's place
-// misleads, offering one late is only noise.
-//
-// The cost is that the documented clear forms do not complete:
-// `lode task set skills WL-5` puts the id at position 1, where `set state`
-// takes a state. WL-508 revisits the shape; docRefLast and projectKeyLast
-// carry the same gap for the same reason.
-func taskIDLast(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-		if len(args) < n {
-			return nil, cobra.ShellCompDirectiveDefault
+// staticCompletions offers a closed value set: the kinds, statuses,
+// priorities and `set` field names of 061 §3 C4. Only the values starting
+// with what has been typed are offered, and nothing falls through to filename
+// completion behind them. The prefix match belongs here because cobra hands a
+// completion function's result to the shell unfiltered — unlike ValidArgs,
+// which it narrows itself.
+func staticCompletions(values []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	out := make([]cobra.Completion, 0, len(values))
+	for _, v := range values {
+		if strings.HasPrefix(v, toComplete) {
+			out = append(out, cobra.Completion(v))
 		}
-		return taskIDs(cmd, args, toComplete)
 	}
+	return out, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeFlagValues registers a closed value set as the completion of cmd's
+// named flag. RegisterFlagCompletionFunc's only error is a misspelled or
+// twice-registered flag name — a wiring mistake, which shows up as a flag
+// that completes nothing rather than as anything a user could hit at runtime.
+func completeFlagValues(cmd *cobra.Command, flag string, values []string) {
+	_ = cmd.RegisterFlagCompletionFunc(flag, func(_ *cobra.Command, _ []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		return staticCompletions(values, toComplete)
+	})
+}
+
+// completeProjectFlag registers the live project lookup on cmd's named
+// project flag, for addScopeFlags' --project and the two commands that spell
+// the flag themselves.
+func completeProjectFlag(cmd *cobra.Command, flag string) {
+	_ = cmd.RegisterFlagCompletionFunc(flag, projectKeys)
+}
+
+// taskSetArgs completes `lode task set <field> <value…> <id>` (061 §2.1)
+// position by position. What belongs at a position is a property of the field
+// named first, so the field decides: after "state" comes one of the settable
+// states and then the id, after "checklist" an item and a true/false and then
+// the id, and after "skills" any number of skill names, or none at all, and
+// then the id.
+//
+// Dispatching on the field is what lets the documented clear form
+// (`lode task set skills WL-5`, the id at position 1) complete. A single
+// position threshold could not: position 1 holds a state for one field and
+// the id for another. Skill names are still offered nothing of their own —
+// the pinned-skill argument has no listing behind it — so from position 1 on
+// a "skills" set offers ids, which is the whole candidate set that grammar
+// admits there.
+func taskSetArgs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return staticCompletions(taskSetFields, toComplete)
+	}
+	switch args[0] {
+	case "state":
+		if len(args) == 1 {
+			return staticCompletions(model.SettableTaskStates, toComplete)
+		}
+	case "checklist":
+		switch len(args) {
+		case 1:
+			// The item: an ordinal or a title, neither of them completable.
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		case 2:
+			return staticCompletions([]string{"false", "true"}, toComplete)
+		}
+	}
+	return taskIDs(cmd, args, toComplete)
 }
 
 // docRefsFiltered is the shared body of the document-reference completers.
@@ -228,18 +275,17 @@ func deletedDocRefAt(n int) func(*cobra.Command, []string, string) ([]cobra.Comp
 	}
 }
 
-// docRefLast completes the trailing document ref of `lode doc set <field>
-// <value…> <ref>`, on taskIDLast's terms and with taskIDLast's known gap: the
-// clear form `lode doc set reviewers <ref>`, with the ref at position 1 where
-// a value would otherwise sit, does not complete. WL-508 revisits the shape
-// for both commands.
-func docRefLast(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-		if len(args) < n {
-			return nil, cobra.ShellCompDirectiveDefault
-		}
-		return docRefsFiltered(cmd, toComplete, false)
+// docSetArgs completes `lode doc set <field> <value…> <ref>` on taskSetArgs'
+// terms: the field first, then the values and the trailing ref. "reviewers"
+// takes actor ids, which have no listing to complete from (see actorRefs), and
+// its clear form `lode doc set reviewers <ref>` puts the ref at position 1 —
+// so refs are offered from position 1 on, the whole candidate set that
+// position admits.
+func docSetArgs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return staticCompletions(docSetFields, toComplete)
 	}
+	return docRefsFiltered(cmd, toComplete, false)
 }
 
 // projectKeys completes a project argument — the project's id, which is what
@@ -280,17 +326,16 @@ func projectKeyAt(n int) func(*cobra.Command, []string, string) ([]cobra.Complet
 	}
 }
 
-// projectKeyLast completes the trailing project id of `lode project set focus
-// <concern…> <id>`, on taskIDLast's terms and with the same known gap: the
-// `--clear` form puts the id at position 0, where a concern would otherwise
-// sit, and so does not complete. WL-508 revisits the shape.
-func projectKeyLast(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-		if len(args) < n {
-			return nil, cobra.ShellCompDirectiveDefault
-		}
-		return projectKeys(cmd, args, toComplete)
+// projectSetFocusArgs completes `lode project set focus <concern…> <id>`.
+// --clear takes no concerns, so the id is then the only argument there is and
+// completes from position 0; without it position 0 holds a concern and the id
+// follows. Concerns themselves are not offered: the valid set lives behind
+// store.ValidConcern, which the CLI cannot reach.
+func projectSetFocusArgs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	if clear, _ := cmd.Flags().GetBool("clear"); !clear && len(args) == 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
+	return projectKeys(cmd, args, toComplete)
 }
 
 // actorRefs completes an actor argument from the named project's Crew. That

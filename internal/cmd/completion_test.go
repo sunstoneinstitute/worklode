@@ -6,11 +6,13 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // setupCompletion stands up a task-list stub and a repo scoped to project
@@ -194,8 +196,9 @@ func TestTaskIDCompletionIsSilentOnFailure(t *testing.T) {
 // whose task id is not the first argument. Wiring a completion function that
 // only ever fires at position 0 would leave `lode task set state merged WL-…`
 // silently uncompletable while still looking wired, so the position is a
-// property of the wiring (taskIDAt/taskIDLast) and is checked here per shape:
-// ref-first, ref-mid, and the trailing ref of `task set`.
+// property of the wiring (taskIDAt, and taskSetArgs for the field-dispatched
+// arguments of `task set`) and is checked here per shape: ref-first, ref-mid,
+// and the trailing ref of `task set`.
 func TestTaskIDCompletionFiresAtTheRightPosition(t *testing.T) {
 	tests := []struct {
 		name string
@@ -417,7 +420,10 @@ func TestDocAndProjectCompletionFireAtTheRightPosition(t *testing.T) {
 		// candidate of its own, which says nothing about this wiring.
 		{name: "doc transfer, refs are variadic", args: []string{"doc", "transfer", "--to", "ada", "WL-SPEC-2", ""}, want: "doc"},
 		{name: "doc set, ref last", args: []string{"doc", "set", "reviewers", "ada", ""}, want: "doc"},
-		{name: "doc set, value argument is not a ref", args: []string{"doc", "set", "reviewers", ""}},
+		// The clear form `lode doc set reviewers <ref>` puts the ref where a
+		// reviewer would otherwise sit; actor ids have no listing to offer
+		// there, so the refs are the whole candidate set (WL-508).
+		{name: "doc set, clear form completes the ref", args: []string{"doc", "set", "reviewers", ""}, want: "doc"},
 		{name: "project repo add, project first", args: []string{"project", "repo", "add", ""}, want: "project"},
 		{name: "project repo add, repo argument is not a project", args: []string{"project", "repo", "add", "acme", ""}},
 		{name: "project set focus-note", args: []string{"project", "set", "focus-note", ""}, want: "project"},
@@ -425,6 +431,9 @@ func TestDocAndProjectCompletionFireAtTheRightPosition(t *testing.T) {
 		{name: "project focus", args: []string{"project", "focus", ""}, want: "project"},
 		{name: "project set focus, id last", args: []string{"project", "set", "focus", "cost", ""}, want: "project"},
 		{name: "project set focus, first argument is a concern", args: []string{"project", "set", "focus", ""}},
+		// --clear takes no concerns, so the id is the only argument left
+		// (WL-508).
+		{name: "project set focus --clear, id first", args: []string{"project", "set", "focus", "--clear", ""}, want: "project"},
 	}
 	want := map[string]string{
 		"doc":     "WL-SPEC-2\ta doc\na-doc\ta doc\n",
@@ -449,6 +458,135 @@ func TestDocAndProjectCompletionFireAtTheRightPosition(t *testing.T) {
 			got, _, _ := strings.Cut(out, ":")
 			if got != want[tc.want] {
 				t.Fatalf("candidates = %q, want %q", got, want[tc.want])
+			}
+		})
+	}
+}
+
+// completionCandidates runs one `__complete` line and returns the candidate
+// values, dropping the tab-joined descriptions and the trailing directive.
+func completionCandidates(t *testing.T, args ...string) []string {
+	t.Helper()
+	out, err := runLode(t, append([]string{"__complete"}, args...)...)
+	if err != nil {
+		t.Fatalf("__complete %v: %v\noutput: %s", args, err, out)
+	}
+	got, _, _ := strings.Cut(out, ":")
+	got = strings.TrimSuffix(got, "\n")
+	if got == "" {
+		return nil
+	}
+	var values []string
+	for _, line := range strings.Split(got, "\n") {
+		value, _, _ := strings.Cut(line, "\t")
+		values = append(values, value)
+	}
+	return values
+}
+
+// TestTaskKindFlagCompletesTheLiveKindsOnly is 061 §3 C4 for the flag
+// docs/agent-surfaces.md names as the one agents most often get wrong. The
+// candidates are ns.TaskKinds itself, never a literal beside it, and the
+// retired "spec" spelling — still accepted as an input alias by
+// ns.DeprecatedTaskKinds, so a caller reaching for it is not corrected by an
+// error — must never be offered, on any command carrying the flag.
+func TestTaskKindFlagCompletesTheLiveKindsOnly(t *testing.T) {
+	setupCompletion(t, "proj", func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(t, w, tasksResponse("WL-1"))
+	})
+
+	for _, args := range [][]string{
+		{"task", "add", "--kind", ""},
+		{"task", "list", "--kind", ""},
+		{"task", "edit", "--kind", ""},
+		{"task", "claim", "--kind", ""},
+		{"work", "next", "--kind", ""},
+		{"work", "listen", "--kind", ""},
+		{"inbox", "promote", "--kind", ""},
+	} {
+		t.Run(strings.Join(args[:len(args)-2], " "), func(t *testing.T) {
+			got := completionCandidates(t, args...)
+			if !slices.Equal(got, ns.TaskKinds) {
+				t.Fatalf("candidates = %v, want ns.TaskKinds %v", got, ns.TaskKinds)
+			}
+			for alias := range ns.DeprecatedTaskKinds {
+				if slices.Contains(got, alias) {
+					t.Fatalf("offered the retired kind %q; candidates = %v", alias, got)
+				}
+			}
+		})
+	}
+}
+
+// TestFlagValueCompletion is the rest of 061 §3 C4: --status and --priority
+// from their static sets, --kind from the set belonging to the entity the
+// command acts on (a document kind is not a task kind), and --project from
+// the live projects through the same helper the positional argument uses.
+func TestFlagValueCompletion(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"doc add --kind", []string{"doc", "add", "--kind", ""}, docKinds},
+		{"doc list --status", []string{"doc", "list", "--status", ""}, ns.DesignDocStatuses},
+		{"task add --priority", []string{"task", "add", "--priority", ""}, taskPriorities},
+		{"task list --status", []string{"task", "list", "--status", "deployed_"}, []string{"deployed_dev", "deployed_prod"}},
+		{"actor add --kind", []string{"actor", "add", "--kind", ""}, actorKinds},
+		{"search --kind", []string{"search", "--kind", ""}, searchKinds},
+		{"show --kind", []string{"show", "--kind", "p"}, []string{"plan", "project"}},
+		{"task list --project", []string{"task", "list", "--project", ""}, []string{"acme", "worklode"}},
+		{"show --project", []string{"show", "--project", ""}, []string{"acme", "worklode"}},
+		{"project show --project", []string{"project", "show", "--project", ""}, []string{"acme", "worklode"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupCompletionRoutes(t, "proj", map[string]http.HandlerFunc{
+				"/api/v1/projects": func(w http.ResponseWriter, r *http.Request) {
+					writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
+						{ID: "worklode", Name: "Worklode", Key: "WL"},
+						{ID: "acme", Name: "Acme", Key: "AC"},
+					}})
+				},
+			})
+			if got := completionCandidates(t, tc.args...); !slices.Equal(got, tc.want) {
+				t.Fatalf("candidates = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSetFieldCompletion is 061 §1 L4's payoff: `set` writes the field named
+// in an argument, so the field names complete, and each field then decides
+// what belongs after it. `project set` is not here — its fields are
+// subcommands, which cobra already completes.
+func TestSetFieldCompletion(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"task set field names", []string{"task", "set", ""}, taskSetFields},
+		{"doc set field names", []string{"doc", "set", ""}, docSetFields},
+		{"task set state values", []string{"task", "set", "state", ""}, model.SettableTaskStates},
+		{"task set checklist checked values", []string{"task", "set", "checklist", "0", ""}, []string{"false", "true"}},
+		{"task set checklist item has no candidates", []string{"task", "set", "checklist", ""}, nil},
+		// The clear form: no values, so the id sits at position 1 (WL-508).
+		{"task set skills, clear form completes the id", []string{"task", "set", "skills", ""}, []string{"WL-1"}},
+		{"task set state, id after the value", []string{"task", "set", "state", "merged", ""}, []string{"WL-1"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupCompletionRoutes(t, "proj", map[string]http.HandlerFunc{
+				"/api/v1/tasks": func(w http.ResponseWriter, r *http.Request) {
+					writeTestJSON(t, w, tasksResponse("WL-1"))
+				},
+				"/api/v1/docs": func(w http.ResponseWriter, r *http.Request) {
+					writeTestJSON(t, w, docsResponse(model.Doc{Number: 2, Slug: "a-doc", Title: "a doc"}))
+				},
+			})
+			if got := completionCandidates(t, tc.args...); !slices.Equal(got, tc.want) {
+				t.Fatalf("candidates = %v, want %v", got, tc.want)
 			}
 		})
 	}

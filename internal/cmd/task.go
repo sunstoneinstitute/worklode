@@ -20,6 +20,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/blobref"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -344,6 +345,8 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike")
+	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task publish`)")
 	cmd.Flags().StringArrayVar(&skills, "skill", nil, "pin a skill name for recommendation (repeat the flag for each one; not comma-separated)")
@@ -355,6 +358,20 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.MarkFlagRequired("title")
 	return cmd
 }
+
+// taskPriorities and taskStatusValues are the closed sets behind
+// `lode task` --priority and --status. Neither has a Go declaration the CLI
+// can reach — the priorities are internal/api's validPriorities and the
+// states are the tasks.state CHECK constraint of migration 0005 — so they are
+// mirrored here, beside the flags they complete. "all" is resolveStatusFilter's
+// pseudo-status, not a state.
+var (
+	taskPriorities   = []string{"critical", "high", "medium", "low"}
+	taskStatusValues = []string{
+		"draft", "ready", "in_progress", "in_review",
+		"merged", "deployed_dev", "deployed_prod", "released", "abandoned", "all",
+	}
+)
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
@@ -406,6 +423,9 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&parent, "parent", "", "list only the direct children of this task")
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: feature, bug, chore, design, review, spike")
+	completeFlagValues(cmd, "status", taskStatusValues)
+	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
 	cmd.Flags().StringVar(&assignee, "assignee", "", "filter by assignee actor id")
@@ -639,6 +659,8 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kindFlag, "kind", "", "retag the task's kind: feature, bug, chore, design, review, spike")
+	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	cmd.Flags().BoolVar(&humanOnly, "human-only", false, "mark (or unmark) the task as human-only: never offered by lode next or the frontier, still claimable by id")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
@@ -814,6 +836,7 @@ func newTaskClaimCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&next, "next", false, "claim the top-ranked ready task instead of a specific id (spec 005 ranking)")
 	addScopeFlags(cmd, &scope, "the project a bare task number belongs to; with --next, restrict the pick to a project")
 	cmd.Flags().StringVar(&kind, "kind", "", "with --next, restrict the pick to a kind: feature, bug, chore, design, review, spike")
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict --next to the project's focus concerns only")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "with --next, show the top-ranked candidate without claiming it")
 	return cmd
@@ -929,6 +952,11 @@ func newTaskSubmitCmd() *cobra.Command {
 		false, (*cli.Client).SubmitTask)
 }
 
+// taskSetFields are the fields `lode task set` writes. The switch below
+// handles each one and this list names them, for the unknown-field error and
+// for completion (061 §1 L4): the field is an argument, so it completes.
+var taskSetFields = []string{"state", "skills", "checklist"}
+
 // newTaskSetCmd is `lode task set <field> <value…> <id>` (061 §2.1): write one
 // named field on a task. The field and the values are arguments, not part of
 // the verb, so this does not fit newTaskTransitionCmd.
@@ -960,7 +988,7 @@ everything between the field and the id is the value.
                lode task set checklist 0 true WL-5
                lode task set checklist "write tests" false WL-5`,
 		Args:              cobra.MinimumNArgs(2),
-		ValidArgsFunction: taskIDLast(2),
+		ValidArgsFunction: taskSetArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			field, values, ref := args[0], args[1:len(args)-1], args[len(args)-1]
 			switch field {
@@ -981,7 +1009,7 @@ everything between the field and the id is the value.
 					return fmt.Errorf("checklist checked value %q must be true or false", values[1])
 				}
 			default:
-				return fmt.Errorf("unknown field %q: settable fields are \"state\", \"skills\" and \"checklist\"", field)
+				return fmt.Errorf("unknown field %q: settable fields are %s", field, strings.Join(taskSetFields, ", "))
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {

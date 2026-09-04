@@ -25,6 +25,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // listenRetryFloor is the first backoff after a transport failure. It doubles
@@ -75,6 +76,7 @@ func newListenCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "watch this project")
 	cmd.Flags().StringVar(&kind, "kind", "", "only wake for this kind: feature, bug, chore, design, review, spike")
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false,
 		"restrict the watch to the project's focus concerns only, the way lode work next --strict-focus does")
 	cmd.Flags().DurationVar(&interval, "interval", 5*time.Minute, "how often to ask (e.g. 30s, 5m)")

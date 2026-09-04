@@ -26,6 +26,7 @@ func addScopeFlags(cmd *cobra.Command, f *scopeFlags, projectHelp string) {
 		projectHelp+" (default: the current repo's project — from current_project in config, else the git remote); pass --project= for all projects")
 	cmd.Flags().StringVar(&f.repo, "repo", "",
 		"name the project by one of its repos, as owner/name (alternative to --project)")
+	completeProjectFlag(cmd, "project")
 }
 
 // resolveScope returns the project scope a command should act on: an explicit
