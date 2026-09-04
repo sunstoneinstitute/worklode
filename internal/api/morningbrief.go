@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -255,4 +257,53 @@ func morningBriefItemText(ev store.Event) (text, href string) {
 		return ev.Type, "/reviews"
 	}
 	return ev.Type, ""
+}
+
+// reviewedThroughNow advances the actor's Morning Brief boundary to the
+// cutoff the page displayed (032 §9's explicit "Reviewed through now" —
+// the one way the boundary ever moves). Forward-only via the store's
+// GREATEST upsert; clamped to the event-log horizon so a forged form value
+// cannot mark unseen events reviewed.
+func (s *server) reviewedThroughNow(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !s.sameOriginForm(r) {
+		s.observeBriefReview(briefReviewInvalid)
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return
+	}
+	if !parseWebForm(w, r) {
+		s.observeBriefReview(briefReviewInvalid)
+		return
+	}
+
+	cutoff, err := strconv.ParseInt(r.PostFormValue("cutoff"), 10, 64)
+	if err != nil || cutoff <= 0 {
+		s.observeBriefReview(briefReviewInvalid)
+		webErr(w, http.StatusUnprocessableEntity, "cutoff must be a positive event id")
+		return
+	}
+
+	horizon, err := s.st.EventLogHorizonID(ctx)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	if cutoff > horizon {
+		s.observeBriefReview(briefReviewInvalid)
+		webErr(w, http.StatusUnprocessableEntity, "cutoff is beyond what has been recorded")
+		return
+	}
+
+	sub := subjectFrom(r)
+	advanced, err := s.st.AdvanceActorEventCursor(ctx, sub.ActorID, cutoff)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	if advanced {
+		s.observeBriefReview(briefReviewAdvanced)
+	} else {
+		s.observeBriefReview(briefReviewNoop)
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

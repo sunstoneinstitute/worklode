@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -870,6 +872,239 @@ func TestHomePageOpenModeHasNoBrief(t *testing.T) {
 	if strings.Contains(rr.Body.String(), "Morning Brief") {
 		t.Errorf("open mode renders a Morning Brief section:\n%s", rr.Body.String())
 	}
+}
+
+// TestReviewedThroughNow drives the write half of the Morning Brief: POST
+// /home/reviewed advances the actor's boundary to the cutoff Home's own form
+// displayed, and everything keyed off events (tiers 2-4) disappears from the
+// next render while tier-1 open state (an awaiting approval, an assigned
+// open task) persists across the advance, since that state comes from
+// ApprovalsAwaiting/OpenWorkOwnedBy, not from the event window.
+func TestReviewedThroughNow(t *testing.T) {
+	t.Parallel()
+	st, h, iss := newOIDCServer(t, api.Config{})
+	createProject(t, st, "proj1")
+	adminToken := seedActor(t, st, "alice", "human", "Alice", true)
+
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user", "science-leads"},
+	}
+	session := webLogin(t, h, "grace")
+
+	// Crew rows come after login: the actor row is minted by the callback.
+	seedEvent(t, st, "reviewed-crew", func(tx *sql.Tx, eventID int64) error {
+		return store.AddParticipant(tx, st.Now(), "proj1", "grace", "engineer", false, false, "", eventID)
+	})
+
+	// Tier-1 open state: an approval awaiting grace's group, and a task
+	// assigned to her. Neither is an event, so neither should move when the
+	// boundary advances. The approval's project comes from its PR's
+	// task_id, which UpsertPR only fills in when HeadRef names a task that
+	// actually exists (store.TaskIDFromRef) — so it needs a real task, not
+	// just a project-shaped string.
+	approvalTask := createTaskViaAPI(t, h, adminToken, map[string]any{
+		"project": "proj1", "title": "Awaiting review work", "priority": "medium", "kind": "feature",
+	})["id"].(string)
+	seedEvent(t, st, "reviewed-approval", func(tx *sql.Tx, _ int64) error {
+		if _, _, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: "acme/widgets", Number: 9, Title: "Awaiting PR", State: "open",
+			HeadRef: approvalTask + "-awaiting", HeadSHA: "shareviewed",
+			URL: "https://github.com/acme/widgets/pull/9", OpenedAt: st.Now(),
+		}, ""); err != nil {
+			return err
+		}
+		role := "science-leads"
+		return store.InsertAwaitingApproval(tx, st.Now(), "pr",
+			store.PREntityID("acme/widgets", 9), "shareviewed", &role, nil)
+	})
+	assignedTask := createTaskViaAPI(t, h, adminToken, map[string]any{
+		"project": "proj1", "title": "Assigned work", "priority": "medium", "kind": "feature",
+	})["id"].(string)
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+assignedTask+"/assign", adminToken,
+		map[string]any{"assignee": "grace"}); rr.Code != http.StatusOK {
+		t.Fatalf("assign %s to grace: status = %d, body %s", assignedTask, rr.Code, rr.Body.String())
+	}
+
+	ctx := context.Background()
+	record := func(extID, typ, payload string) int64 {
+		id, _, err := st.RecordEvent(ctx, "system", extID, typ, []byte(payload), nil)
+		if err != nil {
+			t.Fatalf("record event %s: %v", extID, err)
+		}
+		return id
+	}
+	record("reviewed-outcome", "task.done", `{"project":"proj1","task":"WL-90"}`)
+	record("reviewed-stopped", "task.stopped", `{"project":"proj1","task":"WL-91"}`)
+	record("reviewed-routine-1", "task.created", `{"project":"proj1","task":"WL-92"}`)
+	record("reviewed-routine-2", "task.created", `{"project":"proj1","task":"WL-93"}`)
+	cutoff := record("reviewed-routine-3", "task.created", `{"project":"proj1","task":"WL-94"}`)
+
+	// pollHomeGET also waits out the commit horizon for every seeded row
+	// above, not just the events: WL-597's race.
+	wantCutoff := fmt.Sprintf(`name="cutoff" value="%d"`, cutoff)
+	pollHomeGET(t, h, session, wantCutoff)
+
+	form := url.Values{"cutoff": {strconv.FormatInt(cutoff, 10)}}
+	rr := withSession(t, h, "POST", "/home/reviewed", session, form.Encode())
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("POST /home/reviewed status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != "/" {
+		t.Errorf("redirect Location = %q, want /", loc)
+	}
+
+	rr2 := withSession(t, h, "GET", "/", session, "")
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr2.Code, rr2.Body.String())
+	}
+	main := mainContent(t, rr2.Body.String())
+	for _, gone := range []string{"3 routine updates", "task.done: WL-90", "task.stopped: WL-91"} {
+		if strings.Contains(main, gone) {
+			t.Errorf("event-derived content %q still renders after review:\n%s", gone, main)
+		}
+	}
+	bodyContains(t, main, "1 approval awaiting you", "Assigned to you: "+assignedTask)
+
+	cursor, err := st.ActorEventCursor(ctx, "grace")
+	if err != nil {
+		t.Fatalf("actor event cursor: %v", err)
+	}
+	if cursor != cutoff {
+		t.Errorf("ActorEventCursor = %d, want %d", cursor, cutoff)
+	}
+}
+
+// TestReviewedThroughNowForwardOnly is the noop half: a reload of a stale
+// tab that still shows an older cutoff must not roll the boundary back, and
+// must not be treated as an error either — the redirect is the same 303.
+func TestReviewedThroughNowForwardOnly(t *testing.T) {
+	t.Parallel()
+	st, h, iss := newOIDCServer(t, api.Config{})
+	createProject(t, st, "proj1")
+
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user"},
+	}
+	session := webLogin(t, h, "grace")
+
+	// Crew rows come after login: the actor row is minted by the callback.
+	// Without membership the brief never renders, and the cutoff never
+	// appears on the page for pollHomeGET to wait on.
+	seedEvent(t, st, "forward-crew", func(tx *sql.Tx, eventID int64) error {
+		return store.AddParticipant(tx, st.Now(), "proj1", "grace", "engineer", false, false, "", eventID)
+	})
+
+	ctx := context.Background()
+	older, _, err := st.RecordEvent(ctx, "system", "forward-older", "task.created",
+		[]byte(`{"project":"proj1","task":"WL-1"}`), nil)
+	if err != nil {
+		t.Fatalf("record older event: %v", err)
+	}
+	newer, _, err := st.RecordEvent(ctx, "system", "forward-newer", "task.created",
+		[]byte(`{"project":"proj1","task":"WL-2"}`), nil)
+	if err != nil {
+		t.Fatalf("record newer event: %v", err)
+	}
+
+	// Wait for the horizon to reach the newer event (which implies it has
+	// also reached the older one) before advancing to it.
+	pollHomeGET(t, h, session, fmt.Sprintf(`name="cutoff" value="%d"`, newer))
+
+	rr := withSession(t, h, "POST", "/home/reviewed", session, "cutoff="+strconv.FormatInt(newer, 10))
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("advance to newer status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = withSession(t, h, "POST", "/home/reviewed", session, "cutoff="+strconv.FormatInt(older, 10))
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("stale POST of older cutoff status = %d, want 303 (a noop, not a fault); body %s",
+			rr.Code, rr.Body.String())
+	}
+
+	cursor, err := st.ActorEventCursor(ctx, "grace")
+	if err != nil {
+		t.Fatalf("actor event cursor: %v", err)
+	}
+	if cursor != newer {
+		t.Errorf("ActorEventCursor = %d, want %d: an older cutoff must never roll the boundary back", cursor, newer)
+	}
+}
+
+// TestReviewedThroughNowRefusals covers the three ways the mutation refuses
+// a request: no live session, a cutoff that does not parse as a positive
+// number, and a cutoff beyond the event-log horizon — the forged-value case
+// that matters most, since without it a browser could mark unseen events
+// reviewed.
+func TestReviewedThroughNowRefusals(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no session", func(t *testing.T) {
+		t.Parallel()
+		_, h, _ := newTestServer(t)
+		rr := doForm(t, h, "/home/reviewed", url.Values{"cutoff": {"1"}}, nil)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403; body %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("unparseable cutoff", func(t *testing.T) {
+		t.Parallel()
+		st, h, iss := newOIDCServer(t, api.Config{})
+		createProject(t, st, "proj1")
+		iss.TokenClaims = map[string]any{
+			"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+			"groups": []string{"user"},
+		}
+		session := webLogin(t, h, "grace")
+
+		for _, cutoff := range []string{"abc", "0"} {
+			rr := withSession(t, h, "POST", "/home/reviewed", session, "cutoff="+cutoff)
+			if rr.Code != http.StatusUnprocessableEntity {
+				t.Errorf("cutoff=%q status = %d, want 422; body %s", cutoff, rr.Code, rr.Body.String())
+			}
+		}
+
+		cursor, err := st.ActorEventCursor(context.Background(), "grace")
+		if err != nil {
+			t.Fatalf("actor event cursor: %v", err)
+		}
+		if cursor != 0 {
+			t.Errorf("ActorEventCursor = %d, want 0: a refused cutoff must not touch the cursor", cursor)
+		}
+	})
+
+	t.Run("beyond horizon", func(t *testing.T) {
+		t.Parallel()
+		st, h, iss := newOIDCServer(t, api.Config{})
+		createProject(t, st, "proj1")
+		iss.TokenClaims = map[string]any{
+			"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+			"groups": []string{"user"},
+		}
+		session := webLogin(t, h, "grace")
+
+		ctx := context.Background()
+		horizon, err := st.EventLogHorizonID(ctx)
+		if err != nil {
+			t.Fatalf("event log horizon: %v", err)
+		}
+
+		rr := withSession(t, h, "POST", "/home/reviewed", session,
+			"cutoff="+strconv.FormatInt(horizon+1_000_000, 10))
+		if rr.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("beyond-horizon cutoff status = %d, want 422; body %s", rr.Code, rr.Body.String())
+		}
+
+		cursor, err := st.ActorEventCursor(ctx, "grace")
+		if err != nil {
+			t.Fatalf("actor event cursor: %v", err)
+		}
+		if cursor != 0 {
+			t.Errorf("ActorEventCursor = %d, want 0: a forged cutoff beyond the horizon must not move it", cursor)
+		}
+	})
 }
 
 func TestWorkPageOrgBoard(t *testing.T) {
