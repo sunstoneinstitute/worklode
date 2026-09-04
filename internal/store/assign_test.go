@@ -296,6 +296,30 @@ func TestStartTaskAlreadyAssignedToCaller(t *testing.T) {
 	mustState(t, s, task.ID, "in_progress")
 }
 
+// TestAssignAndStartDecisionUnaffected pins the lease-free path a decision
+// still goes through: WL-638 shuts a decision out of the ready set and out
+// of Claim, but AssignTask/StartTask (`lode task assign`, `lode task start`)
+// are untouched by that guard and must keep working exactly as before.
+func TestAssignAndStartDecisionUnaffected(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	in.Kind = "decision"
+	task := createTask(t, s, taskTestNow, in)
+
+	if err := assignTask(t, s, taskTestNow, task.ID, "stig"); err != nil {
+		t.Fatalf("AssignTask on decision: %v", err)
+	}
+	assignee, err := startTask(t, s, taskTestNow, task.ID, "stig")
+	if err != nil {
+		t.Fatalf("StartTask on decision: %v", err)
+	}
+	if assignee != "stig" {
+		t.Fatalf("StartTask returned assignee %q, want stig", assignee)
+	}
+	mustState(t, s, task.ID, "in_progress")
+}
+
 func TestStartTaskAssignedToSomeoneElse(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)

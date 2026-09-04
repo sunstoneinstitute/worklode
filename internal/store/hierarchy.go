@@ -134,11 +134,23 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 // checkHierarchy validates a proposed "child child_of parent" edge against the
 // spec-004 invariants. project carries both endpoints' project_id, already
 // read by AddEdge. Any ordinary task may be a parent — 029 §2 left no kind to
-// declare, and the edge itself is what makes the parent a container.
+// declare, and the edge itself is what makes the parent a container — except
+// a decision, which never is (004 §6.3 as amended): a decision closes by its
+// recorded answer in one transaction, a parent closes by roll-up, and the two
+// cannot both hold. A decision as a child stays legal, it is a leaf like any
+// other.
 func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string) error {
 	if project[child] != project[parent] {
 		return fmt.Errorf("cross-project edge %s (%s) child_of %s (%s): %w",
 			child, project[child], parent, project[parent], ErrInvalidInput)
+	}
+
+	var parentKind string
+	if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, parent).Scan(&parentKind); err != nil {
+		return fmt.Errorf("parent kind of %s: %w", parent, err)
+	}
+	if parentKind == "decision" {
+		return fmt.Errorf("task %s is a decision and cannot take children: %w", parent, ErrInvalidInput)
 	}
 
 	existing, hasParent, err := parentOf(tx, child)
@@ -374,8 +386,10 @@ func (s *Store) TaskTree(ctx context.Context, f TaskTreeFilter) ([]model.TaskTre
 // splitting an oversized task, not for re-splitting a container — add further
 // children with AddEdge instead), when it holds an active lease (decomposing
 // work someone is holding is a coordination bug), when it sits deep enough
-// that its children would exceed maxHierarchyDepth, and from the delivery
-// states a task with children can never occupy.
+// that its children would exceed maxHierarchyDepth, when the parent is a
+// decision (004 §6.3 as amended — it closes by its recorded answer, not by
+// roll-up), and from the delivery states a task with children can never
+// occupy.
 func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, createdBy string, eventID int64) ([]model.Task, error) {
 	if len(titles) == 0 {
 		return nil, fmt.Errorf("decompose %s: at least one child title is required: %w",
@@ -407,6 +421,12 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 	if containerForbiddenStates[state] {
 		return nil, fmt.Errorf("task %s is in state %s and cannot take children: %w",
 			parentID, state, ErrBadTransition)
+	}
+	// A decision closes by its recorded answer in one transaction; a parent
+	// closes by roll-up, and the two cannot both hold (004 §6.3 as amended).
+	if kind == "decision" {
+		return nil, fmt.Errorf("task %s is a decision and cannot take children: %w",
+			parentID, ErrInvalidInput)
 	}
 	already, err := hasChildren(tx, parentID)
 	if err != nil {
