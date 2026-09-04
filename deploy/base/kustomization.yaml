@@ -144,3 +144,5 @@ configMapGenerator:
       - migrations/0065_doc_notes.down.sql
       - migrations/0066_decision_kind.up.sql
       - migrations/0066_decision_kind.down.sql
+      - migrations/0067_actor_event_cursor.up.sql
+      - migrations/0067_actor_event_cursor.down.sql
