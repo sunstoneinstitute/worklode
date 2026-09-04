@@ -81,3 +81,48 @@ func ValidateFlow(f model.ApprovalFlow) error {
 	}
 	return nil
 }
+
+// MatchFlow picks the flow that governs a project with these labels: every
+// pair in a flow's match must be present in labels. Among matches the most
+// specific (largest match set) wins; ties break on name. A flow with an
+// empty match never auto-matches — it is only ever applied by name. Nil
+// when nothing matches.
+func MatchFlow(flows []model.ApprovalFlow, labels map[string]string) *model.ApprovalFlow {
+	var best *model.ApprovalFlow
+	for i, f := range flows {
+		if len(f.Match) == 0 || !matchesLabels(f.Match, labels) {
+			continue
+		}
+		if best == nil || len(f.Match) > len(best.Match) ||
+			(len(f.Match) == len(best.Match) && f.Name < best.Name) {
+			best = &flows[i]
+		}
+	}
+	return best
+}
+
+// matchesLabels reports whether every pair in match is present in labels.
+func matchesLabels(match, labels map[string]string) bool {
+	for k, v := range match {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// RequirementsForEntity returns the lanes a flow demands of one entity:
+// requirements whose EntityKind matches and whose Target is empty or
+// equals name case-insensitively. Deterministic lane order.
+func RequirementsForEntity(f model.ApprovalFlow, entityKind, name string) []model.ApprovalRequirement {
+	var out []model.ApprovalRequirement
+	for _, r := range f.Requirements {
+		if r.EntityKind != entityKind {
+			continue
+		}
+		if r.Target == "" || strings.EqualFold(r.Target, name) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
