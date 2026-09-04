@@ -88,9 +88,10 @@ type taskTransition func(*cli.Client, context.Context, string) (model.Task, []by
 // worktree's task stamp when the transition ends the work on that task.
 func newTaskTransitionCmd(use, short string, clearBinding bool, call taskTransition) *cobra.Command {
 	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Use:               use,
+		Short:             short,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -133,9 +134,10 @@ type taskEdge func(*cli.Client, context.Context, string, string) ([]byte, error)
 func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobra.Command {
 	var other string
 	cmd := &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Use:               use,
+		Short:             short,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -158,9 +160,10 @@ func newTaskEdgeCmd(use, short, flag, flagHelp, msg string, call taskEdge) *cobr
 // task, and reports why there is nothing to drop when there is none.
 func newTaskUnEdgeCmd(use, short, msg string, find func(model.TaskDetail) (string, error), call taskEdge) *cobra.Command {
 	return &cobra.Command{
-		Use:   use,
-		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Use:               use,
+		Short:             short,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -452,7 +455,7 @@ func newTaskShowCmd() *cobra.Command {
 		Use:               "show <id>",
 		Short:             "Show a task's details: body, edges, blocked status, and lease holder",
 		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: taskIDs,
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cleanupPager := withPager(cmd, pager)
 			defer cleanupPager()
@@ -519,9 +522,10 @@ type taskShowUsageResult struct {
 // rule L6). The paired write is `lode task set skills <name…> <id>`.
 func newTaskSkillsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "skills <id>",
-		Short: "Show the task's pinned skills",
-		Args:  cobra.ExactArgs(1),
+		Use:               "skills <id>",
+		Short:             "Show the task's pinned skills",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -550,9 +554,10 @@ func newTaskEditCmd() *cobra.Command {
 	var needsDecomposition, humanOnly, noUpload bool
 	var secretNames, artifacts []string
 	cmd := &cobra.Command{
-		Use:   "edit <id>",
-		Short: "Edit a task's title, body, concern, priority, needs-decomposition or human-only flag, or declare an artifact it is verified by",
-		Args:  cobra.ExactArgs(1),
+		Use:               "edit <id>",
+		Short:             "Edit a task's title, body, concern, priority, needs-decomposition or human-only flag, or declare an artifact it is verified by",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var in model.EditTaskInput
 			if cmd.Flags().Changed("title") {
@@ -712,9 +717,10 @@ func newTaskClaimCmd() *cobra.Command {
 	var kind string
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "claim [id]",
-		Short: "Lease a task to the current worktree and move it to in_progress",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "claim [id]",
+		Short:             "Lease a task to the current worktree and move it to in_progress",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -816,9 +822,10 @@ func newTaskClaimCmd() *cobra.Command {
 func newTaskRenewCmd() *cobra.Command {
 	var ttl time.Duration
 	cmd := &cobra.Command{
-		Use:   "renew <id>",
-		Short: "Extend the caller's lease on a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "renew <id>",
+		Short:             "Extend the caller's lease on a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -846,9 +853,10 @@ func newTaskRenewCmd() *cobra.Command {
 
 func newTaskReleaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "release <id>",
-		Short: "Release the caller's lease on a task, returning it to ready",
-		Args:  cobra.ExactArgs(1),
+		Use:               "release <id>",
+		Short:             "Release the caller's lease on a task, returning it to ready",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -877,9 +885,10 @@ func newTaskReleaseCmd() *cobra.Command {
 func newTaskAssignCmd() *cobra.Command {
 	var to string
 	cmd := &cobra.Command{
-		Use:   "assign <id> [--to <actor>]",
-		Short: "Assign a task to an actor (default: yourself)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "assign <id> [--to <actor>]",
+		Short:             "Assign a task to an actor (default: yourself)",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -950,7 +959,8 @@ everything between the field and the id is the value.
   checklist  an item (ordinal, canonical, or title) and true/false:
                lode task set checklist 0 true WL-5
                lode task set checklist "write tests" false WL-5`,
-		Args: cobra.MinimumNArgs(2),
+		Args:              cobra.MinimumNArgs(2),
+		ValidArgsFunction: taskIDLast(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			field, values, ref := args[0], args[1:len(args)-1], args[len(args)-1]
 			switch field {
@@ -1050,7 +1060,8 @@ func newTaskDeleteCmd() *cobra.Command {
 			"should not have existed at all (044 §1). The row is tombstoned, not\n" +
 			"removed: its events stay in the log, and `lode task undelete` restores\n" +
 			"it. A prod instance refuses a delete carrying no --justification.",
-		Args: cobra.ExactArgs(1),
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1108,9 +1119,10 @@ func newTaskBlockCmd() *cobra.Command {
 func newTaskBlockersCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "blockers [id]",
-		Short: "Show what transitively blocks a task, or every blocked task in scope, as a tree",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "blockers [id]",
+		Short:             "Show what transitively blocks a task, or every blocked task in scope, as a tree",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1186,9 +1198,10 @@ func newTaskFrontierCmd() *cobra.Command {
 
 func newTaskBriefCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "brief <id>",
-		Short: "Fetch a task's brief: body, branch, open blockers, and active lease",
-		Args:  cobra.ExactArgs(1),
+		Use:               "brief <id>",
+		Short:             "Fetch a task's brief: body, branch, open blockers, and active lease",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1227,7 +1240,8 @@ func newTaskCostCmd() *cobra.Command {
 			"that held a lease on the task. A container task reports its own\n" +
 			"sessions unless --children is given, which folds in its child_of\n" +
 			"descendants' sessions too.",
-		Args: cobra.ExactArgs(1),
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1335,9 +1349,10 @@ func newTaskUnduplicateCmd() *cobra.Command {
 func newTaskTreeCmd() *cobra.Command {
 	var scope scopeFlags
 	cmd := &cobra.Command{
-		Use:   "tree [id]",
-		Short: "Show tasks with children, and their children, with per-parent progress",
-		Args:  cobra.MaximumNArgs(1),
+		Use:               "tree [id]",
+		Short:             "Show tasks with children, and their children, with per-parent progress",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1375,9 +1390,10 @@ func newTaskTreeCmd() *cobra.Command {
 func newTaskDecomposeCmd() *cobra.Command {
 	var into []string
 	cmd := &cobra.Command{
-		Use:   "decompose <id>",
-		Short: "Split an oversized task into children, in place",
-		Args:  cobra.ExactArgs(1),
+		Use:               "decompose <id>",
+		Short:             "Split an oversized task into children, in place",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -1424,7 +1440,8 @@ func newTaskAttachCmd() *cobra.Command {
 			"reference falls back to the filename, which is not alt text (spec 021 Q021.1).\n" +
 			"It applies to one embedded image at a time -- attach images individually when\n" +
 			"supplying --alt for more than one.",
-		Args: cobra.MinimumNArgs(2),
+		Args:              cobra.MinimumNArgs(2),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			c, cfg, err := newAPIClientWithConfig()
@@ -1538,9 +1555,10 @@ func embedMarkup(alt string, blob model.BlobResponse) string {
 // hash gets a warning rather than a silent no-op.
 func newTaskDetachCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "detach <task-id> <hash>",
-		Short: "Remove an attached blob from a task",
-		Args:  cobra.ExactArgs(2),
+		Use:               "detach <task-id> <hash>",
+		Short:             "Remove an attached blob from a task",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {

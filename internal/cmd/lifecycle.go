@@ -221,7 +221,8 @@ func newNextCmd() *cobra.Command {
 			"and its task branch, binds the lease to that worktree, and prints " +
 			"the task's brief. With an id, claims that task; without one, claims the top-ranked " +
 			"ready task (like `lode task claim --next`).",
-		Args: cobra.MaximumNArgs(1),
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var id string
 			if len(args) > 0 {

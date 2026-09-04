@@ -69,9 +69,6 @@ func completionDescription(s string) string {
 // cobra.ShellCompDirectiveError and never cobra.CompErrorln, both of which
 // print into the prompt the user is typing.
 func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-	if len(args) != 0 {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
 	ctx, cancel, c, scope, ok := completionScope(cmd)
 	if !ok {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -98,4 +95,35 @@ func taskIDs(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Comp
 		ids = append(ids, cobra.Completion(task.ID+"\t"+completionDescription(task.Title)))
 	}
 	return ids, cobra.ShellCompDirectiveNoFileComp
+}
+
+// taskIDAt completes a task id at argument position n (0-based). Which
+// position holds the id is a property of the command being wired, not of the
+// lookup: `lode task attach <task-id> <file>...` takes it first,
+// `lode inbox link <repo> <number> <task-id>` third. Any other position falls
+// through to the shell's own default, so wiring an id argument never takes
+// away the filename completion the arguments after it already had.
+func taskIDAt(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		if len(args) != n {
+			return nil, cobra.ShellCompDirectiveDefault
+		}
+		return taskIDs(cmd, args, toComplete)
+	}
+}
+
+// taskIDLast completes the trailing task id of a command whose id sits after
+// a variable-length value list — `lode task set <field> <value…> <id>`, where
+// it lands at position 2 for `set state`, 3 for `set checklist`, and anywhere
+// from 2 on for `set skills`. n is the earliest position it can occupy and
+// every position from there on offers it, so n is set one past the last
+// position that certainly holds a value: offering an id in a value's place
+// misleads, offering one late is only noise.
+func taskIDLast(n int) func(*cobra.Command, []string, string) ([]cobra.Completion, cobra.ShellCompDirective) {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
+		if len(args) < n {
+			return nil, cobra.ShellCompDirectiveDefault
+		}
+		return taskIDs(cmd, args, toComplete)
+	}
 }

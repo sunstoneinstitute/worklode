@@ -180,3 +180,45 @@ func TestTaskIDCompletionIsSilentOnFailure(t *testing.T) {
 		})
 	}
 }
+
+// TestTaskIDCompletionFiresAtTheRightPosition is 061 §3 C1 for the commands
+// whose task id is not the first argument. Wiring a completion function that
+// only ever fires at position 0 would leave `lode task set state merged WL-…`
+// silently uncompletable while still looking wired, so the position is a
+// property of the wiring (taskIDAt/taskIDLast) and is checked here per shape:
+// ref-first, ref-mid, and the trailing ref of `task set`.
+func TestTaskIDCompletionFiresAtTheRightPosition(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "attach, ref first", args: []string{"task", "attach", "WL-"}, want: true},
+		{name: "attach, file argument is not a ref", args: []string{"task", "attach", "WL-1", "WL-"}},
+		{name: "detach, ref first", args: []string{"task", "detach", "WL-"}, want: true},
+		{name: "assign, ref first", args: []string{"task", "assign", "WL-"}, want: true},
+		{name: "inbox link, ref third", args: []string{"inbox", "link", "acme/repo", "7", "WL-"}, want: true},
+		{name: "inbox link, repo argument is not a ref", args: []string{"inbox", "link", "WL-"}},
+		{name: "set state, ref last", args: []string{"task", "set", "state", "merged", "WL-"}, want: true},
+		{name: "set checklist, ref last", args: []string{"task", "set", "checklist", "0", "true", "WL-"}, want: true},
+		{name: "set, value argument is not a ref", args: []string{"task", "set", "state", "WL-"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			setupCompletion(t, "proj", func(w http.ResponseWriter, r *http.Request) {
+				writeTestJSON(t, w, tasksResponse("WL-1"))
+			})
+			out, err := runLode(t, append([]string{"__complete"}, tc.args...)...)
+			if err != nil {
+				t.Fatalf("__complete %v: %v\noutput: %s", tc.args, err, out)
+			}
+			got, _, _ := strings.Cut(out, ":")
+			if tc.want && got != "WL-1\tt WL-1\n" {
+				t.Fatalf("candidates = %q, want the project's task ids", got)
+			}
+			if !tc.want && got != "" {
+				t.Fatalf("candidates = %q, want none at this position", got)
+			}
+		})
+	}
+}
