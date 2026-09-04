@@ -16,8 +16,7 @@ picks the targets, calls one of them, and reports the result.
 ## Naming
 
 Every command name follows one of nine rules (`WL-SPEC-61` §1 has the
-reasoning). L1–L3, L5, L7–L9 are enforced by `internal/cmd/namerule_test.go`
-(arriving in plan part 4); L4 ("verbs are imperative verbs") and L6 ("named
+reasoning). L1–L3, L5, L7–L9 are enforced by `internal/cmd/namerule_test.go`; L4 ("verbs are imperative verbs") and L6 ("named
 views are nouns, never verbs") are enforced by review — a test cannot tell an
 adjective from a verb or a view from an action.
 
