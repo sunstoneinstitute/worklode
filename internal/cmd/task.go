@@ -449,35 +449,10 @@ func resolveStatusFilter(statuses []string) []string {
 func newTaskShowCmd() *cobra.Command {
 	var pager, usage bool
 	cmd := &cobra.Command{
-		Use:   "show <id>",
-		Short: "Show a task's details: body, edges, blocked status, and lease holder",
-		Args:  cobra.ExactArgs(1),
-		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]cobra.Completion, cobra.ShellCompDirective) {
-			if len(args) != 0 {
-				return nil, cobra.ShellCompDirectiveNoFileComp
-			}
-			c, cfg, err := newAPIClientWithConfig()
-			if err != nil {
-				cobra.CompErrorln(err.Error())
-				return nil, cobra.ShellCompDirectiveError
-			}
-			scope := currentScope(cmd.Context(), c, cfg)
-			if scope.Project == "" {
-				return nil, cobra.ShellCompDirectiveNoFileComp
-			}
-			resp, _, err := c.ListTasks(cmd.Context(), cli.TaskListFilter{Project: scope.Project})
-			if err != nil {
-				cobra.CompErrorln(err.Error())
-				return nil, cobra.ShellCompDirectiveError
-			}
-			ids := make([]cobra.Completion, 0, len(resp.Tasks))
-			for _, task := range resp.Tasks {
-				if strings.HasPrefix(task.ID, toComplete) {
-					ids = append(ids, task.ID)
-				}
-			}
-			return ids, cobra.ShellCompDirectiveNoFileComp
-		},
+		Use:               "show <id>",
+		Short:             "Show a task's details: body, edges, blocked status, and lease holder",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cleanupPager := withPager(cmd, pager)
 			defer cleanupPager()
