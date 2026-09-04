@@ -1,8 +1,10 @@
-package store
+package model_test
 
 import (
 	"slices"
 	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestCompareTaskIDs(t *testing.T) {
@@ -25,9 +27,9 @@ func TestCompareTaskIDs(t *testing.T) {
 		{"DEMO-1", "WL-1", -1},
 	}
 	for _, c := range cases {
-		got := CompareTaskIDs(c.a, c.b)
+		got := model.CompareTaskIDs(c.a, c.b)
 		if sign(got) != c.want {
-			t.Errorf("CompareTaskIDs(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
+			t.Errorf("model.CompareTaskIDs(%q, %q) = %d, want sign %d", c.a, c.b, got, c.want)
 		}
 	}
 }
@@ -35,7 +37,7 @@ func TestCompareTaskIDs(t *testing.T) {
 func TestSortTaskIDs(t *testing.T) {
 	t.Parallel()
 	ids := []string{"WL-10", "SW-2", "WL-9", "SW-10", "WL-1", "SW-1"}
-	SortTaskIDs(ids)
+	model.SortTaskIDs(ids)
 	want := []string{"SW-1", "SW-2", "SW-10", "WL-1", "WL-9", "WL-10"}
 	if !slices.Equal(ids, want) {
 		t.Errorf("SortTaskIDs = %v, want %v", ids, want)
@@ -45,21 +47,21 @@ func TestSortTaskIDs(t *testing.T) {
 func TestCompareTaskIDsMalformed(t *testing.T) {
 	t.Parallel()
 	// Well-formed ids sort before malformed ones.
-	if CompareTaskIDs("WL-1", "bogus") >= 0 {
+	if model.CompareTaskIDs("WL-1", "bogus") >= 0 {
 		t.Errorf("well-formed WL-1 should sort before malformed 'bogus'")
 	}
-	if CompareTaskIDs("bogus", "WL-1") <= 0 {
+	if model.CompareTaskIDs("bogus", "WL-1") <= 0 {
 		t.Errorf("malformed 'bogus' should sort after well-formed WL-1")
 	}
 	// A non-numeric suffix is malformed.
-	if CompareTaskIDs("WL-x", "WL-1") <= 0 {
+	if model.CompareTaskIDs("WL-x", "WL-1") <= 0 {
 		t.Errorf("WL-x (non-numeric suffix) is malformed, sorts after WL-1")
 	}
 	// Two malformed ids compare lexically without panicking.
-	if CompareTaskIDs("abc", "abd") >= 0 {
+	if model.CompareTaskIDs("abc", "abd") >= 0 {
 		t.Errorf("malformed ids compared lexically: abc < abd")
 	}
-	if CompareTaskIDs("dup", "dup") != 0 {
+	if model.CompareTaskIDs("dup", "dup") != 0 {
 		t.Errorf("identical malformed ids compare 0")
 	}
 }
