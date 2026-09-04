@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -735,6 +737,138 @@ func TestHomePageEmptyState(t *testing.T) {
 	bodyContains(t, main, "You are not on any project yet.", `href="/projects"`, "Browse all projects")
 	if strings.Contains(main, "homecard") {
 		t.Errorf("empty state renders a project card:\n%s", main)
+	}
+}
+
+// pollHomeGET retries GET / until the response body contains want or a 10s
+// deadline passes. Needed because the events briefEventsSince reads through
+// are gated by a commit horizon (events_test.go's eventHorizon) that a
+// concurrent transaction elsewhere on the same Postgres instance can hold
+// back — the same reason internal/api's TestBriefEventsSince polls.
+func pollHomeGET(t *testing.T, h http.Handler, session, want string) *httptest.ResponseRecorder {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		rr := withSession(t, h, "GET", "/", session, "")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+		}
+		if strings.Contains(rr.Body.String(), want) {
+			return rr
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("GET / never showed %q after polling; last body:\n%s", want, rr.Body.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestHomePageMorningBrief drives Home as a signed-in member and checks the
+// Morning Brief section it assembles (spec 032 §9): a tier-2 outcome, a
+// tier-3 stopped event, and three tier-4 routine events collapsed to a
+// count with no per-event text, plus the review form's hidden cutoff
+// pinned to the highest seeded event id.
+func TestHomePageMorningBrief(t *testing.T) {
+	t.Parallel()
+	st, h, iss := newOIDCServer(t, api.Config{})
+	createProject(t, st, "proj1")
+
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user"},
+	}
+	session := webLogin(t, h, "grace")
+
+	// Crew rows come after login: the actor row is minted by the callback.
+	seedEvent(t, st, "brief-crew", func(tx *sql.Tx, eventID int64) error {
+		return store.AddParticipant(tx, st.Now(), "proj1", "grace", "engineer", false, false, "", eventID)
+	})
+
+	ctx := context.Background()
+	record := func(extID, typ, payload string) int64 {
+		id, _, err := st.RecordEvent(ctx, "system", extID, typ, []byte(payload), nil)
+		if err != nil {
+			t.Fatalf("record event %s: %v", extID, err)
+		}
+		return id
+	}
+	record("brief-outcome", "task.done", `{"project":"proj1","task":"WL-1"}`)
+	record("brief-stopped", "task.stopped", `{"project":"proj1","task":"WL-2"}`)
+	record("brief-routine-1", "task.created", `{"project":"proj1","task":"WL-3"}`)
+	record("brief-routine-2", "task.created", `{"project":"proj1","task":"WL-4"}`)
+	cutoff := record("brief-routine-3", "task.created", `{"project":"proj1","task":"WL-5"}`)
+
+	// The cutoff hidden field is only present once every seeded event is
+	// past the commit horizon, so polling for it also waits out the other
+	// assertions below.
+	wantCutoff := fmt.Sprintf(`name="cutoff" value="%d"`, cutoff)
+	rr := pollHomeGET(t, h, session, wantCutoff)
+	main := mainContent(t, rr.Body.String())
+	bodyContains(t, main, "Morning Brief", "3 routine updates", wantCutoff)
+	assertOrder(t, main, "task.done: WL-1", "task.stopped: WL-2")
+	if strings.Contains(main, "task.created: WL-3") {
+		t.Errorf("routine item text rendered, want a collapsed count only:\n%s", main)
+	}
+}
+
+// TestHomePageDoesNotAdvanceBoundary is the property that matters most:
+// opening Home renders the brief but must never advance the actor's review
+// boundary — only POST /home/reviewed does that. Two GETs render identical
+// brief content, and the stored cursor stays at 0 (never reviewed).
+func TestHomePageDoesNotAdvanceBoundary(t *testing.T) {
+	t.Parallel()
+	st, h, iss := newOIDCServer(t, api.Config{})
+	createProject(t, st, "proj1")
+
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user"},
+	}
+	session := webLogin(t, h, "grace")
+
+	seedEvent(t, st, "boundary-crew", func(tx *sql.Tx, eventID int64) error {
+		return store.AddParticipant(tx, st.Now(), "proj1", "grace", "engineer", false, false, "", eventID)
+	})
+
+	ctx := context.Background()
+	if _, _, err := st.RecordEvent(ctx, "system", "boundary-event", "task.done",
+		[]byte(`{"project":"proj1","task":"WL-1"}`), nil); err != nil {
+		t.Fatalf("record event: %v", err)
+	}
+
+	rr1 := pollHomeGET(t, h, session, "task.done: WL-1")
+	rr2 := withSession(t, h, "GET", "/", session, "")
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr2.Code, rr2.Body.String())
+	}
+	main1 := mainContent(t, rr1.Body.String())
+	main2 := mainContent(t, rr2.Body.String())
+	if main1 != main2 {
+		t.Errorf("brief content changed between two GETs:\n--- first ---\n%s\n--- second ---\n%s", main1, main2)
+	}
+
+	cursor, err := st.ActorEventCursor(ctx, "grace")
+	if err != nil {
+		t.Fatalf("actor event cursor: %v", err)
+	}
+	if cursor != 0 {
+		t.Errorf("ActorEventCursor = %d, want 0: opening Home must not advance the boundary", cursor)
+	}
+}
+
+// TestHomePageOpenModeHasNoBrief pins open mode's degradation: no actor
+// means no boundary to keep, so the section never renders at all.
+func TestHomePageOpenModeHasNoBrief(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj1")
+
+	rr := doReq(t, h, "GET", "/", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), "Morning Brief") {
+		t.Errorf("open mode renders a Morning Brief section:\n%s", rr.Body.String())
 	}
 }
 

@@ -261,10 +261,87 @@ func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.observeHomeRender(mode)
 
+	// Actor mode only: the Morning Brief (032 §9). Open mode has no actor to
+	// keep a boundary for, so Brief stays nil, no cursor read, no metric.
+	// This handler performs no write of any kind: opening Home does not
+	// advance the actor's review boundary — only POST /home/reviewed does.
+	var brief *ui.MorningBriefView
+	if !in.OpenMode {
+		boundary, err := s.st.ActorEventCursor(ctx, sub.ActorID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		events, truncated, err := s.briefEventsSince(ctx, boundary)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+
+		projectIDs := make([]string, len(projects))
+		keyToProject := make(map[string]string, len(projects))
+		projectsByID := make(map[string]store.Project, len(projects))
+		for i, p := range projects {
+			projectIDs[i] = p.ID
+			keyToProject[p.Key] = p.ID
+			projectsByID[p.ID] = p
+		}
+		repos, err := s.st.ListReposForProjects(ctx, projectIDs)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		repoToProject := make(map[string]string, len(repos))
+		for pid, rs := range repos {
+			for _, rm := range rs {
+				repoToProject[rm.Repo] = pid
+			}
+		}
+
+		assigned := map[string][]store.OwnedWork{}
+		for id := range in.Membership { // bounded by the actor's project count
+			work, err := s.st.OpenWorkOwnedBy(ctx, id, sub.ActorID)
+			if err != nil {
+				s.webStoreErr(w, err)
+				return
+			}
+			if len(work) > 0 {
+				assigned[id] = work
+			}
+		}
+
+		order := make([]string, len(cards))
+		for i, c := range cards {
+			order[i] = c.ProjectID
+		}
+
+		brief = assembleMorningBrief(morningBriefInputs{
+			Events:        events,
+			Truncated:     truncated,
+			Boundary:      boundary,
+			Order:         order,
+			Projects:      projectsByID,
+			Awaiting:      in.Awaiting,
+			Assigned:      assigned,
+			KeyToProject:  keyToProject,
+			RepoToProject: repoToProject,
+		})
+
+		outcome := morningBriefRenderRendered
+		switch {
+		case brief == nil || len(brief.Groups) == 0:
+			outcome = morningBriefRenderEmpty
+		case truncated:
+			outcome = morningBriefRenderTruncated
+		}
+		s.observeMorningBriefRender(outcome)
+	}
+
 	s.renderWeb(w, r, http.StatusOK, "home page", ui.Home(ui.HomeView{
 		Page:  ui.PageProps{Title: "worklode: home"},
 		Mode:  mode,
 		Cards: cards,
+		Brief: brief,
 	}))
 }
 
