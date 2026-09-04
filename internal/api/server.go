@@ -560,6 +560,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// routes Home, Reviews and Deliveries kept after leaving that list record
 	// theirs the same way.
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
+	r.web("POST /home/reviewed", s.navWrap("brief_review", s.requireSession(s.reviewedThroughNow)))
 	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
 		"Low-friction idea capture, looser than and promotable into Intake, arrives with spec 032 §5.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",

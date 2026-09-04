@@ -77,7 +77,12 @@ func open(why string) routeGuard { return routeGuard{perm: permPublic, public: w
 // public ingress and has no authentication middleware at all.
 var routeGuards = map[string]routeGuard{
 	// --- web UI (spec 032) ---------------------------------------------------
-	"GET /{$}":                            guarded(permWebRead),
+	"GET /{$}": guarded(permWebRead),
+	// The Morning Brief's one write (032 §9): advancing the actor's review
+	// boundary. requireSession, applied at registration like the decide
+	// route below, because a forged cutoff needs a live session's identity
+	// to attribute the advance to.
+	"POST /home/reviewed":                 guarded(permWebWrite),
 	"GET /ideas":                          guarded(permWebRead),
 	"GET /intake":                         guarded(permWebRead),
 	"GET /projects":                       guarded(permWebRead),
