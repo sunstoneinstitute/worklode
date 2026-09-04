@@ -8,9 +8,10 @@ import (
 
 func newTimelineCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "timeline <task-id>",
-		Short: "Show a task's full history: state changes, PRs, CI, reviews, deployments, runtime events",
-		Args:  cobra.ExactArgs(1),
+		Use:               "timeline <task-id>",
+		Short:             "Show a task's full history: state changes, PRs, CI, reviews, deployments, runtime events",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {

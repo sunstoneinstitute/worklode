@@ -152,9 +152,10 @@ func newInboxDismissCmd() *cobra.Command {
 
 func newInboxLinkCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "link <repo> <number> <task-id>",
-		Short: "Attach an inbox issue to a task that already exists",
-		Args:  cobra.ExactArgs(3),
+		Use:               "link <repo> <number> <task-id>",
+		Short:             "Attach an inbox issue to a task that already exists",
+		Args:              cobra.ExactArgs(3),
+		ValidArgsFunction: taskIDAt(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			number, err := parseIssueNumber(args[1])
 			if err != nil {
