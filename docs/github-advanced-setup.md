@@ -3,6 +3,7 @@
 How a repo worked by lode workers is configured so a PR lands the moment its
 checks pass, with no human merging or rebasing it. Worklode itself is the
 worked example; the horndb section at the end says what differs there.
+`/lode:setup-merge-queue` in the lode plugin walks these steps for any repo.
 
 ## Why
 

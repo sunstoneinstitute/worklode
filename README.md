@@ -737,6 +737,9 @@ picking up work:
   release the lease.
 - `/lode:status` — read-only report of the current task, lease, and
   heartbeat state.
+- `/lode:setup-merge-queue [owner/repo]` — one-time repo setup (auto-merge,
+  `merge_group` checks, merge queue) so `/lode:done` can hand a PR to the
+  queue; see `docs/github-advanced-setup.md`.
 
 These are thin wrappers over the underlying `lode` subcommands: `lode work
 next`, `lode work resume`, `lode work submit`, `lode work block`,
