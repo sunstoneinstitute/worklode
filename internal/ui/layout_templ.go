@@ -1007,10 +1007,14 @@ func modePillIcon() templ.Component {
 	})
 }
 
-// localNav renders the eight project-local destinations in the exact order
-// docs/specs/032-project-cockpit.md §2 requires (Overview, Crew, Work,
-// Deliverables, Reviews, Decisions, Documents, Activity), marking the item
-// matching active as aria-current="page".
+// localNav renders the project-local destinations in docs/specs/032-project-cockpit.md
+// §2's order (Overview, Crew, Work, Deliverables, Reviews, Decisions,
+// Documents, Activity), marking the item matching active as
+// aria-current="page".
+//
+// Milestones sits between Crew and Work, ahead of §2's list: a milestone
+// contains both work and deliverables (spec 029 §2), so it reads before both
+// lists. 032 §2 is owed the same amendment Deleted is (docs/follow-ups.md).
 //
 // Deleted follows them, outside that order deliberately: it is spec 044's
 // tombstone review rather than one of 032 §2's destinations, and it is last
@@ -1042,6 +1046,10 @@ func localNav(projectID, active string) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/crew", "Crew", "crew", active).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/milestones", "Milestones", "milestones", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

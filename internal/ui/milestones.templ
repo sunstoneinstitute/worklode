@@ -1,0 +1,87 @@
+package ui
+
+// milestones.templ renders a project's Milestones destination (GET
+// /projects/{id}/milestones): every milestone in the project as a section,
+// in position order, with the tasks and deliverables its progress was
+// derived from (spec 029 §2, spec 032 §10).
+//
+// One page carries list and detail. A research project holds a handful of
+// milestones, so a per-milestone page would be chrome without a reader.
+//
+// Progress is plain counts. Spec 029 §2 derives it as a query over the
+// children — two small integers per kind — and a percentage or a bar would
+// claim a precision those integers do not carry.
+
+templ Milestones(v MilestonesView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "milestones") {
+			<div class="canvas">
+				if len(v.Milestones) == 0 {
+					<section class="card">
+						<div class="hd">
+							<h3>Milestones</h3>
+						</div>
+						<div class="bd">
+							<p class="muted">
+								No milestones yet. A milestone is an ordered container in this
+								project (spec 029 §2), holding the work and the deliverables
+								that belong to one step of it.
+							</p>
+						</div>
+					</section>
+				} else {
+					for _, m := range v.Milestones {
+						@milestoneSection(m)
+					}
+				}
+			</div>
+		}
+	}
+}
+
+// milestoneSection renders one milestone: its id and title, the derived
+// progress line, and the children the progress was counted from. A milestone
+// with nothing attached says so rather than rendering two empty containers.
+templ milestoneSection(m MilestoneSection) {
+	<section class="card">
+		<div class="hd">
+			<h3><span class="mono">{ m.ID }</span> &mdash; { m.Title }</h3>
+		</div>
+		<div class="bd">
+			<p class="muted small">{ m.progress() }</p>
+			if !m.hasChildren() {
+				<p class="muted">Nothing is attached to this milestone yet.</p>
+			} else {
+				if len(m.Tasks) > 0 {
+					@tableWrap(m.Title + " tasks") {
+						<table>
+							<tr><th>Task</th><th>Title</th><th>State</th><th>Assignee</th></tr>
+							for _, t := range m.Tasks {
+								<tr>
+									<td><a href={ "/tasks/" + t.ID }>{ t.ID }</a></td>
+									<td>{ t.Title }</td>
+									<td><span class={ "chip " + stateChip(t.State) }>{ stateLabel(t.State) }</span></td>
+									<td>
+										if t.Assignee != "" {
+											{ t.Assignee }
+										} else {
+											<span class="muted">unassigned</span>
+										}
+									</td>
+								</tr>
+							}
+						</table>
+					}
+				}
+				if len(m.Deliverables) > 0 {
+					<div class="dod">
+						for _, d := range m.Deliverables {
+							@deliverableRow(d)
+						}
+					</div>
+				}
+			}
+		</div>
+	</section>
+}

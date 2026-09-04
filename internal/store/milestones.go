@@ -269,3 +269,74 @@ func (s *Store) milestoneTasks(ctx context.Context, id string) ([]model.Task, er
 	}
 	return out, nil
 }
+
+// ListMilestoneChildren returns every attached task and deliverable in a
+// project, grouped by milestone id, in the same order and with the same
+// derived fields their own listings carry. Work attached to no milestone is
+// grouped nowhere, and an unknown project yields empty maps.
+//
+// This is the Milestones page's reader: one page shows every milestone with
+// its children, and calling GetMilestone once per milestone would be a query
+// per section. The shape matches ListMilestones' own — two bulk queries, one
+// per kind, grouped in Go.
+func (s *Store) ListMilestoneChildren(ctx context.Context, projectID string) (map[string][]model.Task, map[string][]model.Deliverable, error) {
+	what := "milestone tasks for " + projectID
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+taskColumns+`, milestone_id FROM tasks
+		  WHERE project_id = $1 AND milestone_id IS NOT NULL AND deleted_at IS NULL`+
+			taskListOrder("tasks"), projectID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", what, err)
+	}
+	tasks, err := groupRows(rows, what, func(r rowScanner) (string, model.Task, error) {
+		var milestoneID string
+		t, err := scanTask(appendScan{r, []any{&milestoneID}})
+		if err != nil {
+			return "", model.Task{}, err
+		}
+		return milestoneID, *t, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Closedness is derived, not stored, and taskClosed binds aliases that
+	// would collide with the column list above — the same second query
+	// ListTasks and milestoneTasks each run.
+	var ids []string
+	for _, list := range tasks {
+		for _, t := range list {
+			ids = append(ids, t.ID)
+		}
+	}
+	closed, err := s.ClosedTaskIDs(ctx, ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", what, err)
+	}
+	for _, list := range tasks {
+		for i := range list {
+			list[i].Closed = closed[list[i].ID]
+		}
+	}
+
+	what = "milestone deliverables for " + projectID
+	rows, err = s.db.QueryContext(ctx,
+		`SELECT `+deliverableSelect+`, milestone_id `+deliverableFrom+`
+		  WHERE project_id = $1 AND milestone_id IS NOT NULL
+		  ORDER BY created_at, id`, projectID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", what, err)
+	}
+	deliverables, err := groupRows(rows, what, func(r rowScanner) (string, model.Deliverable, error) {
+		var milestoneID string
+		d, err := scanDeliverable(appendScan{r, []any{&milestoneID}})
+		if err != nil {
+			return "", model.Deliverable{}, err
+		}
+		return milestoneID, *d, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	return tasks, deliverables, nil
+}

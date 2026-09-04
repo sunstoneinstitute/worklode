@@ -287,10 +287,14 @@ templ modePillIcon() {
 	<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12h4l2 6 4-14 2 8h6"></path></svg>
 }
 
-// localNav renders the eight project-local destinations in the exact order
-// docs/specs/032-project-cockpit.md §2 requires (Overview, Crew, Work,
-// Deliverables, Reviews, Decisions, Documents, Activity), marking the item
-// matching active as aria-current="page".
+// localNav renders the project-local destinations in docs/specs/032-project-cockpit.md
+// §2's order (Overview, Crew, Work, Deliverables, Reviews, Decisions,
+// Documents, Activity), marking the item matching active as
+// aria-current="page".
+//
+// Milestones sits between Crew and Work, ahead of §2's list: a milestone
+// contains both work and deliverables (spec 029 §2), so it reads before both
+// lists. 032 §2 is owed the same amendment Deleted is (docs/follow-ups.md).
 //
 // Deleted follows them, outside that order deliberately: it is spec 044's
 // tombstone review rather than one of 032 §2's destinations, and it is last
@@ -299,6 +303,7 @@ templ modePillIcon() {
 templ localNav(projectID, active string) {
 	@navLink("/projects/"+projectID, "Overview", "overview", active)
 	@navLink("/projects/"+projectID+"/crew", "Crew", "crew", active)
+	@navLink("/projects/"+projectID+"/milestones", "Milestones", "milestones", active)
 	@navLink("/projects/"+projectID+"/work", "Work", "work", active)
 	@navLink("/projects/"+projectID+"/deliverables", "Deliverables", "deliverables", active)
 	@navLink("/projects/"+projectID+"/reviews", "Reviews", "reviews", active)
