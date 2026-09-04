@@ -21,8 +21,9 @@ import (
 // reviewers <reviewer…> <ref>` (WL-487), matching `lode task set skills`.
 func newDocReviewersCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "reviewers <ref>",
-		Short: "Show a document's assigned reviewer set",
+		Use:               "reviewers <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Show a document's assigned reviewer set",
 		Long: "Show the durable reviewer set spec 025 §7.3 assigns to a document\n" +
 			"(WL-359) — independent of any one revision, and what `lode approval\n" +
 			"request` reads when it opens an awaiting lane per reviewer.\n\n" +
@@ -82,8 +83,9 @@ func reviewerList(reviewers []string) string {
 // actor ids, and naming none clears the set.
 func newDocSetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set <field> <value…> <ref>",
-		Short: "Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`",
+		Use:               "set <field> <value…> <ref>",
+		ValidArgsFunction: docRefLast(2),
+		Short:             "Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`",
 		Long: `Set one named field on a document. The document ref is always the last
 argument; everything between the field and the ref is the value.
 

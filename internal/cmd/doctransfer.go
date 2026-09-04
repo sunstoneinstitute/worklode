@@ -41,8 +41,9 @@ func newDocTransferCmd() *cobra.Command {
 	var scope scopeFlags
 	var to, from string
 	cmd := &cobra.Command{
-		Use:   "transfer [ref...] --to <actor>",
-		Short: "Transfer document ownership to another actor",
+		Use:               "transfer [ref...] --to <actor>",
+		ValidArgsFunction: docRefs,
+		Short:             "Transfer document ownership to another actor",
 		Long: "Transfer ownership of one or more documents (025 §7.3).\n\n" +
 			"Name documents by ref:\n" +
 			"  lode doc transfer WL-SPEC-25 --to ada\n\n" +
