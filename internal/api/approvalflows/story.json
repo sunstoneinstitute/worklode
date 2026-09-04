@@ -1,0 +1,43 @@
+{
+  "name": "story",
+  "rev": "1",
+  "match": { "kind": "sunstone-story" },
+  "requirements": [
+    {
+      "lane": "analysis/peer",
+      "entity_kind": "deliverable",
+      "target": "Reproducible analysis",
+      "role": "analysis-reviewers"
+    },
+    {
+      "lane": "methodology/science-lead",
+      "entity_kind": "deliverable",
+      "target": "Methodology",
+      "role": "science-leads"
+    },
+    {
+      "lane": "methodology/domain-expert",
+      "entity_kind": "deliverable",
+      "target": "Methodology",
+      "role": "domain-experts"
+    },
+    {
+      "lane": "report/buddy",
+      "entity_kind": "deliverable",
+      "target": "Scientific report",
+      "role": "report-buddies"
+    },
+    {
+      "lane": "report/expert",
+      "entity_kind": "deliverable",
+      "target": "Scientific report",
+      "role": "domain-experts"
+    },
+    {
+      "lane": "report/journalist",
+      "entity_kind": "deliverable",
+      "target": "Scientific report",
+      "role": "journalists"
+    }
+  ]
+}
