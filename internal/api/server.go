@@ -111,8 +111,10 @@ type Config struct {
 	// "owner/repo@ref:glob" entries. LODE_SKILL_SOURCES. Requires the GitHub
 	// App to be configured. Unset: skill sync off.
 	SkillSources string
-	// EmbeddingURL is a full OpenAI-compatible embeddings endpoint URL.
-	// LODE_EMBEDDING_URL. Unset: recommendations run pins-only.
+	// EmbeddingURL is a full OpenAI-compatible embeddings endpoint URL —
+	// in the default deployment a CPU sidecar, not a third-party API
+	// (040 §2.3). LODE_EMBEDDING_URL. Unset: no dense arm, so search runs
+	// lexical-only and recommendations run pins plus lexical matches (§11).
 	EmbeddingURL string
 	// EmbeddingModel names the model sent to EmbeddingURL. LODE_EMBEDDING_MODEL.
 	EmbeddingModel string
@@ -154,6 +156,14 @@ type Config struct {
 	// number, and a test that wants to see the 413 should not have to spool
 	// 100 MiB to prove it. Zero means the real cap.
 	MaxBlobBytesForTest int64
+
+	// SkillFetchForTest injects the repo-tarball fetch skill sync uses,
+	// replacing githubauth.AppAuth.Tarball and the GitHub App credentials it
+	// needs. Tests only; production sets GitHubAppID/GitHubAppPrivateKey.
+	// It is what lets an out-of-package test (e2e) put a skill in the
+	// registry through POST /api/v1/skills/sync — the only public surface
+	// that creates one — without a GitHub App and a stubbed api.github.com.
+	SkillFetchForTest skillsync.FetchFunc
 
 	// BackgroundCtx governs goroutines NewServer starts on its own (boot
 	// skill sync, webhook-triggered skill syncs) — not any HTTP request.
@@ -885,11 +895,15 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES: %w", err)
 	}
 	if len(skillSources) > 0 {
-		if appAuth == nil {
-			return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES requires the GitHub App (LODE_GITHUB_APP_ID/LODE_GITHUB_APP_PRIVATE_KEY)")
+		fetch := cfg.SkillFetchForTest
+		if fetch == nil {
+			if appAuth == nil {
+				return nil, nil, fmt.Errorf("LODE_SKILL_SOURCES requires the GitHub App (LODE_GITHUB_APP_ID/LODE_GITHUB_APP_PRIVATE_KEY)")
+			}
+			fetch = appAuth.Tarball
 		}
 		s.skillSources = skillSources
-		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: appAuth.Tarball, Log: s.log}
+		s.skillSyncer = &skillsync.Syncer{Store: st, Fetch: fetch, Log: s.log}
 	}
 
 	// Blob storage (spec 021). The feature is off unless an endpoint and a
