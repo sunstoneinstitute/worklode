@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -52,9 +53,55 @@ type doctorReport struct {
 	Checks []doctorCheck `json:"checks"`
 }
 
-// runDoctorChecks runs the spec's six checks in order from dir. Later checks
-// still run when earlier ones fail, degrading to skips where they cannot be
-// evaluated, so one run reports everything wrong at once.
+// edgeAgentHealthURL is the local Edge Agent telemetry gateway's health
+// endpoint. It is a package variable, not a config knob, because it names a
+// fixed local port rather than anything a human chooses; tests override it
+// directly to point checkEdgeAgent at an httptest.Server.
+var edgeAgentHealthURL = "http://127.0.0.1:7700/healthz"
+
+// edgeAgentHealthBody is /healthz's response shape. Named rather than
+// anonymous per internal/model/rule_test.go's modeNamed for internal/cmd
+// (see doctorReport's comment) even though this crosses no Worklode HTTP
+// boundary — it is the Edge Agent's own wire shape, decoded here only.
+type edgeAgentHealthBody struct {
+	OK bool `json:"ok"`
+}
+
+// checkEdgeAgent asks the local Edge Agent telemetry gateway if it is up.
+// This is a local check with no Worklode server involved, so it still runs,
+// and still means something, with the backbone unreachable.
+func checkEdgeAgent(ctx context.Context, url string) doctorCheck {
+	const name = "edge-agent"
+	const fix = "start the local Edge Agent telemetry gateway, then re-run lode doctor"
+
+	ctx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fail(name, "bad health check URL: "+err.Error(), fix)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fail(name, "unreachable: "+err.Error(), fix)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fail(name, fmt.Sprintf("health endpoint returned %d", resp.StatusCode), fix)
+	}
+	var body edgeAgentHealthBody
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return fail(name, "malformed health response: "+err.Error(), fix)
+	}
+	if !body.OK {
+		return fail(name, "reported not ready", fix)
+	}
+	return pass(name, url+" healthy")
+}
+
+// runDoctorChecks runs the spec's seven checks in order from dir. Later
+// checks still run when earlier ones fail, degrading to skips where they
+// cannot be evaluated, so one run reports everything wrong at once.
 func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 	var checks []doctorCheck
 
@@ -179,6 +226,11 @@ func runDoctorChecks(ctx context.Context, dir string) []doctorCheck {
 
 	// 7. Reap materialized secrets whose lease is gone (017 §4, ADR 048 §4).
 	checks = append(checks, sweepSecrets(ctx, c, serverReachable))
+
+	// 8. Local Edge Agent telemetry gateway reachable and healthy. No
+	// dependency on the checks above: it must still run with the backbone
+	// unreachable.
+	checks = append(checks, checkEdgeAgent(ctx, edgeAgentHealthURL))
 
 	return checks
 }
