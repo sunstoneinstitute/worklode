@@ -184,10 +184,16 @@ var routeGuards = map[string]routeGuard{
 	// task-scoped token so claim can't drain instructions leased to a
 	// different task the same actor also holds (0016 multi-lease).
 	"POST /api/v1/tasks/{id}/instructions": guarded(permTaskWrite),
-	"POST /api/v1/instructions/claim":      guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/assign":       guarded(permTaskAssign),
-	"POST /api/v1/tasks/{id}/unassign":     guarded(permTaskAssign),
-	"GET /api/v1/board":                    guarded(permTaskRead),
+
+	// Posing and rewording a decision row (025 §10.1). Not guardedBound: a
+	// PATCH may re-parent the row to another task, which a task-scoped
+	// token has no business reaching.
+	"POST /api/v1/tasks/{id}/decisions":        guarded(permTaskWrite),
+	"PATCH /api/v1/tasks/{id}/decisions/{key}": guarded(permTaskWrite),
+	"POST /api/v1/instructions/claim":          guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/assign":           guarded(permTaskAssign),
+	"POST /api/v1/tasks/{id}/unassign":         guarded(permTaskAssign),
+	"GET /api/v1/board":                        guarded(permTaskRead),
 
 	// --- documents (spec 025 §5, §6, §7) --------------------------------------
 	// Reading and writing the corpus is its own capability (see permDocRead in

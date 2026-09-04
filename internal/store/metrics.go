@@ -38,6 +38,7 @@ type storeMetrics struct {
 	skillAmbiguous        prometheus.Counter
 	instructions          *prometheus.CounterVec
 	instructionsDelivered prometheus.Counter
+	decisions             *prometheus.CounterVec
 	searchRequests        *prometheus.CounterVec
 	searchSeconds         *prometheus.HistogramVec
 	searchArmEmpties      *prometheus.CounterVec
@@ -89,6 +90,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_task_instructions_delivered_total",
 			Help: "Instructions handed to a session by a claim.",
 		}),
+		decisions: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_decisions_total",
+			Help: "Decision-row operations by op (pose|edit|answer) and outcome (ok|refused).",
+		}, []string{"op", "outcome"}),
 		searchRequests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_search_requests_total",
 			Help: "Corpus searches by mode (hybrid|dense|lexical|invalid) and outcome (ok|error|empty).",
@@ -108,7 +113,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Searches where an arm that ran offered no candidates, by arm (dense|lexical).",
 		}, []string{"arm"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.searchRequests, m.searchSeconds, m.searchArmEmpties)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -208,6 +213,25 @@ func (m *storeMetrics) instruction(op, outcome string) {
 		return
 	}
 	m.instructions.WithLabelValues(op, outcome).Inc()
+}
+
+// decision records one decision-row operation (025 §10.1) by op and
+// outcome. Every caller passes an op literal, so the label stays bounded.
+func (m *storeMetrics) decision(op, outcome string) {
+	if m == nil {
+		return
+	}
+	m.decisions.WithLabelValues(op, outcome).Inc()
+}
+
+// decisionOutcome maps a decision mutation's error to ok/refused. Every
+// failure the store returns here is a refusal about the row or the task, so
+// there is no third value to report.
+func decisionOutcome(err error) string {
+	if err != nil {
+		return "refused"
+	}
+	return "ok"
 }
 
 // deliverInstructions adds n to worklode_task_instructions_delivered_total,

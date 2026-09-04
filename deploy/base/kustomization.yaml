@@ -146,3 +146,5 @@ configMapGenerator:
       - migrations/0066_decision_kind.down.sql
       - migrations/0067_actor_event_cursor.up.sql
       - migrations/0067_actor_event_cursor.down.sql
+      - migrations/0068_decisions.up.sql
+      - migrations/0068_decisions.down.sql

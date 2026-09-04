@@ -24,6 +24,13 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
+## `lode decision` — Decisions: the questions a task poses and the answers they wait on
+
+- `lode decision add` — Pose a question on a task
+  Flags: --context, --group, --key, --max-picks, --min-picks, --option, --question, --type
+- `lode decision edit` — Reword, regroup or re-parent an unanswered question
+  Flags: --context, --group, --key, --max-picks, --min-picks, --option, --question, --task, --type
+
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
