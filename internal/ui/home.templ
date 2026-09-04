@@ -11,6 +11,9 @@ templ Home(v HomeView) {
 	@Page(v.Page) {
 		@globalShell() {
 			<h1>Home</h1>
+			if v.Mode == "actor" {
+				@morningBrief(v.Brief)
+			}
 			if v.Mode == "empty" {
 				<p class="muted">You are not on any project yet. <a href="/projects">Browse all projects</a></p>
 			} else if len(v.Cards) == 0 {
