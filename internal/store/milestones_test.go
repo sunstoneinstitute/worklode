@@ -278,3 +278,66 @@ func TestGetMilestone(t *testing.T) {
 		t.Errorf("unknown milestone: got %v, want ErrNotFound", err)
 	}
 }
+
+// TestListMilestoneChildren checks the bulk child reader the Milestones page
+// composes its sections from: every attached task and deliverable in a
+// project, grouped by milestone, with the same derived closedness and
+// reported state their own listings carry, and work attached to no milestone
+// grouped nowhere.
+func TestListMilestoneChildren(t *testing.T) {
+	t.Parallel()
+	s, m1, m2 := progressFixture(t)
+
+	tasks, deliverables, err := s.ListMilestoneChildren(t.Context(), "p1")
+	if err != nil {
+		t.Fatalf("list milestone children: %v", err)
+	}
+	if len(tasks) != 1 || len(tasks[m1.ID]) != 2 {
+		t.Fatalf("tasks = %+v, want two under %s and nothing unattached", tasks, m1.ID)
+	}
+	if len(deliverables) != 1 || len(deliverables[m1.ID]) != 2 {
+		t.Fatalf("deliverables = %+v, want two under %s", deliverables, m1.ID)
+	}
+	if len(tasks[m2.ID]) != 0 || len(deliverables[m2.ID]) != 0 {
+		t.Errorf("empty milestone has children: %+v / %+v", tasks[m2.ID], deliverables[m2.ID])
+	}
+
+	var closed int
+	for _, task := range tasks[m1.ID] {
+		if task.Closed {
+			closed++
+		}
+	}
+	if closed != 1 {
+		t.Errorf("closed tasks = %d, want 1 (closedness must match ListTasks)", closed)
+	}
+	var reported int
+	for _, d := range deliverables[m1.ID] {
+		if d.ReportedState == "published" {
+			reported++
+		}
+	}
+	if reported != 1 {
+		t.Errorf("published deliverables = %d, want 1 (reported state must be carried)", reported)
+	}
+}
+
+// TestListMilestoneChildrenEmpty pins the reader's answer for a project with
+// nothing attached and for a project id that names nothing: empty maps, never
+// an error.
+func TestListMilestoneChildrenEmpty(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	if err := s.CreateProject(t.Context(), "p1", "Project One", "P1"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	for _, id := range []string{"p1", "nope"} {
+		tasks, deliverables, err := s.ListMilestoneChildren(t.Context(), id)
+		if err != nil {
+			t.Fatalf("list milestone children for %s: %v", id, err)
+		}
+		if len(tasks) != 0 || len(deliverables) != 0 {
+			t.Errorf("children for %s = %+v / %+v, want empty", id, tasks, deliverables)
+		}
+	}
+}

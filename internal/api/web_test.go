@@ -407,6 +407,7 @@ func TestEveryPageRendersTheShell(t *testing.T) {
 		{"/reviews", global, false}, {"/deliveries", global, false},
 		{"/docs", global, true},
 		{"/projects/proj", project, true}, {"/projects/proj/crew", project, true},
+		{"/projects/proj/milestones", project, true},
 		{"/projects/proj/reviews", project, true}, {"/projects/proj/decisions", project, true},
 		{"/projects/proj/documents", project, true}, {"/projects/proj/activity", project, true},
 		{"/projects/proj/deliverables", project, true},
@@ -1209,10 +1210,10 @@ func TestProjectPage(t *testing.T) {
 			t.Errorf("project page unexpectedly rendered %q:\n%s", absent, body)
 		}
 	}
-	// Project local nav, in the exact order docs/specs/032-project-cockpit.md
-	// §2 requires: Overview, Crew, Work, Deliverables, Reviews, Decisions,
-	// Documents, Activity.
-	assertOrder(t, body, ">Overview<", ">Crew<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
+	// Project local nav, in docs/specs/032-project-cockpit.md §2's order, with
+	// Milestones inserted after Crew: a milestone contains both work and
+	// deliverables (spec 029 §2), so it sits ahead of both lists.
+	assertOrder(t, body, ">Overview<", ">Crew<", ">Milestones<", ">Work<", ">Deliverables<", ">Reviews<", ">Decisions<", ">Documents<", ">Activity<")
 	assertOrder(t, body, `class="backlink"`, "All projects", ">Overview<")
 	// The cockpit is a projection, never a stored workflow field: the page
 	// must not render any of the retired/forbidden concepts. "Crew" and

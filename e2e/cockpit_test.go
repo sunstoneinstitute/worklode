@@ -328,6 +328,20 @@ func TestProjectCockpitPublicSurface(t *testing.T) {
 		}
 	}
 
+	// Milestones is a built, read-only destination (spec 029 §2). This
+	// project has none, so the page states that honestly rather than
+	// fabricating a section; a seeded page is covered in internal/api's web
+	// tests, which can create milestones through the JSON API.
+	{
+		code, body := getPage(t, srv.URL+"/projects/proj/milestones")
+		if code != http.StatusOK {
+			t.Fatalf("GET /projects/proj/milestones: status = %d, want 200", code)
+		}
+		if !strings.Contains(mainContent(t, body), "No milestones yet") {
+			t.Fatalf("GET /projects/proj/milestones is missing its honest empty state:\n%s", body)
+		}
+	}
+
 	for _, path := range []string{
 		"/assets/app.css",
 		"/assets/fonts/dm-sans-variable.ttf",

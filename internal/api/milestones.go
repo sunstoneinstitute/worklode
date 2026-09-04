@@ -12,6 +12,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // recordMilestone writes one milestone through RecordEvent, so the event log
@@ -68,4 +69,74 @@ func (s *server) createMilestone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+// milestonesPage handles GET /projects/{id}/milestones, the project-local
+// Milestones destination (spec 029 §2, spec 032 §10): every milestone as a
+// section, in position order, with the children its progress was derived
+// from. It loads the project header first, so an unknown project 404s the
+// same way every other project route does.
+func (s *server) milestonesPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	project, err := s.projectHeader(ctx, r.PathValue("id"))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	milestones, err := s.st.ListMilestones(ctx, project.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	tasks, deliverables, err := s.st.ListMilestoneChildren(ctx, project.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	s.renderWeb(w, r, http.StatusOK, "milestones page",
+		ui.Milestones(milestonesView(project, milestones, tasks, deliverables)))
+}
+
+// milestonesView maps a project's milestones and their children into the
+// Milestones page. The counts come off the list reader's derived progress —
+// the page repeats the numbers the store derived, and never re-derives them
+// from the rows it happens to be rendering.
+func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
+	tasks map[string][]model.Task, deliverables map[string][]model.Deliverable) ui.MilestonesView {
+	v := ui.MilestonesView{
+		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Milestones"},
+		CanonicalURL: "/projects/" + project.ID + "/milestones",
+		Project:      project,
+		Milestones:   make([]ui.MilestoneSection, 0, len(milestones)),
+	}
+	for _, m := range milestones {
+		section := ui.MilestoneSection{
+			ID:                m.ID,
+			Title:             m.Title,
+			TasksTotal:        m.Progress.TasksTotal,
+			TasksClosed:       m.Progress.TasksClosed,
+			DeliverablesTotal: m.Progress.DeliverablesTotal,
+			DeliverablesLive:  m.Progress.DeliverablesLive,
+		}
+		for _, t := range tasks[m.ID] {
+			section.Tasks = append(section.Tasks, ui.MilestoneTaskRow{
+				ID: t.ID, Title: t.Title, State: t.State, Assignee: t.Assignee,
+			})
+		}
+		for _, d := range deliverables[m.ID] {
+			section.Deliverables = append(section.Deliverables, ui.DeliverableRow{
+				ID:            d.ID,
+				Name:          d.Name,
+				Description:   d.Description,
+				URL:           d.URL,
+				CreatedBy:     d.CreatedBy,
+				CreatedAt:     d.CreatedAt,
+				Artifact:      d.Artifact,
+				ReportedState: d.ReportedState,
+				ReportedAt:    d.ReportedAt,
+			})
+		}
+		v.Milestones = append(v.Milestones, section)
+	}
+	return v
 }
