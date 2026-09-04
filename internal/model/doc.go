@@ -102,6 +102,37 @@ type DocRevision struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// DocNote is one anchored, non-blocking note on a document section
+// (025 §8.5): a single body against a frozen anchor, linked to the task and
+// the agent session that raised it. It blocks nothing and settles nothing —
+// there is no thread and no resolve state, deliberately; a note is a remark
+// left where it applies, and the review surface that gates a document is the
+// approval set, not this.
+//
+// Task and Session are the provenance of the remark and are empty when there
+// is none: a human at a prompt is in no worktree and no agent session.
+type DocNote struct {
+	ID        int64     `json:"id"`
+	Doc       int64     `json:"doc"`
+	Anchor    string    `json:"anchor"`
+	Body      string    `json:"body"`
+	Task      string    `json:"task,omitempty"`
+	Session   string    `json:"session,omitempty"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AddDocNoteInput is the request body for POST /api/v1/docs/{id}/notes.
+// Anchor must name a section the document has: a note that is not anchored is
+// not a note, it is noise. Task and Session are filled by the CLI from the
+// worktree it stands in, and omitted when it stands in none.
+type AddDocNoteInput struct {
+	Anchor  string `json:"anchor"`
+	Body    string `json:"body"`
+	Task    string `json:"task,omitempty"`
+	Session string `json:"session,omitempty"`
+}
+
 // DocEdge is one typed link between documents (025 §14), always stated from
 // the point of view of the document being read: FromAnchor is the near end,
 // ToDoc and ToAnchor the far end — in DocDetail's Edges and EdgesIn alike. An
@@ -200,6 +231,9 @@ type DocDetail struct {
 	Edges    []DocEdge    `json:"edges"`
 	EdgesIn  []DocEdge    `json:"edges_in"`
 	Revision *DocRevision `json:"revision"`
+	// Notes are the document's anchored notes (025 §8.5), in the order they
+	// were left. Nil when it has none, which is the ordinary case.
+	Notes []DocNote `json:"notes,omitempty"`
 }
 
 // DocRef is a minimal reference to a document — enough to name and link it

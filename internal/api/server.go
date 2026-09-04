@@ -703,6 +703,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
 	r.api("POST /api/v1/docs/{id}/revise", s.reviseDoc)
 	r.api("POST /api/v1/docs/{id}/owner", s.transferDocOwner)
+	r.api("POST /api/v1/docs/{id}/notes", s.addDocNote)
+	r.api("GET /api/v1/docs/{id}/notes", s.listDocNotes)
 	r.api("POST /api/v1/docs/{id}/reviewers", s.setDocReviewers)
 	r.api("POST /api/v1/docs/{id}/request-approval", s.requestDocApproval)
 	r.api("PUT /api/v1/docs/{id}/revision", s.updateDocRevision)

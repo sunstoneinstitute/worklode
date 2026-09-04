@@ -210,6 +210,8 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/accept":      guarded(permDocWrite),
 	"POST /api/v1/docs/{id}/revise":      guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/owner":       guarded(permDocWrite),
+	"POST /api/v1/docs/{id}/notes":       guardedAny(permDocWrite),
+	"GET /api/v1/docs/{id}/notes":        guardedAny(permDocRead),
 	// Setting the reviewer set (025 §7.3, WL-359) is the same shape as owner
 	// transfer: guarded rather than guardedAny, since it too is a deliberate
 	// act on the document's identity, gated in the store on the same

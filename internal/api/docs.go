@@ -332,6 +332,50 @@ func docFilterFrom(r *http.Request) store.DocFilter {
 	}
 }
 
+// addDocNote handles POST /api/v1/docs/{id}/notes: one anchored, non-blocking
+// note against a section the document has (025 §8.5). It gates on doc.write
+// rather than doc.read because it writes a row, not because a note carries any
+// authority over the document — it blocks nothing and settles nothing.
+func (s *server) addDocNote(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.AddDocNoteInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	var note model.DocNote
+	err := s.recordDocEvent(w, r, "note", "doc.note_added", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			note, err = store.AddDocNote(tx, now, id, req, actorID, eventID)
+			return err
+		})
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, note)
+}
+
+// listDocNotes handles GET /api/v1/docs/{id}/notes. The detail endpoint
+// carries the same rows; this exists for a caller that wants them alone.
+func (s *server) listDocNotes(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	notes, err := s.st.ListDocNotes(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, notes)
+}
+
 // docListSelector is GET /api/v1/docs' query string once validated: the four
 // plain filters, plus at most one of the three derived selectors of 026 §2.
 type docListSelector struct {
@@ -388,6 +432,11 @@ func docSelectorFrom(r *http.Request) (docListSelector, error) {
 	// docFilterFrom, which the cockpit's read-only /docs page also calls and
 	// which has no tombstone surface.
 	if sel.filter.Deleted, err = queryBool(q, "deleted"); err != nil {
+		return docListSelector{}, err
+	}
+	// A plain filter, but boolean, so it is read here beside deleted rather
+	// than in docFilterFrom's string loop.
+	if sel.filter.HasNotes, err = queryBool(q, "has_notes"); err != nil {
 		return docListSelector{}, err
 	}
 
@@ -479,7 +528,13 @@ func (s *server) docDetail(r *http.Request, id int64) (*model.DocDetail, error) 
 	if err != nil {
 		return nil, err
 	}
-	detail := &model.DocDetail{Doc: s.withProjectKey(ctx, *d), Sections: sections, Edges: out, EdgesIn: in}
+	notes, err := s.st.ListDocNotes(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	detail := &model.DocDetail{
+		Doc: s.withProjectKey(ctx, *d), Sections: sections, Edges: out, EdgesIn: in, Notes: notes,
+	}
 	// No open revision is the ordinary case, not a failure: only an accepted
 	// spec or ADR ever has one.
 	rev, err := s.st.GetDocRevision(ctx, id)

@@ -104,10 +104,13 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		if err != nil {
 			return err
 		}
-		return writeDocShow(cmd, doc, section, []byte(out))
+		return writeDocShow(cmd, doc, section, []byte(cli.InlineDocNotes(out, detail.Notes)))
 	}
 
-	data := []byte(detail.Body)
+	// Notes are folded in before the section is cut, so `--section` and a
+	// whole-document render show the same note under the same heading
+	// (025 §8.5).
+	data := []byte(cli.InlineDocNotes(detail.Body, detail.Notes))
 
 	if section == "" {
 		return writeDocShow(cmd, doc, "", data)
