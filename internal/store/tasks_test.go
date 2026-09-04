@@ -128,6 +128,20 @@ func removeEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	return err
 }
 
+// insertBareTask inserts a minimal 'horndb' task row with an explicit id,
+// bypassing CreateTask's sequential allocator. Used by tests that need
+// specific ids (e.g. to pin ordering) rather than whatever the next-task-num
+// counter would assign.
+func insertBareTask(t *testing.T, s *Store, id string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO tasks (id, project_id, title, priority, kind, state, created_at, updated_at)
+		 VALUES ($1, 'horndb', $1, 'medium', 'feature', 'ready', $2, $2)`,
+		id, taskTestNow); err != nil {
+		t.Fatalf("insert task %s: %v", id, err)
+	}
+}
+
 func isBlocked(t *testing.T, s *Store, taskID string) bool {
 	t.Helper()
 	var blocked bool
