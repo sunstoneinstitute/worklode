@@ -606,7 +606,7 @@ func BriefRender(w io.Writer, b model.Brief) {
 			fmt.Fprintf(w, "  pinned  %s — %s (content in brief)\n", p.Name, p.Description)
 		}
 		for _, m := range b.Skills.Matches {
-			fmt.Fprintf(w, "  %.2f    %s — %s\n", m.Score, m.Name, m.Description)
+			fmt.Fprintf(w, "  %.4f  %s — %s\n", m.Score, m.Name, m.Description)
 		}
 		for _, warn := range b.Skills.Warnings {
 			fmt.Fprintf(w, "  warning: %s\n", warn)
