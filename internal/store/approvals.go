@@ -503,6 +503,7 @@ func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, 
 		 LEFT JOIN projects p ON p.id = `+approvalProjectID+`
 		 LEFT JOIN actors ra ON ra.id = a.required_actor
 		 WHERE a.state = 'awaiting'
+		   AND (a.entity_kind <> 'pr' OR pr.state IS NULL OR pr.state = 'open')
 		 ORDER BY a.created_at, a.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list awaiting approvals: %w", err)
@@ -537,6 +538,7 @@ func (s *Store) ApprovalsAwaiting(ctx context.Context,
 		 FROM approvals a
 		 `+approvalEntityJoins+`
 		 WHERE a.state = 'awaiting'
+		   AND (a.entity_kind <> 'pr' OR pr.state IS NULL OR pr.state = 'open')
 		   AND (a.required_actor = $1 OR a.required_role = ANY($2))
 		   AND `+approvalProjectID+` IS NOT NULL
 		 GROUP BY 1`,
@@ -593,6 +595,7 @@ func (s *Store) ListInboxReviews(ctx context.Context) ([]InboxReview, error) {
 		 FROM approvals a
 		 `+approvalEntityJoins+`
 		 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
+		   AND (pr.state IS NULL OR pr.state = 'open')
 		 ORDER BY a.created_at, a.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list inbox reviews: %w", err)
@@ -613,8 +616,10 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 		`SELECT EXISTS (
 			-- §3.2 bucket 1: reviews assigned to the actor
 			SELECT 1 FROM approvals a
+			 LEFT JOIN pull_requests pr ON a.entity_id = pr.repo || '#' || pr.number
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND a.required_actor = $1
+			   AND (pr.state IS NULL OR pr.state = 'open')
 
 			UNION ALL
 
@@ -626,6 +631,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			   ON pp.project_id = t.project_id AND pp.actor_id = $1 AND pp.is_lead
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND a.required_actor IS NULL
+			   AND pr.state = 'open'
 
 			UNION ALL
 
@@ -638,6 +644,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			   AND pr.author IS NOT NULL AND act.expected_github_login IS NOT NULL
 			   AND lower(pr.author) = lower(act.expected_github_login)
 			   AND (a.required_actor IS NULL OR a.required_actor <> $1)
+			   AND pr.state = 'open'
 
 			UNION ALL
 
