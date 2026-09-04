@@ -825,9 +825,8 @@ Recorded by WL-532 (the project Milestones page, 029 §2 and 032 §10):
   Deliverables because a milestone contains both (029 §2). That is the same
   gap WL-238's Deleted entry above records, and the same amendment closes
   both.
-- `[P3]` **A milestone's children cannot be attached from any surface yet.**
-  `store.ListMilestoneChildren` reads them and the page renders them, but the
-  writer that sets `milestone_id` on a task or a deliverable is a later task
-  of the milestones plan. Until it lands, every rendered section says nothing
-  is attached, so the page's populated shape is covered by store and
-  `internal/ui` tests rather than by an `internal/api` one.
+- **Deleted (WL-533, WL-534).** A milestone's children could not be attached
+  from any surface when WL-532 landed, so the Milestones page's populated
+  shape was covered by store and `internal/ui` tests rather than by an
+  `internal/api` one. `lode task edit --milestone` and `lode milestone
+  attach`/`detach` now write `milestone_id` from both sides.
