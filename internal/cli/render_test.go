@@ -715,7 +715,7 @@ func TestBriefRenderRendersSkillsSection(t *testing.T) {
 	for _, want := range []string{
 		"Skills:",
 		"pinned  tdd — Red-green-refactor (content in brief)",
-		"0.87    debugging — Systematic debugging",
+		"0.8700  debugging — Systematic debugging",
 		"warning: pinned skill not found: ghost",
 	} {
 		if !strings.Contains(out, want) {

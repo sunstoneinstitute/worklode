@@ -91,7 +91,7 @@ func newSkillsRecommendCmd() *cobra.Command {
 				fmt.Fprintf(out, "pinned\t%s\t%s\n", p.Name, p.Description)
 			}
 			for _, m := range rec.Matches {
-				fmt.Fprintf(out, "%.2f\t%s\t%s\n", m.Score, m.Name, m.Description)
+				fmt.Fprintf(out, "%.4f\t%s\t%s\n", m.Score, m.Name, m.Description)
 			}
 			for _, w := range rec.Warnings {
 				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", w)

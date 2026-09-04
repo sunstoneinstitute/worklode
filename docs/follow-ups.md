@@ -789,15 +789,6 @@ Recorded by WL-633's pass over spec 040 §9:
   it back" therefore holds for short queries only. Extracting query terms
   from a brief (or OR-ing them) is a retrieval-quality change, not a wiring
   one, so it is not folded into this task.
-- `[P3]` **Recommendation scores now render as near-identical small numbers.**
-  A match's `score` is the fused reciprocal rank (040 §6.1, roughly 0.016 for
-  rank 1), not the cosine similarity it was under 016. `lode skill recommend`
-  (`internal/cmd/skills.go`) and the session-start brief
-  (`internal/hookrun/hookrun.go`) both print it as `%.2f`, so every match now
-  shows as `0.02`. The list order still carries the ranking; the printed
-  number no longer distinguishes anything. Widening the format or dropping
-  the column from those two views is a display decision, left out of the
-  wiring change.
 
 Recorded by WL-634's pass over spec 040 §9:
 
