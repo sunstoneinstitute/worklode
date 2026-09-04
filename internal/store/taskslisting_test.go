@@ -89,6 +89,40 @@ func TestListTasksFiltersAndOrdering(t *testing.T) {
 	}
 }
 
+// TestListTasksOrderMatchesModelCompareTaskIDs pins taskListOrder's SQL
+// ORDER BY to model.CompareTaskIDs (061 §4 S3): a project key matches
+// ^[A-Z][A-Z0-9]{1,9}$ and never contains '-', so split_part(id,'-',1) is
+// always the key and CAST(split_part(id,'-',2) AS INTEGER) the numeric
+// suffix, making the two orderings equivalent by construction. That argument
+// held by inspection, not by test, until this pins it: a shuffled set
+// spanning the boundary a plain lexical sort gets wrong ("10" < "2" as
+// strings; "AB" < "WL" as keys), all one priority so the id tiebreak is what
+// is under test.
+func TestListTasksOrderMatchesModelCompareTaskIDs(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	ids := []string{"WL-10", "WL-2", "WL-9", "AB-100", "AB-9", "WL-1"}
+	for _, id := range ids {
+		insertBareTask(t, s, id)
+	}
+
+	got, err := s.ListTasks(ctx, TaskFilter{Project: "horndb"})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	var gotIDs []string
+	for _, task := range got {
+		gotIDs = append(gotIDs, task.ID)
+	}
+
+	want := slices.SortedFunc(slices.Values(ids), model.CompareTaskIDs)
+	if !slices.Equal(gotIDs, want) {
+		t.Fatalf("ListTasks order = %v, want %v (model.CompareTaskIDs order)", gotIDs, want)
+	}
+}
+
 // TestListTasksFilterByPlanDoc: TaskFilter.PlanDoc narrows to exactly the
 // tasks minted from one plan document — the query that is the plan's task
 // set (025 §9.2, §1). A task with no plan_doc is unaffected either way.

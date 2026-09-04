@@ -638,7 +638,13 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 // given table alias: priority first (critical first), then the same order as
 // model.CompareTaskIDs — key lexically, then the numeric suffix, so WL-9
 // precedes WL-10 — but done in the database. Shared so a second listing (the
-// tree's children) cannot order its rows differently from ListTasks.
+// tree's children) cannot order its rows differently from ListTasks. Pinned
+// to model.CompareTaskIDs by TestListTasksOrderMatchesModelCompareTaskIDs and
+// TestChildrenOfOrderMatchesModelCompareTaskIDs (061 §4 S3).
+//
+// 061 §4 S4: this is the default order and tiebreak, never a ranking. `task
+// frontier`, `task board` and `task critical-path` order by the 005 ranking
+// instead; `task list` (this function) orders by priority first, id second.
 func taskListOrder(alias string) string {
 	return ` ORDER BY CASE ` + alias + `.priority
 	         WHEN 'critical' THEN 0
