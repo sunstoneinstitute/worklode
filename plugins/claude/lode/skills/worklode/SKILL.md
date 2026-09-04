@@ -91,6 +91,7 @@ lode task block --by <id>
 lode task abandon
 lode board                              # in-progress / in-review / blocked / ready, at a glance
 lode show <ref>                         # any entity by id: task, doc, project
+lode search <query>                     # rank docs, tasks and skills by meaning and by exact token
 lode task timeline <id>                 # full history: states, PRs, CI, deploys
 
 lode doc add --kind spec --slug <slug> --file <draft.md>   # kind: spec, adr, plan

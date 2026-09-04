@@ -16,7 +16,9 @@ after the first split release shipped (053 §3, WL-319).
 **Design documents live in the backbone, not in this tree (055).** Specs,
 ADRs and plans are rows in Postgres, read and written through `lode doc`.
 `lode doc list --kind spec` is the map; `lode show WL-SPEC-4` starts you on
-the execution backbone.
+the execution backbone. `lode search <query>` ranks documents, tasks and
+skills together when you know what you are looking for but not where it is
+(040 §9).
 
 **To read what a spec says, use `lode show <ref> --inline`.** That folds every
 in-force amendment and supersession into the text, attributed to the section it
