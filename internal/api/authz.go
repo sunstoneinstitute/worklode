@@ -88,6 +88,14 @@ const (
 	permDeliverableRead  Permission = "deliverable.read"
 	permDeliverableWrite Permission = "deliverable.write"
 
+	// permMilestoneWrite covers spec 029 §2's milestone, the container tasks
+	// and deliverables hang off. Its own capability for the same reason a
+	// deliverable has one: shaping what a project is working towards is a
+	// different authority from filing the work. The matching milestone.read
+	// lands with the first read route — a granted permission that guards no
+	// route fails TestEveryGuardedPermissionIsGranted.
+	permMilestoneWrite Permission = "milestone.write"
+
 	// permCrewWrite covers changing a project's Crew: who is on it and with
 	// which role labels (spec 029 §6.1). Its own capability rather than a
 	// flavour of project.admin, because Crew is the working group of a
@@ -253,6 +261,8 @@ var grants = map[Permission][]Role{
 	// definition of done is one someone will plausibly want.
 	permDeliverableRead:  {RoleUser, RoleAdmin},
 	permDeliverableWrite: {RoleUser, RoleAdmin},
+
+	permMilestoneWrite: {RoleUser, RoleAdmin},
 
 	// Every authenticated actor, which is wider than spec 029 §6.1 asks for:
 	// the spec scopes the change to the project's own Crew ("any Crew member

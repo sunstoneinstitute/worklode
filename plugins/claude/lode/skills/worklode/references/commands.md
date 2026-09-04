@@ -97,6 +97,11 @@ Flags: --no-browser, --server
 
 Flags: --server
 
+## `lode milestone` — Milestones: the ordered containers a project's tasks and deliverables hang off
+
+- `lode milestone add` — Create a milestone
+  Flags: --position, --project, --repo
+
 ## `lode project` — Manage projects and their repos
 
 - `lode project add` — Create a project
