@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,24 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 )
+
+// fakeEdgeAgent points edgeAgentHealthURL at an httptest.Server for the
+// duration of the test and restores the production value on cleanup, so the
+// full-command doctor tests (which run rootCmd in-process rather than
+// through checkEdgeAgent directly) can control what the edge-agent check
+// sees without a user-facing config knob.
+func fakeEdgeAgent(t *testing.T, status int, body string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+
+	prev := edgeAgentHealthURL
+	edgeAgentHealthURL = srv.URL
+	t.Cleanup(func() { edgeAgentHealthURL = prev })
+}
 
 // fakeLode serves whoami and the project list the way lode doctor consumes
 // them, and points LODE_SERVER/LODE_TOKEN at itself.
@@ -43,6 +62,7 @@ func TestDoctorHealthySetup(t *testing.T) {
 	repo := setupRepoConfig(t, "demo")
 	initGitRepoInDir(t, repo)
 	fakeLode(t, http.StatusOK, `{"id":"demo","name":"Demo","key":"WL","repos":[],"focus":[]}`)
+	fakeEdgeAgent(t, http.StatusOK, `{"ok":true}`)
 	if _, _, err := githooks.Install(repo); err != nil {
 		t.Fatalf("install hooks: %v", err)
 	}
@@ -51,7 +71,7 @@ func TestDoctorHealthySetup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("healthy doctor exited non-zero: %v\n%s", err, out)
 	}
-	for _, want := range []string{"config", "server", "token", "current_project", "hooks"} {
+	for _, want := range []string{"config", "server", "token", "current_project", "hooks", "edge-agent"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("doctor output missing %q check:\n%s", want, out)
 		}
@@ -106,8 +126,25 @@ func TestDoctorFailuresNameTheirFix(t *testing.T) {
 				repo := setupRepoConfig(t, "demo")
 				initGitRepoInDir(t, repo)
 				fakeLode(t, http.StatusOK, `{"id":"demo","name":"Demo","key":"WL","repos":[],"focus":[]}`)
+				fakeEdgeAgent(t, http.StatusOK, `{"ok":true}`)
 			},
 			wantFix: "lode install",
+		},
+		{
+			name: "edge agent unreachable",
+			setup: func(t *testing.T) {
+				repo := setupRepoConfig(t, "demo")
+				initGitRepoInDir(t, repo)
+				fakeLode(t, http.StatusOK, `{"id":"demo","name":"Demo","key":"WL","repos":[],"focus":[]}`)
+				if _, _, err := githooks.Install(repo); err != nil {
+					t.Fatalf("install hooks: %v", err)
+				}
+				prev := edgeAgentHealthURL
+				// A closed port: connection refused, not a slow timeout.
+				edgeAgentHealthURL = "http://127.0.0.1:1/healthz"
+				t.Cleanup(func() { edgeAgentHealthURL = prev })
+			},
+			wantFix: "Edge Agent",
 		},
 	}
 	for _, tc := range cases {
@@ -119,6 +156,32 @@ func TestDoctorFailuresNameTheirFix(t *testing.T) {
 			}
 			if !strings.Contains(out, tc.wantFix) {
 				t.Fatalf("doctor output does not name the fix %q:\n%s", tc.wantFix, out)
+			}
+		})
+	}
+}
+
+func TestDoctorEdgeAgentHealth(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		wantOK bool
+	}{
+		{"healthy", http.StatusOK, `{"ok":true}`, true},
+		{"not ready", http.StatusServiceUnavailable, `{"ok":false}`, false},
+		{"bad body", http.StatusOK, `{`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			t.Cleanup(srv.Close)
+
+			got := checkEdgeAgent(context.Background(), srv.URL)
+			if got.OK != tc.wantOK {
+				t.Fatalf("checkEdgeAgent() OK = %v, want %v; detail = %q", got.OK, tc.wantOK, got.Detail)
 			}
 		})
 	}
@@ -197,6 +260,7 @@ func TestDoctorSweepsSecretsForGoneLeases(t *testing.T) {
 	secretsDoctorServer(t,
 		map[string]int{"WL-7": http.StatusOK, "WL-8": http.StatusOK, "WL-9": http.StatusNotFound},
 		map[string]bool{"WL-8": true})
+	fakeEdgeAgent(t, http.StatusOK, `{"ok":true}`)
 
 	for _, id := range []string{"WL-7", "WL-8", "WL-9"} {
 		materialize(t, id)
