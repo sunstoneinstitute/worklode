@@ -65,6 +65,13 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(home, "hooks.json"), []byte(seed), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	// Foreign content in the sibling config.toml that must also survive:
+	// a top-level key Codex owns and an unrelated key already under [otel].
+	configSeed := "model = \"gpt-5.6-sol\"\n[otel]\nenvironment = \"dev\"\n"
+	configPath := filepath.Join(home, "config.toml")
+	if err := os.WriteFile(configPath, []byte(configSeed), 0o600); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
 
 	h, ok := Get("codex")
 	if !ok {
@@ -84,15 +91,41 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 		t.Fatalf("bound = %v; want the four codex events", hi.Bound)
 	}
 	// A codex hook is inert until the user approves it, so the install report
-	// has to say so.
-	if len(hi.Notes) != 1 || !strings.Contains(hi.Notes[0], "/hooks") {
-		t.Fatalf("notes = %v; want the trust-gate advice", hi.Notes)
+	// has to say so, and the second file's path and action must appear too --
+	// hooks.json alone does not tell a reader that config.toml changed.
+	if len(hi.Notes) != 2 || !strings.Contains(hi.Notes[0], "/hooks") {
+		t.Fatalf("notes = %v; want the trust-gate advice first", hi.Notes)
+	}
+	if !strings.Contains(hi.Notes[1], configPath) || !strings.Contains(hi.Notes[1], ActionInstalled) {
+		t.Fatalf("notes[1] = %q; want it to name %s and %s", hi.Notes[1], configPath, ActionInstalled)
 	}
 
-	// Re-run converges: same bytes.
+	// The telemetry config is correct and every foreign key survived.
+	cfg := readCodexConfig(t, configPath)
+	if cfg["model"] != "gpt-5.6-sol" {
+		t.Fatalf("foreign top-level config key lost: %#v", cfg)
+	}
+	otel := cfg["otel"].(map[string]any)
+	if otel["environment"] != "dev" {
+		t.Fatalf("foreign otel key lost: %#v", otel)
+	}
+	if otel["log_user_prompt"] != false {
+		t.Fatalf("log_user_prompt = %v, want false", otel["log_user_prompt"])
+	}
+	exporter := otel["exporter"].(map[string]any)
+	grpc := exporter["otlp-grpc"].(map[string]any)
+	if grpc["endpoint"] != "http://127.0.0.1:4317" {
+		t.Fatalf("exporter endpoint = %v", grpc["endpoint"])
+	}
+
+	// Re-run converges: same bytes, both files.
 	before, err := os.ReadFile(hi.Path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
+	}
+	beforeConfig, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
 	}
 	if _, err := h.InstallHooks(t.TempDir(), ScopeLocal); err != nil {
 		t.Fatalf("reinstall: %v", err)
@@ -104,12 +137,19 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatalf("reinstall did not converge:\n%s\n---\n%s", before, after)
 	}
+	afterConfig, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !bytes.Equal(beforeConfig, afterConfig) {
+		t.Fatalf("reinstall did not converge config.toml:\n%s\n---\n%s", beforeConfig, afterConfig)
+	}
 
-	var cfg map[string]any
-	if err := json.Unmarshal(after, &cfg); err != nil {
+	var hooksJSON map[string]any
+	if err := json.Unmarshal(after, &hooksJSON); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if cfg["description"] != "theirs" {
+	if hooksJSON["description"] != "theirs" {
 		t.Fatalf("foreign top-level key lost: %s", after)
 	}
 	hooks := codexHooks(t, hi.Path)
@@ -147,10 +187,35 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 		t.Fatalf("SessionStart after uninstall = %v", got)
 	}
 
-	// A second uninstall is a no-op and must not rewrite the file.
+	// Uninstall also removed Worklode's telemetry from config.toml, safely:
+	// the foreign top-level key and the foreign otel key both survive, and
+	// the otel table is gone rather than left empty.
+	cfgAfter := readCodexConfig(t, configPath)
+	if cfgAfter["model"] != "gpt-5.6-sol" {
+		t.Fatalf("foreign top-level config key lost on uninstall: %#v", cfgAfter)
+	}
+	otelAfter, ok := cfgAfter["otel"].(map[string]any)
+	if !ok {
+		t.Fatalf("foreign otel key lost on uninstall: %#v", cfgAfter)
+	}
+	if otelAfter["environment"] != "dev" {
+		t.Fatalf("foreign otel key changed on uninstall: %#v", otelAfter)
+	}
+	if _, ok := otelAfter["log_user_prompt"]; ok {
+		t.Fatalf("log_user_prompt not removed on uninstall: %#v", otelAfter)
+	}
+	if _, ok := otelAfter["exporter"]; ok {
+		t.Fatalf("exporter not removed on uninstall: %#v", otelAfter)
+	}
+
+	// A second uninstall is a no-op and must not rewrite either file.
 	stripped, err := os.ReadFile(hi.Path)
 	if err != nil {
 		t.Fatalf("read: %v", err)
+	}
+	strippedConfig, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
 	}
 	info, err := os.Stat(hi.Path)
 	if err != nil {
@@ -167,12 +232,60 @@ func TestCodexInstallUninstallRoundTrip(t *testing.T) {
 	if !bytes.Equal(stripped, again) {
 		t.Fatal("no-op uninstall rewrote the file")
 	}
+	againConfig, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !bytes.Equal(strippedConfig, againConfig) {
+		t.Fatal("no-op uninstall rewrote config.toml")
+	}
 	info2, err := os.Stat(hi.Path)
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
 	if !info.ModTime().Equal(info2.ModTime()) {
 		t.Fatal("no-op uninstall bumped the file's mtime")
+	}
+}
+
+// A user who repointed the exporter elsewhere keeps it: uninstall only
+// removes values that still match what Worklode wrote.
+func TestCodexUninstallKeepsUserModifiedExporter(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	h, _ := Get("codex")
+	if _, err := h.InstallHooks(t.TempDir(), ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	configPath := filepath.Join(home, "config.toml")
+	if _, err := installCodexTelemetry(configPath); err != nil {
+		t.Fatalf("seed telemetry: %v", err)
+	}
+	cfg := readCodexConfig(t, configPath)
+	otel := cfg["otel"].(map[string]any)
+	otel["exporter"] = map[string]any{"otlp-http": map[string]any{"endpoint": "https://example.com"}}
+	if err := writeCodexConfigFile(configPath, cfg); err != nil {
+		t.Fatalf("reseed: %v", err)
+	}
+
+	if _, err := h.UninstallHooks(t.TempDir(), ScopeLocal); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	after := readCodexConfig(t, configPath)
+	otelAfter, ok := after["otel"].(map[string]any)
+	if !ok {
+		t.Fatalf("user-modified exporter's otel table was removed: %#v", after)
+	}
+	exporter, ok := otelAfter["exporter"].(map[string]any)
+	if !ok {
+		t.Fatalf("user-modified exporter was removed: %#v", otelAfter)
+	}
+	httpExp, ok := exporter["otlp-http"].(map[string]any)
+	if !ok || httpExp["endpoint"] != "https://example.com" {
+		t.Fatalf("user-modified exporter changed: %#v", exporter)
+	}
+	if _, ok := otelAfter["log_user_prompt"]; ok {
+		t.Fatalf("log_user_prompt (still Worklode's value) was not removed: %#v", otelAfter)
 	}
 }
 
@@ -219,6 +332,12 @@ func TestCodexScopesShareOneFile(t *testing.T) {
 	}
 	if local.Path != project.Path {
 		t.Fatalf("paths differ: %s vs %s", local.Path, project.Path)
+	}
+	// The telemetry config.toml is user-level too, not reinstalled per
+	// scope -- both notes must name the exact same path.
+	wantConfig := filepath.Join(home, "config.toml")
+	if !strings.Contains(local.Notes[1], wantConfig) || !strings.Contains(project.Notes[1], wantConfig) {
+		t.Fatalf("telemetry notes = %q / %q; want both to name %s", local.Notes[1], project.Notes[1], wantConfig)
 	}
 }
 
