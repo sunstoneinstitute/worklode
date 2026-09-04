@@ -355,7 +355,7 @@ func newProjectSetFocusCmd() *cobra.Command {
 	var clear bool
 	cmd := &cobra.Command{
 		Use:               "focus <concern…> <id>",
-		ValidArgsFunction: projectKeyLast(1),
+		ValidArgsFunction: projectSetFocusArgs,
 		Short:             "Set or clear a project's ranking focus (ordered list of concerns)",
 		Args:              cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -546,6 +546,7 @@ func newProjectShowCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&project, "project", "", "project id (default: the current project)")
+	completeProjectFlag(cmd, "project")
 	cmd.Flags().IntVar(&days, "days", defaultCostDays, "cost window in days, counting today; 0 for all history")
 	return cmd
 }

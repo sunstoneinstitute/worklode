@@ -18,6 +18,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -233,6 +234,7 @@ func newNextCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "restrict the pick to a project (only without an id)")
 	cmd.Flags().StringVar(&kind, "kind", "", "restrict the pick to a kind: feature, bug, chore, design, review, spike (only without an id)")
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
 	return cmd
 }

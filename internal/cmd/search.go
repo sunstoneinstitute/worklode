@@ -8,6 +8,9 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
+// searchKinds are the subject kinds GET /api/v1/search indexes (040 §9).
+var searchKinds = []string{"doc", "task", "skill"}
+
 // newSearchCmd builds `lode search`, the corpus-wide hybrid search (040 §9).
 //
 // It sits at the top level rather than under an entity group because it
@@ -77,6 +80,7 @@ func newSearchCmd() *cobra.Command {
 	}
 	cmd.Flags().StringSliceVar(&kinds, "kind", nil,
 		"limit to these subject kinds: doc, task, skill (repeatable; default all three)")
+	completeFlagValues(cmd, "kind", searchKinds)
 	cmd.Flags().StringVar(&mode, "mode", "",
 		"retrieval mode: hybrid (default), dense or lexical — for comparing the arms on a real query")
 	cmd.Flags().IntVar(&limit, "limit", 0, "max hits to return (default 20)")
