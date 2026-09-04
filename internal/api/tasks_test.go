@@ -652,6 +652,86 @@ func TestPatchTaskConcern(t *testing.T) {
 	}
 }
 
+// TestPatchTaskMilestone covers PATCH /api/v1/tasks/{id}'s milestone field
+// (spec 029 §2): a same-project attach is 200 and stored, a cross-project
+// attach is refused (422), "none" clears it, and the task_attach counter is
+// observed for every attempt including the refused one.
+func TestPatchTaskMilestone(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "proj2")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Attach target", "priority": "high", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj2", "title": "Other project task", "priority": "high", "kind": "feature",
+	})
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+		model.CreateMilestoneInput{Title: "Internal review"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create milestone status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	milestoneID := decodeMap(t, rr)["id"].(string)
+
+	// Unknown milestone is a bad reference in the body, not a missing URL
+	// target.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"milestone": "WL-MILE-9"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown milestone status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Same-project attach.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"milestone": milestoneID})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("attach status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["milestone"]; got != milestoneID {
+		t.Fatalf("patch response milestone = %v, want %s", got, milestoneID)
+	}
+	task, err := st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Milestone != milestoneID {
+		t.Fatalf("stored milestone = %q, want %s", task.Milestone, milestoneID)
+	}
+
+	// Cross-project attach: 029 §5, containment never crosses a project
+	// boundary.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/PROJ2-1", token, map[string]any{"milestone": milestoneID})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("cross-project attach status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// "none" clears it.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"milestone": "none"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clear status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if cleared := decodeMap(t, rr)["milestone"]; cleared != nil && cleared != "" {
+		t.Errorf("patch response milestone after clear = %v, want empty", cleared)
+	}
+	task, err = st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.Milestone != "" {
+		t.Fatalf("stored milestone after clear = %q, want empty", task.Milestone)
+	}
+
+	// Four attempts above: unknown (rejected), attach (ok), cross-project
+	// (rejected), clear (ok).
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_milestone_changes_total{action="task_attach",outcome="ok"} 2`) {
+		t.Errorf("metrics missing two ok task_attach counts:\n%s", metrics)
+	}
+	if !strings.Contains(metrics, `worklode_milestone_changes_total{action="task_attach",outcome="rejected"} 2`) {
+		t.Errorf("metrics missing two rejected task_attach counts:\n%s", metrics)
+	}
+}
+
 func TestPatchTaskState(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)

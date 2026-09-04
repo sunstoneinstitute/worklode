@@ -42,6 +42,10 @@ type Task struct {
 	// from PlanDoc, which names the plan whose acceptance minted the task
 	// (025 §9.2), not what the task is about.
 	AboutDoc int64 `json:"about_doc,omitempty"`
+	// Milestone is the milestone this task is attached to (spec 029 §2), ""
+	// when it is attached to none. Always in the task's own project — the
+	// store refuses a cross-project attach.
+	Milestone string `json:"milestone,omitempty"`
 	// Closed reports whether the task has no work left for anyone to own, by
 	// the per-repo predicate of 004 §1.3: server-derived and read-only. A
 	// client cannot compute this itself (the predicate reads other repos'
@@ -136,6 +140,10 @@ type EditTaskInput struct {
 	// idempotent — an entity may hold several addresses, and there is no
 	// undeclare surface yet.
 	Artifacts *[]string `json:"artifacts"`
+	// Milestone, when non-nil, attaches or detaches the task from a milestone
+	// (spec 029 §2): "" or "none" detaches, any other value must name a
+	// milestone in the task's own project.
+	Milestone *string `json:"milestone,omitempty"`
 }
 
 // EdgeInput is the request body for adding or removing a task edge

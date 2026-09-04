@@ -508,7 +508,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
 		req.NeedsDecomposition == nil && req.HumanOnly == nil && req.State == nil &&
-		req.Secrets == nil && req.Artifacts == nil && req.Kind == nil {
+		req.Secrets == nil && req.Artifacts == nil && req.Kind == nil && req.Milestone == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
@@ -556,6 +556,10 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.Milestone != nil && *req.Milestone == "none" {
+		empty := ""
+		req.Milestone = &empty
+	}
 	var stateFrom string
 	if req.State != nil {
 		var ok bool
@@ -569,12 +573,12 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 
 	err := s.recordTaskEvent(r.Context(), "cli", "task.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind); err != nil {
+			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind, req.Milestone); err != nil {
 				return err
 			}
 			for field, val := range map[string]*string{
 				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
-				"kind": req.Kind,
+				"kind": req.Kind, "milestone": req.Milestone,
 			} {
 				if val == nil {
 					continue
@@ -622,6 +626,9 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			}
 			return nil
 		})
+	if req.Milestone != nil {
+		s.observeMilestoneChange("task_attach", err)
+	}
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
