@@ -381,9 +381,10 @@ type docLintFileReport struct {
 func newDocShowCmd() *cobra.Command {
 	var version int
 	cmd := &cobra.Command{
-		Use:   "show <ref>",
-		Short: "Show a document: its body, sections, and edges",
-		Args:  cobra.ExactArgs(1),
+		Use:               "show <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Show a document: its body, sections, and edges",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -429,9 +430,10 @@ func newDocShowCmd() *cobra.Command {
 // current version and every one it has superseded, newest first.
 func newDocVersionsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "versions <ref>",
-		Short: "List a document's version history",
-		Args:  cobra.ExactArgs(1),
+		Use:               "versions <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "List a document's version history",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -459,9 +461,10 @@ func newDocVersionsCmd() *cobra.Command {
 func newDocEditCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "edit <ref>",
-		Short: "Replace a document's body (a draft, or a plan at any status)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "edit <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Replace a document's body (a draft, or a plan at any status)",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body, err := readBodyFile(cmd, file)
 			if err != nil {
@@ -494,9 +497,10 @@ func newDocEditCmd() *cobra.Command {
 
 func newDocAcceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "accept <ref>",
-		Short: "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it",
-		Args:  cobra.ExactArgs(1),
+		Use:               "accept <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -533,9 +537,10 @@ func newDocAcceptCmd() *cobra.Command {
 // minting a review task, say — is the doc-lifecycle watcher's to decide.
 func newDocSubmitCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "submit <ref>",
-		Short: "Submit a document for review (records a review event; the document's status does not change)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "submit <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Submit a document for review (records a review event; the document's status does not change)",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -568,8 +573,9 @@ func newDocSubmitCmd() *cobra.Command {
 func newDocDeleteCmd() *cobra.Command {
 	var justification string
 	cmd := &cobra.Command{
-		Use:   "delete <ref>",
-		Short: "Delete a document: hide a row that should not have existed",
+		Use:               "delete <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Delete a document: hide a row that should not have existed",
 		Long: "Delete a document. The row is tombstoned, not removed: its events stay\n" +
 			"in the log, references to it still resolve, and `lode doc undelete`\n" +
 			"restores it. A prod instance refuses a delete carrying no\n" +
@@ -609,8 +615,9 @@ func newDocDeleteCmd() *cobra.Command {
 // (044 §3).
 func newDocUndeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "undelete <ref>",
-		Short: "Restore a deleted document, clearing its tombstone",
+		Use:               "undelete <ref>",
+		ValidArgsFunction: deletedDocRefAt(0),
+		Short:             "Restore a deleted document, clearing its tombstone",
 		Long: "Restore a deleted document. A slug resolves here even though the\n" +
 			"document has left every live list, because the lookup falls back to\n" +
 			"the tombstoned ones; `lode doc list --deleted` shows what is there.",
@@ -649,9 +656,10 @@ func newDocReviseCmd() *cobra.Command {
 	var file string
 	var accept, discard bool
 	cmd := &cobra.Command{
-		Use:   "revise <ref>",
-		Short: "Open, update, land, or discard a document's candidate revision",
-		Args:  cobra.ExactArgs(1),
+		Use:               "revise <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Open, update, land, or discard a document's candidate revision",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {

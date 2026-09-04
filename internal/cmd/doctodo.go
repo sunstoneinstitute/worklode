@@ -18,8 +18,9 @@ import (
 func newDocTodoCmd() *cobra.Command {
 	var deps bool
 	cmd := &cobra.Command{
-		Use:   "todo <ref>",
-		Short: "What is left before a spec is fully implemented",
+		Use:               "todo <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "What is left before a spec is fully implemented",
 		Long: `Join a spec's planning gap, its unexecuted plans, and the ordering
 between them into one work list (026 §2.5).
 

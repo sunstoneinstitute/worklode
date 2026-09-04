@@ -128,8 +128,9 @@ func newShowCmd() *cobra.Command {
 	var kind, taskFlag, specFlag, adrFlag, planFlag, milestoneFlag, projectFlag, deliverableFlag, section string
 	var pager, inline, usage bool
 	cmd := &cobra.Command{
-		Use:   "show [id]",
-		Short: "Show any entity by id or kind flag: a task, a design doc, a project",
+		Use:               "show [id]",
+		ValidArgsFunction: showRefs,
+		Short:             "Show any entity by id or kind flag: a task, a design doc, a project",
 		Long: `Show any entity, in one of two forms:
 
   lode show <id>                    classify the id and dispatch (a task,
@@ -212,6 +213,10 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
 	cmd.Flags().BoolVar(&usage, "usage", false, "for a task: include its token usage/cost (all history, own sessions only)")
+	// --project is the only way to reach a project through show: a positional
+	// slug classifies as a document (classify, above), so the project
+	// candidates belong on the flag rather than in the positional's union.
+	cmd.RegisterFlagCompletionFunc("project", projectKeys)
 	return cmd
 }
 
