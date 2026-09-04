@@ -721,6 +721,13 @@ func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
 	task := createTestTask(t, c, "Mirror hooks")
 
 	root := initGitRepo(t)
+	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
+		t.Fatalf("mkdir .worklode: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "config.toml"),
+		[]byte("current_project = \"proj\"\n"), 0o600); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
 	if _, err := (harness.ClaudeCode{}).InstallHooks(root, harness.ScopeLocal); err != nil {
 		t.Fatalf("install claude hooks at root: %v", err)
 	}
@@ -742,6 +749,30 @@ func TestNextMirrorsLocalClaudeHooksWhenRootOptedIn(t *testing.T) {
 	hooks, _ := settings["hooks"].(map[string]any)
 	if _, ok := hooks["SessionStart"]; !ok {
 		t.Fatalf("worktree settings = %v, want a mirrored SessionStart binding", settings)
+	}
+
+	// The worktree `lode work next` just stamped gets both the project and
+	// task resource attributes.
+	env, _ := settings["env"].(map[string]any)
+	wantAttrs := "worklode.project.id=proj,worklode.task.id=" + task.ID
+	if got, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string); got != wantAttrs {
+		t.Fatalf("worktree OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, wantAttrs)
+	}
+
+	// Converse: the main checkout's own install carries the project but no
+	// task attribute — it is never stamped, so there is nothing to bind it
+	// to the task the worktree above was created for.
+	rootData, err := os.ReadFile(filepath.Join(root, ".claude", "settings.local.json"))
+	if err != nil {
+		t.Fatalf("read root settings: %v", err)
+	}
+	var rootSettings map[string]any
+	if err := json.Unmarshal(rootData, &rootSettings); err != nil {
+		t.Fatalf("parse root settings: %v", err)
+	}
+	rootEnv, _ := rootSettings["env"].(map[string]any)
+	if got, _ := rootEnv["OTEL_RESOURCE_ATTRIBUTES"].(string); got != "worklode.project.id=proj" {
+		t.Fatalf("root OTEL_RESOURCE_ATTRIBUTES = %q, want %q (no task attribute)", got, "worklode.project.id=proj")
 	}
 }
 
