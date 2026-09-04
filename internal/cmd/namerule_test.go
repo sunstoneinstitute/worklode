@@ -13,9 +13,9 @@ import (
 var (
 	l1Entities = map[string]bool{ // L1: exactly what the backbone models, singular
 		"actor": true, "approval": true, "blob": true, "channel": true,
-		"doc": true, "event": true, "graph": true, "inbox": true,
-		"project": true, "secret": true, "skill": true, "task": true,
-		"token": true,
+		"decision": true, "doc": true, "event": true, "graph": true,
+		"inbox": true, "milestone": true, "project": true, "secret": true,
+		"skill": true, "task": true, "token": true,
 	}
 	l2Machine = map[string]bool{ // L2: acts on this machine or this checkout
 		"doctor": true, "install": true, "uninstall": true,
