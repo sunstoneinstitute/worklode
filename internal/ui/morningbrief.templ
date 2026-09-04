@@ -1,0 +1,86 @@
+package ui
+
+// morningbrief.templ renders the Morning Brief section on Home (spec 032 §9,
+// §11; NOT the task brief in internal/api/brief.go): tier-1 NeedsYou through
+// tier-3 Stopped items in full, tier-4 Routine collapsed to a count with no
+// per-event rendering anywhere. That absence is §11's acceptance bar in
+// markup form — judgment obvious, no firehose.
+
+import "strconv"
+
+templ morningBrief(b *MorningBriefView) {
+	if b != nil {
+		<section class="morningbrief" aria-label="Morning Brief">
+			<h2>Morning Brief</h2>
+			if b.Truncated {
+				<p class="small muted">Showing the oldest { b.Shown } events since your last review.</p>
+			}
+			if len(b.Groups) == 0 {
+				<p class="muted">Nothing needing you since your last review.</p>
+			}
+			for _, g := range b.Groups {
+				@morningBriefGroup(g)
+			}
+			if b.CanReview {
+				<form method="post" action="/home/reviewed">
+					<input type="hidden" name="cutoff" value={ strconv.FormatInt(b.Cutoff, 10) }/>
+					<button type="submit">Reviewed through now</button>
+				</form>
+			}
+		</section>
+	}
+}
+
+// morningBriefGroup renders one project's slice in tier order: NeedsYou
+// first and visually strongest, then Outcomes, then Stopped, then the
+// Routine count. FocusNote (pinned focus, when set) sits beside the project
+// name.
+templ morningBriefGroup(g MorningBriefGroup) {
+	<div class="mbgroup">
+		<h3>
+			<a href={ "/projects/" + g.ProjectID }>{ g.Name }</a>
+			if g.FocusNote != "" {
+				<span class="small muted">{ g.FocusNote }</span>
+			}
+		</h3>
+		if len(g.NeedsYou) > 0 {
+			<ul class="mb-needsyou">
+				for _, it := range g.NeedsYou {
+					@morningBriefItem(it)
+				}
+			</ul>
+		}
+		if len(g.Outcomes) > 0 {
+			<ul class="mb-outcomes">
+				for _, it := range g.Outcomes {
+					@morningBriefItem(it)
+				}
+			</ul>
+		}
+		if len(g.Stopped) > 0 {
+			<ul class="mb-stopped">
+				for _, it := range g.Stopped {
+					@morningBriefItem(it)
+				}
+			</ul>
+		}
+		if g.Routine > 0 {
+			<details class="mb-collapsed">
+				<summary class="muted">{ routineLabel(g.Routine) }</summary>
+				<p class="small muted">These are at or before your last-review cutoff and collapse when you review.</p>
+			</details>
+		}
+	</div>
+}
+
+// morningBriefItem renders one tier line: a link when Href is set, plain
+// text otherwise.
+templ morningBriefItem(it MorningBriefItem) {
+	<li>
+		if it.Href != "" {
+			<a href={ it.Href }>{ it.Text }</a>
+		} else {
+			{ it.Text }
+		}
+	</li>
+}
