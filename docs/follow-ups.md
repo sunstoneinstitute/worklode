@@ -798,3 +798,20 @@ Recorded by WL-633's pass over spec 040 §9:
   number no longer distinguishes anything. Widening the format or dropping
   the column from those two views is a display decision, left out of the
   wiring change.
+
+Recorded by WL-634's pass over spec 040 §9:
+
+- `[P2]` **`lode search` is a top-level command 061 §1 does not name.** 040
+  §9 spells the CLI verb `lode search <query>`, and it answers over three
+  entities at once, so no L1 `lode <entity> <verb>` spelling is true of it
+  and L7's one polymorphic reader (`lode show`, one reference in, one
+  subject out) is a different operation. That leaves the top level, whose
+  L2 set 061 §1 closes and whose amendment it reserves to itself. The
+  command ships under 040 §9; 061 §1 needs the amendment that puts `search`
+  in the map, next to a rule for cross-entity readers.
+- `[P3]` **A document hit's address costs one extra request.**
+  `model.SearchHit` carries the document's row id, not the `WL-SPEC-25`
+  reference §9's line renders, so `lode search` fetches the project's
+  document list to map ids to references whenever the results hold a
+  document. A `ref` on the hit itself — built where the store already
+  builds a skill's qualified name — would drop the second request.
