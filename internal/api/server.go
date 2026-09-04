@@ -847,9 +847,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := st.EnsureServiceActor(context.Background(), flowActorID, "approval flow rules"); err != nil {
-		return nil, nil, fmt.Errorf("ensure %s actor: %w", flowActorID, err)
-	}
 
 	if cfg.OIDCIssuer != "" && cfg.OIDCClientID != "" {
 		if err := cfg.requireWebSecrets("OIDC"); err != nil {
@@ -972,6 +969,12 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		if err := st.BootstrapAdmin(context.Background(), cfg.BootstrapToken); err != nil {
 			return nil, nil, fmt.Errorf("bootstrap admin: %w", err)
 		}
+	}
+	// After BootstrapAdmin: BootstrapAdmin no-ops once the actors table is
+	// non-empty, so a service-actor insert ahead of it would silently skip
+	// bootstrap on a fresh database (WL-545 regression).
+	if err := st.EnsureServiceActor(context.Background(), flowActorID, "approval flow rules"); err != nil {
+		return nil, nil, fmt.Errorf("ensure %s actor: %w", flowActorID, err)
 	}
 
 	s.initMetrics(reg)
