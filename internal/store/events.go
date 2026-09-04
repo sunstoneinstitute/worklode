@@ -285,17 +285,36 @@ func EventPayload(v any) ([]byte, error) {
 // append-only in the sense that matters (§15.3's objection is to patching a
 // row that has already committed).
 func AttributeEventToTask(tx *sql.Tx, eventID int64, taskID string) error {
+	what := fmt.Sprintf("attribute event %d to task %s", eventID, taskID)
+	return mergeEventPayload(tx, eventID, map[string]string{"task": taskID}, what)
+}
+
+// MergeEventPayload folds fields into an already-inserted event's payload,
+// for the values that do not exist until the transaction runs: a minted id, a
+// position resolved against the rows already there. Same rule and the same
+// justification as AttributeEventToTask — call it only from the apply
+// callback of the event it names.
+func MergeEventPayload(tx *sql.Tx, eventID int64, fields map[string]string) error {
+	return mergeEventPayload(tx, eventID, fields, fmt.Sprintf("merge into event %d payload", eventID))
+}
+
+// mergeEventPayload is the single writer both forms share; what names the
+// operation in every error it returns.
+func mergeEventPayload(tx *sql.Tx, eventID int64, fields map[string]string, what string) error {
+	extra, err := json.Marshal(fields)
+	if err != nil {
+		return fmt.Errorf("%s: %w", what, err)
+	}
 	res, err := tx.Exec(
 		`UPDATE events
 		    SET payload = CASE WHEN jsonb_typeof(payload) = 'object' THEN payload ELSE '{}'::jsonb END
-		                  || jsonb_build_object('task', $2::text)
+		                  || $2::jsonb
 		  WHERE id = $1`,
-		eventID, taskID)
+		eventID, extra)
 	if err != nil {
-		return fmt.Errorf("attribute event %d to task %s: %w", eventID, taskID, err)
+		return fmt.Errorf("%s: %w", what, err)
 	}
-	return requireOneAffected(res, fmt.Sprintf("attribute event %d to task %s", eventID, taskID),
-		fmt.Errorf("event %d: %w", eventID, ErrNotFound))
+	return requireOneAffected(res, what, fmt.Errorf("event %d: %w", eventID, ErrNotFound))
 }
 
 // recordedEventID reads back the id of the event (source, externalID) already
