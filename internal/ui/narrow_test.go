@@ -188,6 +188,29 @@ func pages(t *testing.T) map[string]string {
 				ReportedState: "published", ReportedAt: &now,
 			}},
 		}),
+		// Two sections: one holding a long task title, an unbreakable
+		// artifact address and a deliverable, and one holding nothing, so
+		// both branches of milestoneSection are measured.
+		"milestones": Milestones(MilestonesView{
+			Page: PageProps{Title: "Milestones"}, Project: proj,
+			CanonicalURL: "/projects/worklode/milestones",
+			Milestones: []MilestoneSection{{
+				ID: "WL-MILE-1", Title: "Internal review of the casualty reconciliation methodology",
+				TasksTotal: 3, TasksClosed: 1, DeliverablesTotal: 2, DeliverablesLive: 1,
+				Tasks: []MilestoneTaskRow{
+					{ID: "WL-234", Title: longTitle, State: "in_progress", Assignee: "stig@sunstoneinstitute.ai"},
+					{ID: "WL-141", Title: tokenTitle, State: "ready"},
+				},
+				Deliverables: []DeliverableRow{{
+					ID: "WL-DEL-4", Name: "Daily casualty reconciliation snapshot",
+					Description: "The partitioned daily snapshot the newsroom queries, republished whenever an upstream correction lands",
+					CreatedBy:   "stig", CreatedAt: now, Artifact: token,
+					ReportedState: "published", ReportedAt: &now,
+				}},
+			}, {
+				ID: "WL-MILE-2", Title: "Publication and the editorial evaluation that gates it",
+			}},
+		}),
 		"crew": Crew(CrewView{
 			Page: PageProps{Title: "Crew"}, Project: proj,
 			AddAction: "/projects/worklode/crew", RemoveAction: "/projects/worklode/crew/remove",

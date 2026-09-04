@@ -816,3 +816,18 @@ Recorded by WL-603 (`lode doc note`, 025 §8.5):
   `internal/cmd/namerule_test.go` and to `internal/cmd/CLAUDE.md`'s L3 list.
   That test's list is transcribed from 061 §1 L3, so the spec owes the same
   entry; adding it is a revision of an accepted spec, not part of this task.
+
+Recorded by WL-532 (the project Milestones page, 029 §2 and 032 §10):
+
+- `[P3]` **Spec 032 §2's project-local navigation now names two destinations
+  it does not list.** WL-532 adds Milestones between Crew and Work in
+  `localNav` (`internal/ui/layout.templ`), ahead of both Work and
+  Deliverables because a milestone contains both (029 §2). That is the same
+  gap WL-238's Deleted entry above records, and the same amendment closes
+  both.
+- `[P3]` **A milestone's children cannot be attached from any surface yet.**
+  `store.ListMilestoneChildren` reads them and the page renders them, but the
+  writer that sets `milestone_id` on a task or a deliverable is a later task
+  of the milestones plan. Until it lands, every rendered section says nothing
+  is attached, so the page's populated shape is covered by store and
+  `internal/ui` tests rather than by an `internal/api` one.

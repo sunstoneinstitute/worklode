@@ -9,6 +9,7 @@ package ui
 // reference api's DTOs (ADR 036 §3).
 
 import (
+	"fmt"
 	"html/template"
 	"strconv"
 	"strings"
@@ -472,6 +473,56 @@ func deliverableLabel(state string) string {
 		return "Declared"
 	}
 	return strings.ToUpper(state[:1]) + state[1:]
+}
+
+// --- milestones --------------------------------------------------------------
+
+// MilestonesView is the project-local Milestones destination (spec 029 §2).
+// An empty Milestones slice renders an honest empty state, never a
+// fabricated row.
+type MilestonesView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	Milestones   []MilestoneSection
+}
+
+// MilestoneSection is one milestone with the children its progress was
+// derived from. The counts echo model.MilestoneProgress; the view repeats
+// the numbers, never the derivation.
+type MilestoneSection struct {
+	ID                string
+	Title             string
+	TasksTotal        int
+	TasksClosed       int
+	DeliverablesTotal int
+	DeliverablesLive  int
+	Tasks             []MilestoneTaskRow
+	Deliverables      []DeliverableRow
+}
+
+// MilestoneTaskRow is one task in a milestone section, linking to the task
+// page the way every other task list does.
+type MilestoneTaskRow struct {
+	ID       string
+	Title    string
+	State    string
+	Assignee string
+}
+
+// progress is the section's one-line readout: plain counts of what the store
+// derived. Spec 029 §2 makes progress a query over children, and a
+// percentage or a bar would claim a precision two small integers do not
+// carry.
+func (m MilestoneSection) progress() string {
+	return fmt.Sprintf("%d/%d tasks closed · %d/%d deliverables live",
+		m.TasksClosed, m.TasksTotal, m.DeliverablesLive, m.DeliverablesTotal)
+}
+
+// hasChildren reports whether anything is attached. A milestone with nothing
+// attached says so instead of rendering two empty containers.
+func (m MilestoneSection) hasChildren() bool {
+	return len(m.Tasks) > 0 || len(m.Deliverables) > 0
 }
 
 // --- crew --------------------------------------------------------------------

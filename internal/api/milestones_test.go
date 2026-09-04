@@ -114,3 +114,57 @@ func TestCreateMilestoneAPIRefusals(t *testing.T) {
 		t.Errorf("metrics missing four rejected creates:\n%s", metrics)
 	}
 }
+
+// TestMilestonesPage covers the project-local Milestones destination (spec
+// 029 §2, spec 032 §10): an empty project renders the honest "No milestones
+// yet" state, a seeded project renders every milestone in position order with
+// its derived progress, and an unknown project 404s the way every other
+// project route does. Milestones are seeded through the real write path, so
+// what the page shows is what a create actually stores.
+func TestMilestonesPage(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "GET", "/projects/proj/milestones", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	bodyContains(t, body, "No milestones yet")
+
+	for _, title := range []string{"Internal review", "Publication"} {
+		if rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+			model.CreateMilestoneInput{Title: title}); rr.Code != http.StatusCreated {
+			t.Fatalf("seed %q status = %d; body %s", title, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = doReq(t, h, "GET", "/projects/proj/milestones", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("seeded status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	body = rr.Body.String()
+	assertShell(t, body)
+	assertOneAriaCurrent(t, body)
+	main := mainContent(t, body)
+	if strings.Contains(main, "No milestones yet") {
+		t.Error("a seeded page still renders the whole-page empty state")
+	}
+	// Section order is the store's position order, not insertion luck.
+	assertOrder(t, main, "WL-MILE-1", "Internal review", "WL-MILE-2", "Publication")
+	// Nothing is attached yet, so both sections carry zero progress and say
+	// so rather than rendering an empty table.
+	if n := strings.Count(main, "0/0 tasks closed"); n != 2 {
+		t.Errorf("progress lines = %d, want 2:\n%s", n, main)
+	}
+	if n := strings.Count(main, "Nothing is attached to this milestone yet."); n != 2 {
+		t.Errorf("childless milestone notes = %d, want 2:\n%s", n, main)
+	}
+
+	if rr := doReq(t, h, "GET", "/projects/nosuch/milestones", "", nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown project status = %d, want 404", rr.Code)
+	}
+}
