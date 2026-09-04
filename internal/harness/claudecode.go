@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -85,24 +87,43 @@ func (ClaudeCode) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	if err != nil {
 		return HookInstall{}, err
 	}
-	if err := installClaudeHooks(path); err != nil {
+	settings, err := ReadJSONFile(path)
+	if err != nil {
+		return HookInstall{}, err
+	}
+	applyGroupedHooks(settings, claudeBindings)
+	projectID, taskID := resolveClaudeTelemetryIDs(repoDir)
+	applyClaudeTelemetry(settings, projectID, taskID)
+	if err := writeJSONFile(path, settings); err != nil {
 		return HookInstall{}, err
 	}
 	return HookInstall{Path: path, Bound: boundNames(claudeBindings)}, nil
 }
 
 // UninstallHooks removes Worklode's bindings from the scope's settings file
-// for the repo containing repoDir.
+// for the repo containing repoDir, plus the telemetry env vars and resource
+// attributes InstallHooks writes -- the same single read-modify-write
+// InstallHooks uses to write them.
 func (ClaudeCode) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
 	path, err := settingsPathForScope(repoDir, scope)
 	if err != nil {
 		return HookUninstall{}, err
 	}
-	action, err := uninstallClaudeHooks(path)
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		return HookUninstall{Path: path, Action: ActionNone}, nil
+	}
+	settings, err := ReadJSONFile(path)
 	if err != nil {
 		return HookUninstall{}, err
 	}
-	return HookUninstall{Path: path, Action: action}, nil
+	hooks := stripGroupedHooks(settings)
+	telemetry := stripClaudeTelemetry(settings)
+	if hooks == ActionRemoved || telemetry == ActionRemoved {
+		if err := writeJSONFile(path, settings); err != nil {
+			return HookUninstall{}, err
+		}
+	}
+	return HookUninstall{Path: path, Action: hooks}, nil
 }
 
 // InstallWithStatusLine is InstallHooks plus the status line. Both live in the
@@ -120,6 +141,8 @@ func (ClaudeCode) InstallWithStatusLine(repoDir, scope string) (HookInstall, err
 	}
 	applyGroupedHooks(settings, claudeBindings)
 	action := applyStatusLine(settings)
+	projectID, taskID := resolveClaudeTelemetryIDs(repoDir)
+	applyClaudeTelemetry(settings, projectID, taskID)
 	if err := writeJSONFile(path, settings); err != nil {
 		return HookInstall{}, err
 	}
@@ -151,7 +174,8 @@ func (ClaudeCode) UninstallWithStatusLine(repoDir, scope string) (HookUninstall,
 	}
 	hooks := stripGroupedHooks(settings)
 	statusLine := stripStatusLine(settings)
-	if hooks == ActionRemoved || statusLine == ActionRemoved {
+	telemetry := stripClaudeTelemetry(settings)
+	if hooks == ActionRemoved || statusLine == ActionRemoved || telemetry == ActionRemoved {
 		if err := writeJSONFile(path, settings); err != nil {
 			return HookUninstall{}, err
 		}
@@ -249,6 +273,8 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {
 		applyStatusLine(settings)
 	}
+	projectID, taskID := resolveClaudeTelemetryIDs(dir)
+	applyClaudeTelemetry(settings, projectID, taskID)
 	return writeJSONFile(dirPath, settings)
 }
 
@@ -308,4 +334,165 @@ func isLodeStatusLine(v any) bool {
 		return true
 	}
 	return len(fields) > 1 && filepath.Base(fields[0]) == "lode" && fields[1] == "statusline"
+}
+
+// claudeTelemetryEnv is the fixed set of environment variables a Claude Code
+// install writes to turn on OTel-based usage telemetry, pointed at the
+// collector lode-server runs. The values never vary by project or scope, so
+// there is nothing here for a caller to configure.
+var claudeTelemetryEnv = map[string]string{
+	"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+	"OTEL_METRICS_EXPORTER":        "otlp",
+	"OTEL_EXPORTER_OTLP_PROTOCOL":  "grpc",
+	"OTEL_EXPORTER_OTLP_ENDPOINT":  "http://127.0.0.1:4317",
+}
+
+// The two OTEL_RESOURCE_ATTRIBUTES keys Worklode owns. Every other key=value
+// entry in that comma-separated string belongs to someone else and is
+// preserved untouched by both apply and strip.
+const (
+	resourceProjectKey = "worklode.project.id"
+	resourceTaskKey    = "worklode.task.id"
+)
+
+// settingsEnv returns the settings' "env" object, or an empty one when it is
+// absent or not an object -- the same convention settingsHooks uses.
+func settingsEnv(settings map[string]any) map[string]any {
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		return map[string]any{}
+	}
+	return env
+}
+
+// resolveClaudeTelemetryIDs resolves the project and task identity a Claude
+// Code install stamps into OTEL_RESOURCE_ATTRIBUTES. The project comes from
+// local config only -- the same cheap, no-server-round-trip contract
+// CurrentProjectFrom promises internal/hookrun -- and the task comes only
+// from the enclosing worktree's own git-config stamp, never the directory
+// name. A main checkout is never stamped, which is what makes its own
+// install carry no task attribute rather than copying one from wherever the
+// process happens to be invoked.
+func resolveClaudeTelemetryIDs(repoDir string) (projectID, taskID string) {
+	projectID = cli.CurrentProjectFrom(repoDir)
+	if root, ok := worktree.Root(repoDir); ok {
+		taskID, _ = worktree.StampedTaskID(root)
+	}
+	return projectID, taskID
+}
+
+// mergeResourceAttributes merges Worklode's project and task identity into an
+// existing OTEL_RESOURCE_ATTRIBUTES value, keeping every other key=value
+// entry untouched. Entries are sorted so a second install with the same
+// inputs writes the exact same string. An empty id is left out rather than
+// written as "worklode.task.id=" -- that is both how a main checkout's
+// install ends up with no task attribute, and how a strip (called with "",
+// "") removes both keys while leaving the rest alone.
+func mergeResourceAttributes(existing, projectID, taskID string) string {
+	attrs := map[string]string{}
+	for _, part := range strings.Split(existing, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		attrs[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	delete(attrs, resourceProjectKey)
+	delete(attrs, resourceTaskKey)
+	if projectID != "" {
+		attrs[resourceProjectKey] = projectID
+	}
+	if taskID != "" {
+		attrs[resourceTaskKey] = taskID
+	}
+	if len(attrs) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(attrs))
+	for k := range attrs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+"="+attrs[k])
+	}
+	return strings.Join(parts, ",")
+}
+
+// hasResourceKey reports whether an OTEL_RESOURCE_ATTRIBUTES value carries
+// key among its comma-separated key=value entries.
+func hasResourceKey(attrs, key string) bool {
+	for _, part := range strings.Split(attrs, ",") {
+		k, _, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if ok && strings.TrimSpace(k) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// applyClaudeTelemetry sets Worklode's telemetry env vars on an already-read
+// settings object and merges the project/task resource attributes into
+// OTEL_RESOURCE_ATTRIBUTES, preserving every foreign env key and resource
+// attribute. It mutates settings in place and never touches the filesystem --
+// the same contract applyGroupedHooks has, so a caller with more than one
+// surface in the file folds this into its own single read-modify-write.
+func applyClaudeTelemetry(settings map[string]any, projectID, taskID string) {
+	env := settingsEnv(settings)
+	for k, v := range claudeTelemetryEnv {
+		env[k] = v
+	}
+	existing, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string)
+	if merged := mergeResourceAttributes(existing, projectID, taskID); merged != "" {
+		env["OTEL_RESOURCE_ATTRIBUTES"] = merged
+	} else {
+		delete(env, "OTEL_RESOURCE_ATTRIBUTES")
+	}
+	settings["env"] = env
+}
+
+// stripClaudeTelemetry removes Worklode's telemetry env vars from an
+// already-read settings object, but only the four exact vars and only where
+// they still hold Worklode's own values -- a developer who repointed one
+// elsewhere keeps their own value. It always drops the two worklode.*
+// resource attributes it owns when present, and preserves every other env
+// key and resource attribute. Returns ActionRemoved or ActionNone,
+// stripGroupedHooks' vocabulary, so a caller with more than one surface can
+// OR the results together to decide whether to write.
+func stripClaudeTelemetry(settings map[string]any) (action string) {
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		return ActionNone
+	}
+	changed := false
+	for k, want := range claudeTelemetryEnv {
+		if got, ok := env[k].(string); ok && got == want {
+			delete(env, k)
+			changed = true
+		}
+	}
+	if existing, ok := env["OTEL_RESOURCE_ATTRIBUTES"].(string); ok {
+		if hasResourceKey(existing, resourceProjectKey) || hasResourceKey(existing, resourceTaskKey) {
+			changed = true
+			if merged := mergeResourceAttributes(existing, "", ""); merged == "" {
+				delete(env, "OTEL_RESOURCE_ATTRIBUTES")
+			} else {
+				env["OTEL_RESOURCE_ATTRIBUTES"] = merged
+			}
+		}
+	}
+	if !changed {
+		return ActionNone
+	}
+	if len(env) == 0 {
+		delete(settings, "env")
+	} else {
+		settings["env"] = env
+	}
+	return ActionRemoved
 }
