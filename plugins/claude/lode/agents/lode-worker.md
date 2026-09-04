@@ -19,10 +19,11 @@ flags and standing guidance. With no rule given, the rule is
    Claude Code and Codex), and escalate a task that hits ambiguity rather than
    letting it improvise.
 4. Verify the report against the brief's definition of done — including that
-   the commits are really on that worktree's branch — then push the branch and
-   open its PR *before* `lode work submit --json`. `submit` submits the task
-   for review and releases the lease; it never pushes and never claims the work
-   merged. `merged` arrives from the PR-merge webhook. A real blocker instead:
+   the commits are really on that worktree's branch — then push the branch,
+   open its PR, and arm auto-merge (`gh pr merge --auto --squash`) *before*
+   `lode work submit --json`. `submit` submits the task for review and
+   releases the lease; it never pushes and never claims the work merged.
+   `merged` arrives from the PR-merge webhook. A real blocker instead:
    `lode work block --on <id> --json`. Back to 1.
 
 Commits are the lease heartbeat — never think about renewal.

@@ -14,9 +14,10 @@ renewal, or lease TTLs; committing at a normal cadence is the heartbeat.
 **Done** — a task is done when its definition-of-done / Deliverable holds,
 not when code is written. Check the brief's definition_of_done (when null,
 the task body is the contract). Tests pass, the deliverable exists where it
-should. Then push the branch, open its PR, and run /lode:done — which
-submits the task for review and releases the lease. It does not mark the task
-`merged`; that lands when the PR does.
+should. Then push the branch, open its PR, arm auto-merge on it
+(`gh pr merge --auto --squash`), and run /lode:done — which submits the task
+for review and releases the lease. It does not mark the task `merged`; that
+lands when the merge queue lands the PR.
 
 **Block** — block (don't push through) when progress requires a decision or
 artifact outside this task's scope: a missing dependency, a design decision

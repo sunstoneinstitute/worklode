@@ -8,6 +8,11 @@ on:
     # re-evaluates and lets it through). opened/synchronize/reopened are the
     # normal triggers.
     types: [opened, synchronize, reopened, labeled]
+  # The merge queue builds each queued PR on top of main and needs the same
+  # checks reported on that synthetic ref, or the entry times out. See
+  # docs/github-advanced-setup.md for the ruleset that turns the queue on.
+  merge_group:
+    types: [checks_requested]
 
 permissions:
   contents: read
@@ -17,7 +22,9 @@ permissions:
   packages: write
 
 concurrency:
-  group: ci-pr-${{ github.event.pull_request.number }}
+  # One group per PR, or per merge-queue ref (a merge_group event has no PR
+  # number; without the fallback every queued entry would cancel the last).
+  group: ci-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -42,6 +49,15 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+
+          # A merge-queue build has no pull_request payload to inspect: the
+          # ref is main plus PRs that each already passed these checks on
+          # their own, so it is trusted, runs everything, and skips nothing.
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            echo "Merge-queue build — running every check on the trusted runners."
+            printf 'trusted=true\nobsidian=true\nrun=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # `trusted` gates the self-hosted runner (hel01), not whether CI runs
           # at all: a fork PR's code must never execute somewhere with
@@ -194,3 +210,20 @@ jobs:
         with:
           overlay-base: deploy/overlays
           environments: hzdev hzprod
+
+  # The one job the main ruleset requires (docs/github-advanced-setup.md).
+  # Requiring the conditional jobs above directly leaves a PR blocked whenever
+  # one of them never reports; this job always runs, and passes when every
+  # job it needs either succeeded or was skipped by its own `if:`.
+  checks:
+    needs: [gate, lint, test, obsidian, build-image, validate-kustomize]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
