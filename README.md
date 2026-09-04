@@ -565,10 +565,17 @@ after the fact with `lode task set skills <name...> <id>` (no names clears
 them); `lode task skills <id>` shows what is pinned, and pinned skills are
 always inlined in `lode task brief`.
 
-Recommendations need `LODE_EMBEDDING_URL` and `LODE_EMBEDDING_MODEL` on the
-server, and, if the endpoint requires auth, `LODE_EMBEDDING_API_KEY`. With
-`LODE_EMBEDDING_URL` unset, the server runs pins-only: briefs and
-recommendations both still work, just without similarity matches.
+Recommendations and `lode search` share one retrieval path over the corpus
+index (040). Its dense arm needs `LODE_EMBEDDING_URL` and
+`LODE_EMBEDDING_MODEL` on the server, and, if the endpoint requires auth,
+`LODE_EMBEDDING_API_KEY`; the default deployment points the URL at a CPU
+embeddings sidecar rather than a third-party API. `LODE_INDEX_INTERVAL` sets
+how often the background loop indexes new documents, tasks and skills
+(default `5m`).
+
+With `LODE_EMBEDDING_URL` unset, both still work on the lexical arm alone:
+search answers `provider: "none"` with real results, and recommendations fall
+back to pins plus lexical matches.
 
 ## Worklode plugin (Claude Code)
 
