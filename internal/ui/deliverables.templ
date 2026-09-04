@@ -2,7 +2,8 @@ package ui
 
 // deliverables.templ renders a project's Deliverables destination (GET
 // /projects/{id}/deliverables): the declared outputs of the project (spec 029
-// §3) and the affordance to declare another.
+// §3), grouped by the milestone each is attached to (spec 029 §2), and the
+// affordance to declare another.
 //
 // Each row shows what is stored — id, name, description, the declared
 // artifact address, and who declared it when — plus the newest state reported
@@ -10,6 +11,12 @@ package ui
 // and probers report: an emitter can now report one (the catalog ingest), the
 // poll prober cannot yet, so a row with no report says "Declared" instead of
 // dressing a declaration up as a status.
+//
+// A project with no milestones (or none holding a deliverable) shows exactly
+// one group — Groups' unattached entry — which renders with no subheading:
+// the flat list this page has always shown. Once a second group exists, every
+// group gets a heading, "No milestone" for the unattached one, so a
+// declared row is never dropped off the page for lacking one.
 
 templ Deliverables(v DeliverablesView) {
 	@Page(v.Page) {
@@ -24,18 +31,22 @@ templ Deliverables(v DeliverablesView) {
 						</div>
 					</div>
 					<div class="bd">
-						if len(v.Deliverables) == 0 {
+						if v.totalRows() == 0 {
 							<p class="muted">
 								No deliverable is declared for this project yet. A deliverable is
 								what the project ships &mdash; a dataset, an analysis, a report,
 								a story &mdash; and declaring one states the intent, not that it exists.
 							</p>
-						} else {
+						} else if len(v.Groups) <= 1 {
 							<div class="dod">
-								for _, d := range v.Deliverables {
+								for _, d := range v.Groups[0].Rows {
 									@deliverableRow(d)
 								}
 							</div>
+						} else {
+							for _, g := range v.Groups {
+								@deliverableGroup(g)
+							}
 						}
 					</div>
 				</section>
@@ -49,6 +60,17 @@ templ Deliverables(v DeliverablesView) {
 			</div>
 		}
 	}
+}
+
+// deliverableGroup renders one milestone's (or the unattached) deliverables
+// as a subsection: a heading, then every row.
+templ deliverableGroup(g DeliverableGroup) {
+	<h4>{ g.header() }</h4>
+	<div class="dod">
+		for _, d := range g.Rows {
+			@deliverableRow(d)
+		}
+	</div>
 }
 
 // deliverableRow renders one declared deliverable. The chip is the newest

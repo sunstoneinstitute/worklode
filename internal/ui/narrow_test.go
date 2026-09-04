@@ -180,13 +180,13 @@ func pages(t *testing.T) map[string]string {
 		}),
 		"deliverables": Deliverables(DeliverablesView{
 			Page: PageProps{Title: "Deliverables"}, Project: proj, NewURL: "/projects/worklode/deliverables/new",
-			Deliverables: []DeliverableRow{{
+			Groups: []DeliverableGroup{{Rows: []DeliverableRow{{
 				ID: "DL-4", Name: "Daily casualty reconciliation snapshot",
 				Description: "The partitioned daily snapshot the newsroom queries, republished whenever an upstream correction lands",
 				URL:         "https://console.cloud.google.com/bigquery?project=sunstone-prod&ws=!1m5!1m4!4m3!1ssunstone-prod!2scasualty_reconciliation",
 				CreatedBy:   "stig", CreatedAt: now, Artifact: token,
 				ReportedState: "published", ReportedAt: &now,
-			}},
+			}}}},
 		}),
 		// Two sections: one holding a long task title, an unbreakable
 		// artifact address and a deliverable, and one holding nothing, so

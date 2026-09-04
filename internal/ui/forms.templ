@@ -124,6 +124,7 @@ templ NewDeliverable(v NewDeliverableView) {
 					exact address, so copy it from the catalog rather than typing it.
 				</span>
 			</p>
+			@selectField("milestone", "Milestone", v.Milestones)
 		}
 	}
 }

@@ -24,6 +24,11 @@ type Deliverable struct {
 	// link. "" when the deliverable declares none.
 	Artifact string `json:"artifact"`
 
+	// Milestone is the milestone this deliverable is attached to (spec 029
+	// §2), "" when it is attached to none. Always in the deliverable's own
+	// project — the store refuses a cross-project attach.
+	Milestone string `json:"milestone,omitempty"`
+
 	// ReportedState is the state of the newest evidence for Artifact
 	// (published | updated | deprecated | removed | failed), "" when nothing
 	// has reported; ReportedAt is when that report says it happened.
@@ -44,4 +49,17 @@ type CreateDeliverableInput struct {
 	Description string `json:"description"`
 	URL         string `json:"url"`
 	Artifact    string `json:"artifact"`
+	// Milestone attaches the deliverable to a milestone in the same project
+	// at declaration time (spec 029 §2), "" for none.
+	Milestone string `json:"milestone,omitempty"`
+}
+
+// EditDeliverableInput is the request body for PATCH /api/v1/deliverables/{id}.
+// The three descriptive fields (name, description, url) stay immutable in
+// P1 — only the milestone attachment can be edited after declaration.
+type EditDeliverableInput struct {
+	// Milestone, when non-nil, attaches or detaches the deliverable from a
+	// milestone (spec 029 §2): "" detaches, any other value must name a
+	// milestone in the deliverable's own project.
+	Milestone *string `json:"milestone"`
 }

@@ -181,19 +181,18 @@ func (s *Store) milestoneTaskStates(ctx context.Context, projectID string) (map[
 // "the newest fact reported about the declared address" has one spelling.
 func (s *Store) milestoneDeliverableStates(ctx context.Context, projectID string) (map[string][]string, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+deliverableSelect+`, milestone_id `+deliverableFrom+`
+		`SELECT `+deliverableSelect+` `+deliverableFrom+`
 		  WHERE project_id = $1 AND milestone_id IS NOT NULL`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("milestone deliverable states for %s: %w", projectID, err)
 	}
 	return groupRows(rows, "milestone deliverable states for "+projectID,
 		func(r rowScanner) (string, string, error) {
-			var milestoneID string
-			d, err := scanDeliverable(appendScan{r, []any{&milestoneID}})
+			d, err := scanDeliverable(r)
 			if err != nil {
 				return "", "", err
 			}
-			return milestoneID, d.ReportedState, nil
+			return d.Milestone, d.ReportedState, nil
 		})
 }
 
@@ -320,19 +319,18 @@ func (s *Store) ListMilestoneChildren(ctx context.Context, projectID string) (ma
 
 	what = "milestone deliverables for " + projectID
 	rows, err = s.db.QueryContext(ctx,
-		`SELECT `+deliverableSelect+`, milestone_id `+deliverableFrom+`
+		`SELECT `+deliverableSelect+` `+deliverableFrom+`
 		  WHERE project_id = $1 AND milestone_id IS NOT NULL
 		  ORDER BY created_at, id`, projectID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", what, err)
 	}
 	deliverables, err := groupRows(rows, what, func(r rowScanner) (string, model.Deliverable, error) {
-		var milestoneID string
-		d, err := scanDeliverable(appendScan{r, []any{&milestoneID}})
+		d, err := scanDeliverable(r)
 		if err != nil {
 			return "", model.Deliverable{}, err
 		}
-		return milestoneID, *d, nil
+		return d.Milestone, *d, nil
 	})
 	if err != nil {
 		return nil, nil, err

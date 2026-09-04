@@ -30,14 +30,17 @@ const (
 // validateDeliverable trims and checks the declared fields, returning the
 // cleaned input or a message naming the one thing to fix. Shared by the JSON
 // handler and the web form so the two surfaces cannot drift into accepting
-// different deliverables.
-func validateDeliverable(projectID, name, description, rawURL, artifact, createdBy string) (store.DeliverableInput, string) {
+// different deliverables. milestone is trimmed only — existence and
+// same-project containment (029 §2) are a store.CreateDeliverable check, not
+// a validator concern.
+func validateDeliverable(projectID, name, description, rawURL, artifact, milestone, createdBy string) (store.DeliverableInput, string) {
 	in := store.DeliverableInput{
 		ProjectID:   projectID,
 		Name:        strings.TrimSpace(name),
 		Description: strings.TrimSpace(description),
 		URL:         strings.TrimSpace(rawURL),
 		Artifact:    strings.TrimSpace(artifact),
+		MilestoneID: strings.TrimSpace(milestone),
 		CreatedBy:   createdBy,
 	}
 	// Counted in runes, not bytes, so the server and the field's HTML
@@ -105,6 +108,7 @@ func (s *server) recordDeliverable(ctx context.Context, source string, in store.
 		"description": in.Description,
 		"url":         in.URL,
 		"artifact":    in.Artifact,
+		"milestone":   in.MilestoneID,
 		"created_by":  in.CreatedBy,
 	}, func(tx *sql.Tx, _ int64) error {
 		d, err := store.CreateDeliverable(tx, now, in)
@@ -148,7 +152,7 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := actorIDFrom(r)
-	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, req.Artifact, actorID)
+	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, req.Artifact, req.Milestone, actorID)
 	if msg != "" {
 		writeErr(w, http.StatusUnprocessableEntity, msg)
 		return
@@ -160,4 +164,43 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+// patchDeliverable handles PATCH /api/v1/deliverables/{id}: reparents a
+// deliverable to another milestone in its own project, or detaches it
+// ("" clears). The three descriptive fields stay immutable in P1 (spec 029
+// §3.1), so milestone is the only field this route accepts.
+func (s *server) patchDeliverable(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req model.EditDeliverableInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if req.Milestone == nil {
+		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
+		return
+	}
+
+	err := s.recordEvent(r.Context(), "cli", "deliverable.updated", map[string]string{
+		"deliverable": id,
+		"milestone":   *req.Milestone,
+	}, func(tx *sql.Tx, eventID int64) error {
+		if err := store.SetDeliverableMilestone(tx, s.st.Now(), id, *req.Milestone); err != nil {
+			return err
+		}
+		return store.LogChange(tx, "deliverable", id, eventID,
+			map[string]string{"field": "milestone", "new": *req.Milestone})
+	})
+	s.observeMilestoneChange("deliverable_attach", err)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	d, err := s.st.GetDeliverable(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }

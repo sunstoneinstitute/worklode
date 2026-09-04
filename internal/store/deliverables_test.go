@@ -152,6 +152,43 @@ func TestCreateDeliverableRejectsBadInput(t *testing.T) {
 	}
 }
 
+// TestCreateDeliverableMilestone checks that a declared milestone attach
+// (spec 029 §2) is stored, a cross-project or unknown milestone is
+// ErrInvalidInput, and neither rejected create burns an ordinal.
+func TestCreateDeliverableMilestone(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "atlas", "Atlas", "ATL"); err != nil {
+		t.Fatalf("create second project: %v", err)
+	}
+	if err := s.EnsureActor(ctx, "ada", "human", "Ada"); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	mile, err := createMilestone(s, "cow", "Internal review", 0)
+	if err != nil {
+		t.Fatalf("create milestone: %v", err)
+	}
+
+	if _, err := createDeliverable(s, DeliverableInput{ProjectID: "atlas", Name: "x", MilestoneID: mile.ID}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("cross-project attach at create: got %v, want ErrInvalidInput", err)
+	}
+	if _, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "x", MilestoneID: "COW-MILE-9"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("unknown milestone at create: got %v, want ErrInvalidInput", err)
+	}
+
+	d, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "first", MilestoneID: mile.ID})
+	if err != nil {
+		t.Fatalf("create deliverable with milestone: %v", err)
+	}
+	if d.ID != "COW-DEL-1" {
+		t.Errorf("id after two rejected creates = %q, want COW-DEL-1", d.ID)
+	}
+	if d.Milestone != mile.ID {
+		t.Errorf("milestone = %q, want %s", d.Milestone, mile.ID)
+	}
+}
+
 // TestListDeliverables checks declaration order, project scoping, and that an
 // unknown or empty project yields an empty slice rather than an error.
 func TestListDeliverables(t *testing.T) {
@@ -194,5 +231,85 @@ func TestListDeliverables(t *testing.T) {
 
 	if _, err := s.GetDeliverable(ctx, "COW-DEL-99"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("get unknown deliverable = %v, want ErrNotFound", err)
+	}
+}
+
+// TestSetDeliverableMilestone mirrors TestUpdateTaskMilestone for the
+// deliverable side of spec 029 §2: a same-project attach is stored and bumps
+// updated_at, a cross-project or unknown milestone is refused, and detaching
+// (milestone "") is always legal.
+func TestSetDeliverableMilestone(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "atlas", "Atlas", "ATL"); err != nil {
+		t.Fatalf("create second project: %v", err)
+	}
+	if err := s.EnsureActor(ctx, "ada", "human", "Ada"); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	mile, err := createMilestone(s, "cow", "Internal review", 0)
+	if err != nil {
+		t.Fatalf("create milestone: %v", err)
+	}
+
+	d1, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "output"})
+	if err != nil {
+		t.Fatalf("create deliverable in cow: %v", err)
+	}
+	d2, err := createDeliverable(s, DeliverableInput{ProjectID: "atlas", Name: "other"})
+	if err != nil {
+		t.Fatalf("create deliverable in atlas: %v", err)
+	}
+
+	set := func(now time.Time, id, milestoneID string) error {
+		_, _, err := s.RecordEvent(ctx, "cli", randomID(), "deliverable.updated", nil,
+			func(tx *sql.Tx, _ int64) error {
+				return SetDeliverableMilestone(tx, now, id, milestoneID)
+			})
+		return err
+	}
+
+	attachAt := d1.UpdatedAt.Add(time.Minute)
+	if err := set(attachAt, d1.ID, mile.ID); err != nil {
+		t.Fatalf("attach in same project: %v", err)
+	}
+	got, err := s.GetDeliverable(ctx, d1.ID)
+	if err != nil {
+		t.Fatalf("get deliverable: %v", err)
+	}
+	if got.Milestone != mile.ID {
+		t.Fatalf("milestone not stored: %+v", got)
+	}
+	if !got.UpdatedAt.Equal(attachAt) {
+		t.Fatalf("updated_at after attach = %v, want %v", got.UpdatedAt, attachAt)
+	}
+
+	// 029 §5: containment never crosses a project boundary.
+	if err := set(attachAt, d2.ID, mile.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("cross-project attach: got %v, want ErrInvalidInput", err)
+	}
+	if err := set(attachAt, d1.ID, "COW-MILE-9"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("unknown milestone: got %v, want ErrInvalidInput", err)
+	}
+	if err := set(attachAt, "COW-DEL-99", mile.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown deliverable: got %v, want ErrNotFound", err)
+	}
+
+	// Detach is always legal (029 §2), and also bumps updated_at.
+	detachAt := attachAt.Add(time.Minute)
+	if err := set(detachAt, d1.ID, ""); err != nil {
+		t.Fatalf("detach: %v", err)
+	}
+	got, err = s.GetDeliverable(ctx, d1.ID)
+	if err != nil {
+		t.Fatalf("get deliverable: %v", err)
+	}
+	if got.Milestone != "" {
+		t.Fatalf("milestone after detach: got %q, want empty", got.Milestone)
+	}
+	if !got.UpdatedAt.Equal(detachAt) {
+		t.Fatalf("updated_at after detach = %v, want %v", got.UpdatedAt, detachAt)
 	}
 }
