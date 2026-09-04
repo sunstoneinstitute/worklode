@@ -1,0 +1,229 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main]
+    # `labeled` is included so that applying `can-be-tested` to a PR from an
+    # outside contributor re-triggers the checks (the gate job below
+    # re-evaluates and lets it through). opened/synchronize/reopened are the
+    # normal triggers.
+    types: [opened, synchronize, reopened, labeled]
+  # The merge queue builds each queued PR on top of main and needs the same
+  # checks reported on that synthetic ref, or the entry times out. See
+  # docs/github-advanced-setup.md for the ruleset that turns the queue on.
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+  # _build-image.yml declares packages: write; a called reusable workflow may
+  # not request more than the caller grants, or GitHub fails the run at startup.
+  packages: write
+
+concurrency:
+  # One group per PR, or per merge-queue ref (a merge_group event has no PR
+  # number; without the fallback every queued entry would cancel the last).
+  group: ci-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Decide whether this PR may consume CI, keeping fork / drive-by PRs from
+  # auto-running the build on a public repo. Docs-only PRs also skip; jobs
+  # skipped via `if:` count as satisfied for branch protection.
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      obsidian: ${{ steps.decide.outputs.obsidian }}
+      trusted: ${{ steps.decide.outputs.trusted }}
+    steps:
+      - name: Decide whether to run checks
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # A merge-queue build has no pull_request payload to inspect: the
+          # ref is main plus PRs that each already passed these checks on
+          # their own, so it is trusted, runs everything, and skips nothing.
+          if [ "${{ github.event_name }}" = "merge_group" ]; then
+            echo "Merge-queue build — running every check on the trusted runners."
+            printf 'trusted=true\nobsidian=true\nrun=true\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # `trusted` gates the self-hosted runner (hel01), not whether CI runs
+          # at all: a fork PR's code must never execute somewhere with
+          # filesystem/network access beyond a throwaway VM, no matter its
+          # author's association or the `can-be-tested` label — both of those
+          # only ever route to `ubuntu-latest` below. Non-fork is the whole
+          # test: every branch pushed to this repo, including the head-repo
+          # case `run` accepts a few lines down.
+          if [ "$HEAD_REPO" = "${{ github.repository }}" ]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Changed-file list, fetched once and reused by every check below. On
+          # API failure it is empty, which each check treats as "fail open
+          # towards running".
+          CHANGED=$(gh api --paginate \
+            "repos/${{ github.repository }}/pulls/$PR_NUMBER/files?per_page=100" \
+            --jq '.[].filename' 2>/dev/null || true)
+
+          # The obsidian job is the only one scoped to a subtree: the plugin is
+          # the repo's sole Node package, nothing in the Go build imports it,
+          # and it ships separately — so a PR that touches neither
+          # plugins/obsidian/
+          # nor its own workflow cannot change its result. Decided here rather
+          # than with a `paths:` filter because a reusable workflow cannot take
+          # one. Deliberately independent of `run` below: `can-be-tested`
+          # authorises CI on an untrusted PR, it does not make an untouched
+          # subtree worth rebuilding.
+          if [ -z "$CHANGED" ] \
+             || echo "$CHANGED" | grep -qE '^plugins/obsidian/|^\.github/workflows/_obsidian\.yml$'; then
+            echo "obsidian=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "obsidian=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Opt-in label (needs Triage+, so authors cannot self-authorise).
+          # Checked first so it also forces a run on a docs-only PR.
+          if ${{ contains(github.event.pull_request.labels.*.name, 'can-be-tested') }}; then
+            echo "PR carries the 'can-be-tested' label — running checks."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Docs/site-only skip. www/ is the static marketing site; it has its
+          # own deploy workflow and shares no code with the Go build.
+          #
+          # Some markdown is input, not prose, and is excluded from the skip
+          # because a markdown-only change to it can break something with no
+          # CI signal:
+          #
+          #   plugins/                  shipped content whose manifests the
+          #                             Codex mirror check reads
+          #   CLAUDE.md, internal/cmd/CLAUDE.md, .claude/skills/,
+          #   docs/agent-surfaces.md    the remaining agent surfaces
+          #                             TestAgentSurfaces checks for stale lode
+          #                             invocations (docs/agent-surfaces.md is
+          #                             the register of all of them)
+          #
+          # This is a correctness gate, not a review one: nothing CI runs reads
+          # prose for injected instructions, so do not add paths here on that
+          # basis.
+          if [ -n "$CHANGED" ] && ! echo "$CHANGED" | grep -qvE '(^docs/|^www/|\.md$)' \
+             && ! echo "$CHANGED" | grep -qE '^(docs/agent-surfaces\.md|plugins/|\.claude/skills/|CLAUDE\.md|internal/cmd/CLAUDE\.md)'; then
+            echo "::notice::PR touches only docs/, www/ and markdown files, and none of the agent-surface paths that are exempt from the skip — skipping the checks. Apply the 'can-be-tested' label to force a full run."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Not a fork — pushing the head branch required write access. Checked
+          # before ASSOCIATION, which the webhook reports as CONTRIBUTOR for org
+          # members whose membership is private.
+          if [ "$HEAD_REPO" = "${{ github.repository }}" ]; then
+            echo "PR head branch is in ${{ github.repository }} — running checks."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          case "$ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "Author $AUTHOR is $ASSOCIATION — running checks."
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          echo "::notice::PR is from a fork and author '$AUTHOR' ($ASSOCIATION) is not a member or collaborator, and the PR lacks the 'can-be-tested' label — skipping the checks. A maintainer can add that label to authorise CI."
+          echo "run=false" >> "$GITHUB_OUTPUT"
+
+  lint:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    uses: ./.github/workflows/_lint.yml
+    with:
+      # `gha-buildcache`, not the bare `self-hosted` build-image/test also
+      # moved off: this job's Go cache skip is a real environment
+      # requirement (see docs/self-hosted-runner.md), not implied by
+      # self-hosted alone.
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["self-hosted","gha-buildcache"]' || '["ubuntu-latest"]' }}
+
+  test:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    uses: ./.github/workflows/_test.yml
+    with:
+      # `gha-pgvector` + `gha-buildcache`, not the bare `self-hosted` lint
+      # uses: reaching the always-on Postgres on hel01 and skipping the Go
+      # cache round trip through actions/cache (see
+      # docs/self-hosted-runner.md) are both real environment requirements
+      # of this job, not preferences, so a self-hosted runner missing either
+      # must not be scheduled here.
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["gha-pgvector","gha-buildcache"]' || '["ubuntu-latest"]' }}
+      # hel01's own always-on container (see docs/self-hosted-runner.md);
+      # `ubuntu-latest` keeps the ephemeral `services:` postgres below.
+      postgres-dsn: ${{ needs.gate.outputs.trusted == 'true' && 'postgres://postgres:postgres@localhost:15432/postgres?sslmode=disable' || 'postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable' }}
+
+  obsidian:
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.obsidian == 'true'
+    uses: ./.github/workflows/_obsidian.yml
+
+  build-image:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    uses: ./.github/workflows/_build-image.yml
+    with:
+      push: false
+      # `docker` + `gha-buildcache`, not the bare `self-hosted` lint uses:
+      # ghrunner holds Docker socket access, and the daemon's BuildKit cache
+      # survives between runs, only because this job needs both (see
+      # docs/self-hosted-runner.md) — two real environment requirements,
+      # scheduled on, not a default.
+      runs-on: ${{ needs.gate.outputs.trusted == 'true' && '["docker","gha-buildcache"]' || '["ubuntu-latest"]' }}
+
+  validate-kustomize:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          lfs: true
+      # Needs flat-overlay support (actions v1.6.0+); without it this step
+      # validates zero overlays against this repo's flat
+      # deploy/overlays/<env>/kustomization.yaml layout and reports success
+      # having checked nothing.
+      - uses: sunstoneinstitute/actions/validate-kustomize@c1b0fe620bef4371fad2ed9424573cb4c816fa08 # v1.8.0
+        with:
+          overlay-base: deploy/overlays
+          environments: hzdev hzprod
+
+  # The one job the main ruleset requires (docs/github-advanced-setup.md).
+  # Requiring the conditional jobs above directly leaves a PR blocked whenever
+  # one of them never reports; this job always runs, and passes when every
+  # job it needs either succeeded or was skipped by its own `if:`.
+  checks:
+    needs: [gate, lint, test, obsidian, build-image, validate-kustomize]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
