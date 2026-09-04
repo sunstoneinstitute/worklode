@@ -277,6 +277,32 @@ func TestBootstrapAdminNoOpWithExistingActors(t *testing.T) {
 	}
 }
 
+// TestNewServerBootstrapsAdminOnFreshDatabase pins the ordering between
+// NewServer's service-actor inserts and BootstrapAdmin: BootstrapAdmin
+// no-ops once the actors table is non-empty (TestBootstrapAdminNoOpWithExistingActors
+// above), so a service actor created ahead of it on a fresh database would
+// silently swallow the bootstrap admin and its token (WL-545 regression).
+func TestNewServerBootstrapsAdminOnFreshDatabase(t *testing.T) {
+	t.Parallel()
+	st := newTestStore(t)
+	tok := "wl_" + strings.Repeat("12", 20)
+	h, _, err := api.NewServer(st, api.Config{BootstrapToken: tok})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	rr := doReq(t, h, "GET", "/api/v1/tasks", tok, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET /api/v1/tasks with bootstrap token = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	a, err := st.GetActor(context.Background(), "admin")
+	if err != nil {
+		t.Fatalf("get admin actor: %v", err)
+	}
+	if !a.Admin {
+		t.Fatalf("admin actor = %+v, want Admin=true", a)
+	}
+}
+
 func TestOversizedBody413(t *testing.T) {
 	t.Parallel()
 	_, h, token := newTestServer(t)
