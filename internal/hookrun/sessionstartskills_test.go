@@ -53,7 +53,7 @@ func TestSessionStartSkillsHappyPath(t *testing.T) {
 		"\n### Pinned: tdd\n" + tddContent + "\n" +
 		"(supporting files: " + pinnedPath + ")\n" +
 		"\n### Possibly relevant org skills\nRead the SKILL.md if relevant to this task:\n" +
-		"- diagnose (0.87): Systematic debugging — " + matchLoc + "\n"
+		"- diagnose (0.8700): Systematic debugging — " + matchLoc + "\n"
 	if !strings.HasSuffix(ctx, wantSection) {
 		t.Fatalf("additionalContext = %q\nwant suffix %q", ctx, wantSection)
 	}
