@@ -31,6 +31,9 @@ type DeliverableInput struct {
 	// artifact_declarations entry, which is what the catalog ingest routes on.
 	Artifact  string
 	CreatedBy string
+	// MilestoneID attaches the deliverable to a milestone in the same
+	// project at declaration time (spec 029 §2), "" for none.
+	MilestoneID string
 }
 
 // deliverableSeqKind is the deliverable's row key in project_entity_seq and
@@ -38,8 +41,9 @@ type DeliverableInput struct {
 const deliverableSeqKind = "DEL"
 
 // deliverableColumns is the deliverables table's own column list, in insert
-// and scan order.
-const deliverableColumns = `id, project_id, name, description, url, created_by, created_at, updated_at`
+// and scan order. milestone_id (migration 0062) is last, append-only, so a
+// positional scan elsewhere is unaffected by its addition.
+const deliverableColumns = `id, project_id, name, description, url, created_by, created_at, updated_at, milestone_id`
 
 // deliverableSelect is what a read projects: the stored columns, then the
 // declared artifact address and the newest state reported about that address.
@@ -77,12 +81,16 @@ const deliverableFrom = `FROM deliverables
 // CreateTask it is meant to be called from a RecordEvent apply callback with
 // the store's clock as now. An unknown project is ErrNotFound and a blank
 // name is ErrInvalidInput — both checked before the id is allocated, so a
-// rejected input never burns an ordinal.
+// rejected input never burns an ordinal. A non-empty MilestoneID is checked
+// the same way UpdateTaskFields checks a task's milestone (029 §2): it must
+// name a milestone in the same project, or the create is ErrInvalidInput —
+// also checked before the ordinal is allocated.
 func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.Deliverable, error) {
 	name := strings.TrimSpace(in.Name)
 	if name == "" {
 		return nil, fmt.Errorf("deliverable name is empty: %w", ErrInvalidInput)
 	}
+	milestoneID := strings.TrimSpace(in.MilestoneID)
 
 	var key string
 	if err := tx.QueryRow(`SELECT key FROM projects WHERE id = $1`, in.ProjectID).Scan(&key); err != nil {
@@ -90,6 +98,21 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 			return nil, fmt.Errorf("project %s: %w", in.ProjectID, ErrNotFound)
 		}
 		return nil, fmt.Errorf("look up project %s: %w", in.ProjectID, err)
+	}
+
+	if milestoneID != "" {
+		var milestoneProject string
+		if err := tx.QueryRow(`SELECT project_id FROM milestones WHERE id = $1`, milestoneID).
+			Scan(&milestoneProject); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fmt.Errorf("unknown milestone %s: %w", milestoneID, ErrInvalidInput)
+			}
+			return nil, fmt.Errorf("look up milestone %s: %w", milestoneID, err)
+		}
+		if milestoneProject != in.ProjectID {
+			return nil, fmt.Errorf("cross-project milestone %s (%s) for new deliverable in %s: %w",
+				milestoneID, milestoneProject, in.ProjectID, ErrInvalidInput)
+		}
 	}
 
 	// The upsert both creates the counter row on a project's first
@@ -122,11 +145,16 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 		CreatedAt:   ts,
 		UpdatedAt:   ts,
 		Artifact:    strings.TrimSpace(in.Artifact),
+		Milestone:   milestoneID,
+	}
+	var milestoneVal sql.NullString
+	if milestoneID != "" {
+		milestoneVal = sql.NullString{String: milestoneID, Valid: true}
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO deliverables (`+deliverableColumns+`)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		d.ID, d.Project, d.Name, d.Description, d.URL, createdBy, d.CreatedAt, d.UpdatedAt,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		d.ID, d.Project, d.Name, d.Description, d.URL, createdBy, d.CreatedAt, d.UpdatedAt, milestoneVal,
 	); err != nil {
 		return nil, fmt.Errorf("insert deliverable %s: %w", id, err)
 	}
@@ -142,14 +170,15 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 // single scan point for both readers, so neither can drift on the projection.
 func scanDeliverable(row rowScanner) (*model.Deliverable, error) {
 	var d model.Deliverable
-	var createdBy sql.NullString
+	var createdBy, milestone sql.NullString
 	var reportedAt sql.NullTime
 	if err := row.Scan(&d.ID, &d.Project, &d.Name, &d.Description, &d.URL,
-		&createdBy, &d.CreatedAt, &d.UpdatedAt,
+		&createdBy, &d.CreatedAt, &d.UpdatedAt, &milestone,
 		&d.Artifact, &d.ReportedState, &reportedAt); err != nil {
 		return nil, err
 	}
 	d.CreatedBy = createdBy.String
+	d.Milestone = milestone.String
 	if reportedAt.Valid {
 		t := reportedAt.Time
 		d.ReportedAt = &t
@@ -186,4 +215,42 @@ func (s *Store) GetDeliverable(ctx context.Context, id string) (*model.Deliverab
 		return nil, fmt.Errorf("get deliverable %s: %w", id, err)
 	}
 	return d, nil
+}
+
+// SetDeliverableMilestone reparents one deliverable ("" detaches) inside
+// the given transaction. Same-project containment per 029 §5; bumps
+// updated_at. Callers reach it through RecordEvent with event type
+// "deliverable.updated".
+func SetDeliverableMilestone(tx *sql.Tx, now time.Time, id, milestoneID string) error {
+	var deliverableProject string
+	if err := tx.QueryRow(`SELECT project_id FROM deliverables WHERE id = $1`, id).
+		Scan(&deliverableProject); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("deliverable %s: %w", id, ErrNotFound)
+		}
+		return fmt.Errorf("look up deliverable %s: %w", id, err)
+	}
+
+	var milestoneVal sql.NullString
+	if milestoneID != "" {
+		var milestoneProject string
+		if err := tx.QueryRow(`SELECT project_id FROM milestones WHERE id = $1`, milestoneID).
+			Scan(&milestoneProject); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("unknown milestone %s: %w", milestoneID, ErrInvalidInput)
+			}
+			return fmt.Errorf("look up milestone %s: %w", milestoneID, err)
+		}
+		if milestoneProject != deliverableProject {
+			return fmt.Errorf("cross-project milestone %s (%s) for deliverable %s (%s): %w",
+				milestoneID, milestoneProject, id, deliverableProject, ErrInvalidInput)
+		}
+		milestoneVal = sql.NullString{String: milestoneID, Valid: true}
+	}
+
+	if _, err := tx.Exec(`UPDATE deliverables SET milestone_id = $1, updated_at = $2 WHERE id = $3`,
+		milestoneVal, now.UTC(), id); err != nil {
+		return fmt.Errorf("set milestone for deliverable %s: %w", id, err)
+	}
+	return nil
 }

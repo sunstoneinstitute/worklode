@@ -748,6 +748,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
 	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
 	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
+	r.api("PATCH /api/v1/deliverables/{id}", s.patchDeliverable)
 	r.api("POST /api/v1/projects/{id}/milestones", s.createMilestone)
 	r.api("GET /api/v1/projects/{id}/participants", s.listCrewMembers)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)

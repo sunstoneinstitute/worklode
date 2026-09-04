@@ -225,19 +225,24 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 }
 
 // deliverablesView maps a project's declared deliverables into the project's
-// Deliverables page. A row's state is not stored (spec 029 §3.2): it is the
-// newest evidence reported against the declared address, carried on the read
-// projection, and empty until an emitter reports one.
-func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.DeliverablesView {
+// Deliverables page, grouped by milestone (spec 029 §2): one group per
+// milestone in position order — only milestones that actually hold a
+// deliverable — then an unattached group last. A row's state is not stored
+// (spec 029 §3.2): it is the newest evidence reported against the declared
+// address, carried on the read projection, and empty until an emitter
+// reports one.
+func deliverablesView(project ui.CockpitProject, items []model.Deliverable, milestones []model.Milestone) ui.DeliverablesView {
 	v := ui.DeliverablesView{
 		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Deliverables"},
 		CanonicalURL: "/projects/" + project.ID + "/deliverables",
 		Project:      project,
 		NewURL:       "/projects/" + project.ID + "/deliverables/new",
-		Deliverables: make([]ui.DeliverableRow, 0, len(items)),
 	}
+
+	byMilestone := make(map[string][]ui.DeliverableRow, len(milestones))
+	var unattached []ui.DeliverableRow
 	for _, d := range items {
-		v.Deliverables = append(v.Deliverables, ui.DeliverableRow{
+		row := ui.DeliverableRow{
 			ID:            d.ID,
 			Name:          d.Name,
 			Description:   d.Description,
@@ -247,7 +252,27 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable) ui.D
 			Artifact:      d.Artifact,
 			ReportedState: d.ReportedState,
 			ReportedAt:    d.ReportedAt,
-		})
+		}
+		if d.Milestone == "" {
+			unattached = append(unattached, row)
+		} else {
+			byMilestone[d.Milestone] = append(byMilestone[d.Milestone], row)
+		}
+	}
+	for _, m := range milestones {
+		if rows := byMilestone[m.ID]; len(rows) > 0 {
+			v.Groups = append(v.Groups, ui.DeliverableGroup{
+				MilestoneID: m.ID, MilestoneTitle: m.Title, Rows: rows,
+			})
+		}
+	}
+	// The unattached group is always last, and always present unless at
+	// least one milestone group already carries the page's only content: a
+	// project with no milestones (or none holding a deliverable) then shows
+	// exactly one group, which the template renders headerless — today's
+	// flat page.
+	if len(unattached) > 0 || len(v.Groups) == 0 {
+		v.Groups = append(v.Groups, ui.DeliverableGroup{Rows: unattached})
 	}
 	return v
 }
@@ -430,8 +455,10 @@ func newTaskView(project ui.CockpitProject, v taskFormValues, errMsg string, dic
 	}
 }
 
-// newDeliverableView builds the deliverable form the same way.
-func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errMsg string, dictation bool) ui.NewDeliverableView {
+// newDeliverableView builds the deliverable form the same way, offering the
+// project's milestones as the optional attach-at-declaration choice
+// (spec 029 §2), default "No milestone".
+func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, milestones []model.Milestone, errMsg string, dictation bool) ui.NewDeliverableView {
 	return ui.NewDeliverableView{
 		Form: ui.FormShell{
 			Page:      ui.PageProps{Title: formTitle("worklode: "+project.Name+": new deliverable", errMsg)},
@@ -445,7 +472,22 @@ func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, errM
 		Description: v.Description,
 		URL:         v.URL,
 		Artifact:    v.Artifact,
+		Milestones:  milestoneFormOptions(milestones, v.Milestone),
 	}
+}
+
+// milestoneFormOptions renders a project's milestones as a menu, with a
+// leading "No milestone" choice selected when nothing was chosen — the
+// deliverable form's milestone select shares this with no other caller
+// because milestones are IDs and titles, not a fixed value list formOptions
+// covers.
+func milestoneFormOptions(milestones []model.Milestone, selected string) []ui.FormOption {
+	out := make([]ui.FormOption, 0, len(milestones)+1)
+	out = append(out, ui.FormOption{Value: "", Label: "No milestone", Selected: selected == ""})
+	for _, m := range milestones {
+		out = append(out, ui.FormOption{Value: m.ID, Label: m.Title, Selected: m.ID == selected})
+	}
+	return out
 }
 
 // formOptions renders a menu from a fixed value list, marking the selected

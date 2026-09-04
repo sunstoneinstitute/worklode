@@ -77,6 +77,7 @@ type deliverableFormValues struct {
 	Description string
 	URL         string
 	Artifact    string
+	Milestone   string
 }
 
 // sameOriginForm reports whether a state-changing form submission came from
@@ -328,18 +329,29 @@ func (s *server) deliverablesPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	s.renderWeb(w, r, http.StatusOK, "deliverables page", ui.Deliverables(deliverablesView(project, items)))
+	milestones, err := s.st.ListMilestones(ctx, project.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	s.renderWeb(w, r, http.StatusOK, "deliverables page", ui.Deliverables(deliverablesView(project, items, milestones)))
 }
 
 // newDeliverablePage handles GET /projects/{id}/deliverables/new.
 func (s *server) newDeliverablePage(w http.ResponseWriter, r *http.Request) {
-	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
+	ctx := r.Context()
+	project, err := s.projectHeader(ctx, r.PathValue("id"))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	milestones, err := s.st.ListMilestones(ctx, project.ID)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
 	}
 	s.renderWeb(w, r, http.StatusOK, "new deliverable page",
-		ui.NewDeliverable(newDeliverableView(project, deliverableFormValues{}, "", s.dictationEnabled())))
+		ui.NewDeliverable(newDeliverableView(project, deliverableFormValues{}, milestones, "", s.dictationEnabled())))
 }
 
 // createDeliverableFromForm handles POST /projects/{id}/deliverables: declare
@@ -356,12 +368,18 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Description: strings.TrimSpace(r.PostFormValue("description")),
 		URL:         strings.TrimSpace(r.PostFormValue("url")),
 		Artifact:    strings.TrimSpace(r.PostFormValue("artifact")),
+		Milestone:   strings.TrimSpace(r.PostFormValue("milestone")),
 	}
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, values.Artifact, actorIDFrom(r))
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, values.Artifact, values.Milestone, actorIDFrom(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
+		milestones, err := s.st.ListMilestones(ctx, project.ID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
 		s.renderWeb(w, r, http.StatusUnprocessableEntity, "new deliverable page",
-			ui.NewDeliverable(newDeliverableView(project, values, formMessage(msg), s.dictationEnabled())))
+			ui.NewDeliverable(newDeliverableView(project, values, milestones, formMessage(msg), s.dictationEnabled())))
 		return
 	}
 
