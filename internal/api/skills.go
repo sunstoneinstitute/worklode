@@ -13,7 +13,7 @@ import (
 
 // recommendTimeout bounds the embedding-provider call on both the recommend
 // endpoint and the task-brief path, which share skillMatches; on expiry the
-// response degrades to pins-only.
+// response degrades to the lexical arm alone.
 const recommendTimeout = 2 * time.Second
 
 // defaultSkillLimit applies when the caller asks for no particular number of
@@ -114,10 +114,11 @@ func (s *server) recommendSkills(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rec)
 }
 
-// recommendation resolves pins (inline content) and, when a provider is
-// configured, embedding matches excluding the pinned names. Provider
-// failures degrade to pins-only with a warning — recommendations never block
-// work. Matching itself is shared with the task brief via skillMatches: the
+// recommendation resolves pins (inline content) and retrieval matches
+// excluding the pinned names. A provider failure degrades to the lexical arm
+// with a warning, and no provider at all to pins plus lexical matches (040
+// §11) — recommendations never block work. Matching itself is shared with
+// the task brief via skillMatches: the
 // brief already has its pins resolved by store.Brief, so taskBrief calls
 // skillMatches directly instead of re-resolving them here.
 func (s *server) recommendation(ctx context.Context, text string, pins []string, limit int) (*model.SkillRecommendation, error) {
@@ -151,19 +152,24 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 	return rec, nil
 }
 
-// skillMatches computes embedding matches for text, excluding any name in
+// skillMatches retrieves skill matches for text, excluding any name in
 // exclude (typically already-pinned skills, so the same skill is never
 // surfaced twice). Both sides of that comparison are qualified names — a
-// bare-name exclusion set would silently stop excluding anything. It is the one embedding code path shared by recommendation
-// (pins resolved just above) and the task brief handler (pins already
-// resolved by store.Brief).
+// bare-name exclusion set would silently stop excluding anything. It is the
+// one retrieval path shared by recommendation (pins resolved just above) and
+// the task brief handler (pins already resolved by store.Brief).
 //
-// It never fails. Every way matching can break — provider down, provider
-// timeout past recommendTimeout, or a vector query the store rejects (mixed
-// dimensions in the corpus make every cosine query error) — degrades to no
-// matches plus a warning. Pins-only is a fully functional mode per spec 016,
-// and this path serves the task brief: an error here would stop anyone from
-// starting work.
+// Retrieval is store.Search with kind=skill (040 §9): recommendation is a
+// caller of the one hybrid path rather than a second embedding code path of
+// its own, which is what gives it the lexical arm — a brief naming a tool
+// literally now matches the skill that names it back.
+//
+// It never fails. Every way matching can break degrades to fewer matches
+// plus a warning, never an error: no provider or a provider that is down or
+// slower than recommendTimeout drops to the lexical arm alone (§11), and a
+// query the store rejects drops to no matches at all. Pins-only is a fully
+// functional mode per spec 016, and this path serves the task brief: an
+// error here would stop anyone from starting work.
 func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]model.SkillMatch, []string) {
 	matches := []model.SkillMatch{}
 	if limit <= 0 {
@@ -171,31 +177,73 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 	} else if limit > maxSkillLimit {
 		limit = maxSkillLimit
 	}
-	if s.embedder == nil {
-		return matches, nil
+
+	var warnings []string
+	var vec []float32
+	if s.embedder != nil {
+		ectx, cancel := context.WithTimeout(ctx, recommendTimeout)
+		vecs, err := s.embedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
+		cancel()
+		if err != nil {
+			warnings = append(warnings, "embedding provider unavailable; lexical matches only")
+		} else {
+			vec = vecs[0]
+		}
 	}
-	ectx, cancel := context.WithTimeout(ctx, recommendTimeout)
-	defer cancel()
-	vecs, err := s.embedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
-	if err != nil {
-		return matches, []string{"embedding provider unavailable; matches omitted"}
+	// No vector means the dense arm cannot run, so ask for the mode that
+	// actually applies rather than letting hybrid quietly answer with one arm.
+	mode := model.SearchHybrid
+	if len(vec) == 0 {
+		mode = model.SearchLexical
 	}
-	found, err := s.st.RecommendSkills(ctx, vecs[0], limit+len(exclude), s.skillFloor)
+	hits, err := s.st.Search(ctx, store.SearchQuery{
+		Text: text, Vector: vec, Kinds: []string{store.SubjectSkill},
+		Limit: limit + len(exclude), Mode: mode,
+	})
 	if err != nil {
-		// Logged: the caller gets a warning, but the cause (usually a corpus
-		// left at two dimensions) is only visible here.
+		// Logged: the caller gets a warning, but the cause (usually a query
+		// vector the stored ones cannot be compared against) is only visible
+		// here.
 		s.log.Error("skill match query failed", "err", err)
-		return matches, []string{"skill matching unavailable; matches omitted"}
+		return matches, append(warnings, "skill matching unavailable; matches omitted")
 	}
-	for _, m := range found {
-		if exclude[m.Name] || len(matches) >= limit {
+	if len(hits) == 0 {
+		return matches, warnings
+	}
+
+	// A hit carries the skill's qualified name but not its description or
+	// content hash, which the response body needs. Resolving the names is one
+	// extra query, against the same rule 1 exact match a pin uses.
+	names := make([]string, 0, len(hits))
+	for _, h := range hits {
+		names = append(names, h.Title)
+	}
+	res, err := s.st.ResolveSkillRefs(ctx, names)
+	if err != nil {
+		s.log.Error("skill match resolution failed", "err", err)
+		return matches, append(warnings, "skill matching unavailable; matches omitted")
+	}
+	byName := make(map[string]store.Skill, len(res))
+	for _, r := range res {
+		if r.Skill != nil {
+			byName[r.Skill.QualifiedName()] = *r.Skill
+		}
+	}
+
+	for _, h := range hits {
+		if exclude[h.Title] || len(matches) >= limit {
 			continue
 		}
+		sk := byName[h.Title]
 		matches = append(matches, model.SkillMatch{
-			Name: m.Name, Description: m.Description, Hash: m.ContentHash, Score: m.Score,
+			Name: h.Title, Description: sk.Description, Hash: sk.ContentHash,
+			// Score is the fused reciprocal-rank sum store.Search returns, not
+			// a cosine similarity (040 §6.1). It orders matches; it does not
+			// measure them.
+			Score: h.Score,
 		})
 	}
-	return matches, nil
+	return matches, warnings
 }
 
 func (s *server) syncSkills(w http.ResponseWriter, r *http.Request) {

@@ -776,3 +776,25 @@ Recorded by WL-643's pass over spec 040 §5 and §7:
   by nulling `embedding`; nothing handles it for the chunker. Re-indexing is
   a manual truncate until it does. Folding a chunker version into the hashed
   expression would fix it, at the cost of one full re-embed per bump.
+
+Recorded by WL-633's pass over spec 040 §9:
+
+- `[P3]` **The lexical arm contributes nothing on the task-brief path.**
+  Recommendation now retrieves through `store.Search` (040 §9), so a short
+  `lode skill recommend --text "pytest"` matches the skill naming pytest.
+  The brief path (`internal/api/brief.go`) passes the whole title plus body,
+  and `websearch_to_tsquery` ANDs every unquoted term, so a brief of any
+  length yields an empty `tsquery` match and the dense arm answers alone.
+  §9's "a task brief naming a tool by name now matches the skill that names
+  it back" therefore holds for short queries only. Extracting query terms
+  from a brief (or OR-ing them) is a retrieval-quality change, not a wiring
+  one, so it is not folded into this task.
+- `[P3]` **Recommendation scores now render as near-identical small numbers.**
+  A match's `score` is the fused reciprocal rank (040 §6.1, roughly 0.016 for
+  rank 1), not the cosine similarity it was under 016. `lode skill recommend`
+  (`internal/cmd/skills.go`) and the session-start brief
+  (`internal/hookrun/hookrun.go`) both print it as `%.2f`, so every match now
+  shows as `0.02`. The list order still carries the ranking; the printed
+  number no longer distinguishes anything. Widening the format or dropping
+  the column from those two views is a display decision, left out of the
+  wiring change.
