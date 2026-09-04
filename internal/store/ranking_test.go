@@ -500,6 +500,28 @@ func TestHumanOnlySkippedByRankButClaimableByID(t *testing.T) {
 	}
 }
 
+// TestDecisionNeverInReadySet pins 004 §6.3 as amended (WL-638): a decision
+// task has nothing to check out, so it never appears in the ready set even
+// when ready, unblocked and unleased. Unlike human_only, this is not an
+// escape hatch a direct claim can get past (see TestClaimRejectsDecision) —
+// a decision is simply never claimable.
+func TestDecisionNeverInReadySet(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	decisionIn := defaultTaskInput()
+	decisionIn.Kind = "decision"
+	decision := createTask(t, s, taskTestNow, decisionIn)
+	sibling := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	got, err := s.readyCandidates(t.Context(), "", "")
+	if err != nil {
+		t.Fatalf("readyCandidates: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != sibling.ID {
+		t.Fatalf("candidates = %v, want [%s] (decision %s excluded)", taskIDs(got), sibling.ID, decision.ID)
+	}
+}
+
 // TestClaimNextIgnoresFollowUpTo pins 004 §1.3: follow_up_to is provenance, not
 // scheduling. A follow-up is claimable while its origin is wide open, which is
 // exactly what separates it from blocks.

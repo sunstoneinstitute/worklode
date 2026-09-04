@@ -1319,6 +1319,54 @@ func TestDecomposeRejectsTaskWithChildren(t *testing.T) {
 	}
 }
 
+// TestDecomposeRejectsDecisionParent pins 004 §6.3 as amended (WL-638): a
+// decision closes by its recorded answer in one transaction, a parent closes
+// by roll-up, and the two cannot both hold.
+func TestDecomposeRejectsDecisionParent(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	in.Kind = "decision"
+	decision := createTask(t, s, taskTestNow, in)
+
+	_, err := decompose(t, s, decision.ID, []string{"A"})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestAddEdgeRejectsDecisionParent is Decompose's rejection's counterpart via
+// the other door a decision could acquire children through.
+func TestAddEdgeRejectsDecisionParent(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	in.Kind = "decision"
+	decision := createTask(t, s, taskTestNow, in)
+	child := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	err := addEdge(t, s, child.ID, decision.ID, "child_of")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("error = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestAddEdgeAcceptsDecisionChild pins the other half of 004 §6.3 as amended:
+// a decision as a *child* stays legal, it is a leaf like any other. The
+// exclusion is on decision-as-parent, not on decision anywhere in a chain.
+func TestAddEdgeAcceptsDecisionChild(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	in := defaultTaskInput()
+	in.Kind = "decision"
+	decision := createTask(t, s, taskTestNow, in)
+	parent := createTask(t, s, taskTestNow, containerInput())
+
+	if err := addEdge(t, s, decision.ID, parent.ID, "child_of"); err != nil {
+		t.Fatalf("decision as child: %v", err)
+	}
+}
+
 // TestDecomposeRejectsDeliveredTask pins the doc comment's claim that
 // Decompose rejects from the delivery states a container can never occupy.
 func TestDecomposeRejectsDeliveredTask(t *testing.T) {
