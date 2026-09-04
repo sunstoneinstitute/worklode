@@ -1075,6 +1075,35 @@ func TestReviewedThroughNowRefusals(t *testing.T) {
 		}
 	})
 
+	t.Run("cross-origin", func(t *testing.T) {
+		t.Parallel()
+		st, h, iss := newOIDCServer(t, api.Config{})
+		createProject(t, st, "proj1")
+		iss.TokenClaims = map[string]any{
+			"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+			"groups": []string{"user"},
+		}
+		session := webLogin(t, h, "grace")
+
+		req := httptest.NewRequest("POST", "/home/reviewed", strings.NewReader("cutoff=1"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Sec-Fetch-Site", "cross-site")
+		req.AddCookie(&http.Cookie{Name: "wl_session", Value: session})
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("cross-origin review status = %d, want 403; body %s", rr.Code, rr.Body.String())
+		}
+
+		cursor, err := st.ActorEventCursor(context.Background(), "grace")
+		if err != nil {
+			t.Fatalf("actor event cursor: %v", err)
+		}
+		if cursor != 0 {
+			t.Errorf("ActorEventCursor = %d, want 0: a cross-origin post must not move it", cursor)
+		}
+	})
+
 	t.Run("beyond horizon", func(t *testing.T) {
 		t.Parallel()
 		st, h, iss := newOIDCServer(t, api.Config{})
