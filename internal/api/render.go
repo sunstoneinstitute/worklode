@@ -506,7 +506,7 @@ func cockpitFocus(f *model.Focus) *ui.CockpitFocus {
 
 // cockpitDecision maps the next governed decision, preserving nil (no decision
 // ready).
-func cockpitDecision(d *model.Decision) *ui.CockpitDecision {
+func cockpitDecision(d *model.CockpitDecision) *ui.CockpitDecision {
 	if d == nil {
 		return nil
 	}

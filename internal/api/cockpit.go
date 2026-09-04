@@ -289,11 +289,11 @@ func pinnedBySummary(pinnedBy string, resolveActor func(string) (*store.Actor, e
 // 0013): nil when no title is set, otherwise the title, who is accountable,
 // and the readiness note. Subject/Actions/Evidence stay at their zero values —
 // the curated v0 card carries none.
-func buildNextDecision(p *store.Project) *model.Decision {
+func buildNextDecision(p *store.Project) *model.CockpitDecision {
 	if p.DecisionTitle == "" {
 		return nil
 	}
-	return &model.Decision{
+	return &model.CockpitDecision{
 		Title:       p.DecisionTitle,
 		Accountable: p.DecisionAccountable,
 		Readiness:   p.DecisionReadiness,
