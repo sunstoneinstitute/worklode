@@ -16,6 +16,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 // docKinds lists the valid --kind values for `lode doc add`, mirroring
@@ -133,6 +134,7 @@ func newDocAddCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "document kind: spec, adr, or plan (required)")
+	completeFlagValues(cmd, "kind", docKinds)
 	cmd.Flags().StringVar(&slug, "slug", "", "document slug (required)")
 	cmd.Flags().IntVar(&number, "number", 0,
 		"corpus number (omit to auto-assign the next free one; an explicit value is a rare reservation)")
@@ -192,6 +194,8 @@ func newDocListCmd() *cobra.Command {
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
 	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded")
+	completeFlagValues(cmd, "kind", docKinds)
+	completeFlagValues(cmd, "status", ns.DesignDocStatuses)
 	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")
 	cmd.Flags().BoolVar(&needsPlanning, "needs-planning", false,
 		"accepted specs with a section no accepted plan covers")

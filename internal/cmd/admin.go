@@ -19,6 +19,10 @@ func newActorCmd() *cobra.Command {
 	return cmd
 }
 
+// actorKinds mirrors internal/api's validActorKinds — the actors.kind CHECK
+// constraint — which the CLI cannot reach.
+var actorKinds = []string{"human", "agent", "service"}
+
 func newActorAddCmd() *cobra.Command {
 	var kind, name string
 	var admin bool
@@ -46,6 +50,7 @@ func newActorAddCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "actor kind: human, agent, or service (required)")
+	completeFlagValues(cmd, "kind", actorKinds)
 	cmd.Flags().StringVar(&name, "name", "", "display name")
 	cmd.Flags().BoolVar(&admin, "admin", false, "grant admin rights (manage projects, actors, and tokens)")
 	cmd.MarkFlagRequired("kind")

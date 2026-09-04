@@ -202,12 +202,14 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 		},
 	}
 	cmd.Flags().StringVar(&kind, "kind", "", "generic kind flag, paired with the ordinal/slug positional: "+strings.Join(showKinds, "|"))
+	completeFlagValues(cmd, "kind", showKinds)
 	cmd.Flags().StringVar(&taskFlag, "task", "", "show a task by bare number (e.g. --task 12; equivalent to the bare number positional)")
 	cmd.Flags().StringVar(&specFlag, "spec", "", "show a spec by number (e.g. --spec 15)")
 	cmd.Flags().StringVar(&adrFlag, "adr", "", "show an ADR by number (e.g. --adr 7)")
 	cmd.Flags().StringVar(&planFlag, "plan", "", "show a plan by number (e.g. --plan 7)")
 	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2); not showable yet (spec 029 §4)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
+	completeProjectFlag(cmd, "project")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)

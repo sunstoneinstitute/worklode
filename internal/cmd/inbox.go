@@ -10,6 +10,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
 func newInboxCmd() *cobra.Command {
@@ -114,6 +115,8 @@ func newInboxPromoteCmd() *cobra.Command {
 	cmd.Flags().StringVar(&body, "body", "", "task body")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low (required)")
 	cmd.Flags().StringVar(&kind, "kind", "bug", "kind: feature, bug, chore, design, review, spike")
+	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().StringVar(&appliesTo, "applies-to", "", "comma-separated versions this issue applies to, e.g. v1.2,v1.3")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create the task as a draft (not claimable until `lode task publish`)")
 	cmd.Flags().StringVar(&parent, "parent", "", "make the new task a child of this task")
