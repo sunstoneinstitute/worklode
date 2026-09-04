@@ -5,6 +5,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -100,4 +101,171 @@ func CreateMilestone(tx *sql.Tx, now time.Time, projectID, title string, positio
 		return nil, fmt.Errorf("insert milestone %s: %w", m.ID, err)
 	}
 	return m, nil
+}
+
+// scanMilestone reads one row selected with milestoneColumns. Progress is not
+// in the row — it is derived by the callers below and by nothing else.
+func scanMilestone(row rowScanner) (*model.Milestone, error) {
+	var m model.Milestone
+	var createdBy sql.NullString
+	if err := row.Scan(&m.ID, &m.Project, &m.Title, &m.Position,
+		&createdBy, &m.CreatedAt, &m.UpdatedAt); err != nil {
+		return nil, err
+	}
+	m.CreatedBy = createdBy.String
+	m.CreatedAt = m.CreatedAt.UTC()
+	m.UpdatedAt = m.UpdatedAt.UTC()
+	return &m, nil
+}
+
+// ListMilestones returns a project's milestones ordered by position then id,
+// each with derived progress. An unknown project yields an empty slice, not
+// an error — callers that need the project to exist load it first, as
+// ListDeliverables' callers do.
+//
+// The children come back in two bulk queries, one per kind, grouped in Go:
+// the alternative is a query per milestone, and a milestone's progress is
+// only ever read as part of a list.
+func (s *Store) ListMilestones(ctx context.Context, projectID string) ([]model.Milestone, error) {
+	what := "list milestones for " + projectID
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+milestoneColumns+` FROM milestones WHERE project_id = $1
+		 ORDER BY position, id`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	out, err := collectRows(rows, what, byValue(scanMilestone))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return []model.Milestone{}, nil
+	}
+
+	taskStates, err := s.milestoneTaskStates(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	deliverableStates, err := s.milestoneDeliverableStates(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		out[i].Progress = ComputeMilestoneProgress(
+			taskStates[out[i].ID], deliverableStates[out[i].ID])
+	}
+	return out, nil
+}
+
+// milestoneTaskStates reads the states of every attached task in a project,
+// keyed by milestone. A tombstoned task is out of the counts for the reason
+// it is out of every listing (044 §4).
+func (s *Store) milestoneTaskStates(ctx context.Context, projectID string) (map[string][]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT milestone_id, state FROM tasks
+		  WHERE project_id = $1 AND milestone_id IS NOT NULL AND deleted_at IS NULL`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("milestone task states for %s: %w", projectID, err)
+	}
+	return groupRows(rows, "milestone task states for "+projectID,
+		func(r rowScanner) (string, string, error) {
+			var milestoneID, state string
+			err := r.Scan(&milestoneID, &state)
+			return milestoneID, state, err
+		})
+}
+
+// milestoneDeliverableStates reads the reported state of every attached
+// deliverable in a project, keyed by milestone. It goes through the
+// deliverable projection rather than joining artifact_evidence itself, so
+// "the newest fact reported about the declared address" has one spelling.
+func (s *Store) milestoneDeliverableStates(ctx context.Context, projectID string) (map[string][]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deliverableSelect+`, milestone_id `+deliverableFrom+`
+		  WHERE project_id = $1 AND milestone_id IS NOT NULL`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("milestone deliverable states for %s: %w", projectID, err)
+	}
+	return groupRows(rows, "milestone deliverable states for "+projectID,
+		func(r rowScanner) (string, string, error) {
+			var milestoneID string
+			d, err := scanDeliverable(appendScan{r, []any{&milestoneID}})
+			if err != nil {
+				return "", "", err
+			}
+			return milestoneID, d.ReportedState, nil
+		})
+}
+
+// GetMilestone returns one milestone with its tasks, its deliverables, and
+// the progress derived from exactly those children. ErrNotFound when the id
+// names no milestone.
+func (s *Store) GetMilestone(ctx context.Context, id string) (*model.MilestoneDetail, error) {
+	m, err := scanMilestone(s.db.QueryRowContext(ctx,
+		`SELECT `+milestoneColumns+` FROM milestones WHERE id = $1`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get milestone %s: %w", id, err)
+	}
+	detail := &model.MilestoneDetail{Milestone: *m}
+
+	if detail.Tasks, err = s.milestoneTasks(ctx, id); err != nil {
+		return nil, err
+	}
+	what := "deliverables of milestone " + id
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+deliverableSelect+` `+deliverableFrom+`
+		  WHERE milestone_id = $1 ORDER BY created_at, id`, id)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	if detail.Deliverables, err = collectRows(rows, what, byValue(scanDeliverable)); err != nil {
+		return nil, err
+	}
+
+	taskStates := make([]string, len(detail.Tasks))
+	for i, t := range detail.Tasks {
+		taskStates[i] = t.State
+	}
+	deliverableStates := make([]string, len(detail.Deliverables))
+	for i, d := range detail.Deliverables {
+		deliverableStates[i] = d.ReportedState
+	}
+	detail.Progress = ComputeMilestoneProgress(taskStates, deliverableStates)
+	detail.Tasks = nonNil(detail.Tasks)
+	detail.Deliverables = nonNil(detail.Deliverables)
+	return detail, nil
+}
+
+// milestoneTasks lists a milestone's live tasks in ListTasks' order, with the
+// same derived closedness — the detail's task list has to look like every
+// other task list.
+func (s *Store) milestoneTasks(ctx context.Context, id string) ([]model.Task, error) {
+	what := "tasks of milestone " + id
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+taskColumns+` FROM tasks
+		  WHERE milestone_id = $1 AND deleted_at IS NULL`+taskListOrder("tasks"), id)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	out, err := collectRows(rows, what, byValue(scanTask))
+	if err != nil {
+		return nil, err
+	}
+	// A second query for the reason ListTasks gives: taskClosed binds aliases
+	// that would collide with the column list above.
+	ids := make([]string, len(out))
+	for i, t := range out {
+		ids[i] = t.ID
+	}
+	closed, err := s.ClosedTaskIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	for i := range out {
+		out[i].Closed = closed[out[i].ID]
+	}
+	return out, nil
 }
