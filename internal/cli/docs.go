@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -39,6 +40,10 @@ type DocListFilter struct {
 	// replace the live ones rather than joining them, so a list never mixes
 	// the two.
 	Deleted bool
+	// HasNotes narrows to documents carrying at least one anchored note
+	// (025 §8.5). The server answers it with one EXISTS; nothing here filters
+	// a listing client-side.
+	HasNotes bool
 }
 
 // ListDocs calls GET /api/v1/docs.
@@ -67,6 +72,9 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	}
 	if f.Deleted {
 		q.Set("deleted", "true")
+	}
+	if f.HasNotes {
+		q.Set("has_notes", "true")
 	}
 	return doJSON[model.DocListResponse](ctx, c, http.MethodGet, withQuery("/api/v1/docs", q), nil, "doc list")
 }
@@ -174,6 +182,19 @@ func (c *Client) DiscardDocRevision(ctx context.Context, id int64) (model.Doc, [
 // 025 §6 anchor rules is refused with the violations named.
 func (c *Client) AcceptDocRevision(ctx context.Context, id int64) (model.Doc, []byte, error) {
 	return c.docWrite(ctx, http.MethodPost, docPath(id, "/revision/accept"), nil)
+}
+
+// AddDocNote calls POST /api/v1/docs/{id}/notes: one anchored, non-blocking
+// note against a section the document has (025 §8.5). The server refuses an
+// anchor the document does not carry and an empty body.
+func (c *Client) AddDocNote(ctx context.Context, id int64, in model.AddDocNoteInput) (model.DocNote, []byte, error) {
+	return doJSON[model.DocNote](ctx, c, http.MethodPost, docPath(id, "/notes"), in, "doc note")
+}
+
+// ListDocNotes calls GET /api/v1/docs/{id}/notes. GetDoc already carries the
+// same rows on its detail; this is for a caller that wants only them.
+func (c *Client) ListDocNotes(ctx context.Context, id int64) ([]model.DocNote, []byte, error) {
+	return doJSON[[]model.DocNote](ctx, c, http.MethodGet, docPath(id, "/notes"), nil, "doc notes")
 }
 
 // DeleteDoc calls DELETE /api/v1/docs/{id}: tombstone the document (044 §2).
@@ -452,7 +473,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	}
 	if d.Body != "" {
 		fmt.Fprintln(w)
-		Markdown(w, d.Body)
+		Markdown(w, InlineDocNotes(d.Body, d.Notes))
 	}
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
@@ -463,6 +484,73 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 			fmt.Fprintf(w, "  %s %s %s\n", docEdgeTarget(e), e.Type, d.Slug)
 		}
 	}
+}
+
+// DocNoteLine renders one note as the attributed one-liner it is meant to be
+// read as: who left it, the task that raised it, when, and what it says. The
+// body is collapsed onto one line — a note is a remark in the margin of a
+// section, not a second document to read beside the first.
+//
+// The session id is deliberately not shown. It is an opaque agent-session
+// identifier that no reader of a document acts on; it stays in --json, where
+// the provenance is queried rather than read.
+func DocNoteLine(n model.DocNote) string {
+	who := n.CreatedBy
+	if who == "" {
+		who = "unknown"
+	}
+	if n.Task != "" {
+		who += " (" + n.Task + ")"
+	}
+	return fmt.Sprintf("**note** — %s, %s: %s",
+		who, LocalTime(n.CreatedAt), strings.Join(strings.Fields(n.Body), " "))
+}
+
+// DocNoteRender prints the one-line confirmation `lode doc note` answers with:
+// the anchor the note landed on and the note itself.
+func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
+	fmt.Fprintf(w, "noted on %s#%s: %s\n", DocRef(d), n.Anchor,
+		strings.Join(strings.Fields(n.Body), " "))
+}
+
+// InlineDocNotes returns body with each note folded in under the section it is
+// anchored to, as a blockquoted one-liner (025 §8.5). Notes anchored outside
+// body — the common case when body is one section's subtree — are left out
+// rather than collected somewhere else: a note belongs where it was left.
+//
+// Body is returned untouched when there is nothing to fold or when it does not
+// parse, so a render never degrades because of a note.
+func InlineDocNotes(body string, notes []model.DocNote) string {
+	if len(notes) == 0 || body == "" {
+		return body
+	}
+	byAnchor := make(map[string][]model.DocNote, len(notes))
+	for _, n := range notes {
+		byAnchor[n.Anchor] = append(byAnchor[n.Anchor], n)
+	}
+	doc, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		return body
+	}
+	var folded bool
+	for _, sec := range doc.Sections {
+		secNotes := byAnchor[sec.Anchor]
+		if len(secNotes) == 0 {
+			continue
+		}
+		var b strings.Builder
+		b.WriteString(strings.TrimRight(sec.Body, "\n"))
+		for _, n := range secNotes {
+			b.WriteString("\n\n> " + DocNoteLine(n))
+		}
+		b.WriteString("\n\n")
+		sec.Body = b.String()
+		folded = true
+	}
+	if !folded {
+		return body
+	}
+	return string(doc.Bytes())
 }
 
 // docEdgeTarget renders one edge's far end: the document's slug and optional

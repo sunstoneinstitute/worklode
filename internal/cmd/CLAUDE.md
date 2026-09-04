@@ -38,7 +38,7 @@ tell an adjective from a verb or a view from an action.
   `reconcile`, `transfer`, `accept`, `revise`, `lint`, `derive`, `seek`,
   `tail`, `gc`, `link`, `dismiss`, `serve`, `listen`, `next`, `resume`,
   `attach`, `detach`, `assign`, `block`, `parent`, `duplicate`, `request`,
-  `pack`.
+  `pack`, `note`.
 - **L4** — Verbs are imperative verbs. No adjectives: `task ready` becomes
   `task publish`. No hyphenated verbs, with exceptions named in the spec 061
   §5 allowlist. `set` is a verb like any other: the field it writes is an

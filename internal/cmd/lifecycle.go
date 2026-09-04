@@ -103,6 +103,27 @@ func currentTaskID() string {
 	return taskID
 }
 
+// currentSessionID is currentTaskID's companion for the coding session: the id
+// of the agent session live in this worktree, or "" when there is none — a
+// human at a shell, a checkout no hook has entered. Read from the same session
+// marker `lode-hook` writes, so the two agree on what session a command
+// belongs to.
+//
+// Like currentTaskID, every failure is the same answer: a session id is
+// provenance a command records when it has it, never a precondition.
+func currentSessionID() string {
+	dir, err := workingDir()
+	if err != nil {
+		return ""
+	}
+	root, ok := worktree.Root(dir)
+	if !ok {
+		return ""
+	}
+	id, _ := worktree.SessionID(root)
+	return id
+}
+
 // unboundHelp renders the two ways out of an unbound checkout: say which task,
 // or claim one into a worktree that carries the binding. The description
 // column is sized to the widest form so a long one (`lode task block <id>

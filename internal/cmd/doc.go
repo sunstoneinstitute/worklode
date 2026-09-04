@@ -71,6 +71,7 @@ func newDocCmd() *cobra.Command {
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
 		newDocReviseCmd(),
+		newDocNoteCmd(),
 		newDocLintCmd(),
 		newDocImportCmd(),
 		newDocTodoCmd(),
@@ -149,7 +150,7 @@ func newDocAddCmd() *cobra.Command {
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind, status, owner string
-	var needsPlanning, needsExecution, bareSuperseded, deleted bool
+	var needsPlanning, needsExecution, bareSuperseded, deleted, hasNotes bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List documents: specs, ADRs, and plans",
@@ -171,7 +172,7 @@ func newDocListCmd() *cobra.Command {
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
 				Project: sc.Project, Kind: kind, Status: status, Owner: owner,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
-				Deleted: deleted,
+				Deleted: deleted, HasNotes: hasNotes,
 			})
 			if err != nil {
 				return err
@@ -205,6 +206,8 @@ func newDocListCmd() *cobra.Command {
 		"superseded documents with a section nothing replaces")
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
 		"list deleted documents instead of live ones (044 §5)")
+	cmd.Flags().BoolVar(&hasNotes, "has-notes", false,
+		"only documents carrying an anchored note (025 §8.5)")
 	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded")
 	return cmd
 }
@@ -496,6 +499,73 @@ func newDocEditCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&file, "file", "", `markdown source file, frontmatter included ("-" for stdin) (required)`)
 	cmd.MarkFlagRequired("file")
+	return cmd
+}
+
+// newDocNoteCmd is `lode doc note <ref>#sec-N` (025 §8.5): leave one anchored
+// remark on a section. It blocks nothing, settles nothing, and needs no reply
+// — the note is read by whoever next renders that section, and the document
+// goes on exactly as it was.
+//
+// The anchor comes from the ref's fragment rather than from a flag, because a
+// note without a section is not a note: making the anchor part of the thing
+// being named is what keeps that true at the call site. `#sec-8.5`, `#8.5`
+// and `sec-8.5` all name the same section, the same spellings `lode show
+// --section` takes.
+//
+// The task and session are read off the worktree the command runs in, the way
+// `lode doc add` reads its authoring task; outside a worktree the note is
+// still left, attributed to the actor alone.
+func newDocNoteCmd() *cobra.Command {
+	var body, bodyFile string
+	cmd := &cobra.Command{
+		Use:               "note <ref>#sec-N",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Leave an anchored, non-blocking note on a document section",
+		Args:              cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ref, anchor := designdoc.SplitFragment(args[0])
+			if anchor == "" {
+				return fmt.Errorf("a note needs the section it is about: pass %s#sec-N (025 §8.5)", args[0])
+			}
+			text, err := resolveBody(body, bodyFile, cmd.InOrStdin())
+			if err != nil {
+				return err
+			}
+			if strings.TrimSpace(text) == "" {
+				return errors.New("a note needs something said: pass --body or --body-file")
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, ref)
+			if err != nil {
+				return err
+			}
+			n, raw, err := c.AddDocNote(cmd.Context(), id, model.AddDocNoteInput{
+				Anchor: normalizeSection(anchor), Body: text,
+				Task: currentTaskID(), Session: currentSessionID(),
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			d, _, err := c.GetDoc(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			cli.DocNoteRender(cmd.OutOrStdout(), d.Doc, n)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&body, "body", "", "the note")
+	cmd.Flags().StringVar(&bodyFile, "body-file", "",
+		`read the note from a file ("-" for stdin), instead of --body`)
+	cmd.MarkFlagsMutuallyExclusive("body", "body-file")
 	return cmd
 }
 
