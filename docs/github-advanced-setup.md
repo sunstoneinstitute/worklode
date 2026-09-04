@@ -37,15 +37,13 @@ The worker's side is one command after `gh pr create`: `gh pr merge --auto
 
 ## Order of operations
 
-The ruleset can require status checks before the workflow change lands,
-because the PR run already reports those names. The merge-queue rule must
-wait until `merge_group` support is on `main`, or the first queued PR sits
-until the check timeout. So:
+Both ruleset rules wait for the workflow change: the required check is the
+`checks` job that change adds, and the merge-queue rule needs `merge_group`
+support on `main`, or the first queued PR sits until the check timeout. So:
 
 1. Enable auto-merge on the repo.
-2. Add the required-status-checks rule.
-3. Land the workflow change (this is what PR for WL-659 does).
-4. Add the merge-queue rule.
+2. Land the workflow change (this is what the PR for WL-659 does).
+3. Add the required-status-checks and merge-queue rules in one `PUT`.
 
 ## Commands
 
@@ -57,24 +55,37 @@ All of these need repo admin.
 gh api -X PATCH repos/sunstoneinstitute/worklode -F allow_auto_merge=true
 ```
 
-### 2 and 4. The ruleset
+### 2. The workflow
+
+`.github/workflows/pr-checks.yml` has four parts that the queue relies on:
+
+- `on.merge_group.types: [checks_requested]` next to `pull_request`.
+- The `concurrency.group` falls back to `github.ref` when there is no PR
+  number, so queued entries do not cancel each other.
+- The `gate` job's first branch: on a `merge_group` event it sets
+  `trusted=true`, `run=true`, `obsidian=true` and exits. There is no PR
+  payload to read file lists or author association from, and every PR in
+  the group already passed the gate on its own.
+- The `checks` job at the end: `if: always()`, needs every other job, and
+  is the one check the ruleset names.
+
+### 3. The ruleset
 
 Worklode's `main` ruleset is id `19780760` ("protect main"). Find another
 repo's with `gh api repos/<owner>/<repo>/rulesets`. The `PUT` replaces the
 whole rule list, so the file below carries the existing `deletion` and
 `non_fast_forward` rules too.
 
-Required check names are job names as they appear on a PR: a job from a
-reusable workflow reports as `<caller job> / <called job>`. Jobs skipped by
-an `if:` (the docs-only skip, the subtree-scoped `obsidian` job) count as
-satisfied, so requiring them does not block docs-only PRs.
+The only required check is the `checks` job at the end of the workflow. It
+has `if: always()`, needs every other job, and passes when each of them
+either succeeded or was skipped by its own `if:`. Requiring the conditional
+jobs directly (the docs-only skip, the subtree-scoped `obsidian` job) leaves
+a PR blocked whenever one of them never reports.
 
 The bypass entry lets repository admins push to `main` directly, which
 keeps the small direct commits this repo also carries working. A PR with
 auto-merge armed always goes through the queue regardless of who opened it.
 Remove the entry to make the queue mandatory for everyone.
-
-Step 2, checks only:
 
 ```bash
 cat > ruleset.json <<'EOF'
@@ -92,51 +103,26 @@ cat > ruleset.json <<'EOF'
     {"type": "required_status_checks", "parameters": {
       "strict_required_status_checks_policy": false,
       "do_not_enforce_on_create": false,
-      "required_status_checks": [
-        {"context": "gate"},
-        {"context": "lint / lint"},
-        {"context": "test / test"},
-        {"context": "build-image / build"},
-        {"context": "validate-kustomize"},
-        {"context": "obsidian"}
-      ]}}
+      "required_status_checks": [{"context": "checks"}]}},
+    {"type": "merge_queue", "parameters": {
+      "merge_method": "SQUASH",
+      "grouping_strategy": "ALLGREEN",
+      "max_entries_to_build": 5,
+      "max_entries_to_merge": 5,
+      "min_entries_to_merge": 1,
+      "min_entries_to_merge_wait_minutes": 0,
+      "check_response_timeout_minutes": 60
+    }}
   ]
 }
 EOF
 gh api -X PUT repos/sunstoneinstitute/worklode/rulesets/19780760 --input ruleset.json
 ```
 
-Step 4, once `merge_group` is on `main`: add this object to `rules` in the
-same file and run the same `PUT`.
-
-```json
-{"type": "merge_queue", "parameters": {
-  "merge_method": "SQUASH",
-  "grouping_strategy": "ALLGREEN",
-  "max_entries_to_build": 5,
-  "max_entries_to_merge": 5,
-  "min_entries_to_merge": 1,
-  "min_entries_to_merge_wait_minutes": 0,
-  "check_response_timeout_minutes": 60
-}}
-```
-
 `strict_required_status_checks_policy` stays false: the queue already
 rebuilds on top of `main`, so requiring the PR branch itself to be current
 would only force the rebase round-trips the queue exists to remove.
 `SQUASH` matches how PRs have been landing (`<title> (#N)` commits).
-
-### 3. The workflow
-
-`.github/workflows/pr-checks.yml` has three parts that the queue relies on:
-
-- `on.merge_group.types: [checks_requested]` next to `pull_request`.
-- The `concurrency.group` falls back to `github.ref` when there is no PR
-  number, so queued entries do not cancel each other.
-- The `gate` job's first branch: on a `merge_group` event it sets
-  `trusted=true`, `run=true`, `obsidian=true` and exits. There is no PR
-  payload to read file lists or author association from, and every PR in
-  the group already passed the gate on its own.
 
 ## Checking it works
 
@@ -166,4 +152,5 @@ Same three pieces. Its `main` ruleset is id `17377439`. `ci.yml` needs the
 (the existing one only trusts non-`pull_request` events by name, so a
 `merge_group` event falls into the code-owner check with an empty author and
 skips the build). Its concurrency group is already keyed on `github.ref`.
-Required check names are that workflow's job names.
+It also needs an aggregating `checks` job like the one above, and that is
+the one check its ruleset names.

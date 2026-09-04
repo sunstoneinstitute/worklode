@@ -210,3 +210,20 @@ jobs:
         with:
           overlay-base: deploy/overlays
           environments: hzdev hzprod
+
+  # The one job the main ruleset requires (docs/github-advanced-setup.md).
+  # Requiring the conditional jobs above directly leaves a PR blocked whenever
+  # one of them never reports; this job always runs, and passes when every
+  # job it needs either succeeded or was skipped by its own `if:`.
+  checks:
+    needs: [gate, lint, test, obsidian, build-image, validate-kustomize]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
