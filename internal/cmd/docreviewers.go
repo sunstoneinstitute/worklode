@@ -72,6 +72,10 @@ func reviewerList(reviewers []string) string {
 	return strings.Join(reviewers, ", ")
 }
 
+// docSetFields are the fields `lode doc set` writes — the switch below and
+// the unknown-field error read this list, and so does completion (061 §1 L4).
+var docSetFields = []string{"reviewers"}
+
 // newDocSetCmd is `lode doc set <field> <value…> <ref>` (061 §2.1, WL-487):
 // write one named field on a document. The field and the values are
 // arguments, not part of the verb, matching `lode task set` — this is the
@@ -84,7 +88,7 @@ func reviewerList(reviewers []string) string {
 func newDocSetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "set <field> <value…> <ref>",
-		ValidArgsFunction: docRefLast(2),
+		ValidArgsFunction: docSetArgs,
 		Short:             "Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`",
 		Long: `Set one named field on a document. The document ref is always the last
 argument; everything between the field and the ref is the value.
@@ -99,7 +103,7 @@ argument; everything between the field and the ref is the value.
 			switch field {
 			case "reviewers":
 			default:
-				return fmt.Errorf("unknown field %q: settable fields are \"reviewers\"", field)
+				return fmt.Errorf("unknown field %q: settable fields are %s", field, strings.Join(docSetFields, ", "))
 			}
 			c, err := newAPIClient()
 			if err != nil {
