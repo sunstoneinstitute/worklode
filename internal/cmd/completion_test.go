@@ -72,6 +72,45 @@ func tasksResponse(ids ...string) model.TaskListResponse {
 	return resp
 }
 
+// TestTaskIDCompletionSanitizesTitle is 061 §3 C3: a task title is free text
+// and will eventually contain a tab or newline. Either would corrupt the
+// "id\tdescription" line a shell splits on, so both are replaced before
+// joining, and a long title is truncated to keep one candidate on one line.
+func TestTaskIDCompletionSanitizesTitle(t *testing.T) {
+	longTitle := strings.Repeat("x", candidateTitleWidth+20)
+	setupCompletion(t, "proj", func(w http.ResponseWriter, r *http.Request) {
+		var resp model.TaskListResponse
+		resp.Tasks = []model.Task{
+			{ID: "WL-1", Project: "proj", Title: "fix\tthe\nthing\r\n"},
+			{ID: "WL-2", Project: "proj", Title: longTitle},
+		}
+		writeTestJSON(t, w, resp)
+	})
+
+	out, err := runLode(t, "__complete", "task", "show", "WL-")
+	if err != nil {
+		t.Fatalf("__complete task show: %v\noutput: %s", err, out)
+	}
+	got, _, _ := strings.Cut(out, ":")
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("candidates = %q, want exactly 2 lines", got)
+	}
+	if lines[0] != "WL-1\tfix the thing" {
+		t.Fatalf("candidate[0] = %q, want tab/newline replaced with spaces", lines[0])
+	}
+	id, desc, ok := strings.Cut(lines[1], "\t")
+	if !ok || id != "WL-2" {
+		t.Fatalf("candidate[1] = %q, want a single id/description split on WL-2", lines[1])
+	}
+	if want := strings.Repeat("x", candidateTitleWidth-1) + "…"; desc != want {
+		t.Fatalf("candidate[1] description = %q, want truncated to %d runes: %q", desc, candidateTitleWidth, want)
+	}
+	if strings.Contains(desc, "\t") || strings.Contains(desc, "\n") {
+		t.Fatalf("candidate[1] description = %q, still contains a raw tab or newline", desc)
+	}
+}
+
 // TestTaskIDCompletionOffersScopedIDsInOrder covers the happy path: the
 // candidates are the project's tasks matching what has been typed, ordered by
 // model.CompareTaskIDs (061 §4), so WL-9 precedes WL-10.
@@ -85,8 +124,8 @@ func TestTaskIDCompletionOffersScopedIDsInOrder(t *testing.T) {
 		t.Fatalf("__complete task show: %v\noutput: %s", err, out)
 	}
 	got, _, _ := strings.Cut(out, ":")
-	if got != "WL-9\nWL-91\n" {
-		t.Fatalf("completion candidates = %q, want WL-9 then WL-91", got)
+	if got != "WL-9\tt WL-9\nWL-91\tt WL-91\n" {
+		t.Fatalf("completion candidates = %q, want WL-9 then WL-91, each with its title", got)
 	}
 	if !strings.Contains(out, "ShellCompDirectiveNoFileComp") {
 		t.Fatalf("directive not NoFileComp: %q", out)
