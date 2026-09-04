@@ -640,6 +640,22 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 
 @media (prefers-reduced-motion:no-preference){.mode.active{animation:fade .25s ease}@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1}}}
 
+/* ---------- morning brief ---------- */
+.morningbrief{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:18px}
+.morningbrief h2{margin:0 0 10px;font-size:15px}
+.mbgroup{padding:10px 0;border-top:1px solid var(--line)}
+.mbgroup:first-of-type{border-top:0;padding-top:0}
+.mbgroup h3{margin:0 0 6px;font-size:13.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mbgroup h3 a{color:var(--ink)}
+.mbgroup ul{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:4px}
+.mbgroup li{font-size:12.5px}
+.mb-needsyou{font-weight:600}
+.mb-needsyou li{font-weight:600}
+.mb-collapsed{margin-top:4px}
+.mb-collapsed summary{cursor:pointer;font-size:12.5px}
+.mb-collapsed p{margin:6px 0 0}
+.morningbrief form{margin-top:12px}
+
 /* ---------- Fonts (self-hosted variable fonts) ---------- */
 /* JetBrains Mono has no self-hosted font file yet (see .mono above); it
  * falls back to ui-monospace. Add a @font-face here if/when the file lands. */

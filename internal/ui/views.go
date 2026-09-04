@@ -901,6 +901,7 @@ type HomeView struct {
 	Page  PageProps
 	Mode  string
 	Cards []HomeCard
+	Brief *MorningBriefView // nil = no section (open mode, or nothing to say)
 }
 
 // HomeCard is one project card, density B: identity, role badge ("Lead",
@@ -979,4 +980,14 @@ type MorningBriefGroup struct {
 type MorningBriefItem struct {
 	Text string
 	Href string
+}
+
+// routineLabel is the tier-4 collapsed count line's exact spelling. There is
+// no per-item text to pluralize against — Routine is a count, not a list
+// (032 §11: judgment obvious, no firehose).
+func routineLabel(n int) string {
+	if n == 1 {
+		return "1 routine update"
+	}
+	return strconv.Itoa(n) + " routine updates"
 }

@@ -276,3 +276,114 @@ func TestRunBoardEmpty(t *testing.T) {
 		t.Error("empty board should render no group headings")
 	}
 }
+
+// morningBriefFixture is a Brief carrying one group with all four tiers, for
+// TestHomeMorningBrief.
+func morningBriefFixture() *MorningBriefView {
+	return &MorningBriefView{
+		Cutoff:    1234567890,
+		CanReview: true,
+		Groups: []MorningBriefGroup{
+			{
+				ProjectID: "p1",
+				Name:      "Alpha",
+				FocusNote: "Ship the migration first",
+				NeedsYou:  []MorningBriefItem{{Text: "Decision needed: schema change", Href: "/tasks/t1"}},
+				Outcomes:  []MorningBriefItem{{Text: "Shipped WL-100", Href: "/tasks/t100"}},
+				Stopped:   []MorningBriefItem{{Text: "Blocked on review", Href: ""}},
+				Routine:   3,
+			},
+		},
+	}
+}
+
+// TestHomeMorningBrief pins spec 032 §9/§11's judgment bar: NeedsYou first
+// and strongest, routine collapsed to one line with no per-event rendering,
+// and the review form wired to /home/reviewed.
+func TestHomeMorningBrief(t *testing.T) {
+	body := renderHome(t, HomeView{
+		Page:  PageProps{Title: "Home"},
+		Mode:  "actor",
+		Brief: morningBriefFixture(),
+	})
+
+	if !strings.Contains(body, "Morning Brief") {
+		t.Error("expected the Morning Brief heading")
+	}
+
+	needsYou := strings.Index(body, "Decision needed: schema change")
+	outcomes := strings.Index(body, "Shipped WL-100")
+	stopped := strings.Index(body, "Blocked on review")
+	if needsYou < 0 || outcomes < 0 || stopped < 0 {
+		t.Fatalf("expected all three tier items to render, got: %s", body)
+	}
+	if !(needsYou < outcomes && outcomes < stopped) {
+		t.Errorf("expected NeedsYou before Outcomes before Stopped, got indices %d, %d, %d", needsYou, outcomes, stopped)
+	}
+
+	if !strings.Contains(body, "3 routine updates") {
+		t.Error("expected the collapsed routine count \"3 routine updates\"")
+	}
+	if strings.Count(body, "routine") != 1 {
+		t.Errorf("expected the word \"routine\" to appear exactly once (the collapsed count line), no per-event rendering; got %d", strings.Count(body, "routine"))
+	}
+
+	if !strings.Contains(body, `action="/home/reviewed"`) {
+		t.Error("expected the review form to post to /home/reviewed")
+	}
+	if !strings.Contains(body, `name="cutoff"`) {
+		t.Error("expected the hidden cutoff field")
+	}
+	if !strings.Contains(body, "Reviewed through now") {
+		t.Error("expected the review button label")
+	}
+}
+
+// TestHomeMorningBriefNil confirms a nil Brief (open mode, or nothing to
+// say) renders no morningbrief section at all.
+func TestHomeMorningBriefNil(t *testing.T) {
+	body := renderHome(t, HomeView{
+		Page: PageProps{Title: "Home"},
+		Mode: "actor",
+	})
+	if strings.Contains(body, "morningbrief") {
+		t.Error("nil Brief must render no morningbrief section")
+	}
+	if strings.Contains(body, "Morning Brief") {
+		t.Error("nil Brief must render no Morning Brief heading")
+	}
+}
+
+// TestHomeMorningBriefCanReviewFalse confirms the review form is withheld
+// when the cutoff hasn't actually advanced.
+func TestHomeMorningBriefCanReviewFalse(t *testing.T) {
+	brief := morningBriefFixture()
+	brief.CanReview = false
+	body := renderHome(t, HomeView{
+		Page:  PageProps{Title: "Home"},
+		Mode:  "actor",
+		Brief: brief,
+	})
+	if strings.Contains(body, `action="/home/reviewed"`) {
+		t.Error("CanReview: false must render no review form")
+	}
+}
+
+// TestHomeMorningBriefZeroGroups confirms zero groups with CanReview true
+// still renders the honest empty line and the review form.
+func TestHomeMorningBriefZeroGroups(t *testing.T) {
+	body := renderHome(t, HomeView{
+		Page: PageProps{Title: "Home"},
+		Mode: "actor",
+		Brief: &MorningBriefView{
+			Cutoff:    1234567890,
+			CanReview: true,
+		},
+	})
+	if !strings.Contains(body, "Nothing needing you since your last review.") {
+		t.Error("expected the nothing-needing-you line")
+	}
+	if !strings.Contains(body, `action="/home/reviewed"`) {
+		t.Error("expected the review form even with zero groups")
+	}
+}
