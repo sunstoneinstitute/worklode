@@ -740,6 +740,120 @@ func TestObserveOverviewNilSafe(t *testing.T) {
 	s.observeDeriveRun(deriveDeploy, deriveWritten)
 }
 
+func TestObserveMorningBriefRender(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeMorningBriefRender(morningBriefRenderRendered)
+	s.observeMorningBriefRender(morningBriefRenderRendered)
+	s.observeMorningBriefRender(morningBriefRenderEmpty)
+
+	for _, tc := range []struct {
+		outcome string
+		want    float64
+	}{
+		{morningBriefRenderRendered, 2},
+		{morningBriefRenderEmpty, 1},
+		// Pre-initialised, so an outcome nobody has hit reads as a flat zero
+		// rather than as no-data.
+		{morningBriefRenderTruncated, 0},
+	} {
+		if got := testutil.ToFloat64(s.morningBriefRenders.WithLabelValues(tc.outcome)); got != tc.want {
+			t.Fatalf("morningBriefRenders{outcome=%s} = %v, want %v", tc.outcome, got, tc.want)
+		}
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var outcomes []string
+	for _, mf := range mfs {
+		if mf.GetName() != "worklode_web_morning_brief_renders_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				outcomes = append(outcomes, l.GetName()+"="+l.GetValue())
+			}
+		}
+	}
+	// The label is bounded to exactly the three outcomes: never a project or
+	// task id.
+	want := []string{"outcome=empty", "outcome=rendered", "outcome=truncated"}
+	slices.Sort(outcomes)
+	if !slices.Equal(outcomes, want) {
+		t.Fatalf("worklode_web_morning_brief_renders_total series = %v, want %v", outcomes, want)
+	}
+}
+
+// TestObserveMorningBriefRenderNilSafe checks a *server built without
+// initMetrics (as tests in this package do) does not panic when a handler
+// calls observeMorningBriefRender.
+func TestObserveMorningBriefRenderNilSafe(t *testing.T) {
+	t.Parallel()
+	s := &server{}
+	s.observeMorningBriefRender(morningBriefRenderEmpty)
+}
+
+func TestObserveBriefReview(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeBriefReview(briefReviewAdvanced)
+	s.observeBriefReview(briefReviewNoop)
+	s.observeBriefReview(briefReviewNoop)
+
+	for _, tc := range []struct {
+		outcome string
+		want    float64
+	}{
+		{briefReviewAdvanced, 1},
+		{briefReviewNoop, 2},
+		// Pre-initialised, so an outcome nobody has hit reads as a flat zero
+		// rather than as no-data.
+		{briefReviewInvalid, 0},
+	} {
+		if got := testutil.ToFloat64(s.briefReviews.WithLabelValues(tc.outcome)); got != tc.want {
+			t.Fatalf("briefReviews{outcome=%s} = %v, want %v", tc.outcome, got, tc.want)
+		}
+	}
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var outcomes []string
+	for _, mf := range mfs {
+		if mf.GetName() != "worklode_web_brief_reviews_total" {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			for _, l := range m.GetLabel() {
+				outcomes = append(outcomes, l.GetName()+"="+l.GetValue())
+			}
+		}
+	}
+	want := []string{"outcome=advanced", "outcome=invalid", "outcome=noop"}
+	slices.Sort(outcomes)
+	if !slices.Equal(outcomes, want) {
+		t.Fatalf("worklode_web_brief_reviews_total series = %v, want %v", outcomes, want)
+	}
+}
+
+// TestObserveBriefReviewNilSafe checks a *server built without initMetrics
+// (as tests in this package do) does not panic when a handler calls
+// observeBriefReview.
+func TestObserveBriefReviewNilSafe(t *testing.T) {
+	t.Parallel()
+	s := &server{}
+	s.observeBriefReview(briefReviewNoop)
+}
+
 // gatheredLabelPairs returns "<first value>/<second value>" for every series
 // of a metric family, sorted. Looked up by label name rather than by
 // position: Gather sorts label pairs alphabetically, which is not the order

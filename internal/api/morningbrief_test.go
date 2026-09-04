@@ -1,7 +1,10 @@
 package api
 
 import (
+	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
@@ -340,5 +343,84 @@ func TestAssembleMorningBrief(t *testing.T) {
 			got := assembleMorningBrief(tc.in)
 			tc.check(t, got)
 		})
+	}
+}
+
+// TestBriefEventsSince seeds more events than one store.ListEvents page (200)
+// but fewer than morningBriefEventCap (2000), and checks briefEventsSince
+// pages across that boundary transparently: a fetch from 0 returns every
+// seeded event in ascending id order and reports no truncation, and a fetch
+// cursored mid-log returns only the tail after it.
+func TestBriefEventsSince(t *testing.T) {
+	t.Parallel()
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	s := &server{st: st}
+
+	const n = 250 // > store.MaxEventListLimit (200), < morningBriefEventCap (2000)
+	var ids []int64
+	for i := 0; i < n; i++ {
+		id, _, err := st.RecordEvent(ctx, "system", fmt.Sprintf("%s-%d", t.Name(), i), "test.event", nil, nil)
+		if err != nil {
+			t.Fatalf("record event %d: %v", i, err)
+		}
+		ids = append(ids, id)
+	}
+
+	events, truncated := pollBriefEventsSince(t, ctx, s, 0, n)
+	if len(events) != n {
+		t.Fatalf("briefEventsSince(0) returned %d events, want %d", len(events), n)
+	}
+	if truncated {
+		t.Error("truncated = true, want false: 250 events is well under the 2000 cap")
+	}
+	for i, ev := range events {
+		if ev.ID != ids[i] {
+			t.Fatalf("events[%d].ID = %d, want %d (ascending id order)", i, ev.ID, ids[i])
+		}
+	}
+
+	// A cursor mid-log returns only the tail after it. The full log is
+	// already known visible from the poll above, so this read needs no
+	// further polling.
+	mid := events[100].ID
+	tail, truncated, err := s.briefEventsSince(ctx, mid)
+	if err != nil {
+		t.Fatalf("briefEventsSince(after=%d): %v", mid, err)
+	}
+	if truncated {
+		t.Error("truncated = true, want false")
+	}
+	if want := n - 101; len(tail) != want {
+		t.Fatalf("briefEventsSince(after=%d) returned %d events, want %d", mid, len(tail), want)
+	}
+	if tail[0].ID != events[101].ID {
+		t.Fatalf("tail[0].ID = %d, want %d", tail[0].ID, events[101].ID)
+	}
+}
+
+// pollBriefEventsSince retries briefEventsSince until it sees at least want
+// events or a 10s deadline passes. Needed because the commit horizon
+// briefEventsSince reads through (store.ListEvents's eventHorizon) can be
+// held back by a concurrent transaction elsewhere on the same Postgres
+// instance, same as store.pollListEvents in events_test.go.
+func pollBriefEventsSince(t *testing.T, ctx context.Context, s *server, after int64, want int) (events []store.Event, truncated bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var err error
+		events, truncated, err = s.briefEventsSince(ctx, after)
+		if err != nil {
+			t.Fatalf("briefEventsSince: %v", err)
+		}
+		if len(events) >= want {
+			return events, truncated
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("briefEventsSince: got %d events after polling, want %d "+
+				"(commit horizon held back by a concurrent transaction elsewhere on the instance?)",
+				len(events), want)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
