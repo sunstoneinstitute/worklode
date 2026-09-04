@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 func TestMorningBriefTierOf(t *testing.T) {
@@ -100,6 +101,244 @@ func TestMorningBriefProject(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("morningBriefProject(%s) = %q, want %q", tc.payload, got, tc.want)
 			}
+		})
+	}
+}
+
+func TestAssembleMorningBrief(t *testing.T) {
+	proj1 := map[string]store.Project{
+		"proj1": {ID: "proj1", Name: "Proj One", FocusNote: "Ship the thing"},
+	}
+	order1 := []string{"proj1"}
+	keyToProject := map[string]string{"WL": "proj1"}
+
+	cases := []struct {
+		name  string
+		in    morningBriefInputs
+		check func(t *testing.T, got *ui.MorningBriefView)
+	}{
+		{
+			// the §9 order: a group with all four tiers renders NeedsYou,
+			// then Outcomes, then Stopped, then the Routine count — assert
+			// field placement, not string order.
+			name: "order",
+			in: morningBriefInputs{
+				Events: []store.Event{
+					{ID: 1, Type: "task.done", Payload: []byte(`{"task":"WL-1"}`)},
+					{ID: 2, Type: "task.stopped", Payload: []byte(`{"task":"WL-2"}`)},
+					{ID: 3, Type: "task.created", Payload: []byte(`{"task":"WL-3"}`)},
+				},
+				Boundary:     0,
+				Order:        order1,
+				Projects:     proj1,
+				Awaiting:     map[string]int{"proj1": 2},
+				Assigned:     map[string][]store.OwnedWork{"proj1": {{Kind: "task", ID: "WL-9", Title: "Fix thing", State: "in_progress"}}},
+				KeyToProject: keyToProject,
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a view")
+				}
+				if len(got.Groups) != 1 {
+					t.Fatalf("Groups = %d, want 1", len(got.Groups))
+				}
+				g := got.Groups[0]
+				if g.FocusNote != "Ship the thing" {
+					t.Errorf("FocusNote = %q, want %q", g.FocusNote, "Ship the thing")
+				}
+				if len(g.NeedsYou) != 2 {
+					t.Errorf("NeedsYou = %d, want 2", len(g.NeedsYou))
+				}
+				if len(g.Outcomes) != 1 {
+					t.Errorf("Outcomes = %d, want 1", len(g.Outcomes))
+				}
+				if len(g.Stopped) != 1 {
+					t.Errorf("Stopped = %d, want 1", len(g.Stopped))
+				}
+				if g.Routine != 1 {
+					t.Errorf("Routine = %d, want 1", g.Routine)
+				}
+			},
+		},
+		{
+			// collapse: five task.created/push events → Routine: 5, no items.
+			name: "collapse",
+			in: morningBriefInputs{
+				Events: []store.Event{
+					{ID: 1, Type: "task.created", Payload: []byte(`{"task":"WL-1"}`)},
+					{ID: 2, Type: "push", Payload: []byte(`{"task":"WL-1"}`)},
+					{ID: 3, Type: "task.created", Payload: []byte(`{"task":"WL-2"}`)},
+					{ID: 4, Type: "push", Payload: []byte(`{"task":"WL-2"}`)},
+					{ID: 5, Type: "task.created", Payload: []byte(`{"task":"WL-3"}`)},
+				},
+				Boundary:     0,
+				Order:        order1,
+				Projects:     proj1,
+				KeyToProject: keyToProject,
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a view")
+				}
+				if len(got.Groups) != 1 {
+					t.Fatalf("Groups = %d, want 1", len(got.Groups))
+				}
+				g := got.Groups[0]
+				if len(g.NeedsYou) != 0 || len(g.Outcomes) != 0 || len(g.Stopped) != 0 {
+					t.Errorf("expected only Routine, got NeedsYou=%d Outcomes=%d Stopped=%d",
+						len(g.NeedsYou), len(g.Outcomes), len(g.Stopped))
+				}
+				if g.Routine != 5 {
+					t.Errorf("Routine = %d, want 5", g.Routine)
+				}
+			},
+		},
+		{
+			// persistence: Awaiting and Assigned populate NeedsYou even with
+			// Events empty (CanReview false, Cutoff == Boundary) — an
+			// undecided approval must not vanish from the brief after a
+			// review advance.
+			name: "persistence",
+			in: morningBriefInputs{
+				Boundary: 42,
+				Order:    order1,
+				Projects: proj1,
+				Awaiting: map[string]int{"proj1": 1},
+				Assigned: map[string][]store.OwnedWork{"proj1": {{Kind: "task", ID: "WL-9", Title: "Fix thing", State: "in_progress"}}},
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a view")
+				}
+				if got.CanReview {
+					t.Error("CanReview = true, want false")
+				}
+				if got.Cutoff != 42 {
+					t.Errorf("Cutoff = %d, want 42 (== Boundary)", got.Cutoff)
+				}
+				if len(got.Groups) != 1 || len(got.Groups[0].NeedsYou) != 2 {
+					t.Fatalf("Groups = %+v, want 1 group with 2 NeedsYou items", got.Groups)
+				}
+			},
+		},
+		{
+			// scope: an event attributed to a project absent from Order is
+			// dropped; an unattributed event is dropped but still counted
+			// in Shown and still moves Cutoff.
+			name: "scope",
+			in: morningBriefInputs{
+				Events: []store.Event{
+					{ID: 1, Type: "task.done", Payload: []byte(`{"project":"other-project"}`)},
+					{ID: 2, Type: "task.done", Payload: []byte(`{}`)},
+				},
+				Boundary:     0,
+				Order:        order1,
+				Projects:     proj1,
+				KeyToProject: keyToProject,
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a view")
+				}
+				if got.Shown != 2 {
+					t.Errorf("Shown = %d, want 2", got.Shown)
+				}
+				if got.Cutoff != 2 {
+					t.Errorf("Cutoff = %d, want 2", got.Cutoff)
+				}
+				if len(got.Groups) != 0 {
+					t.Errorf("Groups = %+v, want none", got.Groups)
+				}
+			},
+		},
+		{
+			// cutoff: Cutoff = max event id; empty events → Boundary;
+			// Truncated passes through.
+			name: "cutoff with events",
+			in: morningBriefInputs{
+				Events: []store.Event{
+					{ID: 5, Type: "task.done", Payload: []byte(`{"task":"WL-1"}`)},
+					{ID: 9, Type: "task.done", Payload: []byte(`{"task":"WL-1"}`)},
+				},
+				Boundary:     3,
+				Order:        order1,
+				Projects:     proj1,
+				KeyToProject: keyToProject,
+				Truncated:    true,
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a view")
+				}
+				if got.Cutoff != 9 {
+					t.Errorf("Cutoff = %d, want 9 (max event id)", got.Cutoff)
+				}
+				if !got.Truncated {
+					t.Error("Truncated = false, want true (passthrough)")
+				}
+			},
+		},
+		{
+			name: "cutoff with no events",
+			in: morningBriefInputs{
+				Boundary: 7,
+				Order:    order1,
+				Projects: proj1,
+				Awaiting: map[string]int{"proj1": 1},
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a view")
+				}
+				if got.Cutoff != 7 {
+					t.Errorf("Cutoff = %d, want 7 (== Boundary)", got.Cutoff)
+				}
+			},
+		},
+		{
+			// nil: no state, no events → nil.
+			name: "nil",
+			in: morningBriefInputs{
+				Boundary: 3,
+				Order:    order1,
+				Projects: proj1,
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got != nil {
+					t.Errorf("got %+v, want nil", got)
+				}
+			},
+		},
+		{
+			// empty-but-advanced: events exist but all drop → non-nil view,
+			// CanReview true, zero groups.
+			name: "empty-but-advanced",
+			in: morningBriefInputs{
+				Events: []store.Event{
+					{ID: 1, Type: "task.done", Payload: []byte(`{}`)},
+				},
+				Boundary: 0,
+				Order:    order1,
+				Projects: proj1,
+			},
+			check: func(t *testing.T, got *ui.MorningBriefView) {
+				if got == nil {
+					t.Fatal("got nil, want a non-nil view")
+				}
+				if !got.CanReview {
+					t.Error("CanReview = false, want true")
+				}
+				if len(got.Groups) != 0 {
+					t.Errorf("Groups = %+v, want none", got.Groups)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := assembleMorningBrief(tc.in)
+			tc.check(t, got)
 		})
 	}
 }
