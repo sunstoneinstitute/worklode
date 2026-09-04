@@ -293,8 +293,9 @@ func TestSessionStartSkillsPinnedEmptyHashSkipped(t *testing.T) {
 }
 
 // TestSessionStartSkillsFetchBudgetBounded covers the fix for a measured
-// regression: 1 pin + 5 matches (5 is RecommendSkills' default limit; see
-// internal/api/brief.go) against a hanging archive endpoint used to cost
+// regression: 1 pin + 5 matches (5 is the brief's default match limit,
+// defaultSkillLimit; see internal/api/skills.go) against a hanging archive
+// endpoint used to cost
 // 12s+ of dead air at session start, strictly linear in skill count. The
 // fetch loop must instead be bounded overall by skillsBudget and run with
 // bounded concurrency (skillFetchConcurrency), never serially per skill.

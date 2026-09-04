@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -125,9 +124,6 @@ type Config struct {
 	// chunk text the lexical arm needs (040 §7, §11) — but only when the
 	// caller passes a BackgroundCtx.
 	IndexInterval time.Duration
-	// SkillScoreFloor is the minimum cosine similarity for a recommendation,
-	// default 0.35. LODE_SKILL_SCORE_FLOOR.
-	SkillScoreFloor string
 
 	// Speech-to-text for the cockpit's dictation button (WL-299). Off unless
 	// SpeechToTextAPIKey is set: the forms then render no microphone and
@@ -270,7 +266,6 @@ type server struct {
 	embedder         embed.Provider
 	skillSyncer      *skillsync.Syncer
 	skillSources     []skillsync.Source
-	skillFloor       float64
 	skillSyncMu      sync.Mutex
 	skillSyncPending atomic.Bool
 
@@ -864,14 +859,6 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		s.repoReader = &storederive.GitHubReader{Auth: appAuth}
 	}
 
-	s.skillFloor = 0.35
-	if cfg.SkillScoreFloor != "" {
-		f, err := strconv.ParseFloat(cfg.SkillScoreFloor, 64)
-		if err != nil || math.IsNaN(f) || f < 0 || f > 1 {
-			return nil, nil, fmt.Errorf("LODE_SKILL_SCORE_FLOOR: want a float in [0,1], got %q", cfg.SkillScoreFloor)
-		}
-		s.skillFloor = f
-	}
 	if cfg.EmbeddingURL != "" {
 		if cfg.EmbeddingModel == "" {
 			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")

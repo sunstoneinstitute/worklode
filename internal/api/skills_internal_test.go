@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/sunstoneinstitute/worklode/internal/corpusindex"
 	"github.com/sunstoneinstitute/worklode/internal/embed"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/skillsync"
@@ -65,10 +66,9 @@ func TestRecommendationPins(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 
 	s := &server{
-		st:         st,
-		log:        slog.Default(),
-		skillFloor: 0.35,
-		embedder:   &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		st:       st,
+		log:      slog.Default(),
+		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
@@ -145,10 +145,9 @@ func TestRecommendationNoPins(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 
 	s := &server{
-		st:         st,
-		log:        slog.Default(),
-		skillFloor: 0.35,
-		embedder:   &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		st:       st,
+		log:      slog.Default(),
+		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
 	if err := st.SeedSkillChunksForTests(context.Background(), sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
@@ -169,8 +168,8 @@ func TestRecommendationNoPins(t *testing.T) {
 
 // TestNewServerSkillsConfig covers NewServer's skills-config boot validation
 // one field at a time: the reviewer found this path had zero coverage, so
-// deleting the 0.35 default, the range check, the EmbeddingModel
-// requirement, or the appAuth requirement all left the api suite green.
+// deleting the EmbeddingModel requirement or the appAuth requirement left the
+// api suite green.
 func TestNewServerSkillsConfig(t *testing.T) {
 	t.Parallel()
 	st := store.OpenTestStore(t)
@@ -181,15 +180,6 @@ func TestNewServerSkillsConfig(t *testing.T) {
 		wantErr bool
 	}{
 		{"empty config boots with skills off", Config{}, false},
-
-		{"score floor non-numeric", Config{SkillScoreFloor: "abc"}, true},
-		{"score floor below zero", Config{SkillScoreFloor: "-0.1"}, true},
-		{"score floor above one", Config{SkillScoreFloor: "1.5"}, true},
-		{"score floor NaN", Config{SkillScoreFloor: "NaN"}, true},
-		{"score floor leading space", Config{SkillScoreFloor: " 0.5"}, true},
-		{"score floor zero", Config{SkillScoreFloor: "0"}, false},
-		{"score floor one", Config{SkillScoreFloor: "1"}, false},
-		{"score floor mid-range", Config{SkillScoreFloor: "0.5"}, false},
 
 		{"embedding url without model", Config{EmbeddingURL: "https://example.com/embed"}, true},
 		{"embedding url with model", Config{EmbeddingURL: "https://example.com/embed", EmbeddingModel: "m"}, false},
@@ -235,9 +225,9 @@ func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
 		t.Fatalf("NewServer: %v", err)
 	}
 
-	got, err := st.RecommendSkills(ctx, []float32{1, 0}, 5, 0.5)
-	if err != nil || len(got) != 0 {
-		t.Fatalf("vectors from the previous provider survived boot: %+v err=%v", got, err)
+	counts, err := st.IndexCounts(ctx)
+	if err != nil || counts.ByKind[store.SubjectSkill] != 1 || counts.WithoutVector != 1 {
+		t.Fatalf("vectors from the previous provider survived boot: %+v err=%v", counts, err)
 	}
 	want := (&embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel}).ID()
 	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != want {
@@ -294,29 +284,31 @@ func TestNewServerSkillsSourcesWithGitHubApp(t *testing.T) {
 	}
 }
 
-// TestDefaultSkillScoreFloor pins the 0.35 default end to end through
-// NewServer and the HTTP handler: a stored skill embedding and a query
-// vector at a known cosine similarity, just under and just over the
-// threshold. (1,0) and (cosθ,sinθ) are both unit vectors, so their cosine
-// similarity is exactly cosθ, independent of pgvector's own normalization.
-func TestDefaultSkillScoreFloor(t *testing.T) {
+// TestRecommendDenseFloor pins the dense arm's candidate floor (040 §6.1,
+// 0.35, inherited from 016) end to end through NewServer and the HTTP
+// handler: a stored skill embedding and a query vector at a known cosine
+// similarity, just under and just over the threshold. (1,0) and (cosθ,sinθ)
+// are both unit vectors, so their cosine similarity is exactly cosθ,
+// independent of pgvector's own normalization. The floor lives in the store
+// now and is not a caller's knob, so this is the only place it is observable.
+func TestRecommendDenseFloor(t *testing.T) {
 	t.Parallel()
 	cosVector := func(cos float64) []float32 {
 		return store.VecForTests(float32(cos), float32(math.Sqrt(1-cos*cos)))
 	}
 
 	if n := recommendMatchCountAtCosine(t, cosVector(0.30)); n != 0 {
-		t.Fatalf("cosine 0.30 vs default floor 0.35: got %d matches, want 0", n)
+		t.Fatalf("cosine 0.30 vs dense floor 0.35: got %d matches, want 0", n)
 	}
 	if n := recommendMatchCountAtCosine(t, cosVector(0.40)); n != 1 {
-		t.Fatalf("cosine 0.40 vs default floor 0.35: got %d matches, want 1", n)
+		t.Fatalf("cosine 0.40 vs dense floor 0.35: got %d matches, want 1", n)
 	}
 }
 
 // recommendMatchCountAtCosine seeds a skill embedded at (1,0), boots a real
-// server with no SkillScoreFloor override (so NewServer's 0.35 default
-// applies), points its embedder at a fake endpoint that always returns
-// query, and returns how many matches /api/v1/skills/recommend reports.
+// server, points its embedder at a fake endpoint that always returns query,
+// and returns how many matches /api/v1/skills/recommend reports. The request
+// text matches no chunk lexically, so the count is the dense arm's alone.
 func recommendMatchCountAtCosine(t *testing.T, query []float32) int {
 	t.Helper()
 	st := store.OpenTestStore(t)
@@ -396,7 +388,7 @@ func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
 			fakeSrv := httptest.NewServer(tc.handler)
 			t.Cleanup(fakeSrv.Close)
 			s := &server{
-				st: st, log: slog.Default(), skillFloor: 0.35,
+				st: st, log: slog.Default(),
 				embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 			}
 
@@ -439,7 +431,7 @@ func TestSkillMatchesLimitClamped(t *testing.T) {
 	}))
 	t.Cleanup(fakeSrv.Close)
 	s := &server{
-		st: st, log: slog.Default(), skillFloor: 0.35,
+		st: st, log: slog.Default(),
 		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 
@@ -478,7 +470,7 @@ func TestRecommendationPinsSurviveMatchQueryFailure(t *testing.T) {
 	}))
 	t.Cleanup(fakeSrv.Close)
 	s := &server{
-		st: st, log: slog.Default(), skillFloor: 0.35,
+		st: st, log: slog.Default(),
 		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 
@@ -882,5 +874,50 @@ func TestRunSkillSyncAbortsWhenBackgroundContextCancelled(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("runSkillSync did not abort when its background context was cancelled")
+	}
+}
+
+// TestRecommendationLexicalWithoutProvider is 040 §9 with §11: recommendation
+// runs through the same retrieval path as search, so an instance with no
+// embedding provider still answers with the skill whose indexed text names
+// the query term literally. The pins-only era returned nothing here.
+func TestRecommendationLexicalWithoutProvider(t *testing.T) {
+	t.Parallel()
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+
+	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+	if err := st.ReplaceSubjectChunks(ctx,
+		store.ChunkSubject{Kind: store.SubjectSkill, SkillID: sk.ID, ContentHash: "h-tdd"},
+		[]corpusindex.Chunk{{Index: 0, Header: "skill: tdd", Text: "run pytest before committing"}},
+		nil); err != nil {
+		t.Fatalf("index skill text: %v", err)
+	}
+	// A second skill the query does not name, so a match proves retrieval and
+	// not "there was only one row".
+	other := seedSkillDirect(t, st, "deploying", "Ship it")
+	if err := st.ReplaceSubjectChunks(ctx,
+		store.ChunkSubject{Kind: store.SubjectSkill, SkillID: other.ID, ContentHash: "h-deploying"},
+		[]corpusindex.Chunk{{Index: 0, Header: "skill: deploying", Text: "roll the cluster forward"}},
+		nil); err != nil {
+		t.Fatalf("index skill text: %v", err)
+	}
+
+	s := &server{st: st, log: slog.Default()} // no embedder configured
+
+	rec, err := s.recommendation(ctx, "pytest", nil, 5)
+	if err != nil {
+		t.Fatalf("recommendation: %v", err)
+	}
+	if rec.Provider != "none" {
+		t.Fatalf("provider = %q, want none", rec.Provider)
+	}
+	if len(rec.Matches) != 1 || rec.Matches[0].Name != "acme:tdd" {
+		t.Fatalf("matches = %+v, want just acme:tdd", rec.Matches)
+	}
+	// Description and hash come from the skill row, not from the chunk: a hit
+	// that carried neither would still be the wrong response body.
+	if m := rec.Matches[0]; m.Description != "Red-green-refactor discipline" || m.Hash != "h-tdd" {
+		t.Fatalf("match = %+v, want the skill's own description and hash", m)
 	}
 }
