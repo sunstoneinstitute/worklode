@@ -85,9 +85,11 @@ func (s *server) setDocReviewers(w http.ResponseWriter, r *http.Request) {
 }
 
 // listApprovals handles GET /api/v1/approvals: the awaiting queue (029 §7.1)
-// as JSON, the same rows the cockpit's /reviews page renders. Read-only, and
-// unfiltered — the queue is what is outstanding org-wide, and a queue you
-// have to filter to see all of is not a queue.
+// as JSON, the same rows the cockpit's /reviews page renders. Read-only.
+// Excludes a pr-kind row whose PR has since closed (WL-663): tasks carry no
+// review requirement by default (029 §7.3), so a closed, unreviewed PR is
+// not an outstanding requirement, just an ingest artifact nobody can act on
+// any more.
 //
 // No dedicated metric, on resolveDocRef's reasoning: every outcome this route
 // has is already a status code on http_requests_total's {route, code}.

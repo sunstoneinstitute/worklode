@@ -1041,6 +1041,45 @@ func TestHasInboxItems(t *testing.T) {
 		}
 	})
 
+	// WL-663 regression: bucket 2 (unassigned, led project) must not fire
+	// once the PR itself is merged, even though the approval is still
+	// 'awaiting'. Bucket 2 inner-joins pull_requests, so unlike bucket 1
+	// there is no not-yet-correlated case to cover here.
+	t.Run("unassigned review in a led project, PR merged", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig" leads it
+		ctx := t.Context()
+		if err := s.CreateActor(ctx, "creator6", "human", "Creator Six", false); err != nil {
+			t.Fatal(err)
+		}
+		task := createTask(t, s, taskTestNow, TaskInput{
+			ProjectID: "horndb", Title: "t", Body: "b", Priority: "medium",
+			Kind: "feature", CreatedBy: "creator6",
+		})
+		// Bucket 6 (other active-state work in a member project) must not
+		// mask what this test checks -- park the task in a terminal state so
+		// only bucket 2's own PR-state filter is exercised.
+		setTaskState(t, s, task.ID, "merged")
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 1, Title: "pr", State: "merged",
+			HeadRef: task.ID + "-fix", HeadSHA: "sha1",
+			URL: "https://github.com/sunstoneinstitute/h/pull/1", OpenedAt: taskTestNow,
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha1",
+			nil, nil, "awaiting", taskTestNow)
+
+		got, err := s.HasInboxItems(ctx, "stig")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Error("got true, want false: the review's PR is merged")
+		}
+	})
+
 	t.Run("non-member with nothing", func(t *testing.T) {
 		t.Parallel()
 		s := openTaskStore(t) // project "horndb", actor "stig" leads it
