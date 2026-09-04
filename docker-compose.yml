@@ -65,6 +65,10 @@ services:
       LODE_EMBEDDING_URL: ${LODE_EMBEDDING_URL:-}
       LODE_EMBEDDING_MODEL: ${LODE_EMBEDDING_MODEL:-}
       LODE_EMBEDDING_API_KEY: ${LODE_EMBEDDING_API_KEY:-}
+      # How often the corpus index converges (040 §7); unset means 5m. Search
+      # still works with no embedding provider — the loop writes the chunk
+      # text the lexical arm needs either way.
+      LODE_INDEX_INTERVAL: ${LODE_INDEX_INTERVAL:-}
     restart: unless-stopped
     # No healthcheck: the image is distroless (no shell, no curl/wget), so
     # there is no in-container binary to run an HTTP probe with. /healthz and
