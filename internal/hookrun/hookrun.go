@@ -1223,7 +1223,7 @@ func compactBrief(b model.Brief, skillPaths map[string]string) string {
 		if len(b.Skills.Matches) > 0 {
 			fmt.Fprintf(&sb, "\n### Possibly relevant org skills\nRead the SKILL.md if relevant to this task:\n")
 			for _, m := range b.Skills.Matches {
-				fmt.Fprintf(&sb, "- %s (%.2f): %s — %s\n",
+				fmt.Fprintf(&sb, "- %s (%.4f): %s — %s\n",
 					m.Name, m.Score, m.Description, skillLocation(m.Name, skillPaths[m.Name]))
 			}
 		}
