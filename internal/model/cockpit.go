@@ -60,8 +60,10 @@ type EvidenceReference struct {
 	Category string `json:"category"`
 }
 
-// Decision is the project's curated "Next decision" card (migration 0013).
-type Decision struct {
+// CockpitDecision is the project's curated "Next decision" card (migration
+// 0013). Named apart from the spec 025 §10.1 Decision (a task's posed
+// question) — the two are unrelated concepts that happened to share a name.
+type CockpitDecision struct {
 	Title            string              `json:"title"`
 	Accountable      string              `json:"accountable"`
 	Subject          string              `json:"subject"`
@@ -120,7 +122,7 @@ type CockpitProjection struct {
 	Mode              CockpitMode        `json:"mode"`
 	PinnedFocus       *Focus             `json:"pinned_focus"`
 	RankingFocus      []string           `json:"ranking_focus"`
-	NextDecision      *Decision          `json:"next_decision"`
+	NextDecision      *CockpitDecision   `json:"next_decision"`
 	Work              CockpitWork        `json:"work"`
 	SecondaryConcerns []SecondaryConcern `json:"secondary_concerns"`
 	Repositories      []Repository       `json:"repositories"`
