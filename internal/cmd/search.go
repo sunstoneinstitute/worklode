@@ -13,11 +13,11 @@ var searchKinds = []string{"doc", "task", "skill"}
 
 // newSearchCmd builds `lode search`, the corpus-wide hybrid search (040 §9).
 //
-// It sits at the top level rather than under an entity group because it
-// answers over three of them at once — documents, tasks and skills — so no
-// `lode <entity> <verb>` spelling (061 §1 L1) is true of it. It is not the
-// polymorphic reader either: `lode show` resolves one known reference to one
-// subject (L7, L3), while search takes an unknown one and returns a ranking.
+// It is one of the two cross-entity readers 061 §1 L7 puts at the top level:
+// it answers over documents, tasks and skills at once, so no
+// `lode <entity> <verb>` spelling (L1) is true of it. `lode show` is the
+// other, and the split is what the caller supplies — show resolves one known
+// reference to one subject, search takes an unknown one and returns a ranking.
 func newSearchCmd() *cobra.Command {
 	var (
 		kinds []string
