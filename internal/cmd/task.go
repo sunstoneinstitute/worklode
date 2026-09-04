@@ -345,7 +345,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noUpload, "no-upload", false, "do not upload local images referenced by --body-file")
 	cmd.Flags().StringVar(&priority, "priority", "medium", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kind, "kind", "feature", "kind: feature, bug, chore, design, review, spike, decision")
-	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "priority", model.TaskPriorities)
 	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security (optional)")
 	cmd.Flags().BoolVar(&draft, "draft", false, "create as draft (not claimable until published with `lode task publish`)")
@@ -359,19 +359,12 @@ func newTaskAddCmd() *cobra.Command {
 	return cmd
 }
 
-// taskPriorities and taskStatusValues are the closed sets behind
-// `lode task` --priority and --status. Neither has a Go declaration the CLI
-// can reach — the priorities are internal/api's validPriorities and the
-// states are the tasks.state CHECK constraint of migration 0005 — so they are
-// mirrored here, beside the flags they complete. "all" is resolveStatusFilter's
-// pseudo-status, not a state.
-var (
-	taskPriorities   = []string{"critical", "high", "medium", "low"}
-	taskStatusValues = []string{
-		"draft", "ready", "in_progress", "in_review",
-		"merged", "deployed_dev", "deployed_prod", "released", "abandoned", "all",
-	}
-)
+// taskStatusValues is the closed set behind `lode task --status`: the live
+// task states plus "all", resolveStatusFilter's pseudo-status, which is not a
+// state. The states themselves come from model.TaskStates, pinned to the
+// tasks.state CHECK constraint by internal/store, so completion cannot offer
+// a stale set. --priority completes straight off model.TaskPriorities.
+var taskStatusValues = append(slices.Clone(model.TaskStates), "all")
 
 func newTaskListCmd() *cobra.Command {
 	var scope scopeFlags
@@ -424,7 +417,7 @@ func newTaskListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&priority, "priority", "", "filter by priority")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: feature, bug, chore, design, review, spike, decision")
 	completeFlagValues(cmd, "status", taskStatusValues)
-	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "priority", model.TaskPriorities)
 	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	// No --mine: the CLI has no caller identity to resolve it to (see
 	// docs/follow-ups.md).
@@ -662,7 +655,7 @@ func newTaskEditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&concern, "concern", "", "concern: completeness, performance, usability, security, or none to clear")
 	cmd.Flags().StringVar(&priority, "priority", "", "priority: critical, high, medium, low")
 	cmd.Flags().StringVar(&kindFlag, "kind", "", "retag the task's kind: feature, bug, chore, design, review, spike, decision")
-	completeFlagValues(cmd, "priority", taskPriorities)
+	completeFlagValues(cmd, "priority", model.TaskPriorities)
 	completeFlagValues(cmd, "kind", ns.TaskKinds)
 	cmd.Flags().BoolVar(&needsDecomposition, "needs-decomposition", false, "mark (or unmark) the task as needing decomposition before it is claimable")
 	cmd.Flags().BoolVar(&humanOnly, "human-only", false, "mark (or unmark) the task as human-only: never offered by lode next or the frontier, still claimable by id")

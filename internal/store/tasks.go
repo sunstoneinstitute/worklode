@@ -328,9 +328,7 @@ func TaskState(tx *sql.Tx, taskID string) (string, error) {
 
 // validPriorities is the tasks.priority CHECK constraint, mirrored in Go so
 // callers get a clean error instead of a raw constraint violation.
-var validPriorities = map[string]bool{
-	"critical": true, "high": true, "medium": true, "low": true,
-}
+var validPriorities = ns.Set(model.TaskPriorities)
 
 // validConcerns is the tasks.concern CHECK constraint, mirrored in Go so
 // callers get a clean error instead of a raw constraint violation.

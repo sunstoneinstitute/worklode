@@ -2,6 +2,24 @@ package model
 
 import "time"
 
+// TaskPriorities is the tasks.priority CHECK constraint's value set, most
+// urgent first. Postgres is the authority; this is the one Go copy every
+// layer reads — the API gate, the store gate, the web form's menu, the plan
+// parser and the CLI's completion — so none of them can hold a stale list of
+// its own. internal/store's TestPriorityCheckConstraintMatchesModel reads the
+// constraint back and fails if the two drift.
+var TaskPriorities = []string{"critical", "high", "medium", "low"}
+
+// TaskStates is the tasks.state CHECK constraint's value set, in the
+// lifecycle order the state machine walks. Same deal as TaskPriorities:
+// internal/store's TestStateCheckConstraintMatchesModel pins it to the
+// constraint and to legalTransitions, so a state added in a migration or in
+// the machine cannot leave this list behind.
+var TaskStates = []string{
+	"draft", "ready", "in_progress", "in_review",
+	"merged", "deployed_dev", "deployed_prod", "released", "abandoned",
+}
+
 // Task is a unit of work. Concern is "" when the task has none; Assignee is
 // "" when the task is unassigned; Skills is never nil (the store guarantees
 // an empty slice, so the JSON reads [] rather than null).
