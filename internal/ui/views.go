@@ -951,3 +951,32 @@ type CLICodeView struct {
 	// human-facing duration ui renders.
 	ExpiresIn string
 }
+
+// --- morning brief (032 §9; NOT the task brief in internal/api/brief.go) --
+
+// MorningBriefView is the assembled Morning Brief: 032 §9's four tiers,
+// grouped by project in Home's display order. Nil (not zero) means there is
+// nothing to show — no tier-1 state and no events past the boundary.
+type MorningBriefView struct {
+	Cutoff    int64 // displayed cutoff; the hidden form value
+	CanReview bool  // Cutoff advanced past the stored boundary
+	Truncated bool
+	Shown     int // events represented, for the truncation line
+	Groups    []MorningBriefGroup
+}
+
+// MorningBriefGroup is one project's slice of the brief, in tier order.
+type MorningBriefGroup struct {
+	ProjectID, Name string
+	FocusNote       string             // pinned focus, "" = none
+	NeedsYou        []MorningBriefItem // tier 1: decisions and exceptions
+	Outcomes        []MorningBriefItem // tier 2: material outcomes and changes
+	Stopped         []MorningBriefItem // tier 3: stopped or reached a bound
+	Routine         int                // tier 4: routine, collapsed to a count
+}
+
+// MorningBriefItem is one renderable line; Href "" renders as plain text.
+type MorningBriefItem struct {
+	Text string
+	Href string
+}

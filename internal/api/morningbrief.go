@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // morningBriefTier is 032 §9's ordering, from the spec's own numbered list.
@@ -68,4 +70,149 @@ func morningBriefProject(ev store.Event, keyToProject, repoToProject map[string]
 	}
 
 	return ""
+}
+
+// morningBriefInputs is everything the brief derivation reads, already
+// fetched. Events are ascending by id, all above Boundary; Truncated means
+// the fetch hit its cap and Events is a prefix. Order is the project-id
+// display order (the Home cards' order); Awaiting and Assigned are the
+// tier-1 open state, keyed by project id, and are independent of Events.
+type morningBriefInputs struct {
+	Events        []store.Event
+	Truncated     bool
+	Boundary      int64 // the stored cursor (0 = never reviewed)
+	Order         []string
+	Projects      map[string]store.Project // by id, for Name and FocusNote
+	Awaiting      map[string]int           // ApprovalsAwaiting counts
+	Assigned      map[string][]store.OwnedWork
+	KeyToProject  map[string]string
+	RepoToProject map[string]string
+}
+
+// assembleMorningBrief derives the brief. nil when there is nothing at all:
+// no tier-1 state anywhere and no events past the boundary — the section
+// then does not render. Groups appear in Order; a project with neither
+// tier-1 state nor attributed events gets no group. Within a group: tier 1
+// from Awaiting/Assigned, tiers 2 and 3 from events in id order, tier 4 as
+// a count. Cutoff is the highest event id seen (Boundary when Events is
+// empty); CanReview is Cutoff > Boundary.
+func assembleMorningBrief(in morningBriefInputs) *ui.MorningBriefView {
+	hasState := false
+	for _, n := range in.Awaiting {
+		if n > 0 {
+			hasState = true
+			break
+		}
+	}
+	if !hasState {
+		for _, work := range in.Assigned {
+			if len(work) > 0 {
+				hasState = true
+				break
+			}
+		}
+	}
+	if !hasState && len(in.Events) == 0 {
+		return nil
+	}
+
+	cutoff := in.Boundary
+	if n := len(in.Events); n > 0 {
+		cutoff = in.Events[n-1].ID
+	}
+
+	inOrder := make(map[string]bool, len(in.Order))
+	for _, pid := range in.Order {
+		inOrder[pid] = true
+	}
+
+	groups := make(map[string]*ui.MorningBriefGroup, len(in.Order))
+	group := func(pid string) *ui.MorningBriefGroup {
+		g, ok := groups[pid]
+		if !ok {
+			proj := in.Projects[pid]
+			g = &ui.MorningBriefGroup{ProjectID: pid, Name: proj.Name, FocusNote: proj.FocusNote}
+			groups[pid] = g
+		}
+		return g
+	}
+
+	for _, pid := range in.Order {
+		if n := in.Awaiting[pid]; n > 0 {
+			group(pid).NeedsYou = append(group(pid).NeedsYou, ui.MorningBriefItem{
+				Text: morningBriefAwaitingText(n),
+				Href: "/reviews",
+			})
+		}
+		for _, w := range in.Assigned[pid] {
+			group(pid).NeedsYou = append(group(pid).NeedsYou, ui.MorningBriefItem{
+				Text: "Assigned to you: " + w.ID + " " + w.Title,
+				Href: "/tasks/" + w.ID,
+			})
+		}
+	}
+
+	for _, ev := range in.Events {
+		pid := morningBriefProject(ev, in.KeyToProject, in.RepoToProject)
+		if pid == "" || !inOrder[pid] {
+			continue
+		}
+		g := group(pid)
+		switch morningBriefTierOf(ev.Type) {
+		case briefTierOutcome:
+			text, href := morningBriefItemText(ev)
+			g.Outcomes = append(g.Outcomes, ui.MorningBriefItem{Text: text, Href: href})
+		case briefTierStopped:
+			text, href := morningBriefItemText(ev)
+			g.Stopped = append(g.Stopped, ui.MorningBriefItem{Text: text, Href: href})
+		default:
+			g.Routine++
+		}
+	}
+
+	view := &ui.MorningBriefView{
+		Cutoff:    cutoff,
+		CanReview: cutoff > in.Boundary,
+		Truncated: in.Truncated,
+		Shown:     len(in.Events),
+	}
+	for _, pid := range in.Order {
+		g, ok := groups[pid]
+		if !ok {
+			continue
+		}
+		if len(g.NeedsYou) == 0 && len(g.Outcomes) == 0 && len(g.Stopped) == 0 && g.Routine == 0 {
+			continue
+		}
+		view.Groups = append(view.Groups, *g)
+	}
+	return view
+}
+
+// morningBriefAwaitingText spells the tier-1 approvals-awaiting item, using
+// the exact singular/plural wording pinned by the Global Constraints (see
+// homeSignal in home.go for the same spelling on the Home card).
+func morningBriefAwaitingText(n int) string {
+	if n == 1 {
+		return "1 approval awaiting you"
+	}
+	return fmt.Sprintf("%d approvals awaiting you", n)
+}
+
+// morningBriefItemText renders one event as a brief line: a `task` payload
+// key yields "<type>: <task id>" linking to the task; approval.decided
+// links to Reviews; anything else is the bare type label with no link.
+// Deliberately dumb — the acceptance bar is legibility, not payload
+// archaeology.
+func morningBriefItemText(ev store.Event) (text, href string) {
+	var payload map[string]any
+	if err := json.Unmarshal(ev.Payload, &payload); err == nil {
+		if taskID, ok := payload["task"].(string); ok && taskID != "" {
+			return ev.Type + ": " + taskID, "/tasks/" + taskID
+		}
+	}
+	if ev.Type == "approval.decided" {
+		return ev.Type, "/reviews"
+	}
+	return ev.Type, ""
 }
