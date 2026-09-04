@@ -655,8 +655,9 @@ func TestHomePageActorTiers(t *testing.T) {
 			return err
 		}
 		role := "science-leads"
-		return store.InsertAwaitingApproval(tx, st.Now(), "pr",
-			store.PREntityID("acme/widgets", 7), "shaawait", &role, nil)
+		_, err := store.InsertAwaitingApproval(tx, st.Now(), "pr",
+			store.PREntityID("acme/widgets", 7), "shaawait", "", &role, nil, nil)
+		return err
 	})
 
 	now = now.Add(time.Hour)

@@ -752,8 +752,9 @@ func TestImportSetsPRAuthorEnablingSelfApprovalRefusal(t *testing.T) {
 		t.Fatalf("upsert actor: %v", err)
 	}
 	if err := st0.Tx(ctx, func(tx *sql.Tx) error {
-		return store.InsertAwaitingApproval(tx, st0.Now(), "pr",
-			store.PREntityID("acme/widgets", 1), "cafe", nil, nil)
+		_, err := store.InsertAwaitingApproval(tx, st0.Now(), "pr",
+			store.PREntityID("acme/widgets", 1), "cafe", "", nil, nil, nil)
+		return err
 	}); err != nil {
 		t.Fatalf("insert awaiting approval: %v", err)
 	}
