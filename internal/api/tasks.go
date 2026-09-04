@@ -160,10 +160,19 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 				blobref.Extract(req.Body), actorID); err != nil {
 				return err
 			}
+			// Every kind may carry rows (025 §10.1), and a decision-kind
+			// task with none is legal while its questions are still being
+			// drafted. Same transaction as the insert: a task never exists
+			// with half its questions posed.
+			for _, d := range req.Decisions {
+				if _, err := store.InsertDecision(tx, t.ID, d); err != nil {
+					return err
+				}
+			}
 			return nil
 		})
 	if err != nil {
-		s.mapStoreErr(w, err)
+		s.mapDecisionErr(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
@@ -206,7 +215,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := model.TaskDetail{Task: *t, Blocked: blocked[id]}
+	decisions, err := s.st.ListDecisions(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)
@@ -505,6 +520,20 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		normalized := s.normalizeTaskKind(*req.Kind, "edit")
 		if !validKinds[normalized] {
 			writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
+			return
+		}
+		// The decision kind is fixed when the task is created: it closes by
+		// answering rather than by landing a diff (025 §10), and its rows
+		// gate that closing, so retyping either way would change what the
+		// rows already on the task mean.
+		cur, err := s.st.GetTask(r.Context(), id)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		if (normalized == "decision") != (cur.Kind == "decision") {
+			writeErr(w, http.StatusUnprocessableEntity,
+				"kind decision is fixed when the task is created: create a new task instead of retyping this one")
 			return
 		}
 		req.Kind = &normalized

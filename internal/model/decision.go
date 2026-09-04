@@ -35,3 +35,27 @@ type DecisionAnswer struct {
 	Freetext string   `json:"freetext,omitempty"`
 	Value    string   `json:"value,omitempty"`
 }
+
+// DecisionInput is the body of a pose (POST /api/v1/tasks/{id}/decisions)
+// and of an edit (PATCH .../decisions/{key}).
+//
+// On a pose every field the response type needs must be present. On an edit
+// only what is sent changes, with one grouping rule: response_type,
+// options, min_picks and max_picks move together, so an edit that sends
+// response_type replaces all four and an edit that does not leaves all four
+// alone. Without that, retyping a multi_select to freetext would strand
+// min_picks on a row that may not carry it. The merged row is revalidated
+// as a whole, so an edit cannot leave a row a pose would have refused.
+type DecisionInput struct {
+	// Task re-parents the row to another task. Edit only; a pose takes its
+	// task from the path.
+	Task         string           `json:"task,omitempty"`
+	Key          string           `json:"key,omitempty"`
+	Group        *string          `json:"group,omitempty"`
+	Question     string           `json:"question,omitempty"`
+	Context      *string          `json:"context,omitempty"`
+	ResponseType string           `json:"response_type,omitempty"`
+	Options      []DecisionOption `json:"options,omitempty"`
+	MinPicks     *int             `json:"min_picks,omitempty"`
+	MaxPicks     *int             `json:"max_picks,omitempty"`
+}

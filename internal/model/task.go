@@ -104,6 +104,10 @@ type CreateTaskInput struct {
 	// Secrets declares the org-catalog secret names this task needs (spec
 	// 017). Names only; validated against internal/secrets.ValidName.
 	Secrets []string `json:"secrets,omitempty"`
+	// Decisions poses questions on the new task in the same transaction as
+	// the insert (025 §10.1). Legal on any kind, and a decision-kind task
+	// with none is legal too — the list is often written after the task.
+	Decisions []Decision `json:"decisions,omitempty"`
 }
 
 // EditTaskInput carries the optional fields of a task edit (PATCH
