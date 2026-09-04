@@ -56,6 +56,13 @@ func TestShortcuts(t *testing.T) {
 	// ready` got in unnoticed; the table is meant to be the visible closed
 	// set instead.
 	for _, c := range rootCmd.Commands() {
+		// Cobra adds its own hidden __complete (aliased __completeNoDesc)
+		// the first time a command executes, so a test that ran a
+		// completion leaves it on the shared rootCmd. It is machinery the
+		// shell calls, not a spelling anyone types.
+		if strings.HasPrefix(c.Name(), "__") {
+			continue
+		}
 		if len(c.Aliases) > 0 {
 			t.Errorf("`lode %s` declares Aliases %v: top-level aliases belong in the "+
 				"shortcuts table in root.go (061 §1 L9)", c.Name(), c.Aliases)
