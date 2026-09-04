@@ -246,7 +246,7 @@ func priorityRank(p string) int {
 // SW-9 must sort before SW-10, which a plain string compare gets wrong. A
 // malformed id sorts last rather than panicking.
 func numericTaskID(id string) int {
-	if _, n, ok := splitTaskID(id); ok {
+	if _, n, ok := model.SplitTaskID(id); ok {
 		return n
 	}
 	return math.MaxInt

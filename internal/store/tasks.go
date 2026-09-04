@@ -636,9 +636,9 @@ func (s *Store) GetTask(ctx context.Context, id string) (*model.Task, error) {
 
 // taskListOrder renders the ORDER BY every task listing shares, over the
 // given table alias: priority first (critical first), then the same order as
-// CompareTaskIDs — key lexically, then the numeric suffix, so WL-9 precedes
-// WL-10 — but done in the database. Shared so a second listing (the tree's
-// children) cannot order its rows differently from ListTasks.
+// model.CompareTaskIDs — key lexically, then the numeric suffix, so WL-9
+// precedes WL-10 — but done in the database. Shared so a second listing (the
+// tree's children) cannot order its rows differently from ListTasks.
 func taskListOrder(alias string) string {
 	return ` ORDER BY CASE ` + alias + `.priority
 	         WHEN 'critical' THEN 0
@@ -649,8 +649,8 @@ func taskListOrder(alias string) string {
 }
 
 // ListTasks returns tasks matching the filter, ordered by priority (critical
-// first), then by task id in CompareTaskIDs order (key lexically, suffix
-// numerically, so WL-9 precedes WL-10).
+// first), then by task id in model.CompareTaskIDs order (key lexically,
+// suffix numerically, so WL-9 precedes WL-10).
 func (s *Store) ListTasks(ctx context.Context, f TaskFilter) ([]model.Task, error) {
 	q := `SELECT ` + taskColumns + ` FROM tasks`
 	var conds []string
