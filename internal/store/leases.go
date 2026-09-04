@@ -133,7 +133,8 @@ func scanActiveLeaseRow(row rowScanner, taskID string) (*Lease, error) {
 //     backstop for races).
 //   - ErrBlocked: an open 'blocks' edge points at the task, or a plan
 //     ordered before the task's plan is unfinished (025 §9.3).
-//   - ErrBadTransition: the task has children, or is not in state ready
+//   - ErrBadTransition: the task has children, is a decision (004 §6.3 as
+//     amended — use `lode task assign` instead), or is not in state ready
 //     (draft, merged, ...).
 //   - ErrNotFound: the task or actor does not exist, or the task is deleted.
 //
@@ -161,10 +162,10 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			// Lock the task row first so concurrent claims serialize here.
 			// A tombstoned task is outside the claimable universe (044 §4),
 			// so it reads as ErrNotFound rather than as some other refusal.
-			var state string
+			var state, kind string
 			if err := tx.QueryRow(
-				`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, taskID,
-			).Scan(&state); err != nil {
+				`SELECT state, kind FROM tasks WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, taskID,
+			).Scan(&state, &kind); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 				}
@@ -181,6 +182,12 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 			}
 			if container {
 				return fmt.Errorf("task %s has children and cannot be claimed: %w", taskID, ErrBadTransition)
+			}
+			// A decision has nothing to check out either, and is never leased
+			// (004 §6.3 as amended); it moves via `lode task assign` instead.
+			if kind == "decision" {
+				return fmt.Errorf("task %s is a decision and cannot be claimed; use 'lode task assign' instead: %w",
+					taskID, ErrBadTransition)
 			}
 
 			if err := requireActor(tx, actorID); err != nil {

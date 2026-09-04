@@ -241,6 +241,24 @@ func TestClaimRequiresReady(t *testing.T) {
 	}
 }
 
+// TestClaimRejectsDecision pins 004 §6.3 as amended (WL-638): a decision is
+// never leased, even by a direct claim by id (the human_only escape hatch
+// does not apply here). `lode task assign` is the intended path instead.
+func TestClaimRejectsDecision(t *testing.T) {
+	t.Parallel()
+	s, _ := openLeaseStore(t)
+	in := defaultTaskInput()
+	in.Kind = "decision"
+	task := createTask(t, s, leaseTestNow, in)
+
+	if _, err := s.Claim(t.Context(), task.ID, "stig", "host:/wt", 0); !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("claim decision task: want ErrBadTransition, got %v", err)
+	}
+	if active, total := countLeases(t, s, task.ID); active != 0 || total != 0 {
+		t.Fatalf("decision task %s: %d/%d leases after rejected claim, want 0/0", task.ID, active, total)
+	}
+}
+
 func TestClaimUnknownTaskOrActor(t *testing.T) {
 	t.Parallel()
 	s, _ := openLeaseStore(t)
