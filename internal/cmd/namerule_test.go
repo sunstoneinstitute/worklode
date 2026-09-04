@@ -39,6 +39,12 @@ var l3Canonical = map[string]bool{
 // l3DomainActions is L3's allowlist of verbs that name an act none of the
 // seven expresses. Transcribed from 061 §1 L3 in its order; a verb reaching
 // the tree without reaching this list is the drift §0 describes.
+//
+// `pack` is the last entry for a reason worth keeping: `lode secret pack` is
+// Hidden, so two hand surveys enumerating from `lode --help` never saw it and
+// this test found it instead (061 §1, "Revised again"). The walk below reads
+// the built tree and does not skip hidden commands — the law says every
+// command is explicable by one of its rules, not every visible one.
 var l3DomainActions = map[string]bool{
 	"claim": true, "release": true, "renew": true, "submit": true,
 	"abandon": true, "reopen": true, "rework": true, "start": true,
@@ -50,7 +56,7 @@ var l3DomainActions = map[string]bool{
 	"tail": true, "gc": true, "link": true, "dismiss": true,
 	"serve": true, "listen": true, "next": true, "resume": true,
 	"attach": true, "detach": true, "assign": true, "block": true,
-	"parent": true, "duplicate": true, "request": true,
+	"parent": true, "duplicate": true, "request": true, "pack": true,
 }
 
 // nounViews is every L6 named view in the tree, by full command path. A view
@@ -146,12 +152,6 @@ func TestNameRule(t *testing.T) {
 		for _, sub := range subs {
 			name, path := sub.Name(), sub.CommandPath()
 			switch {
-			case sub.Hidden:
-				// A hidden command is not on the surface `lode --help` teaches,
-				// and the law is about what a caller has to remember. `lode
-				// secret pack` is the only one today: the ceremony re-invokes
-				// the binary with it, no human types it. See WL-510's report —
-				// its verb has no L3 entry, and that gap is 061's to close.
 			case depth == 0:
 				// Check 1: every top-level command classifies under one rule.
 				seenTop[name] = true
