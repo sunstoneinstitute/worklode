@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -88,7 +89,11 @@ func (Codex) SkillTargets(repoDir, scope string) ([]SkillTarget, error) {
 func (Codex) Events() map[Event][]string { return eventsFor(codexBindings) }
 
 // InstallHooks merges Worklode's bindings into hooks.json, preserving every
-// foreign hook and top-level key it finds.
+// foreign hook and top-level key it finds, and configures usage telemetry in
+// the user-level config.toml alongside it (spec 063 §3). The two files are
+// separate because Codex reads them for different purposes -- hooks.json for
+// event handlers, config.toml for OTel export -- so the telemetry action is
+// folded into Notes rather than a second location on HookInstall.
 func (c Codex) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	path, err := codexHooksPath()
 	if err != nil {
@@ -97,16 +102,29 @@ func (c Codex) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	if err := installGroupedHooks(path, codexBindings); err != nil {
 		return HookInstall{}, err
 	}
+	configPath, err := codexConfigPath()
+	if err != nil {
+		return HookInstall{}, err
+	}
+	telemetryAction, err := installCodexTelemetry(configPath)
+	if err != nil {
+		return HookInstall{}, err
+	}
 	return HookInstall{
 		Path:    path,
 		Bound:   boundNames(codexBindings),
 		Unbound: missingEvents(c),
-		Notes:   []string{codexTrustNote},
+		Notes: []string{
+			codexTrustNote,
+			fmt.Sprintf("usage telemetry %s in %s", telemetryAction, configPath),
+		},
 	}, nil
 }
 
 // UninstallHooks strips Worklode's bindings from hooks.json, leaving the file
-// untouched when there is nothing of ours in it.
+// untouched when there is nothing of ours in it, and removes the telemetry
+// settings InstallHooks wrote from config.toml wherever they still hold
+// Worklode's own values.
 func (Codex) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
 	path, err := codexHooksPath()
 	if err != nil {
@@ -114,6 +132,13 @@ func (Codex) UninstallHooks(repoDir, scope string) (HookUninstall, error) {
 	}
 	action, err := uninstallGroupedHooks(path)
 	if err != nil {
+		return HookUninstall{}, err
+	}
+	configPath, err := codexConfigPath()
+	if err != nil {
+		return HookUninstall{}, err
+	}
+	if _, err := uninstallCodexTelemetry(configPath); err != nil {
 		return HookUninstall{}, err
 	}
 	return HookUninstall{Path: path, Action: action}, nil
