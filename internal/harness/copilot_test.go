@@ -134,12 +134,18 @@ func TestCopilotInstallWritesOwnedFile(t *testing.T) {
 
 // initGitRepo makes dir a git repository and returns the path git itself
 // reports as the root, which on macOS differs from t.TempDir() by a /private
-// symlink prefix.
+// symlink prefix. The initial commit gives `git worktree add -b` something to
+// branch from.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "-c", "commit.gpgsign=false",
+		"-c", "user.email=test@example.com", "-c", "user.name=test",
+		"commit", "--allow-empty", "-m", "init").CombinedOutput(); err != nil {
+		t.Fatalf("git commit --allow-empty: %v: %s", err, out)
 	}
 	root, ok := worktree.Root(dir)
 	if !ok {

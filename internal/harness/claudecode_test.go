@@ -3,11 +3,14 @@ package harness
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
 // readSettings reads a settings file as generic JSON, failing the test if it
@@ -193,12 +196,51 @@ func seedClaudeSettings(t *testing.T, path string, statusLine bool) {
 	}
 }
 
-func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
-	root := t.TempDir()
-	rootPath := filepath.Join(root, ".claude", "settings.local.json")
-	seedClaudeSettings(t, rootPath, true)
+// writeCurrentProjectConfig writes a repo-local .worklode/config.toml pinning
+// current_project, so cli.CurrentProjectFrom resolves it for repo (and for
+// anything nested under it, worktrees included) without a server round trip.
+func writeCurrentProjectConfig(t *testing.T, repo, project string) {
+	t.Helper()
+	dir := filepath.Join(repo, ".worklode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", dir, err)
+	}
+	content := "current_project = \"" + project + "\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write config.toml: %v", err)
+	}
+}
 
-	dir := t.TempDir()
+// resourceAttributes reads OTEL_RESOURCE_ATTRIBUTES out of an already-read
+// settings object, or "" when there is no env block or no such key.
+func resourceAttributes(settings map[string]any) string {
+	env, _ := settings["env"].(map[string]any)
+	attrs, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string)
+	return attrs
+}
+
+func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
+	root := initGitRepo(t)
+	writeCurrentProjectConfig(t, root, "worklode")
+
+	// Simulate `lode install` at the main checkout: it resolves the project
+	// from local config, but the main checkout is never task-stamped, so its
+	// own telemetry carries no task attribute.
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(root, ScopeLocal); err != nil {
+		t.Fatalf("install at root: %v", err)
+	}
+
+	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
+		t.Fatalf("enable worktree config extension: %v", err)
+	}
+	dir := filepath.Join(root, worktree.DefaultBase, "WL-654-configure-telemetry")
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-b", "WL-654-configure-telemetry", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	if err := worktree.SetTaskID(dir, "WL-654"); err != nil {
+		t.Fatalf("stamp task id: %v", err)
+	}
+
 	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
 		t.Fatalf("propagate: %v", err)
 	}
@@ -211,6 +253,19 @@ func TestPropagateClaudeHooksToWorktreeMirrorsRootsOptIn(t *testing.T) {
 	sl, ok := settings["statusLine"]
 	if !ok || !isLodeStatusLine(sl) {
 		t.Fatalf("statusLine in worktree = %v, want the mirrored lode statusline", sl)
+	}
+	wantAttrs := "worklode.project.id=worklode,worklode.task.id=WL-654"
+	if got := resourceAttributes(settings); got != wantAttrs {
+		t.Fatalf("worktree OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, wantAttrs)
+	}
+
+	// Converse: the main checkout's own install must not carry a task
+	// attribute -- only the propagated worktree is bound to WL-654.
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	rootSettings := readSettings(t, rootPath)
+	wantRootAttrs := "worklode.project.id=worklode"
+	if got := resourceAttributes(rootSettings); got != wantRootAttrs {
+		t.Fatalf("root OTEL_RESOURCE_ATTRIBUTES = %q, want %q (no task attribute)", got, wantRootAttrs)
 	}
 }
 
@@ -859,5 +914,113 @@ func TestBoundNamesMatchEvents(t *testing.T) {
 	}
 	if got := events[Heartbeat]; len(got) != 4 {
 		t.Errorf("Heartbeat natives = %v, want all four", got)
+	}
+}
+
+// --- Claude Code usage telemetry (WL-655) ---------------------------------
+
+func TestApplyClaudeTelemetryKeepsForeignAttributes(t *testing.T) {
+	settings := map[string]any{"env": map[string]any{
+		"OTEL_RESOURCE_ATTRIBUTES": "team.id=platform,worklode.task.id=WL-OLD",
+	}}
+	applyClaudeTelemetry(settings, "worklode", "WL-654")
+	env := settings["env"].(map[string]any)
+	if got := env["OTEL_METRICS_EXPORTER"]; got != "otlp" {
+		t.Fatalf("OTEL_METRICS_EXPORTER = %v, want otlp", got)
+	}
+	want := "team.id=platform,worklode.project.id=worklode,worklode.task.id=WL-654"
+	if got := env["OTEL_RESOURCE_ATTRIBUTES"]; got != want {
+		t.Fatalf("resource attributes = %q, want %q", got, want)
+	}
+}
+
+// A developer who repointed OTEL_EXPORTER_OTLP_ENDPOINT, added their own env
+// vars, or carries a foreign resource attribute keeps all of it: uninstall
+// only removes the four exact Worklode telemetry vars where they still hold
+// Worklode's own values, and only the two worklode.* resource keys.
+func TestUninstallHooksRemovesClaudeTelemetryKeepsForeignEnv(t *testing.T) {
+	root := initGitRepo(t)
+	writeCurrentProjectConfig(t, root, "worklode")
+	path := filepath.Join(root, ".claude", "settings.local.json")
+
+	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	settings := readSettings(t, path)
+	env := settings["env"].(map[string]any)
+	env["MY_OWN_VAR"] = "keep-me"
+	attrs, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string)
+	env["OTEL_RESOURCE_ATTRIBUTES"] = attrs + ",team.id=platform"
+	if err := writeJSONFile(path, settings); err != nil {
+		t.Fatalf("seed foreign env: %v", err)
+	}
+
+	hu, err := (ClaudeCode{}).UninstallHooks(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if hu.Action != ActionRemoved {
+		t.Fatalf("action = %q, want %q", hu.Action, ActionRemoved)
+	}
+
+	settings = readSettings(t, path)
+	env, _ = settings["env"].(map[string]any)
+	for k := range claudeTelemetryEnv {
+		if _, ok := env[k]; ok {
+			t.Errorf("env[%s] survived uninstall, want it removed", k)
+		}
+	}
+	if got := env["MY_OWN_VAR"]; got != "keep-me" {
+		t.Fatalf("MY_OWN_VAR = %v, want it preserved", got)
+	}
+	wantAttrs := "team.id=platform"
+	if got, _ := env["OTEL_RESOURCE_ATTRIBUTES"].(string); got != wantAttrs {
+		t.Fatalf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q (worklode.project.id gone, team.id kept)", got, wantAttrs)
+	}
+}
+
+// Determinism matters here: a settings file must diff clean across repeat
+// installs, or every re-run of `lode install` looks like a change. Runs
+// through InstallWithStatusLine, the fullest surface (hooks, status line and
+// telemetry all in one write), with both a project and a stamped task in
+// play so the merged OTEL_RESOURCE_ATTRIBUTES has two keys to sort.
+func TestInstallWithStatusLineIsByteIdenticalAcrossRepeatInstalls(t *testing.T) {
+	root := initGitRepo(t)
+	writeCurrentProjectConfig(t, root, "worklode")
+	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
+		t.Fatalf("enable worktree config extension: %v", err)
+	}
+	dir := filepath.Join(root, worktree.DefaultBase, "WL-654-repeat-install")
+	if out, err := exec.Command("git", "-C", root, "worktree", "add", "-b", "WL-654-repeat-install", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git worktree add: %v\n%s", err, out)
+	}
+	if err := worktree.SetTaskID(dir, "WL-654"); err != nil {
+		t.Fatalf("stamp task id: %v", err)
+	}
+
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(dir, ScopeLocal); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	path := filepath.Join(dir, ".claude", "settings.local.json")
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after first install: %v", err)
+	}
+
+	if _, err := (ClaudeCode{}).InstallWithStatusLine(dir, ScopeLocal); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	second, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read after second install: %v", err)
+	}
+	if string(first) != string(second) {
+		t.Fatalf("install is not byte-identical on repeat:\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+
+	settings := readSettings(t, path)
+	wantAttrs := "worklode.project.id=worklode,worklode.task.id=WL-654"
+	if got := resourceAttributes(settings); got != wantAttrs {
+		t.Fatalf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, wantAttrs)
 	}
 }
