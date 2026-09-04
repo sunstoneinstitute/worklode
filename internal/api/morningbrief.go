@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -8,6 +9,45 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
+
+// morningBriefEventCap bounds one brief render.
+// ponytail: flat cap, oldest-first; an actor away long enough to accrue
+// more sees a truncation line and reviews forward in steps. Upgrade path:
+// summarize-then-page, only if real briefs ever hit the cap.
+const morningBriefEventCap = 2000
+
+// briefEventsSince pages ListEvents (After cursor) until a short page, the
+// cap, or the horizon. Ascending id order, horizon-bounded by ListEvents
+// itself. truncated reports hitting the cap with more behind it.
+func (s *server) briefEventsSince(ctx context.Context, after int64) (events []store.Event, truncated bool, err error) {
+	cursor := after
+	for len(events) < morningBriefEventCap {
+		limit := morningBriefEventCap - len(events)
+		if limit > store.MaxEventListLimit {
+			limit = store.MaxEventListLimit
+		}
+		page, err := s.st.ListEvents(ctx, store.EventFilter{After: cursor, Limit: limit})
+		if err != nil {
+			return nil, false, err
+		}
+		if len(page) == 0 {
+			return events, false, nil
+		}
+		events = append(events, page...)
+		cursor = page[len(page)-1].ID
+		if len(page) < limit {
+			return events, false, nil // short page: reached the horizon
+		}
+	}
+	// Hit the cap exactly (the last page's limit was shrunk to fit it). One
+	// more page, asking for a single row, is enough to say whether anything
+	// sits behind the cap without pulling it all in.
+	more, err := s.st.ListEvents(ctx, store.EventFilter{After: cursor, Limit: 1})
+	if err != nil {
+		return nil, false, err
+	}
+	return events, len(more) > 0, nil
+}
 
 // morningBriefTier is 032 §9's ordering, from the spec's own numbered list.
 // Tier 1 (decisions and exceptions needing the actor) is never assigned to

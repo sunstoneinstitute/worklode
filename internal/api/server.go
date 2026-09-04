@@ -502,6 +502,15 @@ type server struct {
 	// are the same 200.
 	overviewReads *prometheus.CounterVec
 	deriveRuns    *prometheus.CounterVec
+
+	// morningBriefRenders counts Morning Brief section renders, by outcome
+	// (rendered, empty, truncated); see morningbrief.go and
+	// metrics.go's observeMorningBriefRender.
+	morningBriefRenders *prometheus.CounterVec
+	// briefReviews counts review-advance attempts (moving the brief's
+	// cursor forward), by outcome (advanced, noop, invalid); see
+	// metrics.go's observeBriefReview.
+	briefReviews *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,

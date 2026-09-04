@@ -226,6 +226,17 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(deriveOutcomes, ", ") +
 			"). One observation per deriver, not per request. A steady 'skipped' share is healthy — it is the content hash matching, costing no write; 'refused_empty' is the guard against a broken input replacing a graph with nothing.",
 	}, []string{"source", "outcome"})
+	s.morningBriefRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_morning_brief_renders_total",
+		Help: "Morning Brief section renders, by outcome (" +
+			strings.Join(morningBriefRenderOutcomes, ", ") +
+			"). Bounded by construction: no project or task id is a label here.",
+	}, []string{"outcome"})
+	s.briefReviews = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_web_brief_reviews_total",
+		Help: "Morning Brief review-advance attempts, by outcome (" +
+			strings.Join(briefReviewOutcomes, ", ") + ").",
+	}, []string{"outcome"})
 	// The horizon's position is a scrape-time fact, not something a handler
 	// increments, so it is a collector rather than a gauge. It lives here
 	// because this is where it gets registered: eventbus.NewMetrics, which
@@ -247,7 +258,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.blobUploads, s.blobServes, s.posterExtractions, s.taskBlobRefs,
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
-		s.overviewReads, s.deriveRuns)
+		s.overviewReads, s.deriveRuns,
+		s.morningBriefRenders, s.briefReviews)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -399,6 +411,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		for _, surface := range kindAliasSurfaces {
 			s.kindAliasUses.WithLabelValues(alias, surface)
 		}
+	}
+	// All three brief render outcomes and all three review outcomes, so a
+	// side nobody has hit yet reads as a flat zero rather than as no-data.
+	for _, outcome := range morningBriefRenderOutcomes {
+		s.morningBriefRenders.WithLabelValues(outcome)
+	}
+	for _, outcome := range briefReviewOutcomes {
+		s.briefReviews.WithLabelValues(outcome)
 	}
 }
 
@@ -1143,4 +1163,49 @@ func (s *server) observeDeriveRun(source, outcome string) {
 		return
 	}
 	s.deriveRuns.WithLabelValues(source, outcome).Inc()
+}
+
+// The Morning Brief's render outcomes (see morningbrief.go's
+// assembleMorningBrief): "empty" is a nil view (nothing at all to show),
+// "truncated" is a non-nil view whose event fetch hit morningBriefEventCap,
+// "rendered" is everything else. These are also this metric's only label
+// values.
+const (
+	morningBriefRenderRendered  = "rendered"
+	morningBriefRenderEmpty     = "empty"
+	morningBriefRenderTruncated = "truncated"
+)
+
+var morningBriefRenderOutcomes = []string{
+	morningBriefRenderRendered, morningBriefRenderEmpty, morningBriefRenderTruncated,
+}
+
+// observeMorningBriefRender records one Morning Brief section render, by
+// outcome. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeMorningBriefRender(outcome string) {
+	if s.morningBriefRenders == nil {
+		return
+	}
+	s.morningBriefRenders.WithLabelValues(outcome).Inc()
+}
+
+// The Morning Brief's review-advance outcomes: "advanced" moved the cursor,
+// "noop" found nothing past the current cursor to advance to, "invalid" is a
+// malformed or stale request. These are also this metric's only label
+// values.
+const (
+	briefReviewAdvanced = "advanced"
+	briefReviewNoop     = "noop"
+	briefReviewInvalid  = "invalid"
+)
+
+var briefReviewOutcomes = []string{briefReviewAdvanced, briefReviewNoop, briefReviewInvalid}
+
+// observeBriefReview records one Morning Brief review-advance attempt, by
+// outcome. Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeBriefReview(outcome string) {
+	if s.briefReviews == nil {
+		return
+	}
+	s.briefReviews.WithLabelValues(outcome).Inc()
 }
