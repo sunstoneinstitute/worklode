@@ -2,6 +2,12 @@ package model
 
 import "time"
 
+// ActorKinds is the actors.kind CHECK constraint's value set. Postgres is
+// the authority; this is the one Go copy, read by internal/api's gate and the
+// CLI's completion. internal/store's TestActorKindCheckConstraintMatchesModel
+// reads the constraint back and fails if the two drift.
+var ActorKinds = []string{"human", "agent", "service"}
+
 // Actor is the wire form of an actor: a human, agent, or service identity
 // that can hold leases and be granted tokens.
 type Actor struct {

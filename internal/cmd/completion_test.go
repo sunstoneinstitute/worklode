@@ -530,9 +530,9 @@ func TestFlagValueCompletion(t *testing.T) {
 	}{
 		{"doc add --kind", []string{"doc", "add", "--kind", ""}, docKinds},
 		{"doc list --status", []string{"doc", "list", "--status", ""}, ns.DesignDocStatuses},
-		{"task add --priority", []string{"task", "add", "--priority", ""}, taskPriorities},
+		{"task add --priority", []string{"task", "add", "--priority", ""}, model.TaskPriorities},
 		{"task list --status", []string{"task", "list", "--status", "deployed_"}, []string{"deployed_dev", "deployed_prod"}},
-		{"actor add --kind", []string{"actor", "add", "--kind", ""}, actorKinds},
+		{"actor add --kind", []string{"actor", "add", "--kind", ""}, model.ActorKinds},
 		{"search --kind", []string{"search", "--kind", ""}, searchKinds},
 		{"show --kind", []string{"show", "--kind", "p"}, []string{"plan", "project"}},
 		{"task list --project", []string{"task", "list", "--project", ""}, []string{"acme", "worklode"}},

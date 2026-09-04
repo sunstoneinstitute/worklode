@@ -7,9 +7,28 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 var tokenPattern = regexp.MustCompile(`^wl_[0-9a-f]{40}$`)
+
+// TestActorKindCheckConstraintMatchesModel pins model.ActorKinds to the
+// actors.kind CHECK constraint that owns it. internal/api's validActorKinds
+// gate and `lode actor add --kind` completion both read that one copy, so
+// neither can go stale behind a migration.
+func TestActorKindCheckConstraintMatchesModel(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+
+	got, def := checkConstraintValues(t, s, "actors", "actors_kind_check")
+	want := slices.Sorted(slices.Values(model.ActorKinds))
+	if !slices.Equal(got, want) {
+		t.Errorf("actors_kind_check = %v, want %v\n"+
+			"the CHECK constraint and model.ActorKinds disagree; a migration "+
+			"must move with the Go copy\nconstraint: %s", got, want, def)
+	}
+}
 
 func TestCreateAndGetActor(t *testing.T) {
 	t.Parallel()

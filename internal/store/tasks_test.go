@@ -930,6 +930,70 @@ func TestTaskSecretsRejectsBadName(t *testing.T) {
 	}
 }
 
+// checkConstraintValues reads a CHECK constraint's definition back from
+// Postgres and returns the quoted values it admits, sorted, alongside the raw
+// definition for the failure message. Every enum below is owned by its CHECK
+// constraint; the Go copy is the thing that can drift, so the constraint is
+// what the copy is compared against.
+func checkConstraintValues(t *testing.T, s *Store, table, constraint string) ([]string, string) {
+	t.Helper()
+	var def string
+	err := s.db.QueryRow(
+		`SELECT pg_get_constraintdef(oid) FROM pg_constraint
+		  WHERE conrelid = $1::regclass AND conname = $2`, table, constraint).Scan(&def)
+	if err != nil {
+		t.Fatalf("read %s: %v", constraint, err)
+	}
+	matches := regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(def, -1)
+	got := make([]string, 0, len(matches))
+	for _, m := range matches {
+		got = append(got, m[1])
+	}
+	slices.Sort(got)
+	return got, def
+}
+
+// TestPriorityCheckConstraintMatchesModel pins model.TaskPriorities to the
+// tasks.priority CHECK constraint that owns it. The Go copy is read by the
+// API gate, this package's gate, the new-task form's menu, the plan parser
+// and the CLI's --priority completion, so all five move together or this
+// fails.
+func TestPriorityCheckConstraintMatchesModel(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+
+	got, def := checkConstraintValues(t, s, "tasks", "tasks_priority_check")
+	want := slices.Sorted(slices.Values(model.TaskPriorities))
+	if !slices.Equal(got, want) {
+		t.Errorf("tasks_priority_check = %v, want %v\n"+
+			"the CHECK constraint and model.TaskPriorities disagree; a migration "+
+			"must move with the Go copy\nconstraint: %s", got, want, def)
+	}
+}
+
+// TestStateCheckConstraintMatchesModel pins model.TaskStates to both of its
+// authorities: the tasks.state CHECK constraint (migration 0005), which is
+// what Postgres will actually accept, and legalTransitions, which is what the
+// store will actually move a task through. A state added to one and not the
+// others leaves `lode task --status` offering or omitting it wrongly, so all
+// three are held together here.
+func TestStateCheckConstraintMatchesModel(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+
+	want := slices.Sorted(slices.Values(model.TaskStates))
+	got, def := checkConstraintValues(t, s, "tasks", "tasks_state_check")
+	if !slices.Equal(got, want) {
+		t.Errorf("tasks_state_check = %v, want %v\n"+
+			"the CHECK constraint and model.TaskStates disagree; a migration "+
+			"must move with the Go copy\nconstraint: %s", got, want, def)
+	}
+	if machine := allStates(); !slices.Equal(machine, want) {
+		t.Errorf("legalTransitions covers %v, want %v — the state machine and "+
+			"model.TaskStates disagree", machine, want)
+	}
+}
+
 // TestKindCheckConstraintMatchesGeneratedKinds closes the direction the API's
 // TestTaskKindsAgreeAcrossSources cannot see. That test creates a task of
 // every ns.TaskKind, which proves the CHECK admits at least the generated
@@ -941,21 +1005,7 @@ func TestKindCheckConstraintMatchesGeneratedKinds(t *testing.T) {
 	t.Parallel()
 	s := OpenTestStore(t)
 
-	var def string
-	err := s.db.QueryRow(
-		`SELECT pg_get_constraintdef(oid) FROM pg_constraint
-		  WHERE conrelid = 'tasks'::regclass AND conname = 'tasks_kind_check'`,
-	).Scan(&def)
-	if err != nil {
-		t.Fatalf("read tasks_kind_check: %v", err)
-	}
-
-	inCheck := regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(def, -1)
-	got := make([]string, 0, len(inCheck))
-	for _, m := range inCheck {
-		got = append(got, m[1])
-	}
-	slices.Sort(got)
+	got, def := checkConstraintValues(t, s, "tasks", "tasks_kind_check")
 
 	if !slices.Equal(got, ns.TaskKinds) {
 		t.Errorf("tasks_kind_check = %v, want %v\n"+

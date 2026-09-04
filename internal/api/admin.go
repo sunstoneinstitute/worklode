@@ -13,15 +13,14 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/repourl"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // validActorKinds is the actors.kind CHECK constraint, mirrored in Go so
 // callers get a clean 422 instead of a raw constraint violation.
-var validActorKinds = map[string]bool{
-	"human": true, "agent": true, "service": true,
-}
+var validActorKinds = ns.Set(model.ActorKinds)
 
 // projectKeyRe mirrors the projects_key_format CHECK constraint, so callers
 // get a clean 422 instead of a raw constraint violation.

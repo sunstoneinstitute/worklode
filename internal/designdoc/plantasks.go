@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 )
 
@@ -39,8 +40,9 @@ var planMintableKinds = []string{"feature", "bug", "chore", "design", "decision"
 
 // planPriorities is the priority values a task definition may declare
 // (docs/authoring-design-docs.md's key table); "medium" is the default when
-// the key is absent.
-var planPriorities = []string{"critical", "high", "medium", "low"}
+// the key is absent. A plan may declare any live priority, so this is the
+// live set rather than a copy of it.
+var planPriorities = model.TaskPriorities
 
 // planTaskFence is the yaml metadata block a task subsection opens with.
 // KnownFields makes a typoed key an error rather than a silent drop,
