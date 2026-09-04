@@ -17,9 +17,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-var validPriorities = map[string]bool{
-	"critical": true, "high": true, "medium": true, "low": true,
-}
+var validPriorities = ns.Set(model.TaskPriorities)
 
 // invalidPriorityMsg and invalidConcernMsg are shared by every handler that
 // gates on validPriorities / store.ValidConcern, for invalidKindMsg's reason:

@@ -52,9 +52,10 @@ const maxWebForm = 256 << 10
 // mirrors validKinds exactly; a test holds the two together.
 var webTaskKinds = []string{"feature", "bug", "chore", "design", "review", "spike", "decision"}
 
-// webTaskPriorities are the priorities the new-task form offers, most urgent
-// first, mirroring validPriorities.
-var webTaskPriorities = []string{"critical", "high", "medium", "low"}
+// webTaskPriorities are the priorities the new-task form offers, in
+// model.TaskPriorities' most-urgent-first order, which is also what
+// validPriorities gates on.
+var webTaskPriorities = model.TaskPriorities
 
 // webTaskConcerns are the optional concerns the new-task form offers,
 // mirroring store's validConcerns. The empty value is rendered as "None".
