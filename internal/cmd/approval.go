@@ -38,7 +38,7 @@ func init() { rootCmd.AddCommand(newApprovalCmd()) }
 // WL-487) — this command only materializes the lanes.
 func newApprovalRequestCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "request <id-or-slug>",
+		Use:   "request <ref>",
 		Short: "Open an approval lane for each of a document's assigned reviewers",
 		Long: "Open an approval lane for each of a document's assigned reviewers,\n" +
 			"on its current version (025 §7.3). Assign the reviewer set first with\n" +
@@ -46,6 +46,9 @@ func newApprovalRequestCmd() *cobra.Command {
 			"after a later `lode doc set reviewers` call adds only the newly\n" +
 			"assigned lanes.",
 		Args: cobra.ExactArgs(1),
+		// resolveDocID below takes any document reference, so the argument is
+		// spelled and completed like every other one: `<ref>`, docRefAt.
+		ValidArgsFunction: docRefAt(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
