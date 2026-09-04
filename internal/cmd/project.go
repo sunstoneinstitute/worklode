@@ -103,9 +103,10 @@ func newProjectRepoCmd() *cobra.Command {
 func newProjectRepoAddCmd() *cobra.Command {
 	var doneState string
 	cmd := &cobra.Command{
-		Use:   "add <project> <owner/name>",
-		Short: "Map a GitHub repo to a project",
-		Args:  cobra.ExactArgs(2),
+		Use:               "add <project> <owner/name>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Map a GitHub repo to a project",
+		Args:              cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -140,9 +141,10 @@ func newProjectRepoAddCmd() *cobra.Command {
 // colliding.
 func newProjectCrewCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "crew <project>",
-		Short: "List, or manage, a project's Crew",
-		Args:  cobra.ExactArgs(1),
+		Use:               "crew <project>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "List, or manage, a project's Crew",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -168,8 +170,9 @@ func newProjectCrewAddCmd() *cobra.Command {
 	var role string
 	var lead, deputy bool
 	cmd := &cobra.Command{
-		Use:   "add <project> <actor>",
-		Short: "Add an actor to a project's Crew",
+		Use:               "add <project> <actor>",
+		ValidArgsFunction: projectThenActor,
+		Short:             "Add an actor to a project's Crew",
 		Long: "Add an actor to a project's Crew with a role label.\n\n" +
 			"The role is one of the fixed project-role vocabulary (member, editor,\n" +
 			"science-lead, reporter, domain-expert, data-scientist, engineer);\n" +
@@ -213,8 +216,9 @@ func newProjectCrewAddCmd() *cobra.Command {
 // re-add, which is why there is no --role flag here.
 func newProjectCrewRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <project> <actor>",
-		Short: "Remove an actor from a project's Crew",
+		Use:               "remove <project> <actor>",
+		ValidArgsFunction: projectThenActor,
+		Short:             "Remove an actor from a project's Crew",
 		Long: "Remove an actor from a project's Crew, dropping every role they hold\n" +
 			"on the project at once.\n\n" +
 			"A member who still owns open work on the project cannot be removed: the\n" +
@@ -307,9 +311,10 @@ func newProjectRepoRemoveCmd() *cobra.Command {
 // view never writes (L6); the paired write is `lode project set focus`.
 func newProjectFocusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "focus <id>",
-		Short: "Show a project's ranking focus (ordered list of concerns)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "focus <id>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Show a project's ranking focus (ordered list of concerns)",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()
 			if err != nil {
@@ -349,9 +354,10 @@ func newProjectSetCmd() *cobra.Command {
 func newProjectSetFocusCmd() *cobra.Command {
 	var clear bool
 	cmd := &cobra.Command{
-		Use:   "focus <concern…> <id>",
-		Short: "Set or clear a project's ranking focus (ordered list of concerns)",
-		Args:  cobra.MinimumNArgs(1),
+		Use:               "focus <concern…> <id>",
+		ValidArgsFunction: projectKeyLast(1),
+		Short:             "Set or clear a project's ranking focus (ordered list of concerns)",
+		Args:              cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[len(args)-1]
 			concerns := args[:len(args)-1]
@@ -390,9 +396,10 @@ func newProjectSetFocusNoteCmd() *cobra.Command {
 	var note, by string
 	var clear bool
 	cmd := &cobra.Command{
-		Use:   "focus-note <id>",
-		Short: "Set or clear a project's pinned-focus note (cockpit card)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "focus-note <id>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Set or clear a project's pinned-focus note (cockpit card)",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if clear && (note != "" || by != "") {
 				return fmt.Errorf("--clear takes no --note or --by")
@@ -432,9 +439,10 @@ func newProjectSetDecisionCmd() *cobra.Command {
 	var title, accountable, restsOn string
 	var clear bool
 	cmd := &cobra.Command{
-		Use:   "decision <id>",
-		Short: "Set or clear a project's next-decision card (cockpit card)",
-		Args:  cobra.ExactArgs(1),
+		Use:               "decision <id>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Set or clear a project's next-decision card (cockpit card)",
+		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if clear && (title != "" || accountable != "" || restsOn != "") {
 				return fmt.Errorf("--clear takes no --title, --accountable, or --rests-on")
