@@ -67,6 +67,10 @@ type DocFilter struct {
 	// Deleted switches the list from live documents to tombstoned ones
 	// (044 §5). See TaskFilter.Deleted for why it is a switch.
 	Deleted bool
+	// HasNotes narrows to documents carrying at least one anchored note
+	// (025 §8.5) — "what has someone remarked on", answered by one EXISTS
+	// rather than by listing the corpus and asking per document.
+	HasNotes bool
 }
 
 // logDocChange records one document mutation in the state log. Nine write
@@ -865,6 +869,9 @@ func (s *Store) ListDocs(ctx context.Context, f DocFilter) ([]model.Doc, error) 
 		}
 		args = append(args, c.value)
 		where += fmt.Sprintf(" AND %s = $%d", c.column, len(args))
+	}
+	if f.HasNotes {
+		where += " AND EXISTS (SELECT 1 FROM doc_notes n WHERE n.doc_id = docs.id)"
 	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+docColumns+` FROM docs WHERE `+where+

@@ -57,6 +57,7 @@ var l3DomainActions = map[string]bool{
 	"serve": true, "listen": true, "next": true, "resume": true,
 	"attach": true, "detach": true, "assign": true, "block": true,
 	"parent": true, "duplicate": true, "request": true, "pack": true,
+	"note": true,
 }
 
 // nounViews is every L6 named view in the tree, by full command path. A view

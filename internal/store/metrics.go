@@ -71,7 +71,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|accept|submit|revise|discard|edges|delete|undelete|list-versions|get-version) and outcome.",
+			Help: "Design-document operations by op (create|update|accept|submit|revise|discard|edges|note|delete|undelete|list-versions|get-version) and outcome.",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",

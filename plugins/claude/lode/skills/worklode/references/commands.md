@@ -38,7 +38,9 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
   Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
-  Flags: --bare-superseded, --deleted, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
+  Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
+- `lode doc note` — Leave an anchored, non-blocking note on a document section
+  Flags: --body, --body-file
 - `lode doc reviewers` — Show a document's assigned reviewer set
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision
   Flags: --accept, --discard, --file

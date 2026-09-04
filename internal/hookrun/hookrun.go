@@ -76,10 +76,6 @@ const leaseRenewWindow = 30 * time.Minute
 // conversation is several times a minute; the backbone does not need that.
 const heartbeatDebounce = time.Minute
 
-// sessionMarkerFile is written in the worktree-private git dir to mark a live
-// coding session; see the marker helpers below.
-const sessionMarkerFile = "worklode-session.json"
-
 // Payload is the subset of a hook's stdin JSON that Worklode reads. Claude
 // Code sends cwd/session_id/hook_event_name/tool_input; a git pre-commit hook
 // sends no stdin at all, so every field is optional.
@@ -1257,56 +1253,17 @@ func humanKB(n int) string {
 
 // --- session marker ---------------------------------------------------------
 
-// sessionMarker records the process owning a live coding session in a
-// worktree. A marker is stale once its pid is no longer alive.
-type sessionMarker struct {
-	SessionID       string `json:"session_id"`
-	PID             int    `json:"pid"`
-	StartedAt       string `json:"started_at"`
-	LastHeartbeatAt string `json:"last_heartbeat_at,omitempty"`
-}
+// The marker itself lives in internal/worktree, which `lode` also reads to
+// learn the session a command belongs to. These aliases keep the rest of this
+// file (and its tests) on the unexported spelling they were written against.
+type sessionMarker = worktree.SessionMarker
 
-// markerPath returns the marker file path inside root's worktree-private git
-// dir.
-func markerPath(root string) (string, error) {
-	gitDir, err := worktree.GitDir(root)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(gitDir, sessionMarkerFile), nil
-}
-
-// readSessionMarker reads root's marker. A missing or unparseable marker
-// returns ok=false — never an error, since every caller treats "no marker" as
-// "nothing to do".
-func readSessionMarker(root string) (sessionMarker, bool) {
-	path, err := markerPath(root)
-	if err != nil {
-		return sessionMarker{}, false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return sessionMarker{}, false
-	}
-	var m sessionMarker
-	if json.Unmarshal(data, &m) != nil {
-		return sessionMarker{}, false
-	}
-	return m, true
-}
-
-// writeMarker serializes m to root's marker path.
-func writeMarker(root string, m sessionMarker) error {
-	path, err := markerPath(root)
-	if err != nil {
-		return err
-	}
-	b, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o644)
-}
+var (
+	markerPath        = worktree.SessionMarkerPath
+	readSessionMarker = worktree.ReadSessionMarker
+	writeMarker       = worktree.WriteSessionMarker
+	markerSessionID   = worktree.SessionID
+)
 
 // writeSessionMarker writes the current process's session marker for root.
 // LastHeartbeatAt is left empty rather than stamped with now: heartbeatDue
@@ -1320,16 +1277,6 @@ func writeSessionMarker(root, sessionID string, now time.Time) error {
 		PID:       os.Getpid(),
 		StartedAt: now.Format(time.RFC3339),
 	})
-}
-
-// markerSessionID returns the session id recorded for root. Used by hooks that
-// receive no stdin (git pre-commit) and so cannot learn it from a payload.
-func markerSessionID(root string) (string, bool) {
-	m, ok := readSessionMarker(root)
-	if !ok || m.SessionID == "" {
-		return "", false
-	}
-	return m.SessionID, true
 }
 
 // heartbeatDue reports whether root's session is due another heartbeat. No

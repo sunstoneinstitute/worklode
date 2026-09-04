@@ -807,3 +807,12 @@ Recorded by WL-634's pass over spec 040 §9:
   document list to map ids to references whenever the results hold a
   document. A `ref` on the hit itself — built where the store already
   builds a skill's qualified name — would drop the second request.
+
+Recorded by WL-603 (`lode doc note`, 025 §8.5):
+
+- `[P3]` **`note` is in the L3 allowlist here but not yet in WL-SPEC-61 §1.**
+  `lode doc note` leaves an anchored remark, which none of L3's seven verbs
+  expresses, so `note` was added to `l3DomainActions` in
+  `internal/cmd/namerule_test.go` and to `internal/cmd/CLAUDE.md`'s L3 list.
+  That test's list is transcribed from 061 §1 L3, so the spec owes the same
+  entry; adding it is a revision of an accepted spec, not part of this task.
