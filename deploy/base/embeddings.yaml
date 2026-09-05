@@ -1,0 +1,141 @@
+---
+# EmbeddingGemma-300M served on CPU by text-embeddings-inference (040 §2.3).
+# It exposes the OpenAI-compatible /v1/embeddings that internal/embed.OpenAI
+# already speaks, so the default deployment needs no new provider code: it is
+# LODE_EMBEDDING_URL in configmap.yaml pointed at the Service below.
+#
+# In base rather than in the overlays: dev and prod embed the same corpus with
+# the same model at the same width (§2.2), and nothing about the sidecar is
+# environment-specific. The overlays carry environment identity — hostnames,
+# OIDC clients, the cluster env map — and this has none.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worklode-embeddings
+  namespace: worklode
+  labels:
+    app: worklode-embeddings
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worklode-embeddings
+  template:
+    metadata:
+      labels:
+        app: worklode-embeddings
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: embeddings
+          image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model-id=google/embeddinggemma-300m
+            - --port=8080
+            # The indexer embeds one subject per call and sends all of that
+            # subject's chunks in one request (internal/indexer.vectors). A
+            # long spec chunks on every section anchor (040 §4.2), so the
+            # server's default client batch of 32 would 413 on the largest
+            # documents in the corpus.
+            - --max-client-batch-size=256
+            # A chunk over the model's 2048-token window truncates instead of
+            # failing the whole pass. §4.1's chunk budget is what keeps chunks
+            # inside the window; this is the net under it, not a substitute.
+            - --auto-truncate
+          env:
+            # Weights are cached here. The root filesystem is read-only, and
+            # the default cache path is under $HOME.
+            - name: HF_HOME
+              value: /data
+            # google/embeddinggemma-300m is a gated Hugging Face repo
+            # ("gated: manual"): downloading the weights needs a token from an
+            # account that has been granted access under the Gemma terms.
+            # Optional so this manifest applies before that secret exists —
+            # the pod then starts and fails its model load visibly, instead of
+            # the manifest failing to roll out at all.
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: worklode-huggingface
+                  key: token
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              # 040 §2.3's "~200 MB resident" is the model quantised; the
+              # safetensors text-embeddings-inference actually loads are fp32,
+              # 1.21 GB on disk and about that resident. Still a sidecar, not
+              # a node pool — but requesting 200 Mi would get it OOM-killed on
+              # the first pass. Quantised serving (llama.cpp, the §2.3
+              # alternative) is what would earn the smaller number.
+              memory: "1536Mi"
+              cpu: "500m"
+              # The weight cache below is this container's ephemeral storage.
+              # As in deployment.yaml, the limit sits above the volume's
+              # sizeLimit so sizeLimit stays the binding constraint.
+              ephemeral-storage: "2Gi"
+            limits:
+              memory: "3Gi"
+              cpu: "2"
+              ephemeral-storage: "4Gi"
+          # The first start downloads 1.3 GB from Hugging Face before it can
+          # serve. A startup probe gives that up to ten minutes without
+          # loosening liveness afterwards.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /data
+      volumes:
+        # ponytail: an emptyDir re-downloads the weights on every pod restart.
+        # Restarts are rare and existing vectors keep serving while it is down
+        # (040 §11); move to a PVC if a Hugging Face outage during a restart
+        # ever costs a convergence window.
+        - name: hf-cache
+          emptyDir:
+            sizeLimit: 3Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worklode-embeddings
+  namespace: worklode
+spec:
+  selector:
+    app: worklode-embeddings
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
