@@ -17,6 +17,15 @@ metadata:
     app: worklode-embeddings
 spec:
   replicas: 1
+  # Surge to two pods and take none away: a replacement re-downloads 1.3 GB
+  # into its emptyDir before it is ready, so the old pod has to keep serving
+  # until then. This is what the defaults already round to at one replica;
+  # it is spelled out because the download makes it load-bearing.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: worklode-embeddings
