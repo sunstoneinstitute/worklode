@@ -30,12 +30,12 @@ func TestInsertAwaitingApprovalIsIdempotent(t *testing.T) {
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
 	for range 2 { // second insert must be a silent no-op
-		if err := InsertAwaitingApproval(tx, now,
-			"pr", "acme/site#7", "abc123", nil, nil); err != nil {
+		if _, err := InsertAwaitingApproval(tx, now,
+			"pr", "acme/site#7", "abc123", "", nil, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
-	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#7")
+	a, err := OpenApprovalForLane(tx, "pr", "acme/site#7", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,17 +59,18 @@ func TestApprovalResolveApprovedClosesOpenLookup(t *testing.T) {
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
-	if err := InsertAwaitingApproval(tx, now, "pr", "acme/site#8", "sha1", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, now,
+		"pr", "acme/site#8", "sha1", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#8")
+	a, err := OpenApprovalForLane(tx, "pr", "acme/site#8", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := ResolveApproval(tx, a.ID, "approved", nil, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := OpenApprovalForEntity(tx, "pr", "acme/site#8"); !errors.Is(err, ErrNotFound) {
+	if _, err := OpenApprovalForLane(tx, "pr", "acme/site#8", ""); !errors.Is(err, ErrNotFound) {
 		t.Errorf("got err %v, want ErrNotFound", err)
 	}
 }
@@ -79,17 +80,18 @@ func TestApprovalResolveChangesRequestedStaysOpen(t *testing.T) {
 	s := OpenTestStore(t)
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
-	if err := InsertAwaitingApproval(tx, now, "pr", "acme/site#9", "sha1", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, now,
+		"pr", "acme/site#9", "sha1", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#9")
+	a, err := OpenApprovalForLane(tx, "pr", "acme/site#9", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := ResolveApproval(tx, a.ID, "changes_requested", nil, now); err != nil {
 		t.Fatal(err)
 	}
-	got, err := OpenApprovalForEntity(tx, "pr", "acme/site#9")
+	got, err := OpenApprovalForLane(tx, "pr", "acme/site#9", "")
 	if err != nil {
 		t.Fatalf("still-open lookup: %v", err)
 	}
@@ -108,17 +110,18 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 	}
 	reviewer := "reviewer-1"
 
-	if err := InsertAwaitingApproval(tx, now, "pr", "acme/site#10", "sha1", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, now,
+		"pr", "acme/site#10", "sha1", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#10")
+	a, err := OpenApprovalForLane(tx, "pr", "acme/site#10", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := ResolveApproval(tx, a.ID, "changes_requested", &reviewer, now); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := OpenApprovalForEntity(tx, "pr", "acme/site#10")
+	resolved, err := OpenApprovalForLane(tx, "pr", "acme/site#10", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +132,7 @@ func TestReopenApprovalClearsResolutionAndNoOpsOnApproved(t *testing.T) {
 	if err := ReopenApproval(tx, a.ID); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := OpenApprovalForEntity(tx, "pr", "acme/site#10")
+	reopened, err := OpenApprovalForLane(tx, "pr", "acme/site#10", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,10 +166,11 @@ func TestGetApproval(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, now, "pr", "acme/site#11", "sha1", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, now,
+		"pr", "acme/site#11", "sha1", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#11")
+	a, err := OpenApprovalForLane(tx, "pr", "acme/site#11", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,10 +203,11 @@ func TestSetRequiredActor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := InsertAwaitingApproval(tx, now, "pr", "acme/site#12", "sha1", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, now,
+		"pr", "acme/site#12", "sha1", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	a, err := OpenApprovalForEntity(tx, "pr", "acme/site#12")
+	a, err := OpenApprovalForLane(tx, "pr", "acme/site#12", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +216,7 @@ func TestSetRequiredActor(t *testing.T) {
 	if err := SetRequiredActor(tx, a.ID, "actor-a"); err != nil {
 		t.Fatal(err)
 	}
-	got, err := OpenApprovalForEntity(tx, "pr", "acme/site#12")
+	got, err := OpenApprovalForLane(tx, "pr", "acme/site#12", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +228,7 @@ func TestSetRequiredActor(t *testing.T) {
 	if err := SetRequiredActor(tx, a.ID, "actor-b"); err != nil {
 		t.Fatal(err)
 	}
-	got2, err := OpenApprovalForEntity(tx, "pr", "acme/site#12")
+	got2, err := OpenApprovalForLane(tx, "pr", "acme/site#12", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,16 +319,16 @@ func TestApprovalsAwaiting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prH.Repo, prH.Number), "sha1", nil, &actorStig); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prH.Repo, prH.Number), "sha1", "", nil, &actorStig, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prA.Repo, prA.Number), "sha2", &role, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prA.Repo, prA.Number), "sha2", "", &role, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prNobody.Repo, prNobody.Number), "sha3", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prNobody.Repo, prNobody.Number), "sha3", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -413,19 +418,19 @@ func TestListAwaitingApprovals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, newer, "pr",
-		PREntityID(prNew.Repo, prNew.Number), "sha-new", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, newer, "pr",
+		PREntityID(prNew.Repo, prNew.Number), "sha-new", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, older, "pr",
-		PREntityID(prOld.Repo, prOld.Number), "sha-old", nil, &actorStig); err != nil {
+	if _, err := InsertAwaitingApproval(tx, older, "pr",
+		PREntityID(prOld.Repo, prOld.Number), "sha-old", "", nil, &actorStig, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, older.Add(-time.Hour), "pr",
-		PREntityID(prResolved.Repo, prResolved.Number), "sha-resolved", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, older.Add(-time.Hour), "pr",
+		PREntityID(prResolved.Repo, prResolved.Number), "sha-resolved", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
-	resolved, err := OpenApprovalForEntity(tx, "pr", PREntityID(prResolved.Repo, prResolved.Number))
+	resolved, err := OpenApprovalForLane(tx, "pr", PREntityID(prResolved.Repo, prResolved.Number), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -598,8 +603,8 @@ func TestListAwaitingApprovalsIncludesDocs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow.Add(-time.Hour), "pr",
-		PREntityID(pr.Repo, pr.Number), "sha1", nil, nil); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow.Add(-time.Hour), "pr",
+		PREntityID(pr.Repo, pr.Number), "sha1", "", nil, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := RequestDocApproval(tx, taskTestNow, doc.ID, 1); err != nil {
@@ -701,7 +706,7 @@ func TestListAwaitingApprovalsExcludesMergedOrClosedPR(t *testing.T) {
 		{PREntityID(prClosed.Repo, prClosed.Number), "sha-closed"},
 		{noRowEntityID, "sha-none"},
 	} {
-		if err := InsertAwaitingApproval(tx, taskTestNow, "pr", in.entityID, in.revision, nil, nil); err != nil {
+		if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr", in.entityID, in.revision, "", nil, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -763,12 +768,12 @@ func TestApprovalsAwaitingExcludesMergedPR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prOpen.Repo, prOpen.Number), "sha-open", nil, &actorStig); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prOpen.Repo, prOpen.Number), "sha-open", "", nil, &actorStig, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prMerged.Repo, prMerged.Number), "sha-merged", nil, &actorStig); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prMerged.Repo, prMerged.Number), "sha-merged", "", nil, &actorStig, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -1193,4 +1198,125 @@ func TestHasInboxItems(t *testing.T) {
 			t.Error("got false, want true: no pull_requests row must still match")
 		}
 	})
+}
+
+// mustWorklodeActor creates the system actor lane-keyed rows are created_by,
+// so the created_by foreign key resolves.
+func mustWorklodeActor(t *testing.T, s *Store) {
+	t.Helper()
+	if err := s.CreateActor(t.Context(), "worklode", "service", "Worklode", false); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestApprovalLanesAreIndependentRows is 029 §7.2's point: two lanes of one
+// revision are two rows, not one row that the second insert deduplicates
+// away.
+func TestApprovalLanesAreIndependentRows(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	mustWorklodeActor(t, s)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	for _, lane := range []string{"methodology/science-lead", "methodology/domain-expert"} {
+		ins, err := InsertAwaitingApproval(tx, now,
+			"deliverable", "WL-DEL-1", "", lane,
+			ptrTo("science-leads"), nil, ptrTo("worklode"))
+		if err != nil || !ins {
+			t.Fatalf("lane %s: inserted=%v err=%v", lane, ins, err)
+		}
+	}
+	open, err := OpenApprovalsForEntity(tx, "deliverable", "WL-DEL-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(open) != 2 {
+		t.Fatalf("open rows = %d, want 2 (one per lane)", len(open))
+	}
+	if open[0].Lane != "methodology/domain-expert" || open[1].Lane != "methodology/science-lead" {
+		t.Errorf("got lanes %q, %q, want lane order", open[0].Lane, open[1].Lane)
+	}
+	if open[0].CreatedBy == nil || *open[0].CreatedBy != "worklode" {
+		t.Errorf("created_by = %v, want worklode (it must round-trip)", open[0].CreatedBy)
+	}
+}
+
+// TestApprovalLanesCoexistOnOneRevision is the widened unique key: 0064 keys
+// on lane, so two lanes of one non-empty revision are not a conflict.
+func TestApprovalLanesCoexistOnOneRevision(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	for _, lane := range []string{"lane-a", "lane-b"} {
+		ins, err := InsertAwaitingApproval(tx, now,
+			"doc", "doc:1", "7", lane, nil, nil, nil)
+		if err != nil || !ins {
+			t.Fatalf("lane %s: inserted=%v err=%v", lane, ins, err)
+		}
+	}
+	open, err := OpenApprovalsForEntity(tx, "doc", "doc:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(open) != 2 {
+		t.Fatalf("open rows = %d, want 2 on one revision", len(open))
+	}
+}
+
+// TestInsertAwaitingApprovalReportsWhetherItInserted covers the return that
+// lets materialization count what actually changed: the second insert of a
+// lane reports false and leaves one row.
+func TestInsertAwaitingApprovalReportsWhetherItInserted(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	first, err := InsertAwaitingApproval(tx, now, "doc", "doc:2", "1", "lane-a", nil, nil, nil)
+	if err != nil || !first {
+		t.Fatalf("first insert: inserted=%v err=%v, want true/nil", first, err)
+	}
+	again, err := InsertAwaitingApproval(tx, now, "doc", "doc:2", "1", "lane-a", nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again {
+		t.Error("re-inserting one lane reported an insert, want false")
+	}
+	var count int
+	if err := tx.QueryRow(
+		`SELECT count(*) FROM approvals WHERE entity_kind = 'doc' AND entity_id = 'doc:2'`,
+	).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Errorf("got %d rows, want 1", count)
+	}
+}
+
+// TestOpenApprovalForLaneSelectsOnlyItsLane: with several lanes open, the
+// per-lane reader must not hand back a neighbouring lane's row.
+func TestOpenApprovalForLaneSelectsOnlyItsLane(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	for _, lane := range []string{"", "lane-a", "lane-b"} {
+		if _, err := InsertAwaitingApproval(tx, now,
+			"doc", "doc:3", "1", lane, nil, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, lane := range []string{"", "lane-a", "lane-b"} {
+		got, err := OpenApprovalForLane(tx, "doc", "doc:3", lane)
+		if err != nil {
+			t.Fatalf("lane %q: %v", lane, err)
+		}
+		if got.Lane != lane {
+			t.Errorf("lane %q: got row of lane %q", lane, got.Lane)
+		}
+	}
+	if _, err := OpenApprovalForLane(tx, "doc", "doc:3", "lane-missing"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("absent lane: got err %v, want ErrNotFound", err)
+	}
 }
