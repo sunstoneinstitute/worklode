@@ -105,7 +105,8 @@ templ stageStepper() {
 
 // rallyCard renders the project's active rally: its title, progress over its
 // direct members, and links to the ones still open. Rendered only when the
-// project has one open (see Cockpit).
+// project has an active rally (see Cockpit); a draft one is inert and never
+// reaches here.
 templ rallyCard(r *CockpitRally) {
 	<section class="card" aria-labelledby="rally-heading">
 		<div class="hd">

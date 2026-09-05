@@ -57,6 +57,23 @@ func (s *Store) ActiveRally(ctx context.Context, projectID string) (*model.Task,
 	return t, nil
 }
 
+// RallyMemberCount returns how many live tasks a rally's direct membership
+// names: the 'blocks' edges pointing at it, whatever state those tasks are
+// in. The tombstone filter is the point — ListEdges has none while
+// blockerRelation does, so a total taken from the raw edges would keep a
+// soft-deleted member in the denominator while the open set dropped it, and
+// the cockpit card would read it as done.
+func (s *Store) RallyMemberCount(ctx context.Context, rallyID string) (int, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM task_edges e
+		   JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
+		  WHERE e.to_task = $1 AND e.type = 'blocks'`, rallyID).Scan(&n); err != nil {
+		return 0, fmt.Errorf("rally member count for %s: %w", rallyID, err)
+	}
+	return n, nil
+}
+
 // rallyMembers returns the transitive open-blocker closure of every ACTIVE
 // rally, every project in one query: the set of task ids some rally is
 // waiting on, directly or through another blocker. A draft rally seeds
@@ -99,10 +116,19 @@ SELECT id FROM members`)
 }
 
 // rallyAlreadyActive turns the tasks_one_active_rally unique violation into a
-// sentinel. Two writes can trip it: publishing a draft rally (transitionKnown)
-// and retagging a task to rally (UpdateTaskFields). The index, not a prior
-// read, is what serialises concurrent attempts, so this is the refusal itself
-// rather than a backstop behind one. A non-matching error passes through.
+// sentinel. Four writes can trip it — every write that can put a row into the
+// index, which means creating one, or moving one of the three columns its
+// predicate reads:
+//   - creating a non-draft rally (CreateTask)
+//   - publishing a draft rally, state (transitionKnown)
+//   - retagging a task to rally, kind (UpdateTaskFields)
+//   - undeleting a tombstoned active rally, deleted_at (UndeleteTask)
+//
+// Every other write to tasks leaves all three alone, and Postgres does not
+// re-check uniqueness against a row's own earlier version, so none of them
+// can trip it. The index, not a prior read, is what serialises concurrent
+// attempts, so this is the refusal itself rather than a backstop behind one.
+// A non-matching error passes through.
 func rallyAlreadyActive(err error, taskID string) error {
 	if isUniqueViolationOn(err, "tasks_one_active_rally") {
 		return fmt.Errorf("task %s: its project already has an active rally: %w",

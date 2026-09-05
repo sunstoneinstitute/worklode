@@ -610,3 +610,93 @@ func TestRetagToRallyRefusedWhenOneIsActive(t *testing.T) {
 		t.Fatalf("refusal %q does not name the task %s", err, other.ID)
 	}
 }
+
+// TestRetagToRallyRefusedWhenPlanMinted: a plan-minted task carries
+// plan-ordering blockers that are not 'blocks' edges, and a rally's
+// membership is its 'blocks' edges alone. Retag is the only way plan_doc and
+// kind='rally' could ever meet, so this is what makes "a rally carries no
+// plan_doc" true rather than merely so far unobserved.
+func TestRetagToRallyRefusedWhenPlanMinted(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	var docID int64
+	if err := s.db.QueryRowContext(t.Context(),
+		`INSERT INTO docs (project_id, kind, number, slug, title, body, created_at, updated_at)
+		 VALUES ('horndb', 'plan', 1, 'a-plan', 'title', 'body', $1, $1)
+		 RETURNING id`, taskTestNow).Scan(&docID); err != nil {
+		t.Fatalf("insert plan doc: %v", err)
+	}
+	in := defaultTaskInput()
+	in.PlanDoc = docID
+	in.PlanTaskKey = "Task 1 — do the thing"
+	minted := createTask(t, s, taskTestNow, in)
+
+	err := retag(t, s, minted.ID, "rally")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("retag a plan-minted task to rally: want ErrInvalidInput, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "minted from a plan") {
+		t.Fatalf("refusal %q does not say why", err)
+	}
+	got, err := s.GetTask(t.Context(), minted.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Kind != "feature" {
+		t.Fatalf("kind is %q after the refused retag, want feature", got.Kind)
+	}
+}
+
+// TestUndeleteRallyRefusedWhenOneIsActive: undelete clears deleted_at, one of
+// the three columns the partial unique index reads, so it is a fourth door
+// into a second active rally. It has to refuse the same way the other three
+// do — a raw unique violation here reaches the user as HTTP 500.
+func TestUndeleteRallyRefusedWhenOneIsActive(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	first := createTask(t, s, taskTestNow, rallyInput())
+	if err := deleteTask(t, s, first.ID, "stig", "superseded"); err != nil {
+		t.Fatalf("delete the first rally: %v", err)
+	}
+	// The slot is free again, so a second one activates.
+	createTask(t, s, taskTestNow, rallyInput())
+
+	err := undeleteTask(t, s, first.ID)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("undelete a rally with one active: want ErrInvalidInput, got %v", err)
+	}
+	if !strings.Contains(err.Error(), first.ID) {
+		t.Fatalf("refusal %q does not name the task %s", err, first.ID)
+	}
+}
+
+// TestRallyMemberCountSkipsTombstoned: the cockpit card divides this count by
+// the open members BlockerTree reports, and BlockerTree drops tombstoned
+// tasks. Counting them here would leave a deleted member in the denominator,
+// reading as done.
+func TestRallyMemberCountSkipsTombstoned(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	rally := createTask(t, s, taskTestNow, rallyInput())
+	live := createTask(t, s, taskTestNow, defaultTaskInput())
+	gone := createTask(t, s, taskTestNow, defaultTaskInput())
+	for _, m := range []string{live.ID, gone.ID} {
+		if err := addEdge(t, s, m, rally.ID, "blocks"); err != nil {
+			t.Fatalf("addEdge %s blocks %s: %v", m, rally.ID, err)
+		}
+	}
+	if err := deleteTask(t, s, gone.ID, "stig", "filed twice"); err != nil {
+		t.Fatalf("delete a member: %v", err)
+	}
+
+	n, err := s.RallyMemberCount(t.Context(), rally.ID)
+	if err != nil {
+		t.Fatalf("RallyMemberCount: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("member count = %d, want 1 (the tombstoned member does not count)", n)
+	}
+}

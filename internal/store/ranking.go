@@ -246,8 +246,9 @@ func criticalRank(priority string, strictFocus bool) int {
 // the human's focus, and dropping it would leave --strict-focus ignoring the
 // one signal a person set by hand.
 //
-// Membership only sorts; it never narrows the ready set (readyCandidates has
-// no rally filter), so agents fall through to other ready work once the
+// Membership only sorts; it never narrows the ready set (readyCandidates
+// excludes rallies themselves but does not filter on membership), so agents
+// fall through to other ready work once the
 // rally's members are done or all leased — spec 005 §2 still holds.
 func rallyRank(inRally bool) int {
 	if inRally {

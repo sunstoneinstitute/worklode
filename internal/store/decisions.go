@@ -511,7 +511,7 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 }
 
 // requireLiveTask refuses an unknown or soft-deleted task, the same
-// tombstone rule Claim uses (044 §4).
+// tombstone rule Claim uses (044 §4), and a rally (rejectRallyDecision).
 func requireLiveTask(tx *sql.Tx, taskID string) error {
 	var kind string
 	err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&kind)

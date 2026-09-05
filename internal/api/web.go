@@ -749,7 +749,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	// same reason as the agent sessions above: not contracted on the JSON
 	// cockpit.
 	if rally, err := s.st.ActiveRally(ctx, id); err == nil {
-		_, in, err := s.st.ListEdges(ctx, rally.ID)
+		total, err := s.st.RallyMemberCount(ctx, rally.ID)
 		if err != nil {
 			s.webStoreErr(w, err)
 			return
@@ -759,7 +759,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 			s.webStoreErr(w, err)
 			return
 		}
-		card := rallyCardView(rally, in, tree)
+		card := rallyCardView(rally, total, tree)
 		view.Rally = &card
 	} else if !errors.Is(err, store.ErrNotFound) {
 		s.webStoreErr(w, err)

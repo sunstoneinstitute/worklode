@@ -219,6 +219,9 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
 	)
 	if err != nil {
+		if mapped := rallyAlreadyActive(err, id); mapped != err {
+			return nil, mapped
+		}
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
 	}
 	if err := LogChange(tx, "task", id, eventID,
@@ -390,6 +393,10 @@ func secretsJSON(names []string) ([]byte, error) {
 //   - decision rows: requireLiveTask/requireOpenTask refuse a rally only — a
 //     decision task is the one that is meant to carry them.
 //   - outbound 'blocks' edge: AddEdge refuses a rally only.
+//   - plan_doc: planMintableKinds excludes rally, so no plan mints one. A
+//     plan-minted task carries plan-ordering blockers that are not 'blocks'
+//     edges (blockerRelation's second arm), and a rally's membership is its
+//     'blocks' edges alone — the cockpit card counts on that.
 //
 // The project's one-active-rally rule is not checked here. It is a partial
 // unique index, so the UPDATE below is what enforces it, reported through
@@ -397,6 +404,16 @@ func secretsJSON(names []string) ([]byte, error) {
 func checkKindRetag(tx *sql.Tx, id, kind string) error {
 	if kind != "decision" && kind != "rally" {
 		return nil
+	}
+	// Lock the row before reading the state the rules below check: Claim takes
+	// FOR UPDATE, so without this a claim landing between the lease check and
+	// the kind UPDATE leaves a leased rally. A missing row falls through to
+	// the UPDATE, which reports ErrNotFound. This closes the claim race only —
+	// AddEdge, AddDecision and Decompose take no row lock, so a concurrent
+	// edge, decision or child can still slip past their checks.
+	if err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1 FOR UPDATE`, id).
+		Scan(new(int)); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock task %s: %w", id, err)
 	}
 	container, err := hasChildren(tx, id)
 	if err != nil {
@@ -419,11 +436,17 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 		return nil
 	}
 	var decisions, blocks int
+	var planned bool
 	if err := tx.QueryRow(
 		`SELECT (SELECT count(*) FROM decisions WHERE task_id = $1),
-		        (SELECT count(*) FROM task_edges WHERE from_task = $1 AND type = 'blocks')`,
-		id).Scan(&decisions, &blocks); err != nil {
+		        (SELECT count(*) FROM task_edges WHERE from_task = $1 AND type = 'blocks'),
+		        COALESCE((SELECT plan_doc IS NOT NULL FROM tasks WHERE id = $1), false)`,
+		id).Scan(&decisions, &blocks, &planned); err != nil {
 		return fmt.Errorf("rally retag checks for %s: %w", id, err)
+	}
+	if planned {
+		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'blocks' edges): %w",
+			id, ErrInvalidInput)
 	}
 	if decisions > 0 {
 		return fmt.Errorf("task %s carries %d decision row(s), which a rally cannot: %w",

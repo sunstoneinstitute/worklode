@@ -1032,11 +1032,10 @@ func TestTasksOneActiveRallyPerProject(t *testing.T) {
 			_, err := CreateTask(tx, taskTestNow, in, eventID)
 			return err
 		})
-	if err == nil {
-		t.Fatal("expected a unique violation on tasks_one_active_rally, got nil error")
-	}
-	if !isUniqueViolationOn(err, "tasks_one_active_rally") {
-		t.Fatalf("expected tasks_one_active_rally unique violation, got: %v", err)
+	// The index violation must reach the caller as ErrInvalidInput, not as a
+	// raw pg error: mapStoreErr's default turns anything else into HTTP 500.
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("second active rally: want ErrInvalidInput, got %v", err)
 	}
 
 	walkTo(t, s, first.ID, "abandoned")

@@ -224,21 +224,16 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	}
 }
 
-// rallyCardView maps an active rally task, its incoming edges (ListEdges) and
-// its open-blocker tree (BlockerTree) into the cockpit's rally card
-// (WL-667). Total counts in's 'blocks' edges — the rally's direct members,
-// whatever their state. tree's depth-1 nodes are exactly those same members
-// still open: a rally carries no plan_doc, so BlockerTree's plan-blocking
-// branch never applies to it, leaving only the direct task_edges 'blocks'
-// edges ListEdges also counted. Those depth-1 nodes become Members, and Done
-// falls out as Total minus len(Members).
-func rallyCardView(rally *model.Task, in []store.Edge, tree model.BlockerTree) ui.CockpitRally {
-	total := 0
-	for _, e := range in {
-		if e.Type == "blocks" {
-			total++
-		}
-	}
+// rallyCardView maps an active rally task, its direct member count
+// (RallyMemberCount) and its open-blocker tree (BlockerTree) into the
+// cockpit's rally card (WL-667). tree's depth-1 nodes are exactly those same
+// members still open, so they become Members and Done falls out as total
+// minus len(Members). Two rules keep that subtraction non-negative, and both
+// are enforced: a rally never carries a plan_doc (planMintableKinds excludes
+// rally, and checkKindRetag refuses a retag of a task that has one), so
+// BlockerTree's plan-blocking branch contributes nothing; and both readers
+// skip tombstoned tasks.
+func rallyCardView(rally *model.Task, total int, tree model.BlockerTree) ui.CockpitRally {
 	var open []ui.CockpitRallyMember
 	for _, b := range tree.Blockers {
 		if b.Depth != 1 {

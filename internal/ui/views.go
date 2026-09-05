@@ -307,8 +307,9 @@ type CockpitView struct {
 	NewTaskURL   string
 	Project      CockpitProject
 	// Rally is the project's active rally (WL-667), shown above PinnedFocus.
-	// Nil when the project has none open — at most one is ever open, per the
-	// tasks_one_open_rally index.
+	// Nil when the project has none active — a project may hold any number of
+	// draft rallies, which are inert and never rendered here, and at most one
+	// active, per the tasks_one_active_rally index.
 	Rally             *CockpitRally
 	PinnedFocus       *CockpitFocus
 	NextDecision      *CockpitDecision
@@ -325,9 +326,9 @@ type CockpitView struct {
 
 // CockpitRally is the project's active rally: a hand-assembled goal that
 // carries no work of its own, its blocks edges naming the tasks to finish
-// now (WL-667). Done/Total count its direct members regardless of state;
-// Members lists only the ones still open, the same set a rally boosts in
-// pickup ranking.
+// now (WL-667). Done/Total count its live direct members regardless of state;
+// Members lists only the ones still open. Pickup ranking boosts more than
+// this card shows — the whole transitive blocker closure, not just depth 1.
 type CockpitRally struct {
 	ID      string
 	Title   string

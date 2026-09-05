@@ -25,7 +25,8 @@ func TestCockpitShowsRallyCard(t *testing.T) {
 			},
 		},
 	})
-	for _, want := range []string{"WL-667", "Rally the release", "1", "3", `href="/tasks/WL-667"`, "WL-140", `href="/tasks/WL-140"`} {
+	// "1 of 3 done" in full: bare "1" and "3" match any page.
+	for _, want := range []string{"WL-667", "Rally the release", "1 of 3 done", `href="/tasks/WL-667"`, "WL-140", `href="/tasks/WL-140"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("cockpit rally card missing %q:\n%s", want, body)
 		}
