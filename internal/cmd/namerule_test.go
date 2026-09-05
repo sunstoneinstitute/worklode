@@ -81,10 +81,11 @@ var l3DomainActions = map[string]bool{
 //     graph drift, graph gaps, task timeline, work status, and project repo
 //     (which §2.2 calls a nested entity group).
 //   - **Mentioned nowhere in 061:** graph triples, secret status,
-//     task checklist, task skills. These four are the entries this test
-//     legislates outright, and they are the reason the list belongs in the
-//     spec rather than here.
+//     task checklist, task skills, doc referrers. These five are the entries
+//     this test legislates outright, and they are the reason the list belongs
+//     in the spec rather than here.
 var nounViews = map[string]bool{
+	"lode doc referrers":      true,
 	"lode doc reviewers":      true,
 	"lode doc todo":           true,
 	"lode doc versions":       true,
