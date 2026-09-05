@@ -11,11 +11,16 @@ Invocation arguments: $ARGUMENTS
 The arguments are the user's description of the problem. Turn it into one task.
 Do not start the work; this command only files it.
 
-**Step 1: pick the kind.** `bug`, `feature`, `chore`, `design`, `review` or
-`spike`. Infer it from the description — something broken is a `bug`, something
-new is a `feature`, repetitive upkeep is a `chore`, an open question to answer
-before building is a `spike`. Ask the user only when the description genuinely
-fits two kinds.
+**Step 1: pick the kind.** `bug`, `feature`, `chore`, `design`, `review`,
+`spike` or `decision`. Infer it from the description — something broken is a
+`bug`, something new is a `feature`, repetitive upkeep is a `chore`, an open
+question to answer before building is a `spike`, a posed question whose answer
+gets recorded on the task is a `decision`. Ask the user only when the
+description genuinely fits two kinds.
+
+The eighth kind, `rally`, is not filed here: it carries no work of its own,
+only `blocks` edges naming tasks that already exist. Assemble one by hand
+(`lode task add --kind rally --draft`, then `lode task block`).
 
 **Step 2: fill the gap the kind cares about.** Each kind has one thing a task
 is much weaker without. Ask for it if the description does not already carry it,

@@ -68,7 +68,7 @@ end only via release, done, block, abandon, reopen, or the expiry sweep.
 | Type | Meaning | Set by |
 |---|---|---|
 | `child_of` | Decomposition — `from_task` is a subtask of `to_task` | `lode task parent` / `lode task decompose` |
-| `blocks` | `from_task` blocks `to_task` from proceeding | `lode task block` |
+| `blocks` | `from_task` blocks `to_task` from proceeding. Edges into a `rally` task are its membership: they name what to finish now, and those tasks rank first in pickup. A rally is never a `from_task`. | `lode task block` |
 | `follow_up_to` | `from_task` was spun out of the work on `to_task` | `lode task follow-up`, or `--follow-up-to` on `task add` |
 | `duplicate_of` | `from_task` is the same request as `to_task`, which is the canonical one. A pointer only: it closes nothing, gates nothing, and moves nothing onto the canonical task | `lode task duplicate` |
 

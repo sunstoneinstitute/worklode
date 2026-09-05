@@ -75,10 +75,33 @@ instead.
 
 Full table with direction and set-by command: `references/entities-and-edges.md`.
 
+## Rally
+
+A `rally` is a task kind that carries no work of its own. Its `blocks` edges
+name the tasks a person picked as the thing to finish now. Those tasks, plus
+everything they transitively wait on, sort first in `lode work next` — ahead
+of critical and priority, in both default and `--strict-focus` mode.
+
+One rally is active per project. A draft rally is inert and there may be any
+number of them; `lode task publish` is what activates one, and publishing a
+second while one is active is refused.
+
+```bash
+lode task add --title "Ship the cockpit" --kind rally --draft
+lode task block <rally> --by <task>     # name a member: that task blocks the rally
+lode task publish <rally>               # activate it
+lode project rally <project>            # its members, and which are still open
+```
+
+A rally is never handed out as work: `lode work next` skips it and `lode task
+claim` refuses it by id. It also takes no `child_of` children, blocks nothing,
+and carries no decision — the edges pointing at it are its whole content. No
+plan mints one; a rally is assembled by hand.
+
 ## Creating and viewing
 
 ```bash
-lode task add --title "..." --kind bug --priority high   # kind: feature, bug, chore, design, review, spike
+lode task add --title "..." --kind bug --priority high   # kind: feature, bug, chore, design, review, spike, decision, rally
 lode task list                          # open tasks; --status for delivered/abandoned too
 lode task show <id>                     # body, edges, blocked status, lease holder
 lode task claim [<id>]                  # lease it, create its worktree
@@ -90,6 +113,7 @@ lode task unassign [<id>]               # clear assignee (needed before `start` 
 lode task block --by <id>
 lode task abandon
 lode board                              # in-progress / in-review / blocked / ready, at a glance
+lode project rally <project>            # the active rally and its open members
 lode show <ref>                         # any entity by id: task, doc, project
 lode search <query>                     # rank docs, tasks and skills by meaning and by exact token
 lode task timeline <id>                 # full history: states, PRs, CI, deploys
