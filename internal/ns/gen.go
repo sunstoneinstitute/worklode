@@ -7,9 +7,25 @@
 // that moves the matching CHECK constraint — in one commit.
 package ns
 
+// Schemes is every wlc: concept scheme, keyed by its local name, members
+// sorted. Most schemes have no Go caller; they are here so
+// internal/store/nsenums_test.go can hold each one against the CHECK
+// constraint that is supposed to list it, which is the leg of 025 §17 that
+// nothing else checks.
+var Schemes = map[string][]string{
+	"ArtifactKind":     {"binary", "docker_image", "git_tag", "pypi"},
+	"CoverageLevel":    {"full", "none", "partial"},
+	"DeployTargetKind": {"flux_kustomization", "manual", "pypi_target"},
+	"DeploymentStatus": {"deployed", "failed", "pending", "reconciling"},
+	"DesignDocStatus":  {"accepted", "draft", "superseded"},
+	"ModelLayer":       {"execution", "intent", "runtime"},
+	"RuntimeEventKind": {"crashloop", "flux_failure", "flux_recovery", "oom"},
+	"TaskKind":         {"bug", "chore", "decision", "design", "feature", "rally", "review", "spike"},
+}
+
 // TaskKinds mirrors wlc:TaskKind and the tasks.kind CHECK constraint,
 // alphabetically.
-var TaskKinds = []string{"bug", "chore", "decision", "design", "feature", "rally", "review", "spike"}
+var TaskKinds = Schemes["TaskKind"]
 
 // DesignDocStatuses mirrors wlc:DesignDocStatus and the docs.status CHECK
 // constraint, in the lifecycle order of wlc:DesignDocStatusOrder.
