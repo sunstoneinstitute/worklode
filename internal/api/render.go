@@ -224,7 +224,7 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	}
 }
 
-// rallyCardView maps an open rally task, its incoming edges (ListEdges) and
+// rallyCardView maps an active rally task, its incoming edges (ListEdges) and
 // its open-blocker tree (BlockerTree) into the cockpit's rally card
 // (WL-667). Total counts in's 'blocks' edges — the rally's direct members,
 // whatever their state. tree's depth-1 nodes are exactly those same members

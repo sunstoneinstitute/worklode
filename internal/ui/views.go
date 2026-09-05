@@ -306,7 +306,7 @@ type CockpitView struct {
 	CanonicalURL string
 	NewTaskURL   string
 	Project      CockpitProject
-	// Rally is the project's open rally (WL-667), shown above PinnedFocus.
+	// Rally is the project's active rally (WL-667), shown above PinnedFocus.
 	// Nil when the project has none open — at most one is ever open, per the
 	// tasks_one_open_rally index.
 	Rally             *CockpitRally
@@ -323,7 +323,7 @@ type CockpitView struct {
 	AgentSessions []AgentSessionRow
 }
 
-// CockpitRally is the project's open rally: a hand-assembled goal that
+// CockpitRally is the project's active rally: a hand-assembled goal that
 // carries no work of its own, its blocks edges naming the tasks to finish
 // now (WL-667). Done/Total count its direct members regardless of state;
 // Members lists only the ones still open, the same set a rally boosts in

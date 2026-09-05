@@ -19,7 +19,7 @@ import templruntime "github.com/a-h/templ/runtime"
 // costs no canvas height.
 //
 // Honest empty states, never fabricated data: the rally card (WL-667) renders
-// only when the project has an open rally, above the pinned-focus card; the
+// only when the project has an active rally, above the pinned-focus card; the
 // pinned-focus card and the next-decision card render only when their
 // (currently always-nil) data is present; the stepper is neutral methodology
 // chrome (no fabricated done/current markers, since the projection carries no
@@ -258,7 +258,7 @@ func stageStepper() templ.Component {
 	})
 }
 
-// rallyCard renders the project's open rally: its title, progress over its
+// rallyCard renders the project's active rally: its title, progress over its
 // direct members, and links to the ones still open. Rendered only when the
 // project has one open (see Cockpit).
 func rallyCard(r *CockpitRally) templ.Component {

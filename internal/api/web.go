@@ -748,7 +748,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	// Also read off the store rather than the projection (WL-667), for the
 	// same reason as the agent sessions above: not contracted on the JSON
 	// cockpit.
-	if rally, err := s.st.OpenRally(ctx, id); err == nil {
+	if rally, err := s.st.ActiveRally(ctx, id); err == nil {
 		_, in, err := s.st.ListEdges(ctx, rally.ID)
 		if err != nil {
 			s.webStoreErr(w, err)
