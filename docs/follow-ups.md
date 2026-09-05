@@ -832,3 +832,21 @@ Recorded by WL-647's pass over spec 040 §2.3:
   vectors that are not comparable with the stored ones, without tripping §8's
   invalidation. Folding the prefixes into `ID()` would fix it, but §3 fixes
   that string's shape, so it wants an amendment rather than a quiet change.
+
+Recorded by WL-667 (the rally task kind, 005 §2a and 004 §6.1):
+
+- `[P3]` **The cockpit's rally progress can render a negative count under a
+  concurrent edge.** `internal/api/web.go` reads `RallyMemberCount` and
+  `BlockerTree` in two separate queries, so an `AddEdge` landing between them
+  raises the total after the open set was read and `Done = total - len(open)`
+  goes negative. `internal/api/render.go`'s note that two rules keep the
+  subtraction non-negative holds per snapshot, not across the pair. The fix is
+  one transaction spanning both reads, or clamping at zero on the view. Narrow:
+  it needs an edge written into the exact window, and it self-corrects on the
+  next page load.
+- `[P3]` **`checkKindRetag`'s row lock closes the claim and child races, not
+  the edge or decision ones.** `AddEdge` (`internal/store/tasks.go`) and
+  `requireLiveTask` (`internal/store/decisions.go`) take no row lock, so a
+  concurrent `blocks` edge or posed decision can still slip past the retag
+  checks. The race needs two interleaved transactions and is untested; closing
+  it means locking the task row in both paths.

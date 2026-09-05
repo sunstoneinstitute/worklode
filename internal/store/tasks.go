@@ -408,9 +408,10 @@ func checkKindRetag(tx *sql.Tx, id, kind string) error {
 	// Lock the row before reading the state the rules below check: Claim takes
 	// FOR UPDATE, so without this a claim landing between the lease check and
 	// the kind UPDATE leaves a leased rally. A missing row falls through to
-	// the UPDATE, which reports ErrNotFound. This closes the claim race only —
-	// AddEdge, AddDecision and Decompose take no row lock, so a concurrent
-	// edge, decision or child can still slip past their checks.
+	// the UPDATE, which reports ErrNotFound. Decompose locks the parent row
+	// too (hierarchy.go), so this closes the child race as well; AddEdge and
+	// requireLiveTask take no row lock, so a concurrent edge or decision can
+	// still slip past their checks.
 	if err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1 FOR UPDATE`, id).
 		Scan(new(int)); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("lock task %s: %w", id, err)
