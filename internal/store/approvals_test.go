@@ -706,7 +706,7 @@ func TestListAwaitingApprovalsExcludesMergedOrClosedPR(t *testing.T) {
 		{PREntityID(prClosed.Repo, prClosed.Number), "sha-closed"},
 		{noRowEntityID, "sha-none"},
 	} {
-		if err := InsertAwaitingApproval(tx, taskTestNow, "pr", in.entityID, in.revision, nil, nil); err != nil {
+		if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr", in.entityID, in.revision, "", nil, nil, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -768,12 +768,12 @@ func TestApprovalsAwaitingExcludesMergedPR(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prOpen.Repo, prOpen.Number), "sha-open", nil, &actorStig); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prOpen.Repo, prOpen.Number), "sha-open", "", nil, &actorStig, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := InsertAwaitingApproval(tx, taskTestNow, "pr",
-		PREntityID(prMerged.Repo, prMerged.Number), "sha-merged", nil, &actorStig); err != nil {
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "pr",
+		PREntityID(prMerged.Repo, prMerged.Number), "sha-merged", "", nil, &actorStig, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
