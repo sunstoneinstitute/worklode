@@ -16,15 +16,16 @@
 -- Drop the index before the rows so its predicate never has to evaluate
 -- against a kind the CHECK is about to disallow.
 
-DROP INDEX tasks_one_open_rally;
+DROP INDEX tasks_one_active_rally;
 
--- A rally's blocks edges are the expected case, not an edge case.
+-- A rally's inbound blocks edges are the expected case, not an edge case;
+-- outbound ones the store now refuses, but an older database may hold some.
 DELETE FROM task_edges
     WHERE from_task IN (SELECT id FROM tasks WHERE kind = 'rally')
        OR to_task   IN (SELECT id FROM tasks WHERE kind = 'rally');
 
--- Rally is not yet unclaimable (a later task adds that rule), so a lease on
--- one is possible today.
+-- The store refuses to claim a rally, but an older database may hold a lease
+-- taken before that rule existed.
 DELETE FROM leases WHERE task_id IN (SELECT id FROM tasks WHERE kind = 'rally');
 
 -- Reachable via `lode inbox promote --kind rally`. The issue/PR tracking
@@ -34,8 +35,8 @@ UPDATE issues SET task_id = NULL
 UPDATE pull_requests SET task_id = NULL
     WHERE task_id IN (SELECT id FROM tasks WHERE kind = 'rally');
 
--- Reachable through a claimed worktree session -- the same claimability gap
--- as leases above.
+-- Reachable through a worktree session claimed before the rally rules landed
+-- -- the same case as the leases above.
 UPDATE docs SET generated_by_task = NULL
     WHERE generated_by_task IN (SELECT id FROM tasks WHERE kind = 'rally');
 UPDATE doc_notes SET task_id = NULL

@@ -335,7 +335,7 @@ func newProjectFocusCmd() *cobra.Command {
 }
 
 // newProjectRallyCmd is `lode project rally <id>`: the read-only view of a
-// project's open rally (WL-667) — the task naming what to finish now, and
+// project's active rally (WL-667) — the task naming what to finish now, and
 // the transitive tree of open tasks it is waiting on. A rally is a task
 // kind, not an entity, so this is a named view (L6), not a top-level
 // `lode rally`; creation and assembly are `lode task add --kind rally` and
@@ -344,7 +344,7 @@ func newProjectRallyCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "rally <id>",
 		ValidArgsFunction: projectKeyAt(0),
-		Short:             "Show a project's open rally and its transitive open blockers",
+		Short:             "Show a project's active rally and its transitive open blockers",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := newAPIClient()

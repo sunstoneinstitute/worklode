@@ -1,4 +1,4 @@
-// rally.go is the client and view for a project's open rally: the task
+// rally.go is the client and view for a project's active rally: the task
 // naming what to finish now, and the transitive tree of open tasks it is
 // waiting on.
 package cli
@@ -14,7 +14,7 @@ import (
 )
 
 // ProjectRally calls GET /api/v1/projects/{id}/rally. A *ClientError with
-// Status 404 means the project has no open rally.
+// Status 404 means the project has no active rally.
 func (c *Client) ProjectRally(ctx context.Context, id string) (model.Rally, []byte, error) {
 	return doJSON[model.Rally](ctx, c,
 		http.MethodGet, "/api/v1/projects/"+url.PathEscape(id)+"/rally", nil, "rally")

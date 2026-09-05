@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestProjectRallyRoute covers the open rally plus its transitive open
-// blockers, and the 404 a project with no open rally must produce rather
+// TestProjectRallyRoute covers the active rally plus its transitive open
+// blockers, and the 404 a project with no active rally must produce rather
 // than an empty tree that reads as "nothing to steer".
 func TestProjectRallyRoute(t *testing.T) {
 	t.Parallel()

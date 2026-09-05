@@ -115,7 +115,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"arm"}),
 		rallyReads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_rally_reads_total",
-			Help: "Open-rally reads by outcome (ok|none|error).",
+			Help: "Active-rally reads by outcome (ok|none|error).",
 		}, []string{"outcome"}),
 	}
 	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads)
@@ -279,9 +279,9 @@ func (m *storeMetrics) searchArmEmpty(arm string) {
 	m.searchArmEmpties.WithLabelValues(arm).Inc()
 }
 
-// rallyRead records one OpenRally call by outcome. "none" — the project has
-// no open rally — is the ordinary case, not an error, so it gets its own
-// label rather than folding into either of the other two.
+// rallyRead records one ActiveRally call by outcome. "none" — the project
+// has no active rally — is the ordinary case, not an error, so it gets its
+// own label rather than folding into either of the other two.
 func (m *storeMetrics) rallyRead(outcome string) {
 	if m == nil {
 		return

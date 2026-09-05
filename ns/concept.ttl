@@ -77,7 +77,7 @@ wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
 wlc:decision a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "decision" ;
     skos:definition "Answer a posed question and record the answer on the task; the deliverable is the recorded answer in task_decisions, never a document or a diff." .
 wlc:rally a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "rally" ;
-    skos:definition "A hand-assembled goal that carries no work of its own; its blocks edges name the tasks to finish now, and it ranks them first in pickup. At most one is open per project." .
+    skos:definition "A hand-assembled goal that carries no work of its own; its blocks edges name the tasks to finish now, and it ranks them first in pickup. Drafts are unlimited and inert; at most one is active per project." .
 
 
 # ---------------------------------------------------------------------------

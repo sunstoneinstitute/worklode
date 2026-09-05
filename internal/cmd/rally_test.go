@@ -9,7 +9,7 @@ import (
 )
 
 // TestProjectRally covers `lode project rally <id>` (WL-667, L6): 404 with
-// no open rally, then the rally's title and its one open blocker once
+// no active rally, then the rally's title and its one open blocker once
 // `task add --kind rally` and `task block` assemble one, using no command
 // this task did not add.
 func TestProjectRally(t *testing.T) {

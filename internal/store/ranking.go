@@ -213,7 +213,7 @@ type rankInput struct {
 	Task    model.Task
 	Focus   []string // the task's project focus
 	FanOut  int
-	InRally bool // the task is in an open rally's blocker closure
+	InRally bool // the task is in the active rally's blocker closure
 }
 
 // concernRank returns the index of concern in focus (lower is more
@@ -240,7 +240,7 @@ func criticalRank(priority string, strictFocus bool) int {
 	return 1
 }
 
-// rallyRank lifts the open rally's members above everything else, ahead of
+// rallyRank lifts the active rally's members above everything else, ahead of
 // even criticalRank: a rally is hand-assembled, so it is a deliberate
 // override of the computed order. Strict focus keeps this arm — the rally is
 // the human's focus, and dropping it would leave --strict-focus ignoring the
