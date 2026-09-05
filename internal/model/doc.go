@@ -183,6 +183,29 @@ type DocEdge struct {
 	CompletedWith []string `json:"completed_with,omitempty"`
 }
 
+// DocReferrer is one piece of open work pointing at a document section
+// (025 §8.2) — the fact a patch of that section has to answer to. Kind is
+// "doc" or "task"; Ref is the citable id (a document's slug, a task's id);
+// Rel is the relation doing the pointing: the document's own edge type, or,
+// for a task, the covers edge its plan holds.
+//
+// A covering plan appears through its claimed tasks rather than as a
+// document of its own: an accepted plan nobody has claimed work from states
+// an intention, not open work, and is 025 §8.6's stale-marking business.
+type DocReferrer struct {
+	Kind  string `json:"kind"` // doc | task
+	Ref   string `json:"ref"`
+	Rel   string `json:"rel"`
+	Title string `json:"title"`
+}
+
+// DocReferrersResponse is the body of GET /api/v1/docs/{id}/referrers.
+// Referrers is never nil, so the JSON reads [] for a section nothing points
+// at.
+type DocReferrersResponse struct {
+	Referrers []DocReferrer `json:"referrers"`
+}
+
 // CreateDocInput is the request body for POST /api/v1/docs. Number is omitted
 // for a plan, which carries no corpus number (025 §14.3); Owner defaults to
 // the caller, who is then the only actor that can accept the document.

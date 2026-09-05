@@ -587,6 +587,29 @@ func (s *server) getDocVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
+// listDocReferrers handles GET /api/v1/docs/{id}/referrers?anchor=sec-N:
+// 025 §8.2's open work pointing at one section, which a fixer can read
+// before editing accepted text. The anchor is required — a referrer is a
+// section-level fact, and a document-wide answer would silently mix in
+// sections nobody asked about.
+func (s *server) listDocReferrers(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	anchor := r.URL.Query().Get("anchor")
+	if anchor == "" {
+		writeErr(w, http.StatusBadRequest, "anchor is required: a referrer names one section (025 §8.2)")
+		return
+	}
+	refs, err := s.st.DocSectionReferrers(r.Context(), id, anchor)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.DocReferrersResponse{Referrers: refs})
+}
+
 // updateDocBody handles PUT /api/v1/docs/{id}/body.
 func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	id, ok := docID(w, r)
