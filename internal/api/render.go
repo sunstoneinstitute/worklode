@@ -224,6 +224,38 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	}
 }
 
+// rallyCardView maps an open rally task, its incoming edges (ListEdges) and
+// its open-blocker tree (BlockerTree) into the cockpit's rally card
+// (WL-667). Total counts in's 'blocks' edges — the rally's direct members,
+// whatever their state. tree's depth-1 nodes are exactly those same members
+// still open: a rally carries no plan_doc, so BlockerTree's plan-blocking
+// branch never applies to it, leaving only the direct task_edges 'blocks'
+// edges ListEdges also counted. Those depth-1 nodes become Members, and Done
+// falls out as Total minus len(Members).
+func rallyCardView(rally *model.Task, in []store.Edge, tree model.BlockerTree) ui.CockpitRally {
+	total := 0
+	for _, e := range in {
+		if e.Type == "blocks" {
+			total++
+		}
+	}
+	var open []ui.CockpitRallyMember
+	for _, b := range tree.Blockers {
+		if b.Depth != 1 {
+			continue
+		}
+		open = append(open, ui.CockpitRallyMember{ID: b.ID, Title: b.Title, URL: "/tasks/" + b.ID})
+	}
+	return ui.CockpitRally{
+		ID:      rally.ID,
+		Title:   rally.Title,
+		URL:     "/tasks/" + rally.ID,
+		Done:    total - len(open),
+		Total:   total,
+		Members: open,
+	}
+}
+
 // deliverablesView maps a project's declared deliverables into the project's
 // Deliverables page, grouped by milestone (spec 029 §2): one group per
 // milestone in position order — only milestones that actually hold a

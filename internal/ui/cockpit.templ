@@ -10,12 +10,14 @@ package ui
 // itself lives in the sidebar under the project key (layout.templ), where it
 // costs no canvas height.
 //
-// Honest empty states, never fabricated data: the pinned-focus card and the
-// next-decision card render only when their (currently always-nil) data is
-// present; the stepper is neutral methodology chrome (no fabricated
-// done/current markers, since the projection carries no stage fact); the
-// automation boundary discloses "not configured" for the policy/budget the
-// backbone does not store yet and shows real 30-day agent spend. The
+// Honest empty states, never fabricated data: the rally card (WL-667) renders
+// only when the project has an open rally, above the pinned-focus card; the
+// pinned-focus card and the next-decision card render only when their
+// (currently always-nil) data is present; the stepper is neutral methodology
+// chrome (no fabricated done/current markers, since the projection carries no
+// stage fact); the automation boundary discloses "not configured" for the
+// policy/budget the backbone does not store yet and shows real 30-day agent
+// spend. The
 // prototype's Definition-of-done panel has no backing data and is omitted.
 // The prototype-only A/B/C mode switch is omitted (only Operations is wired).
 //
@@ -35,6 +37,9 @@ templ Cockpit(v CockpitView) {
 			<section class="mode active" data-panel="B" data-mode={ v.Project.ModeName } aria-label="Operations mode">
 				<div class="canvas">
 					@stageStepper()
+					if v.Rally != nil {
+						@rallyCard(v.Rally)
+					}
 					if v.PinnedFocus != nil {
 						@pinnedFocus(v.PinnedFocus)
 					}
@@ -96,6 +101,29 @@ templ stageStepper() {
 		<div class="step"><span class="pip">4</span><span class="stx">Story</span></div>
 		<div class="step"><span class="pip">5</span><span class="stx">Distribution</span></div>
 	</div>
+}
+
+// rallyCard renders the project's open rally: its title, progress over its
+// direct members, and links to the ones still open. Rendered only when the
+// project has one open (see Cockpit).
+templ rallyCard(r *CockpitRally) {
+	<section class="card" aria-labelledby="rally-heading">
+		<div class="hd">
+			<h3 id="rally-heading"><a href={ r.URL }>{ r.ID }</a> &mdash; { r.Title }</h3>
+			<div class="meta"><span class="muted">{ r.Done } of { r.Total } done</span></div>
+		</div>
+		<div class="bd wl">
+			if len(r.Members) == 0 {
+				<p class="muted small">No open members.</p>
+			} else {
+				for _, m := range r.Members {
+					<div class="wlrow">
+						<div class="tl"><div class="t"><a href={ m.URL }>{ m.ID } &mdash; { m.Title }</a></div></div>
+					</div>
+				}
+			}
+		</div>
+	</section>
 }
 
 // pinnedFocus renders the project's pinned-focus note with its attribution.
