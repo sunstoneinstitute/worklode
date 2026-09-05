@@ -1014,3 +1014,35 @@ func TestKindCheckConstraintMatchesGeneratedKinds(t *testing.T) {
 			got, ns.TaskKinds, def)
 	}
 }
+
+// TestTasksOneOpenRallyPerProject exercises the tasks_one_open_rally partial
+// unique index (migration 0069): a second open rally in the same project is
+// refused, but closing the first (abandoning it) frees the project for a new
+// one.
+func TestTasksOneOpenRallyPerProject(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	in := defaultTaskInput()
+	in.Kind = "rally"
+	first := createTask(t, s, taskTestNow, in)
+
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, in, eventID)
+			return err
+		})
+	if err == nil {
+		t.Fatal("expected a unique violation on tasks_one_open_rally, got nil error")
+	}
+	if !isUniqueViolationOn(err, "tasks_one_open_rally") {
+		t.Fatalf("expected tasks_one_open_rally unique violation, got: %v", err)
+	}
+
+	walkTo(t, s, first.ID, "abandoned")
+
+	second := createTask(t, s, taskTestNow, in)
+	if second.ID == first.ID {
+		t.Fatalf("second rally got the same id as the first: %s", second.ID)
+	}
+}
