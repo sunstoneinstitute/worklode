@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/term"
@@ -114,4 +115,51 @@ func clampWidth(termWidth int) int {
 	default:
 		return termWidth
 	}
+}
+
+// OSC 8 hyperlinks. A terminal that renders them shows only the link text and
+// makes it clickable; one that does not prints the escape as garbage, and
+// there is no capability query to tell them apart. So Hyperlinks answers from
+// a list of terminals known to render them, and everything else gets the
+// plain text it could already read.
+const (
+	osc8Start = "\x1b]8;;"
+	osc8End   = "\x07"
+)
+
+// osc8Seq matches one OSC 8 introducer or terminator, which occupy no
+// columns.
+var osc8Seq = regexp.MustCompile(regexp.QuoteMeta(osc8Start) + "[^" + osc8End + "]*" + osc8End)
+
+// Hyperlink wraps text in an OSC 8 hyperlink to url.
+func Hyperlink(url, text string) string {
+	return osc8Start + url + osc8End + text + osc8Start + osc8End
+}
+
+// VisibleLen is the number of columns s prints in, ignoring hyperlink
+// escapes. Width arithmetic over linked cells measures through it.
+func VisibleLen(s string) int {
+	return len([]rune(osc8Seq.ReplaceAllString(s, "")))
+}
+
+// Hyperlinks reports whether w is a terminal that renders OSC 8 hyperlinks.
+func Hyperlinks(w io.Writer) bool {
+	if _, isTTY := terminalFd(w); !isTTY || !colorEnabled() {
+		return false
+	}
+	// A multiplexer below the terminal decides what reaches it, and tmux
+	// before 3.4 drops the escape's text with it.
+	if os.Getenv("TMUX") != "" || strings.HasPrefix(os.Getenv("TERM"), "screen") {
+		return false
+	}
+	if os.Getenv("KITTY_WINDOW_ID") != "" || os.Getenv("WT_SESSION") != "" {
+		return true
+	}
+	switch os.Getenv("TERM_PROGRAM") {
+	case "iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper", "rio":
+		return true
+	}
+	// GNOME Terminal and every other VTE terminal, from 0.50.
+	v, err := strconv.Atoi(os.Getenv("VTE_VERSION"))
+	return err == nil && v >= 5000
 }
