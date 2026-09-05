@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 var wantTables = []string{
@@ -82,6 +83,36 @@ func TestMigrateRoundTrip(t *testing.T) {
 	}
 	if err := s.Migrate(MigrationsDirForTests()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestMigrateRoundTripWithLiveRally is TestMigrateRoundTrip with a rally
+// that has done its job still in the database: a blocks edge naming what to
+// finish, and an active lease (rally is not yet unclaimable — that lands in
+// a later task). Both task_edges and leases are ON DELETE RESTRICT onto
+// tasks(id) (0001_baseline), so 0069's down migration must clear them before
+// deleting the rally row or the whole MigrateDown fails.
+func TestMigrateRoundTripWithLiveRally(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // up happened here, plus the horndb/stig fixtures
+
+	rallyInput := defaultTaskInput()
+	rallyInput.Kind = "rally"
+	rally := createTask(t, s, taskTestNow, rallyInput)
+	target := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, rally.ID, target.ID, "blocks"); err != nil {
+		t.Fatalf("add blocks edge onto the rally: %v", err)
+	}
+	if _, err := s.Claim(t.Context(), rally.ID, "stig", "/tmp/wt", time.Hour); err != nil {
+		t.Fatalf("claim the rally: %v", err)
+	}
+
+	if err := s.MigrateDown(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate down with a live rally (edge + lease): %v", err)
+	}
+	if err := s.Migrate(MigrationsDirForTests()); err != nil {
+		t.Fatalf("migrate back up: %v", err)
 	}
 }
 
