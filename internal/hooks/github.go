@@ -482,6 +482,11 @@ func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 		state, p.Review.User.Login, submittedAt)
 }
 
+// prLane is the lane a PR-review approval lives in. The GitHub ingest is not
+// a flow rule, so it writes and reads the no-lane row; 029 §7.2's named lanes
+// belong to flows that mint their own.
+const prLane = ""
+
 // openApproval materializes 029 §7.1's "a missing approval is a visible
 // awaiting row" for a task-correlated PR, bound to the head sha it governs.
 // required_actor is best effort: the first requested reviewer that maps to an
@@ -493,7 +498,7 @@ func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
 // head has moved since. A second row would be left unclearable.
 func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number int64, headSHA string, reviewerLogins []string) error {
 	entityID := store.PREntityID(repo, number)
-	switch _, err := store.OpenApprovalForEntity(tx, "pr", entityID); {
+	switch _, err := store.OpenApprovalForLane(tx, "pr", entityID, prLane); {
 	case err == nil:
 		return nil
 	case !errors.Is(err, store.ErrNotFound):
@@ -503,8 +508,8 @@ func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number in
 	if err != nil {
 		return err
 	}
-	if err := store.InsertAwaitingApproval(tx, now, "pr",
-		entityID, headSHA, nil, requiredActor); err != nil {
+	if _, err := store.InsertAwaitingApproval(tx, now, "pr",
+		entityID, headSHA, prLane, nil, requiredActor, nil); err != nil {
 		return err
 	}
 	a.metrics.approvalIngest("opened")
@@ -515,7 +520,7 @@ func (a *applier) openApproval(tx *sql.Tx, now time.Time, repo string, number in
 // puts a changes_requested row back in the awaiting queue, and fills in the
 // reviewer the open delivery could not resolve. Any other state is a no-op.
 func (a *applier) reopenApproval(tx *sql.Tx, repo string, number int64, reviewerLogin string) error {
-	ap, err := store.OpenApprovalForEntity(tx, "pr", store.PREntityID(repo, number))
+	ap, err := store.OpenApprovalForLane(tx, "pr", store.PREntityID(repo, number), prLane)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
 	}
@@ -566,7 +571,7 @@ func (a *applier) resolveApprovalForReview(tx *sql.Tx, repo string, number int64
 	if pr.TaskID == nil {
 		return nil
 	}
-	ap, err := store.OpenApprovalForEntity(tx, "pr", store.PREntityID(repo, number))
+	ap, err := store.OpenApprovalForLane(tx, "pr", store.PREntityID(repo, number), prLane)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
 	}

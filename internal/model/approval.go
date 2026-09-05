@@ -4,6 +4,10 @@ import "time"
 
 // Approval is one row of the approvals table (spec 029 §7.1): the human
 // decision one entity revision is waiting on, or the settled record of one.
+// Lane names the flow requirement the row answers (029 §7.2): one revision
+// carries several independent lanes, and the row is unique on lane, so ""
+// is the no-lane row a PR ingest or an ad-hoc request writes. CreatedBy is
+// who put the requirement here, nil for rows that predate the column.
 // internal/store aliases this type rather than declaring its own, so the
 // queue reader scans into the shape internal/api serializes (ADR 036 §2).
 type Approval struct {
@@ -11,11 +15,13 @@ type Approval struct {
 	EntityKind      string     `json:"entity_kind"`
 	EntityID        string     `json:"entity_id"`
 	SubjectRevision string     `json:"subject_revision"`
+	Lane            string     `json:"lane"`
 	RequiredRole    *string    `json:"required_role,omitempty"`
 	RequiredActor   *string    `json:"required_actor,omitempty"`
 	ResolvingActor  *string    `json:"resolving_actor,omitempty"`
 	State           string     `json:"state"`
 	CreatedAt       time.Time  `json:"created_at"`
+	CreatedBy       *string    `json:"created_by,omitempty"`
 	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
 }
 

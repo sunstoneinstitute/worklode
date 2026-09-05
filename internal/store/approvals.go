@@ -36,41 +36,34 @@ func DocEntityID(docID int64) string {
 	return fmt.Sprintf("doc:%d", docID)
 }
 
-// InsertAwaitingApproval materializes the requirement as an 'awaiting' row.
-// The ON CONFLICT list is migration 0064's whole unique key: entity_kind,
-// entity_id, subject_revision and lane, so two reviewer lanes on one
-// document revision coexist while a redelivered or reopened PR — which
-// writes the same no-lane row — still does not duplicate the requirement.
-//
-// No caller sets an explicit lane yet (029 §7.2's flow-rule lane names are a
-// later task), so lane is derived from required_actor/required_role here
-// only to keep each row distinct the way the old required_role/required_actor
-// key did: required_actor for a per-reviewer row (RequestDocApproval), empty
-// for a PR-ingest row with neither set. A future task that names real flow
-// lanes replaces this derivation, not the constraint.
+// InsertAwaitingApproval materializes one requirement as an 'awaiting' row,
+// idempotent on migration 0064's whole unique key: entity_kind, entity_id,
+// subject_revision and lane. Two reviewer lanes on one document revision
+// coexist; a redelivered or reopened PR, which rewrites the same no-lane
+// row, still does not duplicate the requirement. Returns whether a row was
+// inserted, so materialization can count and event payloads can say what
+// actually changed.
 func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
-	entityKind, entityID, subjectRevision string,
-	requiredRole, requiredActor *string) error {
-	lane := ""
-	switch {
-	case requiredActor != nil:
-		lane = *requiredActor
-	case requiredRole != nil:
-		lane = *requiredRole
-	}
-	_, err := tx.Exec(
+	entityKind, entityID, subjectRevision, lane string,
+	requiredRole, requiredActor, createdBy *string) (bool, error) {
+	res, err := tx.Exec(
 		`INSERT INTO approvals
 		   (entity_kind, entity_id, subject_revision, required_role,
-		    required_actor, lane, state, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'awaiting', $7)
+		    required_actor, lane, state, created_at, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, 'awaiting', $7, $8)
 		 ON CONFLICT (entity_kind, entity_id, subject_revision, lane) DO NOTHING`,
 		entityKind, entityID, subjectRevision, requiredRole, requiredActor, lane,
-		now.UTC())
+		now.UTC(), createdBy)
 	if err != nil {
-		return fmt.Errorf("insert awaiting approval %s %s@%s: %w",
-			entityKind, entityID, subjectRevision, err)
+		return false, fmt.Errorf("insert awaiting approval %s %s@%s lane %q: %w",
+			entityKind, entityID, subjectRevision, lane, err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("insert awaiting approval %s %s@%s lane %q: %w",
+			entityKind, entityID, subjectRevision, lane, err)
+	}
+	return n > 0, nil
 }
 
 // RequestDocApproval materializes 025 §7.3's durable reviewer set (WL-359:
@@ -96,8 +89,10 @@ func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) err
 	entityID := DocEntityID(docID)
 	revision := strconv.Itoa(version)
 	for _, r := range reviewers {
-		if err := InsertAwaitingApproval(tx, now, "doc", entityID, revision,
-			nil, &r); err != nil {
+		// The reviewer is the lane: one reviewer owes one decision on this
+		// revision, which is exactly the row 0064's key keeps distinct.
+		if _, err := InsertAwaitingApproval(tx, now, "doc", entityID, revision,
+			r, nil, &r, nil); err != nil {
 			return err
 		}
 	}
@@ -188,8 +183,8 @@ func SetDocReviewers(tx *sql.Tx, now time.Time, docID int64, actorID string, rev
 // DocReviewersAwaiting returns the reviewer ids doc's current version still
 // owes an approval from — 025 §7.3's "who still owes a review on this
 // document" as a query, oldest lane first. A document's reviewer set is
-// several open lanes on purpose, unlike OpenApprovalForEntity's single-row
-// PR case, so this reads every open one rather than the newest.
+// several open lanes on purpose, unlike the PR ingest's single no-lane row,
+// so this reads every open one rather than the newest.
 func (s *Store) DocReviewersAwaiting(ctx context.Context, docID int64) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT required_actor FROM approvals
@@ -218,46 +213,64 @@ func checkActorExists(tx *sql.Tx, id string) error {
 }
 
 // approvalColumns is the SELECT list scanApproval expects, in order.
-const approvalColumns = `id, entity_kind, entity_id, subject_revision,
-	required_role, required_actor, resolving_actor, state, created_at, resolved_at`
+const approvalColumns = `id, entity_kind, entity_id, subject_revision, lane,
+	required_role, required_actor, resolving_actor, state, created_at,
+	created_by, resolved_at`
 
 func scanApproval(row rowScanner) (*Approval, error) {
 	var a Approval
 	err := row.Scan(&a.ID, &a.EntityKind, &a.EntityID, &a.SubjectRevision,
-		&a.RequiredRole, &a.RequiredActor, &a.ResolvingActor, &a.State,
-		&a.CreatedAt, &a.ResolvedAt)
+		&a.Lane, &a.RequiredRole, &a.RequiredActor, &a.ResolvingActor, &a.State,
+		&a.CreatedAt, &a.CreatedBy, &a.ResolvedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &a, nil
 }
 
-// OpenApprovalForEntity returns the open row for (entityKind, entityID) —
-// state 'awaiting' or 'changes_requested', both counting as open —
-// ErrNotFound otherwise. The PR ingest keeps at most one open row per entity,
-// so ORDER BY id DESC is a deterministic tiebreak rather than a lane
-// selector. A document's reviewer set is several open rows on purpose (§7.3),
-// so this is the wrong reader for one: address a doc lane by id instead.
-func OpenApprovalForEntity(tx *sql.Tx, entityKind, entityID string) (*Approval, error) {
+// OpenApprovalForLane returns the open row — state 'awaiting' or
+// 'changes_requested', both counting as open — for one lane of one entity;
+// ErrNotFound otherwise. It replaces OpenApprovalForEntity: with 029 §7.2's
+// lanes, "the" open row of an entity is no longer a single thing. The PR
+// ingest reads lane "". ORDER BY id DESC is a deterministic tiebreak, not a
+// selector: the key keeps at most one open row per lane in practice.
+func OpenApprovalForLane(tx *sql.Tx, entityKind, entityID, lane string) (*Approval, error) {
 	a, err := scanApproval(tx.QueryRow(
 		`SELECT `+approvalColumns+` FROM approvals
-		 WHERE entity_kind = $1 AND entity_id = $2
+		 WHERE entity_kind = $1 AND entity_id = $2 AND lane = $3
 		   AND state IN ('awaiting', 'changes_requested')
 		 ORDER BY id DESC LIMIT 1`,
-		entityKind, entityID))
+		entityKind, entityID, lane))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("open approval for %s %s: %w", entityKind, entityID, err)
+		return nil, fmt.Errorf("open approval for %s %s lane %q: %w",
+			entityKind, entityID, lane, err)
 	}
 	return a, nil
+}
+
+// OpenApprovalsForEntity lists every open row of one entity, in lane order —
+// the whole set of decisions it is still waiting on.
+func OpenApprovalsForEntity(tx *sql.Tx, entityKind, entityID string) ([]Approval, error) {
+	rows, err := tx.Query(
+		`SELECT `+approvalColumns+` FROM approvals
+		 WHERE entity_kind = $1 AND entity_id = $2
+		   AND state IN ('awaiting', 'changes_requested')
+		 ORDER BY lane, id`,
+		entityKind, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("open approvals for %s %s: %w", entityKind, entityID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("open approvals for %s %s", entityKind, entityID),
+		byValue(scanApproval))
 }
 
 // ResolveApproval stamps state, resolving_actor, resolved_at. Shared by the
 // review ingest and the web act, so the two resolution paths cannot drift.
 // There is no state guard here: callers reach the row through
-// OpenApprovalForEntity (or their own open-state check) first.
+// OpenApprovalForLane (or their own open-state check) first.
 func ResolveApproval(tx *sql.Tx, id int64, state string,
 	resolvingActor *string, at time.Time) error {
 	_, err := tx.Exec(
@@ -488,8 +501,8 @@ func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
 	var aa AwaitingApproval
 	var title, url, author, taskID, projectID, projectName, actorName sql.NullString
 	err := row.Scan(&aa.ID, &aa.EntityKind, &aa.EntityID, &aa.SubjectRevision,
-		&aa.RequiredRole, &aa.RequiredActor, &aa.ResolvingActor, &aa.State,
-		&aa.CreatedAt, &aa.ResolvedAt,
+		&aa.Lane, &aa.RequiredRole, &aa.RequiredActor, &aa.ResolvingActor,
+		&aa.State, &aa.CreatedAt, &aa.CreatedBy, &aa.ResolvedAt,
 		&title, &url, &author, &taskID, &projectID, &projectName, &actorName)
 	if err != nil {
 		return nil, err
