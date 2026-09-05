@@ -298,14 +298,19 @@ type PlaceholderView struct {
 // — not the whole projection: the projection's ranking focus and mapped
 // repositories have no panel in mode B, so they are absent here rather than
 // carried unrendered (WL-164); the JSON cockpit still serves both.
-// PinnedFocus and NextDecision are optional facts, and each panel is omitted
-// honestly when its data is absent rather than rendering an invented
+// Rally, PinnedFocus and NextDecision are optional facts, and each panel is
+// omitted honestly when its data is absent rather than rendering an invented
 // placeholder.
 type CockpitView struct {
-	Page              PageProps
-	CanonicalURL      string
-	NewTaskURL        string
-	Project           CockpitProject
+	Page         PageProps
+	CanonicalURL string
+	NewTaskURL   string
+	Project      CockpitProject
+	// Rally is the project's active rally (WL-667), shown above PinnedFocus.
+	// Nil when the project has none active — a project may hold any number of
+	// draft rallies, which are inert and never rendered here, and at most one
+	// active, per the tasks_one_active_rally index.
+	Rally             *CockpitRally
 	PinnedFocus       *CockpitFocus
 	NextDecision      *CockpitDecision
 	Work              CockpitWork
@@ -317,6 +322,27 @@ type CockpitView struct {
 	// by spec 032, and this is a page affordance, not a change to that
 	// contract.
 	AgentSessions []AgentSessionRow
+}
+
+// CockpitRally is the project's active rally: a hand-assembled goal that
+// carries no work of its own, its blocks edges naming the tasks to finish
+// now (WL-667). Done/Total count its live direct members regardless of state;
+// Members lists only the ones still open. Pickup ranking boosts more than
+// this card shows — the whole transitive blocker closure, not just depth 1.
+type CockpitRally struct {
+	ID      string
+	Title   string
+	URL     string
+	Done    int
+	Total   int
+	Members []CockpitRallyMember
+}
+
+// CockpitRallyMember is one of a rally's still-open members.
+type CockpitRallyMember struct {
+	ID    string
+	Title string
+	URL   string
 }
 
 // CockpitFocus is the project's pinned focus note shown at the top of the

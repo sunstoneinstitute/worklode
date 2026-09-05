@@ -69,6 +69,14 @@ func pages(t *testing.T) map[string]string {
 				ModeName:  "operations",
 				ModeBasis: "the project has active work and no pending launch decision",
 			},
+			Rally: &CockpitRally{
+				ID: "WL-667", Title: "Rally an eighth task kind that steers pickup toward the tasks that finish the release", URL: "/tasks/WL-667",
+				Done: 2, Total: 4,
+				Members: []CockpitRallyMember{
+					{ID: "WL-140", Title: "Fix what the narrow-width WCAG audit found", URL: "/tasks/WL-140"},
+					{ID: "WL-141", Title: tokenTitle, URL: "/tasks/WL-141"},
+				},
+			},
 			PinnedFocus:  &CockpitFocus{Note: "Land the cockpit accessibility work before the sandbox demo", PinnedBy: "Stig Bakken", PinnedAt: now},
 			NextDecision: &CockpitDecision{Title: "Whether the cockpit ships read-only for the first release", Accountable: "Stig Bakken", Readiness: "awaiting evidence"},
 			Work: CockpitWork{

@@ -189,6 +189,12 @@ func (s *Store) Claim(ctx context.Context, taskID, actorID, worktree string, ttl
 				return fmt.Errorf("task %s is a decision and cannot be claimed; use 'lode task assign' instead: %w",
 					taskID, ErrBadTransition)
 			}
+			// A rally is a goal, not work: its 'blocks' edges name the tasks
+			// to finish, and those are what get claimed.
+			if kind == "rally" {
+				return fmt.Errorf("task %s is a rally and cannot be claimed; claim one of its members instead: %w",
+					taskID, ErrBadTransition)
+			}
 
 			if err := requireActor(tx, actorID); err != nil {
 				return err

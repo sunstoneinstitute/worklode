@@ -19,7 +19,8 @@ func newProjectCmd() *cobra.Command {
 	cmd.AddCommand(newProjectAddCmd(), newProjectListCmd(), newProjectRepoCmd(),
 		newProjectFocusCmd(), newProjectSetCmd(),
 		newProjectResolveCmd(), newProjectShowCmd(),
-		newProjectHealthCmd(), newProjectCrewCmd(), newProjectOverviewCmd())
+		newProjectHealthCmd(), newProjectCrewCmd(), newProjectOverviewCmd(),
+		newProjectRallyCmd())
 	return cmd
 }
 
@@ -328,6 +329,37 @@ func newProjectFocusCmd() *cobra.Command {
 				return printJSON(cmd, map[string]any{"id": p.ID, "focus": p.Focus})
 			}
 			cli.FocusLine(cmd.OutOrStdout(), p.Focus)
+			return nil
+		},
+	}
+}
+
+// newProjectRallyCmd is `lode project rally <id>`: the read-only view of a
+// project's active rally (WL-667) — the task naming what to finish now, and
+// the transitive tree of open tasks it is waiting on. A rally is a task
+// kind, not an entity, so this is a named view (L6), not a top-level
+// `lode rally`; creation and assembly are `lode task add --kind rally` and
+// `lode task block <rally> --by <task>`, which already exist.
+func newProjectRallyCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:               "rally <id>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Show a project's active rally and its transitive open blockers",
+		Args:              cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			rally, raw, err := c.ProjectRally(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.RallyRender(cmd.OutOrStdout(), rally)
 			return nil
 		},
 	}

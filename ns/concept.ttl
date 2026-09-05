@@ -56,7 +56,8 @@ wlc:none a skos:Concept ; skos:inScheme wlc:CoverageLevel ; skos:prefLabel "none
 # Task kind — the union matching the tasks.kind CHECK constraint. Every kind
 # describes a nature of work, not the artifact produced and not a structural
 # role: container-ness is inferred from child_of edges (004 §6.1), never
-# declared here.
+# declared here. wlc:rally is the one exception — it carries no work of its
+# own, only the blocks edges naming what to finish now.
 # ---------------------------------------------------------------------------
 
 wlc:TaskKind a skos:ConceptScheme ; skos:prefLabel "Task kind" .
@@ -75,6 +76,8 @@ wlc:spike a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "spike" ;
     skos:definition "Time-boxed experiment to validate an approach; throwaway output." .
 wlc:decision a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "decision" ;
     skos:definition "Answer a posed question and record the answer on the task; the deliverable is the recorded answer in task_decisions, never a document or a diff." .
+wlc:rally a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "rally" ;
+    skos:definition "A hand-assembled goal that carries no work of its own; its blocks edges name the tasks to finish now, and it ranks them first in pickup. Drafts are unlimited and inert; at most one is active per project." .
 
 
 # ---------------------------------------------------------------------------

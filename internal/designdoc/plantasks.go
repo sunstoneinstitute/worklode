@@ -33,9 +33,10 @@ type PlanTask struct {
 var planTaskHeadingRE = regexp.MustCompile(`^Task\s+(\d+)\s+—\s+(.+)$`)
 
 // planMintableKinds is the subset of task kinds a plan may mint (025 §9.1):
-// review tasks are created by the review lifecycle and spikes are inputs to
-// planning, so neither is plan-declarable. Membership is tested with
-// slices.Contains, so the list is also the lookup — there is nothing to drift.
+// review tasks are created by the review lifecycle, spikes are inputs to
+// planning, and rally is hand-assembled by a person, so none of the three is
+// plan-declarable. Membership is tested with slices.Contains, so the list is
+// also the lookup — there is nothing to drift.
 var planMintableKinds = []string{"feature", "bug", "chore", "design", "decision"}
 
 // planPriorities is the priority values a task definition may declare
