@@ -98,6 +98,7 @@ var nounViews = map[string]bool{
 	"lode project focus":      true,
 	"lode project health":     true,
 	"lode project overview":   true,
+	"lode project rally":      true,
 	"lode project repo":       true,
 	"lode secret catalog":     true,
 	"lode secret status":      true,

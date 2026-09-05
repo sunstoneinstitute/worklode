@@ -139,6 +139,9 @@ func UndeleteTask(tx *sql.Tx, now time.Time, id string, eventID int64) error {
 		`UPDATE tasks SET deleted_at = NULL, deleted_by = NULL, delete_justification = NULL,
 		        updated_at = $1 WHERE id = $2`, now.UTC(), id,
 	); err != nil {
+		if mapped := rallyAlreadyActive(err, id); mapped != err {
+			return mapped
+		}
 		return fmt.Errorf("undelete task %s: %w", id, err)
 	}
 	if err := LogChange(tx, "task", id, eventID,

@@ -127,6 +127,7 @@ Flags: --server
 - `lode project list` — List projects
 - `lode project overview` — One-screen roll-up: drift counts, gaps, frontier, critical head
   Flags: --project, --repo
+- `lode project rally` — Show a project's active rally and its transitive open blockers
 - `lode project repo` — Map, edit, and unmap a project's GitHub repos
 - `lode project repo add` — Map a GitHub repo to a project
   Flags: --done-state

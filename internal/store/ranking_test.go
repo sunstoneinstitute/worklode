@@ -822,3 +822,24 @@ func TestBlockingFanOutCountsOnlyOpenTasks(t *testing.T) {
 		t.Fatalf("fully closed downstream: b still has fan-out %d", fan[b.ID])
 	}
 }
+
+// TestRankTasksRallyArm pins the rally arm's position in the sort key: it
+// comes first, ahead of criticalRank, and unlike criticalRank it survives
+// --strict-focus. Below it the rest of the key is unchanged, which the two
+// non-members' relative order shows.
+func TestRankTasksRallyArm(t *testing.T) {
+	t.Parallel()
+	focus := []string{"security"}
+	in := []rankInput{
+		{Task: rankTask("HDB-1", "critical", "security", rankTestNow), Focus: focus},
+		{Task: rankTask("HDB-2", "low", "", rankTestNow), Focus: focus, InRally: true},
+		{Task: rankTask("HDB-3", "high", "security", rankTestNow), Focus: focus},
+	}
+	for _, strict := range []bool{false, true} {
+		got := rankIDs(rankTasks(in, strict))
+		want := []string{"HDB-2", "HDB-1", "HDB-3"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("rankTasks(strict=%v) = %v, want %v", strict, got, want)
+		}
+	}
+}

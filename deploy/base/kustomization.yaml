@@ -149,3 +149,5 @@ configMapGenerator:
       - migrations/0067_actor_event_cursor.down.sql
       - migrations/0068_decisions.up.sql
       - migrations/0068_decisions.down.sql
+      - migrations/0069_rally_kind.up.sql
+      - migrations/0069_rally_kind.down.sql

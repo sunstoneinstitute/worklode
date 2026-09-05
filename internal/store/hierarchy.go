@@ -137,8 +137,9 @@ func descendantDepth(tx *sql.Tx, id string) (int, error) {
 // declare, and the edge itself is what makes the parent a container — except
 // a decision, which never is (004 §6.3 as amended): a decision closes by its
 // recorded answer in one transaction, a parent closes by roll-up, and the two
-// cannot both hold. A decision as a child stays legal, it is a leaf like any
-// other.
+// cannot both hold. A rally is never a parent either: its members are the
+// 'blocks' edges pointing at it, and children would be a second, contradicting
+// set. Either kind as a child stays legal, a leaf like any other.
 func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string) error {
 	if project[child] != project[parent] {
 		return fmt.Errorf("cross-project edge %s (%s) child_of %s (%s): %w",
@@ -151,6 +152,9 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 	}
 	if parentKind == "decision" {
 		return fmt.Errorf("task %s is a decision and cannot take children: %w", parent, ErrInvalidInput)
+	}
+	if parentKind == "rally" {
+		return fmt.Errorf("task %s is a rally and cannot take children: %w", parent, ErrInvalidInput)
 	}
 
 	existing, hasParent, err := parentOf(tx, child)
@@ -426,6 +430,12 @@ func Decompose(tx *sql.Tx, now time.Time, parentID string, titles []string, crea
 	// closes by roll-up, and the two cannot both hold (004 §6.3 as amended).
 	if kind == "decision" {
 		return nil, fmt.Errorf("task %s is a decision and cannot take children: %w",
+			parentID, ErrInvalidInput)
+	}
+	// A rally holds its members by 'blocks', which is the whole of what it
+	// says; child_of would give it a second, contradicting set.
+	if kind == "rally" {
+		return nil, fmt.Errorf("task %s is a rally and cannot take children: %w",
 			parentID, ErrInvalidInput)
 	}
 	already, err := hasChildren(tx, parentID)

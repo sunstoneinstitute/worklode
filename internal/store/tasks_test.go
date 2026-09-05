@@ -1014,3 +1014,34 @@ func TestKindCheckConstraintMatchesGeneratedKinds(t *testing.T) {
 			got, ns.TaskKinds, def)
 	}
 }
+
+// TestTasksOneActiveRallyPerProject exercises the tasks_one_active_rally
+// partial unique index (migration 0069): a second active rally in the same
+// project is refused, but closing the first (abandoning it) frees the project
+// for a new one. The draft half of that index is covered in rally_test.go.
+func TestTasksOneActiveRallyPerProject(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	in := defaultTaskInput()
+	in.Kind = "rally"
+	first := createTask(t, s, taskTestNow, in)
+
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.create", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := CreateTask(tx, taskTestNow, in, eventID)
+			return err
+		})
+	// The index violation must reach the caller as ErrInvalidInput, not as a
+	// raw pg error: mapStoreErr's default turns anything else into HTTP 500.
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("second active rally: want ErrInvalidInput, got %v", err)
+	}
+
+	walkTo(t, s, first.ID, "abandoned")
+
+	second := createTask(t, s, taskTestNow, in)
+	if second.ID == first.ID {
+		t.Fatalf("second rally got the same id as the first: %s", second.ID)
+	}
+}

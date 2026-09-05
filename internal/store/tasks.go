@@ -219,6 +219,9 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
 	)
 	if err != nil {
+		if mapped := rallyAlreadyActive(err, id); mapped != err {
+			return nil, mapped
+		}
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
 	}
 	if err := LogChange(tx, "task", id, eventID,
@@ -302,6 +305,9 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 		to, now.UTC(), taskID,
 	)
 	if err != nil {
+		if mapped := rallyAlreadyActive(err, taskID); mapped != err {
+			return mapped
+		}
 		return fmt.Errorf("update task %s state: %w", taskID, err)
 	}
 	if err := LogChange(tx, "task", taskID, eventID,
@@ -374,6 +380,86 @@ func secretsJSON(names []string) ([]byte, error) {
 	return json.Marshal(names)
 }
 
+// checkKindRetag refuses a retag into a kind whose invariants the task's
+// current state already violates. Each rule below is checked against the kind
+// the task had when the state was created, and nothing re-checks it after, so
+// a retag is the one door into a decision or a rally holding state its own
+// kind refuses to be given.
+//
+// decision and rally are the only restricted kinds; every other kind accepts
+// any state, so a retag into one needs no check. Where each rule comes from:
+//   - children: checkHierarchy and Decompose refuse both kinds as a parent.
+//   - active lease: Claim refuses both kinds.
+//   - decision rows: requireLiveTask/requireOpenTask refuse a rally only — a
+//     decision task is the one that is meant to carry them.
+//   - outbound 'blocks' edge: AddEdge refuses a rally only.
+//   - plan_doc: planMintableKinds excludes rally, so no plan mints one. A
+//     plan-minted task carries plan-ordering blockers that are not 'blocks'
+//     edges (blockerRelation's second arm), and a rally's membership is its
+//     'blocks' edges alone — the cockpit card counts on that.
+//
+// The project's one-active-rally rule is not checked here. It is a partial
+// unique index, so the UPDATE below is what enforces it, reported through
+// rallyAlreadyActive.
+func checkKindRetag(tx *sql.Tx, id, kind string) error {
+	if kind != "decision" && kind != "rally" {
+		return nil
+	}
+	// Lock the row before reading the state the rules below check: Claim takes
+	// FOR UPDATE, so without this a claim landing between the lease check and
+	// the kind UPDATE leaves a leased rally. A missing row falls through to
+	// the UPDATE, which reports ErrNotFound. Decompose locks the parent row
+	// too (hierarchy.go), so this closes the child race as well; AddEdge and
+	// requireLiveTask take no row lock, so a concurrent edge or decision can
+	// still slip past their checks.
+	if err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1 FOR UPDATE`, id).
+		Scan(new(int)); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock task %s: %w", id, err)
+	}
+	container, err := hasChildren(tx, id)
+	if err != nil {
+		return err
+	}
+	if container {
+		return fmt.Errorf("task %s has children, which a %s cannot: %w", id, kind, ErrInvalidInput)
+	}
+	// activeLeaseTx answers "is it leased" and "by whom" at once; ErrNotFound
+	// is the pass case.
+	lease, err := activeLeaseTx(tx, id)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if err == nil {
+		return fmt.Errorf("task %s is held by %s in %s and a %s is never claimed; release it first: %w",
+			id, lease.ActorID, lease.Worktree, kind, ErrInvalidInput)
+	}
+	if kind != "rally" {
+		return nil
+	}
+	var decisions, blocks int
+	var planned bool
+	if err := tx.QueryRow(
+		`SELECT (SELECT count(*) FROM decisions WHERE task_id = $1),
+		        (SELECT count(*) FROM task_edges WHERE from_task = $1 AND type = 'blocks'),
+		        COALESCE((SELECT plan_doc IS NOT NULL FROM tasks WHERE id = $1), false)`,
+		id).Scan(&decisions, &blocks, &planned); err != nil {
+		return fmt.Errorf("rally retag checks for %s: %w", id, err)
+	}
+	if planned {
+		return fmt.Errorf("task %s was minted from a plan, which a rally cannot be (a plan orders its blockers, and a rally's members are its 'blocks' edges): %w",
+			id, ErrInvalidInput)
+	}
+	if decisions > 0 {
+		return fmt.Errorf("task %s carries %d decision row(s), which a rally cannot: %w",
+			id, decisions, ErrInvalidInput)
+	}
+	if blocks > 0 {
+		return fmt.Errorf("task %s blocks %d task(s), which a rally cannot: %w",
+			id, blocks, ErrInvalidInput)
+	}
+	return nil
+}
+
 // UpdateTaskFields updates the non-nil fields of a task inside the given
 // transaction and bumps updated_at. Returns ErrNotFound if the task does not
 // exist. A nil field is left unchanged; all-nil is a no-op (existence is
@@ -400,8 +486,13 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 	if concern != nil && *concern != "" && *concern != "none" && !ValidConcern(*concern) {
 		return fmt.Errorf("unknown concern %q: %w", *concern, ErrInvalidInput)
 	}
-	if kind != nil && !validTaskKinds[*kind] {
-		return fmt.Errorf("unknown kind %q: %w", *kind, ErrInvalidInput)
+	if kind != nil {
+		if !validTaskKinds[*kind] {
+			return fmt.Errorf("unknown kind %q: %w", *kind, ErrInvalidInput)
+		}
+		if err := checkKindRetag(tx, id, *kind); err != nil {
+			return err
+		}
 	}
 	if milestone != nil && *milestone != "" && *milestone != "none" {
 		var milestoneProject string
@@ -498,6 +589,9 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 		fmt.Sprintf(`UPDATE tasks SET %s WHERE id = $%d`, strings.Join(sets, `, `), len(args)),
 		args...)
 	if err != nil {
+		if mapped := rallyAlreadyActive(err, id); mapped != err {
+			return mapped
+		}
 		return fmt.Errorf("update task %s: %w", id, err)
 	}
 	return requireOneAffected(res, "update task "+id,
@@ -803,11 +897,12 @@ func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
 // transaction. Self-edges are rejected for all four types. A child_of edge
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
-// edges. follow_up_to and duplicate_of are unchecked beyond their partial
-// unique indexes: both are cross-project by design and nothing walks either
-// transitively. A missing endpoint returns ErrNotFound. Appends a state_log
-// row for both endpoints, attributed to eventID, so a cross-project edge
-// dirties both projects.
+// edges. A 'blocks' edge may not start at a rally: a rally's own blockers are
+// its membership, and it blocks nothing in turn. follow_up_to and
+// duplicate_of are unchecked beyond their partial unique indexes: both are
+// cross-project by design and nothing walks either transitively. A missing
+// endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
+// attributed to eventID, so a cross-project edge dirties both projects.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error {
 	if typ != "child_of" && typ != "blocks" && typ != "follow_up_to" && typ != "duplicate_of" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
@@ -831,6 +926,19 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 	if typ == "child_of" {
 		if err := checkHierarchy(tx, fromTask, toTask, project); err != nil {
 			return err
+		}
+	}
+	if typ == "blocks" {
+		// A rally is only ever the to_task of a 'blocks' edge: the edges
+		// pointing at it are its membership. Letting one block something
+		// would make finishing that thing wait on a goal nobody works.
+		var fromKind string
+		if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, fromTask).Scan(&fromKind); err != nil {
+			return fmt.Errorf("kind of %s: %w", fromTask, err)
+		}
+		if fromKind == "rally" {
+			return fmt.Errorf("task %s is a rally and cannot block another task: %w",
+				fromTask, ErrInvalidInput)
 		}
 	}
 	if _, err := tx.Exec(

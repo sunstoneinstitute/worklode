@@ -764,6 +764,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/resolve", s.resolveProjectByRemote)
 	r.api("GET /api/v1/projects/{id}", s.getProject)
 	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
+	r.api("GET /api/v1/projects/{id}/rally", s.getProjectRally)
 	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
 	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
 	r.api("PATCH /api/v1/deliverables/{id}", s.patchDeliverable)

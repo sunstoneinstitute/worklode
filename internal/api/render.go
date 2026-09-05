@@ -224,6 +224,33 @@ func cockpitView(c *model.CockpitProjection, title string) ui.CockpitView {
 	}
 }
 
+// rallyCardView maps an active rally task, its direct member count
+// (RallyMemberCount) and its open-blocker tree (BlockerTree) into the
+// cockpit's rally card (WL-667). tree's depth-1 nodes are exactly those same
+// members still open, so they become Members and Done falls out as total
+// minus len(Members). Two rules keep that subtraction non-negative, and both
+// are enforced: a rally never carries a plan_doc (planMintableKinds excludes
+// rally, and checkKindRetag refuses a retag of a task that has one), so
+// BlockerTree's plan-blocking branch contributes nothing; and both readers
+// skip tombstoned tasks.
+func rallyCardView(rally *model.Task, total int, tree model.BlockerTree) ui.CockpitRally {
+	var open []ui.CockpitRallyMember
+	for _, b := range tree.Blockers {
+		if b.Depth != 1 {
+			continue
+		}
+		open = append(open, ui.CockpitRallyMember{ID: b.ID, Title: b.Title, URL: "/tasks/" + b.ID})
+	}
+	return ui.CockpitRally{
+		ID:      rally.ID,
+		Title:   rally.Title,
+		URL:     "/tasks/" + rally.ID,
+		Done:    total - len(open),
+		Total:   total,
+		Members: open,
+	}
+}
+
 // deliverablesView maps a project's declared deliverables into the project's
 // Deliverables page, grouped by milestone (spec 029 §2): one group per
 // milestone in position order — only milestones that actually hold a
