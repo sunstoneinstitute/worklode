@@ -502,12 +502,13 @@ Nothing here.
 // ns.TaskKinds is that set — generated from ns/concept.ttl's wlc:TaskKind
 // scheme, which the tasks.kind CHECK constraint and internal/api's validKinds
 // also mirror (TestTaskKindsAgreeAcrossSources holds those together). A plan
-// may mint every kind except the two that are not plannable units of the
-// plan's own work.
+// may mint every kind except the three that are not plannable units of the
+// plan's own work: review and spike, plus rally, which is hand-assembled
+// rather than minted.
 func TestPlanMintableKindsMatchLiveKindSet(t *testing.T) {
 	want := make([]string, 0, len(ns.TaskKinds))
 	for _, k := range ns.TaskKinds {
-		if k == "review" || k == "spike" {
+		if k == "review" || k == "spike" || k == "rally" {
 			continue
 		}
 		want = append(want, k)

@@ -744,6 +744,28 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 
 	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
 	view.AgentSessions = projectAgentSessionRows(sessions, s.now())
+
+	// Also read off the store rather than the projection (WL-667), for the
+	// same reason as the agent sessions above: not contracted on the JSON
+	// cockpit.
+	if rally, err := s.st.ActiveRally(ctx, id); err == nil {
+		total, err := s.st.RallyMemberCount(ctx, rally.ID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		tree, err := s.st.BlockerTree(ctx, rally.ID)
+		if err != nil {
+			s.webStoreErr(w, err)
+			return
+		}
+		card := rallyCardView(rally, total, tree)
+		view.Rally = &card
+	} else if !errors.Is(err, store.ErrNotFound) {
+		s.webStoreErr(w, err)
+		return
+	}
+
 	s.renderWeb(w, r, http.StatusOK, "project page", ui.Cockpit(view))
 }
 
