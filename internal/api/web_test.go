@@ -916,8 +916,9 @@ func TestReviewedThroughNow(t *testing.T) {
 			return err
 		}
 		role := "science-leads"
-		return store.InsertAwaitingApproval(tx, st.Now(), "pr",
-			store.PREntityID("acme/widgets", 9), "shareviewed", &role, nil)
+		_, err := store.InsertAwaitingApproval(tx, st.Now(), "pr",
+			store.PREntityID("acme/widgets", 9), "shareviewed", "", &role, nil, nil)
+		return err
 	})
 	assignedTask := createTaskViaAPI(t, h, adminToken, map[string]any{
 		"project": "proj1", "title": "Assigned work", "priority": "medium", "kind": "feature",
