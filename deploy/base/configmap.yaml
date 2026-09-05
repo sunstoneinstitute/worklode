@@ -13,11 +13,21 @@ data:
   LODE_INSTANCE_ENV: "prod"
   LODE_BRANCH_TEMPLATE: ""
   LODE_SKILL_SOURCES: ""
-  LODE_EMBEDDING_URL: ""
-  LODE_EMBEDDING_MODEL: ""
-  # How often the corpus index converges (040 §7); empty means 5m. The default
-  # deployment points LODE_EMBEDDING_URL at a CPU embeddings sidecar (040
-  # §2.3), and the loop runs with or without one.
+  # The dense arm of corpus search (040 §2.3). The URL is the in-cluster
+  # text-embeddings-inference sidecar in embeddings.yaml, which speaks the same
+  # OpenAI-compatible wire protocol internal/embed.OpenAI already speaks — so
+  # this is configuration, not new provider code. No LODE_EMBEDDING_API_KEY:
+  # the sidecar is local and unauthenticated.
+  LODE_EMBEDDING_URL: "http://worklode-embeddings.worklode.svc.cluster.local/v1/embeddings"
+  LODE_EMBEDDING_MODEL: "google/embeddinggemma-300m"
+  # EmbeddingGemma is asymmetric: a query and a document must be embedded with
+  # different instruction prefixes (040 §3), and getting it wrong costs
+  # retrieval quality without ever raising an error. The trailing spaces are
+  # part of the prefixes. A symmetric model (§2.4) sets both to "".
+  LODE_EMBEDDING_QUERY_PREFIX: "task: search result | query: "
+  LODE_EMBEDDING_DOCUMENT_PREFIX: "title: none | text: "
+  # How often the corpus index converges (040 §7); empty means 5m. The loop
+  # runs with or without an embedding provider.
   LODE_INDEX_INTERVAL: ""
   LODE_SECRETS_CATALOG_PATH: "/etc/worklode/secrets-catalog/catalog.toml"
   # Must match the blob-spool volumeMount in deployment.yaml; unset means
