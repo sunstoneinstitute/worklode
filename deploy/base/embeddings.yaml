@@ -5,7 +5,7 @@
 # LODE_EMBEDDING_URL in configmap.yaml pointed at the Service below.
 #
 # In base rather than in the overlays: dev and prod embed the same corpus with
-# the same model at the same width (§2.2), and nothing about the sidecar is
+# the same model at the same width (§2.2), and nothing about this deployment is
 # environment-specific. The overlays carry environment identity — hostnames,
 # OIDC clients, the cluster env map — and this has none.
 apiVersion: apps/v1
@@ -86,9 +86,9 @@ spec:
             requests:
               # 040 §2.3's "~200 MB resident" is the model quantised; the
               # safetensors text-embeddings-inference actually loads are fp32,
-              # 1.21 GB on disk and about that resident. Still a sidecar, not
-              # a node pool — but requesting 200 Mi would get it OOM-killed on
-              # the first pass. Quantised serving (llama.cpp, the §2.3
+              # 1.21 GB on disk and about that resident. Still one small pod,
+              # not a node pool — but requesting 200 Mi would get it OOM-killed
+              # on the first pass. Quantised serving (llama.cpp, the §2.3
               # alternative) is what would earn the smaller number.
               memory: "1536Mi"
               cpu: "500m"
@@ -128,10 +128,11 @@ spec:
             - name: hf-cache
               mountPath: /data
       volumes:
-        # ponytail: an emptyDir re-downloads the weights on every pod restart.
-        # Restarts are rare and existing vectors keep serving while it is down
-        # (040 §11); move to a PVC if a Hugging Face outage during a restart
-        # ever costs a convergence window.
+        # ponytail: an emptyDir re-downloads the weights on every pod restart,
+        # which also makes huggingface.co a runtime dependency and HF_TOKEN a
+        # runtime secret. Restarts are rare and existing vectors keep serving
+        # while it is down (040 §11). The fix is to bake the weights into an
+        # image built once per model version, not to add a PVC.
         - name: hf-cache
           emptyDir:
             sizeLimit: 3Gi
