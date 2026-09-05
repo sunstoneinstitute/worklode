@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -81,6 +82,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 
 	var docs []model.Doc
 	bodies := map[int64]string{}
+	planNumber := 0
 	add := func(files map[string]string, planCorpus bool) {
 		names := make([]string, 0, len(files))
 		for name := range files {
@@ -92,6 +94,12 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 			slug := strings.TrimSuffix(name, ".md")
 			kind := "plan"
 			number := 0
+			if planCorpus {
+				// Plans sit on their project's own sequence (029 §4), so
+				// they render as WL-PLAN-n like every other document.
+				planNumber++
+				number = planNumber
+			}
 			if !planCorpus {
 				kind = "spec"
 				parsed, err := designdoc.Parse([]byte(files[name]))
@@ -106,7 +114,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 				}
 			}
 			docs = append(docs, model.Doc{
-				ID: id, Project: "proj", Kind: kind, Number: number,
+				ID: id, Project: "proj", ProjectKey: "WL", Kind: kind, Number: number,
 				Slug: slug, Title: slug, Status: "accepted", Version: 1,
 			})
 			bodies[id] = files[name]
@@ -180,23 +188,23 @@ func TestDocTodoTable(t *testing.T) {
 		t.Fatalf("doc todo: %v\noutput: %s", err, out)
 	}
 	for _, want := range []string{
-		"docs/specs/001-example.md",
+		"WL-SPEC-1",
 		"unplanned",
 		"sec-2",
 		"1 section has no covering plan",
 		"unexecuted",
 		"sec-1",
-		// The plan column drops the corpus directory the reader already
-		// knows; the --json items keep the full path (TestDocTodoJSON).
-		"001-1-first.md",
+		// Documents are named by the reference `lode show` takes, never by
+		// a corpus path: no such file has existed since 055 (WL-624).
+		"WL-PLAN-1",
 		"1 task open: WL-1",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q\noutput:\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "docs/plans/") {
-		t.Errorf("plan column still carries the corpus directory:\n%s", out)
+	if strings.Contains(out, ".md") {
+		t.Errorf("output still names a corpus path:\n%s", out)
 	}
 	// The gap detail must not leak a frontmatter key into prose.
 	if strings.Contains(out, "fullCoverageWith") {
@@ -311,7 +319,7 @@ func TestDocTodoStatusFromRow(t *testing.T) {
 	}
 	var found bool
 	for _, it := range got.Items {
-		if it.Plan != "docs/plans/001-1-first.md" {
+		if it.Plan != "WL-PLAN-1" {
 			continue
 		}
 		found = true
@@ -381,11 +389,11 @@ func TestDocTodoJSON(t *testing.T) {
 	if got.Items[0].Type != "unplanned" || len(got.Items[0].Anchors) != 1 || got.Items[0].Anchors[0] != "sec-2" {
 		t.Errorf("first item = %+v; want the collapsed unplanned gap over sec-2", got.Items[0])
 	}
-	if got.Items[0].Doc != "docs/specs/001-example.md" || got.Items[0].Heading == "" || got.Items[0].Detail == "" {
+	if got.Items[0].Doc != "WL-SPEC-1" || got.Items[0].Heading == "" || got.Items[0].Detail == "" {
 		t.Errorf("first item = %+v; want doc, heading and detail populated", got.Items[0])
 	}
 	if got.Items[1].Type != "unexecuted" || got.Items[1].Anchor != "sec-1" ||
-		got.Items[1].Plan != "docs/plans/001-1-first.md" ||
+		got.Items[1].Plan != "WL-PLAN-1" ||
 		len(got.Items[1].Tasks) != 1 || got.Items[1].Tasks[0] != "WL-1" {
 		t.Errorf("second item = %+v; want the unexecuted plan item", got.Items[1])
 	}
@@ -497,7 +505,7 @@ func TestDocTodoResolvesShorthandWithoutProjectKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("doc todo WL-SPEC-1: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "docs/specs/001-example.md") || !strings.Contains(out, "unplanned") {
+	if !strings.Contains(out, "WL-SPEC-1") || !strings.Contains(out, "unplanned") {
 		t.Errorf("output is not the spec's work list:\n%s", out)
 	}
 }
@@ -562,10 +570,10 @@ Body.
 	if err != nil {
 		t.Fatalf("doc todo --deps: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "docs/specs/001-example.md") || !strings.Contains(out, "docs/specs/003-required.md") {
+	if !strings.Contains(out, "WL-SPEC-1") || !strings.Contains(out, "WL-SPEC-3") {
 		t.Fatalf("--deps output does not label both documents:\n%s", out)
 	}
-	if strings.Index(out, "docs/specs/001-example.md") > strings.Index(out, "docs/specs/003-required.md") {
+	if strings.Index(out, "WL-SPEC-1") > strings.Index(out, "WL-SPEC-3") {
 		t.Errorf("--deps reordered the walk: the named document must lead\n%s", out)
 	}
 
@@ -574,7 +582,7 @@ Body.
 	if err != nil {
 		t.Fatalf("doc todo: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(out, "unfollowed") || !strings.Contains(out, "003-required.md") {
+	if !strings.Contains(out, "unfollowed") || !strings.Contains(out, "WL-SPEC-1 requires WL-SPEC-3") {
 		t.Errorf("footer does not name the unfollowed requires edge:\n%s", out)
 	}
 }
@@ -616,8 +624,57 @@ Body.
 	if err != nil {
 		t.Fatalf("doc todo: %v\noutput: %s", err, out)
 	}
-	want := "nothing outstanding: every section of docs/specs/004-done.md is planned and executed\n"
+	want := "nothing outstanding: every section of WL-SPEC-4 is planned and executed\n"
 	if out != want {
 		t.Errorf("finished spec printed %q; want %q", out, want)
+	}
+}
+
+// TestDocTodoRefsLinkAndAlign covers the two halves of WL-624 that no
+// end-to-end run can reach, because linking needs a real terminal: a
+// reference is emitted as an OSC 8 link when one is configured, and the plan
+// column is still padded by what the reader sees rather than by the length of
+// the URL behind it.
+func TestDocTodoRefsLinkAndAlign(t *testing.T) {
+	refs := newDocTodoRefs([]model.Doc{
+		{Kind: "spec", Number: 1, Slug: "001-example", ProjectKey: "WL"},
+		{Kind: "plan", Number: 7, Slug: "001-1-first", ProjectKey: "WL"},
+		{Kind: "plan", Number: 12, Slug: "001-2-second", ProjectKey: "WL"},
+	}, "https://lode.example")
+
+	link := refs.ref("docs/plans/001-1-first.md")
+	if !strings.Contains(link, "https://lode.example/docs/ref/WL-PLAN-7") ||
+		!strings.Contains(link, "WL-PLAN-7") {
+		t.Fatalf("plan reference is not a link to its cockpit page: %q", link)
+	}
+	// A reference inside a produced line is rewritten too, by either form the
+	// walk names a document in.
+	if got := refs.rewrite("requires docs/plans/001-2-second.md, not discharged"); got !=
+		"requires "+refs.ref("docs/plans/001-2-second.md")+", not discharged" {
+		t.Errorf("rewrite left a corpus path: %q", got)
+	}
+	if got := refs.rewrite("001-example.md requires 001-2-second.md"); strings.Contains(got, ".md") {
+		t.Errorf("bare filenames survived the rewrite: %q", got)
+	}
+	// A path no document claims is still not printed as a path.
+	if got := refs.ref("docs/specs/009-missing.md"); got != "009-missing" {
+		t.Errorf("unknown path = %q; want its slug", got)
+	}
+
+	var buf strings.Builder
+	writeDocTodoTable(&buf, refs, []designdoc.TodoItem{
+		{Type: designdoc.TodoUnexecuted, Doc: "docs/specs/001-example.md", Anchor: "sec-1",
+			Plan: "docs/plans/001-1-first.md", Detail: "1 task open: WL-1"},
+		{Type: designdoc.TodoUnexecuted, Doc: "docs/specs/001-example.md", Anchor: "sec-2",
+			Plan: "docs/plans/001-2-second.md", Detail: "1 task open: WL-2"},
+	}, designdoc.Diagnostics{})
+	var details []int
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if i := strings.Index(line, "1 task open"); i >= 0 {
+			details = append(details, cli.VisibleLen(line[:i]))
+		}
+	}
+	if len(details) != 2 || details[0] != details[1] {
+		t.Errorf("detail column is misaligned at %v:\n%s", details, buf.String())
 	}
 }
