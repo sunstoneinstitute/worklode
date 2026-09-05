@@ -67,6 +67,7 @@ func newDocCmd() *cobra.Command {
 		newDocListCmd(),
 		newDocShowCmd(),
 		newDocVersionsCmd(),
+		newDocReferrersCmd(),
 		newDocEditCmd(),
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
@@ -459,6 +460,48 @@ func newDocVersionsCmd() *cobra.Command {
 				return nil
 			}
 			cli.DocVersionsTable(cmd.OutOrStdout(), versions)
+			return nil
+		},
+	}
+	return cmd
+}
+
+// newDocReferrersCmd is `lode doc referrers <ref>#sec-N` (025 §8.2): the
+// open work pointing at one section — an accepted document whose text names
+// it, and the claimed, unfinished tasks of the plans that cover it. It is
+// what a fixer reads before patching accepted text, and the same query the
+// §8.3 patch gate runs.
+//
+// The fragment is required. A referrer is a fact about one section, so a
+// whole-document ref has no answer rather than a broader one.
+func newDocReferrersCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               "referrers <ref>#sec-N",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "List the open work pointing at one section of a document",
+		Args:              cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ref, anchor := designdoc.SplitFragment(args[0])
+			if anchor == "" {
+				return fmt.Errorf("%q names no section: a referrer is a fact about one section, so name it (<ref>#sec-N)", args[0])
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, ref)
+			if err != nil {
+				return err
+			}
+			refs, raw, err := c.DocSectionReferrers(cmd.Context(), id, anchor)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DocReferrersTable(cmd.OutOrStdout(), refs.Referrers)
 			return nil
 		},
 	}

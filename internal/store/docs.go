@@ -1137,3 +1137,75 @@ func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, er
 	}
 	return d, nil
 }
+
+// claimedOpenStates is the SQL list of every state a claim holds short of
+// delivery or abandonment — 025 §8.2's "claimed but unfinished". Derived
+// from the state machine (allStates) less the states a task occupies before
+// anyone claims it and less deliveredStateSet, so a new mid-flight state
+// joins the referrer set without an edit here.
+var claimedOpenStates = func() string {
+	var quoted []string
+	for _, st := range allStates() {
+		if st == "draft" || st == "ready" || deliveredStateSet[st] {
+			continue
+		}
+		quoted = append(quoted, "'"+st+"'")
+	}
+	return strings.Join(quoted, ", ")
+}()
+
+// DocSectionReferrers answers 025 §8.2: which open work points at this
+// section, and would therefore have to be told if the section's text
+// changed. See docSectionReferrers for what counts.
+//
+// The answer is about the section, not about who is asking: §8.3's patch
+// gate excludes the plan its own patching task was minted from, which is a
+// fact the caller holds and this reader does not.
+func (s *Store) DocSectionReferrers(ctx context.Context, docID int64, anchor string) ([]model.DocReferrer, error) {
+	return docSectionReferrers(ctx, s.db, docID, anchor)
+}
+
+// docSectionReferrers is DocSectionReferrers against any queryer, so the
+// §8.3 patch gate can ask the same question inside the transaction that
+// patches the section.
+//
+// Two halves. An accepted document holding an anchored
+// requires/covers/amends/replaces edge at the section has written text
+// against it. A plan is not counted as such a document: a plan's claim on a
+// section is the work claimed from it, so it enters through its
+// claimed-but-unfinished tasks instead, and an accepted covering plan whose
+// tasks are all unclaimed or already delivered is 025 §8.6's stale-marking
+// business rather than a referrer.
+func docSectionReferrers(ctx context.Context, q rowQueryer, docID int64, anchor string) ([]model.DocReferrer, error) {
+	rows, err := q.QueryContext(ctx,
+		`SELECT 'doc' AS kind, d.slug AS ref, e.type AS rel, d.title
+		   FROM doc_edges e
+		   JOIN docs d ON d.id = e.from_doc
+		  WHERE e.to_doc = $1 AND e.to_anchor = $2
+		    AND e.type IN ('requires','covers','amends','replaces')
+		    AND d.kind <> 'plan' AND d.status = 'accepted' AND d.deleted_at IS NULL
+		  UNION ALL
+		 SELECT 'task', t.id, e.type, t.title
+		   FROM tasks t
+		   JOIN docs p ON p.id = t.plan_doc
+		    AND p.status = 'accepted' AND p.deleted_at IS NULL
+		   JOIN doc_edges e ON e.from_doc = p.id
+		    AND e.to_doc = $1 AND e.to_anchor = $2 AND e.type = 'covers'
+		  WHERE t.deleted_at IS NULL AND t.state IN (`+claimedOpenStates+`)
+		  ORDER BY kind, ref`,
+		docID, anchor)
+	if err != nil {
+		return nil, fmt.Errorf("doc %d section %s referrers: %w", docID, anchor, err)
+	}
+	defer rows.Close()
+
+	out := []model.DocReferrer{}
+	for rows.Next() {
+		var r model.DocReferrer
+		if err := rows.Scan(&r.Kind, &r.Ref, &r.Rel, &r.Title); err != nil {
+			return nil, fmt.Errorf("scan doc referrer: %w", err)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
