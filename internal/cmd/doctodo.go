@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
+	"path"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -126,10 +129,86 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 		return err
 	}
 	if jsonOut(cmd) {
-		return writeDocTodoJSON(cmd, items, diag)
+		return writeDocTodoJSON(cmd, newDocTodoRefs(resp.Docs, ""), items, diag)
 	}
-	writeDocTodoTable(cmd.OutOrStdout(), designdoc.CorpusPath(target.Kind, target.Slug), items, diag)
+	refs := newDocTodoRefs(resp.Docs, docTodoLinkBase(cmd, cfg))
+	refs.target = refs.ref(designdoc.CorpusPath(target.Kind, target.Slug))
+	writeDocTodoTable(cmd.OutOrStdout(), refs, items, diag)
 	return nil
+}
+
+// docTodoRefs turns the corpus paths the walk keys on into the references a
+// reader acts on. The walk still keys on `docs/specs/<slug>.md`, because
+// that is the form the corpus writes its covers and requires edges in, but
+// no such file has existed since 055 moved documents into the backbone
+// (WL-624). What gets printed is the WL-SPEC-62 shorthand `lode show` takes.
+//
+// server, when set, is the cockpit base URL every reference is linked to.
+type docTodoRefs struct {
+	byPath map[string]string
+	server string
+	target string // the reference the run was asked about, for the empty-list line
+}
+
+// corpusMD matches a corpus path or bare filename inside a produced line: a
+// blocked item's "requires ...", a diagnostic's "X requires Y".
+var corpusMD = regexp.MustCompile(`[A-Za-z0-9._/-]*[A-Za-z0-9._-]\.md`)
+
+// newDocTodoRefs indexes the corpus by both forms the walk names a document
+// in: the full path its edges carry, and the bare filename its diagnostics
+// print.
+func newDocTodoRefs(docs []model.Doc, server string) *docTodoRefs {
+	r := &docTodoRefs{byPath: make(map[string]string, 2*len(docs)), server: server}
+	for _, d := range docs {
+		// A document with no number predates 029 §4's backfill, and
+		// cli.DocRef renders it as its bare kind, which resolves nothing.
+		// Its slug is still a reference `lode show` takes.
+		ref := d.Slug
+		if d.Number != 0 {
+			ref = cli.DocRef(d)
+		}
+		p := designdoc.CorpusPath(d.Kind, d.Slug)
+		r.byPath[p], r.byPath[path.Base(p)] = ref, ref
+	}
+	return r
+}
+
+// ref renders one corpus path as its reference, linked when the terminal
+// renders links. A path no document claims degrades to its slug: the file
+// does not exist either way, and the slug is what a reader would try next.
+func (r *docTodoRefs) ref(p string) string {
+	if p == "" {
+		return ""
+	}
+	ref, ok := r.byPath[p]
+	if !ok {
+		ref, ok = r.byPath[path.Base(p)]
+	}
+	if !ok {
+		// Nothing to link to: the document is not in the corpus, so a
+		// cockpit URL built from its slug would only 404.
+		return strings.TrimSuffix(path.Base(p), ".md")
+	}
+	if r.server == "" {
+		return ref
+	}
+	return cli.Hyperlink(r.server+"/docs/ref/"+url.PathEscape(ref), ref)
+}
+
+// rewrite replaces every corpus path inside a produced line with its
+// reference, so one rule covers the plan column and the reasons alike.
+func (r *docTodoRefs) rewrite(s string) string {
+	return corpusMD.ReplaceAllStringFunc(s, r.ref)
+}
+
+// docTodoLinkBase is the cockpit base URL references link to, or "" when the
+// output is not a terminal that renders links — a pipe, a file, a terminal
+// not on the list, or a checkout with no server configured.
+func docTodoLinkBase(cmd *cobra.Command, cfg cli.Config) string {
+	if cfg.ServerURL == "" || !cli.Hyperlinks(cmd.OutOrStdout()) {
+		return ""
+	}
+	return strings.TrimSuffix(cfg.ServerURL, "/")
 }
 
 // docTodoCorpusConcurrency bounds the body fetches below. The walk needs every
@@ -212,19 +291,20 @@ func docTodoPlanTasks(cmd *cobra.Command, c *cli.Client, cfg cli.Config, docs []
 	return func(plan string) []designdoc.ExecutionTask { return byPlan[plan] }, nil
 }
 
-func writeDocTodoJSON(cmd *cobra.Command, items []designdoc.TodoItem, diag designdoc.Diagnostics) error {
+func writeDocTodoJSON(cmd *cobra.Command, refs *docTodoRefs, items []designdoc.TodoItem, diag designdoc.Diagnostics) error {
 	res := docTodoResult{
 		Items: make([]docTodoItem, 0, len(items)),
 		Diagnostics: docTodoDiagnostics{
-			Unfollowed: orEmpty(diag.Unfollowed),
-			Cycles:     orEmpty(diag.Cycles),
-			Notes:      orEmpty(diag.Notes),
+			Unfollowed: refsAll(refs, orEmpty(diag.Unfollowed)),
+			Cycles:     refsAll(refs, orEmpty(diag.Cycles)),
+			Notes:      refsAll(refs, orEmpty(diag.Notes)),
 		},
 	}
 	for _, it := range items {
 		res.Items = append(res.Items, docTodoItem{
-			Type: it.Type, Doc: it.Doc, Anchor: it.Anchor, Anchors: it.Anchors,
-			Heading: it.Heading, Plan: it.Plan, Tasks: it.Tasks, Detail: it.Detail,
+			Type: it.Type, Doc: refs.ref(it.Doc), Anchor: it.Anchor, Anchors: it.Anchors,
+			Heading: it.Heading, Plan: refs.ref(it.Plan), Tasks: it.Tasks,
+			Detail: refs.rewrite(it.Detail),
 		})
 	}
 	b, err := json.Marshal(res)
@@ -233,6 +313,15 @@ func writeDocTodoJSON(cmd *cobra.Command, items []designdoc.TodoItem, diag desig
 	}
 	printRaw(cmd, b)
 	return nil
+}
+
+// refsAll rewrites a diagnostics block's lines through refs.
+func refsAll(refs *docTodoRefs, lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = refs.rewrite(l)
+	}
+	return out
 }
 
 // orEmpty keeps a diagnostics key an empty array rather than null, so a
@@ -310,16 +399,16 @@ const docTodoContinuedNote = "(continued) marks a document the queue returns to:
 // Column widths are measured per run, not over the whole list: one document
 // with a long plan filename would otherwise pad every planless row in every
 // other document out to its width, which on this corpus is most of them.
-func writeDocTodoTable(w io.Writer, docPath string, items []designdoc.TodoItem, diag designdoc.Diagnostics) {
+func writeDocTodoTable(w io.Writer, refs *docTodoRefs, items []designdoc.TodoItem, diag designdoc.Diagnostics) {
 	if len(items) == 0 {
-		fmt.Fprintf(w, "nothing outstanding: every section of %s is planned and executed\n", docPath)
-		writeDocTodoFooter(w, diag)
+		fmt.Fprintf(w, "nothing outstanding: every section of %s is planned and executed\n", refs.target)
+		writeDocTodoFooter(w, refs, diag)
 		return
 	}
 
 	rows := make([]docTodoRow, 0, len(items))
 	for _, it := range items {
-		rows = append(rows, docTodoRowFor(it))
+		rows = append(rows, docTodoRowFor(refs, it))
 	}
 	seen := map[string]bool{}
 	continued := false
@@ -347,7 +436,7 @@ func writeDocTodoTable(w io.Writer, docPath string, items []designdoc.TodoItem, 
 		fmt.Fprintln(w, docTodoContinuedNote)
 	}
 	fmt.Fprintf(w, "\n%s\n", docTodoLegend)
-	writeDocTodoFooter(w, diag)
+	writeDocTodoFooter(w, refs, diag)
 }
 
 // docTodoRowFor flattens one item into its cells, and decides which of the
@@ -360,12 +449,12 @@ func writeDocTodoTable(w io.Writer, docPath string, items []designdoc.TodoItem, 
 //     first, so it goes on a continuation line instead of running off the edge.
 //   - everything else: the reason, which carries the task id or the section
 //     count that nothing else on the row does.
-func docTodoRowFor(it designdoc.TodoItem) docTodoRow {
+func docTodoRowFor(refs *docTodoRefs, it designdoc.TodoItem) docTodoRow {
 	r := docTodoRow{
-		doc: it.Doc, typ: it.Type, sections: docTodoSections(it),
-		plan: shortenPlanRefs(it.Plan),
+		doc: refs.ref(it.Doc), typ: it.Type, sections: docTodoSections(it),
+		plan: refs.ref(it.Plan),
 	}
-	detail := shortenPlanRefs(it.Detail)
+	detail := refs.rewrite(it.Detail)
 	switch {
 	case it.Type == designdoc.TodoPlanDraft && it.Heading != "":
 		r.detail = ellipsize(it.Heading, maxHeadingCell)
@@ -375,16 +464,6 @@ func docTodoRowFor(it designdoc.TodoItem) docTodoRow {
 		r.detail = detail
 	}
 	return r
-}
-
-// shortenPlanRefs drops the plan corpus's own directory from every plan
-// reference in s — the column and the "requires ..." reasons alike, so one
-// rule covers both. What is left is the plan's canonical reference, its bare
-// slug; the directory it shares with every
-// other plan is the one part a reader gains nothing from. The --json items
-// keep the full repo-relative paths.
-func shortenPlanRefs(s string) string {
-	return strings.ReplaceAll(s, designdoc.CorpusDir("plan")+"/", "")
 }
 
 // writeDocTodoRun prints one document's consecutive items, aligned among
@@ -414,7 +493,7 @@ func writeDocTodoRun(w io.Writer, rows []docTodoRow) {
 			// needs no padding.
 			line += "  " + r.plan
 		default:
-			line += fmt.Sprintf("  %-*s  %s", planW, r.plan, r.detail)
+			line += "  " + pad(r.plan, planW) + "  " + r.detail
 		}
 		fmt.Fprintln(w, strings.TrimRight(line, " "))
 		if r.reason != "" {
@@ -423,7 +502,18 @@ func writeDocTodoRun(w io.Writer, rows []docTodoRow) {
 	}
 }
 
-func runeLen(s string) int { return len([]rune(s)) }
+// runeLen is the width a cell prints in. A linked reference carries escapes
+// that occupy no columns, so every width here measures through cli.VisibleLen
+// or the plan column would pad by the length of a URL.
+func runeLen(s string) int { return cli.VisibleLen(s) }
+
+// pad right-pads s to width columns.
+func pad(s string, width int) string {
+	if n := width - runeLen(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
+}
 
 // maxHeadingCell bounds the detail column when it carries a heading. A
 // document's own title runs past eighty characters here; it is prose, so the
@@ -441,7 +531,7 @@ func ellipsize(s string, width int) string {
 
 // writeDocTodoFooter prints the diagnostics: one labelled block per non-empty
 // category, its count in the label so a long list reads at a glance.
-func writeDocTodoFooter(w io.Writer, diag designdoc.Diagnostics) {
+func writeDocTodoFooter(w io.Writer, refs *docTodoRefs, diag designdoc.Diagnostics) {
 	blocks := []struct {
 		label string
 		lines []string
@@ -456,7 +546,7 @@ func writeDocTodoFooter(w io.Writer, diag designdoc.Diagnostics) {
 		}
 		fmt.Fprintf(w, "\n%s (%d):\n", b.label, len(b.lines))
 		for _, l := range b.lines {
-			fmt.Fprintf(w, "  %s\n", l)
+			fmt.Fprintf(w, "  %s\n", refs.rewrite(l))
 		}
 	}
 }
