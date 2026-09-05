@@ -42,8 +42,9 @@ func TestInboxDotOnProjectsPage(t *testing.T) {
 	// no FK to pull_requests).
 	actor := "grace"
 	seedEvent(t, st, "inbox-dot-approval", func(tx *sql.Tx, _ int64) error {
-		return store.InsertAwaitingApproval(tx, st.Now(), "pr",
-			store.PREntityID("acme/widgets", 3), "shainboxdot", nil, &actor)
+		_, err := store.InsertAwaitingApproval(tx, st.Now(), "pr",
+			store.PREntityID("acme/widgets", 3), "shainboxdot", "", nil, &actor, nil)
+		return err
 	})
 
 	rows, err := st.ListAwaitingApprovals(context.Background())

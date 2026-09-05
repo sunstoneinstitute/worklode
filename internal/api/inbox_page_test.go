@@ -100,7 +100,9 @@ func TestInboxPage(t *testing.T) {
 			return err
 		}
 		actor := "grace"
-		return store.InsertAwaitingApproval(tx, now, "pr", store.PREntityID("acme/alpha", 1), "sha-assigned", nil, &actor)
+		_, err := store.InsertAwaitingApproval(tx, now, "pr",
+			store.PREntityID("acme/alpha", 1), "sha-assigned", "", nil, &actor, nil)
+		return err
 	})
 
 	// Bucket 2: an open review with no required actor, in a project grace
@@ -113,7 +115,9 @@ func TestInboxPage(t *testing.T) {
 		}, ""); err != nil {
 			return err
 		}
-		return store.InsertAwaitingApproval(tx, now, "pr", store.PREntityID("acme/alpha", 2), "sha-unassigned", nil, nil)
+		_, err := store.InsertAwaitingApproval(tx, now, "pr",
+			store.PREntityID("acme/alpha", 2), "sha-unassigned", "", nil, nil, nil)
+		return err
 	})
 
 	// Bucket 3: grace's own pull request, required of bob.
@@ -126,7 +130,9 @@ func TestInboxPage(t *testing.T) {
 			return err
 		}
 		actor := "bob"
-		return store.InsertAwaitingApproval(tx, now, "pr", store.PREntityID("acme/alpha", 3), "sha-owned", nil, &actor)
+		_, err := store.InsertAwaitingApproval(tx, now, "pr",
+			store.PREntityID("acme/alpha", 3), "sha-owned", "", nil, &actor, nil)
+		return err
 	})
 
 	assigned := ibCreateTask(t, st, "task-assigned", now, "alpha", "Assigned task", "zed", "grace")

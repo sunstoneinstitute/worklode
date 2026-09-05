@@ -96,8 +96,9 @@ func seedPRApproval(t *testing.T, st *store.Store, seed prApprovalSeed) seededAp
 		}, ""); err != nil {
 			return err
 		}
-		return store.InsertAwaitingApproval(tx, now, "pr",
-			store.PREntityID(repo, number), revision, requiredRole, nil)
+		_, err := store.InsertAwaitingApproval(tx, now, "pr",
+			store.PREntityID(repo, number), revision, "", requiredRole, nil, nil)
+		return err
 	})
 
 	// Read the id back through the queue reader rather than a hand-rolled
