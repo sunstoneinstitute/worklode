@@ -64,8 +64,9 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 }
 
 // readyCandidates returns every task eligible for pickup: state ready, no
-// child_of children, not a decision, not needs_decomposition, not
-// human_only, unleased, not blocked by an open 'blocks' edge from a task not
+// child_of children, neither a decision nor a rally, not
+// needs_decomposition, not human_only, unleased, not blocked by an open
+// 'blocks' edge from a task not
 // in a closed state, and not held by a plan-to-plan ordering edge
 // (planBlockedCondition, 025 §9.3). An empty projectID matches every
 // project; an empty kind matches every kind. A task with children is
@@ -74,9 +75,10 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 // excluded the same way and for the same reason — it has nothing to check
 // out either — but the predicate is on the kind rather than on an edge:
 // unlike a container, a decision has no child that would let the query
-// detect it any other way (004 §6.3 as amended). A tombstoned task is never
-// handed out, and a tombstoned child does not make its parent a container
-// (044 §4).
+// detect it any other way (004 §6.3 as amended). A rally is excluded on the
+// same predicate and for the same reason: it names other tasks, and the work
+// is its members. A tombstoned task is never handed out, and a tombstoned
+// child does not make its parent a container (044 §4).
 //
 // This is the one seam both ranked paths go through — Frontier and ClaimNext
 // share it via rankedFrontier — so human_only is filtered here and nowhere
@@ -90,7 +92,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		  AND NOT EXISTS (SELECT 1 FROM task_edges c
 		                  JOIN tasks ct ON ct.id = c.from_task AND ct.deleted_at IS NULL
 		                  WHERE c.to_task = t.id AND c.type = 'child_of')
-		  AND t.kind <> 'decision'
+		  AND t.kind NOT IN ('decision', 'rally')
 		  AND NOT t.needs_decomposition
 		  AND NOT t.human_only
 		  AND ($1 = '' OR t.project_id = $1)
@@ -141,8 +143,8 @@ func (s *Store) projectFocusMap(ctx context.Context, projectIDs []string) (map[s
 // rankedFrontier is the ranking pipeline both Frontier and ClaimNext run:
 // the ready set for (projectID, kind), ordered by rankTasks under the given
 // focus mode, plus the blocking fan-out map the ranking used. It writes
-// nothing. An empty ready set short-circuits before the fan-out and focus
-// queries — neither has anything to say about no tasks — and yields a nil
+// nothing. An empty ready set short-circuits before the fan-out, rally and
+// focus queries — none has anything to say about no tasks — and yields a nil
 // slice with a non-nil empty map.
 func (s *Store) rankedFrontier(ctx context.Context, projectID, kind string, strictFocus bool) ([]model.Task, map[string]int, error) {
 	candidates, err := s.readyCandidates(ctx, projectID, kind)
@@ -154,6 +156,11 @@ func (s *Store) rankedFrontier(ctx context.Context, projectID, kind string, stri
 	}
 
 	fanOut, err := s.BlockingFanOut(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	inRally, err := s.rallyMembers(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -173,7 +180,7 @@ func (s *Store) rankedFrontier(ctx context.Context, projectID, kind string, stri
 
 	in := make([]rankInput, len(candidates))
 	for i, t := range candidates {
-		in[i] = rankInput{Task: t, Focus: focus[t.Project], FanOut: fanOut[t.ID]}
+		in[i] = rankInput{Task: t, Focus: focus[t.Project], FanOut: fanOut[t.ID], InRally: inRally[t.ID]}
 	}
 	return rankTasks(in, strictFocus), fanOut, nil
 }
@@ -203,9 +210,10 @@ func (s *Store) Frontier(ctx context.Context, projectID string) ([]model.Task, m
 // (a claim-next call spanning multiple projects uses each task's own
 // project), and fan-out is precomputed by BlockingFanOut.
 type rankInput struct {
-	Task   model.Task
-	Focus  []string // the task's project focus
-	FanOut int
+	Task    model.Task
+	Focus   []string // the task's project focus
+	FanOut  int
+	InRally bool // the task is in an open rally's blocker closure
 }
 
 // concernRank returns the index of concern in focus (lower is more
@@ -227,6 +235,22 @@ func concernRank(concern string, focus []string) int {
 // same), so focus alone decides the head of the queue.
 func criticalRank(priority string, strictFocus bool) int {
 	if !strictFocus && priority == "critical" {
+		return 0
+	}
+	return 1
+}
+
+// rallyRank lifts the open rally's members above everything else, ahead of
+// even criticalRank: a rally is hand-assembled, so it is a deliberate
+// override of the computed order. Strict focus keeps this arm — the rally is
+// the human's focus, and dropping it would leave --strict-focus ignoring the
+// one signal a person set by hand.
+//
+// Membership only sorts; it never narrows the ready set (readyCandidates has
+// no rally filter), so agents fall through to other ready work once the
+// rally's members are done or all leased — spec 005 §2 still holds.
+func rallyRank(inRally bool) int {
+	if inRally {
 		return 0
 	}
 	return 1
@@ -260,8 +284,8 @@ func numericTaskID(id string) int {
 
 // rankTasks orders candidates by the spec-02 key:
 //
-//	default:      (is_critical desc, concern_rank asc, priority asc, fan_out desc)
-//	strict-focus: (concern_rank asc, priority asc, fan_out desc)
+//	default:      (in_rally desc, is_critical desc, concern_rank asc, priority asc, fan_out desc)
+//	strict-focus: (in_rally desc, concern_rank asc, priority asc, fan_out desc)
 //
 // tiebreak: created_at asc, then numeric id asc. The sort is stable and its
 // inputs are pure, so identical input always yields identical output.
@@ -269,6 +293,7 @@ func rankTasks(in []rankInput, strictFocus bool) []model.Task {
 	ranked := slices.Clone(in)
 	slices.SortStableFunc(ranked, func(a, b rankInput) int {
 		return cmp.Or(
+			cmp.Compare(rallyRank(a.InRally), rallyRank(b.InRally)),
 			cmp.Compare(criticalRank(a.Task.Priority, strictFocus), criticalRank(b.Task.Priority, strictFocus)),
 			cmp.Compare(concernRank(a.Task.Concern, a.Focus), concernRank(b.Task.Concern, b.Focus)),
 			cmp.Compare(priorityRank(a.Task.Priority), priorityRank(b.Task.Priority)),

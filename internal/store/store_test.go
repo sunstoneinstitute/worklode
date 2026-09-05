@@ -89,18 +89,18 @@ func TestMigrateRoundTrip(t *testing.T) {
 // TestMigrateRoundTripWithLiveRally is TestMigrateRoundTrip with a rally
 // that has done its job still in the database, one row in every table
 // 0069's down migration must clear before DELETE FROM tasks: a blocks edge
-// (task_edges), an active lease (leases — rally is not yet unclaimable, that
-// lands in a later task), a document it authored (docs.generated_by_task), a
-// note raised against it (doc_notes.task_id), a promoted issue and PR
-// pointing at it (issues.task_id, pull_requests.task_id), and a decisions
-// row attached to it (decisions.task_id — AddDecision/EditDecision check
-// only that the task is live, not its kind, so this is reachable today; the
-// "a rally cannot carry a decision" rule is a later task, not this one).
-// Every one of these is a non-CASCADE foreign key onto tasks(id), so any one
-// left populated fails the whole MigrateDown. The non-task rows are
-// inserted directly (like insertDoc/seedDocNoteTask elsewhere in this
-// package) since only the schema-level FK matters here, not each table's
-// own creation-path validation.
+// (task_edges), a lease (leases), a document it authored
+// (docs.generated_by_task), a note raised against it (doc_notes.task_id), a
+// promoted issue and PR pointing at it (issues.task_id,
+// pull_requests.task_id), and a decisions row attached to it
+// (decisions.task_id). Every one of these is a non-CASCADE foreign key onto
+// tasks(id), so any one left populated fails the whole MigrateDown.
+//
+// Every row but the tasks themselves is inserted directly (like
+// insertDoc/seedDocNoteTask elsewhere in this package). Only the schema-level
+// FK matters here, and the store now refuses three of these outright — a
+// rally blocks nothing, is never claimed, and carries no decisions — so the
+// migration still has to survive rows an older database may hold.
 func TestMigrateRoundTripWithLiveRally(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t) // up happened here, plus the horndb/stig fixtures
@@ -110,11 +110,16 @@ func TestMigrateRoundTripWithLiveRally(t *testing.T) {
 	rally := createTask(t, s, taskTestNow, rallyInput)
 	target := createTask(t, s, taskTestNow, defaultTaskInput())
 
-	if err := addEdge(t, s, rally.ID, target.ID, "blocks"); err != nil {
-		t.Fatalf("add blocks edge onto the rally: %v", err)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, 'blocks', $3)`,
+		rally.ID, target.ID, taskTestNow); err != nil {
+		t.Fatalf("insert blocks edge from the rally: %v", err)
 	}
-	if _, err := s.Claim(t.Context(), rally.ID, "stig", "/tmp/wt", time.Hour); err != nil {
-		t.Fatalf("claim the rally: %v", err)
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO leases (task_id, actor_id, worktree, acquired_at, renewed_at, expires_at)
+		 VALUES ($1, 'stig', '/tmp/wt', $2, $2, $3)`,
+		rally.ID, taskTestNow, taskTestNow.Add(time.Hour)); err != nil {
+		t.Fatalf("insert lease on the rally: %v", err)
 	}
 
 	var docID int64

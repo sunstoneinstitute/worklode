@@ -803,11 +803,12 @@ func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
 // transaction. Self-edges are rejected for all four types. A child_of edge
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
-// edges. follow_up_to and duplicate_of are unchecked beyond their partial
-// unique indexes: both are cross-project by design and nothing walks either
-// transitively. A missing endpoint returns ErrNotFound. Appends a state_log
-// row for both endpoints, attributed to eventID, so a cross-project edge
-// dirties both projects.
+// edges. A 'blocks' edge may not start at a rally: a rally's own blockers are
+// its membership, and it blocks nothing in turn. follow_up_to and
+// duplicate_of are unchecked beyond their partial unique indexes: both are
+// cross-project by design and nothing walks either transitively. A missing
+// endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
+// attributed to eventID, so a cross-project edge dirties both projects.
 func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID int64) error {
 	if typ != "child_of" && typ != "blocks" && typ != "follow_up_to" && typ != "duplicate_of" {
 		return fmt.Errorf("unknown edge type %q: %w", typ, ErrInvalidInput)
@@ -831,6 +832,19 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 	if typ == "child_of" {
 		if err := checkHierarchy(tx, fromTask, toTask, project); err != nil {
 			return err
+		}
+	}
+	if typ == "blocks" {
+		// A rally is only ever the to_task of a 'blocks' edge: the edges
+		// pointing at it are its membership. Letting one block something
+		// would make finishing that thing wait on a goal nobody works.
+		var fromKind string
+		if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, fromTask).Scan(&fromKind); err != nil {
+			return fmt.Errorf("kind of %s: %w", fromTask, err)
+		}
+		if fromKind == "rally" {
+			return fmt.Errorf("task %s is a rally and cannot block another task: %w",
+				fromTask, ErrInvalidInput)
 		}
 	}
 	if _, err := tx.Exec(

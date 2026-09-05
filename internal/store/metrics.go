@@ -42,6 +42,7 @@ type storeMetrics struct {
 	searchRequests        *prometheus.CounterVec
 	searchSeconds         *prometheus.HistogramVec
 	searchArmEmpties      *prometheus.CounterVec
+	rallyReads            *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -112,8 +113,12 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_search_arm_empty_total",
 			Help: "Searches where an arm that ran offered no candidates, by arm (dense|lexical).",
 		}, []string{"arm"}),
+		rallyReads: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_rally_reads_total",
+			Help: "Open-rally reads by outcome (ok|none|error).",
+		}, []string{"outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -272,6 +277,16 @@ func (m *storeMetrics) searchArmEmpty(arm string) {
 		return
 	}
 	m.searchArmEmpties.WithLabelValues(arm).Inc()
+}
+
+// rallyRead records one OpenRally call by outcome. "none" — the project has
+// no open rally — is the ordinary case, not an error, so it gets its own
+// label rather than folding into either of the other two.
+func (m *storeMetrics) rallyRead(outcome string) {
+	if m == nil {
+		return
+	}
+	m.rallyReads.WithLabelValues(outcome).Inc()
 }
 
 // claimOutcome maps a Claim error to its metric label. Everything outside the

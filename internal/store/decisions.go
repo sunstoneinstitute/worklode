@@ -337,7 +337,8 @@ func InsertDecision(tx *sql.Tx, taskID string, d model.Decision) (*model.Decisio
 }
 
 // AddDecision poses one question on an existing task (025 §10.1), recorded
-// as a "decision.posed" cli event. Any kind of task may carry rows.
+// as a "decision.posed" cli event. Any kind of task but a rally may carry
+// rows.
 //
 // Errors: ErrNotFound if the task does not exist or is soft-deleted, or if
 // actorID does not name an actor; ErrInvalidInput for a spec violation;
@@ -512,23 +513,34 @@ func updateDecision(tx *sql.Tx, id int64, taskID string, d model.Decision, repos
 // requireLiveTask refuses an unknown or soft-deleted task, the same
 // tombstone rule Claim uses (044 §4).
 func requireLiveTask(tx *sql.Tx, taskID string) error {
-	var one int
-	err := tx.QueryRow(`SELECT 1 FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&one)
+	var kind string
+	err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
 	if err != nil {
 		return fmt.Errorf("check task %s: %w", taskID, err)
 	}
+	return rejectRallyDecision(taskID, kind)
+}
+
+// rejectRallyDecision refuses a decision row on a rally. A rally carries no
+// content of its own — its 'blocks' edges are the whole of it — so a question
+// posed there is a question nobody reads. Pose it on the member it is about.
+func rejectRallyDecision(taskID, kind string) error {
+	if kind == "rally" {
+		return fmt.Errorf("task %s is a rally and cannot carry decisions: %w", taskID, ErrInvalidInput)
+	}
 	return nil
 }
 
 // requireOpenTask additionally refuses a task in a terminal state: a
-// question moved onto a closed task would never be answered.
+// question moved onto a closed task would never be answered. The rally rule
+// applies to a re-parent the same way it does to a pose.
 func requireOpenTask(tx *sql.Tx, taskID string) error {
-	var state string
+	var state, kind string
 	err := tx.QueryRow(
-		`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&state)
+		`SELECT state, kind FROM tasks WHERE id = $1 AND deleted_at IS NULL`, taskID).Scan(&state, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
 	}
@@ -538,5 +550,5 @@ func requireOpenTask(tx *sql.Tx, taskID string) error {
 	if deliveredStateSet[state] {
 		return fmt.Errorf("task %s is %s: cannot pose a decision on it: %w", taskID, state, ErrInvalidInput)
 	}
-	return nil
+	return rejectRallyDecision(taskID, kind)
 }
