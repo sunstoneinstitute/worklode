@@ -90,13 +90,17 @@ func TestMigrateRoundTrip(t *testing.T) {
 // that has done its job still in the database, one row in every table
 // 0069's down migration must clear before DELETE FROM tasks: a blocks edge
 // (task_edges), an active lease (leases — rally is not yet unclaimable, that
-// lands in a later task), and, reachable through that same claimed session,
-// a document it authored (docs.generated_by_task) and a note raised against
-// it (doc_notes.task_id). All four are non-CASCADE foreign keys onto
-// tasks(id), so any one of them left populated fails the whole MigrateDown.
-// The doc and note rows are inserted directly (like insertDoc/
-// seedDocNoteTask elsewhere in this package) since only the schema-level FK
-// matters here, not CreateDoc/AddDocNote's own validation.
+// lands in a later task), a document it authored (docs.generated_by_task), a
+// note raised against it (doc_notes.task_id), a promoted issue and PR
+// pointing at it (issues.task_id, pull_requests.task_id), and a decisions
+// row attached to it (decisions.task_id — AddDecision/EditDecision check
+// only that the task is live, not its kind, so this is reachable today; the
+// "a rally cannot carry a decision" rule is a later task, not this one).
+// Every one of these is a non-CASCADE foreign key onto tasks(id), so any one
+// left populated fails the whole MigrateDown. The non-task rows are
+// inserted directly (like insertDoc/seedDocNoteTask elsewhere in this
+// package) since only the schema-level FK matters here, not each table's
+// own creation-path validation.
 func TestMigrateRoundTripWithLiveRally(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t) // up happened here, plus the horndb/stig fixtures
@@ -126,9 +130,25 @@ func TestMigrateRoundTripWithLiveRally(t *testing.T) {
 		docID, rally.ID, taskTestNow); err != nil {
 		t.Fatalf("insert doc note raised by the rally: %v", err)
 	}
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO issues (repo, number, task_id) VALUES ('horndb/repo', 1, $1)`,
+		rally.ID); err != nil {
+		t.Fatalf("insert issue promoted to the rally: %v", err)
+	}
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO pull_requests (repo, number, state, task_id) VALUES ('horndb/repo', 1, 'open', $1)`,
+		rally.ID); err != nil {
+		t.Fatalf("insert PR linked to the rally: %v", err)
+	}
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO decisions (task_id, key, position, question, response_type)
+		 VALUES ($1, 'x-distribution', 1, 'Which way?', 'yes_no')`,
+		rally.ID); err != nil {
+		t.Fatalf("insert decision attached to the rally: %v", err)
+	}
 
 	if err := s.MigrateDown(MigrationsDirForTests()); err != nil {
-		t.Fatalf("migrate down with a live rally (edge + lease + doc + note): %v", err)
+		t.Fatalf("migrate down with a live rally (edge + lease + doc + note + issue + PR + decision): %v", err)
 	}
 	if err := s.Migrate(MigrationsDirForTests()); err != nil {
 		t.Fatalf("migrate back up: %v", err)

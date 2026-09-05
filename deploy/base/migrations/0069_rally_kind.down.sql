@@ -11,9 +11,7 @@
 --   pull_requests.task_id                     -- RESTRICT (0001_baseline)
 --   docs.generated_by_task                    -- NO ACTION (0044)
 --   doc_notes.task_id                         -- NO ACTION (0065)
---   decisions.task_id                         -- NO ACTION (0068); left alone
---     on purpose: kind is fixed at creation (internal/api/tasks.go), so a
---     decisions row can never belong to a rally.
+--   decisions.task_id                         -- NO ACTION, NOT NULL (0068)
 --
 -- Drop the index before the rows so its predicate never has to evaluate
 -- against a kind the CHECK is about to disallow.
@@ -42,6 +40,10 @@ UPDATE docs SET generated_by_task = NULL
     WHERE generated_by_task IN (SELECT id FROM tasks WHERE kind = 'rally');
 UPDATE doc_notes SET task_id = NULL
     WHERE task_id IN (SELECT id FROM tasks WHERE kind = 'rally');
+
+-- task_id is NOT NULL, so unlike the above there is no null to fall back
+-- to; a rally's decisions rows go with it.
+DELETE FROM decisions WHERE task_id IN (SELECT id FROM tasks WHERE kind = 'rally');
 
 DELETE FROM tasks WHERE kind = 'rally';
 
