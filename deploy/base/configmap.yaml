@@ -19,7 +19,12 @@ data:
   # this is configuration, not new provider code. No LODE_EMBEDDING_API_KEY:
   # the Service is cluster-local and unauthenticated.
   LODE_EMBEDDING_URL: "http://worklode-embeddings.worklode.svc.cluster.local/v1/embeddings"
-  LODE_EMBEDDING_MODEL: "google/embeddinggemma-300m"
+  # The name text-embeddings-inference serves under, which is whatever
+  # --model-id says: the weights are baked in at /model, so the repo id is not
+  # a name it answers to. Sending the repo id makes TEI warn "has not been
+  # found ... should be provided either empty or with model=/model instead" on
+  # every call.
+  LODE_EMBEDDING_MODEL: "/model"
   # EmbeddingGemma is asymmetric: a query and a document must be embedded with
   # different instruction prefixes (040 §3), and getting it wrong costs
   # retrieval quality without ever raising an error. The trailing spaces are
