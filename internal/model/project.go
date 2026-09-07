@@ -15,6 +15,12 @@ type Project struct {
 	Key   string        `json:"key"`
 	Repos []RepoMapping `json:"repos"`
 	Focus []string      `json:"focus"`
+
+	// The approval flow governing the project (029 §7.2), so a reader can
+	// name it without unmarshalling the stored snapshot. Absent until a
+	// flow is applied.
+	ApprovalFlowName string `json:"approval_flow_name,omitempty"`
+	ApprovalFlowRev  string `json:"approval_flow_rev,omitempty"`
 }
 
 // ProjectListResponse is the response body of GET /api/v1/projects.
