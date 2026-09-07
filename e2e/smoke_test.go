@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -629,7 +630,9 @@ func primaryNavRegion(t *testing.T, body string) string {
 // carries the project name and the crashloop failure (the org-wide board,
 // now the task-oriented destination — see docs/specs/032-project-cockpit.md
 // §2), the project's own run board (032 §8) loads at its route, and the
-// task page loads. It also proves spec 056 end to end: the shared shell's
+// task page loads. Home's Morning Brief is the same degradation seen from
+// the other side: no session means no brief and a refused POST
+// /home/reviewed. It also proves spec 056 end to end: the shared shell's
 // top bar carries the inbox indicator, the Primary nav landmark lists
 // exactly the five destinations §1 shrank it to (Home, Reviews and
 // Deliveries left the list but keep their routes, checked below), and
@@ -651,6 +654,24 @@ func assertWebPages(t *testing.T, baseURL, taskID string) {
 	}
 	if strings.Contains(body, "Current work") {
 		t.Fatalf("home page still renders the retired board framing %q:\n%s", "Current work", body)
+	}
+
+	// The Morning Brief's boundary (032 §9) is per actor, and this stack has
+	// no login provider: open mode renders no brief at all, and the mutation
+	// that would move a boundary is refused. The GET after the refusal is how
+	// the absence of a cursor row shows on a public surface.
+	if strings.Contains(body, "Morning Brief") {
+		t.Fatalf("open mode renders a Morning Brief section:\n%s", body)
+	}
+	if code, _ := postForm(t, baseURL, "/home/reviewed", url.Values{"cutoff": {"1"}}); code != http.StatusForbidden {
+		t.Fatalf("POST /home/reviewed without a session: status = %d, want 403", code)
+	}
+	code, body = getPage(t, baseURL+"/")
+	if code != http.StatusOK {
+		t.Fatalf("GET / after the refused review: status = %d, want 200", code)
+	}
+	if strings.Contains(body, "Morning Brief") {
+		t.Fatalf("a refused review left a brief behind:\n%s", body)
 	}
 
 	nav := primaryNavRegion(t, body)
