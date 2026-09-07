@@ -237,6 +237,36 @@ func CurrentProjectFrom(startDir string) string {
 	return ""
 }
 
+// ServerURLFrom returns the worklode server URL for startDir's repo, using
+// only the LODE_SERVER override and the local config files -- repo-local
+// first, then the user config -- with no keychain access: the same cheap,
+// dir-scoped contract WorktreeDirFrom and CurrentProjectFrom have, for a
+// caller (the status line) that re-renders on every assistant message.
+// Returns "" when nothing sets one. The URL keeps whatever form the config
+// gave it, minus a trailing slash.
+func ServerURLFrom(startDir string) string {
+	if v := os.Getenv("LODE_SERVER"); v != "" {
+		return strings.TrimSuffix(v, "/")
+	}
+	var paths []string
+	if repoPath, ok := findRepoConfig(startDir); ok {
+		paths = append(paths, repoPath)
+	}
+	if userPath, err := configPath(); err == nil {
+		paths = append(paths, userPath)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if cfg, err := parseConfig(string(data)); err == nil && cfg.ServerURL != "" {
+			return strings.TrimSuffix(cfg.ServerURL, "/")
+		}
+	}
+	return ""
+}
+
 // LoadConfig reads the config files (a missing file is not an error — its
 // fields are just left empty), merges the repo-local config found from the
 // working directory on top of the user config, and applies the

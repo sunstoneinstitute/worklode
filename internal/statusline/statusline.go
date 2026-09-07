@@ -21,9 +21,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -261,6 +263,12 @@ func renderLocation(p *Payload, fallbackDir string, dark bool) string {
 		dir, _ = os.Getwd()
 	}
 
+	// A task-bound workspace needs nothing else: the id is the whole segment,
+	// so this returns before the rev-parse and the remote lookup below.
+	if taskID, ok := worktree.StampedTaskID(dir); ok {
+		return formatTaskLocation(taskID, cli.ServerURLFrom(dir), dark)
+	}
+
 	// One rev-parse for toplevel, common .git dir, and branch.
 	info, err := gitexec.Text(dir, "rev-parse", "--path-format=absolute",
 		"--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD")
@@ -272,36 +280,59 @@ func renderLocation(p *Payload, fallbackDir string, dark bool) string {
 	mainWorktree := filepath.Dir(lines[1]) // parent of the common .git dir
 	branch := lines[2]
 
-	project := gitProject(dir, mainWorktree)
-	if taskID, ok := worktree.StampedTaskID(dir); ok {
-		return formatTaskLocation(project, taskID, branch, dark)
-	}
-	return formatLocation(project, toplevel != mainWorktree, branch)
+	return formatLocation(gitProject(dir, mainWorktree), toplevel != mainWorktree, branch)
 }
 
-// formatTaskLocation renders a workspace bound to a task: the task id in
-// blue, then project, then slug as three words. The branch is rendered from
-// the id and slug (`WL-7-fix-the-thing`), so splitting the id back off
-// recovers the slug, and a space where the joining dash was reads as two
-// facts rather than one long token.
+// formatTaskLocation renders a workspace bound to a task: the task id alone,
+// in blue, hyperlinked to the task on the worklode server when the terminal
+// renders OSC 8 links and a server URL is configured.
 //
-// A branch that does not carry the id — renamed by hand, or produced by a
-// LODE_BRANCH_TEMPLATE that orders the parts differently — yields no slug, and
-// the id stands alone rather than having a guess appended to it.
-//
-// The id's colour is reset back to locationColor rather than ansiReset alone,
-// because the caller wraps the whole location segment in locationColor and
-// this text sits inside that span.
-func formatTaskLocation(project, taskID, branch string, dark bool) string {
-	taskIDColor, resumeColor := taskIDColorLight, locationColorLight
+// Project, branch and worktree state are all implied by the id — a task
+// branch is rendered *from* the id (`WL-7-fix-the-thing`), and the worktree
+// exists because the task does — so at the width of a terminal prompt they
+// are the same fact three more times.
+func formatTaskLocation(taskID, server string, dark bool) string {
+	color := taskIDColorLight
 	if dark {
-		taskIDColor, resumeColor = taskIDColorDark, locationColorDark
+		color = taskIDColorDark
 	}
-	out := fmt.Sprintf("%s%s%s%s %s", taskIDColor, taskID, ansiReset, resumeColor, project)
-	if slug := strings.TrimPrefix(branch, taskID+"-"); slug != branch && slug != "" {
-		out += " " + slug
+	var link string
+	if server != "" {
+		link = server + "/" + taskID
 	}
-	return out
+	return color + osc8(taskID, link) + ansiReset
+}
+
+// osc8 wraps text in an OSC 8 hyperlink to url. An empty url, or a terminal
+// that does not render the sequence, gets the text unchanged: a terminal
+// without support prints the escape as garbage rather than ignoring it.
+func osc8(text, url string) string {
+	if url == "" || !hyperlinksSupported() {
+		return text
+	}
+	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
+}
+
+// hyperlinksSupported reports whether the terminal the harness is drawing in
+// is known to render OSC 8 hyperlinks. Sniffing the environment is the only
+// signal there is: this command's stdout is a pipe to the harness, never a
+// terminal, so there is nothing to query. Unknown means no — a missed link
+// costs nothing, a printed escape sequence costs the line.
+func hyperlinksSupported() bool {
+	switch os.Getenv("TERM_PROGRAM") {
+	case "iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper", "rio", "tabby":
+		return true
+	}
+	for _, key := range []string{"KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION"} {
+		if os.Getenv(key) != "" {
+			return true
+		}
+	}
+	// VTE (gnome-terminal, tilix, ...) gained OSC 8 in 0.50.
+	if v, err := strconv.Atoi(os.Getenv("VTE_VERSION")); err == nil {
+		return v >= 5000
+	}
+	return false
 }
 
 // gitProject returns the project name: the basename of the remote URL with any
@@ -323,11 +354,8 @@ func gitProject(dir, mainWorktree string) string {
 // workspace that carries no task binding. Both symbols sit together
 // immediately before the branch name when in a worktree.
 //
-// A workspace bound to a task shows the task id here instead: the id is the
-// name of the work, and once it is known the branch and worktree symbols only
-// spell out what the id already implies — a task branch is rendered *from* the
-// id (`WL-7-fix-the-thing`), so showing both is the same fact twice at the
-// width of a terminal prompt.
+// A workspace bound to a task never reaches here: renderLocation shows the
+// task id alone instead — see formatTaskLocation.
 func formatLocation(project string, isWorktree bool, branch string) string {
 	out := project
 	hasBranch := branch != "" && branch != "HEAD"
