@@ -410,6 +410,10 @@ type server struct {
 	// not counted here — worklode_authz_decisions_total already carries it.
 	approvalDecisions *prometheus.CounterVec
 
+	// approvalRequirements counts approval rows materialized from a review
+	// flow, by origin; see observeApprovalRequirements.
+	approvalRequirements *prometheus.CounterVec
+
 	// doc sync (spec 025 §15.7): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
 
