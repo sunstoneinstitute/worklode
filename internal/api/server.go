@@ -413,6 +413,9 @@ type server struct {
 	// approvalRequirements counts approval rows materialized from a review
 	// flow, by origin; see observeApprovalRequirements.
 	approvalRequirements *prometheus.CounterVec
+	// approvalFlowApplies counts applies of an approval flow to a project,
+	// by outcome; see observeApprovalFlowApply.
+	approvalFlowApplies *prometheus.CounterVec
 
 	// doc sync (spec 025 §15.7): runs by result, request duration, docs synced
 	// by kind/outcome, and forced (--force) syncs accepted.
@@ -787,6 +790,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("PATCH /api/v1/projects/{id}", s.patchProject)
 	r.api("POST /api/v1/projects/{id}/session-usage", s.reportProjectSessionUsage)
 	r.api("POST /api/v1/projects/{id}/repos", s.addRepo)
+	r.api("POST /api/v1/projects/{id}/approval-flow", s.applyApprovalFlow)
 	r.api("PATCH /api/v1/repos/{owner}/{name}", s.patchRepo)
 	r.api("DELETE /api/v1/repos/{owner}/{name}", s.removeRepo)
 	r.api("GET /api/v1/repos/doctor", s.reposDoctor)

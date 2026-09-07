@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // projectRepos runs `lode project list --json` and returns the repo mappings
@@ -687,5 +688,66 @@ func TestProjectCrewRemove(t *testing.T) {
 	}
 	if out != "" {
 		t.Fatalf("crew remove --json output = %q, want empty (204 has no body)", out)
+	}
+}
+
+// seedDeliverable declares one deliverable straight through the store: there
+// is no `lode deliverable` command to declare it with, and the flow apply
+// under test only needs something for the backfill to find.
+func seedDeliverable(t *testing.T, st *store.Store, project, name string) {
+	t.Helper()
+	tx, err := st.DBForTests().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback() //nolint:errcheck // committed below on the happy path
+	if _, err := store.CreateDeliverable(tx, st.Now(), store.DeliverableInput{
+		ProjectID: project, Name: name, CreatedBy: "alice",
+	}); err != nil {
+		t.Fatalf("create deliverable %s: %v", name, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestProjectSetFlow drives `lode project set flow` end to end: the apply
+// prints its one-line confirmation, --json is the server's own body, and an
+// unknown flow name is an error the CLI surfaces rather than a silent
+// success.
+func TestProjectSetFlow(t *testing.T) {
+	st, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	ctx := context.Background()
+	if err := st.CreateActor(ctx, "ada", "human", "Ada", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	seedDeliverable(t, st, "proj", "Scientific report")
+
+	out, err := runLode(t, "project", "set", "flow", "proj",
+		"--name", "story", "--reviewer", "report/journalist=ada")
+	if err != nil {
+		t.Fatalf("set flow: %v\noutput: %s", err, out)
+	}
+	if want := "applied story rev 1 to proj (PROJ): 3 requirements materialized"; !strings.Contains(out, want) {
+		t.Fatalf("set flow output = %q, want it to contain %q", out, want)
+	}
+
+	// Re-applying materializes nothing new, and --json prints the server's
+	// own body.
+	out, err = runLode(t, "project", "set", "flow", "proj", "--name", "story", "--json")
+	if err != nil {
+		t.Fatalf("set flow --json: %v\noutput: %s", err, out)
+	}
+	var resp model.ApplyApprovalFlowResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode output %q: %v", out, err)
+	}
+	if resp.Materialized != 0 || resp.Project.ApprovalFlowName != "story" {
+		t.Fatalf("resp = %+v, want an idempotent re-apply of story", resp)
+	}
+
+	if out, err := runLode(t, "project", "set", "flow", "proj", "--name", "nope"); err == nil {
+		t.Fatalf("unknown flow: want an error, got nil\noutput: %s", out)
 	}
 }

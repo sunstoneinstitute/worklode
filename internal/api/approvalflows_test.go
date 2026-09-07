@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 func flowByName(t *testing.T, flows []model.ApprovalFlow, name string) model.ApprovalFlow {
@@ -170,5 +172,172 @@ func TestNewServerLoadsApprovalFlows(t *testing.T) {
 	}
 	if actor == nil {
 		t.Fatal("NewServer did not ensure the worklode service actor")
+	}
+}
+
+// --- applying a flow (029 §7.2) ---------------------------------------
+
+// flowApproval is one materialized row, read straight from the table: the
+// awaiting queue's joins do not carry deliverable-kind rows yet (WL-719).
+type flowApproval struct{ entityID, lane, state, role, actor, createdBy string }
+
+// flowApprovalRows returns every deliverable-kind approval row, lane-ordered.
+func flowApprovalRows(t *testing.T, st *store.Store) []flowApproval {
+	t.Helper()
+	rows, err := st.DBForTests().Query(
+		`SELECT entity_id, lane, state, COALESCE(required_role, ''),
+		        COALESCE(required_actor, ''), COALESCE(created_by, '')
+		   FROM approvals WHERE entity_kind = 'deliverable'
+		  ORDER BY entity_id, lane`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []flowApproval
+	for rows.Next() {
+		var r flowApproval
+		if err := rows.Scan(&r.entityID, &r.lane, &r.state, &r.role, &r.actor, &r.createdBy); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// countEvents returns how many events of one type the log holds.
+func countEvents(t *testing.T, st *store.Store, typ string) int {
+	t.Helper()
+	var n int
+	if err := st.DBForTests().QueryRow(
+		`SELECT count(*) FROM events WHERE type = $1`, typ).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+// createDeliverableNamed declares one deliverable through the JSON API and
+// returns its id.
+func createDeliverableNamed(t *testing.T, h http.Handler, token, project, name string) string {
+	t.Helper()
+	rr := doReq(t, h, "POST", "/api/v1/projects/"+project+"/deliverables", token,
+		model.CreateDeliverableInput{Name: name})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create deliverable %s = %d, body %s", name, rr.Code, rr.Body.String())
+	}
+	id, _ := decodeMap(t, rr)["id"].(string)
+	if id == "" {
+		t.Fatalf("created deliverable has no id: %s", rr.Body.String())
+	}
+	return id
+}
+
+// TestApplyFlowStampsSnapshotAndBackfills is 029 §7.2's apply act: the
+// project carries the flow it was stamped with, the deliverables it already
+// held owe the lanes that flow demands, a named reviewer replaces the lane's
+// role, and applying the same flow again is idempotent in rows while still
+// recording that it happened.
+func TestApplyFlowStampsSnapshotAndBackfills(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	report := createDeliverableNamed(t, h, token, "proj", "Scientific report")
+	// A deliverable no lane targets: the backfill must leave it alone.
+	createDeliverableNamed(t, h, token, "proj", "Interview notes")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/approval-flow", token,
+		model.ApplyApprovalFlowInput{
+			Name:      "story",
+			Reviewers: map[string]string{"report/journalist": "alice"},
+		})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("apply status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var out model.ApplyApprovalFlowResponse
+	decodeInto(t, rr, &out)
+	if out.Materialized != 3 || out.Project.ApprovalFlowName != "story" || out.Project.ApprovalFlowRev != "1" {
+		t.Errorf("materialized=%d flow=%q rev=%q, want 3 / story / 1",
+			out.Materialized, out.Project.ApprovalFlowName, out.Project.ApprovalFlowRev)
+	}
+
+	// The reviewer template replaces the role on the lane it names, and only
+	// there; every row is the system actor's, since the rule filed it.
+	want := []flowApproval{
+		{report, "report/buddy", "awaiting", "report-buddies", "", "worklode"},
+		{report, "report/expert", "awaiting", "domain-experts", "", "worklode"},
+		{report, "report/journalist", "awaiting", "", "alice", "worklode"},
+	}
+	got := flowApprovalRows(t, st)
+	if len(got) != len(want) {
+		t.Fatalf("materialized %d rows, want %d: %+v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("row %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+
+	// Re-apply: no new rows, but the act is recorded again — an apply is an
+	// explicit, event-logged decision, not a diff.
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/approval-flow", token,
+		model.ApplyApprovalFlowInput{
+			Name:      "story",
+			Reviewers: map[string]string{"report/journalist": "alice"},
+		})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("re-apply status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	decodeInto(t, rr, &out)
+	if out.Materialized != 0 {
+		t.Errorf("re-apply materialized %d rows, want 0", out.Materialized)
+	}
+	if n := len(flowApprovalRows(t, st)); n != 3 {
+		t.Errorf("after re-apply %d rows, want 3", n)
+	}
+	if n := countEvents(t, st, "approval_flow.applied"); n != 2 {
+		t.Errorf("approval_flow.applied events = %d, want 2", n)
+	}
+}
+
+// TestApprovalFlowMetric: worklode_approval_flow_applied_total carries one
+// series per outcome, pre-initialised to zero, and an unknown flow name is a
+// 404 that writes nothing — the flow vocabulary is instance configuration, so
+// a name nothing defines is a missing resource, not a bad field.
+func TestApprovalFlowMetric(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	createDeliverableNamed(t, h, token, "proj", "Scientific report")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/approval-flow", token,
+		model.ApplyApprovalFlowInput{Name: "no-such-flow"})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown flow = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+	if n := len(flowApprovalRows(t, st)); n != 0 {
+		t.Errorf("an unknown flow materialized %d rows, want none", n)
+	}
+	if n := countEvents(t, st, "approval_flow.applied"); n != 0 {
+		t.Errorf("an unknown flow recorded %d events, want none", n)
+	}
+
+	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/approval-flow", token,
+		model.ApplyApprovalFlowInput{Name: "story"}); rr.Code != http.StatusOK {
+		t.Fatalf("apply = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	for _, want := range []string{
+		`worklode_approval_flow_applied_total{outcome="applied"} 1`,
+		`worklode_approval_flow_applied_total{outcome="unknown_flow"} 1`,
+		// Pre-initialised, so an instance where no apply has failed reads as
+		// zero rather than as no-data.
+		`worklode_approval_flow_applied_total{outcome="error"} 0`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("metrics missing %s", want)
+		}
 	}
 }
