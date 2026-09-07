@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 
@@ -114,29 +113,11 @@ func initGitRepoInDir(t *testing.T, dir string) string {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
-	run := func(args ...string) {
-		t.Helper()
-		// commit.gpgsign=false: the developer's global config may enable
-		// signing, which a temp-repo test commit must not depend on.
-		c := exec.Command("git", append([]string{"-c", "commit.gpgsign=false"}, args...)...)
-		c.Dir = dir
-		c.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init")
+	gitIn(t, dir, "init")
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("test\n"), 0o644); err != nil {
 		t.Fatalf("write README: %v", err)
 	}
-	run("add", "README.md")
-	run("commit", "-m", "initial commit")
-
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
-	if err != nil {
-		t.Fatalf("rev-parse toplevel: %v", err)
-	}
-	return strings.TrimSpace(string(out))
+	gitIn(t, dir, "add", "README.md")
+	gitIn(t, dir, "commit", "-m", "initial commit")
+	return gitIn(t, dir, "rev-parse", "--show-toplevel")
 }
