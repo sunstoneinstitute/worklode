@@ -386,3 +386,77 @@ func TestCreateTaskWithDecisions(t *testing.T) {
 		t.Fatalf("create with an invalid row status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 }
+
+// TestDecideDecision covers POST /api/v1/tasks/{id}/decisions/{key}/decide:
+// the 200 body is the answered row, a decision-kind task closes on its last
+// answer, and the store's refusals map to 409/422/404.
+func TestDecideDecision(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	// Answering an unassigned task assigns it to the decider, and an
+	// assignee must be on the project's crew (029 §6.1).
+	if rr := doReq(t, h, "POST", "/api/v1/projects/proj/participants", token,
+		map[string]any{"actor": "alice"}); rr.Code != http.StatusCreated {
+		t.Fatalf("add alice to the crew status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	id := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Scope call", "priority": "high", "kind": "decision",
+	})["id"].(string)
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decisions", token,
+		poseBody("ship-date", "yes_no")); rr.Code != http.StatusCreated {
+		t.Fatalf("pose status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	path := "/api/v1/tasks/" + id + "/decisions/ship-date/decide"
+	rr := doReq(t, h, "POST", path, token, map[string]any{"value": "yes"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("decide status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	answer, _ := got["answer"].(map[string]any)
+	if answer["value"] != "yes" || got["decided_by"] != "alice" || got["decided_at"] == nil {
+		t.Fatalf("answered row = %v", got)
+	}
+	task := doReq(t, h, "GET", "/api/v1/tasks/"+id, token, nil)
+	if state := decodeMap(t, task)["state"]; state != "merged" {
+		t.Fatalf("task state = %v, want merged: the last answer closes the task", state)
+	}
+
+	// Recording is terminal, and a closed task is past deciding: both are
+	// conflicts, not bad input.
+	if rr = doReq(t, h, "POST", path, token, map[string]any{"value": "no"}); rr.Code != http.StatusConflict {
+		t.Fatalf("re-decide status = %d, want 409; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestDecideDecisionRejectsAnAnswerTheTypeDoesNotDefine: a spec violation is
+// 422, and the row stays unanswered.
+func TestDecideDecisionRejectsAnAnswerTheTypeDoesNotDefine(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	id := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Scope call", "priority": "high", "kind": "decision",
+	})["id"].(string)
+	if rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decisions", token,
+		poseBody("ship-date", "yes_no")); rr.Code != http.StatusCreated {
+		t.Fatalf("pose status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decisions/ship-date/decide", token,
+		map[string]any{"freetext": "sometime"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id+"/decisions/ship-date", token, nil)
+	if _, ok := decodeMap(t, rr)["answer"]; ok {
+		t.Fatalf("a refused answer was written: %s", rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decisions/nope/decide", token,
+		map[string]any{"value": "yes"})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown key status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
