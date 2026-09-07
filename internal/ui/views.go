@@ -161,16 +161,25 @@ type ApprovalsView struct {
 // document hangs off its project with no task in between, and a row whose
 // kind nothing correlates has neither. Kind, Revision and Age are
 // pre-formatted for display (see FmtAge).
+//
+// Lane is the flow requirement this row answers (029 §7.2), "" for a row that
+// answers no named lane. Two lanes of one revision are two rows, and the lane
+// is what tells them apart on the page.
+//
+// Decidable is false for a row whose approval names no revision: the store
+// refuses that decide, so the page renders why instead of the form.
 type ApprovalRow struct {
 	ID                int64
-	Kind              string // "PR", "Document"
+	Kind              string // the entity kind: "pr", "doc", "deliverable", "task"
 	EntityID          string
 	Title, URL        string
 	Revision          string // the version under review, when the kind has one
+	Lane              string
 	TaskID, ProjectID string
 	ProjectName       string
 	RequiredActorName string
 	Age               string
+	Decidable         bool
 }
 
 // --- inbox (spec 056 §3) -----------------------------------------------------

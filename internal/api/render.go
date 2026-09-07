@@ -87,10 +87,13 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 // row's age against. ID carries through because each row renders the decide
 // form that posts to /approvals/{id}/decide (029 §7.3).
 //
-// The kind label and the revision are formatted here, not in internal/ui,
-// which takes pre-formatted rows. Every kind but a PR shows its revision: an
-// approval is granted against one version and the reviewer needs to see
-// which, where a PR's own page already shows the head its link resolves to.
+// The revision is formatted here, not in internal/ui, which takes
+// pre-formatted rows. Every kind but a PR shows its revision: an approval is
+// granted against one version and the reviewer needs to see which, where a
+// PR's own page already shows the head its link resolves to.
+//
+// Decidable follows the store's own rule: an approval naming no revision
+// cannot be decided, so the row must not offer the form.
 func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsView {
 	out := make([]ui.ApprovalRow, 0, len(rows))
 	for _, a := range rows {
@@ -100,22 +103,14 @@ func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsVie
 			EntityID:    a.EntityID,
 			Title:       a.Title,
 			URL:         a.URL,
+			Lane:        a.Lane,
 			TaskID:      a.Task,
 			ProjectID:   a.Project,
 			ProjectName: a.ProjectName,
 			Age:         ui.FmtAge(a.CreatedAt, now),
+			Decidable:   a.SubjectRevision != "",
 		}
-		switch a.EntityKind {
-		case "pr":
-			row.Kind = "PR"
-		case "doc":
-			row.Kind = "Document"
-			row.Revision = a.SubjectRevision
-		case "deliverable":
-			row.Kind = "Deliverable"
-			row.Revision = a.SubjectRevision
-		case "task":
-			row.Kind = "Task"
+		if a.EntityKind != "pr" {
 			row.Revision = a.SubjectRevision
 		}
 		if a.RequiredActorName != nil {
