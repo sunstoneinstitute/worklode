@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -448,6 +449,136 @@ func (s *Store) EditDecision(ctx context.Context, taskID, key, actorID string, i
 		return nil, err
 	}
 	return edited, nil
+}
+
+// answerableStates are the task states a decision may still be recorded
+// from. Each has a legal edge to merged, which is what lets the last answer
+// close the task in the same transaction; a delivered or abandoned task has
+// nothing left to decide.
+var answerableStates = map[string]bool{"ready": true, "in_progress": true, "in_review": true}
+
+// RecordDecision records actorID's answer to the question taskID poses under
+// key, as a "task.decided" cli event (025 §10.1). Recording is terminal: an
+// already-answered row is never written over — deciding again is another row.
+// When the task's kind is "decision" and this was its last unanswered row,
+// the same transaction moves the task to merged. The last answer and the
+// closure are one act, so they share one event id.
+//
+// Ownership mirrors StartTask: an unassigned task is assigned to actorID
+// (recorded via LogChange), and a task assigned to someone else is refused —
+// the assignee is the accountable decider (029 §6.1).
+//
+// Errors: ErrNotFound for an unknown task, actor or key; ErrBadTransition if
+// the task is past deciding or the row is already answered; ErrInvalidInput
+// if the task is blocked, assigned to someone else, or the answer does not
+// satisfy the row's response_type.
+func (s *Store) RecordDecision(ctx context.Context, taskID, key, actorID string, a model.DecisionAnswer) (*model.Decision, error) {
+	extID, err := randomExternalID()
+	if err != nil {
+		return nil, err
+	}
+	payload, err := EventPayload(map[string]any{"task": taskID, "actor": actorID, "key": key})
+	if err != nil {
+		return nil, err
+	}
+
+	var recorded *model.Decision
+	_, _, err = s.RecordEvent(ctx, "cli", extID, "task.decided", payload,
+		func(tx *sql.Tx, eventID int64) error {
+			if err := requireActor(tx, actorID); err != nil {
+				return err
+			}
+			project, state, assignee, err := lockTaskOwnership(tx, taskID)
+			if err != nil {
+				return err
+			}
+			// The kind decides whether the last answer closes the task. It is
+			// read under the lock lockTaskOwnership just took.
+			var kind string
+			if err := tx.QueryRow(`SELECT kind FROM tasks WHERE id = $1`, taskID).Scan(&kind); err != nil {
+				return fmt.Errorf("read kind of task %s: %w", taskID, err)
+			}
+			if !answerableStates[state] {
+				return fmt.Errorf("task %s is %s: nothing left to decide: %w", taskID, state, ErrBadTransition)
+			}
+			blocked, err := IsBlocked(tx, taskID)
+			if err != nil {
+				return err
+			}
+			if blocked {
+				return fmt.Errorf("task %s is blocked: %w", taskID, ErrInvalidInput)
+			}
+			if assignee != "" && assignee != actorID {
+				return fmt.Errorf("task %s: assigned to %s, who decides it; unassign first: %w",
+					taskID, assignee, ErrInvalidInput)
+			}
+			posed, err := lockDecision(tx, taskID, key)
+			if err != nil {
+				return err
+			}
+			if err := validateAnswer(posed, a); err != nil {
+				return err
+			}
+
+			now := s.nowFn().UTC().Truncate(time.Second)
+			if assignee == "" {
+				if err := requireCrewMember(tx, project, actorID); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(
+					`UPDATE tasks SET assignee = $1, updated_at = $2 WHERE id = $3`,
+					actorID, now, taskID,
+				); err != nil {
+					return fmt.Errorf("assign task %s: %w", taskID, err)
+				}
+				// old is always "" here: this branch only runs when the task
+				// was unassigned.
+				if err := LogChange(tx, "task", taskID, eventID,
+					map[string]string{"field": "assignee", "old": "", "new": actorID}); err != nil {
+					return err
+				}
+			}
+
+			answer, err := json.Marshal(a)
+			if err != nil {
+				return fmt.Errorf("encode answer of %s/%s: %w", taskID, key, err)
+			}
+			row := tx.QueryRow(
+				`UPDATE decisions SET answer = $1, decided_by = $2, decided_at = $3
+				  WHERE task_id = $4 AND key = $5 AND answer IS NULL
+				 RETURNING `+decisionColumns,
+				answer, actorID, now, taskID, key)
+			d, err := scanDecision(row)
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("decision %s/%s is already answered; recording is terminal, so pose another row: %w",
+					taskID, key, ErrBadTransition)
+			}
+			if err != nil {
+				return fmt.Errorf("record decision %s/%s: %w", taskID, key, err)
+			}
+			recorded = &d
+
+			if kind != "decision" {
+				return nil
+			}
+			var open int
+			if err := tx.QueryRow(
+				`SELECT count(*) FROM decisions WHERE task_id = $1 AND answer IS NULL`, taskID,
+			).Scan(&open); err != nil {
+				return fmt.Errorf("count unanswered decisions of %s: %w", taskID, err)
+			}
+			if open > 0 {
+				return nil
+			}
+			// state came from lockTaskOwnership's FOR UPDATE read, so the
+			// transition needs no re-read.
+			return transitionKnown(tx, now, taskID, state, state, "merged", eventID)
+		})
+	s.metrics.decision("answer", decisionOutcome(err))
+	if err != nil {
+		return nil, err
+	}
+	return recorded, nil
 }
 
 // applyDecisionInput folds in over base. pose=true builds a fresh row from
