@@ -60,30 +60,11 @@ var l3DomainActions = map[string]bool{
 	"note": true,
 }
 
-// nounViews is every L6 named view in the tree, by full command path. A view
-// is a noun, so checks 2 and 3 — which read a subcommand's name as a verb —
-// must not run over it, and asking "is this verb allowed" is unanswerable
-// until this set is known.
-//
-// L6's own list is illustrative, not exhaustive: it names seventeen of these
-// and the tree holds twenty-seven. So this is a second normative list, and it
-// lives in a test rather than in the spec it enforces — an inversion worth
-// fixing. **It should move into 061 (§5, beside the four checks it feeds, or
-// L6) the next time that spec is revised**, at which point this comment goes
-// with it.
-//
-// Provenance, since it differs by entry:
-//   - Verbatim from L6: task brief, task board, task tree, task blockers,
-//     task cost, task frontier, task critical-path, doc todo, doc versions,
-//     doc reviewers, secret catalog, event subscribers, graph quarantines,
-//     project overview, project health, project focus, project crew.
-//   - Named in §2.1–§2.3's rename tables but absent from L6's list:
-//     graph drift, graph gaps, task timeline, work status, and project repo
-//     (which §2.2 calls a nested entity group).
-//   - **Mentioned nowhere in 061:** graph triples, secret status,
-//     task checklist, task skills, doc referrers, doc sections. These six are
-//     the entries this test legislates outright, and they are the reason the
-//     list belongs in the spec rather than here.
+// nounViews is the noun-subcommand table of 061 §5, transcribed by full
+// command path: the L6 named views plus §2.2's nested entity groups. A noun is
+// not a verb, so checks 2 and 3 must not run over it, and "is this verb
+// allowed" is unanswerable until this set is known. The set is closed in the
+// spec's own words — adding a member is part of adding the command.
 var nounViews = map[string]bool{
 	"lode doc referrers":      true,
 	"lode doc reviewers":      true,
@@ -167,7 +148,7 @@ func TestNameRule(t *testing.T) {
 						"061 §1 to open the closed set it belongs in", path)
 				}
 			case nounViews[path]:
-				seenView[path] = true // L6: a noun, so not this rule's business
+				seenView[path] = true // 061 §5: a noun, so not this rule's business
 			case c.Name() == "set":
 				// L4: under `set` the field "is an argument, not part of its
 				// name". `project set focus-note` is a field, never a verb.
@@ -217,8 +198,8 @@ func TestNameRule(t *testing.T) {
 	}
 	for path := range nounViews {
 		if !seenView[path] {
-			t.Errorf("nounViews names %q, which is not a command: a rename was missed, so the "+
-				"view is now being read as a verb under some other path", path)
+			t.Errorf("061 §5's noun-subcommand table names %q, which is not a command: a rename "+
+				"was missed, so the noun is now being read as a verb under some other path", path)
 		}
 	}
 	for path, reason := range hyphenatedVerbs {
