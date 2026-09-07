@@ -66,7 +66,7 @@ var l3DomainActions = map[string]bool{
 // until this set is known.
 //
 // L6's own list is illustrative, not exhaustive: it names seventeen of these
-// and the tree holds twenty-six. So this is a second normative list, and it
+// and the tree holds twenty-seven. So this is a second normative list, and it
 // lives in a test rather than in the spec it enforces — an inversion worth
 // fixing. **It should move into 061 (§5, beside the four checks it feeds, or
 // L6) the next time that spec is revised**, at which point this comment goes
@@ -81,12 +81,13 @@ var l3DomainActions = map[string]bool{
 //     graph drift, graph gaps, task timeline, work status, and project repo
 //     (which §2.2 calls a nested entity group).
 //   - **Mentioned nowhere in 061:** graph triples, secret status,
-//     task checklist, task skills, doc referrers. These five are the entries
-//     this test legislates outright, and they are the reason the list belongs
-//     in the spec rather than here.
+//     task checklist, task skills, doc referrers, doc sections. These six are
+//     the entries this test legislates outright, and they are the reason the
+//     list belongs in the spec rather than here.
 var nounViews = map[string]bool{
 	"lode doc referrers":      true,
 	"lode doc reviewers":      true,
+	"lode doc sections":       true,
 	"lode doc todo":           true,
 	"lode doc versions":       true,
 	"lode event subscribers":  true,

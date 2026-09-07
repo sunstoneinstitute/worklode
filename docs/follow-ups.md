@@ -336,7 +336,11 @@ Design items landed in spec 025. These are the mechanical leftovers.
   §3.1–§3.2) remains unimplemented. `lode doc list` now exists (spec 025),
   carrying the 026 §2 planning-status flags (`--needs-planning` /
   `--needs-execution`); `lode doc sync` was retired unshipped (`f11af04`).
-  `lode doc sections` and `--strict-refs` remain unimplemented. WL-147 moved
+  `lode doc sections` shipped as the plain cross-corpus listing (WL-622): the
+  sections of every live document in scope, narrowable to one by number or
+  anchor. 026 §2.3's wider view — `--with-drafts`, `--show-dropped`, and the
+  footer summarising sections an effective `replaces` retired — and
+  `--strict-refs` remain unimplemented. WL-147 moved
   the resolution source from the file corpus to the backbone, so the command
   now needs a reachable server; the `--json` shape's `path` field became
   `doc` + `slug` with it.

@@ -1148,6 +1148,39 @@ func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, er
 	return d, nil
 }
 
+// ListCorpusSections is the cross-corpus section listing `scripts/secindex.py`
+// used to write into docs/specs/index.yaml before the file corpus went away
+// (055 §4): every section of every spec and ADR the caller asks for, in
+// document order.
+//
+// project narrows to one project, "" answers over all of them. number
+// narrows to one section by its number ("8.2") or its anchor ("sec-8.2"),
+// which is the "which document defines §N" question; "" answers over every
+// section. Deleted documents are excluded, as everywhere else (044 §4).
+func (s *Store) ListCorpusSections(ctx context.Context, project, number string) ([]model.DocSectionRow, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.id, d.project_id, d.slug, d.kind, coalesce(d.number,0), d.title,
+		        sec.anchor, coalesce(sec.number,''), sec.heading, sec.depth,
+		        sec.position, sec.last_revised_in, sec.published
+		   FROM doc_sections sec
+		   JOIN docs d ON d.id = sec.doc_id
+		  WHERE d.deleted_at IS NULL
+		    AND ($1 = '' OR d.project_id = $1)
+		    AND ($2 = '' OR sec.number = $2 OR sec.anchor = $2)
+		  ORDER BY d.project_id, d.kind, d.number, sec.position`,
+		project, number)
+	if err != nil {
+		return nil, fmt.Errorf("list corpus sections: %w", err)
+	}
+	return collectRows(rows, "list corpus sections", func(r rowScanner) (model.DocSectionRow, error) {
+		var row model.DocSectionRow
+		err := r.Scan(&row.Doc, &row.Project, &row.Slug, &row.DocKind, &row.DocNumber, &row.DocTitle,
+			&row.Anchor, &row.Number, &row.Heading, &row.Depth,
+			&row.Position, &row.LastRevisedIn, &row.Published)
+		return row, err
+	})
+}
+
 // claimedOpenStates is the SQL list of every state a claim holds short of
 // delivery or abandonment — 025 §8.2's "claimed but unfinished". Derived
 // from the state machine (allStates) less the states a task occupies before
