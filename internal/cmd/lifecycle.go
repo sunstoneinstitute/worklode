@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,12 +155,17 @@ func pendingIdentity(root string) (string, error) {
 	return fmt.Sprintf("%s:%s#pending-%s", host, root, hex.EncodeToString(buf)), nil
 }
 
-// addWorktree creates the worktree at dir on branch, creating the branch if
-// it does not already exist. If -b fails because branch already exists (a
+// addWorktree creates the worktree at dir on branch, cut from the branch
+// point branchPoint picks. If -b fails because branch already exists (a
 // leftover from an earlier attempt), it retries attaching to the existing
-// branch instead.
-func addWorktree(root, dir, branch string) error {
-	err := gitexec.Run(root, "worktree", "add", "-b", branch, dir)
+// branch instead — which keeps that branch's own commits, so no start point
+// applies there.
+func addWorktree(warn io.Writer, root, dir, branch string) error {
+	args := []string{"worktree", "add", "-b", branch, dir}
+	if start := branchPoint(warn, root); start != "" {
+		args = append(args, start)
+	}
+	err := gitexec.Run(root, args...)
 	if err == nil {
 		return nil
 	}
@@ -168,6 +174,37 @@ func addWorktree(root, dir, branch string) error {
 		return nil
 	}
 	return fmt.Errorf("%w (retry attaching existing branch also failed: %v)", err, err2)
+}
+
+// branchPoint is where a new task branch is cut from: origin/<default>, after
+// a best-effort fetch. Git's own default — the root checkout's HEAD — makes
+// every claimed worktree inherit whatever that checkout happens to sit on,
+// which after a run of merged sibling PRs is a stale base, and after a
+// detour onto a feature branch is the wrong base entirely (WL-623).
+//
+// Returns "" — git's behaviour, with a warning — when the default branch or
+// its remote-tracking ref cannot be resolved. A claim must never become
+// impossible because the repo has no remote or the network is down, so every
+// failure here is a warning on warn, never an error. A repo with no origin at
+// all is not warned about: local HEAD is the only branch point it has.
+func branchPoint(warn io.Writer, root string) string {
+	if !gitexec.OK(root, "remote", "get-url", "origin") {
+		return ""
+	}
+	def, err := worktree.DefaultBranch(root)
+	if err != nil {
+		fmt.Fprintf(warn, "warning: branch point not verified: %v\n", err)
+		return ""
+	}
+	ref := "origin/" + def
+	if err := gitexec.Run(root, "fetch", "origin", def); err != nil {
+		fmt.Fprintf(warn, "warning: fetch origin %s: %v\n", def, err)
+	}
+	if !gitexec.OK(root, "rev-parse", "--verify", "--quiet", ref+"^{commit}") {
+		fmt.Fprintf(warn, "warning: branch point not verified: no %s to branch from\n", ref)
+		return ""
+	}
+	return ref
 }
 
 // clearTaskBinding drops the worklode.task-id stamp from a checkout whose
@@ -333,7 +370,7 @@ func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, stri
 		fmt.Fprintf(cmd.ErrOrStderr(), "warning: enable git worktree config extension: %v\n", err)
 	}
 
-	if err := addWorktree(root, dir, branch); err != nil {
+	if err := addWorktree(cmd.ErrOrStderr(), root, dir, branch); err != nil {
 		rollbackClaim(ctx, c, taskID, root, dir)
 		return fmt.Errorf("set up worktree for %s: %w", taskID, err)
 	}
