@@ -122,12 +122,22 @@ spec:
             periodSeconds: 60
             timeoutSeconds: 15
             failureThreshold: 5
-          # There is one replica, so failing readiness takes the only endpoint
-          # out of the Service and the indexer's next call fails; it buys no
-          # failover. Kept as a real signal, sized not to flap under load.
+          # /info, not /health: /health is erratic on this server even when it
+          # is idle — measured at 40s+ (timed out), then 0.49s, then 4.3s in
+          # three consecutive calls, while an actual embed round-trip took
+          # 0.29s. There is one replica, so every /health lie empties the
+          # Service and the indexer's next call gets "connection refused",
+          # which WL-714 turns into dropped chunk rows. /info is a static
+          # struct and answers immediately.
+          #
+          # ponytail: /info proves the process is serving HTTP, not that the
+          # backend can embed. That is what the slack liveness probe above
+          # still uses /health for, and what worklode_index_reembed_total
+          # reports. Point readiness back at a health endpoint if TEI ever
+          # gets one that answers predictably.
           readinessProbe:
             httpGet:
-              path: /health
+              path: /info
               port: http
             periodSeconds: 15
             timeoutSeconds: 10
