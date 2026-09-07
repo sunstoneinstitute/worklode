@@ -146,9 +146,11 @@ Flags: --server
 - `lode project repo remove` — Unmap a repo from its project
 - `lode project resolve` — Show which project this directory scopes to, and why
   Flags: --refresh
-- `lode project set` — Set one field on a project: decision, focus, or focus-note
+- `lode project set` — Set one field on a project: decision, flow, focus, or focus-note
 - `lode project set decision` — Set or clear a project's next-decision card (cockpit card)
   Flags: --accountable, --clear, --rests-on, --title
+- `lode project set flow` — Apply an approval flow to a project, backfilling what it demands
+  Flags: --name, --reviewer
 - `lode project set focus` — Set or clear a project's ranking focus (ordered list of concerns)
   Flags: --clear
 - `lode project set focus-note` — Set or clear a project's pinned-focus note (cockpit card)
