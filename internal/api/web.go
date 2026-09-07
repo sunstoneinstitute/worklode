@@ -189,6 +189,12 @@ func (s *server) webStoreErr(w http.ResponseWriter, err error) {
 // Groups come off the request subject, which carries the actor row's stored
 // Keycloak claim (see authz.go's Subject.Groups) — the same rows GetActor
 // would return, without a second read.
+//
+// Actor mode also carries the Morning Brief (032 §9): what needs the actor,
+// then what happened since their last review, with routine work collapsed to
+// a count. Assembling it is morningbrief.go's job; this handler only fetches
+// its inputs and never advances the review boundary — POST /home/reviewed
+// does that alone.
 func (s *server) homePage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sub := subjectFrom(r)

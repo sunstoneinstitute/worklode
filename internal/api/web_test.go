@@ -1191,6 +1191,119 @@ func TestReviewedThroughNowRefusals(t *testing.T) {
 	})
 }
 
+// briefCutoff reads the review form's hidden cutoff off the rendered page,
+// so the journey posts back what Home displayed rather than a value the test
+// computed for itself.
+func briefCutoff(t *testing.T, body string) string {
+	t.Helper()
+	_, after, ok := strings.Cut(body, `name="cutoff" value="`)
+	if !ok {
+		t.Fatalf("page carries no review form cutoff:\n%s", body)
+	}
+	value, _, ok := strings.Cut(after, `"`)
+	if !ok {
+		t.Fatalf("review form cutoff is unterminated:\n%s", body)
+	}
+	return value
+}
+
+// TestMorningBriefJourney is spec 032 §11's acceptance demonstration: the
+// brief makes the remaining human judgment obvious without showing a raw
+// activity firehose. One person logs in, work is created, finished and
+// stopped, and Home separates what needs her from what merely happened;
+// "Reviewed through now" then clears the event window and leaves the
+// standing state behind.
+//
+// Every fact the brief reports is put there through an HTTP route — no
+// store write seeds anything. It lives in this package rather than in e2e/
+// because the journey needs a session and the e2e stack runs with no login
+// provider.
+func TestMorningBriefJourney(t *testing.T) {
+	t.Parallel()
+	st, h, iss := newOIDCServer(t, api.Config{})
+	// The one fixture no route can mint: the first admin token.
+	adminToken := seedActor(t, st, "alice", "human", "Alice", true)
+
+	rr := doReq(t, h, "POST", "/api/v1/projects", adminToken,
+		map[string]any{"id": "proj1", "name": "Proj One", "key": "WL"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create project: status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	iss.TokenClaims = map[string]any{
+		"preferred_username": "grace", "name": "Grace", "aud": iss.ClientID,
+		"groups": []string{"user"},
+	}
+	session := webLogin(t, h, "grace")
+
+	// Crew comes after login: grace's actor row is minted by the callback.
+	// Alice joins too — starting a task requires being on the project's crew.
+	for _, actor := range []string{"grace", "alice"} {
+		rr = doReq(t, h, "POST", "/api/v1/projects/proj1/participants", adminToken,
+			map[string]any{"actor": actor, "role": "engineer"})
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("add %s to the crew: status = %d, body %s", actor, rr.Code, rr.Body.String())
+		}
+	}
+
+	newTask := func(title string) string {
+		t.Helper()
+		return createTaskViaAPI(t, h, adminToken, map[string]any{
+			"project": "proj1", "title": title, "priority": "medium", "kind": "feature",
+		})["id"].(string)
+	}
+	delivered := newTask("Ship the exporter")
+	stalled := newTask("Backfill the index")
+	mine := newTask("Decide the retention window")
+
+	post := func(path string, body any) {
+		t.Helper()
+		if rr := doReq(t, h, "POST", path, adminToken, body); rr.Code != http.StatusOK {
+			t.Fatalf("POST %s: status = %d, body %s", path, rr.Code, rr.Body.String())
+		}
+	}
+	post("/api/v1/tasks/"+mine+"/assign", map[string]any{"assignee": "grace"})
+	post("/api/v1/tasks/"+delivered+"/state", map[string]any{"state": "merged"})
+	post("/api/v1/tasks/"+stalled+"/start", nil)
+	post("/api/v1/tasks/"+stalled+"/stop", nil)
+
+	// The stop is the last event recorded, so seeing it means the whole
+	// window is past the commit horizon (see pollHomeGET).
+	main := mainContent(t, pollHomeGET(t, h, session, "task.stopped: "+stalled).Body.String())
+	bodyContains(t, main, "Morning Brief", "routine updates")
+	// Needs-you first, then the outcome, then the stopped run.
+	assertOrder(t, main,
+		"Assigned to you: "+mine,
+		"task.done: "+delivered,
+		"task.stopped: "+stalled,
+	)
+	for _, id := range []string{delivered, stalled, mine} {
+		if strings.Contains(main, "task.created: "+id) {
+			t.Errorf("creation of %s renders as its own item, want the collapsed count only:\n%s", id, main)
+		}
+	}
+
+	rr = withSession(t, h, "POST", "/home/reviewed", session, "cutoff="+briefCutoff(t, main))
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("POST /home/reviewed: status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = withSession(t, h, "GET", "/", session, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET / after review: status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	reviewed := mainContent(t, rr.Body.String())
+	for _, gone := range []string{
+		"task.done: " + delivered, "task.stopped: " + stalled, "routine update",
+	} {
+		if strings.Contains(reviewed, gone) {
+			t.Errorf("event window content %q survives the review:\n%s", gone, reviewed)
+		}
+	}
+	// Tier 1 is open state, not an event, so it persists across the advance.
+	bodyContains(t, reviewed, "Assigned to you: "+mine)
+}
+
 func TestWorkPageOrgBoard(t *testing.T) {
 	t.Parallel()
 	st, h, token := newTestServer(t)
