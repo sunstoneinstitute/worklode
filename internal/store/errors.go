@@ -55,6 +55,12 @@ var (
 	// 029 §7.1 refuses this by default; the policy-permitted exception is not
 	// implemented.
 	ErrSelfApproval = errors.New("cannot decide your own change")
+	// ErrNoRevision means the approval names no subject_revision, so nothing
+	// has been designated for review. 029 §7.1 binds a decision to "the
+	// immutable revision the actor actually saw"; with no revision there is
+	// nothing to bind, so the row is a visible gap rather than a decidable
+	// item.
+	ErrNoRevision = errors.New("nothing has been designated for review")
 	// ErrUnknownBlob means a task reference names a hash with no blobs row.
 	// Only the insert direction of task_blobs_hash_fkey maps to this: the
 	// delete direction is a GC bug, and must stay a 500.

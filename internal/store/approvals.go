@@ -298,13 +298,17 @@ type DecideInput struct {
 // DecideApproval records a decision on an open approval, composing the pure
 // rules in approval_rules.go with ResolveApproval. It enforces, in order:
 // the row exists (ErrNotFound); it is open — awaiting or changes_requested
-// (ErrApprovalResolved); the decider holds the group required_role names
-// (ErrNotQualified); and, for entity_kind 'pr', the decider did not author
-// the pull request (ErrSelfApproval). Then it resolves the row.
+// (ErrApprovalResolved); it names a subject_revision (ErrNoRevision); the
+// decider holds the group required_role names (ErrNotQualified); and the
+// decider did not author the thing under review (ErrSelfApproval). Then it
+// resolves the row.
 //
 // Self-approval is refused by default and unconditionally (029 §7.1); the
-// policy-permitted exception flow is not implemented. An unknown login on
+// policy-permitted exception flow is not implemented. An unknown author on
 // either side proves nothing, so it does not refuse — see IsSelfApproval.
+// A 'pr' row compares GitHub logins, since the author GitHub reports is a
+// login; every other kind records its author as an actor id (created_by),
+// so those compare directly.
 //
 // The row is locked FOR UPDATE, so two concurrent decisions serialize and the
 // second sees the resolved state rather than overwriting it: ResolveApproval
@@ -330,21 +334,25 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 	if a.State != "awaiting" && a.State != "changes_requested" {
 		return nil, ErrApprovalResolved
 	}
+	if a.SubjectRevision == "" {
+		return nil, ErrNoRevision
+	}
 	if !QualifiedForRole(a.RequiredRole, in.Groups) {
 		return nil, ErrNotQualified
 	}
+	author, decider := "", in.ActorID
 	if a.EntityKind == "pr" {
-		author, err := prAuthorForEntity(tx, a.EntityID)
-		if err != nil {
+		if author, err = prAuthorForEntity(tx, a.EntityID); err != nil {
 			return nil, err
 		}
-		decider, err := gitHubLoginForActor(tx, in.ActorID)
-		if err != nil {
+		if decider, err = gitHubLoginForActor(tx, in.ActorID); err != nil {
 			return nil, err
 		}
-		if IsSelfApproval(author, decider) {
-			return nil, ErrSelfApproval
-		}
+	} else if author, err = authorActorForEntity(tx, a.EntityKind, a.EntityID); err != nil {
+		return nil, err
+	}
+	if IsSelfApproval(author, decider) {
+		return nil, ErrSelfApproval
 	}
 
 	if err := ResolveApproval(tx, a.ID, state, &in.ActorID, in.Now); err != nil {
@@ -375,6 +383,37 @@ func prAuthorForEntity(tx *sql.Tx, entityID string) (string, error) {
 	}
 	if err != nil {
 		return "", fmt.Errorf("pr author for %s: %w", entityID, err)
+	}
+	return author, nil
+}
+
+// authorActorForEntity returns the actor id that created what entityID names
+// under kind: docs, deliverables and tasks all record it as created_by. "" on
+// no row, a NULL column, or a kind with no created_by to read — and "" never
+// counts as a match, so an unknown author cannot be read as self-approval.
+//
+// Each arm matches entity_id the way the writer spelled it (DocEntityID's
+// "doc:<id>", a bare id elsewhere), the same correlation approvalEntityJoins
+// states for the queue readers.
+func authorActorForEntity(tx *sql.Tx, kind, entityID string) (string, error) {
+	var query string
+	switch kind {
+	case "doc":
+		query = `SELECT coalesce(created_by, '') FROM docs WHERE 'doc:' || id = $1`
+	case "deliverable":
+		query = `SELECT coalesce(created_by, '') FROM deliverables WHERE id = $1`
+	case "task":
+		query = `SELECT coalesce(created_by, '') FROM tasks WHERE id = $1`
+	default:
+		return "", nil
+	}
+	var author string
+	err := tx.QueryRow(query, entityID).Scan(&author)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("author for %s %s: %w", kind, entityID, err)
 	}
 	return author, nil
 }
