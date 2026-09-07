@@ -88,7 +88,7 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 // form that posts to /approvals/{id}/decide (029 §7.3).
 //
 // The kind label and the revision are formatted here, not in internal/ui,
-// which takes pre-formatted rows. Only a document shows its revision: an
+// which takes pre-formatted rows. Every kind but a PR shows its revision: an
 // approval is granted against one version and the reviewer needs to see
 // which, where a PR's own page already shows the head its link resolves to.
 func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsView {
@@ -110,6 +110,12 @@ func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsVie
 			row.Kind = "PR"
 		case "doc":
 			row.Kind = "Document"
+			row.Revision = a.SubjectRevision
+		case "deliverable":
+			row.Kind = "Deliverable"
+			row.Revision = a.SubjectRevision
+		case "task":
+			row.Kind = "Task"
 			row.Revision = a.SubjectRevision
 		}
 		if a.RequiredActorName != nil {
