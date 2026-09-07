@@ -338,9 +338,7 @@ var validPriorities = ns.Set(model.TaskPriorities)
 
 // validConcerns is the tasks.concern CHECK constraint, mirrored in Go so
 // callers get a clean error instead of a raw constraint violation.
-var validConcerns = map[string]bool{
-	"completeness": true, "performance": true, "usability": true, "security": true,
-}
+var validConcerns = ns.Set(model.TaskConcerns)
 
 // ValidConcern reports whether s is one of the recognized task concerns.
 func ValidConcern(s string) bool {

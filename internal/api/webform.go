@@ -57,9 +57,10 @@ var webTaskKinds = []string{"feature", "bug", "chore", "design", "review", "spik
 // validPriorities gates on.
 var webTaskPriorities = model.TaskPriorities
 
-// webTaskConcerns are the optional concerns the new-task form offers,
-// mirroring store's validConcerns. The empty value is rendered as "None".
-var webTaskConcerns = []string{"completeness", "performance", "usability", "security"}
+// webTaskConcerns are the optional concerns the new-task form offers, in
+// model.TaskConcerns' order, which is also what validConcerns gates on. The
+// empty value is rendered as "None".
+var webTaskConcerns = model.TaskConcerns
 
 // taskFormValues are the new-task form's fields as submitted, kept whole so a
 // rejected submit re-renders exactly what the person typed.
