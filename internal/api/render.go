@@ -348,8 +348,8 @@ func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail, 
 		BodyHTML:        md.DocBody(keys, body),
 		Ref:             docRef(d.Doc),
 		Sections:        d.Sections,
-		Edges:           docEdgeRows(d.Edges),
-		EdgesIn:         docEdgeRows(d.EdgesIn),
+		Edges:           docEdgeRows(d.Edges, keys),
+		EdgesIn:         docEdgeRows(d.EdgesIn, keys),
 		Revision:        d.Revision,
 		Consolidated:    consolidated,
 		ConsolidatedURL: path,
@@ -416,7 +416,7 @@ func docVersionView(md *mdrender.Cache, keys mdrender.ProjectKeys, doc model.Doc
 // the id — or the verbatim reference when the edge names something outside
 // this backbone. The id is the last resort, for a row whose join found no
 // document to name.
-func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
+func docEdgeRows(edges []model.DocEdge, keys mdrender.ProjectKeys) []ui.DocEdgeRow {
 	out := make([]ui.DocEdgeRow, 0, len(edges))
 	for _, e := range edges {
 		row := ui.DocEdgeRow{Type: e.Type, Anchor: e.FromAnchor, Label: e.ToExternal}
@@ -444,7 +444,9 @@ func docEdgeRows(edges []model.DocEdge) []ui.DocEdgeRow {
 			// URL "" and renders as text.
 			base, frag := designdoc.SplitFragment(e.ToExternal)
 			if _, ok := designdoc.ParseNumberForm(base); ok || designdoc.LooksLikePath(base) {
-				row.URL = "/docs/ref/" + base
+				// The number is on the referring project's sequence, so the
+				// link carries its key the way an autolinked one does (WL-723).
+				row.URL = "/docs/ref/" + base + keys.HomeQuery()
 				if frag != "" {
 					row.URL += "#" + frag
 				}

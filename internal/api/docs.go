@@ -270,7 +270,7 @@ func (s *server) resolveDocRef(w http.ResponseWriter, r *http.Request) {
 	d, err := s.st.ResolveDocRef(r.Context(), ref)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			if gd, gerr := s.resolveDocRefWeb(r.Context(), ref); gerr == nil {
+			if gd, gerr := s.resolveDocRefWeb(r.Context(), ref, ""); gerr == nil {
 				gd.Body = ""
 				writeJSON(w, http.StatusOK, gd)
 				return

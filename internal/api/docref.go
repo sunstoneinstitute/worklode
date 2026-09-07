@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
+	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -27,7 +28,7 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "empty document reference")
 		return
 	}
-	d, err := s.resolveDocRefWeb(r.Context(), ref)
+	d, err := s.resolveDocRefWeb(r.Context(), ref, r.URL.Query().Get(mdrender.HomeParam))
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err.Error())
 		return
@@ -46,10 +47,22 @@ func (s *server) docRefRedirect(w http.ResponseWriter, r *http.Request) {
 // answered the way `lode show`'s tier 2 answers it (026 §4.2): the project
 // whose key it is supplies the candidates. A number form that is ambiguous
 // across projects reports the candidates rather than picking one.
-func (s *server) resolveDocRefWeb(ctx context.Context, ref string) (model.Doc, error) {
+//
+// home is the ?p=<KEY> the renderer puts on a number-form link (WL-723).
+// Document numbers are per-project sequences, so a bare "029" names one
+// document in the project the referring body belongs to and a different one
+// everywhere else; resolving within that project first is what makes the link
+// land. An unknown key, or a ref that names nothing there, falls through to
+// the org-wide resolution below.
+func (s *server) resolveDocRefWeb(ctx context.Context, ref, home string) (model.Doc, error) {
 	docs, err := s.st.ListDocs(ctx, store.DocFilter{})
 	if err != nil {
 		return model.Doc{}, err
+	}
+	if home != "" {
+		if d, ok := s.resolveDocRefIn(ctx, docs, home, ref); ok {
+			return d, nil
+		}
 	}
 	d, _, err := designdoc.ResolveRef(docs, "", ref)
 	if err == nil {
@@ -67,16 +80,40 @@ func (s *server) resolveDocRefWeb(ctx context.Context, ref string) (model.Doc, e
 		if p.Key != unresolved.Key {
 			continue
 		}
-		scoped := docs[:0:0]
-		for _, doc := range docs {
-			if doc.Project == p.ID {
-				scoped = append(scoped, doc)
-			}
-		}
-		d, _, err := designdoc.ResolveRef(scoped, p.Key, ref)
+		d, _, err := designdoc.ResolveRef(scopeDocsToProject(docs, p.ID), p.Key, ref)
 		return d, err
 	}
 	return model.Doc{}, unresolved
+}
+
+// resolveDocRefIn resolves ref against one project's documents alone. It
+// reports false — never an error — when the project key is unknown or the ref
+// names nothing there, because both are cases for the wider search the caller
+// falls through to.
+func (s *server) resolveDocRefIn(ctx context.Context, docs []model.Doc, key, ref string) (model.Doc, bool) {
+	projects, err := s.st.ListProjects(ctx)
+	if err != nil {
+		return model.Doc{}, false
+	}
+	for _, p := range projects {
+		if p.Key != key {
+			continue
+		}
+		d, _, err := designdoc.ResolveRef(scopeDocsToProject(docs, p.ID), p.Key, ref)
+		return d, err == nil
+	}
+	return model.Doc{}, false
+}
+
+// scopeDocsToProject is the candidate set of one project's live documents.
+func scopeDocsToProject(docs []model.Doc, project string) []model.Doc {
+	scoped := docs[:0:0]
+	for _, d := range docs {
+		if d.Project == project {
+			scoped = append(scoped, d)
+		}
+	}
+	return scoped
 }
 
 // refShortcut handles GET /{ref}: a bare reference at the root, so a task id
