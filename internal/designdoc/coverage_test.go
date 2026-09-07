@@ -495,12 +495,12 @@ func TestSectionAbsoluteCorpusRoot(t *testing.T) {
 // <KEY>-<TYPE>-<n> shorthand.
 func shorthandFixture(t *testing.T) []designdoc.CorpusDoc {
 	t.Helper()
-	spec, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("spec", "example"), "spec", 25,
+	spec, _, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("spec", "example"), "spec", 25,
 		[]byte("---\nstatus: accepted\n---\n# Spec\n\n## 1. One {#sec-1}\n\nBody.\n"))
 	if err != nil {
 		t.Fatalf("spec: %v", err)
 	}
-	plan, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("plan", "a"), "plan", 1,
+	plan, _, err := designdoc.CorpusDocFromBody(designdoc.CorpusPath("plan", "a"), "plan", 1,
 		[]byte("---\nstatus: accepted\ncovers: WL-SPEC-25#sec-1\n---\n# A\n\nBody.\n"))
 	if err != nil {
 		t.Fatalf("plan: %v", err)
