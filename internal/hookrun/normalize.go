@@ -32,6 +32,5 @@ func normalizePayload(harnessID string, raw []byte) Payload {
 	}
 	pick(&p.Cwd, "workingDirectory", "working_directory", "workspacePath", "workspace_path")
 	pick(&p.SessionID, "sessionId", "session", "threadId", "thread_id")
-	pick(&p.TranscriptPath, "transcriptPath", "rolloutPath", "rollout_path")
 	return p
 }

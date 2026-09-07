@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -304,6 +305,25 @@ func runHook(t *testing.T, event string, p Payload) {
 	runHookOutput(t, event, p)
 }
 
+// runHookRaw drives one hook invocation over a hand-built stdin object, for
+// the tests that send a field Payload deliberately no longer has (a harness
+// still sends transcript_path; Worklode stopped reading it in WL-658).
+func runHookRaw(t *testing.T, event string, stdin map[string]any) {
+	t.Helper()
+	raw, err := json.Marshal(stdin)
+	if err != nil {
+		t.Fatalf("marshal stdin: %v", err)
+	}
+	var errBuf bytes.Buffer
+	code := Run(context.Background(), Options{
+		Event: event, Stdin: bytes.NewReader(raw),
+		Stdout: io.Discard, Stderr: &errBuf,
+	})
+	if code != 0 {
+		t.Fatalf("%s exit code = %d, want 0 (stderr: %s)", event, code, errBuf.String())
+	}
+}
+
 // pathToolInput is the tool_input a worktree hook carries: the path it acted
 // on.
 func pathToolInput(t *testing.T, dir string) json.RawMessage {
@@ -576,24 +596,6 @@ func newSessionRecorder(t *testing.T, route, reply string) *sessionRecorder {
 	t.Setenv("LODE_SERVER", ts.URL)
 	t.Setenv("LODE_TOKEN", "test-token")
 	return rec
-}
-
-// newUsageRecorder serves the consolidated session-usage endpoint, which is
-// where a session's billed tokens go since spec 052 §3. The lifecycle routes
-// (touch/end) 404 into a warning, which a hook downgrades and survives.
-func newUsageRecorder(t *testing.T) *sessionRecorder {
-	t.Helper()
-	return newSessionRecorder(t, "POST /api/v1/projects/{id}/session-usage", "")
-}
-
-// byTask decodes the recorded classification of the single usage report.
-func (r *sessionRecorder) byTask(t *testing.T) map[string][]model.SessionUsageBucket {
-	t.Helper()
-	var out map[string][]model.SessionUsageBucket
-	if err := json.Unmarshal(r.only(t)["by_task"], &out); err != nil {
-		t.Fatalf("decode by_task: %v", err)
-	}
-	return out
 }
 
 func newEndRecorder(t *testing.T) *sessionRecorder {
