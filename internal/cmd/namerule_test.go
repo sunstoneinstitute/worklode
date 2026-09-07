@@ -228,17 +228,13 @@ func TestNameRule(t *testing.T) {
 	}
 }
 
-// subcommands returns c's children less cobra's own generated ones: `help`,
-// `completion`, and the `__complete` RPC the shell scripts call. Cobra adds
-// the last two lazily on the first Execute, so which of them are attached
-// depends on what ran before this test — none of them are ours to name.
-// Hidden children of ours stay in: a hidden child is still depth, so check 4
-// counts it.
+// subcommands returns c's children less cobra's own generated ones (see
+// isCobraGenerated). Hidden children of ours stay in: a hidden child is
+// still depth, so check 4 counts it.
 func subcommands(c *cobra.Command) []*cobra.Command {
 	var out []*cobra.Command
 	for _, sub := range c.Commands() {
-		name := sub.Name()
-		if name == "help" || name == "completion" || strings.HasPrefix(name, "__") {
+		if isCobraGenerated(sub.Name()) {
 			continue
 		}
 		out = append(out, sub)

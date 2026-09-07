@@ -56,11 +56,7 @@ func TestShortcuts(t *testing.T) {
 	// ready` got in unnoticed; the table is meant to be the visible closed
 	// set instead.
 	for _, c := range rootCmd.Commands() {
-		// Cobra adds its own hidden __complete (aliased __completeNoDesc)
-		// the first time a command executes, so a test that ran a
-		// completion leaves it on the shared rootCmd. It is machinery the
-		// shell calls, not a spelling anyone types.
-		if strings.HasPrefix(c.Name(), "__") {
+		if isCobraGenerated(c.Name()) {
 			continue
 		}
 		if len(c.Aliases) > 0 {

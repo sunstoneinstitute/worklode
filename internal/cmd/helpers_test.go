@@ -5,12 +5,24 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/githooks"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// isCobraGenerated reports whether name is a command cobra attaches itself
+// rather than one this repo declares: the default help and completion
+// commands, or the hidden __complete/__completeNoDesc RPC cobra lazily
+// registers the first time Execute runs. rootCmd is a package global, so
+// once any test executes it, these commands sit on the shared tree for
+// every later test — a tree-walking test passes alone and fails with the
+// package.
+func isCobraGenerated(name string) bool {
+	return name == "help" || name == "completion" || strings.HasPrefix(name, "__")
+}
 
 // lodeBinary caches the built CLI for the whole package run. Go caches
 // compilation but never the link step, so each build costs seconds — and
