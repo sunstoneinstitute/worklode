@@ -37,13 +37,19 @@ type Project struct {
 	DecisionTitle       string
 	DecisionAccountable string
 	DecisionReadiness   string
+
+	// The approval flow governing this project (029 §7.2), denormalized out
+	// of the approval_flow snapshot (migration 0063) so a listing can name
+	// the flow without unmarshalling it. Empty until a flow is applied.
+	ApprovalFlowName string
+	ApprovalFlowRev  string
 }
 
-// projectExtras holds the nullable cockpit columns (migration 0013) during a
-// row scan; dest wires them into a Scan call and apply copies present values
-// onto a Project, leaving Go zero values where the column was NULL. Keeping
-// both scan sites (GetProject, ListProjects) on this one helper stops them
-// drifting apart.
+// projectExtras holds the nullable cockpit columns (migration 0013) and the
+// denormalized approval-flow columns (0063) during a row scan; dest wires them
+// into a Scan call and apply copies present values onto a Project, leaving Go
+// zero values where the column was NULL. Keeping both scan sites (GetProject,
+// ListProjects) on this one helper stops them drifting apart.
 type projectExtras struct {
 	focusNote           sql.NullString
 	focusPinnedBy       sql.NullString
@@ -51,12 +57,15 @@ type projectExtras struct {
 	decisionTitle       sql.NullString
 	decisionAccountable sql.NullString
 	decisionReadiness   sql.NullString
+	approvalFlowName    sql.NullString
+	approvalFlowRev     sql.NullString
 }
 
 func (e *projectExtras) dest() []any {
 	return []any{
 		&e.focusNote, &e.focusPinnedBy, &e.focusPinnedAt,
 		&e.decisionTitle, &e.decisionAccountable, &e.decisionReadiness,
+		&e.approvalFlowName, &e.approvalFlowRev,
 	}
 }
 
@@ -67,6 +76,8 @@ func (e *projectExtras) apply(p *Project) {
 	p.DecisionTitle = e.decisionTitle.String
 	p.DecisionAccountable = e.decisionAccountable.String
 	p.DecisionReadiness = e.decisionReadiness.String
+	p.ApprovalFlowName = e.approvalFlowName.String
+	p.ApprovalFlowRev = e.approvalFlowRev.String
 }
 
 // nullIfZeroTime maps the zero time to a SQL NULL, so optional timestamptz
@@ -79,11 +90,12 @@ func nullIfZeroTime(t time.Time) any {
 }
 
 // projectColumns is the SELECT list shared by GetProject and ListProjects:
-// the base columns plus the migration-0013 cockpit columns, in the order
-// projectExtras.dest expects them.
+// the base columns plus the migration-0013 cockpit columns and 0063's
+// approval-flow columns, in the order projectExtras.dest expects them.
 const projectColumns = `id, name, key, focus,
 	focus_note, focus_pinned_by, focus_pinned_at,
-	decision_title, decision_accountable, decision_readiness`
+	decision_title, decision_accountable, decision_readiness,
+	approval_flow_name, approval_flow_rev`
 
 // scanProjectFocus unmarshals a jsonb focus column (read as raw bytes) into
 // a []string. An empty or null column yields a nil slice.
