@@ -154,7 +154,7 @@ func TestRenderUsageCombinesContextAndRateLimits(t *testing.T) {
 			SevenDay: &RateLimitWindow{UsedPercentage: 24},
 		},
 	}
-	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " [CtxWin 50% 101k] [Sess 56%] [Week 24%]" {
+	if got := stripANSI(renderUsage(p, t.TempDir(), "")); got != " [Ctx 50% 101k] [Sess 56%] [Week 24%]" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -178,7 +178,7 @@ func TestRenderUsageColorsBySeverity(t *testing.T) {
 }
 
 // The base 200k window leaves less real working room at a given percentage
-// than the 1M extended window does, so the CtxWin field's colour bumps one
+// than the 1M extended window does, so the Ctx field's colour bumps one
 // severity level early — landing on yellow uses the punchier gold rather than
 // the ramp's ordinary yellow.
 func TestContextColorBumpsOneLevelAtBaseWindowSize(t *testing.T) {
