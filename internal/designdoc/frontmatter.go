@@ -50,8 +50,8 @@ type Frontmatter struct {
 
 // CoveredSections is the sections a plan undertakes to realise, reading the
 // retired `implements` spelling when `covers` is absent (026 §5.1). Callers use
-// this rather than either field: a document carrying both is an error
-// scripts/secmeta.py reports, so the precedence here never silently picks.
+// this rather than either field: a document carrying both is refused at write
+// time (store.rebuildEdges), so the precedence here never silently picks.
 func (f Frontmatter) CoveredSections() RefList {
 	entries := f.CoverageEntries()
 	out := make(RefList, len(entries))
@@ -130,8 +130,8 @@ func (c CoverageList) MarshalYAML() (any, error) {
 }
 
 // UnmarshalYAML accepts a bare spec reference as full coverage or a qualified
-// mapping. Policy validation belongs to secmeta.py; this parser only preserves
-// the authored syntax faithfully.
+// mapping. Policy validation belongs to store.rebuildEdges; this parser only
+// preserves the authored syntax faithfully.
 func (c *Coverage) UnmarshalYAML(n *yaml.Node) error {
 	switch n.Kind {
 	case yaml.ScalarNode:

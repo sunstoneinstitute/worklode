@@ -237,14 +237,12 @@ func reachesByAmends(tx *sql.Tx, startDoc int64, startAnchor string, fromDoc int
 // different closure is a contradiction the frontmatter cannot mean (026
 // §2.1), so that is ErrInvalidInput rather than a raw unique-index violation.
 //
-// A covers edge's level is normalised here — an empty entry means full — and
-// validated: anything other than full/partial/none is ErrInvalidInput. The
-// empty case is reached only from the object form with `coverage:` absent;
-// the bare-string form decodes straight to "full"
-// (designdoc.Coverage.UnmarshalYAML) and never passes through here empty. An
-// object entry omitting the required key (026 §5.1) is a defect
-// scripts/secmeta.py reports — this fallback just keeps it reading as full
-// rather than inventing a fourth state. A partial edge's fullCoverageWith
+// A covers edge is checked against 026 §5.1: the key is plan-only, the level
+// is one of full/partial/none, and a qualified entry carries both required
+// keys. An empty level reaches here only from the object form with
+// `coverage:` absent — the bare-string form decodes straight to "full"
+// (designdoc.Coverage.UnmarshalYAML) — so it is that missing key, not a
+// document with nothing to say. A partial edge's fullCoverageWith
 // closure is resolved the same way doc_edges resolves its own targets and
 // stored in doc_coverage_completed_with, in authored order.
 //
@@ -252,8 +250,8 @@ func reachesByAmends(tx *sql.Tx, startDoc int64, startAnchor string, fromDoc int
 // be a plan, the `spec` reference must carry a `#sec-N` fragment (unlike
 // covers, which tolerates a whole-document claim — a whole-document deferral
 // would silently defer sections not yet written), the owner must be named,
-// must carry no fragment (an owner is a document, 026 §5.3 — secmeta.py
-// refuses the same), and must not resolve to the deferring plan itself. The
+// must carry no fragment (an owner is a document, 026 §5.3), and must not
+// resolve to the deferring plan itself. The
 // owner is
 // then resolved exactly as a fullCoverageWith target and stored as the
 // edge's sole doc_coverage_completed_with row, at position 0. coverage stays
@@ -292,6 +290,23 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			}
 		}
 	}
+	// The two covers defects a single header settles on its own (026 §5.1,
+	// §7). Both are checked here rather than in the loop below: designdoc.Refs
+	// reads one coverage key and drops an entry naming no spec, so neither
+	// reaches frontmatterEdges.
+	if fm != nil {
+		if fm.Covers != nil && fm.Implements != nil {
+			return fmt.Errorf(
+				"doc %d carries both covers and implements, which are one key under two names (026 §5.1): %w",
+				docID, ErrInvalidInput)
+		}
+		for i, c := range fm.CoverageEntries() {
+			if strings.TrimSpace(c.Spec) == "" {
+				return fmt.Errorf("doc %d covers[%d] names no spec (026 §5.1): %w",
+					docID, i, ErrInvalidInput)
+			}
+		}
+	}
 	seen := map[docEdgeRow]docEdgeSeen{}
 	for _, e := range frontmatterEdges(fm) {
 		base, fragment := designdoc.SplitFragment(e.ref)
@@ -327,9 +342,17 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 
 		level := ""
 		if e.typ == "covers" {
+			if kind != "plan" {
+				return fmt.Errorf("doc %d covers %q, but covers is plan-only and doc %d is a %s (026 §5.1): %w",
+					docID, e.ref, docID, kind, ErrInvalidInput)
+			}
 			level = strings.TrimSpace(e.coverage)
 			if level == "" {
-				level = "full"
+				// Only the mapping form arrives empty: the bare form decodes
+				// straight to "full" (designdoc.Coverage.UnmarshalYAML), and
+				// `coverage` is required on a qualified entry (026 §5.1).
+				return fmt.Errorf("doc %d covers %q with no coverage level (026 §5.1): %w",
+					docID, e.ref, ErrInvalidInput)
 			}
 			if level != "full" && level != "partial" && level != "none" {
 				return fmt.Errorf("doc %d covers %q with unknown coverage level %q (026 §5.1): %w",
