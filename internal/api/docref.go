@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/designdoc"
@@ -76,4 +77,28 @@ func (s *server) resolveDocRefWeb(ctx context.Context, ref string) (model.Doc, e
 		return d, err
 	}
 	return model.Doc{}, unresolved
+}
+
+// refShortcut handles GET /{ref}: a bare reference at the root, so a task id
+// or a document reference pasted into the address bar lands on its page.
+// Every literal route (/docs, /work, /reviews, …) is more specific than this
+// wildcard and still wins, so the shortcut only sees paths nothing else
+// claims.
+//
+// Task ids resolve first because the lookup is one indexed row, and because
+// <KEY>-<n> and <KEY>-<TYPE>-<n> are not distinguishable by shape alone —
+// model.SplitTaskID reads "WL-SPEC-59" as key "WL-SPEC". Whatever the task
+// lookup misses falls through to the same resolver /docs/ref/{ref...} uses,
+// which already answers every 026 §3 reference form.
+func (s *server) refShortcut(w http.ResponseWriter, r *http.Request) {
+	ref := strings.TrimSpace(r.PathValue("ref"))
+	if ref == "" {
+		writeErr(w, http.StatusNotFound, "empty reference")
+		return
+	}
+	if _, err := s.st.GetTask(r.Context(), ref); err == nil {
+		http.Redirect(w, r, "/tasks/"+url.PathEscape(ref), http.StatusFound)
+		return
+	}
+	s.docRefRedirect(w, r)
 }

@@ -73,3 +73,47 @@ func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 		t.Errorf("relation link carries no #fragment:\n%s", page)
 	}
 }
+
+// TestRefShortcut pins the root-level shortcut (WL-721): a bare task id or
+// document reference 302s to its page, a literal route still beats the
+// wildcard, and an unresolvable ref is a 404.
+func TestRefShortcut(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	created := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Shortcut me", "kind": "feature", "priority": "medium",
+	})
+	taskID, _ := created["id"].(string)
+	if taskID == "" {
+		t.Fatalf("created task has no id: %v", created)
+	}
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 45, Slug: "per-project-workflows",
+		Body: "---\nstatus: draft\n---\n# Spec 45 — Workflows\n\n## 1. One {#sec-1}\n\nText.\n",
+	})
+
+	for _, tc := range []struct{ ref, want string }{
+		{taskID, "/tasks/" + taskID},
+		{"WL-SPEC-45", "/docs/WL-SPEC-45"},
+		{"per-project-workflows", "/docs/WL-SPEC-45"},
+		{"45", "/docs/WL-SPEC-45"},
+	} {
+		rr := doReq(t, h, "GET", "/"+tc.ref, "", nil)
+		if rr.Code != http.StatusFound {
+			t.Fatalf("ref %q status = %d, want 302; body %s", tc.ref, rr.Code, rr.Body.String())
+		}
+		if got := rr.Header().Get("Location"); got != tc.want {
+			t.Fatalf("ref %q Location = %q, want %q", tc.ref, got, tc.want)
+		}
+	}
+
+	// A literal route is more specific than /{ref} and keeps answering with
+	// its page; an unresolvable ref is the only thing the shortcut 404s.
+	if rr := doReq(t, h, "GET", "/docs", "", nil); rr.Code != http.StatusOK {
+		t.Fatalf("/docs status = %d, want 200 (the wildcard must not shadow it)", rr.Code)
+	}
+	if rr := doReq(t, h, "GET", "/no-such-ref", "", nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("/no-such-ref status = %d, want 404", rr.Code)
+	}
+}

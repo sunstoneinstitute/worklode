@@ -625,6 +625,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// The reference redirect (WL-301): not navWrapped — it answers a 302,
 	// never a page.
 	r.web("GET /docs/ref/{ref...}", s.docRefRedirect)
+	r.web("GET /{ref}", s.refShortcut)
 	// The drift board (spec 007) is the graph-backed half of Knowledge, so it
 	// marks that destination current rather than taking an eighth nav entry
 	// (see primaryNav's doc comment). Read-only: it renders no act.
