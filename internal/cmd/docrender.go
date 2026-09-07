@@ -93,14 +93,14 @@ func runDocShow(cmd *cobra.Command, ref, section, expectedKind string, inline bo
 		// The consolidated view (WL-84): every effective claim folded into
 		// the section it acts on, transitively; --section narrows to one
 		// subtree with its folds intact.
-		inliner := newDocInliner(func(id int64) (*model.DocDetail, error) {
+		inliner := designdoc.NewInliner(func(id int64) (*model.DocDetail, error) {
 			d, _, err := c.GetDoc(ctx, id)
 			if err != nil {
 				return nil, err
 			}
 			return &d, nil
 		})
-		out, err := inliner.consolidateDoc(&detail, section)
+		out, err := inliner.Consolidate(&detail, section)
 		if err != nil {
 			return err
 		}

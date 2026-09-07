@@ -11,6 +11,14 @@ package ui
 // prose with headings, tables and code fences, none of which survive the <pre>
 // this used to be; the document flavour also keeps the {#sec-N} heading
 // anchors, which is what lets the Sections table link into it.
+//
+// The document page is a review surface (WL-716), so what it defaults to
+// showing is the consolidated body — every effective amendment folded into
+// the section it acts on (026 §3.2) — alongside the review state the backbone
+// already holds: the reviewer roster, the open approvals with their decide
+// form, and the anchored notes. The stored source is one link away and says
+// which of the two is on screen. What is deliberately absent is comment
+// threads and rounds: that is WL-SPEC-59, and a note is not a thread.
 
 // Docs carries the link to /drift because Knowledge is where the graph-backed
 // expert views live (layout.templ's primaryNav doc comment): the drift board
@@ -141,8 +149,17 @@ templ Doc(v DocView) {
 					@docEdges("Into this document", v.EdgesIn)
 				</div>
 			</section>
+			@docReview(v)
+			@docNotes(v)
 			<section class="card">
-				<div class="hd"><h3>Body</h3></div>
+				<div class="hd">
+					<h3>Body</h3>
+					if v.Consolidated {
+						<span class="muted small">amendments folded in &middot; <a href={ v.SourceURL }>stored source</a></span>
+					} else {
+						<span class="muted small">stored source &middot; <a href={ v.ConsolidatedURL }>with amendments folded in</a></span>
+					}
+				</div>
 				// BodyHTML is emitted unescaped for the reason task.templ
 				// gives: internal/mdrender has already reduced it to an
 				// allowlist. The document flavour adds one attribute to that
@@ -196,6 +213,78 @@ templ DocVersion(v DocVersionView) {
 			</section>
 		}
 	}
+}
+
+// docReview renders the review state 025 §7.3 and 029 §7 already hold: the
+// durable reviewer roster with who still owes a verdict, and every approval
+// still awaiting a decision, each with the same decide form the Reviews queue
+// posts (the form carries this page as its return, so deciding here comes
+// back here). It states an empty roster and an empty queue outright rather
+// than rendering a card that looks like it failed to load.
+templ docReview(v DocView) {
+	<section class="card">
+		<div class="hd"><h3>Review</h3></div>
+		<div class="bd">
+			<h4>Reviewers</h4>
+			if len(v.Reviewers) == 0 {
+				<p class="muted">No reviewers are assigned.</p>
+			} else {
+				<ul>
+					for _, rev := range v.Reviewers {
+						<li>
+							{ rev.Actor }{ " " }
+							if rev.Awaiting {
+								<span class="chip warn">awaiting</span>
+							} else {
+								<span class="chip ok">reviewed</span>
+							}
+						</li>
+					}
+				</ul>
+			}
+			<h4>Approvals</h4>
+			if len(v.Approvals) == 0 {
+				<p class="muted">No approvals are open on this document.</p>
+			} else {
+				<ul class="approvalq">
+					for _, row := range v.Approvals {
+						@approvalRow(row)
+					}
+				</ul>
+			}
+		</div>
+	</section>
+}
+
+// docNotes renders the document's anchored notes (025 §8.5). A note settles
+// nothing and blocks nothing, so it is listed where it applies — the anchor
+// links at the section in the body below — and never presented as a verdict.
+templ docNotes(v DocView) {
+	<section class="card">
+		<div class="hd"><h3>Notes</h3></div>
+		<div class="bd">
+			if len(v.Notes) == 0 {
+				<p class="muted">No notes.</p>
+			} else {
+				<ul>
+					for _, n := range v.Notes {
+						<li>
+							<p class="muted small">
+								<a href={ "#" + n.Anchor } class="mono">{ "#" + n.Anchor }</a>
+								{ " · " }{ n.CreatedBy }{ " · " }{ fmtTime(n.CreatedAt) }
+								if n.Task != "" {
+									{ " · " }<a href={ "/tasks/" + n.Task }>{ n.Task }</a>
+								}
+							</p>
+							<div class="prose">
+								@templ.Raw(string(n.BodyHTML))
+							</div>
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	</section>
 }
 
 // docEdges renders one direction of a document's relations. An unresolved

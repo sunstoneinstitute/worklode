@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
@@ -669,7 +670,8 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	view := docView(s.mdcache, s.projectKeys(r.Context()), detail)
+	body, consolidated := s.docPageBody(r, detail)
+	view := docView(s.mdcache, s.projectKeys(r.Context()), detail, body, consolidated, r.URL.Path)
 	// A failed read degrades to an empty Versions card rather than failing
 	// the whole page, the same call projectKeyByID makes for its dependency.
 	versions, err := s.st.ListDocVersions(r.Context(), detail.Doc.ID)
@@ -678,7 +680,56 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 	} else {
 		view.Versions = versions
 	}
+	view.Approvals = s.docPageApprovals(r, detail.Doc.ID)
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
+}
+
+// docPageBody picks the markdown the document page renders: the consolidated
+// view (026 §3.2) by default, so a reviewer reads the document's current
+// state rather than what it said before four other specs amended it, and the
+// stored source under ?body=source. It reports which it returned.
+//
+// A fold that fails — an unreadable acting document, an unparseable body —
+// degrades to the source and says so through the false, rather than failing
+// the page: the source is still worth reading, it is just not the whole
+// story, and the page labels it.
+func (s *server) docPageBody(r *http.Request, d *model.DocDetail) (string, bool) {
+	if r.URL.Query().Get("body") == "source" {
+		return d.Doc.Body, false
+	}
+	out, err := designdoc.NewInliner(func(id int64) (*model.DocDetail, error) {
+		return s.docDetail(r, id)
+	}).Consolidate(d, "")
+	if err != nil {
+		s.log.Warn("rendering doc page from its stored source: consolidation failed",
+			"doc", d.Doc.ID, "err", err)
+		return d.Doc.Body, false
+	}
+	return out, true
+}
+
+// docPageApprovals is this document's still-awaiting approval rows, filtered
+// out of the same queue the Reviews page renders so the two cannot disagree
+// about what is open. A failed read degrades to no rows, like the version
+// history above.
+func (s *server) docPageApprovals(r *http.Request, docID int64) []ui.ApprovalRow {
+	rows, err := s.st.ListAwaitingApprovals(r.Context())
+	if err != nil {
+		s.log.Warn("rendering doc page without its approvals: queue unreadable", "doc", docID, "err", err)
+		return nil
+	}
+	entity := store.DocEntityID(docID)
+	mine := make([]store.AwaitingApproval, 0, 1)
+	for _, a := range rows {
+		if a.EntityKind == "doc" && a.EntityID == entity {
+			mine = append(mine, a)
+		}
+	}
+	out := approvalRows(mine, s.st.Now())
+	for i := range out {
+		out[i].ReturnURL = r.URL.Path
+	}
+	return out
 }
 
 // docVersionPage handles GET /docs/versions/{id}/{n}: one version of a

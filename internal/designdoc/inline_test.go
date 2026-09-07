@@ -1,4 +1,4 @@
-package cmd
+package designdoc
 
 import (
 	"fmt"
@@ -40,8 +40,8 @@ func inlineFixture() map[int64]*model.DocDetail {
 	return map[int64]*model.DocDetail{1: base, 2: amender, 3: draft, 4: meta}
 }
 
-func fixtureInliner(docs map[int64]*model.DocDetail) *docInliner {
-	return newDocInliner(func(id int64) (*model.DocDetail, error) {
+func fixtureInliner(docs map[int64]*model.DocDetail) *Inliner {
+	return NewInliner(func(id int64) (*model.DocDetail, error) {
 		d, ok := docs[id]
 		if !ok {
 			return nil, fmt.Errorf("no doc %d", id)
@@ -55,7 +55,7 @@ func fixtureInliner(docs map[int64]*model.DocDetail) *docInliner {
 // nested sections are not duplicated.
 func TestConsolidateDoc(t *testing.T) {
 	docs := inlineFixture()
-	out, err := fixtureInliner(docs).consolidateDoc(docs[1], "")
+	out, err := fixtureInliner(docs).Consolidate(docs[1], "")
 	if err != nil {
 		t.Fatalf("consolidate: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestConsolidateDoc(t *testing.T) {
 	}
 
 	// Section mode: only §2's subtree, folds intact.
-	out, err = fixtureInliner(docs).consolidateDoc(docs[1], "sec-2")
+	out, err = fixtureInliner(docs).Consolidate(docs[1], "sec-2")
 	if err != nil {
 		t.Fatalf("consolidate sec-2: %v", err)
 	}
