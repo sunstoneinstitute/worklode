@@ -115,6 +115,128 @@ func TestCreateMilestoneAPIRefusals(t *testing.T) {
 	}
 }
 
+// TestListProjectMilestonesAPI covers GET /api/v1/projects/{id}/milestones:
+// an empty project reads back an empty list rather than 404ing, a seeded
+// project lists its milestones in position order with derived progress from
+// their attached children, and an unknown project 404s.
+func TestListProjectMilestonesAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "GET", "/api/v1/projects/proj/milestones", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("empty status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var empty model.MilestoneListResponse
+	decodeInto(t, rr, &empty)
+	if len(empty.Milestones) != 0 {
+		t.Fatalf("empty project milestones = %+v, want none", empty.Milestones)
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+		model.CreateMilestoneInput{Title: "Internal review"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create milestone 1 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	m1 := decodeMap(t, rr)["id"].(string)
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+		model.CreateMilestoneInput{Title: "Publication"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create milestone 2 status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	m2 := decodeMap(t, rr)["id"].(string)
+
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Attached task", "priority": "high", "kind": "feature",
+	})
+	if rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"milestone": m1}); rr.Code != http.StatusOK {
+		t.Fatalf("attach task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/projects/proj/milestones", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("seeded status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var resp model.MilestoneListResponse
+	decodeInto(t, rr, &resp)
+	if len(resp.Milestones) != 2 {
+		t.Fatalf("milestones = %+v, want 2", resp.Milestones)
+	}
+	if resp.Milestones[0].ID != m1 || resp.Milestones[1].ID != m2 {
+		t.Fatalf("milestone order = [%s, %s], want [%s, %s]",
+			resp.Milestones[0].ID, resp.Milestones[1].ID, m1, m2)
+	}
+	if got := resp.Milestones[0].Progress; got.TasksTotal != 1 || got.TasksClosed != 0 {
+		t.Errorf("m1 progress = %+v, want 1 task open", got)
+	}
+	if got := resp.Milestones[1].Progress; got.TasksTotal != 0 {
+		t.Errorf("m2 progress = %+v, want no tasks", got)
+	}
+
+	if rr := doReq(t, h, "GET", "/api/v1/projects/nosuch/milestones", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown project status = %d, want 404", rr.Code)
+	}
+}
+
+// TestGetMilestoneAPI covers GET /api/v1/milestones/{id}: the detail carries
+// the milestone's attached task and deliverable, its progress derived from
+// exactly those children, and an unknown id 404s.
+func TestGetMilestoneAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+		model.CreateMilestoneInput{Title: "Internal review"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create milestone status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	milestoneID := decodeMap(t, rr)["id"].(string)
+
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Attached task", "priority": "high", "kind": "feature",
+	})
+	if rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"milestone": milestoneID}); rr.Code != http.StatusOK {
+		t.Fatalf("attach task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token,
+		model.CreateDeliverableInput{Name: "Attached deliverable"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create deliverable status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	deliverableID := decodeMap(t, rr)["id"].(string)
+	if rr := doReq(t, h, "PATCH", "/api/v1/deliverables/"+deliverableID, token,
+		model.EditDeliverableInput{Milestone: &milestoneID}); rr.Code != http.StatusOK {
+		t.Fatalf("attach deliverable status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/milestones/"+milestoneID, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var detail model.MilestoneDetail
+	decodeInto(t, rr, &detail)
+	if detail.ID != milestoneID || detail.Title != "Internal review" {
+		t.Fatalf("detail = %+v, want id/title of the created milestone", detail)
+	}
+	if len(detail.Tasks) != 1 || detail.Tasks[0].ID != "WL-1" {
+		t.Fatalf("detail tasks = %+v, want [WL-1]", detail.Tasks)
+	}
+	if len(detail.Deliverables) != 1 || detail.Deliverables[0].ID != deliverableID {
+		t.Fatalf("detail deliverables = %+v, want [%s]", detail.Deliverables, deliverableID)
+	}
+	if detail.Progress.TasksTotal != 1 || detail.Progress.DeliverablesTotal != 1 {
+		t.Fatalf("detail progress = %+v, want 1 task and 1 deliverable", detail.Progress)
+	}
+
+	if rr := doReq(t, h, "GET", "/api/v1/milestones/WL-MILE-9", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown milestone status = %d, want 404", rr.Code)
+	}
+}
+
 // TestMilestonesPage covers the project-local Milestones destination (spec
 // 029 §2, spec 032 §10): an empty project renders the honest "No milestones
 // yet" state, a seeded project renders every milestone in position order with

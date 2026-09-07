@@ -72,6 +72,77 @@ func TestMilestoneAddJSON(t *testing.T) {
 	}
 }
 
+// TestMilestoneListGetsProjectMilestones covers `lode milestone list`: it
+// GETs the scoped project's milestones endpoint and renders the table.
+func TestMilestoneListGetsProjectMilestones(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, `{"milestones":[{"id":"COW-MILE-1","project":"cow",`+
+			`"title":"Internal review","position":1,"progress":{"tasks_total":2,"tasks_closed":1}}]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	cmd := newMilestoneListCmd()
+	cmd.SetArgs([]string{"--project", "cow"})
+	cmd.SetOut(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("milestone list: %v", err)
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/v1/projects/cow/milestones" {
+		t.Errorf("request = %s %s, want GET /api/v1/projects/cow/milestones", gotMethod, gotPath)
+	}
+	for _, want := range []string{"COW-MILE-1", "Internal review", "1/2"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestMilestoneListJSON: --json prints the server's own body, unreformatted.
+// Driven through rootCmd because --json is a root persistent flag.
+func TestMilestoneListJSON(t *testing.T) {
+	const body = `{"milestones":[{"id":"COW-MILE-1","project":"cow","title":"Internal review","position":1}]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, body)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	out, err := runLode(t, "milestone", "list", "--project", "cow", "--json")
+	if err != nil {
+		t.Fatalf("milestone list --json: %v", err)
+	}
+	if !strings.Contains(out, body) {
+		t.Errorf("output = %q, want the raw server body", out)
+	}
+}
+
+// TestMilestoneListRequiresProject covers the no-project error: `lode
+// milestone list` cannot resolve a default the way `add` cannot either.
+func TestMilestoneListRequiresProject(t *testing.T) {
+	t.Setenv("LODE_SERVER", "http://unused.invalid")
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	cmd := newMilestoneListCmd()
+	cmd.SetArgs(nil)
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("milestone list with no project: want an error, got nil")
+	}
+}
+
 // TestMilestoneAttachPatchesDeliverable covers `lode milestone attach
 // <milestone> <deliverable>`: it PATCHes the deliverable's milestone field
 // and prints the updated row.

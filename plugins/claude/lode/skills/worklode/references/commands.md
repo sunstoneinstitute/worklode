@@ -113,6 +113,8 @@ Flags: --server
   Flags: --position, --project, --repo
 - `lode milestone attach` — Attach a deliverable to a milestone in the same project
 - `lode milestone detach` — Detach a deliverable from its milestone
+- `lode milestone list` — List a project's milestones, in position order
+  Flags: --project, --repo
 
 ## `lode project` — Manage projects and their repos
 
