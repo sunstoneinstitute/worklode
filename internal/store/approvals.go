@@ -807,7 +807,7 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 			 WHERE a.entity_kind = 'pr' AND a.state IN ('awaiting', 'changes_requested')
 			   AND pr.author IS NOT NULL AND act.expected_github_login IS NOT NULL
 			   AND lower(pr.author) = lower(act.expected_github_login)
-			   AND (a.required_actor IS NULL OR a.required_actor <> $1)
+			   AND a.required_actor IS NOT NULL AND a.required_actor <> $1
 			   AND pr.state = 'open'
 
 			UNION ALL
