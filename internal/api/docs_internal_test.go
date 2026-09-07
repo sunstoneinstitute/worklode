@@ -73,14 +73,15 @@ func TestDocSelectorFromConflicts(t *testing.T) {
 // test-built *server carries.
 func TestDocViewRendersBody(t *testing.T) {
 	t.Parallel()
+	body := "## 3. Anchors {#sec-3}\n\n**prose**\n\n<script>alert(1)</script>\n"
 	v := docView(nil, mdrender.ProjectKeys{}, &model.DocDetail{
 		Doc: model.Doc{
 			ID:   25,
 			Kind: "spec",
 			Slug: "025-documents",
-			Body: "## 3. Anchors {#sec-3}\n\n**prose**\n\n<script>alert(1)</script>\n",
+			Body: body,
 		},
-	})
+	}, body, false, "/docs/WL-SPEC-25")
 	got := string(v.BodyHTML)
 	// The document flavour: the anchor becomes an id, which is what the
 	// Sections table links at.

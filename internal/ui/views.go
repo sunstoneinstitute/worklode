@@ -180,6 +180,11 @@ type ApprovalRow struct {
 	RequiredActorName string
 	Age               string
 	Decidable         bool
+	// ReturnURL is the page deciding this row should come back to, for a row
+	// rendered somewhere other than the Reviews queue. Empty on the queue
+	// itself, which is where the act redirects by default; it must be a path
+	// on this site, and the handler refuses anything else.
+	ReturnURL string
 }
 
 // --- inbox (spec 056 §3) -----------------------------------------------------
@@ -742,6 +747,45 @@ type DocView struct {
 	// its live row and every version it has superseded — rendered as the
 	// Versions table below the chips.
 	Versions []model.DocVersionSummary
+	// Consolidated says BodyHTML is the folded view (026 §3.2) rather than
+	// the stored source: every effective amendment and supersession inlined
+	// under the section it acts on. That is the page's default, because a
+	// reviewer reading the source of a spec four other specs have amended is
+	// reading something no longer true. SourceURL and ConsolidatedURL are the
+	// two spellings of this page; the toggle links at whichever is not shown.
+	// Consolidated is false when the fold failed, and the page then says so
+	// rather than passing the source off as the current state.
+	Consolidated    bool
+	ConsolidatedURL string
+	SourceURL       string
+	// Notes are the document's anchored notes (025 §8.5), oldest first.
+	Notes []DocNoteRow
+	// Reviewers is the durable reviewer roster (025 §7.3), each row saying
+	// whether that reviewer still owes a verdict on the current version.
+	Reviewers []DocReviewerRow
+	// Approvals are this document's still-awaiting approval rows (029 §7),
+	// each carrying the decide form the Reviews queue uses. Empty when none
+	// is open, which is the ordinary case for an accepted document.
+	Approvals []ApprovalRow
+}
+
+// DocNoteRow is one anchored note rendered for the page: the note's own body
+// as sanitised markdown, plus who left it, when, and the section it hangs on.
+// Task is the task that raised it, "" when a human at a prompt did.
+type DocNoteRow struct {
+	Anchor    string
+	BodyHTML  template.HTML
+	CreatedBy string
+	CreatedAt time.Time
+	Task      string
+}
+
+// DocReviewerRow is one member of a document's reviewer roster. Awaiting is
+// true while that reviewer has neither approved nor requested changes on the
+// current version.
+type DocReviewerRow struct {
+	Actor    string
+	Awaiting bool
 }
 
 // DocVersionView is one version's page (GET /docs/versions/{id}/{n}): the
