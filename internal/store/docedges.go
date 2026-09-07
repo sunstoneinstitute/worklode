@@ -175,6 +175,46 @@ func closureEqual(a, b []closureRef) bool {
 	return slices.Equal(sa, sb)
 }
 
+// reachesByAmends reports whether the section (fromDoc, fromAnchor) is
+// reachable from (startDoc, startAnchor) over stored section-scoped
+// amends/replaces edges — including the zero-hop case, where the two are the
+// same section. rebuildEdges walks it from a proposed edge's *to* end back
+// towards its *from* end: an arrival means the proposed edge closes a cycle.
+//
+// Only section-scoped resolved edges enter the graph (026 §4.1): a
+// document-scoped claim is a banner reference `lode show --inline` never folds
+// (026 §3.2), so it cannot recurse, and an unresolved reference names no
+// section at all. `amends` and `replaces` share one graph because both mean
+// "this newer section acts on that older one".
+//
+// UNION, not UNION ALL: the walk dedupes on the node, so it terminates even
+// over a graph that is already cyclic. Tombstoned documents are not filtered
+// out — undeleting one restores its edges, and a loop written past a
+// tombstone would come back with it.
+func reachesByAmends(tx *sql.Tx, startDoc int64, startAnchor string, fromDoc int64, fromAnchor string) (bool, error) {
+	var one int
+	err := tx.QueryRow(`
+		WITH RECURSIVE reach(doc, anchor) AS (
+		    SELECT $1::bigint, $2::text
+		  UNION
+		    SELECT e.to_doc, e.to_anchor
+		      FROM reach r
+		      JOIN doc_edges e ON e.from_doc = r.doc AND e.from_anchor = r.anchor
+		     WHERE e.type IN ('amends','replaces')
+		       AND e.to_doc IS NOT NULL AND e.to_anchor IS NOT NULL
+		)
+		SELECT 1 FROM reach WHERE doc = $3 AND anchor = $4 LIMIT 1`,
+		startDoc, startAnchor, fromDoc, fromAnchor).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("walk amends/replaces edges from doc %d #%s: %w",
+			startDoc, startAnchor, err)
+	}
+	return true, nil
+}
+
 // rebuildEdges replaces the edges a document's frontmatter declares. It
 // deletes and re-inserts, so doc_edges_unique is satisfied across calls;
 // doc_coverage_completed_with cascades off doc_edges, so clearing the parent
@@ -221,6 +261,9 @@ func closureEqual(a, b []closureRef) bool {
 // authored twice is one edge, same as covers; the same section deferred to
 // two different owners is the contradiction covers refuses for two
 // disagreeing levels, refused here as ErrInvalidInput too.
+//
+// A section-scoped amends/replaces edge is checked for acyclicity before it is
+// written (026 §4.1, reachesByAmends) — the edge that closes a loop is ErrCycle.
 func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, fm *designdoc.Frontmatter) error {
 	// declared_by, not from_doc: a `blockedBy:` row's from end is the *other*
 	// plan (025 §5), and this document is still the one answerable for it. The
@@ -345,6 +388,23 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 		}
 		seen[row] = docEdgeSeen{level: level, closure: closure}
 
+		// 026 §4.1: the amends/replaces graph stays acyclic. A cycle needs
+		// every one of its edges to exist, so refusing the one that closes it
+		// never blocks a legitimate intermediate state — and a loop, once
+		// written, makes `lode show --inline` a question with no fixed answer.
+		if (row.typ == "amends" || row.typ == "replaces") &&
+			row.fromAnchor != "" && row.toAnchor != "" && row.toDoc != 0 {
+			cyclic, err := reachesByAmends(tx, row.toDoc, row.toAnchor, row.fromDoc, row.fromAnchor)
+			if err != nil {
+				return err
+			}
+			if cyclic {
+				return fmt.Errorf(
+					"doc %d #%s %s %q, closing a loop in the amends/replaces graph (026 §4.1): %w",
+					docID, row.fromAnchor, e.typ, e.ref, ErrCycle)
+			}
+		}
+
 		var coverageCol sql.NullString
 		if e.typ == "covers" {
 			coverageCol = sql.NullString{String: level, Valid: true}
@@ -421,7 +481,9 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 // have refused as a contradiction (026 §5.1). That disagreement is deliberately
 // not ErrInvalidInput here: it lives in *another* document's frontmatter, and
 // failing this document's creation for it would wedge an import on an unrelated
-// defect.
+// defect. An amends/replaces loop that only closes as an edge re-points is left
+// standing for the same reason — rebuildEdges refuses one at write time
+// (026 §4.1), and the re-point is not the write that authored it.
 //
 // A re-pointed document-level `replaces` edge also carries a side effect: the
 // supersession cascade its replacing document could not run, because at accept
