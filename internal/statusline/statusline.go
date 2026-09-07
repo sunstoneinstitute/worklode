@@ -400,7 +400,7 @@ func renderTask(dir, session string) string {
 }
 
 // renderUsage returns the usage segment: context, session, and weekly usage
-// as bracketed fields ([CtxWin 12% 101k] [Sess 56% ⟲2h3m] [Week 24%
+// as bracketed fields ([Ctx 12% 101k] [Sess 56% ⟲2h3m] [Week 24%
 // ⟲1d2h3m]) rather than a bar, so all three fit in the width the bar alone
 // used to need. Each field drops out independently — a payload can carry
 // context_window without rate_limits (a harness below Claude Code 2.1.x, or
@@ -412,7 +412,7 @@ func renderUsage(p *Payload, tempDir, configDir string) string {
 	now := time.Now()
 	var fields []string
 	if used, tokens, windowSize, ok := contextUsedPercent(p, tempDir); ok {
-		fields = append(fields, bracketField("CtxWin", used, contextColor(used, windowSize, dark), humanTokens(tokens)))
+		fields = append(fields, bracketField("Ctx", used, contextColor(used, windowSize, dark), humanTokens(tokens)))
 	}
 	if p.RateLimits != nil {
 		if w := p.RateLimits.FiveHour; w != nil {
@@ -569,7 +569,7 @@ func usageColor(pct int, dark bool) string {
 	return usageColors(dark)[severityIndex(pct)]
 }
 
-// contextColor picks the CtxWin field's colour: the usual severity ramp,
+// contextColor picks the Ctx field's colour: the usual severity ramp,
 // bumped one level brighter when windowSize is the base 200k rather than the
 // 1M extended window — that smaller window leaves less room to work with at
 // the same percentage, so the warning should arrive a level early. A bump
