@@ -14,10 +14,10 @@ data:
   LODE_BRANCH_TEMPLATE: ""
   LODE_SKILL_SOURCES: ""
   # The dense arm of corpus search (040 §2.3). The URL is the in-cluster
-  # text-embeddings-inference sidecar in embeddings.yaml, which speaks the same
+  # text-embeddings-inference Service in embeddings.yaml, which speaks the same
   # OpenAI-compatible wire protocol internal/embed.OpenAI already speaks — so
   # this is configuration, not new provider code. No LODE_EMBEDDING_API_KEY:
-  # the sidecar is local and unauthenticated.
+  # the Service is cluster-local and unauthenticated.
   LODE_EMBEDDING_URL: "http://worklode-embeddings.worklode.svc.cluster.local/v1/embeddings"
   LODE_EMBEDDING_MODEL: "google/embeddinggemma-300m"
   # EmbeddingGemma is asymmetric: a query and a document must be embedded with

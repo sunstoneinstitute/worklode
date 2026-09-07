@@ -1,0 +1,91 @@
+# Builds the embedding server with the model weights baked in
+# (deploy/embeddings.Dockerfile). Run by hand, once per model version — the
+# result is a 1.5 GB image that changes only when the model or the
+# text-embeddings-inference base does, so it deliberately stays off the
+# per-commit path in _build-image.yml.
+#
+# After a run, pin the new tag in deploy/base/embeddings.yaml.
+name: build-embeddings-image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Image tag, naming the model and the base version it was built from.
+          Bump it whenever deploy/embeddings.Dockerfile changes either.
+        type: string
+        default: embeddinggemma-300m-tei1.9.3
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # HF_TOKEN lives on this environment, not on the repo: it pulls weights
+    # under a licence the org accepted by name, so who can spend it is a
+    # protection rule rather than "anyone who can run a workflow".
+    environment: huggingface
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # An empty secret would otherwise fail as a 401 from Hugging Face partway
+      # through the build, which reads like a revoked grant rather than an
+      # unset secret. It also makes the leak check below vacuous: grep for the
+      # empty string matches anything.
+      - name: Require a non-empty HF_TOKEN
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN repo secret is unset or empty. It must hold a" \
+                 "Hugging Face token for an account granted access to the gated" \
+                 "google/embeddinggemma-300m repo."
+            exit 1
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: deploy/embeddings.Dockerfile
+          push: true
+          tags: ghcr.io/sunstoneinstitute/worklode-embeddings:${{ inputs.tag }}
+          # google/embeddinggemma-300m is a gated repo; this token must belong
+          # to an account granted access under the Gemma Terms of Use. Mounted
+          # as a build secret so it never lands in an image layer.
+          secrets: |
+            hf_token=${{ secrets.HF_TOKEN }}
+
+      # BuildKit does not commit a secret mount to a layer, so this should never
+      # fire. It is here to catch the change that swaps the mount for an ARG or
+      # an ENV, both of which do persist — an ARG lands in the image history
+      # verbatim. The image config carries the env and the history, which is
+      # where such a leak would surface.
+      - name: Check the token did not land in the image
+        env:
+          IMAGE: ghcr.io/sunstoneinstitute/worklode-embeddings:${{ inputs.tag }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          config="$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Image}}')"
+          if printf '%s' "$config" | grep -qF "$HF_TOKEN"; then
+            echo "::error::The Hugging Face token is present in the published image config."
+            exit 1
+          fi
+          if printf '%s' "$config" | grep -qE '"(HF_TOKEN|HUGGING_FACE_HUB_TOKEN)='; then
+            echo "::error::The image sets a Hugging Face token env var; the running pod must hold no credential."
+            exit 1
+          fi
+          echo "No Hugging Face credential in the published image config."
