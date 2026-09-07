@@ -76,6 +76,30 @@ func TestHookCommandsKeepsForeignCommands(t *testing.T) {
 	}
 }
 
+// TestApplyGroupedHooksDropsObsoleteUsageHook is the `lode install` cleanup
+// guarantee that retires a binding Worklode no longer ships (WL-658 removed
+// the transcript usage report). applyGroupedHooks strips every managed
+// `lode-hook ` command before writing the current ones, so an upgrade needs no
+// second cleanup mechanism: the obsolete entry goes, a foreign hook on the
+// same event stays, and a repeated install leaves exactly one current binding.
+func TestApplyGroupedHooksDropsObsoleteUsageHook(t *testing.T) {
+	settings := map[string]any{"hooks": map[string]any{
+		"Stop": []any{map[string]any{"hooks": []any{
+			map[string]any{"type": "command", "command": "lode-hook report-usage"},
+			map[string]any{"type": "command", "command": "their-hook"},
+		}}},
+	}}
+	current := []hookBinding{{Event: "Stop", Command: "lode-hook heartbeat"}}
+
+	applyGroupedHooks(settings, current)
+	applyGroupedHooks(settings, current) // a second install must not accumulate
+
+	want := []string{"their-hook", "lode-hook heartbeat"}
+	if got := HookCommands(settings, "Stop"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Stop = %#v, want %#v", got, want)
+	}
+}
+
 func TestStripLodeHooksRemovesLegacyAndNewBindings(t *testing.T) {
 	settings := map[string]any{"hooks": map[string]any{
 		"Stop": []any{map[string]any{"hooks": []any{
