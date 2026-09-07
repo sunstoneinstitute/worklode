@@ -28,6 +28,13 @@ func (c *Client) GetDecision(ctx context.Context, task, key string) (model.Decis
 		"/api/v1/tasks/"+url.PathEscape(task)+"/decisions/"+url.PathEscape(key), nil, "decision")
 }
 
+// AnswerDecision calls POST /api/v1/tasks/{id}/decisions/{key}/decide: record
+// the answer to one posed question.
+func (c *Client) AnswerDecision(ctx context.Context, task, key string, a model.DecisionAnswer) (model.Decision, []byte, error) {
+	return doJSON[model.Decision](ctx, c, http.MethodPost,
+		"/api/v1/tasks/"+url.PathEscape(task)+"/decisions/"+url.PathEscape(key)+"/decide", a, "decision")
+}
+
 // AddDecision calls POST /api/v1/tasks/{id}/decisions: pose one question.
 func (c *Client) AddDecision(ctx context.Context, task string, in model.DecisionInput) (model.Decision, []byte, error) {
 	return doJSON[model.Decision](ctx, c, http.MethodPost,

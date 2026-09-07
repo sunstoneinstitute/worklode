@@ -136,3 +136,50 @@ func TestDecisionEditRejectsBareTask(t *testing.T) {
 		t.Fatalf("decision edit WL-7 err = %v, want the address hint", err)
 	}
 }
+
+// TestDecisionResolvePostsAnswer covers `lode decision resolve`: the
+// <task>/<key> address splits, each answer flag maps onto its answer JSON
+// field, and the confirmation says so when the answer closed the task.
+func TestDecisionResolvePostsAnswer(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/decide") {
+			b, _ := io.ReadAll(r.Body)
+			gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(b)
+			io.WriteString(w, answeredDecisionJSON)
+			return
+		}
+		io.WriteString(w, `{"id":"WL-7","title":"Ship X","state":"merged","priority":"high","kind":"decision"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	cmd := newDecisionResolveCmd()
+	cmd.SetArgs([]string{"WL-7/x-distribution", "--pick", "yes", "--notes", "cheaper"})
+	cmd.SetOut(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("decision resolve: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/v1/tasks/WL-7/decisions/x-distribution/decide" {
+		t.Errorf("request = %s %s", gotMethod, gotPath)
+	}
+	if !strings.Contains(gotBody, `"picked":["yes"]`) || !strings.Contains(gotBody, `"notes":"cheaper"`) {
+		t.Errorf("request body = %q", gotBody)
+	}
+	if strings.Contains(gotBody, `"value"`) || strings.Contains(gotBody, `"freetext"`) {
+		t.Errorf("resolve sent answer fields it was never given: %q", gotBody)
+	}
+	if !strings.Contains(out.String(), "WL-7 is merged") {
+		t.Errorf("output does not report the closure:\n%s", out.String())
+	}
+}
+
+const answeredDecisionJSON = `{"id":1,"task":"WL-7","key":"x-distribution","position":1,` +
+	`"question":"Do we ship X?","response_type":"single_select_notes",` +
+	`"options":[{"label":"yes"},{"label":"no"}],` +
+	`"answer":{"picked":["yes"],"notes":"cheaper"},"decided_by":"stig",` +
+	`"decided_at":"2026-09-07T10:00:00Z"}`

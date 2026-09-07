@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/sunstoneinstitute/worklode/internal/cli"
@@ -69,7 +71,53 @@ func newDecisionCmd() *cobra.Command {
 		Use:   "decision",
 		Short: "Decisions: the questions a task poses and the answers they wait on",
 	}
-	cmd.AddCommand(newDecisionListCmd(), newDecisionShowCmd(), newDecisionAddCmd(), newDecisionEditCmd())
+	cmd.AddCommand(newDecisionListCmd(), newDecisionShowCmd(), newDecisionAddCmd(),
+		newDecisionEditCmd(), newDecisionResolveCmd())
+	return cmd
+}
+
+// newDecisionResolveCmd records the answer to a posed question. `resolve` is
+// the L3 domain action for it (061 §1): "answer" names no verb the naming law
+// allows, and the seven canonical verbs do not express recording a decision.
+func newDecisionResolveCmd() *cobra.Command {
+	var a model.DecisionAnswer
+	cmd := &cobra.Command{
+		Use:   "resolve <task>/<key>",
+		Short: "Record the answer to a posed question",
+		Long: "Record the answer to a posed question. Recording is terminal: an answered\n" +
+			"row is never written over, so deciding again means posing another question.\n" +
+			"On a decision-kind task the last answer closes the task in the same act.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			onTask, key, err := cli.ParseDecisionRef(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.AnswerDecision(cmd.Context(), onTask, key, a)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DecisionRender(cmd.OutOrStdout(), d)
+			// The answer that closed the task is worth one line: the row's own
+			// view says nothing about the task it just delivered.
+			if task, _, err := c.GetTask(cmd.Context(), onTask); err == nil && task.State == "merged" {
+				fmt.Fprintf(cmd.OutOrStdout(), "\n%s is merged: every question it posed is answered.\n", onTask)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringArrayVar(&a.Picked, "pick", nil, "an option label the answer names (repeatable for multi_select)")
+	cmd.Flags().StringVar(&a.Notes, "notes", "", "the reasoning a single_select_notes question asks for")
+	cmd.Flags().StringVar(&a.Freetext, "text", "", "free text, for a freetext or pick_or_freetext question")
+	cmd.Flags().StringVar(&a.Value, "value", "", "yes, no or unsure, for a yes_no question")
 	return cmd
 }
 

@@ -202,10 +202,15 @@ var routeGuards = map[string]routeGuard{
 	// token has no business reaching.
 	"POST /api/v1/tasks/{id}/decisions":        guarded(permTaskWrite),
 	"PATCH /api/v1/tasks/{id}/decisions/{key}": guarded(permTaskWrite),
-	"POST /api/v1/instructions/claim":          guarded(permTaskClaim),
-	"POST /api/v1/tasks/{id}/assign":           guarded(permTaskAssign),
-	"POST /api/v1/tasks/{id}/unassign":         guarded(permTaskAssign),
-	"GET /api/v1/board":                        guarded(permTaskRead),
+
+	// Recording an answer, which on a decision-kind task also closes it: a
+	// task transition, guarded like /done and /start.
+	"POST /api/v1/tasks/{id}/decisions/{key}/decide": guarded(permTaskWrite),
+
+	"POST /api/v1/instructions/claim":  guarded(permTaskClaim),
+	"POST /api/v1/tasks/{id}/assign":   guarded(permTaskAssign),
+	"POST /api/v1/tasks/{id}/unassign": guarded(permTaskAssign),
+	"GET /api/v1/board":                guarded(permTaskRead),
 
 	// --- documents (spec 025 §5, §6, §7) --------------------------------------
 	// Reading and writing the corpus is its own capability (see permDocRead in

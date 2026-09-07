@@ -1,6 +1,6 @@
 // decisions.go serves 025 §10.1's posed question over the JSON API: reading
-// the rows a task poses, adding one, and editing an unanswered one. Recording
-// an answer is a different write with a different rule and does not live here.
+// the rows a task poses, adding one, editing an unanswered one, and recording
+// the answer that closes it.
 package api
 
 import (
@@ -70,6 +70,23 @@ func (s *server) editDecision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d, err := s.st.EditDecision(r.Context(), r.PathValue("id"), r.PathValue("key"), actorIDFrom(r), req)
+	if err != nil {
+		s.mapDecisionErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+// decideDecision handles POST /api/v1/tasks/{id}/decisions/{key}/decide: the
+// answer to one posed question. On a decision-kind task whose last open row
+// this was, the same write closes the task.
+func (s *server) decideDecision(w http.ResponseWriter, r *http.Request) {
+	var req model.DecisionAnswer
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	d, err := s.st.RecordDecision(r.Context(), r.PathValue("id"), r.PathValue("key"), actorIDFrom(r), req)
 	if err != nil {
 		s.mapDecisionErr(w, err)
 		return
