@@ -473,9 +473,9 @@ func TestInstallWritesInstructions(t *testing.T) {
 	}
 }
 
-// gitIn runs one git command in dir, failing the test on a non-zero exit.
-// Signing and identity are pinned so a temp repo never depends on the
-// developer's global config.
+// gitIn runs one git command in dir and returns its trimmed output, failing
+// the test on a non-zero exit. Signing and identity are pinned so a temp repo
+// never depends on the developer's global config.
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	c := exec.Command("git", append([]string{
@@ -487,7 +487,7 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 	if err != nil {
 		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
 	}
-	return string(out)
+	return strings.TrimSpace(string(out))
 }
 
 // linkedWorktree creates <root>/.worktrees/<name> as a real linked worktree —

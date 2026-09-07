@@ -264,6 +264,55 @@ func TestNextClaimsSpecificTaskAndSetsUpWorktree(t *testing.T) {
 	}
 }
 
+// TestNextBranchesFromOriginDefault pins WL-623: the task branch is cut from
+// origin/<default>, whatever the root checkout happens to have checked out.
+// Before the fix `git worktree add -b` took the root's HEAD, so claiming after
+// a run of merged sibling PRs — or from a checkout parked on a feature branch
+// — silently gave the worktree a stale base. The remote here is a bare repo on
+// disk, so the fetch is real but needs no network.
+func TestNextBranchesFromOriginDefault(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	task := createTestTask(t, c, "Fresh base")
+
+	root := initGitRepo(t)
+	def := gitIn(t, root, "rev-parse", "--abbrev-ref", "HEAD")
+	base := gitIn(t, root, "rev-parse", "HEAD")
+
+	remote := filepath.Join(t.TempDir(), "origin.git")
+	gitIn(t, root, "init", "--bare", remote)
+	gitIn(t, root, "remote", "add", "origin", remote)
+	gitIn(t, root, "push", "origin", def)
+	gitIn(t, root, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/"+def)
+
+	// A sibling PR lands on the default branch...
+	if err := os.WriteFile(filepath.Join(root, "sibling.txt"), []byte("merged\n"), 0o644); err != nil {
+		t.Fatalf("write sibling.txt: %v", err)
+	}
+	gitIn(t, root, "add", "sibling.txt")
+	gitIn(t, root, "commit", "-m", "sibling PR")
+	gitIn(t, root, "push", "origin", def)
+	fresh := gitIn(t, root, "rev-parse", "HEAD")
+
+	// ...and the root checkout knows nothing about it: its default branch is
+	// back at base, it is standing on an unrelated feature branch, and even
+	// the remote-tracking ref is gone, so only a fetch can recover it.
+	gitIn(t, root, "checkout", "-B", def, base)
+	gitIn(t, root, "checkout", "-b", "unrelated-feature")
+	gitIn(t, root, "update-ref", "-d", "refs/remotes/origin/"+def)
+
+	t.Chdir(root)
+	out, err := runLode(t, "work", "next", task.ID, "--json")
+	if err != nil {
+		t.Fatalf("lode work next: %v\noutput: %s", err, out)
+	}
+
+	wtDir := filepath.Join(root, worktree.DefaultBase, task.ID+"-fresh-base")
+	if got := gitIn(t, wtDir, "rev-parse", "HEAD"); got != fresh {
+		t.Fatalf("worktree HEAD = %s, want origin/%s (%s); base was %s", got, def, fresh, base)
+	}
+}
+
 // emptyBranchServer wraps a test server's handler so the claim endpoint's
 // response always reports an empty branch, regardless of what the store
 // actually rendered — the only way to exercise the "the server returned no
