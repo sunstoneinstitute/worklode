@@ -56,8 +56,8 @@ func TestEntityArgsComplete(t *testing.T) {
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
 		for _, sub := range c.Commands() {
-			if sub.Name() == "help" || sub.Name() == "completion" {
-				continue // cobra's own, and neither takes an entity
+			if isCobraGenerated(sub.Name()) {
+				continue // cobra's own; none take an entity
 			}
 			path := sub.CommandPath()
 			args := entityArgs(sub.Use)
