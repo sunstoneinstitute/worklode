@@ -115,9 +115,20 @@ spec:
           # Liveness is deliberately slacker than readiness, so readiness always
           # fires first and liveness only reaches a process that has been
           # unresponsive for five minutes — a hang, not a batch.
+          # /info here too, for the same reason as readiness below: /health
+          # blocks behind the inference queue and cannot tell "busy" from
+          # "hung", so as a kill signal it only ever produces false
+          # positives. It killed this pod 11 times in four hours (exit 137,
+          # "Liveness probe failed: context deadline exceeded" x144) while
+          # the server was answering embeds normally.
+          #
+          # ponytail: this now only catches a wedged HTTP listener, not a
+          # wedged backend. The backend wedge we actually saw aborts the
+          # process (exit 139), which the kubelet restarts anyway, so the
+          # coverage lost is smaller than the outage this caused.
           livenessProbe:
             httpGet:
-              path: /health
+              path: /info
               port: http
             periodSeconds: 60
             timeoutSeconds: 15
@@ -131,10 +142,10 @@ spec:
           # struct and answers immediately.
           #
           # ponytail: /info proves the process is serving HTTP, not that the
-          # backend can embed. That is what the slack liveness probe above
-          # still uses /health for, and what worklode_index_reembed_total
-          # reports. Point readiness back at a health endpoint if TEI ever
-          # gets one that answers predictably.
+          # backend can embed. Nothing in the pod checks the backend now;
+          # worklode_index_reembed_total is what reports it. Point both
+          # probes back at a health endpoint if TEI ever gets one that
+          # answers predictably.
           readinessProbe:
             httpGet:
               path: /info
