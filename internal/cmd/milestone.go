@@ -15,8 +15,42 @@ func newMilestoneCmd() *cobra.Command {
 		Short: "Milestones: the ordered containers a project's tasks and deliverables hang off",
 	}
 	cmd.AddCommand(newMilestoneAddCmd())
+	cmd.AddCommand(newMilestoneListCmd())
 	cmd.AddCommand(newMilestoneAttachCmd())
 	cmd.AddCommand(newMilestoneDetachCmd())
+	return cmd
+}
+
+func newMilestoneListCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List a project's milestones, in position order",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			if sc.Project == "" {
+				return errNoProject
+			}
+			resp, raw, err := c.ListMilestones(cmd.Context(), sc.Project)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.MilestoneTable(cmd.OutOrStdout(), resp.Milestones)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "project id")
 	return cmd
 }
 

@@ -51,6 +51,34 @@ func (s *server) recordMilestone(ctx context.Context, source, projectID, title s
 	return created, nil
 }
 
+// listProjectMilestones handles GET /api/v1/projects/{id}/milestones. It
+// loads the project first, so an unknown project 404s the way
+// listProjectDeliverables' does rather than returning an empty list for a
+// project that was never there.
+func (s *server) listProjectMilestones(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+	if _, err := s.st.GetProject(r.Context(), projectID); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	items, err := s.st.ListMilestones(r.Context(), projectID)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, model.MilestoneListResponse{Milestones: items})
+}
+
+// getMilestone handles GET /api/v1/milestones/{id}.
+func (s *server) getMilestone(w http.ResponseWriter, r *http.Request) {
+	d, err := s.st.GetMilestone(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
 // createMilestone handles POST /api/v1/projects/{id}/milestones. Validation
 // lives in store.CreateMilestone so no caller can drift into accepting a
 // different milestone; mapStoreErr turns its refusals into 422 (bad title or
