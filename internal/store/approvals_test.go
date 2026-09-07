@@ -492,6 +492,127 @@ func TestListAwaitingApprovals(t *testing.T) {
 	}
 }
 
+// TestListAwaitingApprovalsCoversEveryKind: 029 §7.2's queue is one fact
+// family over every governed entity, so the reader correlates a deliverable
+// and a task the same way it already correlates a PR and a doc — each to its
+// own project, none of them dropped for want of a task in between.
+func TestListAwaitingApprovalsCoversEveryKind(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+	task := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "the pr's task", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+	pr := PullRequest{
+		Repo: "sunstoneinstitute/q", Number: 1, Title: "a pr", State: "open",
+		HeadRef: task.ID + "-pr", HeadSHA: "sha1",
+		URL: "https://github.com/sunstoneinstitute/q/pull/1", OpenedAt: taskTestNow,
+	}
+	if _, err := upsertPR(t, s, pr, ""); err != nil {
+		t.Fatal(err)
+	}
+	doc := docForApproval(t, s, "029-every-kind", 29)
+	del, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "horndb", Name: "the casualties dataset",
+		URL: "https://example.org/casualties", CreatedBy: "stig",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewed := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "a plan worth reviewing", Body: "b",
+		Priority: "medium", Kind: "feature", CreatedBy: "stig",
+	})
+
+	// Seeded oldest first, in the order the assertions below expect back.
+	seeds := []struct {
+		age  time.Duration
+		kind string
+		id   string
+	}{
+		{4 * time.Hour, "pr", PREntityID(pr.Repo, pr.Number)},
+		{3 * time.Hour, "doc", DocEntityID(doc.ID)},
+		{2 * time.Hour, "deliverable", del.ID},
+		{1 * time.Hour, "task", reviewed.ID},
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sd := range seeds {
+		if _, err := InsertAwaitingApproval(tx, taskTestNow.Add(-sd.age),
+			sd.kind, sd.id, "rev1", "", nil, nil, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListAwaitingApprovals(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct{ kind, title, url, taskID string }{
+		{"pr", "a pr", pr.URL, task.ID},
+		{"doc", doc.Title, "/docs/" + strconv.FormatInt(doc.ID, 10), ""},
+		{"deliverable", del.Name, "https://example.org/casualties", ""},
+		{"task", reviewed.Title, "/tasks/" + reviewed.ID, ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d rows, want one per kind: %+v", len(got), got)
+	}
+	for i, w := range want {
+		row := got[i]
+		if row.EntityKind != w.kind || row.Title != w.title || row.URL != w.url ||
+			row.Task != w.taskID {
+			t.Errorf("row %d = kind %q title %q url %q task %q; want %q/%q/%q/%q",
+				i, row.EntityKind, row.Title, row.URL, row.Task,
+				w.kind, w.title, w.url, w.taskID)
+		}
+		if row.Project != "horndb" || row.ProjectName != "HornDB" {
+			t.Errorf("row %d (%s) project = %q/%q, want horndb/HornDB",
+				i, w.kind, row.Project, row.ProjectName)
+		}
+	}
+}
+
+// TestApprovalsAwaitingCountsEveryKind: the Home page badge counts through
+// the same joins, so a role-scoped lane on a deliverable lands on that
+// deliverable's project.
+func TestApprovalsAwaitingCountsEveryKind(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+	del, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "horndb", Name: "the report", CreatedBy: "stig",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := "science-leads"
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, "deliverable",
+		del.ID, "rev1", "", &role, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ApprovalsAwaiting(ctx, "stig", []string{"science-leads"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].ProjectID != "horndb" || got[0].Count != 1 {
+		t.Errorf("ApprovalsAwaiting = %+v, want horndb:1 (the deliverable lane)", got)
+	}
+}
+
 // docForApproval creates a doc in the horndb project openTaskStore seeds, for
 // the two doc-approval tests below.
 func docForApproval(t *testing.T, s *Store, slug string, number int) *model.Doc {

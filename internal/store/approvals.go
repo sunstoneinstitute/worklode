@@ -465,14 +465,35 @@ func (s *Store) GetApproval(ctx context.Context, id int64) (*Approval, error) {
 // below adds a narrower, deliberate exclusion on top of these joins — a
 // pr-kind row whose PR has closed — which is a display decision, not a
 // correlation failure; see its comment.)
+//
+// Every join is on a primary key (or pull_requests' unique repo+number), so
+// no branch can fan a single approvals row out into several queue rows.
 const approvalEntityJoins = `LEFT JOIN pull_requests pr
 		ON a.entity_kind = 'pr' AND a.entity_id = pr.repo || '#' || pr.number
 	LEFT JOIN tasks t ON t.id = pr.task_id
-	LEFT JOIN docs d ON a.entity_kind = 'doc' AND a.entity_id = 'doc:' || d.id`
+	LEFT JOIN docs d ON a.entity_kind = 'doc' AND a.entity_id = 'doc:' || d.id
+	LEFT JOIN deliverables del ON a.entity_kind = 'deliverable' AND a.entity_id = del.id
+	LEFT JOIN tasks tk ON a.entity_kind = 'task' AND a.entity_id = tk.id`
 
 // approvalProjectID is the project an approvals row belongs to under those
-// joins: through its task for a PR, directly for a doc.
-const approvalProjectID = `coalesce(t.project_id, d.project_id)`
+// joins: through its task for a PR, directly for every other kind.
+const approvalProjectID = `coalesce(t.project_id, d.project_id, del.project_id, tk.project_id)`
+
+// approvalEntityTitle and approvalEntityURL are what a queue row renders of
+// whichever entity join matched: the title a reader scans for, and the one
+// address that opens it. A PR jumps out to GitHub and a deliverable to its
+// declared address if it has one; the rest are cockpit pages. Every arm
+// resolves to somewhere, because the queue renders the title as a link and
+// an empty href is a link that reloads the page. A row no join correlates
+// still lists, with both columns empty (see approvalEntityJoins).
+//
+// A task-kind row's own id is its EntityID, so the Task column below stays
+// the PR's task and does not restate it.
+const (
+	approvalEntityTitle = `coalesce(pr.title, d.title, del.name, tk.title)`
+	approvalEntityURL   = `coalesce(pr.url, '/docs/' || d.id, nullif(del.url, ''),
+		'/projects/' || del.project_id || '/deliverables', '/tasks/' || tk.id)`
+)
 
 // approvalPROpen is true for every non-pr approval, every pr-kind approval
 // not yet correlated to a pull_requests row, and every pr-kind approval
@@ -521,14 +542,15 @@ func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
 
 // ListAwaitingApprovals returns every awaiting approval with the entity it
 // governs, oldest first, excluding a pr-kind row whose PR has closed
-// (approvalPROpen — WL-663). Title/URL/Author come from whichever entity
-// join matched: a PR jumps out to GitHub, a doc links to its cockpit page
-// (its SubjectRevision names the version reviewed).
+// (approvalPROpen — WL-663). Title/URL come from whichever entity join
+// matched (approvalEntityTitle/URL); Author is the PR's login where there is
+// one and otherwise the actor that filed the requirement.
 func (s *Store) ListAwaitingApprovals(ctx context.Context) ([]AwaitingApproval, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+qualifyColumns(approvalColumns, "a")+`,
-		        coalesce(pr.title, d.title), coalesce(pr.url, '/docs/' || d.id),
-		        pr.author, t.id, `+approvalProjectID+`, p.name, ra.display_name
+		        `+approvalEntityTitle+`, `+approvalEntityURL+`,
+		        coalesce(pr.author, a.created_by), t.id,
+		        `+approvalProjectID+`, p.name, ra.display_name
 		 FROM approvals a
 		 `+approvalEntityJoins+`
 		 LEFT JOIN projects p ON p.id = `+approvalProjectID+`
