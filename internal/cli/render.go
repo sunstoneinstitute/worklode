@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -52,14 +51,7 @@ func DocNumber(n int) string {
 // predates 029 §4's backfill and renders as its kind, which is what the whole
 // column said for plans before.
 func DocRef(d model.Doc) string {
-	if d.Number == 0 {
-		return d.Kind
-	}
-	ref := strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
-	if d.ProjectKey == "" {
-		return ref
-	}
-	return d.ProjectKey + "-" + ref
+	return d.FormatRef()
 }
 
 // LocalTime formats t in the local zone, or "-" for the zero value. Every
