@@ -183,7 +183,23 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err != nil {
 		return nil, err
 	}
-	diff := designdoc.CompareSections(accepted.doc, candidate.doc, designdoc.DepthLimit)
+	diff := designdoc.CompareSections(accepted.doc, candidate.doc, docDepthLimit)
+	// Lowering the limit is one-way-safe by construction (025 §6.1): the check
+	// re-runs at every publication, so a too-deep anchor the accepted version
+	// already published is refused here. It gets its own wording — the fix is
+	// to raise the limit back, not to restructure the document.
+	var orphaned []string
+	for _, anchor := range diff.TooDeep {
+		if prior[anchor].published {
+			orphaned = append(orphaned, anchor)
+		}
+	}
+	if len(orphaned) > 0 {
+		return nil, fmt.Errorf(
+			"revision of doc %d cannot be accepted: depth limit %d orphans accepted anchors: %s "+
+				"(§6.1: lower the limit only for documents never accepted): %w",
+			id, docDepthLimit, strings.Join(orphaned, ", "), ErrInvalidInput)
+	}
 	// Removed is filtered down to the published anchors before Violations
 	// renders it, so the text stays in one place and an unpublished removal
 	// raises nothing.

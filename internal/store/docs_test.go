@@ -1121,6 +1121,77 @@ func TestDocAcceptAllowsAnchorAtTheDepthLimit(t *testing.T) {
 	}
 }
 
+// setDocDepthLimit points the package-level 025 §6.1 limit at n for one test
+// and restores it afterwards. The limit is boot-time configuration with no
+// synchronization, so a test that calls this must not be parallel.
+func setDocDepthLimit(t *testing.T, n int) {
+	t.Helper()
+	prev := docDepthLimit
+	docDepthLimit = n
+	t.Cleanup(func() { docDepthLimit = prev })
+}
+
+// TestDocDepthLimit: the depth limit is server configuration (025 §6.1), and
+// lowering it is one-way-safe because every publication re-checks it. Not
+// parallel — the subtests move a package-level variable.
+func TestDocDepthLimit(t *testing.T) {
+	// A level-4 anchor: refused at the default limit of 3, accepted at 4.
+	deepBody := "---\nstatus: draft\n---\n\n# T\n\n## 1. Scope {#sec-1}\n\na\n\n" +
+		"### 1.1 Sub {#sec-1.1}\n\nb\n\n#### 1.1.1 Deeper {#sec-1.1.1}\n\nc\n"
+
+	t.Run("a raised limit accepts what the default refuses", func(t *testing.T) {
+		setDocDepthLimit(t, 4)
+		s := openDocStore(t)
+		doc := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 25, Slug: "025-deep", Body: deepBody, CreatedBy: "stig",
+		})
+		if _, _, err := acceptDoc(t, s, doc.ID, "stig"); err != nil {
+			t.Fatalf("AcceptDoc under limit 4: %v", err)
+		}
+	})
+
+	t.Run("a lowered limit is refused where it orphans accepted anchors", func(t *testing.T) {
+		s := openDocStore(t)
+		doc := mustAcceptedSpec(t, s, "025-x") // publishes sec-2.1 at depth 3
+		if err := reviseDoc(t, s, doc.ID, "stig"); err != nil {
+			t.Fatalf("ReviseDoc: %v", err)
+		}
+		if err := updateRevision(t, s, doc.ID, revisedSpecBody); err != nil {
+			t.Fatalf("UpdateRevision: %v", err)
+		}
+		setDocDepthLimit(t, 2)
+
+		_, err := acceptRevision(t, s, doc.ID, "stig")
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("err = %v, want ErrInvalidInput", err)
+		}
+		for _, want := range []string{"sec-2.1", "orphans accepted anchors", "§6.1"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to mention %q", err, want)
+			}
+		}
+	})
+
+	t.Run("a never-accepted draft gets the plain refusal", func(t *testing.T) {
+		setDocDepthLimit(t, 2)
+		s := openDocStore(t)
+		doc := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "spec", Number: 26, Slug: "026-draft", Body: specBody, CreatedBy: "stig",
+		})
+
+		_, _, err := acceptDoc(t, s, doc.ID, "stig")
+		if !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("err = %v, want ErrInvalidInput", err)
+		}
+		if !strings.Contains(err.Error(), "sec-2.1") {
+			t.Errorf("err = %v, want it to name sec-2.1", err)
+		}
+		if strings.Contains(err.Error(), "orphans") {
+			t.Errorf("err = %v, want the plain refusal: nothing was ever accepted to orphan", err)
+		}
+	})
+}
+
 // TestDocAcceptNotFound covers the unknown-id path.
 func TestDocAcceptNotFound(t *testing.T) {
 	t.Parallel()

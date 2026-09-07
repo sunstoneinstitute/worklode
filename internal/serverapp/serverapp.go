@@ -16,17 +16,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/sunstoneinstitute/worklode/internal/api"
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/indexer"
 	"github.com/sunstoneinstitute/worklode/internal/projector"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-type Options struct{ DSN, Listen, AdminListen string }
+type Options struct{ DSN, Listen, AdminListen, DocDepthLimit string }
 
 const shutdownTimeout = 10 * time.Second
 
 func Run(ctx context.Context, opts Options) error {
+	depthLimit, err := parseDocDepthLimit(opts.DocDepthLimit)
+	if err != nil {
+		return err
+	}
+	store.SetDocDepthLimit(depthLimit)
 	if opts.DSN == "" {
 		return errors.New("no DSN: set --dsn or LODE_DSN")
 	}
@@ -92,6 +98,21 @@ func Run(ctx context.Context, opts Options) error {
 		slog.Info("shutting down")
 		return shutdownServers(cancelRequests, shutdownTimeout, srv, adminSrv)
 	}
+}
+
+// parseDocDepthLimit reads the 025 §6.1 anchor depth limit (--doc-depth-limit
+// or LODE_DOC_DEPTH_LIMIT), defaulting to designdoc.DepthLimit. Below 1 no
+// document could hold an addressable section at all, so it fails the boot
+// rather than making every accept impossible.
+func parseDocDepthLimit(v string) (int, error) {
+	if v == "" {
+		return designdoc.DepthLimit, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("LODE_DOC_DEPTH_LIMIT (--doc-depth-limit): want an integer >= 1, got %q", v)
+	}
+	return n, nil
 }
 
 func parseClusterEnvMap(s string) (map[string]string, error) {

@@ -29,6 +29,11 @@ export LODE_BOOTSTRAP_TOKEN=wl_$(openssl rand -hex 20)
 docker compose up -d
 ```
 
+`LODE_DOC_DEPTH_LIMIT` (or `--doc-depth-limit`) sets how deep an anchored
+document section may go and still be addressable (spec 025 §6.1). It defaults
+to 3, and a value below 1 fails the boot. Raising it is always safe; lowering
+it is refused for any document whose already-accepted anchors it would orphan.
+
 Install the end-user binaries: the `lode` CLI plus `lode-hook` and
 `lode-statusline`, which agent harnesses invoke on every lifecycle event.
 
