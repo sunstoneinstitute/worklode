@@ -213,6 +213,16 @@ keep new state on the right side of that split.
   whether an open PR's head sits on one of them (`gh pr list --state open`) —
   that PR goes stale with an empty diff instead of landing. Say so and let the
   author decide; never quietly substitute a merge.
+- **`main` has a merge queue, so a PR is queued, not merged.** `gh pr merge
+  <n>` enqueues it and the queue lands it after its own `merge_group` run;
+  `--delete-branch` is refused outright, and a `--squash`/`--merge` flag is
+  ignored with a warning, because the ruleset sets the strategy. So merging a
+  PR whose checks already passed is `gh pr merge <n>`, then poll `gh pr view
+  <n> --json state` until it stops being `OPEN` — an enqueue is not a landing,
+  and "already queued to merge" on a second attempt means the first one worked.
+  The worker's `gh pr merge --auto --squash` straight after `gh pr create` is a
+  different move and stays right: it arms the queue before checks pass.
+  `docs/github-advanced-setup.md` covers the ruleset and `merge_group` wiring.
 - `MODEL_SELECTION.md` defines which Claude Code or Codex model tier and
   reasoning effort each agent role uses when working this repo with subagents.
 - `e2e/` drives the stack through public surfaces only (HTTP API, signed
