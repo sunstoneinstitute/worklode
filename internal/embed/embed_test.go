@@ -325,6 +325,52 @@ func TestOpenAIIDWidth(t *testing.T) {
 	}
 }
 
+// TestOpenAIIDRolePrefixes covers the prefix component of ID(). The prefixes
+// are configuration (LODE_EMBEDDING_QUERY_PREFIX,
+// LODE_EMBEDDING_DOCUMENT_PREFIX), and changing one changes what every stored
+// vector means, so it must invalidate the same way a model swap does
+// (spec 040 §3, §8).
+func TestOpenAIIDRolePrefixes(t *testing.T) {
+	base := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m"}
+	doc := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", DocumentPrefix: "title: none | text: "}
+	doc2 := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", DocumentPrefix: "passage: "}
+	query := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", QueryPrefix: "task: search result | query: "}
+	both := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", QueryPrefix: "task: search result | query: ", DocumentPrefix: "title: none | text: "}
+
+	// Both prefixes empty keeps the pre-prefix ID, so a symmetric instance
+	// does not re-embed its corpus just because ID() learned about prefixes.
+	if base.ID() != "openai:m@768@api.openai.com/v1/embeddings" {
+		t.Fatalf("empty prefixes must not change the ID: %q", base.ID())
+	}
+	for _, p := range []*OpenAI{doc, doc2, query, both} {
+		if p.ID() == base.ID() {
+			t.Fatalf("a configured prefix must change the ID: %q", p.ID())
+		}
+	}
+	if doc.ID() == doc2.ID() {
+		t.Fatalf("a changed document prefix must change the ID: %q == %q", doc.ID(), doc2.ID())
+	}
+	if doc.ID() == query.ID() {
+		t.Fatalf("the same string as query vs document prefix must differ: %q == %q", doc.ID(), query.ID())
+	}
+	if both.ID() == doc.ID() || both.ID() == query.ID() {
+		t.Fatalf("adding the second prefix must change the ID: %q", both.ID())
+	}
+	// Stable across calls and across identically-configured providers, or
+	// every boot would clear the index.
+	same := &OpenAI{URL: "https://api.openai.com/v1/embeddings", Model: "m", QueryPrefix: "task: search result | query: ", DocumentPrefix: "title: none | text: "}
+	if both.ID() != both.ID() || both.ID() != same.ID() {
+		t.Fatalf("ID must be stable for identical config: %q vs %q", both.ID(), same.ID())
+	}
+	// Bounded: a digest, not the prefixes spelled out.
+	if got := len(both.ID()) - len(base.ID()); got != 9 {
+		t.Fatalf("prefix suffix should be 9 chars (#+8 hex), got %d: %q", got, both.ID())
+	}
+	if strings.Contains(both.ID(), "title: none") {
+		t.Fatalf("ID should carry a digest, not the prefix text: %q", both.ID())
+	}
+}
+
 // TestOpenAIEmbedRolePrefix asserts DocumentPrefix is applied to
 // RoleDocument texts and QueryPrefix to RoleQuery texts, and never the
 // other way around.

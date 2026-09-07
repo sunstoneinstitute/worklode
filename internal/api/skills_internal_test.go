@@ -235,6 +235,42 @@ func TestNewServerInvalidatesEmbeddingsWithoutSkillSources(t *testing.T) {
 	}
 }
 
+// TestNewServerInvalidatesEmbeddingsOnPrefixChange covers the same boot path
+// for the other half of the embedding space: the role prefixes are
+// configuration (LODE_EMBEDDING_DOCUMENT_PREFIX), and changing one changes
+// what every stored vector means. Until WL-666 they were absent from ID(), so
+// a prefix change left the old vectors in place and nothing said so.
+func TestNewServerInvalidatesEmbeddingsOnPrefixChange(t *testing.T) {
+	t.Parallel()
+	st := store.OpenTestStore(t)
+	ctx := context.Background()
+	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
+	if err := st.SeedSkillChunksForTests(ctx, sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
+		t.Fatalf("replace embeddings: %v", err)
+	}
+	cfg := Config{
+		EmbeddingURL: "https://example.com/v1/embeddings", EmbeddingModel: "m",
+		EmbeddingDocumentPrefix: "title: none | text: ",
+	}
+	old := (&embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, DocumentPrefix: "passage: "}).ID()
+	if err := st.SetEmbeddingProviderID(ctx, old); err != nil {
+		t.Fatalf("set provider id: %v", err)
+	}
+
+	if _, _, err := NewServer(st, cfg); err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+
+	counts, err := st.IndexCounts(ctx)
+	if err != nil || counts.WithoutVector != 1 {
+		t.Fatalf("vectors from the previous prefix survived boot: %+v err=%v", counts, err)
+	}
+	want := (&embed.OpenAI{URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, DocumentPrefix: cfg.EmbeddingDocumentPrefix}).ID()
+	if id, err := st.EmbeddingProviderID(ctx); err != nil || id != want {
+		t.Fatalf("provider id = %q err=%v, want %q", id, err, want)
+	}
+}
+
 // TestNewServerSkillsSourcesWithGitHubApp covers the "skill sources with
 // github app configured" boot case that TestNewServerSkillsConfig can't:
 // that config makes NewServer's boot-time skill sync (see runSkillSync)

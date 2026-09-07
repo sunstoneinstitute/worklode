@@ -5,6 +5,8 @@ package embed
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,9 +31,9 @@ const (
 // Provider computes one vector per input text, order-preserving.
 type Provider interface {
 	Embed(ctx context.Context, role Role, texts []string) ([][]float32, error)
-	// ID identifies the embedding space (provider + model + width). Vectors
-	// from different IDs are not comparable, so a change invalidates every
-	// stored embedding.
+	// ID identifies the embedding space: every configured input that changes
+	// what a stored vector means. Vectors from different IDs are not
+	// comparable, so a change invalidates every stored embedding.
 	ID() string
 	// Dim returns the vector width this provider produces. It must be 768;
 	// NewServer refuses a provider that disagrees.
@@ -114,12 +116,17 @@ func (p *OpenAI) Dim() int {
 	return 768
 }
 
-// ID identifies this provider's embedding space as model+width+endpoint,
-// e.g. "openai:text-embedding-3-small@768@api.openai.com/v1/embeddings".
+// ID identifies this provider's embedding space as model+width+endpoint, plus
+// a digest of the role prefixes when either is set, e.g.
+// "openai:text-embedding-3-small@768@api.openai.com/v1/embeddings".
 // The width is included because the same model truncated to a different
 // dimension is a different, incomparable space. The path is included
 // because a path-routed gateway (LiteLLM, vLLM, text-embeddings-inference
-// behind a prefix) can serve different backends from one host.
+// behind a prefix) can serve different backends from one host. The prefixes
+// are included because text embedded under a different instruction lands
+// somewhere else in the same model's space; they are digested rather than
+// spelled out to keep the ID bounded, and left off entirely when both are
+// empty so a symmetric instance keeps the ID it already recorded (040 §3).
 func (p *OpenAI) ID() string {
 	endpoint := p.URL
 	if u, err := url.Parse(p.URL); err == nil {
@@ -129,7 +136,13 @@ func (p *OpenAI) ID() string {
 			endpoint = e
 		}
 	}
-	return fmt.Sprintf("openai:%s@%d@%s", p.Model, p.Dim(), endpoint)
+	id := fmt.Sprintf("openai:%s@%d@%s", p.Model, p.Dim(), endpoint)
+	if p.QueryPrefix != "" || p.DocumentPrefix != "" {
+		// NUL-separated so ("ab", "") and ("a", "b") cannot collide.
+		sum := sha256.Sum256([]byte(p.QueryPrefix + "\x00" + p.DocumentPrefix))
+		id += "#" + hex.EncodeToString(sum[:4])
+	}
+	return id
 }
 
 func (p *OpenAI) client() *http.Client {
