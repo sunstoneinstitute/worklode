@@ -706,3 +706,32 @@ func TestDocTodoReadsOnlyTheTargetsProject(t *testing.T) {
 		t.Errorf("fetched %d bodies; want 2 (the project's spec and plan, never the foreign document)", got)
 	}
 }
+
+// TestDocTodoThinBodyDegrades reproduces WL-724: a stored body with no
+// frontmatter — the shape `lode doc import` lands for a pre-055 corpus —
+// aborted the whole errgroup, so every ref on that project reported one
+// unrelated document and no work list. The walk now answers, and the thin
+// body is a footer note rather than an error.
+func TestDocTodoThinBodyDegrades(t *testing.T) {
+	setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{
+			"001-1-first.md":  todoPlanOpen,
+			"001-2-second.md": "# Plan 1-2 — Imported without frontmatter\n\nBody.\n",
+		}, noTasks)
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1")
+	if err != nil {
+		t.Fatalf("doc todo: %v\noutput: %s", err, out)
+	}
+	for _, want := range []string{
+		"WL-SPEC-1",
+		"unplanned", // sec-2's gap: the walk ran
+		"notes (1)",
+		"WL-PLAN-2: no frontmatter",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\noutput:\n%s", want, out)
+		}
+	}
+}

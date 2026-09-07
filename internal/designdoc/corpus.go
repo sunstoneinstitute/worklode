@@ -157,25 +157,61 @@ func CorpusDir(kind string) string {
 // It derives everything LoadSyncCorpus does except Ordinal, which is a
 // corpus-position fact no single document carries: the backbone assigns
 // document identity itself, so nothing reading from it needs one.
-func CorpusDocFromBody(docPath, kind string, number int, body []byte) (CorpusDoc, error) {
+//
+// A thin body degrades rather than erroring, unlike loadDoc's file under sync
+// review: a body imported from a pre-055 git corpus carries whatever
+// frontmatter the file had, which is usually none, and one such body must not
+// abort a caller's walk over the whole corpus (WL-724). The cost is that
+// document's frontmatter-derived edges, not the corpus's answer. The returned
+// note names what was missing, empty when nothing was; a caller reports it so
+// the narrowing is visible.
+//
+// Status is left to whatever the frontmatter says, which is nothing when
+// there is none: the backbone row is the authority and every caller here
+// overwrites it (WL-478).
+func CorpusDocFromBody(docPath, kind string, number int, body []byte) (CorpusDoc, string, error) {
 	name := path.Base(docPath)
-	doc, cd, err := docFromSource(name, body)
+	doc, err := Parse(body)
 	if err != nil {
-		return CorpusDoc{}, err
+		return CorpusDoc{}, "", fmt.Errorf("%s: %w", name, err)
 	}
-	cd.Path, cd.Kind, cd.Number = docPath, kind, number
-	if kind == "plan" {
-		// Sections deliberately unset: plans carry none (025 §9).
-		cd.Edges = append(cd.Edges, planEdges(doc.Frontmatter)...)
-		return cd, nil
+	cd := CorpusDoc{
+		Filename: name, Source: body,
+		Path: docPath, Kind: kind, Number: number,
 	}
-	sections, err := sectionMetas(doc, name)
-	if err != nil {
-		return CorpusDoc{}, err
+	var missing []string
+	if doc.Frontmatter == nil {
+		missing = append(missing, "no frontmatter")
+	} else {
+		fmJSON, err := doc.Frontmatter.jsonBytes()
+		if err != nil {
+			return CorpusDoc{}, "", fmt.Errorf("%s: %w", name, err)
+		}
+		cd.Status, cd.FrontmatterJSON = doc.Frontmatter.Status, fmJSON
+		if kind == "plan" {
+			cd.Edges = planEdges(doc.Frontmatter)
+		} else {
+			cd.Edges = anchorEdges(doc.Frontmatter)
+		}
 	}
-	cd.Sections = sections
-	cd.Edges = anchorEdges(doc.Frontmatter)
-	return cd, nil
+	if title, ok := Title(doc); ok {
+		cd.Title = title
+	} else {
+		missing = append(missing, "no H1 title")
+	}
+	if kind != "plan" {
+		// Sections come from the body's own anchored headings, so they
+		// survive missing frontmatter. Plans carry none (025 §9).
+		sections, err := sectionMetas(doc, name)
+		if err != nil {
+			return CorpusDoc{}, "", err
+		}
+		cd.Sections = sections
+	}
+	if len(missing) == 0 {
+		return cd, "", nil
+	}
+	return cd, fmt.Sprintf("%s: %s; read without its frontmatter edges", name, strings.Join(missing, ", ")), nil
 }
 
 // Title is the document's H1 title — the preamble's first "# …" line, hash
