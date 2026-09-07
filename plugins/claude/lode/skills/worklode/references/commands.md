@@ -9,8 +9,10 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode actor add` — Create an actor
   Flags: --admin, --kind, --name
 
-## `lode approval` — Request review on a document and see what review is outstanding
+## `lode approval` — Require and request review, and see what review is outstanding
 
+- `lode approval add` — Require an approval on one entity
+  Flags: --actor, --lane, --revision, --role
 - `lode approval list` — List every outstanding approval, oldest first
 - `lode approval request` — Open an approval lane for each of a document's assigned reviewers
 

@@ -233,6 +233,13 @@ const (
 	// may see the whole review backlog" a question worth being able to
 	// answer separately from "who may read a task".
 	permApprovalRead Permission = "approval.read"
+
+	// permApprovalRequire covers filing an ad-hoc approval requirement (029
+	// §7.2): POST /api/v1/approvals. Separate from permApprovalDecide on
+	// purpose — saying "this needs review" is authoring, which an agent or a
+	// CI job holding a bearer token may do, while the decision itself stays
+	// a web-session act.
+	permApprovalRequire Permission = "approval.require"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -329,6 +336,10 @@ var grants = map[Permission][]Role{
 	// just asked for review needs to see whether it is still outstanding.
 	// Deciding is not in this table's gift alone — see permApprovalDecide.
 	permApprovalRead: {RoleUser, RoleAdmin},
+	// Filing a requirement is authoring, so it sits with reading rather than
+	// with deciding: an agent that knows a change needs a second pair of eyes
+	// may say so (029 §7.2).
+	permApprovalRequire: {RoleUser, RoleAdmin},
 
 	permEventRead:      {RoleUser, RoleAdmin},
 	permProjectionRead: {RoleUser, RoleAdmin},

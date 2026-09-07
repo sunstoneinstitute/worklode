@@ -31,9 +31,10 @@ func PREntityID(repo string, number int64) string {
 // DocEntityID renders the approvals entity_id for a document: "doc:" plus the
 // docs.id. Same contract as PREntityID — writer and reader share one spelling
 // — and it stays parseable back to the id, which is what lets the queue query
-// correlate a row to its docs row (and its project) in SQL.
+// correlate a row to its docs row (and its project) in SQL. The spelling
+// itself lives in internal/model, where the CLI can reach it too.
 func DocEntityID(docID int64) string {
-	return fmt.Sprintf("doc:%d", docID)
+	return model.DocEntityID(docID)
 }
 
 // InsertAwaitingApproval materializes one requirement as an 'awaiting' row,
@@ -97,6 +98,74 @@ func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) err
 		}
 	}
 	return nil
+}
+
+// DefaultSubjectRevision returns the revision an ad-hoc requirement binds to
+// when the caller names none: a document's current version, "" for every
+// other kind — nothing else carries a revision the backbone owns.
+//
+// It doubles as the existence check the ad-hoc route needs: ErrNotFound when
+// no row under kind has entityID, ErrInvalidInput for a kind outside
+// model.ApprovalEntityKinds. Each arm matches entity_id the way the writer
+// spells it, the same correlation approvalEntityJoins states.
+//
+// The document arm is 'doc', the approvals table's own spelling.
+// FlowEntityKinds says "document" for the same kind and is wrong; WL-719
+// fixes that separately.
+func DefaultSubjectRevision(tx *sql.Tx, kind, entityID string) (string, error) {
+	if kind == "doc" {
+		var version int
+		err := tx.QueryRow(`SELECT version FROM docs WHERE 'doc:' || id = $1`,
+			entityID).Scan(&version)
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		if err != nil {
+			return "", fmt.Errorf("current version of %s: %w", entityID, err)
+		}
+		return strconv.Itoa(version), nil
+	}
+	var query string
+	switch kind {
+	case "deliverable":
+		query = `SELECT 1 FROM deliverables WHERE id = $1`
+	case "task":
+		query = `SELECT 1 FROM tasks WHERE id = $1`
+	case "pr":
+		query = `SELECT 1 FROM pull_requests WHERE ` + prEntityIDSQL + ` = $1`
+	default:
+		return "", fmt.Errorf("%w: entity_kind %q is not one of %v",
+			ErrInvalidInput, kind, model.ApprovalEntityKinds)
+	}
+	var one int
+	err := tx.QueryRow(query, entityID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("look up %s %s: %w", kind, entityID, err)
+	}
+	return "", nil
+}
+
+// ApprovalByKey loads the row migration 0064's unique key names — entity
+// kind, entity id, subject revision and lane — so a caller that has just run
+// InsertAwaitingApproval can return the row whether or not its own insert
+// won. ErrNotFound when absent.
+func ApprovalByKey(tx *sql.Tx, entityKind, entityID, subjectRevision, lane string) (*Approval, error) {
+	a, err := scanApproval(tx.QueryRow(
+		`SELECT `+approvalColumns+` FROM approvals
+		 WHERE entity_kind = $1 AND entity_id = $2
+		   AND subject_revision = $3 AND lane = $4`,
+		entityKind, entityID, subjectRevision, lane))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("approval for %s %s@%s lane %q: %w",
+			entityKind, entityID, subjectRevision, lane, err)
+	}
+	return a, nil
 }
 
 // scanString reads a single-column string row — the shared scan collectRows
