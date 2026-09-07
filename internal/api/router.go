@@ -125,7 +125,11 @@ var routeGuards = map[string]routeGuard{
 	// no /api/v1/docs/ref/{ref...} pattern to collide with.
 	"GET /docs/versions/{id}/{n}": guarded(permWebRead),
 	"GET /docs/ref/{ref...}":      guarded(permWebRead),
-	"GET /drift":                  guarded(permWebRead),
+	// The bare-reference shortcut (WL-721): /{ref} 302s to the task or the
+	// document. An ordinary web read, and less specific than every literal
+	// route above, so it only answers what nothing else claims.
+	"GET /{ref}": guarded(permWebRead),
+	"GET /drift": guarded(permWebRead),
 	// The cockpit's one decision act (029 §7.3). permApprovalDecide rather
 	// than permWebWrite: deciding an approval is a different capability from
 	// filing a task through a form, and the route is additionally gated by
