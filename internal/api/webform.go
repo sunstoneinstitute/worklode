@@ -465,13 +465,16 @@ func (s *server) decideApproval(w http.ResponseWriter, r *http.Request) {
 }
 
 // decideApprovalErr turns a refused decision into the page the person sees.
-// Each refusal names the rule that refused, since all three are things they
-// can act on: wait for someone else, ask for the role, or look at what the
-// row already says.
+// Each refusal names the rule that refused, since all four are things they
+// can act on: wait for someone else, ask for the role, look at what the row
+// already says, or designate a revision to review.
 func (s *server) decideApprovalErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrApprovalResolved):
 		webErr(w, http.StatusConflict, "this approval has already been decided")
+	case errors.Is(err, store.ErrNoRevision):
+		webErr(w, http.StatusUnprocessableEntity,
+			"nothing has been designated for review yet")
 	case errors.Is(err, store.ErrSelfApproval):
 		webErr(w, http.StatusForbidden, "you authored this change, so you cannot decide it")
 	case errors.Is(err, store.ErrNotQualified):
