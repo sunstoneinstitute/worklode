@@ -58,6 +58,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode doc reviewers` — Show a document's assigned reviewer set
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision
   Flags: --accept, --discard, --file
+- `lode doc sections` — List document sections across the corpus
+  Flags: --project, --repo
 - `lode doc set` — Set one field on a document, e.g. `lode doc set reviewers alice bob rev-spec`
 - `lode doc show` — Show a document: its body, sections, and edges
   Flags: --version

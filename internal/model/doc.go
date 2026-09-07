@@ -92,6 +92,24 @@ type DocSection struct {
 	Published     bool   `json:"published"`
 }
 
+// DocSectionRow is one section of one document as the cross-corpus listing
+// returns it (GET /api/v1/docs/sections): the section, plus enough of its
+// document to cite it. It is what `scripts/secindex.py` used to write into
+// docs/specs/index.yaml before the file corpus went away (055 §4).
+//
+// Ref is stamped at the API boundary from DocKind and DocNumber, the way
+// Doc.Ref is, and is "" on a store-side value.
+type DocSectionRow struct {
+	Doc       int64  `json:"doc"`
+	Project   string `json:"project"`
+	Ref       string `json:"ref,omitempty"`
+	Slug      string `json:"slug"`
+	DocKind   string `json:"doc_kind"` // spec | adr
+	DocNumber int    `json:"doc_number"`
+	DocTitle  string `json:"doc_title"`
+	DocSection
+}
+
 // DocVersionSummary is one entry in a document's version list: a past or
 // current version's identity without its body.
 type DocVersionSummary struct {
