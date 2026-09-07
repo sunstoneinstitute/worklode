@@ -51,9 +51,10 @@ func IsSelfApproval(authorLogin, deciderLogin string) bool {
 }
 
 // FlowEntityKinds are the entity kinds a review flow may demand a decision on
-// (029 §7.2). 'pr' is absent on purpose: PR approval rows come from the
-// GitHub ingest, not from a flow.
-var FlowEntityKinds = []string{"document", "deliverable", "task"}
+// (029 §7.2): a subset of model.ApprovalEntityKinds, same spelling. 'pr' is
+// absent on purpose: PR approval rows come from the GitHub ingest, not from
+// a flow.
+var FlowEntityKinds = []string{"doc", "deliverable", "task"}
 
 // ValidateFlow reports what makes a flow unusable. Pure, so the loader can
 // refuse a bad configuration file at boot and the rule engine can reuse it.
