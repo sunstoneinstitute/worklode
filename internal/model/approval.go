@@ -1,6 +1,24 @@
 package model
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
+
+// ApprovalEntityKinds are the entity_kind values an approvals row takes (029
+// §7.1). Declared here because three layers need the same list: the API
+// validates an ad-hoc requirement against it, the CLI spells it in help and
+// completion, and the store reads it back. A document is 'doc' — the table's
+// own spelling, and what DocEntityID's ids agree with.
+var ApprovalEntityKinds = []string{"doc", "deliverable", "task", "pr"}
+
+// DocEntityID renders the approvals entity_id for a document: "doc:" plus the
+// docs id. Writer and reader share this one spelling, and it stays parseable
+// back to the id, which is what lets the queue query correlate a row to its
+// document in SQL.
+func DocEntityID(docID int64) string {
+	return "doc:" + strconv.FormatInt(docID, 10)
+}
 
 // Approval is one row of the approvals table (spec 029 §7.1): the human
 // decision one entity revision is waiting on, or the settled record of one.
@@ -49,6 +67,26 @@ type AwaitingApproval struct {
 // ApprovalListResponse is the response body of GET /api/v1/approvals.
 type ApprovalListResponse struct {
 	Approvals []AwaitingApproval `json:"approvals"`
+}
+
+// RequireApprovalInput is the body of POST /api/v1/approvals: 029 §7.2's
+// ad-hoc requirement, filed by hand on a governed target rather than minted
+// by a project's review flow. EntityKind is the approvals table's own
+// spelling — 'doc', 'deliverable', 'task' or 'pr' — and EntityID is the id
+// spelled the way that kind's writer spells it ("doc:<id>" for a document,
+// "repo#number" for a PR).
+//
+// Role and Actor are optional and mutually exclusive: a lane demands a group
+// or a person, never both. Lane defaults to "", the no-lane row. Revision
+// defaults to the document's current version for a 'doc' target and "" for
+// every other kind.
+type RequireApprovalInput struct {
+	EntityKind string `json:"entity_kind"`
+	EntityID   string `json:"entity_id"`
+	Revision   string `json:"revision,omitempty"`
+	Lane       string `json:"lane,omitempty"`
+	Role       string `json:"role,omitempty"`
+	Actor      string `json:"actor,omitempty"`
 }
 
 // SetDocReviewersInput is the body of POST /api/v1/docs/{id}/reviewers:

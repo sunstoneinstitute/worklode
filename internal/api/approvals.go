@@ -1,5 +1,6 @@
-// approvals.go serves the two approval surfaces a CLI token may reach:
-// requesting review on a document, and reading the awaiting queue.
+// approvals.go serves the approval surfaces a CLI token may reach:
+// requesting review on a document, filing an ad-hoc requirement on any
+// governed target (029 §7.2), and reading the awaiting queue.
 //
 // Deciding is deliberately absent. 029 §7.3 makes approving a web UI act —
 // the OIDC session's group claims are fresh, a 30-day CLI token's are not —
@@ -11,6 +12,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -82,6 +84,91 @@ func (s *server) setDocReviewers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeDoc(w, r, id)
+}
+
+// requireApproval handles POST /api/v1/approvals: 029 §7.2's "ad-hoc
+// requirements can be added to any governed target". A flow mints rows from
+// project policy; this files one by hand, on the same table, so the queue
+// reads both without knowing which is which.
+//
+// Filing is not deciding. A bearer token reaches this route — an agent or a
+// CI job may say "this needs review" — while deciding stays a web-session act
+// (029 §7.3, see the file header). created_by is the requesting actor, not
+// the 'worklode' system actor: a human filed this policy, and only
+// rule-created rows belong to worklode (store.FlowActorID).
+//
+// Re-filing is safe: migration 0064's key is (kind, id, revision, lane), so a
+// second call on the same key returns the existing row with 200 rather than a
+// conflict, and only an actual insert counts on
+// worklode_approval_requirements_total{origin="adhoc"}.
+func (s *server) requireApproval(w http.ResponseWriter, r *http.Request) {
+	var req model.RequireApprovalInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	req.EntityKind = strings.TrimSpace(req.EntityKind)
+	req.EntityID = strings.TrimSpace(req.EntityID)
+	if req.EntityID == "" {
+		writeErr(w, http.StatusUnprocessableEntity, "entity_id is required")
+		return
+	}
+	if req.Role != "" && req.Actor != "" {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"role and actor are mutually exclusive: a lane demands a group or a person, not both")
+		return
+	}
+
+	actor := actorIDFrom(r)
+	now := s.st.Now()
+	var created *model.Approval
+	inserted := false
+	if err := s.recordEvent(r.Context(), "cli", "approval.required", map[string]any{
+		"entity_kind": req.EntityKind,
+		"entity_id":   req.EntityID,
+		"revision":    req.Revision,
+		"lane":        req.Lane,
+		"role":        req.Role,
+		"required":    req.Actor,
+		"actor":       actor,
+	}, func(tx *sql.Tx, _ int64) error {
+		// The same call answers "does it exist" (ErrNotFound -> 404) and
+		// "what revision does an unqualified requirement bind to".
+		revision, err := store.DefaultSubjectRevision(tx, req.EntityKind, req.EntityID)
+		if err != nil {
+			return err
+		}
+		if req.Revision != "" {
+			revision = req.Revision
+		}
+		inserted, err = store.InsertAwaitingApproval(tx, now, req.EntityKind,
+			req.EntityID, revision, req.Lane,
+			textPtr(req.Role), textPtr(req.Actor), textPtr(actor))
+		if err != nil {
+			return err
+		}
+		created, err = store.ApprovalByKey(tx, req.EntityKind, req.EntityID, revision, req.Lane)
+		return err
+	}); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	status := http.StatusOK
+	if inserted {
+		s.observeApprovalRequirements(originAdhoc, 1)
+		status = http.StatusCreated
+	}
+	writeJSON(w, status, created)
+}
+
+// textPtr maps "" to NULL, for the three approvals columns where absent and
+// empty are the same thing.
+func textPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // listApprovals handles GET /api/v1/approvals: the awaiting queue (029 §7.1)

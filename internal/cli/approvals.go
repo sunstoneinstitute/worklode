@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -28,6 +29,35 @@ func (c *Client) RequestDocApproval(ctx context.Context, id int64) (model.Doc, [
 // oldest first, across entity kinds and projects.
 func (c *Client) ListApprovals(ctx context.Context) (model.ApprovalListResponse, []byte, error) {
 	return doJSON[model.ApprovalListResponse](ctx, c, http.MethodGet, "/api/v1/approvals", nil, "approval list")
+}
+
+// RequireApproval calls POST /api/v1/approvals: 029 §7.2's ad-hoc
+// requirement on any governed target. Re-filing the same
+// (kind, id, revision, lane) returns the row already there, so this is safe
+// to repeat.
+func (c *Client) RequireApproval(ctx context.Context, in model.RequireApprovalInput) (model.Approval, []byte, error) {
+	return doJSON[model.Approval](ctx, c, http.MethodPost, "/api/v1/approvals", in, "approval")
+}
+
+// ApprovalRender writes one approval in full: what it governs, which lane,
+// what state it is in, and who owes the decision.
+func ApprovalRender(w io.Writer, a model.Approval) {
+	fmt.Fprintf(w, "%s %s\n", a.EntityKind, a.EntityID)
+	tw := newTabwriter(w)
+	fmt.Fprintf(tw, "  approval:\t%d\n", a.ID)
+	if a.SubjectRevision != "" {
+		fmt.Fprintf(tw, "  revision:\t%s\n", a.SubjectRevision)
+	}
+	if a.Lane != "" {
+		fmt.Fprintf(tw, "  lane:\t%s\n", a.Lane)
+	}
+	fmt.Fprintf(tw, "  state:\t%s\n", a.State)
+	fmt.Fprintf(tw, "  awaiting:\t%s\n", awaits(a.RequiredActor, a.RequiredRole))
+	fmt.Fprintf(tw, "  requested:\t%s by %s\n", LocalTime(a.CreatedAt), awaits(a.CreatedBy, nil))
+	if a.ResolvedAt != nil {
+		fmt.Fprintf(tw, "  resolved:\t%s by %s\n", LocalTime(*a.ResolvedAt), awaits(a.ResolvingActor, nil))
+	}
+	tw.Flush()
 }
 
 // ApprovalTable prints one row per awaiting approval: the id the cockpit's
@@ -61,11 +91,18 @@ func approvalAwaits(a model.AwaitingApproval) string {
 	if a.RequiredActorName != nil && *a.RequiredActorName != "" {
 		return *a.RequiredActorName
 	}
-	if a.RequiredActor != nil && *a.RequiredActor != "" {
-		return *a.RequiredActor
+	return awaits(a.RequiredActor, a.RequiredRole)
+}
+
+// awaits is approvalAwaits over the bare approval row, which carries no
+// display name: the actor, else the role, else "-". Passing a nil role reads
+// one nullable actor column on its own.
+func awaits(actor, role *string) string {
+	if actor != nil && *actor != "" {
+		return *actor
 	}
-	if a.RequiredRole != nil && *a.RequiredRole != "" {
-		return *a.RequiredRole
+	if role != nil && *role != "" {
+		return *role
 	}
 	return "-"
 }

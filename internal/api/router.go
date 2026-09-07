@@ -248,9 +248,11 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/docs/{id}/undelete": guarded(permDocWrite),
 
 	// --- approvals (spec 029 §7) --------------------------------------------
-	// Read-only. Deciding is not on the JSON API at all: 029 §7.3 makes it a
-	// web-session act, and its route is "POST /approvals/{id}/decide" above.
-	"GET /api/v1/approvals": guarded(permApprovalRead),
+	// Reading the queue and filing an ad-hoc requirement (§7.2). Deciding is
+	// not on the JSON API at all: 029 §7.3 makes it a web-session act, and
+	// its route is "POST /approvals/{id}/decide" above.
+	"GET /api/v1/approvals":  guarded(permApprovalRead),
+	"POST /api/v1/approvals": guarded(permApprovalRequire),
 
 	// --- skills --------------------------------------------------------------
 	"GET /api/v1/skills":                       guardedAny(permSkillRead),
