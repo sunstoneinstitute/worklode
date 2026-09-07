@@ -687,10 +687,16 @@ completes.
 
 ### Token cost
 
-Ending a session reports what it spent. `lode-hook` parses the agent's own
-transcript — Claude Code's `SessionEnd` payload carries `transcript_path`, and
-every assistant entry in it carries the vendor's `usage` block, so the numbers
-are reported rather than estimated. The server prices them from `model_prices`.
+Token usage comes from Edge Agent telemetry, which watches the agent's own API
+traffic and reports each session's running total to
+`POST /api/v1/projects/{id}/session-usage`. The report is a replacement total,
+so re-delivering it does not double-count. The numbers are the vendor's own
+`usage` block rather than an estimate, and the server prices them from
+`model_prices`.
+
+`lode-hook` reports session lifecycle only — open, still alive, closed. It
+sends no usage. `internal/transcript` still parses Claude Code's JSONL
+transcript, as historical-import code with no live caller.
 
 A prompt is not one number. It bills as four separate classes, at rates that
 span a factor of twenty:
@@ -710,11 +716,8 @@ uncached input, 354k cache writes, 11.8M cache reads, 58k output — the correct
 figure is **$10.88**. Pricing every input token at the base rate gives $62.12;
 using only `input_tokens` and `output_tokens` gives $1.45.
 
-Two more things the numbers depend on: usage is recorded per model, because one
-session mixes them (a main loop on one, subagents on another) at several-fold
-different rates; and transcript entries are deduplicated by message id, since
-an assistant message is written once per content block with the whole usage
-block repeated on each line.
+Usage is recorded per model, because one session mixes them (a main loop on
+one, subagents on another) at several-fold different rates.
 
 Rates live in `model_prices` and are effective-dated, so a past session keeps
 pricing at the rate that applied when it ran. Correcting a rate or filing one

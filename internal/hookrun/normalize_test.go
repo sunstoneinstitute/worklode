@@ -12,9 +12,11 @@ func TestNormalizePayload(t *testing.T) {
 		raw     string
 		want    Payload
 	}{
+		// transcript_path is still on the wire and is deliberately ignored:
+		// live token accounting is Edge Agent telemetry's job (WL-658).
 		{"claude-code: existing shape, byte-identical behaviour", "claude-code",
 			`{"cwd":"/w","session_id":"s1","transcript_path":"/t.jsonl"}`,
-			Payload{Cwd: "/w", SessionID: "s1", TranscriptPath: "/t.jsonl"}},
+			Payload{Cwd: "/w", SessionID: "s1"}},
 		// The default (empty harness) is claude-code, for every binding
 		// already installed (spec 008 §17.4).
 		{"default harness is claude-code", "",
