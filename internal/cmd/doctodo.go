@@ -114,12 +114,25 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	docs, err := docTodoCorpus(cmd.Context(), c, resp.Docs)
+	// The walk is scoped to the target's project. Its edges are corpus paths
+	// (`docs/specs/<slug>.md`), which name no project and so cannot reach out
+	// of one; parsing the rest of the backbone only fetches bodies the walk
+	// discards, lets two projects' equal slugs collide on one corpus path, and
+	// fails the whole report on a foreign document that never met this
+	// corpus's frontmatter contract.
+	scoped := make([]model.Doc, 0, len(resp.Docs))
+	for _, d := range resp.Docs {
+		if d.Project == target.Project {
+			scoped = append(scoped, d)
+		}
+	}
+
+	docs, err := docTodoCorpus(cmd.Context(), c, scoped)
 	if err != nil {
 		return err
 	}
 
-	tasks, err := docTodoPlanTasks(cmd, c, cfg, resp.Docs)
+	tasks, err := docTodoPlanTasks(cmd, c, cfg, scoped)
 	if err != nil {
 		return err
 	}
@@ -129,9 +142,9 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 		return err
 	}
 	if jsonOut(cmd) {
-		return writeDocTodoJSON(cmd, newDocTodoRefs(resp.Docs, ""), items, diag)
+		return writeDocTodoJSON(cmd, newDocTodoRefs(scoped, ""), items, diag)
 	}
-	refs := newDocTodoRefs(resp.Docs, docTodoLinkBase(cmd, cfg))
+	refs := newDocTodoRefs(scoped, docTodoLinkBase(cmd, cfg))
 	refs.target = refs.ref(designdoc.CorpusPath(target.Kind, target.Slug))
 	writeDocTodoTable(cmd.OutOrStdout(), refs, items, diag)
 	return nil

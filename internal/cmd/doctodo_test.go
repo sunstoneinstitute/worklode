@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -676,5 +677,65 @@ func TestDocTodoRefsLinkAndAlign(t *testing.T) {
 	}
 	if len(details) != 2 || details[0] != details[1] {
 		t.Errorf("detail column is misaligned at %v:\n%s", details, buf.String())
+	}
+}
+
+// TestDocTodoScopesCorpusToTargetProject scopes the walk of 026 §2.5: its
+// edges are corpus paths, which name no project, so a document outside the
+// target's project is not the walk's to read. One that never met this corpus's
+// frontmatter contract used to fail the whole report; now its body is never
+// fetched at all.
+func TestDocTodoScopesCorpusToTargetProject(t *testing.T) {
+	var bodyIDs sync.Map
+	docs := []model.Doc{
+		{ID: 1, Project: "proj", ProjectKey: "WL", Kind: "spec", Number: 1,
+			Slug: "001-example", Title: "Example", Status: "accepted", Version: 1},
+		// Another project's plan, imported from a corpus that never carried
+		// worklode frontmatter. Parsing it is an error; reaching it is the bug.
+		{ID: 2, Project: "other", ProjectKey: "DP", Kind: "plan", Number: 1,
+			Slug: "foreign", Title: "Foreign", Status: "accepted", Version: 1},
+	}
+	bodies := map[int64]string{1: todoSpec, 2: "# No frontmatter here\n"}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
+			{ID: "proj", Name: "Proj", Key: "WL"},
+			{ID: "other", Name: "Other", Key: "DP"},
+		}})
+	})
+	mux.HandleFunc("GET /api/v1/docs", func(w http.ResponseWriter, r *http.Request) {
+		writeTestJSON(t, w, model.DocListResponse{Docs: docs})
+	})
+	mux.HandleFunc("GET /api/v1/docs/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		bodyIDs.Store(id, true)
+		for _, d := range docs {
+			if d.ID == id {
+				d.Body = bodies[id]
+				writeTestJSON(t, w, model.DocDetail{Doc: d})
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	mux.HandleFunc("GET /api/v1/tasks", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(noTasks))
+	})
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	t.Setenv("LODE_SERVER", ts.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1")
+	if err != nil {
+		t.Fatalf("doc todo: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "sec-2") {
+		t.Errorf("report did not run to completion:\n%s", out)
+	}
+	if _, fetched := bodyIDs.Load(int64(2)); fetched {
+		t.Error("fetched the body of a document outside the target's project")
 	}
 }
