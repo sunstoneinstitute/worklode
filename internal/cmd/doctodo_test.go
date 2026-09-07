@@ -122,6 +122,15 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 	}
 	add(specs, false)
 	add(plans, true)
+	// One document from another project, as `lode doc import` lands a
+	// foreign corpus: a body with no frontmatter at all. The walk must
+	// never read it — a target's corpus is its own project's (WL-722).
+	foreign := int64(len(docs) + 1)
+	docs = append(docs, model.Doc{
+		ID: foreign, Project: "other", ProjectKey: "OTHR", Kind: "spec", Number: 1,
+		Slug: "0001-foreign", Title: "Foreign", Status: "accepted", Version: 1,
+	})
+	bodies[foreign] = "# Foreign\n\nNo frontmatter here.\n"
 
 	srv := &todoServer{}
 	mux := http.NewServeMux()
@@ -130,6 +139,7 @@ func setupTodoCorpus(t *testing.T, specs, plans map[string]string, tasks string)
 	mux.HandleFunc("GET /api/v1/projects", func(w http.ResponseWriter, r *http.Request) {
 		writeTestJSON(t, w, model.ProjectListResponse{Projects: []model.Project{
 			{ID: "proj", Name: "Proj", Key: "WL"},
+			{ID: "other", Name: "Other", Key: "OTHR"},
 		}})
 	})
 	mux.HandleFunc("GET /api/v1/docs", func(w http.ResponseWriter, r *http.Request) {
@@ -676,5 +686,23 @@ func TestDocTodoRefsLinkAndAlign(t *testing.T) {
 	}
 	if len(details) != 2 || details[0] != details[1] {
 		t.Errorf("detail column is misaligned at %v:\n%s", details, buf.String())
+	}
+}
+
+// TestDocTodoReadsOnlyTheTargetsProject pins the corpus the walk parses to
+// the target's project. Every fixture carries one foreign document with no
+// frontmatter, so a walk that read it would fail to parse; this test states
+// the rule the others only rely on, and checks the body was never fetched.
+func TestDocTodoReadsOnlyTheTargetsProject(t *testing.T) {
+	srv := setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{"001-1-first.md": todoPlanStaleDraftBody}, noTasks)
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1", "--json")
+	if err != nil {
+		t.Fatalf("doc todo: %v\noutput: %s", err, out)
+	}
+	if got := srv.bodyCalls.Load(); got != 2 {
+		t.Errorf("fetched %d bodies; want 2 (the project's spec and plan, never the foreign document)", got)
 	}
 }
