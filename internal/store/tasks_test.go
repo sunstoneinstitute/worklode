@@ -994,6 +994,23 @@ func TestStateCheckConstraintMatchesModel(t *testing.T) {
 	}
 }
 
+// TestConcernCheckConstraintMatchesModel pins model.TaskConcerns to the
+// tasks.concern CHECK constraint that owns it. The Go copy is read by this
+// package's gate and the new-task form's menu, so both move with the
+// constraint or this fails.
+func TestConcernCheckConstraintMatchesModel(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+
+	got, def := checkConstraintValues(t, s, "tasks", "tasks_concern_check")
+	want := slices.Sorted(slices.Values(model.TaskConcerns))
+	if !slices.Equal(got, want) {
+		t.Errorf("tasks_concern_check = %v, want %v\n"+
+			"the CHECK constraint and model.TaskConcerns disagree; a migration "+
+			"must move with the Go copy\nconstraint: %s", got, want, def)
+	}
+}
+
 // TestKindCheckConstraintMatchesGeneratedKinds closes the direction the API's
 // TestTaskKindsAgreeAcrossSources cannot see. That test creates a task of
 // every ns.TaskKind, which proves the CHECK admits at least the generated
