@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -199,6 +200,58 @@ func TestDecideApprovalRefusesSelfApproval(t *testing.T) {
 	}
 	if got := approvalState(t, st, seeded.ID); got != "approved" {
 		t.Errorf("state = %q after a non-author approved, want approved", got)
+	}
+}
+
+// seedUndesignatedApproval seeds one awaiting row that names no
+// subject_revision — the shape 029 §7.2's flows materialize before anything
+// designates a revision — and returns its approvals id, read back through the
+// queue the decide form posts from.
+func seedUndesignatedApproval(t *testing.T, st *store.Store, entityID string) int64 {
+	t.Helper()
+	seedEvent(t, st, "undesignated-"+entityID, func(tx *sql.Tx, _ int64) error {
+		_, err := store.InsertAwaitingApproval(tx, st.Now(), "deliverable",
+			entityID, "", "methodology/science-lead", nil, nil, nil)
+		return err
+	})
+	rows, err := st.ListAwaitingApprovals(context.Background())
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	for _, row := range rows {
+		if row.EntityID == entityID {
+			return row.ID
+		}
+	}
+	t.Fatalf("seeded approval %s is not in the awaiting queue", entityID)
+	return 0
+}
+
+// TestDecideApprovalRefusesUndesignatedRevision: a decision binds the
+// revision the decider saw (029 §7.1), so a row naming none is answered as
+// unprocessable rather than resolved — and counted under its own outcome.
+func TestDecideApprovalRefusesUndesignatedRevision(t *testing.T) {
+	t.Parallel()
+	st, h, admin, iss := newOIDCServerWithAdmin(t)
+	id := seedUndesignatedApproval(t, st, "WL-DEL-1")
+	session := sessionFor(t, h, iss, map[string]any{
+		"preferred_username": "dana", "name": "Dana",
+		"groups":          []string{"user", "methodology/science-lead"},
+		"github_username": "danah",
+	})
+
+	rr := decideForm(t, h, session, id, "approve", nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("decide on an undesignated row = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "nothing has been designated for review yet") {
+		t.Errorf("body = %q, want it to name the missing designation", rr.Body.String())
+	}
+	assertUntouched(t, st, id)
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if want := `worklode_approval_decisions_total{decision="approve",outcome="no_revision"} 1`; !strings.Contains(metrics, want) {
+		t.Errorf("metrics missing %s", want)
 	}
 }
 

@@ -1415,6 +1415,100 @@ func TestInsertAwaitingApprovalReportsWhetherItInserted(t *testing.T) {
 	}
 }
 
+// openApprovalID seeds one awaiting row and returns its id, for the decide
+// tests below: they address a row by id, and InsertAwaitingApproval reports
+// only whether it inserted.
+func openApprovalID(t *testing.T, tx *sql.Tx, kind, entityID, revision, lane string) int64 {
+	t.Helper()
+	if _, err := InsertAwaitingApproval(tx, taskTestNow, kind, entityID, revision,
+		lane, nil, nil, nil); err != nil {
+		t.Fatalf("seed %s %s lane %q: %v", kind, entityID, lane, err)
+	}
+	a, err := OpenApprovalForLane(tx, kind, entityID, lane)
+	if err != nil {
+		t.Fatalf("read back %s %s lane %q: %v", kind, entityID, lane, err)
+	}
+	return a.ID
+}
+
+// TestDecideRefusesUndesignatedRevision: a decision binds the immutable
+// revision the actor actually saw (029 §7.1), so a row that names none has
+// nothing to bind. Until something designates one, the row is a visible gap
+// in the queue, not a decidable item.
+func TestDecideRefusesUndesignatedRevision(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // project "horndb", actor "stig"
+	del, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "horndb", Name: "the report", CreatedBy: "stig",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := mustBegin(t, s)
+	id := openApprovalID(t, tx, "deliverable", del.ID, "", "methodology/science-lead")
+
+	_, err = DecideApproval(tx, DecideInput{
+		ApprovalID: id, Decision: "approve", ActorID: "stig", Now: taskTestNow,
+	})
+	if !errors.Is(err, ErrNoRevision) {
+		t.Fatalf("err = %v, want ErrNoRevision", err)
+	}
+}
+
+// TestDecideSelfApprovalByCreatedBy is 029 §7.1's refusal for the three kinds
+// that record their author as an actor id: created_by is the author, and it
+// compares to the decider directly — no GitHub login stands in between. An
+// unknown author (NULL created_by) proves nothing, so it must not refuse.
+func TestDecideSelfApprovalByCreatedBy(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t) // project "horndb", actor "stig"
+	ctx := t.Context()
+	if err := s.CreateActor(ctx, "ada", "human", "Ada", false); err != nil {
+		t.Fatal(err)
+	}
+	doc := docForApproval(t, s, "029-self", 129) // created_by "stig"
+	del, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "horndb", Name: "ada's dataset", CreatedBy: "ada",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	anon, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "horndb", Name: "nobody's dataset",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewed := createTask(t, s, taskTestNow, TaskInput{
+		ProjectID: "horndb", Title: "stig's plan", Body: "b", Priority: "medium",
+		Kind: "feature", CreatedBy: "stig",
+	})
+
+	for _, tc := range []struct {
+		name, kind, entityID string
+		want                 error
+	}{
+		{"doc the decider wrote", "doc", DocEntityID(doc.ID), ErrSelfApproval},
+		{"task the decider filed", "task", reviewed.ID, ErrSelfApproval},
+		{"deliverable somebody else created", "deliverable", del.ID, nil},
+		{"deliverable with no recorded author", "deliverable", anon.ID, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tx := mustBegin(t, s)
+			id := openApprovalID(t, tx, tc.kind, tc.entityID, "rev1", tc.name)
+			got, err := DecideApproval(tx, DecideInput{
+				ApprovalID: id, Decision: "approve", ActorID: "stig", Now: taskTestNow,
+			})
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if tc.want == nil && got.State != "approved" {
+				t.Errorf("state = %q, want approved", got.State)
+			}
+		})
+	}
+}
+
 // TestOpenApprovalForLaneSelectsOnlyItsLane: with several lanes open, the
 // per-lane reader must not hand back a neighbouring lane's row.
 func TestOpenApprovalForLaneSelectsOnlyItsLane(t *testing.T) {

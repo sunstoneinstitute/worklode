@@ -745,7 +745,7 @@ func (s *server) observeAuthz(perm Permission, d Decision) {
 var (
 	approvalDecisionKinds    = []string{"approve", "request_changes", "reject", decisionInvalid}
 	approvalDecisionOutcomes = []string{"resolved", "refused_self", "refused_role",
-		"conflict", "not_found", "invalid", "error"}
+		"no_revision", "conflict", "not_found", "invalid", "error"}
 )
 
 // decisionInvalid is the decision label for a submission that named no valid
@@ -780,6 +780,8 @@ func approvalDecisionOutcome(err error) string {
 		return "refused_self"
 	case errors.Is(err, store.ErrNotQualified):
 		return "refused_role"
+	case errors.Is(err, store.ErrNoRevision):
+		return "no_revision"
 	case errors.Is(err, store.ErrInvalidInput):
 		return decisionInvalid
 	default:
