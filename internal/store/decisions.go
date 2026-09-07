@@ -297,6 +297,30 @@ func listDecisions(tx *sql.Tx, taskID string) ([]model.Decision, error) {
 	return collectRows(rows, "list decisions of "+taskID, scanDecision)
 }
 
+// GetDecision returns one posed question by its <task>/<key> address.
+//
+// Errors: ErrNotFound if the task poses no question under that key.
+func (s *Store) GetDecision(ctx context.Context, taskID, key string) (*model.Decision, error) {
+	var out model.Decision
+	err := s.Tx(ctx, func(tx *sql.Tx) error {
+		row := tx.QueryRow(
+			`SELECT `+decisionColumns+` FROM decisions WHERE task_id = $1 AND key = $2`, taskID, key)
+		d, err := scanDecision(row)
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("decision %s/%s: %w", taskID, key, ErrNotFound)
+		}
+		if err != nil {
+			return fmt.Errorf("read decision %s/%s: %w", taskID, key, err)
+		}
+		out = d
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // InsertDecision writes one posed question against taskID, at the end of
 // that task's order. The spec is validated first, so an invalid row never
 // reaches the database, and a key already used on the task comes back as

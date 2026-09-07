@@ -14,6 +14,20 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
+// ListDecisions calls GET /api/v1/tasks/{id}/decisions: the questions a task
+// poses, in authored order.
+func (c *Client) ListDecisions(ctx context.Context, task string) ([]model.Decision, []byte, error) {
+	return doJSON[[]model.Decision](ctx, c, http.MethodGet,
+		"/api/v1/tasks/"+url.PathEscape(task)+"/decisions", nil, "decisions")
+}
+
+// GetDecision calls GET /api/v1/tasks/{id}/decisions/{key}: one question in
+// full, with its answer once it has one.
+func (c *Client) GetDecision(ctx context.Context, task, key string) (model.Decision, []byte, error) {
+	return doJSON[model.Decision](ctx, c, http.MethodGet,
+		"/api/v1/tasks/"+url.PathEscape(task)+"/decisions/"+url.PathEscape(key), nil, "decision")
+}
+
 // AddDecision calls POST /api/v1/tasks/{id}/decisions: pose one question.
 func (c *Client) AddDecision(ctx context.Context, task string, in model.DecisionInput) (model.Decision, []byte, error) {
 	return doJSON[model.Decision](ctx, c, http.MethodPost,

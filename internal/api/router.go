@@ -191,6 +191,12 @@ var routeGuards = map[string]routeGuard{
 	// different task the same actor also holds (0016 multi-lease).
 	"POST /api/v1/tasks/{id}/instructions": guarded(permTaskWrite),
 
+	// Reading the decision rows of a task (025 §10.1): the same permission
+	// and the same task-token grant as GET /api/v1/tasks/{id}, which already
+	// carries these rows in its detail.
+	"GET /api/v1/tasks/{id}/decisions":       guardedBound(permTaskRead),
+	"GET /api/v1/tasks/{id}/decisions/{key}": guardedBound(permTaskRead),
+
 	// Posing and rewording a decision row (025 §10.1). Not guardedBound: a
 	// PATCH may re-parent the row to another task, which a task-scoped
 	// token has no business reaching.
