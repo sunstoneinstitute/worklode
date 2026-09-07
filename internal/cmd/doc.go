@@ -253,9 +253,17 @@ func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareS
 // the depth gate are the store's own accept-time checks (designdoc.LintAnchors
 // and designdoc.DepthViolations), reused rather than restated. The rest of the
 // accept-time diff needs a prior version, which a file on disk does not have.
+//
+// The depth limit is server configuration (025 §6.1) and no server is involved
+// here, so this checks the compiled default and says so: it is advisory
+// pre-flight, and the server it posts to is the authority.
 func lintDocFile(doc *designdoc.Document) []string {
 	findings := designdoc.LintAnchors(doc)
-	findings = append(findings, designdoc.DepthViolations(doc, designdoc.DepthLimit)...)
+	for _, v := range designdoc.DepthViolations(doc, designdoc.DepthLimit) {
+		findings = append(findings, fmt.Sprintf(
+			"%s; checked against the default limit of %d, and the server's configured limit is the authority",
+			v, designdoc.DepthLimit))
+	}
 	if isPlanFile(doc) {
 		if _, err := designdoc.PlanTasks(doc); err != nil {
 			findings = append(findings, err.Error())
