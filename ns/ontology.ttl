@@ -697,7 +697,12 @@ wl:layer a owl:AnnotationProperty ;
 #   wl:Release                 never minted (006 §2.1): a release is a wl:Artifact
 #                              of kind wlc:git_tag plus a wl:cutFrom edge.
 #   wl:Milestone               v2 (006 §1).
-#   wlc:TaskState              no SKOS scheme for task state: wl:taskState is a
-#                              literal mirror, so the backbone keeps the enum
+#   wlc:TaskState,             no SKOS scheme for a backbone-owned enum:
+#   wlc:TaskPriority,          wl:taskState, wl:priority and wl:concern are
+#   wlc:Concern                literal mirrors, so the backbone keeps the enums
 #                              and the transitions (006 Open Q3).
+#   wlc:ActorKind              never minted: actors are foaf:Agent/prov:Agent
+#                              (006 §1, §10), and prov:Person vs
+#                              prov:SoftwareAgent already carries the split.
+#                              concept.ttl's closing block has the reasoning.
 # ---------------------------------------------------------------------------
