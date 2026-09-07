@@ -511,17 +511,25 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 // failing the page: the body still renders, and no link is better than a
 // wrong one. Logged rather than counted, because the request it degrades is
 // already counted by the HTTP metrics and this adds no outcome of its own.
-func (s *server) projectKeys(ctx context.Context) mdrender.ProjectKeys {
+//
+// home is the id of the project the body belongs to, "" when there is none.
+// The same read supplies its key, which scopes the body's bare corpus numbers
+// (WL-723) — see mdrender.ProjectKeys.For.
+func (s *server) projectKeys(ctx context.Context, home string) mdrender.ProjectKeys {
 	projects, err := s.st.ListProjects(ctx)
 	if err != nil {
 		s.log.Warn("rendering without task-id links: project keys unreadable", "err", err)
 		return mdrender.ProjectKeys{}
 	}
 	keys := make([]string, 0, len(projects))
+	homeKey := ""
 	for _, p := range projects {
 		keys = append(keys, p.Key)
+		if p.ID == home {
+			homeKey = p.Key
+		}
 	}
-	return mdrender.NewProjectKeys(keys)
+	return mdrender.NewProjectKeys(keys).For(homeKey)
 }
 
 // taskPage handles GET /tasks/{id}: title, state, priority/kind, project,
@@ -568,7 +576,7 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		refs[i].URL = blobURL(refs[i].Hash, refs[i].Filename)
 	}
 
-	view := taskView(s.mdcache, s.projectKeys(ctx), t, project, blocked, entries, out, in)
+	view := taskView(s.mdcache, s.projectKeys(ctx, t.Project), t, project, blocked, entries, out, in)
 	view.Attachments = refs
 	if lease, err := s.st.ActiveLease(ctx, id); err == nil {
 		l := toLeaseJSON(lease)
@@ -639,7 +647,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		}
 		d = detail.Doc
 	} else {
-		resolved, err := s.resolveDocRefWeb(r.Context(), ref)
+		resolved, err := s.resolveDocRefWeb(r.Context(), ref, "")
 		if err != nil {
 			webErr(w, http.StatusNotFound, "not found")
 			return
@@ -671,7 +679,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	body, consolidated := s.docPageBody(r, detail)
-	view := docView(s.mdcache, s.projectKeys(r.Context()), detail, body, consolidated, r.URL.Path)
+	view := docView(s.mdcache, s.projectKeys(r.Context(), detail.Doc.Project), detail, body, consolidated, r.URL.Path)
 	// A failed read degrades to an empty Versions card rather than failing
 	// the whole page, the same call projectKeyByID makes for its dependency.
 	versions, err := s.st.ListDocVersions(r.Context(), detail.Doc.ID)
@@ -770,7 +778,7 @@ func (s *server) renderDocVersion(w http.ResponseWriter, r *http.Request, d mode
 	for _, k := range keyByID {
 		keys = append(keys, k)
 	}
-	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys), d, v, keyByID[d.Project])
+	view := docVersionView(s.mdcache, mdrender.NewProjectKeys(keys).For(keyByID[d.Project]), d, v, keyByID[d.Project])
 	s.renderWeb(w, r, http.StatusOK, "doc version page", ui.DocVersion(view))
 }
 
