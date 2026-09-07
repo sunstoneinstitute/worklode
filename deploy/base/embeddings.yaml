@@ -64,6 +64,15 @@ spec:
             # failing the whole pass. §4.1's chunk budget is what keeps chunks
             # inside the window; this is the net under it, not a substitute.
             - --auto-truncate
+            # The queue behind the backend is bounded by this, and the backend
+            # caps itself at 4 requests per batch on CPU, so one 256-input
+            # client request occupies 256 slots for a long time. Two
+            # overlapping ones reach the default 512 exactly, and TEI's
+            # try_send then panics ("No backend receiver. This is a bug.:
+            # Full(..)") instead of returning 429 — after which /v1/embeddings
+            # and /health hang while /info still answers. Headroom for four
+            # full client batches.
+            - --max-concurrent-requests=2048
           ports:
             - name: http
               containerPort: 8080
