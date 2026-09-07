@@ -205,3 +205,62 @@ func TestLoadSyncCorpusIgnoresNonMarkdown(t *testing.T) {
 		}
 	}
 }
+
+// A body the backbone serves degrades where the same source under sync review
+// (TestLoadSyncCorpusErrors) is rejected: an imported pre-055 corpus carries
+// files with no frontmatter, and one of them must not abort a caller's walk
+// over the whole corpus (WL-724).
+func TestCorpusDocFromBodyDegrades(t *testing.T) {
+	cases := map[string]struct {
+		kind, slug, body string
+		wantNote         string
+		wantSections     int
+		wantEdges        int
+	}{
+		"no frontmatter": {
+			kind: "spec", slug: "url-scheme",
+			body:         "# T\n\n## 1. A {#sec-1}\n\nBody.\n",
+			wantNote:     "no frontmatter",
+			wantSections: 1,
+		},
+		"no status keeps its edges": {
+			kind: "plan", slug: "p",
+			body:      "---\nissued: 2026-01-01\ncovers: WL-SPEC-25#sec-1\n---\n# P\n",
+			wantEdges: 1,
+		},
+		"no h1": {
+			kind: "spec", slug: "noh1",
+			body:     "---\nstatus: draft\n---\nBody only.\n",
+			wantNote: "no H1 title",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := designdoc.CorpusPath(tc.kind, tc.slug)
+			cd, note, err := designdoc.CorpusDocFromBody(p, tc.kind, 1, []byte(tc.body))
+			if err != nil {
+				t.Fatalf("CorpusDocFromBody: %v", err)
+			}
+			if tc.wantNote == "" && note != "" {
+				t.Errorf("note = %q, want none", note)
+			}
+			if tc.wantNote != "" {
+				if !strings.Contains(note, tc.wantNote) {
+					t.Errorf("note = %q, want it to mention %q", note, tc.wantNote)
+				}
+				if !strings.Contains(note, tc.slug) {
+					t.Errorf("note = %q does not name the document", note)
+				}
+			}
+			if len(cd.Sections) != tc.wantSections {
+				t.Errorf("Sections = %d, want %d", len(cd.Sections), tc.wantSections)
+			}
+			if len(cd.Edges) != tc.wantEdges {
+				t.Errorf("Edges = %d, want %d", len(cd.Edges), tc.wantEdges)
+			}
+			if cd.Path != p || cd.Number != 1 {
+				t.Errorf("identity = %s/%d, want %s/1", cd.Path, cd.Number, p)
+			}
+		})
+	}
+}

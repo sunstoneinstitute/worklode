@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -117,15 +118,15 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	// The walk reads the target's own project, not the whole backbone.
 	// resp.Docs spans every project because tier 2 above may resolve a
 	// shorthand into another one, but a spec's plans sit on its project's
-	// sequence (029 §4), and imported corpora elsewhere carry bodies with
-	// no frontmatter that the parser rightly refuses (WL-722).
+	// sequence (029 §4), so another project's documents can only add noise
+	// (WL-722).
 	corpus := make([]model.Doc, 0, len(resp.Docs))
 	for _, d := range resp.Docs {
 		if d.Project == target.Project {
 			corpus = append(corpus, d)
 		}
 	}
-	docs, err := docTodoCorpus(cmd.Context(), c, corpus)
+	docs, thin, err := docTodoCorpus(cmd.Context(), c, corpus)
 	if err != nil {
 		return err
 	}
@@ -139,6 +140,10 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
+	// The bodies that parsed thin go in the footer next to the walk's own
+	// degradations: both say the same thing, that the answer is narrower
+	// than the question.
+	diag.Notes = append(diag.Notes, thin...)
 	if jsonOut(cmd) {
 		return writeDocTodoJSON(cmd, newDocTodoRefs(corpus, ""), items, diag)
 	}
@@ -229,16 +234,21 @@ func docTodoLinkBase(cmd *cobra.Command, cfg cli.Config) string {
 const docTodoCorpusConcurrency = 8
 
 // docTodoCorpus loads every document the backbone serves as a CorpusDoc, so
-// the walk of 026 §2.5 reads the same corpus `lode doc list` does.
+// the walk of 026 §2.5 reads the same corpus `lode doc list` does. Alongside
+// the documents it returns one note per body that parsed thin (see
+// CorpusDocFromBody), for the caller's footer.
 //
 // The walk is a pure function over parsed documents, and the corpus facts it
 // needs — a plan's covers levels, its requires — live in frontmatter, which
 // only the body carries. Each document is therefore fetched and re-parsed
 // rather than read from the backbone's own section and edge rows: those rows
 // are the server's index of the same frontmatter, and reading the source keeps
-// one parser rather than two readings that can disagree.
-func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]designdoc.CorpusDoc, error) {
+// one parser rather than two readings that can disagree. The rows are also
+// the narrower record — model.DocEdge drops the coverage level the walk
+// classifies partial coverage by.
+func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]designdoc.CorpusDoc, []string, error) {
 	out := make([]designdoc.CorpusDoc, len(docs))
+	notes := make([]string, len(docs))
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(docTodoCorpusConcurrency)
 	for i, d := range docs {
@@ -247,7 +257,7 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 			if err != nil {
 				return fmt.Errorf("read document %s: %w", d.Slug, err)
 			}
-			cd, err := designdoc.CorpusDocFromBody(
+			cd, note, err := designdoc.CorpusDocFromBody(
 				designdoc.CorpusPath(d.Kind, d.Slug), d.Kind, d.Number, []byte(detail.Doc.Body))
 			if err != nil {
 				return err
@@ -257,14 +267,14 @@ func docTodoCorpus(ctx context.Context, c *cli.Client, docs []model.Doc) ([]desi
 			// snapshot, which `doc accept` never rewrites and so drifts in
 			// either direction from the row (WL-478).
 			cd.Status = d.Status
-			out[i] = cd
+			out[i], notes[i] = cd, note
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return out, nil
+	return out, slices.DeleteFunc(notes, func(n string) bool { return n == "" }), nil
 }
 
 // docTodoPlanTasks builds the plan → minted-tasks lookup from one task list.
