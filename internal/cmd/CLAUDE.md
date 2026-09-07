@@ -50,9 +50,12 @@ tell an adjective from a verb or a view from an action.
   `task tree`, `task blockers`, `task cost`, `task frontier`,
   `task critical-path`, `doc todo`, `doc versions`, `doc reviewers`,
   `secret catalog`, `event subscribers`, `graph quarantines`,
-  `project overview`, `project health`, `project focus`, `project crew`. A
-  view never writes; the paired write is `set <field>` (L3), never a `--set`
-  flag on the view.
+  `project overview`, `project health`, `project focus`, `project rally`,
+  `project crew`. A view never writes; the paired write is `set <field>` (L3),
+  never a `--set` flag on the view — except `project rally`, whose subject is
+  assembled with `task block`. Spec 061 §5 tables every noun subcommand in the
+  tree, this rule's members included; that table is closed, so a new view is
+  added there and in `namerule_test.go` together.
 - **L7** — Cross-entity readers sit at the top level, and there are two.
   `lode show <ref>` dispatches on a known reference or `--kind` and returns
   one subject; `lode search <query>` takes an unknown one and returns a
