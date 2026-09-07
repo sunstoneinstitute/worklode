@@ -98,6 +98,26 @@ claim` refuses it by id. It also takes no `child_of` children, blocks nothing,
 and carries no decision — the edges pointing at it are its whole content. No
 plan mints one; a rally is assembled by hand.
 
+## Decisions
+
+Any task but a rally can pose questions that someone has to answer. A
+`decision` task is the case where the questions are the whole task: it is
+never handed out as work (`lode work next` skips it, `lode task claim`
+refuses it by id), it moves by `lode task assign`, and answering its last
+open row closes it to `merged` in the same write.
+
+```bash
+lode decision add <task> --key storage --question "Where does the index live?" \
+    --type single_select --option Postgres --option S3
+lode decision list <task>               # the questions it poses, in authored order
+lode decision show <task>/<key>         # one question, its options, its answer
+lode decision edit <task>/<key>         # reword, regroup or re-parent — unanswered rows only
+lode decision resolve <task>/<key> --pick Postgres   # record the answer
+```
+
+Recording is terminal: an answered row is never written over or edited. To
+change a call, pose another row.
+
 ## Creating and viewing
 
 ```bash
