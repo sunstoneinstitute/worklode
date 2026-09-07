@@ -260,6 +260,59 @@ func TestReviewsPageListsAwaitingApprovals(t *testing.T) {
 	assertNoAriaCurrent(t, body)
 }
 
+// TestReviewsPageRendersNonPRLanes: the queue is one page over every
+// governed kind (029 §7.2). A deliverable row names its lane, and a lane
+// with no designated revision is not offered a decide form — the store
+// refuses that decide, and the page does not offer an act that can only 422.
+func TestReviewsPageRendersNonPRLanes(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	seedAwaitingDeliverableLane(t, st, "Methodology", "methodology/science-lead")
+
+	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
+	bodyContains(t, body, "Methodology", "methodology/science-lead",
+		"No revision designated for review yet.", ">deliverable<")
+	if strings.Contains(body, `value="approve"`) {
+		t.Error("undesignated row must not offer a decide form")
+	}
+	assertNoAriaCurrent(t, body)
+}
+
+// TestReviewsPageDeliverableWithRevisionDecides: the same row, once a
+// revision is designated, is decidable and addresses the deliverables page
+// of its project (the deliverable declares no URL of its own).
+func TestReviewsPageDeliverableWithRevisionDecides(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	seeded := seedDeliverableApproval(t, st, "Casualty dataset",
+		"methodology/science-lead", "3")
+
+	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
+	bodyContains(t, body, `value="approve"`,
+		fmt.Sprintf("/approvals/%d/decide", seeded.ID),
+		`href="/projects/`+seeded.ProjectID+`/deliverables"`, "version 3")
+	if strings.Contains(body, "No revision designated for review yet.") {
+		t.Error("a revision-bound row must keep its decide form")
+	}
+}
+
+// TestReviewsPageDocRowLinksItsPage: a doc-kind row links to the cockpit
+// page for that document, not out to GitHub.
+func TestReviewsPageDocRowLinksItsPage(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj")
+	doc := seedDoc(t, st, store.DocInput{
+		Project: "proj", Kind: "spec", Number: 29, Slug: "029-reviews",
+		Body: docSpecBody, CreatedBy: "alice",
+	})
+	seedAwaitingApprovalRow(t, st, "doc", store.DocEntityID(doc.ID), "1", "alice")
+
+	body := doReq(t, h, "GET", "/reviews", "", nil).Body.String()
+	bodyContains(t, body, `href="/docs/`+strconv.FormatInt(doc.ID, 10)+`"`,
+		doc.Title, ">doc<")
+}
+
 // TestReviewsPageEmptyIsHonest checks an empty queue states that honestly
 // rather than showing a fabricated record.
 func TestReviewsPageEmptyIsHonest(t *testing.T) {
