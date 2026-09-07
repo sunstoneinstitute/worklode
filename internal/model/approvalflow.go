@@ -13,7 +13,7 @@ type ApprovalFlow struct {
 // ApprovalRequirement is one review lane a flow demands.
 type ApprovalRequirement struct {
 	Lane       string `json:"lane"`             // unique within the flow
-	EntityKind string `json:"entity_kind"`      // document | deliverable | task
+	EntityKind string `json:"entity_kind"`      // doc | deliverable | task
 	Target     string `json:"target,omitempty"` // exact entity name, case-insensitive; empty = every entity of the kind
 	Role       string `json:"role"`             // Keycloak group that may decide
 }

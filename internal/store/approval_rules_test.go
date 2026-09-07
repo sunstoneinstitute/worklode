@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
@@ -200,6 +201,15 @@ func equalUnordered(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+func TestFlowEntityKindsAreApprovalEntityKinds(t *testing.T) {
+	t.Parallel()
+	for _, k := range store.FlowEntityKinds {
+		if !slices.Contains(model.ApprovalEntityKinds, k) {
+			t.Errorf("FlowEntityKinds has %q, not in model.ApprovalEntityKinds %v", k, model.ApprovalEntityKinds)
+		}
+	}
 }
 
 func TestValidateFlowRefusals(t *testing.T) {
