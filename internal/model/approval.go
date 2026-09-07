@@ -26,11 +26,15 @@ type Approval struct {
 }
 
 // AwaitingApproval is one row of the awaiting queue: the approval plus what a
-// person needs to act on it. The entity fields are kind-neutral — Title/URL/
-// Author are the PR's for a 'pr' row and the document's for a 'doc' row — so
-// the queue does not grow a parallel set of columns per kind. Every one of
-// them, Task included, is "" when the row's kind does not carry it: a
-// document hangs off its project directly, with no task in between.
+// person needs to act on it. The entity fields are kind-neutral — Title is
+// the PR title, document title, deliverable name or task title, whichever the
+// row governs — so the queue does not grow a parallel set of columns per
+// kind. URL is the one address that opens the row's entity: GitHub for a PR,
+// its declared address for a deliverable that has one, a cockpit page
+// otherwise. Only a 'pr' row names a Task — a document, deliverable or task
+// hangs off its project directly, so Task is "" there. Author is the PR's
+// author login where there is one, otherwise the actor that filed the
+// requirement.
 type AwaitingApproval struct {
 	Approval
 	Title             string  `json:"title"`
