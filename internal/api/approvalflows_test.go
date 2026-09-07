@@ -73,7 +73,7 @@ func TestLoadApprovalFlowsShipsTheStoryDefault(t *testing.T) {
 func TestLoadApprovalFlowsDirOverridesByName(t *testing.T) {
 	dir := writeFlow(t, "story.json", `{
 		"name": "story", "rev": "9",
-		"requirements": [{"lane": "only", "entity_kind": "document", "role": "editors"}]
+		"requirements": [{"lane": "only", "entity_kind": "doc", "role": "editors"}]
 	}`)
 	flows, err := api.LoadApprovalFlows(dir)
 	if err != nil {

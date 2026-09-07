@@ -108,10 +108,6 @@ func RequestDocApproval(tx *sql.Tx, now time.Time, docID int64, version int) err
 // no row under kind has entityID, ErrInvalidInput for a kind outside
 // model.ApprovalEntityKinds. Each arm matches entity_id the way the writer
 // spells it, the same correlation approvalEntityJoins states.
-//
-// The document arm is 'doc', the approvals table's own spelling.
-// FlowEntityKinds says "document" for the same kind and is wrong; WL-719
-// fixes that separately.
 func DefaultSubjectRevision(tx *sql.Tx, kind, entityID string) (string, error) {
 	if kind == "doc" {
 		var version int
