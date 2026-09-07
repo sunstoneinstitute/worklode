@@ -95,20 +95,34 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 24
+          # Both probes are sized against a busy server, not an idle one.
+          # EmbeddingGemma on CPU saturates this pod's two cores for the length
+          # of one indexer request, and /health answers on the same starved
+          # runtime, so a 3s timeout reads "pinned" as "hung". The old settings
+          # killed the pod every few minutes: SIGKILL, a ~60s model warm-up,
+          # one more request, killed again, with the in-flight embed call lost
+          # each time (which WL-714 turns into dropped chunk rows).
+          #
+          # Liveness is deliberately slacker than readiness, so readiness always
+          # fires first and liveness only reaches a process that has been
+          # unresponsive for five minutes — a hang, not a batch.
           livenessProbe:
             httpGet:
               path: /health
               port: http
-            periodSeconds: 10
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 5
+          # There is one replica, so failing readiness takes the only endpoint
+          # out of the Service and the indexer's next call fails; it buys no
+          # failover. Kept as a real signal, sized not to flap under load.
           readinessProbe:
             httpGet:
               path: /health
               port: http
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 3
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 4
 ---
 apiVersion: v1
 kind: Service
