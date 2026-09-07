@@ -147,14 +147,25 @@ func (ix *Indexer) convergeKind(ctx context.Context, kind string) (int, error) {
 
 // index rebuilds one subject's chunk set: read the live row, chunk it, embed
 // it when there is a provider, and swap the whole set in one transaction.
+//
+// A configured provider that fails to embed must not make the subject
+// disappear from the lexical arm — that would be strictly worse than having
+// no provider at all, where the nil branch of vectors() already writes null
+// embeddings (§11). So an embed error still writes the chunk rows, with nil
+// vectors, and is still returned: the caller counts it as a failure and logs
+// it, but StaleSubjects' no_vector disjunct re-selects the subject next pass
+// once embedding works again.
 func (ix *Indexer) index(ctx context.Context, subj store.ChunkSubject) error {
 	chunks, err := ix.chunks(ctx, subj)
 	if err != nil {
 		return err
 	}
-	vectors, err := ix.vectors(ctx, chunks)
-	if err != nil {
-		return err
+	vectors, embedErr := ix.vectors(ctx, chunks)
+	if embedErr != nil {
+		if err := ix.Store.ReplaceSubjectChunks(ctx, subj, chunks, nil); err != nil {
+			return errors.Join(embedErr, err)
+		}
+		return embedErr
 	}
 	return ix.Store.ReplaceSubjectChunks(ctx, subj, chunks, vectors)
 }

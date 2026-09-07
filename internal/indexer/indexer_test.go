@@ -261,6 +261,13 @@ func TestNoProviderWritesLexicalRows(t *testing.T) {
 // TestFailedSubjectStaysStale: a provider that errors leaves the subject
 // unindexed and the pass alive, and the next pass picks it up. This is the
 // self-healing property §7 buys by converging rather than hooking writes.
+//
+// It also covers WL-714: a configured-but-failing provider must not drop the
+// subject from the lexical arm the way an embed error used to. The chunk
+// rows still get written, with null vectors, exactly as the no-provider case
+// writes them (§11) — only now driven by a failure rather than by Embed
+// being nil. Without the fix, index() returned on vectors()'s error before
+// calling ReplaceSubjectChunks, so chunkStats would read 0 rows here.
 func TestFailedSubjectStaysStale(t *testing.T) {
 	t.Parallel()
 	st := store.OpenTestStore(t)
@@ -276,8 +283,12 @@ func TestFailedSubjectStaysStale(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("failing pass indexed %d subjects, want 0", n)
 	}
-	if rows, _ := chunkStats(t, st); rows != 0 {
-		t.Fatalf("failing pass wrote %d rows", rows)
+	rows, without := chunkStats(t, st)
+	if rows != 3 {
+		t.Fatalf("failing pass wrote %d chunk rows, want 3 (lexical arm must stay served)", rows)
+	}
+	if without != rows {
+		t.Fatalf("failing pass left %d/%d rows with a vector, want all %d without one", rows-without, rows, rows)
 	}
 	if got := staleGauge(t, m); got != 3 {
 		t.Fatalf("worklode_index_subjects_stale = %v after a failed pass, want 3", got)
@@ -293,6 +304,9 @@ func TestFailedSubjectStaysStale(t *testing.T) {
 	}
 	if got := staleGauge(t, m); got != 0 {
 		t.Fatalf("stale = %v after recovery, want 0", got)
+	}
+	if _, without = chunkStats(t, st); without != 0 {
+		t.Fatalf("%d rows still have no vector after the recovery pass", without)
 	}
 }
 
