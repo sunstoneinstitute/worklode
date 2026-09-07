@@ -114,12 +114,23 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
-	docs, err := docTodoCorpus(cmd.Context(), c, resp.Docs)
+	// The walk reads the target's own project, not the whole backbone.
+	// resp.Docs spans every project because tier 2 above may resolve a
+	// shorthand into another one, but a spec's plans sit on its project's
+	// sequence (029 §4), and imported corpora elsewhere carry bodies with
+	// no frontmatter that the parser rightly refuses (WL-722).
+	corpus := make([]model.Doc, 0, len(resp.Docs))
+	for _, d := range resp.Docs {
+		if d.Project == target.Project {
+			corpus = append(corpus, d)
+		}
+	}
+	docs, err := docTodoCorpus(cmd.Context(), c, corpus)
 	if err != nil {
 		return err
 	}
 
-	tasks, err := docTodoPlanTasks(cmd, c, cfg, resp.Docs)
+	tasks, err := docTodoPlanTasks(cmd, c, cfg, corpus)
 	if err != nil {
 		return err
 	}
@@ -129,9 +140,9 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 		return err
 	}
 	if jsonOut(cmd) {
-		return writeDocTodoJSON(cmd, newDocTodoRefs(resp.Docs, ""), items, diag)
+		return writeDocTodoJSON(cmd, newDocTodoRefs(corpus, ""), items, diag)
 	}
-	refs := newDocTodoRefs(resp.Docs, docTodoLinkBase(cmd, cfg))
+	refs := newDocTodoRefs(corpus, docTodoLinkBase(cmd, cfg))
 	refs.target = refs.ref(designdoc.CorpusPath(target.Kind, target.Slug))
 	writeDocTodoTable(cmd.OutOrStdout(), refs, items, diag)
 	return nil
