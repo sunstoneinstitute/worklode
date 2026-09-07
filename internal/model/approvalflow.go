@@ -24,3 +24,19 @@ type ApprovalFlowSnapshot struct {
 	Flow      ApprovalFlow      `json:"flow"`
 	Reviewers map[string]string `json:"reviewers,omitempty"`
 }
+
+// ApplyApprovalFlowInput is the request body of POST
+// /api/v1/projects/{id}/approval-flow: the name of the flow to stamp, and an
+// optional reviewer template naming the actor who owes a lane.
+type ApplyApprovalFlowInput struct {
+	Name      string            `json:"name"`
+	Reviewers map[string]string `json:"reviewers,omitempty"`
+}
+
+// ApplyApprovalFlowResponse is what the apply returns: the project as it now
+// stands, and how many approval rows the backfill actually inserted (zero on
+// a re-apply, which is idempotent).
+type ApplyApprovalFlowResponse struct {
+	Project      Project `json:"project"`
+	Materialized int     `json:"materialized"`
+}
