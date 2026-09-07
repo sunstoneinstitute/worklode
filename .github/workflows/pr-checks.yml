@@ -37,6 +37,7 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
       obsidian: ${{ steps.decide.outputs.obsidian }}
+      code: ${{ steps.decide.outputs.code }}
       trusted: ${{ steps.decide.outputs.trusted }}
     steps:
       - name: Decide whether to run checks
@@ -55,7 +56,7 @@ jobs:
           # their own, so it is trusted, runs everything, and skips nothing.
           if [ "${{ github.event_name }}" = "merge_group" ]; then
             echo "Merge-queue build — running every check on the trusted runners."
-            printf 'trusted=true\nobsidian=true\nrun=true\n' >> "$GITHUB_OUTPUT"
+            printf 'trusted=true\nobsidian=true\ncode=true\nrun=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -93,6 +94,37 @@ jobs:
             echo "obsidian=true" >> "$GITHUB_OUTPUT"
           else
             echo "obsidian=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # The Go jobs (lint, test, build-image) are scoped the same way, and
+          # for the same reason: a change confined to deploy/ cannot alter what
+          # they report. validate-kustomize is deliberately NOT scoped by this
+          # — it is the one check such a change needs, and it keys on `run`.
+          #
+          # deploy/base/migrations/ is excluded because it is the one thing
+          # under deploy/ that Go reads: store.MigrationsDirForTests loads that
+          # directory from disk, and _lint.yml's `migration numbers` step runs
+          # scripts/check-migrations.sh over it. A migration is a code change
+          # wearing a .sql extension.
+          #
+          # The agent-surface paths carry the same exemption they have in the
+          # docs skip below: TestAgentSurfaces reads them.
+          #
+          # Independent of `can-be-tested`, exactly as obsidian is: the label
+          # authorises CI on an untrusted PR, it does not make untouched Go
+          # worth rebuilding.
+          # These two patterns are the whole decision, named so
+          # scripts/ci-code-scope_test.sh can read them straight out of this
+          # file and test the real thing rather than a copy that drifts.
+          CODE_INERT='(^docs/|^www/|^deploy/|\.md$)'
+          CODE_ANYWAY='^(deploy/base/migrations/|docs/agent-surfaces\.md|plugins/|\.claude/skills/|CLAUDE\.md|internal/cmd/CLAUDE\.md)'
+          if [ -n "$CHANGED" ] \
+             && ! echo "$CHANGED" | grep -qvE "$CODE_INERT" \
+             && ! echo "$CHANGED" | grep -qE "$CODE_ANYWAY"; then
+            echo "::notice::PR changes nothing the Go build reads — skipping lint, test and build-image. validate-kustomize still runs."
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
           fi
 
           # Opt-in label (needs Triage+, so authors cannot self-authorise).
@@ -150,7 +182,7 @@ jobs:
 
   lint:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
     uses: ./.github/workflows/_lint.yml
     with:
       # `gha-buildcache`, not the bare `self-hosted` build-image/test also
@@ -161,7 +193,7 @@ jobs:
 
   test:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
     uses: ./.github/workflows/_test.yml
     with:
       # `gha-pgvector` + `gha-buildcache`, not the bare `self-hosted` lint
@@ -182,7 +214,7 @@ jobs:
 
   build-image:
     needs: gate
-    if: needs.gate.outputs.run == 'true'
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.code == 'true'
     uses: ./.github/workflows/_build-image.yml
     with:
       push: false
