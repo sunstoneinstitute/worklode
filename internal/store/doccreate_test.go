@@ -400,15 +400,17 @@ requires:
 	}
 }
 
-// TestDocCreateSkipsEmptyRefs: a coverage entry qualified with a level but no
-// spec names no target, so it writes no edge — never one with to_external ”.
+// TestDocCreateSkipsEmptyRefs: a blank reference names no target, so it
+// writes no edge — never one with to_external ”. The `covers` spelling of
+// this is refused outright (026 §5.1, TestDocCoversRejections), so the
+// guarantee is pinned on a relation that has no required-key rule.
 func TestDocCreateSkipsEmptyRefs(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
-	body := "---\nstatus: draft\ncovers:\n  - coverage: partial\n---\n\n# Plan\n"
+	body := "---\nstatus: draft\nrequires:\n  - \"   \"\n---\n\n# Plan\n"
 
 	plan := mustCreateDoc(t, s, DocInput{
-		Project: "p1", Kind: "plan", Slug: "empty-covers", Body: body, CreatedBy: "stig",
+		Project: "p1", Kind: "plan", Slug: "empty-requires", Body: body, CreatedBy: "stig",
 	})
 	if edges := docEdges(t, s, plan.ID); len(edges) != 0 {
 		t.Fatalf("edges = %+v, want none", edges)
