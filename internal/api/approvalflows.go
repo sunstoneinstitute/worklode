@@ -12,10 +12,10 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
-// flowActorID owns every approval row a flow rule mints (029 §7.2): the rule
-// inserted them, and crediting the policy to whichever human filed the idea
-// would misstate who did what.
-const flowActorID = "worklode"
+// flowActorID owns every approval row a flow rule mints (029 §7.2). The
+// materializer stamps it as created_by, so the id is store's to define and
+// this side only asserts the actor exists at boot.
+const flowActorID = store.FlowActorID
 
 //go:embed approvalflows/*.json
 var defaultFlowFS embed.FS

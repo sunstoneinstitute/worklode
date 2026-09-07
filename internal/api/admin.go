@@ -44,6 +44,7 @@ func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
 	}
 	return model.Project{
 		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
+		ApprovalFlowName: p.ApprovalFlowName, ApprovalFlowRev: p.ApprovalFlowRev,
 	}
 }
 
