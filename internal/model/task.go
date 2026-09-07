@@ -20,6 +20,12 @@ var TaskStates = []string{
 	"merged", "deployed_dev", "deployed_prod", "released", "abandoned",
 }
 
+// TaskConcerns is the tasks.concern CHECK constraint's value set. Same deal
+// as TaskPriorities: internal/store's TestConcernCheckConstraintMatchesModel
+// pins it to the constraint, so a concern added in a migration cannot leave
+// this list behind.
+var TaskConcerns = []string{"completeness", "performance", "usability", "security"}
+
 // Task is a unit of work. Concern is "" when the task has none; Assignee is
 // "" when the task is unassigned; Skills is never nil (the store guarantees
 // an empty slice, so the JSON reads [] rather than null).
