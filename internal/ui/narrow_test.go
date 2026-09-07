@@ -257,16 +257,22 @@ func pages(t *testing.T) map[string]string {
 		"approvals": Approvals(ApprovalsView{
 			Page: PageProps{Title: "Reviews"},
 			Rows: []ApprovalRow{{
-				ID: 12, Kind: "PR", EntityID: "sunstoneinstitute/worklode#242",
+				ID: 12, Kind: "pr", EntityID: "sunstoneinstitute/worklode#242",
 				Title:  "Make the narrow-width reflow check runnable, so the WCAG fixes are measured",
 				URL:    "https://github.com/sunstoneinstitute/worklode/pull/242",
 				TaskID: "WL-234", ProjectID: "worklode", ProjectName: "Worklode backbone",
-				RequiredActorName: "Stig Bakken", Age: "3h ago",
+				RequiredActorName: "Stig Bakken", Age: "3h ago", Decidable: true,
 			}, {
-				ID: 13, Kind: "Document", EntityID: "doc:44",
+				ID: 13, Kind: "doc", EntityID: "doc:44",
 				Title: longTitle, URL: "/docs/44", Revision: "7",
-				ProjectID: "worklode", ProjectName: "Worklode backbone",
-				RequiredActorName: "Stig Bakken", Age: "2d ago",
+				Lane: "methodology/science-lead", ProjectID: "worklode",
+				ProjectName:       "Worklode backbone",
+				RequiredActorName: "Stig Bakken", Age: "2d ago", Decidable: true,
+			}, {
+				ID: 14, Kind: "deliverable", EntityID: "WL-DEL-3",
+				Title: longTitle, URL: "/projects/worklode/deliverables",
+				Lane: "methodology/science-lead", ProjectID: "worklode",
+				ProjectName: "Worklode backbone", Age: "1d ago",
 			}},
 		}),
 		"newtask": NewTask(NewTaskView{
