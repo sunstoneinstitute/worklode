@@ -116,3 +116,65 @@ func seedPRApproval(t *testing.T, st *store.Store, seed prApprovalSeed) seededAp
 	t.Fatalf("seeded approval %s is not in the awaiting queue", entityID)
 	return seededApproval{}
 }
+
+// seedAwaitingApprovalRow inserts one awaiting approval of any kind and
+// returns its id, read back through the queue reader for the same reason
+// seedPRApproval does: the row it returns is the row /reviews shows.
+func seedAwaitingApprovalRow(t *testing.T, st *store.Store,
+	kind, entityID, revision, lane string) int64 {
+	t.Helper()
+	n := approvalSeedSeq.Add(1)
+	seedEvent(t, st, fmt.Sprintf("approval-seed-row-%d", n), func(tx *sql.Tx, _ int64) error {
+		_, err := store.InsertAwaitingApproval(tx, st.Now(), kind, entityID,
+			revision, lane, nil, nil, nil)
+		return err
+	})
+	rows, err := st.ListAwaitingApprovals(context.Background())
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	for _, row := range rows {
+		if row.EntityKind == kind && row.EntityID == entityID && row.Lane == lane {
+			return row.ID
+		}
+	}
+	t.Fatalf("seeded %s approval %s is not in the awaiting queue", kind, entityID)
+	return 0
+}
+
+// seedAwaitingDeliverableLane seeds a deliverable-kind approval on a lane
+// with no designated revision (029 §7.2): the flow requires a decision, the
+// subject it is granted against has not been named yet.
+func seedAwaitingDeliverableLane(t *testing.T, st *store.Store, name, lane string) seededApproval {
+	t.Helper()
+	return seedDeliverableApproval(t, st, name, lane, "")
+}
+
+// seedDeliverableApproval seeds one deliverable behind its own project and an
+// awaiting approval on it. The deliverable declares no URL, so the queue
+// resolves its address to the project's deliverables page.
+func seedDeliverableApproval(t *testing.T, st *store.Store,
+	name, lane, revision string) seededApproval {
+	t.Helper()
+	n := approvalSeedSeq.Add(1)
+	project := fmt.Sprintf("approval-seed-%d", n)
+	if err := st.CreateProject(context.Background(), project, project,
+		fmt.Sprintf("AQ%d", n)); err != nil {
+		t.Fatalf("create project %s: %v", project, err)
+	}
+	var delID string
+	seedEvent(t, st, fmt.Sprintf("approval-seed-del-%d", n), func(tx *sql.Tx, _ int64) error {
+		del, err := store.CreateDeliverable(tx, st.Now(), store.DeliverableInput{
+			ProjectID: project, Name: name,
+		})
+		if err != nil {
+			return err
+		}
+		delID = del.ID
+		return nil
+	})
+	return seededApproval{
+		ID:        seedAwaitingApprovalRow(t, st, "deliverable", delID, revision, lane),
+		ProjectID: project,
+	}
+}
