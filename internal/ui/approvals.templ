@@ -70,6 +70,11 @@ templ approvalRow(row ApprovalRow) {
 		</div>
 		if row.Decidable {
 			<form method="post" action={ "/approvals/" + strconv.FormatInt(row.ID, 10) + "/decide" } class="decide">
+				// A row rendered outside the queue says where deciding it should
+				// land; the queue itself leaves this empty and keeps the default.
+				if row.ReturnURL != "" {
+					<input type="hidden" name="return" value={ row.ReturnURL }/>
+				}
 				<button type="submit" name="decision" value="approve" class="btn primary">Approve</button>
 				<button type="submit" name="decision" value="request_changes" class="btn">Request changes</button>
 				<button type="submit" name="decision" value="reject" class="btn ghost">Reject</button>

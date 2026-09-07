@@ -5,6 +5,7 @@ package api_test
 // GET /docs, GET /docs/{ref}, and their version-history siblings.
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -219,3 +220,103 @@ func TestDocVersionPageRejectsInt32Overflow(t *testing.T) {
 // docPageURL is the cockpit page path retained for plans, which have no
 // cross-corpus shorthand.
 func docPageURL(id int64) string { return "/docs/" + strconv.FormatInt(id, 10) }
+
+// amendingSpecBody amends 025's §2 from its own §1, the shape the
+// consolidated view folds (026 §3.2).
+const amendingSpecBody = `---
+status: draft
+amends:
+  "#sec-1":
+    - 025-documents-in-the-backbone.md#sec-2
+---
+
+# Amending the model
+
+Intro prose.
+
+## 1. The model, revised {#sec-1}
+
+The model now says nine.
+`
+
+// TestDocPageFoldsAmendmentsAndShowsNotes is WL-716's first two gaps: the
+// document page defaults to the consolidated view, so a reviewer reads what
+// the spec says now rather than what it said before another spec amended it,
+// and the anchored notes 025 §8.5 stores are rendered instead of invisible.
+// ?body=source is the escape hatch back to the stored text.
+func TestDocPageFoldsAmendmentsAndShowsNotes(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	base := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	amender := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 45, Slug: "045-amending", Body: amendingSpecBody,
+	})
+	if rr := doReq(t, h, "POST", docPath(amender.ID, "/accept"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("accept amender: status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "POST", docPath(base.ID, "/notes"), token,
+		model.AddDocNoteInput{Anchor: "sec-2", Body: "this needs an example"}); rr.Code != http.StatusOK {
+		t.Fatalf("add note: status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	assertShell(t, body)
+	bodyContains(t, body,
+		"Model body.",             // the document's own text is still there
+		"The model now says nine", // with the amending section folded under it
+		">spec 45 §1<",            // attributed, so borrowed text is never mistaken
+		"this needs an example",   // the note
+		`href="#sec-2"`,           // anchored where it applies
+	)
+
+	// The stored source stays reachable, and is what it says it is.
+	rr = doReq(t, h, "GET", "/docs/WL-SPEC-25?body=source", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("source status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	source := rr.Body.String()
+	if strings.Contains(source, "The model now says nine") {
+		t.Errorf("?body=source folded the amendment in anyway:\n%s", source)
+	}
+	bodyContains(t, source, "Model body.", "this needs an example")
+}
+
+// TestDocPageShowsReviewState is WL-716's third gap: the reviewer roster
+// (025 §7.3) and the open approval rows (029 §7) are rendered on the document
+// itself, each with the decide form the Reviews queue uses — carrying this
+// page as its return, so deciding here does not throw the reviewer to /reviews.
+func TestDocPageShowsReviewState(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	if err := st.CreateActor(context.Background(), "bob", "human", "bob", false); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+	d := draftSpecForReview(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	setReviewers(t, h, token, d.ID, []string{"bob"})
+	if rr := doReq(t, h, "POST", docPath(d.ID, "/request-approval"), token, nil); rr.Code != http.StatusOK {
+		t.Fatalf("request approval: status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	open := awaitingFor(t, st, d.ID)
+	if len(open) != 1 {
+		t.Fatalf("awaiting rows = %d, want 1", len(open))
+	}
+
+	rr := doReq(t, h, "GET", "/docs/WL-SPEC-25", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	bodyContains(t, body,
+		"<li>bob",   // the roster
+		">awaiting", // and who still owes a verdict
+		fmt.Sprintf(`action="/approvals/%d/decide"`, open[0].ID),
+		`value="approve"`,
+		`name="return" value="/docs/WL-SPEC-25"`,
+	)
+}

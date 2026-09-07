@@ -462,7 +462,23 @@ func (s *server) decideApproval(w http.ResponseWriter, r *http.Request) {
 		s.decideApprovalErr(w, err)
 		return
 	}
-	http.Redirect(w, r, "/reviews", http.StatusSeeOther)
+	http.Redirect(w, r, decideReturn(r.PostFormValue("return")), http.StatusSeeOther)
+}
+
+// decideReturn is where a decided approval lands: the queue, or the page the
+// form came from when it named one. The form field is attacker-controlled, so
+// only a same-site absolute path is honoured — anything carrying a scheme, a
+// host, or a second leading slash is an open redirect and falls back to the
+// queue.
+func decideReturn(want string) string {
+	if want == "" || !strings.HasPrefix(want, "/") || strings.HasPrefix(want, "//") {
+		return "/reviews"
+	}
+	u, err := url.Parse(want)
+	if err != nil || u.Scheme != "" || u.Host != "" {
+		return "/reviews"
+	}
+	return want
 }
 
 // decideApprovalErr turns a refused decision into the page the person sees.

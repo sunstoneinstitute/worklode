@@ -1,9 +1,11 @@
-// `lode show --inline` (WL-84): render a document with every effective
-// amendment and supersession folded into the section it acts on, so an agent
-// reads a spec's current state without chasing the reference chain turn by
+// The consolidated view (WL-84): render a document with every effective
+// amendment and supersession folded into the section it acts on, so a reader
+// sees a spec's current state without chasing the reference chain turn by
 // turn. This is 026 §3.2's consolidated view computed over backbone
 // documents — the same rendering scripts/inlinespec.py produces for the git
-// corpus, driven by doc_edges instead of frontmatter:
+// corpus, driven by doc_edges instead of frontmatter. It backs both
+// `lode show --inline` and the cockpit's document page (WL-716), which is
+// why it lives here rather than in internal/cmd:
 //
 //   - a section an effective claim acts on keeps its own text and gains the
 //     acting section's text beneath it, led by an attribution marker
@@ -19,7 +21,7 @@
 //   - inlined headings are flattened to bold lines so borrowed text cannot
 //     reshape the outline of the document it lands in.
 
-package cmd
+package designdoc
 
 import (
 	"fmt"
@@ -27,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -35,19 +36,19 @@ import (
 // defect, not a rendering requirement (inlinespec.py uses the same bound).
 const inlineMaxDepth = 8
 
-// docInliner folds a document's inbound claims into its body. fetch loads a
+// Inliner folds a document's inbound claims into its body. fetch loads a
 // document's detail by id (memoized — the same acting document is typically
 // named by many sections).
-type docInliner struct {
+type Inliner struct {
 	fetch func(int64) (*model.DocDetail, error)
 	cache map[int64]*model.DocDetail
 }
 
-func newDocInliner(fetch func(int64) (*model.DocDetail, error)) *docInliner {
-	return &docInliner{fetch: fetch, cache: map[int64]*model.DocDetail{}}
+func NewInliner(fetch func(int64) (*model.DocDetail, error)) *Inliner {
+	return &Inliner{fetch: fetch, cache: map[int64]*model.DocDetail{}}
 }
 
-func (in *docInliner) detail(id int64) (*model.DocDetail, error) {
+func (in *Inliner) detail(id int64) (*model.DocDetail, error) {
 	if d, ok := in.cache[id]; ok {
 		return d, nil
 	}
@@ -115,7 +116,7 @@ func sectionClaims(d *model.DocDetail, anchor string) []model.DocEdge {
 
 // blocksFor renders the inlined blocks and pending notes for one section of
 // one document, transitively expanded. seen keys are (doc id, anchor).
-func (in *docInliner) blocksFor(d *model.DocDetail, anchor string, seen map[string]bool, depth int) (blocks, pending []string, err error) {
+func (in *Inliner) blocksFor(d *model.DocDetail, anchor string, seen map[string]bool, depth int) (blocks, pending []string, err error) {
 	key := strconv.FormatInt(d.ID, 10) + "#" + anchor
 	if depth >= inlineMaxDepth || seen[key] {
 		return nil, nil, nil
@@ -130,7 +131,7 @@ func (in *docInliner) blocksFor(d *model.DocDetail, anchor string, seen map[stri
 			pending = append(pending, claimRef(e, e.ToAnchor))
 			continue
 		}
-		parsed, err := designdoc.Parse([]byte(acting.Body))
+		parsed, err := Parse([]byte(acting.Body))
 		if err != nil {
 			return nil, nil, fmt.Errorf("parse %s: %w", acting.Slug, err)
 		}
@@ -153,12 +154,12 @@ func (in *docInliner) blocksFor(d *model.DocDetail, anchor string, seen map[stri
 	return blocks, pending, nil
 }
 
-// consolidateDoc renders the whole consolidated view: banner, preamble, and
+// Consolidate renders the whole consolidated view: banner, preamble, and
 // every section with its claims folded in. section, when non-empty, narrows
 // the output to that section's subtree — each nested section still carries
 // its own folds.
-func (in *docInliner) consolidateDoc(d *model.DocDetail, section string) (string, error) {
-	parsed, err := designdoc.Parse([]byte(d.Body))
+func (in *Inliner) Consolidate(d *model.DocDetail, section string) (string, error) {
+	parsed, err := Parse([]byte(d.Body))
 	if err != nil {
 		return "", fmt.Errorf("parse %s: %w", d.Slug, err)
 	}
