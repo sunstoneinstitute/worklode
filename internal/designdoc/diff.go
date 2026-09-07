@@ -7,8 +7,10 @@ import (
 	"strings"
 )
 
-// DepthLimit is the 025 §6.1 addressability limit. Server-configurable is
-// deferred with the rest of the 014 admin surface; 3 is its default.
+// DepthLimit is the default 025 §6.1 addressability limit. The server's own
+// limit is configuration (LODE_DOC_DEPTH_LIMIT, store.SetDocDepthLimit); this
+// is what it falls back to, and what the client-side `lode doc lint` checks
+// against when there is no server to ask.
 const DepthLimit = 3
 
 // SectionDiff compares an accepted document with a candidate revision
