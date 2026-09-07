@@ -740,9 +740,10 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("DELETE /api/v1/docs/{id}", s.deleteDoc)
 	r.api("POST /api/v1/docs/{id}/undelete", s.undeleteDoc)
 
-	// Requesting and listing only. Deciding is web-session-gated
+	// Requiring and listing only. Deciding is web-session-gated
 	// (029 §7.3) and lives at POST /approvals/{id}/decide; see approvals.go.
 	r.api("GET /api/v1/approvals", s.listApprovals)
+	r.api("POST /api/v1/approvals", s.requireApproval)
 
 	r.api("GET /api/v1/skills", s.listSkills)
 	r.api("GET /api/v1/skills/{name}", s.getSkill)
