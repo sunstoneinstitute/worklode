@@ -1,10 +1,14 @@
 # Worklode concept schemes — the `wlc:` SKOS vocabularies.
 #
 # Companion to ontology.ttl, split by purpose per ADR-0007. Every scheme is a
-# fixed enum; the runtime four each mirror a CHECK constraint that already
-# exists in the schema (006 §6). Sources: spec 006 §4/§1.5, spec 025 §7/§8
-# (status enum and task kinds), spec 006 §6 (runtime enums), spec 025 §7
-# (document lifecycle), and spec 026 §5 (plan coverage levels).
+# fixed enum, and every scheme is the range of one `wl:` object property in
+# ontology.ttl — that is what earns a scheme, not being CHECK-backed. See
+# "Enums with no scheme" at the foot of this file. All but wlc:ModelLayer do
+# also mirror a CHECK constraint in the schema, and internal/store's
+# TestConceptSchemesMatchCheckConstraints holds each one to its column.
+# Sources: spec 006 §4/§1.5, spec 025 §7/§8 (status enum and task kinds),
+# spec 006 §6 (the four runtime enums), spec 025 §7 (document lifecycle), and
+# spec 026 §5 (plan coverage levels).
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -156,3 +160,26 @@ wlc:crashloop a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLab
 wlc:oom a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "OOM kill" .
 wlc:flux_failure a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "Flux failure" .
 wlc:flux_recovery a skos:Concept ; skos:inScheme wlc:RuntimeEventKind ; skos:prefLabel "Flux recovery" .
+
+
+# ---------------------------------------------------------------------------
+# Enums with no scheme. A `wlc:` scheme is earned by being the range of a
+# minted `wl:` object property — a controlled vocabulary a graph consumer
+# reasons over. Being CHECK-backed is not the test: three backbone enums are
+# CHECK-backed and still get no scheme.
+#
+# - `tasks.state`, `tasks.priority` and `tasks.concern` reach the graph as
+#   projected literals on `wl:taskState`, `wl:priority` and `wl:concern`, all
+#   xsd:string datatype properties (006 §3). The backbone owns the enums and
+#   the state machine; a scheme here would fork them (006 Open Q3), which is
+#   the drift 025 §17 exists to prevent. ontology.ttl's "deliberately absent"
+#   register already names them.
+# - `actors.kind` has no `wl:` property to be the range of. Actors project as
+#   `foaf:Agent`/`prov:Agent`, reused rather than minted (006 §1, §10), and
+#   human/agent/service is the split `prov:Person` and `prov:SoftwareAgent`
+#   already carry — so 006 §1's standards-first rule forbids the mint.
+#
+# All three are pinned in Go instead: `model.TaskStates`,
+# `model.TaskPriorities` and `model.ActorKinds`, each held to its CHECK
+# constraint by a test in internal/store.
+# ---------------------------------------------------------------------------
