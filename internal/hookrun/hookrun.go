@@ -34,7 +34,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/skillstore"
-	"github.com/sunstoneinstitute/worklode/internal/transcript"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
@@ -79,14 +78,15 @@ const heartbeatDebounce = time.Minute
 // Payload is the subset of a hook's stdin JSON that Worklode reads. Claude
 // Code sends cwd/session_id/hook_event_name/tool_input; a git pre-commit hook
 // sends no stdin at all, so every field is optional.
+//
+// A harness also sends transcript_path, and Worklode deliberately does not
+// read it: token accounting is Edge Agent telemetry's, not this hook's (see
+// reportSession).
 type Payload struct {
 	Cwd           string          `json:"cwd"`
 	SessionID     string          `json:"session_id"`
 	HookEventName string          `json:"hook_event_name"`
 	ToolInput     json.RawMessage `json:"tool_input"`
-	// TranscriptPath is the session's JSONL transcript, sent on SessionEnd and
-	// Stop. It is where the session's billed tokens come from.
-	TranscriptPath string `json:"transcript_path"`
 }
 
 // Options configures a single Run. Stdin/Stdout/Stderr are injected so the
@@ -227,7 +227,7 @@ type Event struct {
 var events = []Event{
 	{"session-start", "Renew the lease, open the agent session, inject the brief."},
 	{"heartbeat", "Report the session as still alive (at most once a minute)."},
-	{"session-end", "Close the agent session and bill its tokens to the lease."},
+	{"session-end", "Close the agent session on this worktree's lease."},
 	{"pre-commit", "Push the lease TTL out on commit; never blocks the commit."},
 	{"commit-msg", "Stamp the Worklode-Task trailer into a commit made in a task worktree."},
 	{"post-merge", "Report a merge that landed on the default branch in this clone."},
@@ -377,12 +377,11 @@ func (o Options) agentName() string {
 // heartbeat time. Like every hookrun backbone call it is bounded and
 // downgrades failure to a warning.
 //
-// transcriptPath, when set, also reports what the session has billed in root
-// so far. Only a clean end reports usage otherwise, so a crashed agent — or
-// one whose lease the sweeper expires — would never have its spend recorded
-// at all. The report is a running total and replaces the stored one, so the
-// last heartbeat before the crash is what survives. Callers with no
-// transcript (pre-commit, which reads only the marker) pass "".
+// Lifecycle only. This hook once also parsed the agent's transcript and
+// posted the session's running token total; Edge Agent telemetry is the live
+// source of those numbers now, and it reports replacement totals to the same
+// backbone endpoint. `internal/transcript` still holds the parser, as
+// historical-import code with no hook caller.
 //
 // A touch can come back with EndedAt set: the lease closed between this
 // call's ActiveLease check and its write, so the store left the session
@@ -390,46 +389,42 @@ func (o Options) agentName() string {
 // is not a heartbeat — stamping the marker here would suppress the next
 // real one for up to heartbeatDebounce, so the marker is only stamped when
 // the returned session is actually open.
-func reportSession(ctx context.Context, opts Options, c *cli.Client, l worktree.Layout, taskID, root, sessionID, transcriptPath string) {
+func reportSession(ctx context.Context, opts Options, c *cli.Client, taskID, root, sessionID string) {
 	if sessionID == "" {
 		return
 	}
-	byTask := classifyTranscriptUsage(opts, l, taskID, root, transcriptPath)
-
-	if taskID != "" {
-		// Lifecycle only: the session row and its last_seen_at. Usage goes
-		// through reportClassifiedUsage below, which owns every bucket this
-		// session billed anywhere in the project -- see its doc comment.
-		sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, nil)
-		cancel()
-		if err != nil {
-			warn(opts, "report agent session on %s: %v", taskID, err)
-		} else if sess.EndedAt == nil {
-			if err := recordHeartbeat(root, opts.now()); err != nil {
-				warn(opts, "record heartbeat: %v", err)
-			}
-		}
-	} else {
+	if taskID == "" {
 		// No task of our own (main checkout, or an unleased worktree): there
-		// is no agent_sessions row to touch, only usage to report below.
-		// The marker's own debounce still applies -- stamp it directly, since
-		// there is no TouchAgentSession response to gate it on.
+		// is no agent_sessions row to touch. Stamp the marker directly so the
+		// debounce window still advances.
+		if err := recordHeartbeat(root, opts.now()); err != nil {
+			warn(opts, "record heartbeat: %v", err)
+		}
+		return
+	}
+	sctx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	sess, _, err := c.TouchAgentSession(sctx, taskID, opts.agentName(), "", sessionID, nil)
+	cancel()
+	if err != nil {
+		warn(opts, "report agent session on %s: %v", taskID, err)
+		return
+	}
+	if sess.EndedAt == nil {
 		if err := recordHeartbeat(root, opts.now()); err != nil {
 			warn(opts, "record heartbeat: %v", err)
 		}
 	}
-
-	openOtherTaskSessions(ctx, opts, c, taskID, sessionID, byTask)
-	reportClassifiedUsage(ctx, opts, c, root, sessionID, byTask)
 }
 
-// endSession ends an agent session on taskID, reporting the tokens it billed
-// in root. Mirrors reportSession's shape — bounded, downgrades failure to a
-// warning — so the two halves of a session's lifecycle (touch/end) enforce the
-// same timeout-and-warn contract in exactly one place each.
-func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, sessionID, transcriptPath, root string) {
-	if sessionID == "" {
+// endSession closes the agent session on taskID. Mirrors reportSession's
+// shape — bounded, downgrades failure to a warning, lifecycle only — so the
+// two halves of a session's lifecycle (touch/end) enforce the same
+// timeout-and-warn contract in exactly one place each.
+//
+// taskID == "" (main checkout, or an unleased worktree) means no
+// agent_sessions row was ever opened here, so there is nothing to close.
+func endSession(ctx context.Context, opts Options, taskID, sessionID string) {
+	if sessionID == "" || taskID == "" {
 		return
 	}
 	c, err := opts.client()
@@ -437,38 +432,25 @@ func endSession(ctx context.Context, opts Options, l worktree.Layout, taskID, se
 		warn(opts, "load config: %v", err)
 		return
 	}
-
-	byTask := classifyTranscriptUsage(opts, l, taskID, root, transcriptPath)
-
-	if taskID != "" {
-		// Closes the session row; its usage is reported below, whole.
-		ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		endErr := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
-			Agent: opts.agentName(), SessionID: sessionID,
-		})
-		cancel()
-		if endErr != nil {
-			warn(opts, "end agent session on %s: %v", taskID, endErr)
-		}
+	ectx, cancel := context.WithTimeout(ctx, backboneTimeout)
+	defer cancel()
+	if err := c.EndAgentSession(ectx, taskID, model.EndAgentSessionInput{
+		Agent: opts.agentName(), SessionID: sessionID,
+	}); err != nil {
+		warn(opts, "end agent session on %s: %v", taskID, err)
 	}
-	// taskID == "" (main checkout, or an unleased worktree): no
-	// agent_sessions row was ever opened here, so only the classification
-	// below applies.
-
-	openOtherTaskSessions(ctx, opts, c, taskID, sessionID, byTask)
-	reportClassifiedUsage(ctx, opts, c, root, sessionID, byTask)
 }
 
 // closeSession ends the session recorded against root's lease and drops its
 // marker — the shared tail of session-end and worktree-exit. The session id
 // comes from the payload, falling back to the marker for a caller that got no
 // stdin.
-func closeSession(ctx context.Context, opts Options, p Payload, l worktree.Layout, taskID, root string) {
+func closeSession(ctx context.Context, opts Options, p Payload, taskID, root string) {
 	sessionID := p.SessionID
 	if sessionID == "" {
 		sessionID, _ = markerSessionID(root)
 	}
-	endSession(ctx, opts, l, taskID, sessionID, p.TranscriptPath, root)
+	endSession(ctx, opts, taskID, sessionID)
 	if err := removeSessionMarker(root); err != nil {
 		warn(opts, "remove session marker: %v", err)
 	}
@@ -492,151 +474,6 @@ func purgeSecrets(opts Options, taskID string) {
 	}
 	if len(names) > 0 {
 		warn(opts, "purged secrets for %s: %s", taskID, strings.Join(names, ", "))
-	}
-}
-
-// classifyTranscriptUsage parses transcriptPath's FULL usage -- every cwd the
-// session touched, not just one worktree -- and groups it by task id.
-// A cwd outside the configured worktree base, or one whose directory
-// name/stamp carries no task id, groups under the empty string key
-// (overhead). Same no-failure contract as every other hook call: a missing
-// transcript, an unreadable file, or an empty result all yield nil.
-//
-// Two details decide where real money lands. A recorded cwd is usually a
-// directory *inside* a worktree, not its root, so it is trimmed back to the
-// root with WorktreeRootOf before resolution -- l.TaskID alone would reject
-// anything deeper and bill the task's own tokens to overhead. And an entry
-// with no cwd at all (older transcripts omit the field) bills to ownTaskID,
-// the task this hook is running for, which is where it landed before usage
-// was classified per cwd; sending it to overhead would move real task cost.
-//
-// A cwd that resolves to a worktree of a DIFFERENT repository is dropped, not
-// billed. The layout matches path segments alone, so any directory named
-// `.worktrees` anywhere on the filesystem yields a task id --
-// `~/git/trusthere/.worktrees/TH-9-x` resolves to `TH-9`. That task is not in
-// this project, so the report below would bill it to this project's overhead,
-// where nothing would ever remove it. Dropping is the disposal only for a cwd
-// that is provably another repository's; the overhead bucket keeps its
-// deliberate role for a cwd this repo simply cannot classify (WL-329).
-//
-// Resolution is memoized per distinct cwd because l.TaskID spends a git
-// subprocess, and buckets are keyed (day, model, speed, cwd) -- a long
-// session yields many buckets over few directories, on a handler bound to
-// every assistant turn (spec 052 §3).
-func classifyTranscriptUsage(opts Options, l worktree.Layout, ownTaskID, root, transcriptPath string) map[string][]model.SessionUsageBucket {
-	if transcriptPath == "" {
-		return nil
-	}
-	buckets, err := transcript.ParseFile(transcriptPath, transcript.Options{})
-	if err != nil {
-		warn(opts, "parse transcript %s: %v", transcriptPath, err)
-		return nil
-	}
-	// The repository every cwd is measured against. root is either the main
-	// checkout -- already the repo root -- or one of its worktrees, whose repo
-	// root is the path above the base. Containment rather than equality, so a
-	// worktree created from inside another worktree still counts as ours.
-	repoRoot := root
-	if r, ok := l.RepoRootOf(root); ok {
-		repoRoot = r
-	}
-
-	out := map[string][]model.SessionUsageBucket{}
-	type resolved struct {
-		taskID string
-		drop   bool
-	}
-	byCwd := map[string]resolved{"": {taskID: ownTaskID}}
-	for _, b := range buckets {
-		r, seen := byCwd[b.Cwd]
-		if !seen {
-			if wt, ok := l.WorktreeRootOf(b.Cwd); ok {
-				if worktree.Contains(repoRoot, wt) {
-					r.taskID, _ = l.TaskID(wt) // ok=false ⇒ "" (overhead)
-				} else {
-					r.drop = true
-					warn(opts, "%s is a worktree of another repository, not %s; dropping its usage", wt, repoRoot)
-				}
-			}
-			byCwd[b.Cwd] = r
-		}
-		if r.drop {
-			continue
-		}
-		taskID := r.taskID
-		out[taskID] = append(out[taskID], model.SessionUsageBucket{
-			Day:                b.Day.Format(time.DateOnly),
-			Model:              b.Model,
-			Speed:              b.Speed,
-			InputTokens:        b.Usage.Input,
-			CacheWrite5mTokens: b.Usage.CacheWrite5m,
-			CacheWrite1hTokens: b.Usage.CacheWrite1h,
-			CacheReadTokens:    b.Usage.CacheRead,
-			OutputTokens:       b.Usage.Output,
-		})
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// openOtherTaskSessions opens (or refreshes) the agent-session row for every
-// task in the classification other than ownTaskID, carrying NO usage: the
-// consolidated report writes the tokens, this only makes sure there is a row
-// for them to land on. An orchestrator running from the main checkout never
-// touches the worktrees it dispatches into, so without this the subagent
-// turns in its transcript would have no session to bill and would all fall
-// through to overhead.
-//
-// A failure here is not an error to report: the usual cause is that this
-// actor does not hold that task's lease, and the server bills an unreachable
-// task's tokens to overhead by itself (spec 052 §3).
-func openOtherTaskSessions(ctx context.Context, opts Options, c *cli.Client, ownTaskID, sessionID string, byTask map[string][]model.SessionUsageBucket) {
-	for taskID := range byTask {
-		if taskID == "" || taskID == ownTaskID {
-			continue
-		}
-		tctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-		_, _, err := c.TouchAgentSession(tctx, taskID, opts.agentName(), "", sessionID, nil)
-		cancel()
-		if err != nil {
-			warn(opts, "open agent session on %s: %v (its usage bills to project overhead)", taskID, err)
-		}
-	}
-}
-
-// reportClassifiedUsage reports one session's COMPLETE classification --
-// every task it billed plus the turns with no task to bill to -- as a single
-// call. root is the directory to resolve the project from; see layoutFor's
-// doc comment on why this must be the hook's own resolved worktree root,
-// never os.Getwd().
-//
-// One call, not one per destination, because the destinations are replaced
-// together. This hook re-parses its whole transcript and re-posts a running
-// total on every heartbeat, and a turn's destination can change between two
-// of them: a directory that resolved to a task while its lease was held
-// resolves to overhead once the lease is gone. Reporting each destination
-// separately left the vacated one holding its copy, and a project's cost
-// counted both (spec 052 §3).
-//
-// The server decides what an unreachable task's tokens become; this side
-// states the classification and nothing more.
-func reportClassifiedUsage(ctx context.Context, opts Options, c *cli.Client, root, sessionID string, byTask map[string][]model.SessionUsageBucket) {
-	if len(byTask) == 0 {
-		return
-	}
-	project := cli.CurrentProjectFrom(root)
-	if project == "" {
-		warn(opts, "no project configured for %s; dropping %d usage group(s)", root, len(byTask))
-		return
-	}
-	uctx, cancel := context.WithTimeout(ctx, backboneTimeout)
-	defer cancel()
-	if err := c.ReportProjectSessionUsage(uctx, project, model.ProjectSessionUsageInput{
-		Agent: opts.agentName(), ExternalSessionID: sessionID, ByTask: byTask,
-	}); err != nil {
-		warn(opts, "report session usage on %s: %v", project, err)
 	}
 }
 
@@ -665,7 +502,7 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	if err := writeSessionMarker(root, p.SessionID, opts.now()); err != nil {
 		warn(opts, "write session marker: %v", err)
 	}
-	reportSession(ctx, opts, c, l, taskID, root, p.SessionID, p.TranscriptPath)
+	reportSession(ctx, opts, c, taskID, root, p.SessionID)
 
 	skillPaths := ensureSkills(ctx, opts, c, brief, root)
 	emitSessionContext(opts, compactBrief(brief, skillPaths))
@@ -923,7 +760,7 @@ func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, 
 	if root == "" {
 		return
 	}
-	closeSession(ctx, opts, p, l, taskID, root)
+	closeSession(ctx, opts, p, taskID, root)
 }
 
 // handlePreCommit keeps this worktree's lease alive across a long working
@@ -968,9 +805,7 @@ func handlePreCommit(ctx context.Context, opts Options, dir string, l worktree.L
 
 	if heartbeatDue(root, opts.now()) {
 		sessionID, _ := markerSessionID(root)
-		// No payload, so no transcript: a git hook is not the place to
-		// find one, and the next heartbeat reports the spend anyway.
-		reportSession(ctx, opts, c, l, taskID, root, sessionID, "")
+		reportSession(ctx, opts, c, taskID, root, sessionID)
 	}
 }
 
@@ -1059,7 +894,7 @@ func handleHeartbeat(ctx context.Context, opts Options, p Payload, dir string, l
 		warn(opts, "load config: %v", err)
 		return
 	}
-	reportSession(ctx, opts, c, l, taskID, root, sessionID, p.TranscriptPath)
+	reportSession(ctx, opts, c, taskID, root, sessionID)
 }
 
 // handleWorktreeEnter reports the session against the lease of the worktree it
@@ -1087,7 +922,7 @@ func handleWorktreeEnter(ctx context.Context, opts Options, p Payload, dir strin
 			warn(opts, "write session marker: %v", err)
 		}
 	}
-	reportSession(ctx, opts, c, l, taskID, root, p.SessionID, p.TranscriptPath)
+	reportSession(ctx, opts, c, taskID, root, p.SessionID)
 }
 
 // handleWorktreeExit closes the session's row on the worktree it is leaving
@@ -1110,7 +945,7 @@ func handleWorktreeExit(ctx context.Context, opts Options, p Payload, dir string
 	if !ok {
 		return
 	}
-	closeSession(ctx, opts, p, l, taskID, root)
+	closeSession(ctx, opts, p, taskID, root)
 }
 
 // payloadPath returns the created/removed worktree path from the payload's

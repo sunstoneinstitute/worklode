@@ -1,11 +1,8 @@
 package hookrun
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestSessionEndRemovesMarker(t *testing.T) {
@@ -26,60 +23,40 @@ func TestSessionEndRemovesMarker(t *testing.T) {
 	}
 }
 
-// TestSessionEndPostsTranscriptUsage drives the whole accounting path: the
-// same message id repeated across content-block lines is billed once, and a
-// turn that ran in a different directory belongs to that worktree's lease, not
-// this one.
-func TestSessionEndPostsTranscriptUsage(t *testing.T) {
-	rec := newUsageRecorder(t)
+// TestSessionEndIsLifecycleOnly pins the cutover (WL-658): ending a session
+// closes its row and nothing more. The harness still sends transcript_path,
+// and the project usage endpoint is never called for it.
+func TestSessionEndIsLifecycleOnly(t *testing.T) {
+	_, c, rec := newRealServer(t)
 	root := initGitRepo(t)
 	writeProjectConfig(t, root, "proj")
-	wtDir := addWorktree(t, root, "WL-1", "bill-me")
-	elsewhere := t.TempDir()
-
+	_, wtDir, _ := setupLeasedWorktree(t, c, root, "lifecycle-only")
 	path := writeTranscript(t,
-		transcriptLine(wtDir, "msg_1", "claude-opus-5", 100, 200, 300, 400, 50),
-		transcriptLine(wtDir, "msg_1", "claude-opus-5", 100, 200, 300, 400, 50), // same message, second content block
-		transcriptLine(elsewhere, "msg_2", "claude-opus-5", 9_000, 9_000, 9_000, 9_000, 9_000),
+		transcriptLine(wtDir, "msg-1", "claude-opus-5", 10, 0, 0, 0, 2),
 	)
 
-	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: path})
+	beforeUsage := rec.count("/session-usage")
+	runHookRaw(t, "session-end", map[string]any{
+		"cwd": wtDir, "session_id": "sess-1", "transcript_path": path,
+	})
 
-	byTask := rec.byTask(t)
-	want := model.SessionUsageBucket{
-		Day: "2026-07-31", Model: "claude-opus-5", Speed: "standard",
-		InputTokens: 100, CacheWrite5mTokens: 200, CacheWrite1hTokens: 300,
-		CacheReadTokens: 400, OutputTokens: 50,
+	if got := rec.count("/session-usage"); got != beforeUsage {
+		t.Fatalf("session-usage calls = %d, want %d", got, beforeUsage)
 	}
-	own := byTask["WL-1"]
-	if len(own) != 1 || own[0] != want {
-		t.Fatalf("WL-1 usage = %+v, want %+v", own, want)
-	}
-	// The turn that ran outside any worktree is classified, not dropped: it
-	// belongs to no task, so it reports under the overhead key.
-	other := byTask[""]
-	if len(other) != 1 || other[0].InputTokens != 9_000 {
-		t.Fatalf("overhead usage = %+v, want the 9000-token turn from elsewhere", other)
+	if rec.count("/agent-session/end") == 0 {
+		t.Fatalf("session-end did not close the session: %v", rec.list())
 	}
 }
 
-// A hook must never fail its triggering event, so an unreadable transcript
-// still ends the session — just with no usage attached.
-func TestSessionEndWithoutTranscriptStillEndsSession(t *testing.T) {
-	for _, tc := range []struct{ name, path string }{
-		{"absent field", ""},
-		{"missing file", filepath.Join(t.TempDir(), "gone.jsonl")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			rec := newEndRecorder(t)
-			root := initGitRepo(t)
-			wtDir := addWorktree(t, root, "WL-2", "no-transcript")
+// The end request itself carries no usage, so nothing this hook sends can
+// overwrite the totals the live source records.
+func TestSessionEndRequestCarriesNoUsage(t *testing.T) {
+	rec := newEndRecorder(t)
+	root := initGitRepo(t)
+	wtDir := addWorktree(t, root, "WL-2", "lifecycle-only")
 
-			runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1", TranscriptPath: tc.path})
-			body := rec.only(t)
-			if got := string(body["usage"]); got != "null" {
-				t.Fatalf("usage = %s, want null (nil must leave stored usage alone)", got)
-			}
-		})
+	runHook(t, "session-end", Payload{Cwd: wtDir, SessionID: "sess-1"})
+	if got := string(rec.only(t)["usage"]); got != "null" {
+		t.Fatalf("usage = %s, want null (nil must leave stored usage alone)", got)
 	}
 }

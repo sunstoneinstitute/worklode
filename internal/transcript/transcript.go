@@ -1,10 +1,12 @@
-// Package transcript turns a coding agent's session transcript into the token
-// buckets Worklode bills from.
+// Package transcript parses Claude Code's JSONL session transcript into token
+// buckets. It is historical-import code: no hook and no shipped binary calls
+// it. Live token accounting is Edge Agent telemetry, which reports replacement
+// session totals to Worklode's own usage endpoint (WL-658).
 //
-// It reads Claude Code's JSONL transcript, whose path arrives on the
-// `transcript_path` field of the SessionEnd and Stop hook payloads. Every
-// assistant entry carries the vendor's own `usage` block, so the numbers here
-// are reported rather than estimated — nothing re-tokenizes anything.
+// It stays here, tested, so a backfill over transcripts already on disk is a
+// command away if one is asked for. Every assistant entry carries the vendor's
+// own `usage` block, so the numbers here are reported rather than estimated —
+// nothing re-tokenizes anything.
 //
 // Three properties of the format drive the whole implementation:
 //

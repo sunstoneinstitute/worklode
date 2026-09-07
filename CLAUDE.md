@@ -170,9 +170,12 @@ test fails the build on a direct `exec.Command("git", ...)` anywhere else),
 the files `lode install` manages — git hooks in `internal/githooks`, agent
 settings in `internal/harness` — neither of which `internal/cmd` reimplements,
 worktree-bound leases (`internal/worktree`,
-`internal/hookrun`), agent-session tracking priced from the agent's own
-transcript (`internal/transcript`, `store/pricing` — rates are effective-dated
-rows in `model_prices`, never hardcoded), the org skill registry with pgvector
+`internal/hookrun`), agent-session tracking — the hooks own session lifecycle
+only; token usage arrives from Edge Agent telemetry as a replacement session
+total on `POST /api/v1/projects/{id}/session-usage`, and `store/pricing` prices
+it from effective-dated rows in `model_prices`, never hardcoded rates.
+`internal/transcript` parses Claude Code transcripts for historical import and
+has no live caller. Also the org skill registry with pgvector
 embeddings (`internal/skillsync`, `skillstore`), the corpus index over
 documents, tasks and skills (`internal/corpusindex` chunks a subject on its
 own section anchors, `internal/indexer` is the background convergence loop
