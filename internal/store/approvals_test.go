@@ -1319,6 +1319,76 @@ func TestHasInboxItems(t *testing.T) {
 			t.Error("got false, want true: no pull_requests row must still match")
 		}
 	})
+
+	// 056 §3.1 bucket 3: an actor owns a review when they authored the PR
+	// and somebody else is the required reviewer.
+	t.Run("owned review, someone else required", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig" leads it
+		ctx := t.Context()
+		if err := s.UpsertHumanActor(ctx, "author1", "Author One", false, "author1gh", "", nil); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.CreateActor(ctx, "reviewer7", "human", "Reviewer Seven", false); err != nil {
+			t.Fatal(err)
+		}
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 7, Title: "pr", State: "open",
+			HeadRef: "no-task-fix", HeadSHA: "sha7",
+			URL: "https://github.com/sunstoneinstitute/h/pull/7", OpenedAt: taskTestNow,
+			Author: "author1gh",
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		reviewer := "reviewer7"
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha7",
+			nil, &reviewer, "awaiting", taskTestNow)
+
+		// author1 holds no project membership -- authorship plus a named
+		// other reviewer alone must answer the check.
+		got, err := s.HasInboxItems(ctx, "author1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got {
+			t.Error("got false, want true: author1 owns the PR and reviewer7 is required")
+		}
+	})
+
+	// WL-664 regression: a NULL required_actor means nobody else is
+	// deciding, so 056 §3.1's "owned" rule does not hold -- assembleInbox
+	// would place this row in no bucket at all, and HasInboxItems must
+	// agree.
+	t.Run("authored review with no required reviewer", func(t *testing.T) {
+		t.Parallel()
+		s := openTaskStore(t) // project "horndb", actor "stig" leads it
+		ctx := t.Context()
+		if err := s.UpsertHumanActor(ctx, "author2", "Author Two", false, "author2gh", "", nil); err != nil {
+			t.Fatal(err)
+		}
+		pr := PullRequest{
+			Repo: "sunstoneinstitute/h", Number: 8, Title: "pr", State: "open",
+			HeadRef: "no-task-fix-2", HeadSHA: "sha8",
+			URL: "https://github.com/sunstoneinstitute/h/pull/8", OpenedAt: taskTestNow,
+			Author: "author2gh",
+		}
+		if _, err := upsertPR(t, s, pr, ""); err != nil {
+			t.Fatal(err)
+		}
+		seedApprovalRow(t, s, "pr", PREntityID(pr.Repo, pr.Number), "sha8",
+			nil, nil, "awaiting", taskTestNow)
+
+		// author2 authored the PR but nobody is named as required reviewer,
+		// and author2 does not lead horndb.
+		got, err := s.HasInboxItems(ctx, "author2")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Error("got true, want false: no required_actor means nobody else is deciding")
+		}
+	})
 }
 
 // mustWorklodeActor creates the system actor lane-keyed rows are created_by,
