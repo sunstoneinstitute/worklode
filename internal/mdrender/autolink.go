@@ -43,6 +43,7 @@ package mdrender
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -56,6 +57,10 @@ import (
 // docRefPrefix is where a linked reference points: the cockpit's resolving
 // redirect (internal/api's docRefRedirect).
 const docRefPrefix = "/docs/ref/"
+
+// HomeParam is the query parameter a number-form reference carries: the key
+// of the project whose corpus sequence the number belongs to. See For.
+const HomeParam = "p"
 
 // taskRefPrefix is where a linked bare task id points: the task's own cockpit
 // page, GET /tasks/{id}.
@@ -88,6 +93,7 @@ var (
 // one key set is never served under another.
 type ProjectKeys struct {
 	set         map[string]struct{}
+	home        string // the project a bare corpus number is scoped to; "" when unknown
 	fingerprint string
 }
 
@@ -112,6 +118,32 @@ func NewProjectKeys(keys []string) ProjectKeys {
 	// key under a NUL separator, and raw digest bytes can contain a NUL.
 	sum := sha256.Sum256([]byte(strings.Join(sorted, ",")))
 	return ProjectKeys{set: set, fingerprint: hex.EncodeToString(sum[:])}
+}
+
+// For returns a copy scoped to home, the key of the project whose body is
+// being rendered. A bare corpus number ("029 §7.2") is a per-project sequence
+// (029 §4), so the same number names a different document in every project;
+// without a home key the redirect resolves org-wide and reports an ambiguity
+// (WL-723). The fingerprint is remixed so a body cached under one home is
+// never served under another.
+func (k ProjectKeys) For(home string) ProjectKeys {
+	if home == k.home {
+		return k
+	}
+	k.home = home
+	sum := sha256.Sum256([]byte(k.fingerprint + "\x00" + home))
+	k.fingerprint = hex.EncodeToString(sum[:])
+	return k
+}
+
+// HomeQuery is the "?p=WL" a number-form href carries, empty when no home
+// project is known. Exported for internal/api, which builds the same
+// number-form links for a document's edges.
+func (k ProjectKeys) HomeQuery() string {
+	if k.home == "" {
+		return ""
+	}
+	return "?" + HomeParam + "=" + url.QueryEscape(k.home)
 }
 
 func (k ProjectKeys) has(key string) bool {
@@ -239,10 +271,10 @@ func findRefs(value []byte, keys ProjectKeys) []refMatch {
 	}
 	section := func(loc []int, numStart, numEnd, secStart, secEnd int) refMatch {
 		end := loc[1]
-		href := docRefPrefix + string(value[numStart:numEnd])
+		href := docRefPrefix + string(value[numStart:numEnd]) + keys.HomeQuery()
 		if secStart >= 0 {
 			end = trimDot(value, end)
-			href = docRefPrefix + string(value[numStart:numEnd]) + "#sec-" + string(value[secStart:min(secEnd, end)])
+			href += "#sec-" + string(value[secStart:min(secEnd, end)])
 		}
 		return refMatch{loc[0], end, href}
 	}

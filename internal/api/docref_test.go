@@ -66,8 +66,10 @@ func TestDocPageLinksAndStripsFrontmatter(t *testing.T) {
 	if strings.Contains(page, "status: draft") {
 		t.Errorf("frontmatter leaked into the rendered body:\n%s", page)
 	}
-	if !strings.Contains(page, `href="/docs/ref/004#sec-2"`) {
-		t.Errorf("body reference not autolinked:\n%s", page)
+	// The link carries ?p=WL: a bare corpus number is on the referring
+	// project's sequence, so the redirect resolves it there (WL-723).
+	if !strings.Contains(page, `href="/docs/ref/004?p=WL#sec-2"`) {
+		t.Errorf("body reference not autolinked to its project:\n%s", page)
 	}
 	if !strings.Contains(page, "/docs/ref/004-backbone#sec-2") {
 		t.Errorf("relation link carries no #fragment:\n%s", page)
@@ -115,5 +117,33 @@ func TestRefShortcut(t *testing.T) {
 	}
 	if rr := doReq(t, h, "GET", "/no-such-ref", "", nil); rr.Code != http.StatusNotFound {
 		t.Fatalf("/no-such-ref status = %d, want 404", rr.Code)
+	}
+}
+
+// TestDocRefHomeProjectDisambiguates pins WL-723: two projects each hold a
+// spec 29, so /docs/ref/029 alone is ambiguous, and ?p=<KEY> resolves it
+// against the project whose corpus sequence the number is on.
+func TestDocRefHomeProjectDisambiguates(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 29, Slug: "029-here",
+		Body: "# Spec 29 — Here\n",
+	})
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "other", Kind: "spec", Number: 29, Slug: "029-there",
+		Body: "# Spec 29 — There\n",
+	})
+
+	if rr := doReq(t, h, "GET", "/docs/ref/029", "", nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("unscoped ref status = %d, want 404 (ambiguous)", rr.Code)
+	}
+	for key, want := range map[string]string{"WL": "/docs/WL-SPEC-29", "OTHER": "/docs/OTHER-SPEC-29"} {
+		rr := doReq(t, h, "GET", "/docs/ref/029?p="+key, "", nil)
+		if rr.Code != http.StatusFound || rr.Header().Get("Location") != want {
+			t.Errorf("ref 029?p=%s = %d %q, want 302 %q", key, rr.Code, rr.Header().Get("Location"), want)
+		}
 	}
 }
