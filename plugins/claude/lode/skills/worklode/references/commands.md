@@ -33,6 +33,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode decision edit` — Reword, regroup or re-parent an unanswered question
   Flags: --context, --group, --key, --max-picks, --min-picks, --option, --question, --task, --type
 - `lode decision list` — List the questions a task poses
+- `lode decision resolve` — Record the answer to a posed question
+  Flags: --notes, --pick, --text, --value
 - `lode decision show` — Show one question, its options and its answer
 
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans

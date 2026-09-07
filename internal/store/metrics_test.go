@@ -85,8 +85,18 @@ func TestDecisionMetrics(t *testing.T) {
 		t.Fatalf("edit unknown row err = %v, want ErrNotFound", err)
 	}
 
+	if _, err := s.RecordDecision(ctx, task.ID, "x-distribution", "stig",
+		model.DecisionAnswer{Value: "yes"}); err != nil {
+		t.Fatalf("record decision: %v", err)
+	}
+	if _, err := s.RecordDecision(ctx, task.ID, "x-distribution", "stig",
+		model.DecisionAnswer{Value: "no"}); !errors.Is(err, ErrBadTransition) {
+		t.Fatalf("re-answer err = %v, want ErrBadTransition", err)
+	}
+
 	for _, tc := range []struct{ op, outcome string }{
 		{"pose", "ok"}, {"pose", "refused"}, {"edit", "ok"}, {"edit", "refused"},
+		{"answer", "ok"}, {"answer", "refused"},
 	} {
 		if got := testutil.ToFloat64(s.metrics.decisions.WithLabelValues(tc.op, tc.outcome)); got != 1 {
 			t.Errorf("decisions{%s,%s} = %v, want 1", tc.op, tc.outcome, got)

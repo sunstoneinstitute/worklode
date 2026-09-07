@@ -705,6 +705,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/tasks/{id}/decisions/{key}", s.getDecision)
 	r.api("POST /api/v1/tasks/{id}/decisions", s.poseDecision)
 	r.api("PATCH /api/v1/tasks/{id}/decisions/{key}", s.editDecision)
+	r.api("POST /api/v1/tasks/{id}/decisions/{key}/decide", s.decideDecision)
 	r.api("POST /api/v1/instructions/claim", s.claimInstructions)
 	r.api("POST /api/v1/tasks/{id}/state", s.setTaskState)
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
