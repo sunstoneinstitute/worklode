@@ -1874,6 +1874,67 @@ covers:
 	}
 }
 
+// TestDocSections covers GET /api/v1/docs/sections (055 §4): the cross-corpus
+// section listing, its ?project= and ?number= narrowing, and the Ref the
+// boundary stamps so a row is citable as WL-SPEC-25#sec-2.
+func TestDocSections(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+
+	spec := acceptedSpec(t, h, token, "proj", "025-documents-in-the-backbone", 25)
+	acceptedSpec(t, h, token, "other", "025-elsewhere", 25)
+
+	var got []model.DocSectionRow
+	rr := doReq(t, h, "GET", "/api/v1/docs/sections?project=proj", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("sections status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	decodeInto(t, rr, &got)
+	want := []model.DocSectionRow{
+		{
+			Doc: spec.ID, Project: "proj", Ref: "WL-SPEC-25",
+			Slug: "025-documents-in-the-backbone", DocKind: "spec", DocNumber: 25,
+			DocTitle: "Documents in the backbone",
+			DocSection: model.DocSection{
+				Anchor: "sec-1", Number: "1", Heading: "Scope", Depth: 2,
+				Position: 0, LastRevisedIn: 1, Published: true,
+			},
+		},
+		{
+			Doc: spec.ID, Project: "proj", Ref: "WL-SPEC-25",
+			Slug: "025-documents-in-the-backbone", DocKind: "spec", DocNumber: 25,
+			DocTitle: "Documents in the backbone",
+			DocSection: model.DocSection{
+				Anchor: "sec-2", Number: "2", Heading: "Model", Depth: 2,
+				Position: 1, LastRevisedIn: 1, Published: true,
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sections(proj) = %+v, want %+v", got, want)
+	}
+
+	// No project: the whole corpus. One section number: that section wherever
+	// it is defined.
+	rr = doReq(t, h, "GET", "/api/v1/docs/sections?number=sec-2", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("sections by number status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = nil
+	decodeInto(t, rr, &got)
+	if len(got) != 2 || got[0].Anchor != "sec-2" || got[1].Anchor != "sec-2" {
+		t.Errorf("sections(number=sec-2) = %+v, want both projects' sec-2", got)
+	}
+
+	// A project with nothing matching answers [], never null.
+	rr = doReq(t, h, "GET", "/api/v1/docs/sections?project=other&number=sec-9", token, nil)
+	if body := strings.TrimSpace(rr.Body.String()); rr.Code != http.StatusOK || body != "[]" {
+		t.Errorf("empty sections = %d %q, want 200 []", rr.Code, body)
+	}
+}
+
 // TestDocReferrers covers GET /api/v1/docs/{id}/referrers (025 §8.2): the
 // open work pointing at one section, and the refusal to answer for a whole
 // document — a referrer is a section-level fact.

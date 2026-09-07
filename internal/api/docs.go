@@ -304,6 +304,28 @@ func (s *server) lintDocs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, findings)
 }
 
+// listCorpusSections handles GET /api/v1/docs/sections?project=&number=: the
+// cross-corpus section listing (055 §4). ?project= narrows to one project
+// the way every other doc list route does; ?number= narrows to one section
+// number or anchor across the corpus. Both empty answers over everything.
+func (s *server) listCorpusSections(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	rows, err := s.st.ListCorpusSections(r.Context(), q.Get("project"), q.Get("number"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	keys := s.projectKeyByID(r.Context())
+	out := make([]model.DocSectionRow, len(rows))
+	for i, row := range rows {
+		row.Ref = model.Doc{
+			ProjectKey: keys[row.Project], Kind: row.DocKind, Number: row.DocNumber,
+		}.FormatRef()
+		out[i] = row
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 // withoutDocBodies blanks the markdown source on a list projection. A corpus
 // is tens of documents of tens of kilobytes each, and no list consumer reads
 // the text — the one endpoint that serves a body is GET /api/v1/docs/{id},

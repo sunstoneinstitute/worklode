@@ -39,6 +39,11 @@ editor buffer, nothing reads it again after `lode doc add`. Read a document
 back with `lode show <ref>` (see shorthand below) or `lode doc show
 <ref> --json` for the body plus parsed sections and edges.
 
+`lode doc sections` lists sections across the corpus rather than for one
+document: bare, it is every section in the project (`--project=` widens it to
+every project); with a number or anchor, `lode doc sections 8.2` answers
+"which document defines §8.2".
+
 ## Frontmatter
 
 Mandatory, no exceptions. Keys are ontology property names (`ns/ontology.ttl`,

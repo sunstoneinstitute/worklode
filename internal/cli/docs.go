@@ -90,6 +90,21 @@ func (c *Client) LintDocs(ctx context.Context, project string) ([]model.DocLintF
 	return doJSON[[]model.DocLintFinding](ctx, c, http.MethodGet, withQuery("/api/v1/docs/lint", q), nil, "doc lint")
 }
 
+// ListCorpusSections calls GET /api/v1/docs/sections: every section of every
+// spec and ADR in scope, in document order (055 §4). project narrows to one
+// project, "" to all of them; number narrows to one section number ("8.2")
+// or anchor ("sec-8.2") across the corpus, "" to every section.
+func (c *Client) ListCorpusSections(ctx context.Context, project, number string) ([]model.DocSectionRow, []byte, error) {
+	q := url.Values{}
+	if project != "" {
+		q.Set("project", project)
+	}
+	if number != "" {
+		q.Set("number", number)
+	}
+	return doJSON[[]model.DocSectionRow](ctx, c, http.MethodGet, withQuery("/api/v1/docs/sections", q), nil, "doc sections")
+}
+
 // ResolveDoc calls GET /api/v1/docs/resolve?ref=, returning the document a
 // reference names — an id or an exact slug (025 §14.3). The server owns the
 // grammar and its ambiguity rule, so a ref costs one indexed lookup rather
@@ -426,6 +441,26 @@ func DocReferrersTable(w io.Writer, refs []model.DocReferrer) {
 	)
 	for _, r := range refs {
 		tbl.add(r.Kind, r.Ref, r.Rel, r.Title)
+	}
+	tbl.flush(w)
+}
+
+// DocSectionsTable prints one row per section — the `lode doc sections`
+// view. SECTION is the citable `<ref>#<anchor>` a reader pastes into
+// `lode show` or `lode doc referrers`, so the two columns are what the view
+// is for: which section, and what it is about. A row whose document has no
+// project key degrades to its slug, the only id left that names it.
+func DocSectionsTable(w io.Writer, rows []model.DocSectionRow) {
+	tbl := newTable(
+		column{header: "SECTION"},
+		titleColumn("HEADING"),
+	)
+	for _, r := range rows {
+		ref := r.Ref
+		if ref == "" {
+			ref = r.Slug
+		}
+		tbl.add(ref+"#"+r.Anchor, r.Heading)
 	}
 	tbl.flush(w)
 }

@@ -68,6 +68,7 @@ func newDocCmd() *cobra.Command {
 		newDocShowCmd(),
 		newDocVersionsCmd(),
 		newDocReferrersCmd(),
+		newDocSectionsCmd(),
 		newDocEditCmd(),
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
@@ -513,6 +514,56 @@ func newDocReferrersCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+// newDocSectionsCmd is `lode doc sections [number]` (L6: a named view is a
+// noun): the cross-corpus section listing that `scripts/secindex.py` used to
+// write into docs/specs/index.yaml before the file corpus went away
+// (055 §4). `lode doc show` answers for one document; this answers across
+// the corpus.
+//
+// With no argument it lists every section in scope — the project's own by
+// default, every project with `--project=`. With one it answers "which
+// document defines §N of anything", matching a section number ("8.2") or an
+// anchor ("sec-8.2").
+//
+// This is the listing half of 026 §2.3, which reserves the same name for a
+// wider view: `--with-drafts`, `--show-dropped`, and a footer summarising
+// the sections an effective `replaces` retired. Those are unimplemented, so
+// every section of every live document is listed, whatever its status.
+func newDocSectionsCmd() *cobra.Command {
+	var scope scopeFlags
+	cmd := &cobra.Command{
+		Use:   "sections [number]",
+		Short: "List document sections across the corpus",
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var number string
+			if len(args) == 1 {
+				number = args[0]
+			}
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			sc, err := resolveScope(cmd.Context(), cmd, c, cfg, &scope)
+			if err != nil {
+				return err
+			}
+			rows, raw, err := c.ListCorpusSections(cmd.Context(), sc.Project, number)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DocSectionsTable(cmd.OutOrStdout(), rows)
+			return nil
+		},
+	}
+	addScopeFlags(cmd, &scope, "filter by project id")
 	return cmd
 }
 
