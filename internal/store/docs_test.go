@@ -1790,3 +1790,77 @@ func TestDocSectionReferrers(t *testing.T) {
 		t.Errorf("DocSectionReferrers(sec-2.1) = %+v, want none", got)
 	}
 }
+
+// TestListCorpusSections covers the cross-corpus section listing (055 §4): every
+// section of every spec and ADR in scope, in document order, narrowable to
+// one project or to one section number across the corpus.
+func TestListCorpusSections(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO projects (id, name, key) VALUES ('p2','P2','P2')`); err != nil {
+		t.Fatal(err)
+	}
+	specA := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-a", Body: specBody, CreatedBy: "stig",
+	})
+	mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 25, Slug: "025-b", Body: specBody, CreatedBy: "stig",
+	})
+	// A plan carries no sections (025 §9), so it never shows up here.
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "030-p", Body: planBody, CreatedBy: "stig",
+	})
+
+	anchorsOf := func(rows []model.DocSectionRow) []string {
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.Slug+"#"+r.Anchor)
+		}
+		return out
+	}
+
+	got, err := s.ListCorpusSections(ctx, "p1", "")
+	if err != nil {
+		t.Fatalf("ListCorpusSections(p1): %v", err)
+	}
+	want := []string{"025-a#sec-1", "025-a#sec-2", "025-a#sec-2.1"}
+	if !reflect.DeepEqual(anchorsOf(got), want) {
+		t.Errorf("ListCorpusSections(p1) = %v, want %v", anchorsOf(got), want)
+	}
+	if first := got[0]; first.Doc != specA.ID || first.DocKind != "spec" || first.DocNumber != 25 ||
+		first.Heading != "Scope" || first.Number != "1" || first.Position != 0 {
+		t.Errorf("first row = %+v, want spec %d §1 at position 0", first, specA.ID)
+	}
+	if got[2].Depth != 3 {
+		t.Errorf("sec-2.1 depth = %d, want 3", got[2].Depth)
+	}
+
+	// No project: the whole corpus, both projects.
+	got, err = s.ListCorpusSections(ctx, "", "")
+	if err != nil {
+		t.Fatalf("ListCorpusSections(all): %v", err)
+	}
+	if len(got) != 6 {
+		t.Errorf("ListCorpusSections(all) = %v, want 6 rows", anchorsOf(got))
+	}
+
+	// "which document defines §2.1 of anything" — by number, and by anchor.
+	for _, q := range []string{"2.1", "sec-2.1"} {
+		got, err = s.ListCorpusSections(ctx, "", q)
+		if err != nil {
+			t.Fatalf("ListCorpusSections(%q): %v", q, err)
+		}
+		want := []string{"025-a#sec-2.1", "025-b#sec-2.1"}
+		if !reflect.DeepEqual(anchorsOf(got), want) {
+			t.Errorf("ListCorpusSections(%q) = %v, want %v", q, anchorsOf(got), want)
+		}
+	}
+
+	// A number nothing uses answers nothing.
+	if got, err = s.ListCorpusSections(ctx, "", "99"); err != nil || len(got) != 0 {
+		t.Errorf("ListCorpusSections(99) = %v, %v; want none", anchorsOf(got), err)
+	}
+}
