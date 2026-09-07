@@ -25,6 +25,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # HF_TOKEN lives on this environment, not on the repo: it pulls weights
+    # under a licence the org accepted by name, so who can spend it is a
+    # protection rule rather than "anyone who can run a workflow".
+    environment: huggingface
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
