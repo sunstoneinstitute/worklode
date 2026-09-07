@@ -98,10 +98,17 @@ func validateArtifacts(artifacts []string) string {
 // recordDeliverable writes one declared deliverable through RecordEvent, so
 // the event log carries the fact and the source names the surface it came
 // from ("cli" for the JSON API, "web" for a cockpit form).
+//
+// It also materializes the review lanes the project's stamped approval flow
+// demands of the new deliverable (029 §7.1), in the same transaction that
+// records the creation. The hook lives here rather than in a handler so both
+// surfaces get it: a deliverable declared in a browser owes the same reviews
+// as one declared by an API client. A project with no snapshot is untouched.
 func (s *server) recordDeliverable(ctx context.Context, source string, in store.DeliverableInput) (*model.Deliverable, error) {
 	now := s.st.Now()
 
 	var created *model.Deliverable
+	materialized := 0
 	if err := s.recordEvent(ctx, source, "deliverable.created", map[string]string{
 		"project":     in.ProjectID,
 		"name":        in.Name,
@@ -116,10 +123,19 @@ func (s *server) recordDeliverable(ctx context.Context, source string, in store.
 			return err
 		}
 		created = d
-		return nil
+		snap, err := store.ProjectApprovalFlow(tx, in.ProjectID)
+		if err != nil {
+			return err
+		}
+		if snap == nil {
+			return nil
+		}
+		materialized, err = store.MaterializeForEntity(tx, now, *snap, "deliverable", d.ID, d.Name)
+		return err
 	}); err != nil {
 		return nil, err
 	}
+	s.observeApprovalRequirements(originFlow, materialized)
 	return created, nil
 }
 

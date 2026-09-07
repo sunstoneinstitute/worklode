@@ -96,6 +96,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
 	}, []string{"decision", "outcome"})
+	s.approvalRequirements = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_approval_requirements_total",
+		Help: "Approval rows materialized from a project's review flow (029 §7.1), by origin (" +
+			strings.Join(approvalRequirementOrigins, ", ") +
+			"). One per inserted row, so a re-materialization that inserts nothing adds nothing. " +
+			"Labels are bounded: the project, the entity and the lane are deliberately not among them.",
+	}, []string{"origin"})
 	s.taskTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_tokens_total",
 		Help: "Task-scoped token mints (POST /tasks/{id}/tokens, 001 §2.1), by outcome (" +
@@ -249,7 +256,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
-		s.approvalDecisions,
+		s.approvalDecisions, s.approvalRequirements,
 		s.crewChanges,
 		s.milestoneChanges,
 		s.repoMappings,
@@ -339,6 +346,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		for _, outcome := range approvalDecisionOutcomes {
 			s.approvalDecisions.WithLabelValues(decision, outcome)
 		}
+	}
+	// Both origins, so a project with no flow stamped reads as a flat zero
+	// rather than as no-data.
+	for _, origin := range approvalRequirementOrigins {
+		s.approvalRequirements.WithLabelValues(origin)
 	}
 	// Both blob families in full, so an instance with no bucket configured
 	// reads as a flat zero across every outcome rather than as no-data.
@@ -787,6 +799,27 @@ func approvalDecisionOutcome(err error) string {
 	default:
 		return "error"
 	}
+}
+
+// approvalRequirementOrigins bounds worklode_approval_requirements_total's one
+// label: "flow" is a row the project's stamped flow demanded, "adhoc" a row
+// somebody asked for by hand.
+var approvalRequirementOrigins = []string{originFlow, originAdhoc}
+
+const (
+	originFlow  = "flow"
+	originAdhoc = "adhoc"
+)
+
+// observeApprovalRequirements adds n materialized approval rows to the named
+// origin. Called with what the store actually inserted, so a re-materialization
+// that hit the idempotency key adds nothing.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeApprovalRequirements(origin string, n int) {
+	if s.approvalRequirements == nil || n == 0 {
+		return
+	}
+	s.approvalRequirements.WithLabelValues(origin).Add(float64(n))
 }
 
 // observeFormSubmission records one web creation-form submission, called
