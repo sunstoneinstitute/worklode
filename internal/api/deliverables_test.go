@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // TestCreateDeliverableWithArtifact: the JSON API accepts the address a
@@ -176,3 +178,125 @@ func TestPatchDeliverableMilestone(t *testing.T) {
 // strPtr is a small helper for a literal *string in a table or struct
 // literal, where &"x" is not legal Go.
 func strPtr(s string) *string { return &s }
+
+// stampStoryFlow puts the shipped `story` flow on a project, the way Task 10's
+// apply surface will. Reading it from api.LoadApprovalFlows keeps the test
+// honest about the flow the instance actually ships.
+func stampStoryFlow(t *testing.T, st *store.Store, projectID string) {
+	t.Helper()
+	flows, err := api.LoadApprovalFlows("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	story := flowByName(t, flows, "story")
+	tx, err := st.DBForTests().Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback() //nolint:errcheck // committed below on the happy path
+	if err := store.SetProjectApprovalFlow(tx, projectID,
+		model.ApprovalFlowSnapshot{Flow: story}); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// deliverableApproval is one materialized row, read straight from the table:
+// the awaiting queue's joins do not carry deliverable-kind rows yet (WL-719).
+type deliverableApproval struct{ entityID, lane, state, rev, role, createdBy string }
+
+func deliverableApprovals(t *testing.T, st *store.Store) []deliverableApproval {
+	t.Helper()
+	rows, err := st.DBForTests().Query(
+		`SELECT entity_id, lane, state, subject_revision,
+		        COALESCE(required_role, ''), COALESCE(created_by, '')
+		   FROM approvals WHERE entity_kind = 'deliverable'
+		  ORDER BY entity_id, lane`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var out []deliverableApproval
+	for rows.Next() {
+		var r deliverableApproval
+		if err := rows.Scan(&r.entityID, &r.lane, &r.state, &r.rev, &r.role, &r.createdBy); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestDeliverableCreationMaterializesFlowLanes: 029 §7.1's "materialized as an
+// awaiting row when the entity is created". A stamped project's new
+// deliverable owes its flow's lanes immediately; a project with no snapshot
+// owes nothing; and two same-named deliverables owe a set each, because the
+// requirement is keyed on the entity id and not on the name that matched it.
+func TestDeliverableCreationMaterializesFlowLanes(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "story")
+	createProject(t, st, "plain")
+	stampStoryFlow(t, st, "story")
+
+	create := func(project, name string) string {
+		t.Helper()
+		rr := doReq(t, h, "POST", "/api/v1/projects/"+project+"/deliverables", token,
+			model.CreateDeliverableInput{Name: name})
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("create %s status = %d, body %s", name, rr.Code, rr.Body.String())
+		}
+		return decodeMap(t, rr)["id"].(string)
+	}
+
+	first := create("story", "Methodology")
+	rows := deliverableApprovals(t, st)
+	if len(rows) != 2 {
+		t.Fatalf("materialized %d lanes, want 2: %+v", len(rows), rows)
+	}
+	want := []deliverableApproval{
+		{first, "methodology/domain-expert", "awaiting", "", "domain-experts", "worklode"},
+		{first, "methodology/science-lead", "awaiting", "", "science-leads", "worklode"},
+	}
+	for i := range want {
+		if rows[i] != want[i] {
+			t.Errorf("row %d = %+v, want %+v", i, rows[i], want[i])
+		}
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_approval_requirements_total{origin="flow"} 2`) {
+		t.Errorf("metrics missing two flow-materialized requirements:\n%s", metrics)
+	}
+
+	// A deliverable no lane targets, and one in a project with no snapshot:
+	// neither owes anything.
+	create("story", "Interview notes")
+	create("plain", "Methodology")
+	if rows := deliverableApprovals(t, st); len(rows) != 2 {
+		t.Fatalf("after two unmatched deliverables, %d rows: %+v", len(rows), rows)
+	}
+
+	// The same name again is a second entity, so it owes its own lanes.
+	second := create("story", "Methodology")
+	rows = deliverableApprovals(t, st)
+	if len(rows) != 4 {
+		t.Fatalf("after the second Methodology, %d rows, want 4: %+v", len(rows), rows)
+	}
+	ids := map[string]int{}
+	for _, r := range rows {
+		ids[r.entityID]++
+	}
+	if ids[first] != 2 || ids[second] != 2 {
+		t.Errorf("lanes per entity = %v, want 2 for %s and 2 for %s", ids, first, second)
+	}
+	metrics = doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_approval_requirements_total{origin="flow"} 4`) {
+		t.Errorf("metrics missing four flow-materialized requirements:\n%s", metrics)
+	}
+}
