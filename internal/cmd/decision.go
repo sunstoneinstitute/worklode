@@ -69,8 +69,60 @@ func newDecisionCmd() *cobra.Command {
 		Use:   "decision",
 		Short: "Decisions: the questions a task poses and the answers they wait on",
 	}
-	cmd.AddCommand(newDecisionAddCmd(), newDecisionEditCmd())
+	cmd.AddCommand(newDecisionListCmd(), newDecisionShowCmd(), newDecisionAddCmd(), newDecisionEditCmd())
 	return cmd
+}
+
+func newDecisionListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list <task>",
+		Short: "List the questions a task poses",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			rows, raw, err := c.ListDecisions(cmd.Context(), args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DecisionTable(cmd.OutOrStdout(), rows)
+			return nil
+		},
+	}
+}
+
+func newDecisionShowCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "show <task>/<key>",
+		Short: "Show one question, its options and its answer",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			onTask, key, err := cli.ParseDecisionRef(args[0])
+			if err != nil {
+				return err
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.GetDecision(cmd.Context(), onTask, key)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DecisionRender(cmd.OutOrStdout(), d)
+			return nil
+		},
+	}
 }
 
 func newDecisionAddCmd() *cobra.Command {

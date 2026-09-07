@@ -36,6 +36,76 @@ func decisionsOf(t *testing.T, h http.Handler, token, id string) []map[string]an
 	return out
 }
 
+// TestReadDecisions covers GET /api/v1/tasks/{id}/decisions and
+// .../decisions/{key}: an empty list before anything is posed, the rows in
+// authored order after, one row by key, 404 on an unknown key or task, and
+// the answer fields appearing only once the row is answered.
+func TestReadDecisions(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	id := createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Scope call", "priority": "high", "kind": "decision",
+	})["id"].(string)
+
+	rr := doReq(t, h, "GET", "/api/v1/tasks/"+id+"/decisions", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list on a bare task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := strings.TrimSpace(rr.Body.String()); got != "[]" {
+		t.Fatalf("list on a bare task = %s, want []", got)
+	}
+
+	for _, key := range []string{"x-distribution", "ship-date"} {
+		if rr := doReq(t, h, "POST", "/api/v1/tasks/"+id+"/decisions", token, poseBody(key, "yes_no")); rr.Code != http.StatusCreated {
+			t.Fatalf("pose %s status = %d, body %s", key, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id+"/decisions", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var rows []map[string]any
+	decodeInto(t, rr, &rows)
+	if len(rows) != 2 || rows[0]["key"] != "x-distribution" || rows[1]["key"] != "ship-date" {
+		t.Fatalf("list = %v, want the two rows in authored order", rows)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id+"/decisions/ship-date", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if got["key"] != "ship-date" || got["task"] != id || got["response_type"] != "yes_no" {
+		t.Fatalf("got row = %v", got)
+	}
+	if _, ok := got["answer"]; ok {
+		t.Fatalf("unanswered row carries an answer: %v", got)
+	}
+
+	answerDecision(t, st, id, "ship-date")
+	rr = doReq(t, h, "GET", "/api/v1/tasks/"+id+"/decisions/ship-date", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get answered status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = decodeMap(t, rr)
+	answer, _ := got["answer"].(map[string]any)
+	if answer["value"] != "yes" || got["decided_at"] == nil {
+		t.Fatalf("answered row = %v", got)
+	}
+
+	if rr = doReq(t, h, "GET", "/api/v1/tasks/"+id+"/decisions/nope", token, nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("get unknown key status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+	if rr = doReq(t, h, "GET", "/api/v1/tasks/WL-999/decisions", token, nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("list on unknown task status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+	if rr = doReq(t, h, "GET", "/api/v1/tasks/WL-999/decisions/k", token, nil); rr.Code != http.StatusNotFound {
+		t.Fatalf("get on unknown task status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestPoseDecisionEveryResponseType: POST /api/v1/tasks/{id}/decisions takes
 // one row of each of §10.1's six response types and returns 201 with the row.
 func TestPoseDecisionEveryResponseType(t *testing.T) {

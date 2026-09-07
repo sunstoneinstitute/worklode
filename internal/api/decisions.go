@@ -1,6 +1,6 @@
-// decisions.go serves 025 §10.1's posed question over the JSON API: adding
-// a row to a task, and editing an unanswered one. Recording an answer is a
-// different write with a different rule and does not live here.
+// decisions.go serves 025 §10.1's posed question over the JSON API: reading
+// the rows a task poses, adding one, and editing an unanswered one. Recording
+// an answer is a different write with a different rule and does not live here.
 package api
 
 import (
@@ -10,6 +10,37 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
+
+// listDecisions handles GET /api/v1/tasks/{id}/decisions: the questions the
+// task poses, in authored order, empty while none are posed. An unknown task
+// is a 404 rather than an empty list, so a mistyped id is visible.
+func (s *server) listDecisions(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := s.st.GetTask(r.Context(), id); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	rows, err := s.st.ListDecisions(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	if rows == nil {
+		rows = []model.Decision{}
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+// getDecision handles GET /api/v1/tasks/{id}/decisions/{key}: one row in
+// full, with its answer and decider once it has been answered.
+func (s *server) getDecision(w http.ResponseWriter, r *http.Request) {
+	d, err := s.st.GetDecision(r.Context(), r.PathValue("id"), r.PathValue("key"))
+	if err != nil {
+		s.mapDecisionErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
 
 // poseDecision handles POST /api/v1/tasks/{id}/decisions.
 func (s *server) poseDecision(w http.ResponseWriter, r *http.Request) {
