@@ -25,6 +25,16 @@ const docEntityKind = "doc"
 // docDateLayout is the lexical form of docs.issued on the wire.
 const docDateLayout = "2006-01-02"
 
+// docDepthLimit is the 025 §6.1 anchor addressability limit every accept-time
+// gate reads. designdoc.DepthLimit is its default; an operator overrides it
+// with LODE_DOC_DEPTH_LIMIT.
+var docDepthLimit = designdoc.DepthLimit
+
+// SetDocDepthLimit sets the 025 §6.1 anchor depth limit. Boot-time only: call
+// it once before serving. It is a plain package variable with no
+// synchronization, so mutating it while requests are in flight is a data race.
+func SetDocDepthLimit(n int) { docDepthLimit = n }
+
 // validDocKinds and validDocStatuses mirror the docs CHECK constraints, so a
 // bad input is ErrInvalidInput rather than a Postgres error the caller has to
 // decode. The status set is generated from wlc:DesignDocStatus (025 §17); the
@@ -168,7 +178,7 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 	// carry no sections and no anchors (025 §9).
 	acceptedAtCreate := status == "accepted" && in.Kind != "plan"
 	if acceptedAtCreate {
-		if v := designdoc.DepthViolations(parsed.doc, designdoc.DepthLimit); len(v) > 0 {
+		if v := designdoc.DepthViolations(parsed.doc, docDepthLimit); len(v) > 0 {
 			return nil, fmt.Errorf("doc %s/%s cannot be created accepted: %s: %w",
 				in.Project, in.Slug, strings.Join(v, "; "), ErrInvalidInput)
 		}
@@ -363,7 +373,7 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 // what has no row yet.
 //
 // The depth limit is evaluated at publication (025 §6 rule 6), so a first
-// accept still rejects an anchored heading below designdoc.DepthLimit even
+// accept still rejects an anchored heading below the configured depth limit even
 // though rules 1-3 exempt drafts.
 func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	d, err := lockDoc(tx, id)
@@ -400,7 +410,7 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	}
 	// The depth gate is the one rule a first accept still enforces: rules 1-3
 	// need an accepted version to diff against, and there is none.
-	if v := designdoc.DepthViolations(parsed.doc, designdoc.DepthLimit); len(v) > 0 {
+	if v := designdoc.DepthViolations(parsed.doc, docDepthLimit); len(v) > 0 {
 		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %s: %w", id, strings.Join(v, "; "), ErrInvalidInput)
 	}
 
