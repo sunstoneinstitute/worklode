@@ -136,17 +136,18 @@ func pollDocLifecycleCaughtUp(t *testing.T, ctx context.Context, c *cli.Client, 
 
 // eventByID fetches one event through GET /api/v1/events using the exclusive
 // id cursor — there is no by-id route, and a one-row window on the cursor is
-// the public surface that answers the same question.
+// the public surface that answers the same question. The watcher that writes
+// this event is a subscriber driven asynchronously off the event log
+// (internal/eventbus, internal/api/docwatch.go), so the row can land after
+// the caller that triggered it already got its response: poll rather than
+// read once.
 func eventByID(t *testing.T, ctx context.Context, c *cli.Client, id int64) model.Event {
 	t.Helper()
-	resp, _, err := c.ListEvents(ctx, cli.EventListFilter{After: id - 1, Limit: 1})
-	if err != nil {
-		t.Fatalf("GET /api/v1/events after %d: %v", id-1, err)
+	events := pollEventListE2E(t, ctx, c, cli.EventListFilter{After: id - 1, Limit: 1}, 1)
+	if events[0].ID != id {
+		t.Fatalf("GET /api/v1/events after %d = %+v, want exactly event %d", id-1, events, id)
 	}
-	if len(resp.Events) != 1 || resp.Events[0].ID != id {
-		t.Fatalf("GET /api/v1/events after %d = %+v, want exactly event %d", id-1, resp.Events, id)
-	}
-	return resp.Events[0]
+	return events[0]
 }
 
 // eventPayload decodes an event payload into a map, failing on anything else.
