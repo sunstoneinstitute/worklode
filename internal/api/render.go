@@ -95,6 +95,15 @@ func projectsView(projects []store.Project, title, active string) ui.ProjectsVie
 // Decidable follows the store's own rule: an approval naming no revision
 // cannot be decided, so the row must not offer the form.
 func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsView {
+	return ui.ApprovalsView{
+		Page: ui.PageProps{Title: "worklode: reviews"},
+		Rows: approvalRows(rows, now),
+	}
+}
+
+// approvalRows maps queue rows for whichever page renders them: the Reviews
+// queue, or one document's own review panel.
+func approvalRows(rows []store.AwaitingApproval, now time.Time) []ui.ApprovalRow {
 	out := make([]ui.ApprovalRow, 0, len(rows))
 	for _, a := range rows {
 		row := ui.ApprovalRow{
@@ -118,10 +127,7 @@ func approvalsView(rows []store.AwaitingApproval, now time.Time) ui.ApprovalsVie
 		}
 		out = append(out, row)
 	}
-	return ui.ApprovalsView{
-		Page: ui.PageProps{Title: "worklode: reviews"},
-		Rows: out,
-	}
+	return out
 }
 
 // agentSessionRows maps a task's agent sessions into rendered rows. The times
@@ -326,23 +332,64 @@ func docsView(docs []model.Doc, projectKeys map[string]string) ui.DocsView {
 	return v
 }
 
-// docView maps one document's detail projection into its page.
+// docView maps one document's detail projection into its page. body is the
+// markdown to render — the consolidated fold (026 §3.2) or the stored source,
+// which consolidated says which of — and path is this page's own URL, off
+// which the two toggle spellings are built.
 //
 // md may be nil, which renders every body afresh; see the mdcache field.
-func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail) ui.DocView {
+func docView(md *mdrender.Cache, keys mdrender.ProjectKeys, d *model.DocDetail, body string, consolidated bool, path string) ui.DocView {
 	return ui.DocView{
 		Page: ui.PageProps{Title: "worklode: " + d.Slug, ActiveGlobal: "knowledge"},
 		Doc:  d.Doc,
 		// Rendered here rather than in ui for the reason taskView gives.
 		// DocBody rather than Body: a document's {#sec-N} headings are
 		// addressable anchors, and the Sections table links at them.
-		BodyHTML: md.DocBody(keys, d.Doc.Body),
-		Ref:      docRef(d.Doc),
-		Sections: d.Sections,
-		Edges:    docEdgeRows(d.Edges),
-		EdgesIn:  docEdgeRows(d.EdgesIn),
-		Revision: d.Revision,
+		BodyHTML:        md.DocBody(keys, body),
+		Ref:             docRef(d.Doc),
+		Sections:        d.Sections,
+		Edges:           docEdgeRows(d.Edges),
+		EdgesIn:         docEdgeRows(d.EdgesIn),
+		Revision:        d.Revision,
+		Consolidated:    consolidated,
+		ConsolidatedURL: path,
+		SourceURL:       path + "?body=source",
+		Notes:           docNoteRows(md, keys, d.Notes),
+		Reviewers:       docReviewerRows(d.Doc),
 	}
+}
+
+// docNoteRows renders each anchored note's body as markdown — a note is
+// prose an agent or a person wrote, and the corpus's other prose renders.
+// Body rather than DocBody: a note carries no addressable sections, so it
+// must not mint heading anchors that collide with the document's own.
+func docNoteRows(md *mdrender.Cache, keys mdrender.ProjectKeys, notes []model.DocNote) []ui.DocNoteRow {
+	out := make([]ui.DocNoteRow, 0, len(notes))
+	for _, n := range notes {
+		out = append(out, ui.DocNoteRow{
+			Anchor:    n.Anchor,
+			BodyHTML:  md.Body(keys, n.Body),
+			CreatedBy: n.CreatedBy,
+			CreatedAt: n.CreatedAt,
+			Task:      n.Task,
+		})
+	}
+	return out
+}
+
+// docReviewerRows pairs the durable reviewer roster (025 §7.3) with who of it
+// still owes a verdict on the current version. Both come from GetDoc, so a
+// list row (which carries neither) renders no roster rather than an empty one.
+func docReviewerRows(d model.Doc) []ui.DocReviewerRow {
+	awaiting := make(map[string]bool, len(d.ReviewersAwaiting))
+	for _, a := range d.ReviewersAwaiting {
+		awaiting[a] = true
+	}
+	out := make([]ui.DocReviewerRow, 0, len(d.Reviewers))
+	for _, r := range d.Reviewers {
+		out = append(out, ui.DocReviewerRow{Actor: r, Awaiting: awaiting[r]})
+	}
+	return out
 }
 
 // docVersionView maps one document version into its page (GET
