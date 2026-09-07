@@ -179,8 +179,8 @@ func (s *server) projectKeyByID(ctx context.Context) map[string]string {
 	return keys
 }
 
-// withProjectKeys stamps each document's ProjectKey, the half of its formatted
-// id that lives on the project rather than the document. Every handler whose
+// withProjectKeys stamps each document's ProjectKey and, from it, Ref — the
+// formatted id (model.Doc.FormatRef) a client cites. Every handler whose
 // response a client renders as a document ref runs its docs through this.
 func (s *server) withProjectKeys(ctx context.Context, docs []model.Doc) []model.Doc {
 	keys := s.projectKeyByID(ctx)
@@ -189,6 +189,7 @@ func (s *server) withProjectKeys(ctx context.Context, docs []model.Doc) []model.
 	}
 	for i := range docs {
 		docs[i].ProjectKey = keys[docs[i].Project]
+		docs[i].Ref = docs[i].FormatRef()
 	}
 	return docs
 }

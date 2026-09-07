@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 // Doc is a backbone design document (025 §5): a spec, an ADR, or a plan.
 // Number is the project's per-kind ordinal, auto-assigned unless the caller
@@ -19,16 +23,21 @@ type Doc struct {
 	// document's, and joining it into every doc query would put it in two
 	// GROUP BY clauses to serve one column. Empty on a store-side value.
 	ProjectKey string `json:"project_key,omitempty"`
-	Kind       string `json:"kind"` // spec | adr | plan
-	Number     int    `json:"number"`
-	Slug       string `json:"slug"`
-	Title      string `json:"title"`
-	Body       string `json:"body"` // the full markdown, frontmatter included
-	Status     string `json:"status"`
-	Version    int    `json:"version"`
-	Issued     string `json:"issued"` // YYYY-MM-DD, "" when unset
-	Owner      string `json:"owner"`
-	CreatedBy  string `json:"created_by"`
+	// Ref is the document's citable id ("WL-SPEC-29", 025 §14.3), the same
+	// <KEY>-<KIND>-<N> shorthand task.ID uses for tasks ("WL-7"). Stamped
+	// alongside ProjectKey, from which it is built (FormatRef); empty on a
+	// store-side value that never passed through the API boundary.
+	Ref       string `json:"ref,omitempty"`
+	Kind      string `json:"kind"` // spec | adr | plan
+	Number    int    `json:"number"`
+	Slug      string `json:"slug"`
+	Title     string `json:"title"`
+	Body      string `json:"body"` // the full markdown, frontmatter included
+	Status    string `json:"status"`
+	Version   int    `json:"version"`
+	Issued    string `json:"issued"` // YYYY-MM-DD, "" when unset
+	Owner     string `json:"owner"`
+	CreatedBy string `json:"created_by"`
 	// GeneratedByTask is the task that authored this document (025 §12,
 	// projected as prov:wasGeneratedBy), "" when no task did — a cockpit
 	// author, an agent outside a claimed worktree, a corpus import. Distinct
@@ -52,6 +61,22 @@ type Doc struct {
 	// "who still owes a review on this document" as a query. Same
 	// GetDoc-only population as Reviewers.
 	ReviewersAwaiting []string `json:"reviewers_awaiting,omitempty"`
+}
+
+// FormatRef builds a document's citable id: <KEY>-<KIND>-<N>, the 025 §14.3
+// shorthand as widened by 029 §4 — "WL-SPEC-29", "WL-ADR-43", "WL-PLAN-7".
+// An unknown ProjectKey degrades to the unqualified "SPEC-29" rather than
+// guessing one; a document with no Number at all predates 029 §4's backfill
+// and renders as its kind.
+func (d Doc) FormatRef() string {
+	if d.Number == 0 {
+		return d.Kind
+	}
+	ref := strings.ToUpper(d.Kind) + "-" + strconv.Itoa(d.Number)
+	if d.ProjectKey == "" {
+		return ref
+	}
+	return d.ProjectKey + "-" + ref
 }
 
 // DocSection is one addressable section of a spec or ADR (025 §3). Plans have
