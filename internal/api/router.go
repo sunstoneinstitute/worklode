@@ -327,6 +327,10 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/projects":                    guarded(permProjectAdmin),
 	"PATCH /api/v1/projects/{id}":              guarded(permProjectAdmin),
 	"POST /api/v1/projects/{id}/repos":         guarded(permProjectAdmin),
+	// Stamping governance on a project sits with the permission that creates
+	// projects; the flow vocabulary is instance configuration, so applying one
+	// is an administrative act on the project, not a review act.
+	"POST /api/v1/projects/{id}/approval-flow": guarded(permProjectAdmin),
 	"PATCH /api/v1/repos/{owner}/{name}":       guarded(permProjectAdmin),
 	"DELETE /api/v1/repos/{owner}/{name}":      guarded(permProjectAdmin),
 	"POST /api/v1/actors":                      guarded(permActorAdmin),

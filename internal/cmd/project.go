@@ -373,10 +373,72 @@ func newProjectRallyCmd() *cobra.Command {
 func newProjectSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "set",
-		Short: "Set one field on a project: decision, focus, or focus-note",
+		Short: "Set one field on a project: decision, flow, focus, or focus-note",
 	}
-	cmd.AddCommand(newProjectSetFocusCmd(), newProjectSetFocusNoteCmd(), newProjectSetDecisionCmd())
+	cmd.AddCommand(newProjectSetFocusCmd(), newProjectSetFocusNoteCmd(),
+		newProjectSetDecisionCmd(), newProjectSetFlowCmd())
 	return cmd
+}
+
+// newProjectSetFlowCmd is `lode project set flow <id> --name <flow>`: stamp
+// the named approval flow on a project and materialize the requirements it
+// demands of the deliverables the project already holds (029 §7.2). It is a
+// `set` field and not its own verb because the flow is a project field (061
+// §1 L3). The vocabulary of flow names is instance configuration, so an
+// unknown name is the server's 404 rather than a client-side check.
+func newProjectSetFlowCmd() *cobra.Command {
+	var name string
+	var reviewerArgs []string
+	cmd := &cobra.Command{
+		Use:               "flow <id>",
+		ValidArgsFunction: projectKeyAt(0),
+		Short:             "Apply an approval flow to a project, backfilling what it demands",
+		Args:              cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reviewers, err := parseReviewers(reviewerArgs)
+			if err != nil {
+				return err
+			}
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			resp, raw, err := c.ApplyApprovalFlow(cmd.Context(), args[0], name, reviewers)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.ApprovalFlowRender(cmd.OutOrStdout(), resp)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&name, "name", "", "the approval flow to apply (required)")
+	cmd.Flags().StringArrayVar(&reviewerArgs, "reviewer", nil,
+		"name the actor who owes one lane: lane=actor (repeatable)")
+	cmd.MarkFlagRequired("name")
+	return cmd
+}
+
+// parseReviewers turns repeated --reviewer lane=actor flags into the reviewer
+// template the apply sends. A malformed entry is a usage error rather than a
+// silently dropped lane: the lane it named would otherwise stay on its role
+// and nobody would see that it was meant to have a named reviewer.
+func parseReviewers(pairs []string) (map[string]string, error) {
+	if len(pairs) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(pairs))
+	for _, p := range pairs {
+		lane, actor, ok := strings.Cut(p, "=")
+		if !ok || lane == "" || actor == "" {
+			return nil, fmt.Errorf("--reviewer must be lane=actor, got %q", p)
+		}
+		out[lane] = actor
+	}
+	return out, nil
 }
 
 // newProjectSetFocusCmd is `lode project set focus <concern…> <id>`: set or

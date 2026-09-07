@@ -103,6 +103,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			"). One per inserted row, so a re-materialization that inserts nothing adds nothing. " +
 			"Labels are bounded: the project, the entity and the lane are deliberately not among them.",
 	}, []string{"origin"})
+	s.approvalFlowApplies = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_approval_flow_applied_total",
+		Help: "Approval flows applied to a project (POST /api/v1/projects/{id}/approval-flow, 029 §7.2), by outcome (" +
+			strings.Join(approvalFlowApplyOutcomes, ", ") +
+			"). Labels are bounded: the project and the flow name are deliberately not among them.",
+	}, []string{"outcome"})
 	s.taskTokens = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_task_tokens_total",
 		Help: "Task-scoped token mints (POST /tasks/{id}/tokens, 001 §2.1), by outcome (" +
@@ -256,7 +262,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
-		s.approvalDecisions, s.approvalRequirements,
+		s.approvalDecisions, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
 		s.repoMappings,
@@ -351,6 +357,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// rather than as no-data.
 	for _, origin := range approvalRequirementOrigins {
 		s.approvalRequirements.WithLabelValues(origin)
+	}
+	// Every outcome, so an instance where nobody has applied a flow reads as a
+	// flat zero rather than as no-data.
+	for _, outcome := range approvalFlowApplyOutcomes {
+		s.approvalFlowApplies.WithLabelValues(outcome)
 	}
 	// Both blob families in full, so an instance with no bucket configured
 	// reads as a flat zero across every outcome rather than as no-data.
@@ -820,6 +831,28 @@ func (s *server) observeApprovalRequirements(origin string, n int) {
 		return
 	}
 	s.approvalRequirements.WithLabelValues(origin).Add(float64(n))
+}
+
+// flowApply* bound worklode_approval_flow_applied_total's one label:
+// "applied" is a stamped project, "unknown_flow" a name the instance's flow
+// configuration does not define, "error" anything that refused the write.
+const (
+	flowApplyApplied = "applied"
+	flowApplyUnknown = "unknown_flow"
+	flowApplyError   = "error"
+)
+
+var approvalFlowApplyOutcomes = []string{flowApplyApplied, flowApplyUnknown, flowApplyError}
+
+// observeApprovalFlowApply records one POST
+// /api/v1/projects/{id}/approval-flow, called exactly once per request that
+// reaches the handler.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeApprovalFlowApply(outcome string) {
+	if s.approvalFlowApplies == nil {
+		return
+	}
+	s.approvalFlowApplies.WithLabelValues(outcome).Inc()
 }
 
 // observeFormSubmission records one web creation-form submission, called
