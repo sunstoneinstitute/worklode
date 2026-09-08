@@ -286,7 +286,11 @@ type TimelineRow struct {
 	Type    string
 	Label   string
 	Summary string
-	URL     string
+	// Detail is the untruncated summary, set only when Summary was cut to
+	// fit the column (a body edit carries the whole new body). The task page
+	// puts it behind a "see more" disclosure; empty means nothing was cut.
+	Detail string
+	URL    string
 }
 
 // --- placeholder ------------------------------------------------------------

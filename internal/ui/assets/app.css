@@ -2082,6 +2082,19 @@ nav.local a .cnt {
 .mb-collapsed p {
   margin: 6px 0 0;
 }
+.tl-detail summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.tl-detail pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+  max-height: 60vh;
+  overflow: auto;
+  font-size: 12px;
+}
 .morningbrief form {
   margin-top: 12px;
 }

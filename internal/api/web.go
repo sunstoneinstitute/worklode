@@ -891,8 +891,19 @@ func summarizeEntry(e model.TimelineEntry) ui.TimelineRow {
 	default:
 		row.Label = e.Type
 	}
+	// A body edit's "old -> new" runs to the whole task body, which is no
+	// summary at all. Any over-long summary is cut to fit the column and
+	// carries the full text in Detail, behind "see more".
+	if r := []rune(row.Summary); len(r) > timelineSummaryMax {
+		row.Detail = row.Summary
+		row.Summary = string(r[:timelineSummaryMax]) + "\u2026"
+	}
 	return row
 }
+
+// timelineSummaryMax is how much of a timeline summary stays in the table
+// cell before the rest moves behind "see more".
+const timelineSummaryMax = 120
 
 // stateChange is the state_log "change" payload store.LogChange writes: a
 // stored row, not an HTTP body, which is why it is declared here rather than
