@@ -59,6 +59,10 @@ func (s *server) resolveDocRefWeb(ctx context.Context, ref, home string) (model.
 	if err != nil {
 		return model.Doc{}, err
 	}
+	// The store never sets ProjectKey — it is stamped at the API boundary —
+	// and without it an ambiguity names every candidate the same unqualified
+	// "SPEC-29", which is exactly the case a bare number lands in.
+	docs = s.withProjectKeys(ctx, docs)
 	if home != "" {
 		if d, ok := s.resolveDocRefIn(ctx, docs, home, ref); ok {
 			return d, nil
