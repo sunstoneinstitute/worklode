@@ -284,6 +284,15 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	if s.st != nil {
 		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
 	}
+	// githubCalls counts the GitHub API reads worklode makes on its own
+	// schedule rather than in answer to a request. op is a fixed set of call
+	// sites (branch_rules), never a repo or a URL, so the cardinality is
+	// bounded by the code.
+	s.githubCalls = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_github_calls_total",
+		Help: "GitHub API reads made on worklode's own schedule, by operation.",
+	}, []string{"op"})
+
 	// The task-body render cache owns its own instruments (WL-222), so it is
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
@@ -300,7 +309,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns,
-		s.morningBriefRenders, s.briefReviews)
+		s.morningBriefRenders, s.briefReviews,
+		s.githubCalls)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -968,6 +978,17 @@ func (s *server) observeDictation(outcome string) {
 		return
 	}
 	s.dictations.WithLabelValues(outcome).Inc()
+}
+
+// observeGitHubCall records one GitHub API read made on worklode's own
+// schedule, by operation. Counted per attempt, so a failing GitHub still
+// shows the call rate. Nil-safe: tests build a *server directly without
+// initMetrics.
+func (s *server) observeGitHubCall(op string) {
+	if s.githubCalls == nil {
+		return
+	}
+	s.githubCalls.WithLabelValues(op).Inc()
 }
 
 // observeEventSubscriberSeek records one successful admin seek of a

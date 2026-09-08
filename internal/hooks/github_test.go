@@ -81,7 +81,7 @@ func newEnvWith(t *testing.T, resolveBranch func(repo, branch string) (string, e
 	}
 	return &env{
 		dbEnv: dbEnv{st: st},
-		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, m),
+		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil, m),
 	}
 }
 
@@ -339,7 +339,7 @@ func TestMissingHeaders(t *testing.T) {
 
 func TestEmptySecretIs503(t *testing.T) {
 	e := newEnv(t)
-	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil, nil, nil)
+	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil, nil, nil, nil)
 	rr := deliver(t, h, "issues", "d-1", "issues_opened.json")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
@@ -1098,7 +1098,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	want := map[string]bool{
 		"issues": true, "push": true, "pull_request": true, "deployment_status": true,
 		"pull_request_review": true, "workflow_run": true, "release": true,
-		"registry_package": true, "merge_group": true,
+		"registry_package": true, "merge_group": true, "repository_ruleset": true,
 	}
 	got := hooks.HandledEvents()
 	if len(got) != len(want) {
@@ -1379,6 +1379,35 @@ func TestMergeGroupSetsAndClearsQueuedAt(t *testing.T) {
 	deliverOK(t, e, "pull_request", "d-close", "pull_request_closed_merged.json")
 	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
 		t.Fatalf("queued_at after pull_request closed = %v, want nil", got)
+	}
+}
+
+// TestRepositoryRulesetKicksRefresh: WL-SPEC-66 §6.3 — a ruleset change on a
+// mapped repo pokes the server's branch-rules refresh loop. The payload
+// carries no fact worth storing (the merge-queue rule is read per branch from
+// the rules API), so the kick is the whole effect. A repo no project maps is
+// recorded ignored and kicks nothing.
+func TestRepositoryRulesetKicksRefresh(t *testing.T) {
+	e := newEnv(t)
+	// No lock: ServeHTTP runs on this goroutine, and applyFunc calls the
+	// callback synchronously before the delivery is recorded.
+	kicks := 0
+	e.h = hooks.NewGitHubHandlerWithResolver(e.st, testSecret, slog.Default(), nil, nil,
+		func() { kicks++ }, nil)
+
+	deliverOK(t, e, "repository_ruleset", "d-rs-1", "repository_ruleset_edited.json")
+	if kicks != 1 {
+		t.Fatalf("kicks after a mapped repo's ruleset change = %d, want 1", kicks)
+	}
+
+	unmapped := bytes.ReplaceAll(fixture(t, "repository_ruleset_edited.json"),
+		[]byte("sunstoneinstitute/demo"), []byte("someone/else"))
+	rr := deliverBody(t, e.h, "repository_ruleset", "d-rs-2", unmapped)
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
+		t.Fatalf("unmapped ruleset delivery: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if kicks != 1 {
+		t.Fatalf("kicks after an unmapped repo's ruleset change = %d, want 1", kicks)
 	}
 }
 
