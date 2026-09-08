@@ -44,6 +44,28 @@ templ Progress(v ProgressView) {
 	}
 }
 
+// ProgressRowFragment is GET /projects/{id}/progress/spec/{doc}'s payload
+// (§5.2): one spec's row and its detail block, the same markup progressGroup
+// draws inline on the full page. viewer and reviewEnabled decide the row's
+// actions exactly as they do there — the fragment and the page can never
+// disagree about what a viewer may do to this spec.
+templ ProgressRowFragment(s model.ProgressSpec, viewer string, reviewEnabled bool) {
+	@progressRow(s, viewer, reviewEnabled)
+}
+
+// ProgressSummaryFragment is GET /projects/{id}/progress/summary's payload
+// (§5.2): the rally band, the four group counts, the section bar and legend,
+// and the rally footer — everything on the page outside the spec groups
+// themselves. v carries the same model.ProjectProgress the full page
+// renders, from an unfiltered ProjectProgress read (these pieces are
+// project-wide, not one spec's).
+templ ProgressSummaryFragment(v ProgressView) {
+	@progressBand(v.P.Rally)
+	@progressCounts(v.P.Counts)
+	@progressBar(v)
+	@progressFooter(v.P.Draft, v.Viewer)
+}
+
 // progressFooter is §3.5's rally footer, in §2.1's reserved slot. The slot is
 // the same height whether or not a draft rally exists, so confirming or
 // discarding one moves nothing on the page above it. With no draft rally

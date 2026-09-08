@@ -96,6 +96,11 @@ var routeGuards = map[string]routeGuard{
 	// page itself, not permEventStream — a frame carries nothing the page's
 	// own reader could not already see (§4.5).
 	"GET /projects/{id}/progress/events": guarded(permWebRead),
+	// The Progress page's row and summary fragments (§5.2): permWebRead like
+	// the page itself, since either fragment shows only what the page's own
+	// reader could already see.
+	"GET /projects/{id}/progress/spec/{doc}": guarded(permWebRead),
+	"GET /projects/{id}/progress/summary":    guarded(permWebRead),
 	// The Progress page's writes (066 §7). permDocWrite for accepting a
 	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
 	// decides who may actually accept it stays inside the store (§4.2 rule 5).
