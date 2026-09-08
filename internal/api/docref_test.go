@@ -147,3 +147,48 @@ func TestDocRefHomeProjectDisambiguates(t *testing.T) {
 		}
 	}
 }
+
+// TestRefShortcutBareNumberAcrossProjects pins the seam between WL-721 and
+// WL-723: the root shortcut delegates to docRefRedirect, which scopes a bare
+// corpus number to the ?p=<KEY> a referring body carried. A number typed at
+// the root carries no referrer, so it gets the org-wide resolution — a 404
+// naming the candidates rather than an arbitrary pick — while the same number
+// with an explicit ?p= resolves inside that project.
+func TestRefShortcutBareNumberAcrossProjects(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 29, Slug: "029-here",
+		Body: "# Spec 29 — Here\n",
+	})
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "other", Kind: "spec", Number: 29, Slug: "029-there",
+		Body: "# Spec 29 — There\n",
+	})
+
+	// Rootless and ambiguous: 404, and the body names both candidates so the
+	// reader can pick. Silently landing on one of the two would be the bug.
+	rr := doReq(t, h, "GET", "/029", "", nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("/029 status = %d, want 404 (ambiguous across projects)", rr.Code)
+	}
+	// Candidates are named by citable id (025 §14.3): the project key is
+	// exactly what a bare number does not carry, so it is what the reader
+	// needs back.
+	for _, want := range []string{"WL-SPEC-29", "OTHER-SPEC-29"} {
+		if !strings.Contains(rr.Body.String(), want) {
+			t.Errorf("/029 body does not name candidate %s: %s", want, rr.Body.String())
+		}
+	}
+
+	// The same number with an explicit home resolves there, so the shortcut
+	// carries the query string through to the resolver rather than dropping it.
+	for key, want := range map[string]string{"WL": "/docs/WL-SPEC-29", "OTHER": "/docs/OTHER-SPEC-29"} {
+		rr := doReq(t, h, "GET", "/029?p="+key, "", nil)
+		if rr.Code != http.StatusFound || rr.Header().Get("Location") != want {
+			t.Errorf("/029?p=%s = %d %q, want 302 %q", key, rr.Code, rr.Header().Get("Location"), want)
+		}
+	}
+}
