@@ -862,7 +862,7 @@ func sidebar(p CockpitProject, active string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = localNav(p.ID, active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = localNav(p, active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1012,6 +1012,10 @@ func modePillIcon() templ.Component {
 // Documents, Activity), marking the item matching active as
 // aria-current="page".
 //
+// Progress sits after Work and only when the project has a spec — WL-SPEC-66
+// §2 amends 056 §2 to add it, and a project with no spec has no Progress page
+// (its route 404s), so linking to it would be a dead entry.
+//
 // Milestones sits between Crew and Work, ahead of §2's list: a milestone
 // contains both work and deliverables (spec 029 §2), so it reads before both
 // lists. 032 §2 is owed the same amendment Deleted is (docs/follow-ups.md).
@@ -1020,7 +1024,7 @@ func modePillIcon() templ.Component {
 // tombstone review rather than one of 032 §2's destinations, and it is last
 // because a deleted row is the rarest thing anyone comes here to read. Spec
 // 032 §2's list is owed an amendment naming it (docs/follow-ups.md).
-func localNav(projectID, active string) templ.Component {
+func localNav(p CockpitProject, active string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -1041,43 +1045,49 @@ func localNav(projectID, active string) templ.Component {
 			templ_7745c5c3_Var40 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = navLink("/projects/"+projectID, "Overview", "overview", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID, "Overview", "overview", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/crew", "Crew", "crew", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/crew", "Crew", "crew", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/milestones", "Milestones", "milestones", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/milestones", "Milestones", "milestones", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/work", "Work", "work", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/work", "Work", "work", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/deliverables", "Deliverables", "deliverables", active).Render(ctx, templ_7745c5c3_Buffer)
+		if p.HasSpecs {
+			templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/progress", "Progress", "progress", active).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/deliverables", "Deliverables", "deliverables", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/reviews", "Reviews", "reviews", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/reviews", "Reviews", "reviews", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/decisions", "Decisions", "decisions", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/decisions", "Decisions", "decisions", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/documents", "Documents", "documents", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/documents", "Documents", "documents", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/activity", "Activity", "activity", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/activity", "Activity", "activity", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = navLink("/projects/"+projectID+"/deleted", "Deleted", "deleted", active).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/deleted", "Deleted", "deleted", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

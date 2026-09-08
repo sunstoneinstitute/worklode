@@ -589,6 +589,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/crew/remove", s.navWrap("crew", s.removeCrewMemberFromForm))
 	r.web("GET /projects/{id}/milestones", s.navWrap("milestones", s.milestonesPage))
 	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
+	r.web("GET /projects/{id}/progress", s.navWrap("progress", s.progressPage))
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
