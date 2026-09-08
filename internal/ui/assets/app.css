@@ -2240,6 +2240,58 @@ nav.local a .cnt {
   background: var(--info-bg);
   border-color: var(--info);
 }
+.act {
+  border: 1px solid var(--control-line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  position: relative;
+}
+.act:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.act:disabled {
+  opacity: .55;
+  cursor: default;
+}
+.act .confirm-box {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-weight: 500;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.act .confirm-box button {
+  border: 1px solid var(--control-line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.act .confirm-box .confirm {
+  background: var(--accent);
+  border-color: var(--accent-line);
+  color: var(--accent-ink);
+}
+.act-err {
+  color: var(--danger);
+  font-size: 12px;
+}
 #tip {
   position: fixed;
   z-index: 60;
