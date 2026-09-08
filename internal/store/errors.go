@@ -66,6 +66,12 @@ var (
 	// Only the insert direction of task_blobs_hash_fkey maps to this: the
 	// delete direction is a GC bug, and must stay a 500.
 	ErrUnknownBlob = errors.New("body references an unknown blob")
+	// ErrMissingApprovals means AcceptDoc's mechanical reviewer gate (025
+	// §7.3) is not satisfied: at least one reviewer in the document's stored
+	// set has not approved its current version. It wraps ErrForbidden — the
+	// actor is not the one blocked, the document's review state is — so a
+	// caller mapping errors to HTTP status needs no new case for it.
+	ErrMissingApprovals = errors.New("document reviewer approval missing")
 )
 
 // pgViolation reports whether err is a Postgres error with the given
