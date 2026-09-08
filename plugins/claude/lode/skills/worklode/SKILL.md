@@ -143,6 +143,7 @@ lode doc list --needs-planning     # accepted specs with a section no accepted p
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
 lode doc show <ref> --json        # body, sections, edges
 lode doc todo <slug> --deps             # one spec's remaining work, recursively
+lode doc progress                       # every spec in the project: how much exists, what moves it next
 lode doc submit <id>
 lode doc accept <id>
 lode doc transfer <ref> --to <actor>    # owner-gated; move ownership to another actor
