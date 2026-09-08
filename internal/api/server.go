@@ -442,6 +442,15 @@ type server struct {
 	eventStreamsActive    prometheus.Gauge
 	eventStreamEventsSent prometheus.Counter
 
+	// progressStreamsActive is the number of open Progress page follows
+	// (GET /projects/{id}/progress/events, §5.1) and progressStreamFramesSent
+	// the frames pushed over them; see progress.go. A per-project label is
+	// deliberately not added: unlike the admin log follow, one of these opens
+	// per Progress page view, so a project label here would be the page's own
+	// unbounded traffic all over again.
+	progressStreamsActive    prometheus.Gauge
+	progressStreamFramesSent prometheus.Counter
+
 	// listExpansions counts list endpoint requests that asked for an
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
 	// observeListExpansion.
@@ -593,6 +602,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/milestones", s.navWrap("milestones", s.milestonesPage))
 	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
 	r.web("GET /projects/{id}/progress", s.navWrap("progress", s.progressPage))
+	r.web("GET /projects/{id}/progress/events", s.progressEvents)
 	// Not navWrapped: the page script fetches it and reads JSON back, so it
 	// is never a navigated page (066 §4.2 rule 4), like /preview and /dictate.
 	r.web("POST /projects/{id}/progress/accept", s.progressAccept)

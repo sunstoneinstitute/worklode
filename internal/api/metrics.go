@@ -228,6 +228,19 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_event_stream_events_sent_total",
 		Help: "Events pushed to event-log followers, summed across all open streams.",
 	})
+	// The Progress page's own follow (§5.1), the same two-instrument shape as
+	// the admin log stream above, for the same reason: how many page follows
+	// are open, and how much they are pushing, are the two operational
+	// questions, and http_requests_total answers neither for a request that
+	// lasts as long as the page stays open.
+	s.progressStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "worklode_progress_streams_active",
+		Help: "Open Progress page follows (GET /projects/{id}/progress/events, WL-SPEC-66 §5.1).",
+	})
+	s.progressStreamFramesSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "worklode_progress_stream_frames_sent_total",
+		Help: "Frames pushed to Progress page followers, summed across all open streams.",
+	})
 	// Spec 007's two families. http_requests_total cannot answer either
 	// question: a 503 from a graph-less instance and a 500 from a broken
 	// SPARQL endpoint are both "not 200", and one POST /api/v1/derive runs
@@ -274,7 +287,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.milestoneChanges,
 		s.repoMappings,
 		s.localMerges,
-		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
+		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent,
+		s.progressStreamsActive, s.progressStreamFramesSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.posterExtractions, s.taskBlobRefs,
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
@@ -960,6 +974,34 @@ func (s *server) observeEventStreamSent(n int) {
 		return
 	}
 	s.eventStreamEventsSent.Add(float64(n))
+}
+
+// observeProgressStreamOpen and observeProgressStreamClose bracket one open
+// Progress page follow, the same way observeEventStreamOpen/Close do for the
+// admin log stream; progress.go pairs them with a defer.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressStreamOpen() {
+	if s.progressStreamsActive == nil {
+		return
+	}
+	s.progressStreamsActive.Inc()
+}
+
+func (s *server) observeProgressStreamClose() {
+	if s.progressStreamsActive == nil {
+		return
+	}
+	s.progressStreamsActive.Dec()
+}
+
+// observeProgressStreamFrames records n frames pushed to one follower, called
+// once per flushed batch rather than once per frame.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressStreamFrames(n int) {
+	if s.progressStreamFramesSent == nil {
+		return
+	}
+	s.progressStreamFramesSent.Add(float64(n))
 }
 
 // observeListExpansion records one expanded list request. Nil-safe: tests
