@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -228,6 +229,42 @@ func TestProgressExpandedRow(t *testing.T) {
 	}
 	if strings.Contains(strip, "title=") {
 		t.Errorf("a section cell still carries a title attribute, so it shows two tooltips: %s", strip)
+	}
+}
+
+// TestProgressDraftPlanAction: a draft plan's line carries the two-step
+// Accept button (§3.1, §3.2). progress.js has no test harness, so what a Go
+// test holds is the DOM the script drives: one button.act on that line, the
+// route it posts to, the body it sends, and the sentence its confirmation
+// step shows.
+func TestProgressDraftPlanAction(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 66, Slug: "066-progress",
+		Body: progressSpecBody,
+	})
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "066-progress-plan",
+		Body: progressPlanBody,
+	})
+
+	body := getPage(t, h, "/projects/proj/progress").Body.String()
+
+	line := between(t, body, `<div class="plan">`, "</div>")
+	for _, want := range []string{
+		`class="act"`,
+		`data-route="accept"`,
+		`data-body="{&#34;doc&#34;:` + strconv.FormatInt(plan.ID, 10) + `}"`,
+		`data-confirm="Accept ` + plan.Ref + `"`,
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the draft plan's line does not contain %q — line was %s", want, line)
+		}
+	}
+	if got := strings.Count(body, `data-route="accept"`); got != 1 {
+		t.Errorf("the page renders %d accept buttons, want 1", got)
 	}
 }
 

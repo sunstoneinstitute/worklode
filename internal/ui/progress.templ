@@ -125,7 +125,8 @@ templ progressGroup(g model.ProgressGroup) {
 }
 
 // progressRow is §2.2's row: reference, title, strip, next act, and the
-// action slot §3 fills in part 2. The reference is the row's only link. A
+// right-aligned action slot the row-level acts of §3 render into as they
+// land, each one a progressAct. The reference is the row's only link. A
 // bound-only section gets no cell. Clicking the row anywhere but a link
 // expands the detail block that follows it; the row is focusable so a
 // keyboard can do the same.
@@ -220,5 +221,27 @@ templ progressPlanLine(p model.ProgressPlan) {
 			</span>
 			<span class="muted small">{ strconv.Itoa(p.Landed) } landed &middot; { strconv.Itoa(p.Open) } open</span>
 		}
+		for _, a := range progressPlanActions(p) {
+			@progressAct(a)
+		}
 	</div>
+}
+
+// progressAct is §3.1's two-step control, the one button every act on this
+// page uses. It carries what progress.js needs and nothing else: the route
+// to post to, the body to send, and the sentence the confirmation step
+// shows. The first click never writes — the script swaps this element's
+// content for that sentence with Confirm and Cancel, at the width it
+// measured first, so nothing on the page moves. That step guards against a
+// mis-click; what makes the write safe from another origin is the gate in
+// internal/api's beginJSONPost (§4.2, §4.3).
+//
+// A viewer who may not act gets the button disabled with the reason in its
+// hover text rather than no button at all (§3).
+templ progressAct(a ProgressAction) {
+	if a.Reason != "" {
+		<button type="button" class="act" data-route={ a.Route } data-reason={ a.Reason } data-tip={ a.Reason } disabled>{ a.Label }</button>
+	} else {
+		<button type="button" class="act" data-route={ a.Route } data-body={ a.Body } data-confirm={ a.Confirm }>{ a.Label }</button>
+	}
 }

@@ -1303,3 +1303,38 @@ func progressSliceStyle(s model.ProgressSlice) templ.SafeCSS {
 // progressDetailID is the id of a row's detail block, which the row points at
 // with aria-controls so the two are one control to assistive technology.
 func progressDetailID(ref string) string { return "d-" + ref }
+
+// ProgressAction is one §3.1 action button: the route progress.js posts to
+// under /projects/{id}/progress/, the JSON body it sends, and the sentence
+// the confirmation step shows. A non-empty Reason renders the button
+// disabled with that reason as its hover text, because a hidden button reads
+// as a missing feature (§3).
+type ProgressAction struct {
+	Route   string
+	Body    string
+	Label   string
+	Confirm string
+	Reason  string
+}
+
+// progressPlanActions are the acts on one plan line (§2.3). Accept is the
+// only one so far: a draft plan is the document `lode doc accept` accepts
+// (§3.2). Review (§3.3) and the rally acts (§3.5) join it as their routes
+// land.
+func progressPlanActions(p model.ProgressPlan) []ProgressAction {
+	if p.State != "draft" {
+		return nil
+	}
+	return []ProgressAction{{
+		Route:   "accept",
+		Body:    progressDocBody(p.Doc),
+		Label:   "Accept",
+		Confirm: "Accept " + p.Ref,
+	}}
+}
+
+// progressDocBody is the one-field body every document act sends (§7). It is
+// built from an integer, so it is a well-formed JSON object by construction.
+func progressDocBody(doc int64) string {
+	return `{"doc":` + strconv.FormatInt(doc, 10) + `}`
+}
