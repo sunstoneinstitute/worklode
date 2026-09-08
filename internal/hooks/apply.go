@@ -101,6 +101,13 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 		return func(tx *sql.Tx, _ int64) error {
 			return a.applyRegistryPackage(tx, repo, body)
 		}
+	case "merge_group":
+		if env.Action != "checks_requested" && env.Action != "destroyed" {
+			return nil
+		}
+		return func(tx *sql.Tx, _ int64) error {
+			return a.applyMergeGroup(tx, repo, env.Action, body)
+		}
 	default:
 		return nil
 	}
