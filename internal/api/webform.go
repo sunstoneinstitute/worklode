@@ -27,9 +27,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -95,6 +99,14 @@ func (s *server) sameOriginForm(r *http.Request) bool {
 	case "same-site", "cross-site":
 		return false
 	}
+	return s.originAllowed(r)
+}
+
+// originAllowed is the Sec-Fetch-Site-less half of the origin check, shared
+// by the form guard and the JSON one: an Origin, if present, must match the
+// request host or the configured public URL. No Origin at all passes —
+// curl and the e2e harness send neither header.
+func (s *server) originAllowed(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		return true
@@ -185,8 +197,7 @@ func (s *server) renderWeb(w http.ResponseWriter, r *http.Request, status int, p
 			ctx = ui.WithInboxDot(ctx, has)
 		}
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", s.contentSecurityPolicy())
+	s.setWebHeaders(w)
 	w.WriteHeader(status)
 	if err := c.Render(ctx, w); err != nil {
 		s.log.Error("render "+page, "err", err)
@@ -501,4 +512,98 @@ func (s *server) decideApprovalErr(w http.ResponseWriter, err error) {
 	default:
 		s.webStoreErr(w, err)
 	}
+}
+
+// --- page-script writes (WL-SPEC-66 §4.2) -----------------------------------
+
+// maxJSONPost caps a page-script write body at 64 KiB. These bodies name
+// documents and plans; nothing legitimate approaches the cap.
+const maxJSONPost = 64 << 10
+
+// pageHeaderName and pageHeaderValue are the custom header the cockpit's page
+// script sends on every write. An HTML form cannot set it, and a cross-origin script that tries
+// triggers a preflight this server never answers, so it is a lock
+// independent of the session cookie and of the origin check.
+const (
+	pageHeaderName  = "X-Requested-With"
+	pageHeaderValue = "lode-cockpit"
+)
+
+// sameOriginFetch is sameOriginForm's strict twin for script-issued writes
+// (066 §4.2 rule 2): where the form guard accepts Sec-Fetch-Site: none
+// because a person may submit a form from a bookmark, a fetch has no such
+// case — "none" is a user-typed navigation, which a fetch never is.
+func (s *server) sameOriginFetch(r *http.Request) bool {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" {
+		return site == "same-origin"
+	}
+	return s.originAllowed(r)
+}
+
+// beginJSONPost is the write gate for page-script requests (066 §4.2): POST,
+// strictly same-origin, the page's custom header, a JSON body, and the
+// session's actor. It answers the refusal itself and returns ok false; the
+// caller then returns. body is decoded into dst, which may be nil for a
+// route that takes no fields.
+//
+// Every reply it writes, refusals included, carries the page's
+// Content-Security-Policy (§4.4) and is JSON, never HTML (§4.2 rule 4), so a
+// navigation can never render one as a page. route is the metric label, not
+// a path.
+func (s *server) beginJSONPost(w http.ResponseWriter, r *http.Request, route string, dst any) (Subject, ui.CockpitProject, bool) {
+	s.setWebHeaders(w)
+	refuse := func(code int, msg string) (Subject, ui.CockpitProject, bool) {
+		s.observeProgressWrite(route, "refused")
+		writeErr(w, code, msg)
+		return Subject{}, ui.CockpitProject{}, false
+	}
+
+	// Rule 1: no write on GET. SameSite=Lax still sends the cookie on a
+	// top-level GET, so a mutating GET would be forgeable by a plain link.
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		return refuse(http.StatusMethodNotAllowed, "this route accepts POST only")
+	}
+	if !s.sameOriginFetch(r) {
+		return refuse(http.StatusForbidden, "cross-site request refused")
+	}
+	if r.Header.Get(pageHeaderName) != pageHeaderValue {
+		return refuse(http.StatusForbidden, "missing page header")
+	}
+	// application/json is a non-simple content type, which forces the same
+	// preflight for a cross-origin caller.
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/json" {
+		return refuse(http.StatusUnsupportedMediaType, "the body must be application/json")
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONPost)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		return refuse(http.StatusUnprocessableEntity, "the body could not be read")
+	}
+	// Read once into raw fields before decoding into dst, so a body naming
+	// an actor is refused by the rule it breaks rather than as an unknown
+	// field. Rule 6: the acting actor is the session's, never the body's.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return refuse(http.StatusUnprocessableEntity, "the body is not a JSON object")
+	}
+	if _, named := fields["actor"]; named {
+		return refuse(http.StatusUnprocessableEntity, "the actor is the session")
+	}
+	if dst != nil {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(dst); err != nil {
+			return refuse(http.StatusUnprocessableEntity, "the body could not be read: "+err.Error())
+		}
+	}
+
+	project, err := s.projectHeader(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.observeProgressWrite(route, "refused")
+		s.mapStoreErr(w, err)
+		return Subject{}, ui.CockpitProject{}, false
+	}
+	return subjectFrom(r), project, true
 }
