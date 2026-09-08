@@ -135,8 +135,18 @@ func runDocTodo(cmd *cobra.Command, ref string, deps bool) error {
 	if err != nil {
 		return err
 	}
+	// The key the walk resolves shorthand `covers:` targets with is the
+	// target document's own, not this checkout's: a checkout whose
+	// .worklode/config.toml omits project_key used to fail every shorthand in
+	// the corpus at once, reporting every covered section as unplanned
+	// (WL-756). cfg.ProjectKey remains the fallback for a row that predates
+	// the API stamping one.
+	projectKey := target.ProjectKey
+	if projectKey == "" {
+		projectKey = cfg.ProjectKey
+	}
 	items, diag, err := designdoc.Todo(docs, designdoc.CorpusPath(target.Kind, target.Slug),
-		designdoc.TodoOptions{Deps: deps, Tasks: tasks, ProjectKey: cfg.ProjectKey})
+		designdoc.TodoOptions{Deps: deps, Tasks: tasks, ProjectKey: projectKey})
 	if err != nil {
 		return err
 	}

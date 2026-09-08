@@ -86,6 +86,14 @@ func Todo(docs []CorpusDoc, specPath string, opts TodoOptions) ([]TodoItem, Diag
 	if err != nil {
 		return nil, Diagnostics{}, err
 	}
+	// A covers target naming no document in the corpus files its claim under
+	// a key no section queries, so the sections it names read as unplanned.
+	// That is a resolution failure, not a planning gap — say so rather than
+	// let it pass as data (WL-756).
+	for _, u := range w.ix.UnresolvedTargets() {
+		w.diag.Notes = append(w.diag.Notes,
+			u+", which names no document in this corpus: the sections it claims read as unplanned")
+	}
 	if opts.Tasks == nil {
 		w.diag.Notes = append(w.diag.Notes,
 			"no task lookup: every plan's execution state reads as unknown, "+
