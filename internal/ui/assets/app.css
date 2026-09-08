@@ -2111,6 +2111,10 @@ nav.local a .cnt {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.prog-recon {
+  margin-left: auto;
+  white-space: nowrap;
+}
 .prog-footer {
   display: flex;
   align-items: center;
@@ -2170,6 +2174,11 @@ nav.local a .cnt {
 .prog-legend .n {
   font-variant-numeric: tabular-nums;
   color: var(--ink-3);
+}
+.prog-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .prog-row {
   display: grid;

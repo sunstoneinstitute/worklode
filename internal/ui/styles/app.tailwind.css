@@ -669,6 +669,9 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
  * percentage: §2.5 forbids one. */
 .prog-band{display:flex;align-items:center;gap:10px;padding:0 16px;overflow:hidden}
 .prog-band .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The stream's reconnect note (§5.2) sits at the band's right end, inside the
+ * height the band already holds, so a drop moves nothing. */
+.prog-recon{margin-left:auto;white-space:nowrap}
 
 /* The rally footer (§3.5) sits in the slot reserved for it at all times, so
  * confirming or discarding a rally moves nothing above it. Same box as the
@@ -687,6 +690,11 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .prog-legend li{display:flex;align-items:center;gap:8px;font-size:12.5px}
 .prog-legend .l{font-weight:600}
 .prog-legend .n{font-variant-numeric:tabular-nums;color:var(--ink-3)}
+
+/* The group list (§5.4 rule 3). It is one box so progress.js can tell whether
+ * the pointer is over it before moving a row between groups; the gap is the
+ * canvas's, so wrapping the groups changes nothing on a still page. */
+.prog-groups{display:flex;flex-direction:column;gap:16px}
 
 .prog-row{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) auto;
   gap:12px;align-items:start;padding:9px 0;border-top:1px solid var(--line);cursor:pointer}
