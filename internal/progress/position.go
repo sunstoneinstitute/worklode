@@ -28,6 +28,11 @@ type LeaseFact struct {
 type PRFact struct {
 	Number int
 	URL    string
+	// MergeQueue reports whether the PR's repo runs a merge queue on its
+	// base branch, sourced from stored branch rules (WL-SPEC-66 §6.3).
+	// Unknown reads as false — the merge button's fact, not the ladder's:
+	// Position decides the queued rung from Queued, not this field.
+	MergeQueue bool
 }
 
 // CIFact is the latest CI run for a PR's head SHA.
