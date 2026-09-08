@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -29,7 +30,7 @@ func TestClassify(t *testing.T) {
 		{"WL-SPEC-14#sec-2.1", targetDoc, ""},
 		{"WL-SPEC-14#sec-a_b", targetDoc, ""},
 		{"WL-PLAN-7", targetDoc, ""},
-		{"WL-MILE-2", targetUnshowable, "MILE"},
+		{"WL-MILE-2", targetMilestone, ""},
 		{"WL-DEL-3", targetUnshowable, "DEL"},
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
@@ -621,16 +622,35 @@ func TestDocShowForeignKeyUnresolvedJSON(t *testing.T) {
 	}
 }
 
-func TestShowMilestoneErrors(t *testing.T) {
-	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+// TestShowMilestoneDispatch covers the classify-and-dispatch path for a full
+// milestone id (029 §4, WL-536): `lode show WL-MILE-2` fetches through
+// Client.GetMilestone and renders it via cli.MilestoneRender, the same as
+// every other show arm.
+func TestShowMilestoneDispatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/milestones/WL-MILE-2" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"WL-MILE-2","project":"proj","title":"Publication",`+
+			`"position":2,"created_by":"ada","created_at":"2026-09-03T10:00:00Z",`+
+			`"updated_at":"2026-09-03T10:00:00Z",`+
+			`"progress":{"tasks_total":4,"tasks_closed":1}}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	t.Setenv("HOME", t.TempDir())
 
 	out, err := runLode(t, "show", "WL-MILE-2")
-	if err == nil {
-		t.Fatalf("lode show WL-MILE-2 succeeded\noutput: %s", out)
+	if err != nil {
+		t.Fatalf("lode show WL-MILE-2: %v\noutput: %s", err, out)
 	}
-	want := `WL-MILE-2 is a milestone id; milestones are not showable yet (spec 029 §4 defines them; the entities land with spec 029)`
-	if err.Error() != want {
-		t.Fatalf("err = %q; want %q", err.Error(), want)
+	for _, want := range []string{"WL-MILE-2", "Publication", "1/4"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -967,12 +987,73 @@ func TestShowErrorsSectionWithTask(t *testing.T) {
 	}
 }
 
-func TestShowMilestoneFlagErrors(t *testing.T) {
+// TestShowMilestoneFlagEquivalence covers --milestone <ordinal> and --kind
+// milestone <ordinal> building the same full id (<KEY>-MILE-<n>) the
+// positional path classifies directly, the same equivalence
+// TestShowSpecFlagEquivalence checks for --spec.
+func TestShowMilestoneFlagEquivalence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".worklode"), 0o755); err != nil {
+		t.Fatalf("mkdir repo config dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".worklode", "config.toml"),
+		[]byte("current_project = \"proj\"\nproject_key = \"WL\"\n"), 0o600); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+	t.Chdir(repo)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/milestones/WL-MILE-2" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"WL-MILE-2","project":"proj","title":"Publication","position":2}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	outFlag, err := runLode(t, "show", "--milestone", "2")
+	if err != nil {
+		t.Fatalf("lode show --milestone 2: %v\noutput: %s", err, outFlag)
+	}
+	if !strings.Contains(outFlag, "WL-MILE-2") || !strings.Contains(outFlag, "Publication") {
+		t.Fatalf("show --milestone 2 output = %q; want it to name the milestone", outFlag)
+	}
+
+	outPositional, err := runLode(t, "show", "WL-MILE-2")
+	if err != nil {
+		t.Fatalf("lode show WL-MILE-2: %v\noutput: %s", err, outPositional)
+	}
+	if outFlag != outPositional {
+		t.Fatalf("show --milestone 2 = %q; want it to match positional WL-MILE-2 = %q", outFlag, outPositional)
+	}
+
+	outKind, err := runLode(t, "show", "--kind", "milestone", "2")
+	if err != nil {
+		t.Fatalf("lode show --kind milestone 2: %v\noutput: %s", err, outKind)
+	}
+	if outKind != outFlag {
+		t.Fatalf("show --kind milestone 2 = %q; want it to match --milestone 2 = %q", outKind, outFlag)
+	}
+}
+
+// TestShowMilestoneFlagNoProjectKey covers --milestone <ordinal> with no
+// project key configured: unlike --spec/--adr, a milestone id has no
+// bare-number fallback form to fall back to, so this is refused outright
+// rather than silently reaching for one.
+func TestShowMilestoneFlagNoProjectKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(t.TempDir())
+
 	out, err := runLode(t, "show", "--milestone", "2")
 	if err == nil {
 		t.Fatalf("lode show --milestone 2 succeeded\noutput: %s", out)
 	}
-	want := "milestone 2 is not showable yet (spec 029 §4 defines them; the entities land with spec 029)"
+	want := "no project key configured; pass the full id (e.g. WL-MILE-2) positionally"
 	if err.Error() != want {
 		t.Fatalf("err = %q; want %q", err.Error(), want)
 	}

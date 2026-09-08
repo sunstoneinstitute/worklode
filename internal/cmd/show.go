@@ -34,8 +34,10 @@ const (
 	// path, a filename, a number form, a bare slug — dispatch to runDocShow,
 	// whose resolveDocRef owns the full grammar.
 	targetDoc
-	// targetUnshowable: a PLAN, MILE, or DEL id — a real entity kind with no
-	// show support yet (spec 029 §4).
+	// targetMilestone: a MILE id — dispatch to runMilestoneShow.
+	targetMilestone
+	// targetUnshowable: a DEL id — a real entity kind with no show support
+	// yet (spec 029 §4).
 	targetUnshowable
 	// targetUnknownType: a typed id whose <TYPE> segment names no known kind.
 	targetUnknownType
@@ -50,23 +52,18 @@ type showTarget struct {
 	Type string
 }
 
-// unshowableKindWords names the entity a MILE/DEL id refers to, singular, for
-// the "not showable yet" error. PLAN left this map when 029 §4 gave plans a
-// number: a plan is a document and `lode show` renders it like any other.
+// unshowableKindWords names the entity a DEL id refers to, singular, for the
+// "not showable yet" error. MILE left this map with the addition of
+// targetMilestone (WL-536); PLAN left it when 029 §4 gave plans a number: a
+// plan is a document and `lode show` renders it like any other.
 var unshowableKindWords = map[string]string{
-	"MILE": "milestone",
-	"DEL":  "deliverable",
+	"DEL": "deliverable",
 }
 
-const notYetAnEntity = "spec 029 §4 defines them; the entities land with spec 029"
-
 // unshowableReason is the parenthetical each "not showable yet" error ends
-// with, keyed by the singular kind word. A milestone does not exist yet; a
-// deliverable does (spec 029 §3), and saying otherwise would send someone
-// looking for a row that is already there — so its reason names the surfaces
-// that do read it.
+// with, keyed by the singular kind word. A deliverable exists as a row
+// (spec 029 §3); only the surfaces its reason names read it so far.
 var unshowableReason = map[string]string{
-	"milestone": notYetAnEntity,
 	"deliverable": "the entity exists; only the project's Deliverables page and " +
 		"GET /api/v1/projects/{id}/deliverables read it so far",
 }
@@ -85,7 +82,9 @@ func classify(arg string) showTarget {
 		switch typ {
 		case "SPEC", "ADR", "PLAN":
 			return showTarget{Kind: targetDoc}
-		case "MILE", "DEL":
+		case "MILE":
+			return showTarget{Kind: targetMilestone}
+		case "DEL":
 			return showTarget{Kind: targetUnshowable, Type: typ}
 		default:
 			return showTarget{Kind: targetUnknownType, Type: typ}
@@ -207,7 +206,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&specFlag, "spec", "", "show a spec by number (e.g. --spec 15)")
 	cmd.Flags().StringVar(&adrFlag, "adr", "", "show an ADR by number (e.g. --adr 7)")
 	cmd.Flags().StringVar(&planFlag, "plan", "", "show a plan by number (e.g. --plan 7)")
-	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2); not showable yet (spec 029 §4)")
+	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	completeProjectFlag(cmd, "project")
 	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
@@ -271,7 +270,9 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 		return runTaskShow(cmd, value, usage)
 	case "spec", "adr", "plan":
 		return runDocShowByOrdinal(cmd, kind, value, section, inline)
-	case "milestone", "deliverable":
+	case "milestone":
+		return runMilestoneShowByOrdinal(cmd, value)
+	case "deliverable":
 		return fmt.Errorf("%s %s is not showable yet (%s)", kind, value, unshowableReason[kind])
 	case "project":
 		if value == "" {
@@ -309,6 +310,45 @@ func runDocShowByOrdinal(cmd *cobra.Command, kind, value, section string, inline
 	return runDocShow(cmd, ref, section, typ, inline)
 }
 
+// runMilestoneShow fetches and renders one milestone by its full id (e.g.
+// WL-MILE-2), shared between the classify-and-dispatch path
+// (dispatchShowPositional) and the ordinal-flag path
+// (runMilestoneShowByOrdinal).
+func runMilestoneShow(cmd *cobra.Command, id string) error {
+	c, err := newAPIClient()
+	if err != nil {
+		return err
+	}
+	d, raw, err := c.GetMilestone(cmd.Context(), id)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.MilestoneRender(cmd.OutOrStdout(), d)
+	return nil
+}
+
+// runMilestoneShowByOrdinal resolves a --milestone flag's bare ordinal to a
+// full id the same way runDocShowByOrdinal resolves --spec/--adr: a flag can
+// only ever mean this repo's own project, so the id is built from the
+// configured project key. Unlike a document, a milestone id has no bare-
+// number fallback form to resolve through when the key is unknown — the id
+// is either built here or not at all — so an unconfigured key is refused
+// outright rather than silently taken as a doc-ref tier.
+func runMilestoneShowByOrdinal(cmd *cobra.Command, value string) error {
+	cfg, err := cli.LoadConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.ProjectKey == "" {
+		return errors.New("no project key configured; pass the full id (e.g. WL-MILE-2) positionally")
+	}
+	return runMilestoneShow(cmd, fmt.Sprintf("%s-MILE-%s", cfg.ProjectKey, value))
+}
+
 // dispatchShowPositional is the classify-and-dispatch path for a plain `lode
 // show <id>` (no kind flags): unchanged from the original show.go behavior,
 // plus the --section-applies-only-to-docs check the flag-routed path also
@@ -326,6 +366,8 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 		return runTaskShow(cmd, arg, usage)
 	case targetDoc:
 		return runDocShow(cmd, arg, section, "", inline)
+	case targetMilestone:
+		return runMilestoneShow(cmd, arg)
 	case targetUnshowable:
 		word := unshowableKindWords[t.Type]
 		return fmt.Errorf("%s is a %s id; %ss are not showable yet (%s)", arg, word, word, unshowableReason[word])
