@@ -92,6 +92,10 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/crew/remove": guarded(permWebWrite),
 	"GET /projects/{id}/work":         guarded(permWebRead),
 	"GET /projects/{id}/progress":     guarded(permWebRead),
+	// The Progress page's live update stream (§5.1): permWebRead like the
+	// page itself, not permEventStream — a frame carries nothing the page's
+	// own reader could not already see (§4.5).
+	"GET /projects/{id}/progress/events": guarded(permWebRead),
 	// The Progress page's writes (066 §7). permDocWrite for accepting a
 	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
 	// decides who may actually accept it stays inside the store (§4.2 rule 5).

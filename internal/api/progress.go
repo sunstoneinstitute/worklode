@@ -9,10 +9,14 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
+	"strconv"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/progress"
@@ -501,4 +505,235 @@ func (s *server) writeRallyConflict(ctx context.Context, w http.ResponseWriter, 
 		Error:  active.ID + " is already active; finish or abandon it first",
 		Active: active.ID,
 	})
+}
+
+// --- the live stream (WL-SPEC-66 §5.1) --------------------------------------
+
+// progressEvents handles GET /projects/{id}/progress/events: the project's
+// slice of the event log, followed live, so the Progress page redraws on
+// what changed rather than polling the whole derivation. Same poll loop as
+// streamEvents (cursor, heartbeats, Last-Event-ID, flush, context
+// cancellation) — see that handler's comment for why it is a poller and not
+// a listener. Where this route differs: every polled event is resolved
+// through progress.Resolve and looked up in one batched store.ProgressRefs
+// call, and only the refs scoped to this route's project become frames — a
+// project with nothing this page shows still advances its cursor and sends
+// nothing.
+//
+// permWebRead, not permEventStream: unlike the admin-only log follow, this
+// route is open to every cockpit reader, which §4.5 allows because a frame
+// carries nothing about a task, plan or spec that reader could not already
+// read off the page itself.
+func (s *server) progressEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	project, err := s.st.GetProject(ctx, r.PathValue("id"))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	q := r.URL.Query()
+	cursor := int64(-1) // -1: no cursor given, start at the head
+	if v := q.Get("after"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			writeErr(w, http.StatusUnprocessableEntity, "invalid after: must be a non-negative integer event id")
+			return
+		}
+		cursor = n
+	}
+	if v := r.Header.Get("Last-Event-ID"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			writeErr(w, http.StatusUnprocessableEntity, "invalid Last-Event-ID: must be a non-negative integer event id")
+			return
+		}
+		cursor = n
+	}
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+
+	rc := http.NewResponseController(w)
+	if err := rc.Flush(); err != nil {
+		for _, k := range []string{"Content-Type", "Cache-Control", "X-Accel-Buffering"} {
+			h.Del(k)
+		}
+		s.log.Error("progress event stream: response writer cannot flush", "err", err)
+		writeErr(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+
+	s.observeProgressStreamOpen()
+	defer s.observeProgressStreamClose()
+
+	ctx, endStream := context.WithCancel(ctx)
+	defer endStream()
+	defer context.AfterFunc(s.bgCtx, endStream)()
+
+	if cursor < 0 {
+		var err error
+		if cursor, err = s.streamHead(ctx, ""); err != nil {
+			s.streamEnd(ctx, "find progress stream head", err)
+			return
+		}
+	}
+
+	ticker := time.NewTicker(streamPoll())
+	defer ticker.Stop()
+	lastWrite := time.Now()
+
+	for {
+		events, err := s.st.ListEvents(ctx, store.EventFilter{After: cursor, Limit: streamPageSize})
+		if err != nil {
+			s.streamEnd(ctx, "list progress events", err)
+			return
+		}
+		var frames []progressFrame
+		if len(events) > 0 {
+			frames, err = s.progressFrames(ctx, project.ID, events)
+			if err != nil {
+				s.streamEnd(ctx, "resolve progress refs", err)
+				return
+			}
+		}
+		switch {
+		case len(frames) > 0:
+			for _, f := range frames {
+				if err := writeProgressFrame(w, f); err != nil {
+					if errors.Is(err, errEncodeEvent) {
+						s.log.Error("progress event stream: encoding a frame failed", "event", f.id, "err", err)
+					}
+					return
+				}
+			}
+			if err := rc.Flush(); err != nil {
+				return
+			}
+			s.observeProgressStreamFrames(len(frames))
+			lastWrite = time.Now()
+		case time.Since(lastWrite) >= streamHeartbeat():
+			// An SSE comment, same as streamEvents': ignored by every client,
+			// but it keeps proxies and idle timeouts from dropping a stream
+			// that is live but has nothing to say.
+			if _, err := w.Write([]byte(":\n\n")); err != nil {
+				return
+			}
+			if err := rc.Flush(); err != nil {
+				return
+			}
+			lastWrite = time.Now()
+		}
+		for _, e := range events {
+			cursor = e.ID
+		}
+
+		if len(events) == streamPageSize {
+			continue // behind: keep draining without waiting a tick
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// progressFrame pairs one derived model.ProgressEventFrame with the id of
+// the backbone event that produced it — the id: line, and what an encoding
+// failure is attributed to.
+type progressFrame struct {
+	id    int64
+	frame model.ProgressEventFrame
+}
+
+// progressOrigin is the one fact about an event that progress.Resolve throws
+// away and a frame still needs: which event, and when, produced the touch a
+// ProgressRef came back for.
+type progressOrigin struct {
+	eventID int64
+	typ     string
+	at      time.Time
+}
+
+// progressFrames resolves one poll's events into the frames this project's
+// stream sends. Every event is reduced to a touch (progress.Resolve), every
+// touch's task or document id is batched into one store.ProgressRefs call —
+// never one call per event — and a ref outside projectID is dropped (§5.1).
+//
+// A touch with a kind but no id — a deploy event, whose Touch cannot carry
+// the whole set of tasks it transitioned — has nothing to look up and
+// contributes no frame; the same is true of an event whose family this page
+// does not model at all (progress.Resolve's zero Touch).
+func (s *server) progressFrames(ctx context.Context, projectID string, events []store.Event) ([]progressFrame, error) {
+	var taskIDs []string
+	var docIDs []int64
+	taskOrigin := map[string]progressOrigin{}
+	docOrigin := map[int64]progressOrigin{}
+	for _, e := range events {
+		t := progress.Resolve(e.Type, e.Payload)
+		o := progressOrigin{eventID: e.ID, typ: e.Type, at: e.ReceivedAt}
+		switch {
+		case t.Task != "":
+			if _, seen := taskOrigin[t.Task]; !seen {
+				taskIDs = append(taskIDs, t.Task)
+			}
+			taskOrigin[t.Task] = o
+		case t.Doc != 0:
+			if _, seen := docOrigin[t.Doc]; !seen {
+				docIDs = append(docIDs, t.Doc)
+			}
+			docOrigin[t.Doc] = o
+		}
+	}
+	if len(taskIDs) == 0 && len(docIDs) == 0 {
+		return nil, nil
+	}
+
+	refs, err := s.st.ProgressRefs(ctx, taskIDs, docIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []progressFrame
+	for _, ref := range refs {
+		if ref.Project != projectID {
+			continue
+		}
+		// The id ProgressRefs was asked about is a task id for a task ref;
+		// for a doc ref it is the plan's id, or — a bare spec, which
+		// resolves to itself — the sole entry of Specs.
+		var o progressOrigin
+		switch {
+		case ref.Task != "":
+			o = taskOrigin[ref.Task]
+		case ref.Plan != 0:
+			o = docOrigin[ref.Plan]
+		case len(ref.Specs) == 1:
+			o = docOrigin[ref.Specs[0]]
+		}
+		out = append(out, progressFrame{
+			id: o.eventID,
+			frame: model.ProgressEventFrame{
+				Event: o.typ, Task: ref.Task, State: ref.State,
+				Plan: ref.Plan, Specs: ref.Specs, Rally: ref.Rally, At: o.at,
+			},
+		})
+	}
+	return out, nil
+}
+
+// writeProgressFrame writes one SSE message for a resolved touch, mirroring
+// writeEventFrame. event: is always the constant "progress" here — unlike
+// the raw log follow, nothing about this frame's shape is attacker-supplied,
+// so there is no line-break to strip.
+func writeProgressFrame(w io.Writer, f progressFrame) error {
+	data, err := json.Marshal(f.frame)
+	if err != nil {
+		return fmt.Errorf("%w %d: %w", errEncodeEvent, f.id, err)
+	}
+	_, err = fmt.Fprintf(w, "id: %d\nevent: progress\ndata: %s\n\n", f.id, data)
+	return err
 }
