@@ -2,6 +2,7 @@ package model
 
 import (
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,6 +19,20 @@ var ApprovalEntityKinds = []string{"doc", "deliverable", "task", "pr"}
 // document in SQL.
 func DocEntityID(docID int64) string {
 	return "doc:" + strconv.FormatInt(docID, 10)
+}
+
+// DocIDFromEntityID is DocEntityID's inverse: the document id an approvals
+// entity_id names, and false for an id under any other entity kind.
+func DocIDFromEntityID(entityID string) (int64, bool) {
+	rest, ok := strings.CutPrefix(entityID, "doc:")
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return id, true
 }
 
 // Approval is one row of the approvals table (spec 029 §7.1): the human

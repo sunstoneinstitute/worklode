@@ -174,6 +174,25 @@ func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*mode
 	return doc, res, nil
 }
 
+// ClearPatchedSections drops 025 §7.3's patched mark from every section of
+// doc last revised at or before version — the marks a document carries once
+// its reviewers have approved that version again. A later section rebuild
+// carries the flag forward (rebuildSectionsFrom), so clearing the rows is
+// what actually ends the mark; a §7.2 revision landing on top of the patched
+// text clears it the same way, one version later.
+//
+// Sections revised after version keep their mark: those are amendments the
+// approval being recorded never saw.
+func ClearPatchedSections(tx *sql.Tx, docID int64, version int) error {
+	if _, err := tx.Exec(
+		`UPDATE doc_sections SET patched = false
+		  WHERE doc_id = $1 AND patched AND last_revised_in <= $2`,
+		docID, version); err != nil {
+		return fmt.Errorf("clear patched sections of doc %d: %w", docID, err)
+	}
+	return nil
+}
+
 // checkReferrers is §8.2's question asked of every section this patch
 // changes: is there open work pointing at it. A referrer that is left is a
 // refusal — the amendment would move text someone is already building
