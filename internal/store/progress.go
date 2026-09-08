@@ -420,7 +420,7 @@ func (s *Store) progressPositions(ctx context.Context, projectID string, tasks [
 		if pr.TaskID == nil || open[*pr.TaskID] == nil || prs[*pr.TaskID] != nil {
 			continue
 		}
-		prs[*pr.TaskID] = &progress.PRFact{Number: int(pr.Number), URL: pr.URL}
+		prs[*pr.TaskID] = &progress.PRFact{Repo: pr.Repo, Number: pr.Number, URL: pr.URL}
 		queued[*pr.TaskID] = pr.QueuedAt != nil
 		repoSet[pr.Repo] = true
 		key := RepoSHA{Repo: pr.Repo, SHA: pr.HeadSHA}
@@ -457,6 +457,7 @@ func (s *Store) progressPositions(ctx context.Context, projectID string, tasks [
 					f.CI.Conclusion = *latest.Conclusion
 				}
 			}
+			pt.task.Merge = progress.MergeAct(f)
 		}
 		pt.task.Position = progress.Position(f)
 	}

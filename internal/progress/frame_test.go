@@ -139,6 +139,8 @@ func TestResolve(t *testing.T) {
 			Touch{Task: "WL-41", Kind: "pr"}, "hooks/github.go applyPullRequest"},
 		{"pull_request.closed", map[string]any{"pull_request": map[string]any{"number": 5}, "task": "WL-42"},
 			Touch{Task: "WL-42", Kind: "pr"}, "hooks/github.go applyPullRequest"},
+		{"merge_group.checks_requested", map[string]any{"merge_group": map[string]any{"head_ref": "refs/heads/gh-readonly-queue/main/pr-7-abc"}, "task": "WL-44"},
+			Touch{Task: "WL-44", Kind: "pr"}, "hooks/github.go applyMergeGroup"},
 		{"workflow_run.completed", map[string]any{"workflow_run": map[string]any{"head_sha": "abc"}, "task": "WL-43"},
 			Touch{Task: "WL-43", Kind: "ci"}, "hooks/github.go applyWorkflowRun"},
 		// The three deploy events transition a set of tasks, so their payload

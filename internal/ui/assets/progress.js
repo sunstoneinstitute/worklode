@@ -64,8 +64,19 @@
   var pinned = false;
   var pinnedEl = null; // the element a pinned tooltip came from, re-found after a swap
 
-  function show(el) {
+  // show fills the tooltip from the element's data-tip. A pinned one also
+  // takes the element's act, if it has one: §3.6's merge button is rendered
+  // beside the task cell and hidden, and a copy of it lives in the tooltip
+  // for as long as the pin does. Only a pinned tooltip takes the pointer, so
+  // a button in a hovering one could never be pressed anyway.
+  function show(el, withAct) {
     tip.textContent = el.getAttribute("data-tip");
+    if (withAct) {
+      var slot = el.nextElementSibling;
+      if (slot && slot.classList.contains("tip-act") && slot.firstElementChild) {
+        tip.appendChild(slot.firstElementChild.cloneNode(true));
+      }
+    }
     tip.hidden = false;
     var r = el.getBoundingClientRect();
     var box = tip.getBoundingClientRect();
@@ -77,7 +88,7 @@
   }
 
   function pin(el) {
-    show(el);
+    show(el, true);
     pinned = true;
     pinnedEl = el;
     tip.setAttribute("data-pinned", "");

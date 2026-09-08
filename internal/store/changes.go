@@ -390,6 +390,23 @@ func (s *Store) OpenPRsForProject(ctx context.Context, projectID string) ([]Pull
 	return out, nil
 }
 
+// PRTaskID returns the task a PR is correlated to, "" when the row is
+// unknown or carries none. Tx-scoped: a webhook apply uses it to name the
+// task on the event it is applying.
+func PRTaskID(tx *sql.Tx, repo string, number int64) (string, error) {
+	var taskID sql.NullString
+	err := tx.QueryRow(
+		`SELECT task_id FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number,
+	).Scan(&taskID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("task of PR %s#%d: %w", repo, number, err)
+	}
+	return taskID.String, nil
+}
+
 // SetPRQueued sets or clears pull_requests.queued_at (WL-SPEC-66 §6.1): a
 // non-nil at marks the PR as entering the merge queue, nil marks it as
 // having left (merged, or removed from the queue). Unlike UpsertPR this
