@@ -147,16 +147,30 @@ func Hyperlinks(w io.Writer) bool {
 	if _, isTTY := terminalFd(w); !isTTY || !colorEnabled() {
 		return false
 	}
+	return TerminalHyperlinks()
+}
+
+// TerminalHyperlinks reports whether the terminal this process is attached to
+// renders OSC 8 hyperlinks, judged from the environment alone. It is the half
+// of Hyperlinks that does not ask where the output is going, for a caller
+// whose stdout is a pipe by construction and so has no terminal to query —
+// `lode-statusline`, whose stdout is read by the harness that draws the line.
+//
+// Unknown means no: a missed link costs nothing, a printed escape sequence
+// costs the line.
+func TerminalHyperlinks() bool {
 	// A multiplexer below the terminal decides what reaches it, and tmux
 	// before 3.4 drops the escape's text with it.
 	if os.Getenv("TMUX") != "" || strings.HasPrefix(os.Getenv("TERM"), "screen") {
 		return false
 	}
-	if os.Getenv("KITTY_WINDOW_ID") != "" || os.Getenv("WT_SESSION") != "" {
-		return true
+	for _, key := range []string{"KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION"} {
+		if os.Getenv(key) != "" {
+			return true
+		}
 	}
 	switch os.Getenv("TERM_PROGRAM") {
-	case "iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper", "rio":
+	case "iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper", "rio", "tabby":
 		return true
 	}
 	// GNOME Terminal and every other VTE terminal, from 0.50.
