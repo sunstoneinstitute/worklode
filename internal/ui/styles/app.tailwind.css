@@ -654,6 +654,10 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .mb-collapsed{margin-top:4px}
 .mb-collapsed summary{cursor:pointer;font-size:12.5px}
 .mb-collapsed p{margin:6px 0 0}
+
+/* timeline "see more": the full text of a summary too long for its cell. */
+.tl-detail summary{cursor:pointer;font-size:12px;color:var(--muted)}
+.tl-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0;max-height:60vh;overflow:auto;font-size:12px}
 .morningbrief form{margin-top:12px}
 
 /* ---------- Progress page (WL-SPEC-66 §2) ---------- */
