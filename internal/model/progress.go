@@ -44,12 +44,16 @@ type ProgressSpec struct {
 	Updated time.Time `json:"updated_at"`
 	// Status and Owner are the document's own, not derived: §3.2's Accept
 	// button is offered on a draft spec and enabled only for its owner.
-	Status   string            `json:"status"`
-	Owner    string            `json:"owner,omitempty"`
-	Group    string            `json:"group"`
-	Next     ProgressAct       `json:"next"`
-	Sections []ProgressSection `json:"sections"`
-	Plans    []ProgressPlan    `json:"plans"`
+	Status string `json:"status"`
+	Owner  string `json:"owner,omitempty"`
+	// PlanningTask is the open design task about this spec (025 §15.4's
+	// planning task), when one exists. The row shows it as a link instead of
+	// §3.4's Plan button, which mints exactly that task.
+	PlanningTask string            `json:"planning_task,omitempty"`
+	Group        string            `json:"group"`
+	Next         ProgressAct       `json:"next"`
+	Sections     []ProgressSection `json:"sections"`
+	Plans        []ProgressPlan    `json:"plans"`
 }
 
 // ProgressAct is §1.3's next act: Kind names the state that decides it and
@@ -107,4 +111,20 @@ type ProgressAcceptResponse struct {
 	Doc    int64  `json:"doc"`
 	Status string `json:"status"`
 	Minted int    `json:"minted"`
+}
+
+// ProgressPlanInput is the body POST /projects/{id}/progress/plan takes
+// (WL-SPEC-66 §3.4): the spec to mint a planning task for. Like every other
+// act on this page, the acting actor is the session's (§4.2 rule 6).
+type ProgressPlanInput struct {
+	Doc int64 `json:"doc"`
+}
+
+// ProgressPlanResponse is the reply to POST /projects/{id}/progress/plan: the
+// planning task about the spec. Existing is true when an open one was already
+// there and nothing was minted — repeating the request returns the same task
+// rather than a second one (§4.2 rule 7).
+type ProgressPlanResponse struct {
+	Task     string `json:"task"`
+	Existing bool   `json:"existing"`
 }

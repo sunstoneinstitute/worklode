@@ -96,6 +96,9 @@ var routeGuards = map[string]routeGuard{
 	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
 	// decides who may actually accept it stays inside the store (§4.2 rule 5).
 	"POST /projects/{id}/progress/accept": guarded(permDocWrite),
+	// permTaskWrite for minting the planning task (§3.4): the act creates a
+	// task, whatever document it is about.
+	"POST /projects/{id}/progress/plan":   guarded(permTaskWrite),
 	"GET /projects/{id}/milestones":       guarded(permWebRead),
 	"GET /projects/{id}/deliverables":     guarded(permWebRead),
 	"GET /projects/{id}/deliverables/new": guarded(permWebWrite),

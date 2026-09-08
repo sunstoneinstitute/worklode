@@ -8,6 +8,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/progress"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 	"github.com/sunstoneinstitute/worklode/internal/ui"
+	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
 // progressPage handles GET /projects/{id}/progress, runBoardPage-shaped: the
@@ -116,7 +118,7 @@ func (s *server) progressAccept(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := s.st.GetDoc(ctx, body.Doc)
 	if err != nil {
-		s.observeProgressWrite("accept", progressAcceptOutcome(err))
+		s.observeProgressWrite("accept", progressWriteOutcome(err))
 		s.mapStoreErr(w, err)
 		return
 	}
@@ -141,7 +143,7 @@ func (s *server) progressAccept(w http.ResponseWriter, r *http.Request) {
 		s.observeProgressWrite("accept", "conflict")
 		writeErr(w, http.StatusConflict, err.Error())
 	case err != nil:
-		s.observeProgressWrite("accept", progressAcceptOutcome(err))
+		s.observeProgressWrite("accept", progressWriteOutcome(err))
 		s.mapStoreErr(w, err)
 	case !inserted:
 		// Someone else accepted this document at this version while the
@@ -159,12 +161,125 @@ func (s *server) progressAccept(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// progressAcceptOutcome bounds a store error to one of the write metric's
+// progressWriteOutcome bounds a store error to one of the write metric's
 // outcomes: "refused" is the act declined — an unknown document, an actor
-// who is not the owner — and "error" is a fault.
-func progressAcceptOutcome(err error) string {
+// who is not the owner — and "error" is a fault. Every write on this page
+// classifies its store errors through this one function.
+func progressWriteOutcome(err error) string {
 	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrForbidden) {
 		return "refused"
 	}
 	return "error"
+}
+
+// progressPlan handles POST /projects/{id}/progress/plan (§3.4): mint the
+// planning task for a spec, the same task 025 §15.4 mints when the spec is
+// accepted. Title and guard come from internal/watcher, so a task minted
+// here and one minted on acceptance are the same thing.
+//
+// The guard runs before anything else: an open design task about the spec is
+// returned as the answer, with existing true, so a second click on a stale
+// page mints nothing (§4.2 rule 7). Only then does the route check what the
+// button is offered on — an unplanned section — and refuse a spec that has
+// none with a 409.
+func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
+	var body model.ProgressPlanInput
+	sub, project, ok := s.beginJSONPost(w, r, "plan", &body)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+
+	doc, err := s.st.GetDoc(ctx, body.Doc)
+	if err != nil {
+		s.observeProgressWrite("plan", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	// A document of another project, or one that is not a spec, is not found
+	// on this route: the planning task is about a spec of this project and
+	// nothing else.
+	if doc.Project != project.ID || doc.Kind != "spec" {
+		s.observeProgressWrite("plan", "refused")
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	open, err := s.st.OpenTaskForDoc(ctx, doc.ID, "design")
+	if err != nil {
+		s.observeProgressWrite("plan", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	if open != "" {
+		s.observeProgressWrite("plan", "ok")
+		writeJSON(w, http.StatusOK, model.ProgressPlanResponse{Task: open, Existing: true})
+		return
+	}
+
+	unplanned, err := s.specHasUnplannedSection(ctx, project.ID, doc.ID)
+	if err != nil {
+		s.observeProgressWrite("plan", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	if !unplanned {
+		s.observeProgressWrite("plan", "conflict")
+		writeErr(w, http.StatusConflict, fmt.Sprintf("doc %d has no unplanned section", doc.ID))
+		return
+	}
+
+	var minted string
+	iri := store.DocIRI(*doc)
+	err = s.recordEvent(ctx, "web", "task.created",
+		map[string]any{"doc": iri, "kind": "design", "route": "progress/plan"},
+		func(tx *sql.Tx, eventID int64) error {
+			t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
+				ProjectID: doc.Project,
+				Title:     watcher.PlanningTitle(doc.Title),
+				Body:      watcher.PlanningBody(iri, doc.Version, eventID),
+				Kind:      "design",
+				Priority:  "medium",
+				AboutDoc:  doc.ID,
+				CreatedBy: sub.ActorID,
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			minted = t.ID
+			// The id is allocated inside this transaction, after the payload
+			// was marshalled, so the event names its task from here (025 §15.2).
+			return store.AttributeEventToTask(tx, eventID, t.ID)
+		})
+	if err != nil {
+		s.observeProgressWrite("plan", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeProgressWrite("plan", "ok")
+	writeJSON(w, http.StatusOK, model.ProgressPlanResponse{Task: minted})
+}
+
+// specHasUnplannedSection reports whether the spec still has a section no
+// plan covers (§1.2). It reads the page's own derivation rather than a query
+// of its own, so the route can never refuse an act the page offered, or offer
+// one the route refuses.
+func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, doc int64) (bool, error) {
+	in, err := s.st.ProjectProgress(ctx, projectID)
+	if err != nil {
+		return false, err
+	}
+	for _, g := range progress.Derive(in).Groups {
+		for _, spec := range g.Specs {
+			if spec.Doc != doc {
+				continue
+			}
+			for _, sec := range spec.Sections {
+				if sec.State == "unplanned" {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
 }

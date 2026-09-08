@@ -46,6 +46,9 @@ func (s *Store) ProjectProgress(ctx context.Context, projectID string) (progress
 	if err := s.progressSections(ctx, projectID, specs); err != nil {
 		return progress.Input{}, err
 	}
+	if err := s.progressPlanningTasks(ctx, projectID, specs); err != nil {
+		return progress.Input{}, err
+	}
 	if err := s.progressEdges(ctx, projectID, plans); err != nil {
 		return progress.Input{}, err
 	}
@@ -144,6 +147,40 @@ SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("progress sections of %s: %w", projectID, err)
+	}
+	return nil
+}
+
+// progressPlanningTasks attaches each spec's open planning task, one query
+// for the project rather than OpenTaskForDoc per spec. Same rule as
+// OpenTaskForDoc (kind design, about_doc the spec, not closed, oldest first),
+// so the link the page draws names the task POST .../progress/plan would
+// return (066 §3.4).
+func (s *Store) progressPlanningTasks(ctx context.Context, projectID string, specs map[int64]*progress.Spec) error {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT t.about_doc, t.id
+  FROM tasks t
+  JOIN docs d ON d.id = t.about_doc
+ WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL
+   AND t.kind = 'design' AND t.deleted_at IS NULL AND NOT `+taskClosed("t")+`
+ ORDER BY t.created_at, t.id`, projectID)
+	if err != nil {
+		return fmt.Errorf("progress planning tasks of %s: %w", projectID, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var docID int64
+		var taskID string
+		if err := rows.Scan(&docID, &taskID); err != nil {
+			return fmt.Errorf("scan progress planning task: %w", err)
+		}
+		if spec := specs[docID]; spec != nil && spec.PlanningTask == "" {
+			spec.PlanningTask = taskID
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("progress planning tasks of %s: %w", projectID, err)
 	}
 	return nil
 }

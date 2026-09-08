@@ -92,8 +92,8 @@ func evaluateAccepted(in Input) []Action {
 	return []Action{{
 		Rule:     rulePlanOnAccept,
 		TaskKind: "design",
-		Title:    "Plan: decompose " + in.DocTitle + " into plans",
-		Body:     planBody(in),
+		Title:    PlanningTitle(in.DocTitle),
+		Body:     PlanningBody(in.DocIRI, in.Version, in.EventID),
 	}}
 }
 
@@ -107,7 +107,19 @@ separate, deliberate act — %s — which this task does not perform.`,
 		in.DocIRI, in.Version, in.EventID, "`lode doc accept`")
 }
 
-func planBody(in Input) string {
+// PlanningTitle is the title of the planning task 025 §15.4 mints when a
+// spec is accepted. It is exported because the Progress page mints the same
+// task from a button (066 §3.4): one open planning task per spec, whichever
+// act asked for it, so the title has to come from one place.
+func PlanningTitle(docTitle string) string {
+	return "Plan: decompose " + docTitle + " into plans"
+}
+
+// PlanningBody is that task's body. eventID is the event the mint is
+// informed by — the acceptance for the rule above, the mint's own
+// task.created event for the Progress page's button, which has no earlier
+// event to point at.
+func PlanningBody(docIRI string, version int, eventID int64) string {
 	return fmt.Sprintf(`%s (version %d) was accepted.
 
 Decide how to decompose this spec into plans, and write them.
@@ -116,5 +128,5 @@ prov:wasInformedBy wlid:event/%d
 
 Claim this task (%s) before writing anything, so this session's
 tokens bill to it instead of going unattributed (025 §15.6).`,
-		in.DocIRI, in.Version, in.EventID, "`lode task claim <this task's id>`")
+		docIRI, version, eventID, "`lode task claim <this task's id>`")
 }
