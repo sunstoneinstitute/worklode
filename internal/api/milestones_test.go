@@ -1,12 +1,16 @@
 package api_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // milestonePayload is the shape the milestones plan pins on
@@ -288,5 +292,98 @@ func TestMilestonesPage(t *testing.T) {
 
 	if rr := doReq(t, h, "GET", "/projects/nosuch/milestones", "", nil); rr.Code != http.StatusNotFound {
 		t.Errorf("unknown project status = %d, want 404", rr.Code)
+	}
+}
+
+// TestMilestoneReferencesOnPage covers the References section and its add
+// form (029 §5): the empty state, a cross-project reference rendering with
+// the reported state of the deliverable it points at, a good submit writing
+// the edge through the "web" surface and 303ing back, and an unknown id
+// coming back as the page with the message and what was typed.
+func TestMilestoneReferencesOnPage(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "cow")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+		model.CreateMilestoneInput{Title: "Publication"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create milestone status = %d; body %s", rr.Code, rr.Body.String())
+	}
+	milestoneID := decodeMap(t, rr)["id"].(string)
+
+	// The referenced deliverable lives in another project, which is what
+	// entity_edges exist for, and carries a reported state so the row has
+	// one to show.
+	const artifact = "bigquery://sunstone-prod/cow/casualties"
+	rr = doReq(t, h, "POST", "/api/v1/projects/cow/deliverables", token,
+		model.CreateDeliverableInput{Name: "Casualty datapackage", Artifact: artifact})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create deliverable status = %d; body %s", rr.Code, rr.Body.String())
+	}
+	deliverableID := decodeMap(t, rr)["id"].(string)
+	seedEvent(t, st, "cow-published", func(tx *sql.Tx, eventID int64) error {
+		_, err := store.InsertArtifactEvidence(tx, eventID, model.ArtifactEvidence{
+			EntityKind: "deliverable", EntityID: deliverableID, Artifact: artifact,
+			Source: "catalog", State: "published", Provenance: "observed",
+			OccurredAt: time.Now().UTC().Truncate(time.Second),
+		})
+		return err
+	})
+
+	main := mainContent(t, doReq(t, h, "GET", "/projects/proj/milestones", "", nil).Body.String())
+	bodyContains(t, main, "No deliverable references.")
+
+	action := "/projects/proj/milestones/" + milestoneID + "/references"
+	rr = doForm(t, h, action, url.Values{"deliverable": {"  " + deliverableID + "  "}}, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("add status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != "/projects/proj/milestones" {
+		t.Fatalf("Location = %q, want /projects/proj/milestones", loc)
+	}
+
+	page := doReq(t, h, "GET", "/projects/proj/milestones", "", nil)
+	if page.Code != http.StatusOK {
+		t.Fatalf("page status = %d, want 200", page.Code)
+	}
+	main = mainContent(t, page.Body.String())
+	if strings.Contains(main, "No deliverable references.") {
+		t.Error("the References section still renders its empty state")
+	}
+	// The id, the name, the reported state, and the link into the origin
+	// project — the cross-project origin is what the id and the link make
+	// visible.
+	bodyContains(t, main, deliverableID, "Casualty datapackage", "Published",
+		`href="/projects/cow/deliverables"`)
+
+	events := storeEventsOfType(t, st, "reference.created", 1)
+	if len(events) != 1 {
+		t.Fatalf("reference.created events = %d, want 1", len(events))
+	}
+	if events[0].Source != "web" {
+		t.Errorf("event source = %q, want web", events[0].Source)
+	}
+
+	// An unknown id comes back as the page, at 422, with the message and the
+	// id still in the field it was typed into.
+	rr = doForm(t, h, action, url.Values{"deliverable": {"COW-DEL-404"}}, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown id status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	main = mainContent(t, rr.Body.String())
+	bodyContains(t, main, "No deliverable with that id.", `value="COW-DEL-404"`)
+
+	// A second add of the same edge is refused as a duplicate, not a 500.
+	rr = doForm(t, h, action, url.Values{"deliverable": {deliverableID}}, nil)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("duplicate status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	bodyContains(t, mainContent(t, rr.Body.String()), "already references that deliverable")
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_web_form_submissions_total{form="milestone_reference",outcome="created"} 1`) {
+		t.Errorf("metrics missing the milestone_reference form counter:\n%s", metrics)
 	}
 }

@@ -153,3 +153,9 @@ configMapGenerator:
       - migrations/0069_rally_kind.down.sql
       - migrations/0070_label_declarations.up.sql
       - migrations/0070_label_declarations.down.sql
+      - migrations/0071_entity_edges.up.sql
+      - migrations/0071_entity_edges.down.sql
+      - migrations/0072_one_draft_rally.up.sql
+      - migrations/0072_one_draft_rally.down.sql
+      - migrations/0073_merge_queue_facts.up.sql
+      - migrations/0073_merge_queue_facts.down.sql

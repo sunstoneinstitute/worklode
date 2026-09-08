@@ -154,6 +154,15 @@ func (c *Client) UpdateDocBody(ctx context.Context, id int64, body string) (mode
 	return c.docWrite(ctx, http.MethodPut, docPath(id, "/body"), model.UpdateDocBodyInput{Body: body})
 }
 
+// PatchDoc calls POST /api/v1/docs/{id}/patch: 025 §8.4's in-place amendment
+// of an accepted spec or ADR. The §8.3 rules that refuse one are the
+// server's, and this client re-checks none of them — a second copy of the
+// gate here would be a copy that can drift — so a refusal arrives as the
+// message the server wrote.
+func (c *Client) PatchDoc(ctx context.Context, id int64, in model.PatchDocInput) (model.DocPatchResponse, []byte, error) {
+	return doJSON[model.DocPatchResponse](ctx, c, http.MethodPost, docPath(id, "/patch"), in, "doc patch")
+}
+
 // ReplaceDocEdges calls PUT /api/v1/docs/{id}/edges: re-resolve the document's
 // frontmatter references against the documents that exist now. It is the
 // corpus import's second pass — the first cannot resolve a reference to a
@@ -535,7 +544,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	}
 	if d.Body != "" {
 		fmt.Fprintln(w)
-		Markdown(w, InlineDocNotes(d.Body, d.Notes))
+		Markdown(w, InlineDocNotes(d.Body, d.Notes, d.Sections))
 	}
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
@@ -575,20 +584,36 @@ func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
 		strings.Join(strings.Fields(n.Body), " "))
 }
 
+// docPatchedMarker is what a section amended in place since it was last
+// approved renders as (025 §7.3): one blockquoted line above the section's
+// notes, so the reader sees which paragraph has not passed the gate.
+const docPatchedMarker = "> **patched** — approved text, amended in place since (025 §7.3)."
+
 // InlineDocNotes returns body with each note folded in under the section it is
-// anchored to, as a blockquoted one-liner (025 §8.5). Notes anchored outside
-// body — the common case when body is one section's subtree — are left out
-// rather than collected somewhere else: a note belongs where it was left.
+// anchored to, as a blockquoted one-liner (025 §8.5), and a patched marker
+// above them on every section sections says carries one (025 §7.3). Notes and
+// marks anchored outside body — the common case when body is one section's
+// subtree — are left out rather than collected somewhere else: a note belongs
+// where it was left.
 //
 // Body is returned untouched when there is nothing to fold or when it does not
 // parse, so a render never degrades because of a note.
-func InlineDocNotes(body string, notes []model.DocNote) string {
-	if len(notes) == 0 || body == "" {
+func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSection) string {
+	if body == "" {
 		return body
 	}
 	byAnchor := make(map[string][]model.DocNote, len(notes))
 	for _, n := range notes {
 		byAnchor[n.Anchor] = append(byAnchor[n.Anchor], n)
+	}
+	patched := make(map[string]bool)
+	for _, sec := range sections {
+		if sec.Patched {
+			patched[sec.Anchor] = true
+		}
+	}
+	if len(byAnchor) == 0 && len(patched) == 0 {
+		return body
 	}
 	doc, err := designdoc.Parse([]byte(body))
 	if err != nil {
@@ -597,11 +622,14 @@ func InlineDocNotes(body string, notes []model.DocNote) string {
 	var folded bool
 	for _, sec := range doc.Sections {
 		secNotes := byAnchor[sec.Anchor]
-		if len(secNotes) == 0 {
+		if len(secNotes) == 0 && !patched[sec.Anchor] {
 			continue
 		}
 		var b strings.Builder
 		b.WriteString(strings.TrimRight(sec.Body, "\n"))
+		if patched[sec.Anchor] {
+			b.WriteString("\n\n" + docPatchedMarker)
+		}
 		for _, n := range secNotes {
 			b.WriteString("\n\n> " + DocNoteLine(n))
 		}
@@ -630,4 +658,36 @@ func docEdgeTarget(e model.DocEdge) string {
 		return name + "#" + e.ToAnchor
 	}
 	return name
+}
+
+// DocPatchRender confirms one in-place amendment (025 §8.4): what it changed
+// and how it was classified. A substantive one names the reviewers it just
+// reopened the document for, since that is the consequence the caller has to
+// know about; a non-substantive one says where its note went. reviewers is
+// the document's durable reviewer set, empty when the caller has none to hand.
+//
+// Accepted plans covering a changed section that nobody has claimed work from
+// are reported last. They block nothing: an intention against text that just
+// moved is §8.6's stale-marking business.
+func DocPatchRender(w io.Writer, d model.Doc, res model.DocPatchResult, reviewers []string) {
+	sections := "no anchored section"
+	if len(res.ChangedAnchors) > 0 {
+		sections = strings.Join(res.ChangedAnchors, ", ")
+	}
+	fmt.Fprintf(w, "patched %s v%d: %s, changed %s\n",
+		d.FormatRef(), res.NewVersion, res.Classification, sections)
+	if res.Classification == "substantive" {
+		if len(reviewers) > 0 {
+			fmt.Fprintf(w, "awaiting review again from %s\n", strings.Join(reviewers, ", "))
+		}
+	} else {
+		fmt.Fprintln(w, "recorded as a note on the document")
+	}
+	if len(res.UnexecutedCoveringPlans) > 0 {
+		ids := make([]string, len(res.UnexecutedCoveringPlans))
+		for i, id := range res.UnexecutedCoveringPlans {
+			ids[i] = strconv.FormatInt(id, 10)
+		}
+		fmt.Fprintf(w, "covering plans nobody has claimed work from yet: %s\n", strings.Join(ids, ", "))
+	}
 }

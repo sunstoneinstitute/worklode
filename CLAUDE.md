@@ -77,6 +77,7 @@ make bin/lode-server   # one executable, by name: bin/<any of the six>
 make install    # build and install the three end-user binaries to /usr/local/bin
 make test       # go test -trimpath -race -count=1 ./...
 make test-e2e   # e2e suite (build tag required, TEST_POSTGRES_DSN reachable)
+make test-scripts # the tests scripts/ keeps for its own tooling; CI's lint job runs this
 make vet        # go vet ./...
 ```
 
@@ -157,12 +158,17 @@ endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
 per-request `Subject`, a `grants` table of permission → roles, and a
 default-deny `Decide`. There is no RBAC model yet — the two roles are the
 `user`/`admin` Keycloak already syncs (001 §9.2) — so add real roles by editing
-that table, never by adding a check inside a handler.
+that table, never by adding a check inside a handler. A page-script write such
+as the Progress page's goes through one more gate on top of that table's
+permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-66
+§4.2), which enforces same-origin, the page's `X-Requested-With` header, a
+JSON body, and an actor taken from the session rather than the request.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
-and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer for crash
-loops/OOM kills), and `lode inbox import` (backfill through the webhook store
-path, so re-running is safe).
+webhooks — including `merge_group` and `repository_ruleset` for the merge
+queue — and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer
+for crash loops/OOM kills), and `lode inbox import` (backfill through the
+webhook store path, so re-running is safe).
 
 Cross-cutting pieces: `internal/gitexec` (every `git` subprocess in the
 binary, so environment policy and error shape live in one place — a guard
@@ -184,11 +190,17 @@ both retrieval arms — dense over pgvector, lexical over a `simple` tsvector �
 fused by reciprocal rank behind `GET /api/v1/search` and `lode search`, spec
 040), and `internal/eventbus`
 (offset-tracked subscribers over the events log, read via `lode event tail
---follow`). Its one subscriber, `doc-lifecycle`, mints the review and planning
+--follow` and by the project Progress page's live stream, WL-SPEC-66 §5.1).
+Its one subscriber, `doc-lifecycle`, mints the review and planning
 tasks a document's lifecycle calls for (025 §15.4): the rules are a pure
 function in `internal/watcher`, the executor that feeds them is
 `internal/api/docwatch.go`, and `NewServer` starts the loop only when the
-caller passes a `BackgroundCtx`.
+caller passes a `BackgroundCtx`. The project Progress page (spec 066) says how
+much of each spec exists and what moves it next: `internal/progress` is the
+pure derivation — plan state, section state, spec grouping, next act — from
+one `store.ProjectProgress` read, recomputed per request and never stored, and
+`internal/api/progress.go`, `internal/ui/progress.templ` and `lode doc
+progress` are the three readers of it.
 
 The backbone (this repo, Postgres) owns execution facts and — once spec 025 is
 implemented — design-document artifacts; derived architecture facts and the

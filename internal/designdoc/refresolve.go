@@ -147,7 +147,7 @@ func ResolveRef(docs []model.Doc, projectKey, ref string) (model.Doc, string, er
 // unchecked.
 func CheckDocKind(doc model.Doc, typ string) error {
 	if want := strings.ToLower(typ); want != "" && want != doc.Kind {
-		return &KindMismatchError{Doc: doc.Slug, Want: want, Got: doc.Kind}
+		return &KindMismatchError{Doc: doc.FormatRef(), Want: want, Got: doc.Kind}
 	}
 	return nil
 }
@@ -220,6 +220,10 @@ func matchRefSlugPrefix(docs []model.Doc, prefix string) []model.Doc {
 // miss, more than one is ambiguous, and exactly one resolves. Candidates are
 // deduped by id — a document can match through both criteria of the number
 // form — and sorted by slug so an AmbiguousRefError reads the same every run.
+//
+// Candidates are named by their citable id (025 §14.3), because the reader's
+// next move after an ambiguity is to cite one of them, and a bare number is
+// ambiguous precisely when the project differs — the fact only the id carries.
 func finishRef(ref string, matches []model.Doc, section string) (model.Doc, string, error) {
 	matches = uniqueRefDocs(matches)
 	switch len(matches) {
@@ -228,11 +232,12 @@ func finishRef(ref string, matches []model.Doc, section string) (model.Doc, stri
 	case 1:
 		return matches[0], section, nil
 	default:
-		slugs := make([]string, len(matches))
+		refs := make([]string, len(matches))
 		for i, d := range matches {
-			slugs[i] = d.Slug
+			refs[i] = d.FormatRef()
 		}
-		return model.Doc{}, "", &AmbiguousRefError{Ref: ref, Candidates: slugs}
+		slices.Sort(refs)
+		return model.Doc{}, "", &AmbiguousRefError{Ref: ref, Candidates: refs}
 	}
 }
 

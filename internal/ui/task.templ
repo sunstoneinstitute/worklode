@@ -127,7 +127,15 @@ templ Task(v TaskView) {
 										<tr>
 											<td class="mono">{ fmtTime(row.At) }</td>
 											<td>@timelineIcon(row)</td>
-											<td>{ row.Summary }</td>
+											<td>
+												{ row.Summary }
+												if row.Detail != "" {
+													<details class="tl-detail">
+														<summary>see more</summary>
+														<pre>{ row.Detail }</pre>
+													</details>
+												}
+											</td>
 											<td>
 												if row.URL != "" {
 													<a href={ row.URL } rel="noreferrer">Open source</a>

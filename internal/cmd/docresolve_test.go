@@ -98,9 +98,11 @@ func TestResolveDocRefFragment(t *testing.T) {
 }
 
 func TestResolveDocRefAmbiguous(t *testing.T) {
+	// One number, two projects: a corpus number is a per-project, per-kind
+	// sequence, so this is the shape a bare number is actually ambiguous in.
 	docs := []model.Doc{
-		{ID: 1, Kind: "spec", Number: 4, Slug: "004-execution"},
-		{ID: 2, Kind: "spec", Number: 4, Slug: "004-other"},
+		{ID: 1, Project: "worklode", ProjectKey: "WL", Kind: "spec", Number: 4, Slug: "004-execution"},
+		{ID: 2, Project: "other", ProjectKey: "OTHER", Kind: "spec", Number: 4, Slug: "004-other"},
 	}
 
 	_, _, err := resolveDocRef(docs, "WL", "4")
@@ -111,7 +113,7 @@ func TestResolveDocRefAmbiguous(t *testing.T) {
 	if amb.Ref != "4" {
 		t.Errorf("Ref = %q, want 4", amb.Ref)
 	}
-	if want := []string{"004-execution", "004-other"}; !reflect.DeepEqual(amb.Candidates, want) {
+	if want := []string{"OTHER-SPEC-4", "WL-SPEC-4"}; !reflect.DeepEqual(amb.Candidates, want) {
 		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
 	}
 }
@@ -291,9 +293,9 @@ func TestCheckDocKind(t *testing.T) {
 // criteria used to report them as a bogus ambiguity.
 func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
 	docs := []model.Doc{
-		{ID: 26, Kind: "spec", Number: 1, Slug: "001-zero-trust-gateway"},
-		{ID: 27, Kind: "spec", Number: 2, Slug: "002-distributed-downloader-mesh"},
-		{ID: 30, Kind: "plan", Number: 1, Slug: "2026-08-22-mesh-5-tray"},
+		{ID: 26, ProjectKey: "EA", Kind: "spec", Number: 1, Slug: "001-zero-trust-gateway"},
+		{ID: 27, ProjectKey: "EA", Kind: "spec", Number: 2, Slug: "002-distributed-downloader-mesh"},
+		{ID: 30, ProjectKey: "EA", Kind: "plan", Number: 1, Slug: "2026-08-22-mesh-5-tray"},
 	}
 
 	got, _, err := resolveDocRef(docs, "EA", "001-zero-trust-gateway")
@@ -327,13 +329,13 @@ func TestResolveDocRefNumberLedSlugBeatsSharedNumber(t *testing.T) {
 
 	// Two *numbered* kinds sharing one number is still genuinely ambiguous,
 	// and the candidates are exactly the documents carrying that number.
-	docs = append(docs, model.Doc{ID: 31, Kind: "adr", Number: 1, Slug: "001-use-postgres"})
+	docs = append(docs, model.Doc{ID: 31, ProjectKey: "EA", Kind: "adr", Number: 1, Slug: "001-use-postgres"})
 	_, _, err = resolveDocRef(docs, "EA", "1")
 	var amb *designdoc.AmbiguousRefError
 	if !errors.As(err, &amb) {
 		t.Fatalf("bare shared number: err = %v, want *AmbiguousRefError", err)
 	}
-	if want := []string{"001-use-postgres", "001-zero-trust-gateway"}; !reflect.DeepEqual(amb.Candidates, want) {
+	if want := []string{"EA-ADR-1", "EA-SPEC-1"}; !reflect.DeepEqual(amb.Candidates, want) {
 		t.Errorf("Candidates = %v, want %v", amb.Candidates, want)
 	}
 }

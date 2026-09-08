@@ -13,7 +13,7 @@ import (
 var (
 	l1Entities = map[string]bool{ // L1: exactly what the backbone models, singular
 		"actor": true, "approval": true, "blob": true, "channel": true,
-		"decision": true, "doc": true, "event": true, "graph": true,
+		"decision": true, "deliverable": true, "doc": true, "event": true, "graph": true,
 		"inbox": true, "milestone": true, "project": true, "secret": true,
 		"skill": true, "task": true, "token": true,
 	}
@@ -67,6 +67,7 @@ var l3DomainActions = map[string]bool{
 // spec's own words — adding a member is part of adding the command.
 var nounViews = map[string]bool{
 	"lode doc referrers":      true,
+	"lode doc progress":       true,
 	"lode doc reviewers":      true,
 	"lode doc sections":       true,
 	"lode doc todo":           true,

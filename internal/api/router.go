@@ -82,21 +82,50 @@ var routeGuards = map[string]routeGuard{
 	// boundary. requireSession, applied at registration like the decide
 	// route below, because a forged cutoff needs a live session's identity
 	// to attribute the advance to.
-	"POST /home/reviewed":                 guarded(permWebWrite),
-	"GET /ideas":                          guarded(permWebRead),
-	"GET /intake":                         guarded(permWebRead),
-	"GET /projects":                       guarded(permWebRead),
-	"GET /projects/{id}":                  guarded(permWebRead),
-	"GET /projects/{id}/crew":             guarded(permWebRead),
-	"POST /projects/{id}/crew":            guarded(permWebWrite),
-	"POST /projects/{id}/crew/remove":     guarded(permWebWrite),
-	"GET /projects/{id}/work":             guarded(permWebRead),
-	"GET /projects/{id}/milestones":       guarded(permWebRead),
-	"GET /projects/{id}/deliverables":     guarded(permWebRead),
-	"GET /projects/{id}/deliverables/new": guarded(permWebWrite),
-	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
-	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
-	"POST /projects/{id}/tasks":           guarded(permWebWrite),
+	"POST /home/reviewed":             guarded(permWebWrite),
+	"GET /ideas":                      guarded(permWebRead),
+	"GET /intake":                     guarded(permWebRead),
+	"GET /projects":                   guarded(permWebRead),
+	"GET /projects/{id}":              guarded(permWebRead),
+	"GET /projects/{id}/crew":         guarded(permWebRead),
+	"POST /projects/{id}/crew":        guarded(permWebWrite),
+	"POST /projects/{id}/crew/remove": guarded(permWebWrite),
+	"GET /projects/{id}/work":         guarded(permWebRead),
+	"GET /projects/{id}/progress":     guarded(permWebRead),
+	// The Progress page's live update stream (§5.1): permWebRead like the
+	// page itself, not permEventStream — a frame carries nothing the page's
+	// own reader could not already see (§4.5).
+	"GET /projects/{id}/progress/events": guarded(permWebRead),
+	// The Progress page's row and summary fragments (§5.2): permWebRead like
+	// the page itself, since either fragment shows only what the page's own
+	// reader could already see.
+	"GET /projects/{id}/progress/spec/{doc}": guarded(permWebRead),
+	"GET /projects/{id}/progress/summary":    guarded(permWebRead),
+	// The Progress page's writes (066 §7). permDocWrite for accepting a
+	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
+	// decides who may actually accept it stays inside the store (§4.2 rule 5).
+	"POST /projects/{id}/progress/accept": guarded(permDocWrite),
+	// permTaskWrite for minting the planning task (§3.4): the act creates a
+	// task, whatever document it is about.
+	"POST /projects/{id}/progress/plan": guarded(permTaskWrite),
+	// permTaskWrite for the rally acts (§3.5): assembling one mints and links
+	// tasks, and confirming or discarding it moves a task's state. The rally
+	// is a task like any other (004 §6.3).
+	"POST /projects/{id}/progress/rally/add":     guarded(permTaskWrite),
+	"POST /projects/{id}/progress/rally/confirm": guarded(permTaskWrite),
+	"POST /projects/{id}/progress/rally/discard": guarded(permTaskWrite),
+	// permTaskWrite for the merge act (§3.6): it is the last step of
+	// delivering a task, and it moves that task's state by way of the
+	// webhooks the merge produces. The App's installation token, not the
+	// caller's, does the writing at GitHub (§4.2 rule 9).
+	"POST /projects/{id}/progress/merge":              guarded(permTaskWrite),
+	"GET /projects/{id}/milestones":                   guarded(permWebRead),
+	"POST /projects/{id}/milestones/{mid}/references": guarded(permWebWrite),
+	"GET /projects/{id}/deliverables":                 guarded(permWebRead),
+	"GET /projects/{id}/deliverables/new":             guarded(permWebWrite),
+	"POST /projects/{id}/deliverables":                guarded(permWebWrite),
+	"GET /projects/{id}/tasks/new":                    guarded(permWebWrite),
+	"POST /projects/{id}/tasks":                       guarded(permWebWrite),
 	// The cockpit's tombstone review (044 §2) and its two Restore buttons.
 	// Reading the page is an ordinary web read; restoring carries the
 	// permission the JSON API's undelete carries — permTaskWrite for a task,
@@ -234,6 +263,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/docs/{id}/referrers":    guardedAny(permDocRead),
 	"GET /api/v1/docs/{id}/versions/{n}": guardedAny(permDocRead),
 	"PUT /api/v1/docs/{id}/body":         guardedAny(permDocWrite),
+	"POST /api/v1/docs/{id}/patch":       guardedAny(permDocWrite),
 	"PUT /api/v1/docs/{id}/edges":        guarded(permDocImport),
 	"POST /api/v1/docs/{id}/submit":      guardedAny(permDocWrite),
 	"POST /api/v1/docs/{id}/accept":      guarded(permDocWrite),
@@ -307,17 +337,24 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/merges": guardedAny(permTaskWrite),
 
 	// --- projects, actors, tokens -------------------------------------------
-	"GET /api/v1/projects":                              guardedAny(permProjectRead),
-	"GET /api/v1/projects/resolve":                      guardedAny(permProjectRead),
-	"GET /api/v1/projects/{id}":                         guardedAny(permProjectRead),
-	"GET /api/v1/projects/{id}/cockpit":                 guarded(permProjectRead),
-	"GET /api/v1/projects/{id}/rally":                   guarded(permProjectRead),
-	"GET /api/v1/projects/{id}/deliverables":            guarded(permDeliverableRead),
-	"POST /api/v1/projects/{id}/deliverables":           guarded(permDeliverableWrite),
-	"PATCH /api/v1/deliverables/{id}":                   guarded(permDeliverableWrite),
-	"GET /api/v1/projects/{id}/milestones":              guarded(permMilestoneRead),
-	"POST /api/v1/projects/{id}/milestones":             guarded(permMilestoneWrite),
-	"GET /api/v1/milestones/{id}":                       guarded(permMilestoneRead),
+	"GET /api/v1/projects":                    guardedAny(permProjectRead),
+	"GET /api/v1/projects/resolve":            guardedAny(permProjectRead),
+	"GET /api/v1/projects/{id}":               guardedAny(permProjectRead),
+	"GET /api/v1/projects/{id}/cockpit":       guarded(permProjectRead),
+	"GET /api/v1/projects/{id}/rally":         guarded(permProjectRead),
+	"GET /api/v1/projects/{id}/progress":      guardedAny(permProjectRead),
+	"GET /api/v1/projects/{id}/deliverables":  guarded(permDeliverableRead),
+	"POST /api/v1/projects/{id}/deliverables": guarded(permDeliverableWrite),
+	"PATCH /api/v1/deliverables/{id}":         guarded(permDeliverableWrite),
+	"GET /api/v1/deliverables/{id}":           guarded(permDeliverableRead),
+	"GET /api/v1/projects/{id}/milestones":    guarded(permMilestoneRead),
+	"POST /api/v1/projects/{id}/milestones":   guarded(permMilestoneWrite),
+	"GET /api/v1/milestones/{id}":             guarded(permMilestoneRead),
+	// entity_edges (spec 029 §5): typed references between entities of
+	// different kinds. Any crew member may declare a dependency, matching
+	// deliverable creation.
+	"POST /api/v1/references":                           guarded(permReferenceWrite),
+	"GET /api/v1/references":                            guarded(permReferenceRead),
 	"GET /api/v1/projects/{id}/participants":            guarded(permProjectRead),
 	"POST /api/v1/projects/{id}/participants":           guarded(permCrewWrite),
 	"DELETE /api/v1/projects/{id}/participants/{actor}": guarded(permCrewWrite),
@@ -374,6 +411,25 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/critical-path": guarded(permOverviewRead),
 	// The one write on this surface, and admin-only; see permDeriveRun.
 	"POST /api/v1/derive": guarded(permDeriveRun),
+}
+
+// hasReviewSurface reports whether spec 059's routes are registered. The
+// Progress page renders Review disabled until they are, and enables it the
+// day they land with no change here (WL-SPEC-66 §3.3).
+func (s *server) hasReviewSurface() bool {
+	return hasReviewSurfaceIn(routeGuards)
+}
+
+// hasReviewSurfaceIn is hasReviewSurface over an explicit table, so a test
+// can ask the question of a table that carries spec 059's routes without
+// mutating the real one.
+func hasReviewSurfaceIn(guards map[string]routeGuard) bool {
+	for pattern := range guards {
+		if strings.HasPrefix(pattern, "POST /api/v1/reviews") {
+			return true
+		}
+	}
+	return false
 }
 
 // router wires handlers onto a ServeMux through routeGuards, recording which

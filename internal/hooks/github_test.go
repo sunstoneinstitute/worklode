@@ -81,7 +81,7 @@ func newEnvWith(t *testing.T, resolveBranch func(repo, branch string) (string, e
 	}
 	return &env{
 		dbEnv: dbEnv{st: st},
-		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, m),
+		h:     hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil, m),
 	}
 }
 
@@ -339,7 +339,7 @@ func TestMissingHeaders(t *testing.T) {
 
 func TestEmptySecretIs503(t *testing.T) {
 	e := newEnv(t)
-	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil, nil, nil)
+	h := hooks.NewGitHubHandler(e.st, "", slog.Default(), nil, nil, nil, nil)
 	rr := deliver(t, h, "issues", "d-1", "issues_opened.json")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", rr.Code)
@@ -1098,7 +1098,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	want := map[string]bool{
 		"issues": true, "push": true, "pull_request": true, "deployment_status": true,
 		"pull_request_review": true, "workflow_run": true, "release": true,
-		"registry_package": true,
+		"registry_package": true, "merge_group": true, "repository_ruleset": true,
 	}
 	got := hooks.HandledEvents()
 	if len(got) != len(want) {
@@ -1257,5 +1257,189 @@ func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
 	}
 	if n := e.approvalCount(t); n != 1 {
 		t.Errorf("approval rows = %d, want 1 (reopen, not a second row)", n)
+	}
+}
+
+// eventPayloadTask reads the task the applier named on a delivery's stored
+// event payload; "" when it named none.
+func (e *env) eventPayloadTask(t *testing.T, deliveryID string) string {
+	t.Helper()
+	var task sql.NullString
+	if err := e.st.DBForTests().QueryRow(
+		`SELECT payload->>'task' FROM events WHERE source = 'github' AND external_id = $1`,
+		deliveryID).Scan(&task); err != nil {
+		t.Fatalf("event payload for %s: %v", deliveryID, err)
+	}
+	return task.String
+}
+
+// workflowRunBody builds a completed workflow_run payload for one head sha.
+func workflowRunBody(sha string) []byte {
+	return []byte(`{
+		"action": "completed",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"workflow_run": {
+			"name": "CI", "head_sha": "` + sha + `", "status": "completed",
+			"conclusion": "success", "html_url": "https://github.com/x/y/actions/runs/1",
+			"run_started_at": "2026-07-19T10:05:00Z", "updated_at": "2026-07-19T10:10:00Z"
+		}
+	}`)
+}
+
+// TestDeliveryNamesResolvedTask: a GitHub body names no worklode task, so the
+// applier records the correlation it resolved on the event's own payload —
+// what lets a reader of the log name the task without re-joining
+// (WL-SPEC-66 §5.1).
+func TestDeliveryNamesResolvedTask(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t) // WL-1
+
+	deliverOK(t, e, "pull_request", "d-pr", "pull_request_opened.json")
+	if got := e.eventPayloadTask(t, "d-pr"); got != taskID {
+		t.Fatalf("pull_request event names task %q, want %q", got, taskID)
+	}
+
+	// A run carries only its head sha; the branch push is what attributes
+	// that sha to the task.
+	deliverPushOK(t, e, "d-push", "push_branch.json")
+	const branchSHA = "2222222222222222222222222222222222222222"
+	if rr := deliverBody(t, e.h, "workflow_run", "d-ci", workflowRunBody(branchSHA)); rr.Code != http.StatusOK {
+		t.Fatalf("workflow_run: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := e.eventPayloadTask(t, "d-ci"); got != taskID {
+		t.Fatalf("workflow_run event names task %q, want %q", got, taskID)
+	}
+}
+
+// TestDeliveryNamesNoTaskWhenUncorrelated: a delivery that resolves to no
+// task leaves the payload as GitHub sent it.
+func TestDeliveryNamesNoTaskWhenUncorrelated(t *testing.T) {
+	e := newEnv(t)
+	e.seedTask(t)
+
+	deliverOK(t, e, "pull_request", "d-pr", "pull_request_opened_uncorrelated.json")
+	if got := e.eventPayloadTask(t, "d-pr"); got != "" {
+		t.Fatalf("uncorrelated pull_request event names task %q, want none", got)
+	}
+
+	const unknownSHA = "9999999999999999999999999999999999999999"
+	if rr := deliverBody(t, e.h, "workflow_run", "d-ci", workflowRunBody(unknownSHA)); rr.Code != http.StatusOK {
+		t.Fatalf("workflow_run: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := e.eventPayloadTask(t, "d-ci"); got != "" {
+		t.Fatalf("uncorrelated workflow_run event names task %q, want none", got)
+	}
+}
+
+// prQueuedAt reads pull_requests.queued_at for repo/number, nil when unset.
+func (e *dbEnv) prQueuedAt(t *testing.T, repo string, number int64) *time.Time {
+	t.Helper()
+	var queuedAt sql.NullTime
+	if !e.rawQueryRow(t, []any{&queuedAt},
+		`SELECT queued_at FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number) {
+		t.Fatalf("pull_requests row not found for %s#%d", repo, number)
+	}
+	if !queuedAt.Valid {
+		return nil
+	}
+	return &queuedAt.Time
+}
+
+// TestMergeGroupSetsAndClearsQueuedAt: WL-SPEC-66 §6.1 — checks_requested
+// marks a PR queued, destroyed clears it, and a pull_request closed event
+// clears it too (independent of the merge_group lifecycle, e.g. when a PR
+// leaves the queue by ordinary merge rather than by "destroyed").
+func TestMergeGroupSetsAndClearsQueuedAt(t *testing.T) {
+	e := newEnv(t)
+	const repo = "sunstoneinstitute/demo"
+	const prNumber = 42
+
+	// The PR must exist before queued_at can be set on it.
+	deliverOK(t, e, "pull_request", "d-open", "pull_request_opened.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after open = %v, want nil", got)
+	}
+
+	deliverOK(t, e, "merge_group", "d-mg-1", "merge_group_checks_requested.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got == nil {
+		t.Fatal("queued_at after checks_requested = nil, want set")
+	}
+
+	deliverOK(t, e, "merge_group", "d-mg-2", "merge_group_destroyed.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after destroyed = %v, want nil", got)
+	}
+
+	// Re-queue, then close the PR outright: closed clears queued_at
+	// regardless of how the PR left the queue.
+	deliverOK(t, e, "merge_group", "d-mg-3", "merge_group_checks_requested.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got == nil {
+		t.Fatal("queued_at after re-queue = nil, want set")
+	}
+	deliverOK(t, e, "pull_request", "d-close", "pull_request_closed_merged.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after pull_request closed = %v, want nil", got)
+	}
+}
+
+// TestMergeGroupNamesResolvedTask: a merge_group delivery names a queue
+// entry, not a worklode task; the correlation lives on the PR row. The
+// applier records it on the event so the Progress page's stream can resolve
+// the delivery to the task whose position line just became "queued for
+// merge" (WL-SPEC-66 §5.1).
+func TestMergeGroupNamesResolvedTask(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+
+	deliverOK(t, e, "pull_request", "d-open", "pull_request_opened.json")
+	deliverOK(t, e, "merge_group", "d-mg", "merge_group_checks_requested.json")
+
+	if got := e.eventPayloadTask(t, "d-mg"); got != taskID {
+		t.Fatalf("merge_group event names task %q, want %q", got, taskID)
+	}
+}
+
+// TestRepositoryRulesetKicksRefresh: WL-SPEC-66 §6.3 — a ruleset change on a
+// mapped repo pokes the server's branch-rules refresh loop. The payload
+// carries no fact worth storing (the merge-queue rule is read per branch from
+// the rules API), so the kick is the whole effect. A repo no project maps is
+// recorded ignored and kicks nothing.
+func TestRepositoryRulesetKicksRefresh(t *testing.T) {
+	e := newEnv(t)
+	// No lock: ServeHTTP runs on this goroutine, and applyFunc calls the
+	// callback synchronously before the delivery is recorded.
+	kicks := 0
+	e.h = hooks.NewGitHubHandlerWithResolver(e.st, testSecret, slog.Default(), nil, nil,
+		func() { kicks++ }, nil)
+
+	deliverOK(t, e, "repository_ruleset", "d-rs-1", "repository_ruleset_edited.json")
+	if kicks != 1 {
+		t.Fatalf("kicks after a mapped repo's ruleset change = %d, want 1", kicks)
+	}
+
+	unmapped := bytes.ReplaceAll(fixture(t, "repository_ruleset_edited.json"),
+		[]byte("sunstoneinstitute/demo"), []byte("someone/else"))
+	rr := deliverBody(t, e.h, "repository_ruleset", "d-rs-2", unmapped)
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ignored" {
+		t.Fatalf("unmapped ruleset delivery: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if kicks != 1 {
+		t.Fatalf("kicks after an unmapped repo's ruleset change = %d, want 1", kicks)
+	}
+}
+
+// TestMergeGroupUnparseableHeadRefIsNoOp: a head_ref that does not match the
+// documented gh-readonly-queue shape names no PR to update. The delivery
+// still succeeds (recorded, applied) and writes nothing rather than panicking
+// or guessing a PR number.
+func TestMergeGroupUnparseableHeadRefIsNoOp(t *testing.T) {
+	e := newEnv(t)
+	const repo = "sunstoneinstitute/demo"
+	const prNumber = 42
+
+	deliverOK(t, e, "pull_request", "d-open", "pull_request_opened.json")
+	deliverOK(t, e, "merge_group", "d-mg-bad", "merge_group_unparseable_ref.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after unparseable head_ref = %v, want nil", got)
 	}
 }

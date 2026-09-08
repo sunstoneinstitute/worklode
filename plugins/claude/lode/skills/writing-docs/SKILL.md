@@ -19,6 +19,8 @@ Draft the markdown — frontmatter included — in a scratch file, then:
 lode doc lint <file>                                # local lint: anchors, plan ## Tasks
 lode doc add --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
+lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec/ADR in place (025 §8.4)
+lode doc edit <ref> --file <file> --substantive  # same, judged substantive: reviewers are asked again
 lode doc revise <ref>                        # open a candidate revision on an accepted doc
 lode doc revise <ref> --file <file>          # update the open candidate's body
 lode doc revise <ref> --accept               # land the candidate as the doc's next version
@@ -38,10 +40,17 @@ lint` with no argument reports the whole corpus's dangling references,
 unlike `lode doc lint <file>`, which only lints one local file.
 
 The scratch file is an editor buffer, not a copy of record — nothing reads
-it once the command above succeeds. `lode doc edit` only works on a draft,
-or on a plan (plans are edited in place at any status — 025 §9); an
-accepted spec or ADR instead goes through `lode doc revise`: open a
-candidate, edit it, `--accept` to land it or `--discard` to drop it.
+it once the command above succeeds. `lode doc edit` replaces a draft's body,
+and a plan's at any status (plans are edited in place — 025 §9). On an
+accepted spec or ADR it is 025 §8.4's in-place amendment, and the server
+gates it mechanically: an edit that changes a `wl:`/`wlc:` term, a code
+span or fenced block, an acceptance-criteria section, the frontmatter
+`requires` list, or a section that open work already points at (§8.2) is
+refused, naming the rule. That edit goes through `lode doc revise` instead:
+open a candidate, edit it, `--accept` to land it or `--discard` to drop it.
+An amendment that passes the gates needs `--note` saying what changed and
+why, or `--substantive`, which asks the document's reviewers again and marks
+the sections it touched.
 
 **The backbone assigns the number, not you.** Never hand-create a file for a
 document, and never read the next number off filenames. The corpus lives in
@@ -206,6 +215,55 @@ that task and declare a new one. Ordering across files (series parts, other
 plans) is the document-level `blocks`/`blockedBy` above, never a task
 number — `lode doc lint <file>` runs this whole parse first, so a
 malformed task block is caught locally.
+
+**A plan may legitimately declare no tasks.** A *coverage-only* plan records
+coverage for work already built: it carries at least one `covers` or `defers`
+entry and no tasks at all, and accepting it mints nothing. Acceptance is still
+what puts the record in force, since the aggregate coverage query counts
+accepted plans only (026 §2.1). "No tasks at all" is exact — no `## Tasks`
+heading, and no heading opening with `Task`/`Tasks` followed by a number. An
+empty `## Tasks` section, or a `## Task 1` heading that missed the em-dash
+format above, is an authoring mistake and still fails both the lint and the
+accept (025 §9.2).
+
+## After editing an accepted spec or plan, check what it invalidated
+
+**A minted task's body is a snapshot.** `lode doc accept` copies each
+declaration's prose into the task it mints and never looks again, so editing
+the document afterwards leaves every existing task carrying the old text.
+Re-accepting does not repair it: 025 §9.2 mints only declarations with no row
+yet and never mutates a body. Nothing reports the divergence, so the edit is
+not finished until you have walked it yourself:
+
+```bash
+lode task list --plan <slug> --status all --json   # every task the plan minted
+lode show <task-id> --json                         # the body as minted
+lode task edit <task-id> --body-file <file>        # re-body a drifted one
+```
+
+Compare each `### Task N` declaration against its task. The join is exact, not
+a guess: a minted task records `plan_doc` and `plan_task_key` (the declaration
+title), unique together, so a task renamed during execution still points at
+the declaration it came from.
+
+The judgment is yours, and it splits on task state:
+
+- **Open (`ready`, `claimed`, in flight)** — re-body it. Someone is about to
+  work from prose you now know is wrong.
+- **Closed (`deployed_dev`, `merged`, abandoned)** — leave it. A finished
+  task is execution fact, and a title naming the wrong migration number is
+  history, not an error to correct.
+
+Two failure modes worth checking for by hand, since no linter covers them:
+**repo paths that stopped resolving** (a deleted doc, a renamed script) —
+`lode doc lint` checks doc-to-doc references only — and **numbers assigned
+downstream**, migrations above all, where `./scripts/check-migrations.sh`
+renumbers on collision and what shipped is rarely the number the plan named.
+
+For a spec edit, the same question runs one hop further out: `lode doc todo
+<ref>` for what the change leaves unplanned, and `lode doc list --kind plan`
+for the plans covering the section you touched — each of those plans then has
+its own minted tasks to walk.
 
 ## The `ns/` ontology
 

@@ -22,15 +22,26 @@ type Input struct {
 	Specs   []Spec
 	Plans   []Plan
 	Rally   *model.RallyBand
+	// Draft is the project's draft rally, the one §3.5's footer offers to
+	// confirm or discard. Nil when the project has none.
+	Draft *model.RallyBand
 }
 
-// Spec is one spec document and its sections, in document order.
+// Spec is one spec document and its sections, in document order. Status and
+// Owner are carried for §3.2's Accept button, which is offered on a draft
+// spec and enabled only for its owner; the derivation itself reads neither.
 type Spec struct {
-	Doc      int64
-	Ref      string
-	Title    string
-	Updated  time.Time
-	Sections []Section
+	Doc     int64
+	Ref     string
+	Title   string
+	Status  string // draft | accepted | superseded
+	Owner   string
+	Updated time.Time
+	// PlanningTask is the open design task about this spec, when one exists
+	// (025 §15.4). §3.4 shows it instead of the Plan button; the derivation
+	// itself never reads it.
+	PlanningTask string
+	Sections     []Section
 }
 
 // Section is one heading of a spec: no body text, the derivation never reads it.
@@ -48,6 +59,7 @@ type Plan struct {
 	Ref      string
 	Title    string
 	Status   string // draft | accepted | superseded
+	Owner    string // §3.2: the only actor who may accept it
 	Covers   []Cover
 	Requires []string
 	Tasks    []Task
@@ -63,6 +75,9 @@ type Cover struct {
 // Task is one task minted from a plan.
 type Task struct {
 	ID, Title, State, Position string
+	// Merge is the open pull request §3.6's button acts on, nil when the
+	// task has none. A reader fills it with MergeAct.
+	Merge *model.ProgressMerge
 }
 
 // CoverState pairs a Cover with the state of the plan that made it, so
@@ -76,9 +91,10 @@ type CoverState struct {
 // sectionRank is §1.2's "furthest along" order, most complete first.
 var sectionRank = []string{"built", "in_progress", "not_started", "no_record", "draft"}
 
-// barOrder is §2.1's section-bar order: sectionRank plus "unplanned" at the
-// end. "bound" never appears — it is not owed (§1.4).
-var barOrder = append(append([]string{}, sectionRank...), "unplanned")
+// BarOrder is §2.1's section-bar order: sectionRank plus "unplanned" at the
+// end. "bound" never appears — it is not owed (§1.4). It is exported because
+// every renderer of the derived model orders section states by it.
+var BarOrder = append(append([]string{}, sectionRank...), "unplanned")
 
 // groupOrder is §1.3's fixed group order.
 var groupOrder = []string{"active", "planning", "no_record", "built"}
@@ -193,14 +209,14 @@ func Derive(in Input) model.ProjectProgress {
 			}
 			pi.TaskCells = append(pi.TaskCells, model.ProgressTask{
 				ID: t.ID, Title: t.Title, State: t.State,
-				Class: class, Position: t.Position,
+				Class: class, Position: t.Position, Merge: t.Merge,
 			})
 		}
 		plans[p.Doc] = pi
 	}
 
 	byGroup := make(map[string][]model.ProgressSpec, len(groupOrder))
-	barCounts := make(map[string]int, len(barOrder))
+	barCounts := make(map[string]int, len(BarOrder))
 
 	for _, spec := range in.Specs {
 		coversByAnchor := make(map[string][]CoverState)
@@ -277,6 +293,7 @@ func Derive(in Input) model.ProjectProgress {
 			pi := plans[d]
 			specPlans = append(specPlans, model.ProgressPlan{
 				Doc: pi.Doc, Ref: pi.Ref, Title: pi.Title, Status: pi.Status,
+				Owner: pi.Owner,
 				State: pi.State, Requires: pi.Requires, Tasks: pi.TaskCells,
 				Landed: pi.Landed, Open: pi.Open,
 			})
@@ -293,14 +310,17 @@ func Derive(in Input) model.ProjectProgress {
 
 		byGroup[groupKey] = append(byGroup[groupKey], model.ProgressSpec{
 			Doc: spec.Doc, Ref: spec.Ref, Title: spec.Title, Updated: spec.Updated,
-			Group:    groupKey,
-			Next:     nextAct(openTasks, openPlans, draftPlans, unplannedCount, noRecordPlans),
-			Sections: sections,
-			Plans:    specPlans,
+			Status:       spec.Status,
+			Owner:        spec.Owner,
+			PlanningTask: spec.PlanningTask,
+			Group:        groupKey,
+			Next:         nextAct(openTasks, openPlans, draftPlans, unplannedCount, noRecordPlans),
+			Sections:     sections,
+			Plans:        specPlans,
 		})
 	}
 
-	out := model.ProjectProgress{Project: in.Project, Rally: in.Rally}
+	out := model.ProjectProgress{Project: in.Project, Rally: in.Rally, Draft: in.Draft}
 	for _, key := range groupOrder {
 		specs := byGroup[key]
 		sort.SliceStable(specs, func(i, j int) bool { return specs[i].Updated.After(specs[j].Updated) })
@@ -316,7 +336,7 @@ func Derive(in Input) model.ProjectProgress {
 			out.Counts.Built = len(specs)
 		}
 	}
-	for _, state := range barOrder {
+	for _, state := range BarOrder {
 		if n := barCounts[state]; n > 0 {
 			out.Bar = append(out.Bar, model.ProgressSlice{State: state, Count: n})
 		}

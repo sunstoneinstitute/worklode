@@ -119,6 +119,18 @@ func addEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	return err
 }
 
+// insertEdgeRaw writes a task_edges row straight past AddEdge's validation.
+// Only for tests that need a graph AddEdge now refuses — a 'blocks' cycle
+// stored before the guard existed — to prove the readers still terminate.
+func insertEdgeRaw(t *testing.T, s *Store, fromTask, toTask, typ string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, $3, $4)`,
+		fromTask, toTask, typ, taskTestNow.UTC()); err != nil {
+		t.Fatalf("insertEdgeRaw %s %s %s: %v", fromTask, typ, toTask, err)
+	}
+}
+
 func removeEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "edge.remove", nil,
@@ -618,6 +630,91 @@ func TestUpdateTaskMilestone(t *testing.T) {
 	}
 	if got.Milestone != "" {
 		t.Fatalf("milestone after detach: got %q, want empty", got.Milestone)
+	}
+}
+
+// TestSetTaskPlan is the store round trip and both refusals for `lode task
+// edit --plan` (WL-SPEC-66 §6.2): plan_task_key ends up as the task's title
+// — the same value a task minted straight from the plan's `## Tasks`
+// declaration would carry (migration 0043 backfill) — since a link made
+// after the fact has no declaration to key on. Same plan again is a no-op;
+// a different plan, a non-plan document, or a plan in another project all
+// refuse.
+func TestSetTaskPlan(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := t.Context()
+	if err := s.CreateProject(ctx, "p1", "Project One", "P1"); err != nil {
+		t.Fatalf("create project p1: %v", err)
+	}
+	if err := s.CreateProject(ctx, "p2", "Project Two", "P2"); err != nil {
+		t.Fatalf("create project p2: %v", err)
+	}
+	if err := s.EnsureActor(ctx, "ada", "human", "Ada"); err != nil {
+		t.Fatalf("create actor: %v", err)
+	}
+
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "a-plan", Body: planBody, CreatedBy: "ada",
+	})
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Slug: "a-spec", Body: specBody, CreatedBy: "ada",
+	})
+	otherPlan := mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "plan", Slug: "other-plan", Body: planBody, CreatedBy: "ada",
+	})
+
+	in := defaultTaskInput()
+	in.ProjectID = "p1"
+	in.CreatedBy = "ada"
+	in.Title = "Historic task"
+	task := createTask(t, s, taskTestNow, in)
+
+	set := func(taskID string, doc int64) error {
+		_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "task.updated", nil,
+			func(tx *sql.Tx, eventID int64) error {
+				return SetTaskPlan(tx, taskTestNow, taskID, doc, eventID)
+			})
+		return err
+	}
+
+	if err := set(task.ID, spec.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("link to a spec: got %v, want ErrInvalidInput", err)
+	}
+	if err := set(task.ID, otherPlan.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("cross-project plan: got %v, want ErrInvalidInput", err)
+	}
+
+	if err := set(task.ID, plan.ID); err != nil {
+		t.Fatalf("link to plan: %v", err)
+	}
+	got, err := s.GetTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.PlanDoc != plan.ID {
+		t.Fatalf("plan_doc = %d, want %d", got.PlanDoc, plan.ID)
+	}
+	var key string
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT plan_task_key FROM tasks WHERE id = $1`, task.ID).Scan(&key); err != nil {
+		t.Fatalf("read plan_task_key: %v", err)
+	}
+	if key != in.Title {
+		t.Fatalf("plan_task_key = %q, want task title %q", key, in.Title)
+	}
+
+	// Idempotent: linking to the same plan again is a no-op success.
+	if err := set(task.ID, plan.ID); err != nil {
+		t.Fatalf("re-link same plan: %v", err)
+	}
+
+	// Refuses a task already carrying a different plan doc.
+	secondPlan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "second-plan", Body: planBody, CreatedBy: "ada",
+	})
+	if err := set(task.ID, secondPlan.ID); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("relink to a different plan: got %v, want ErrInvalidInput", err)
 	}
 }
 

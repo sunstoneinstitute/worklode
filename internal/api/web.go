@@ -105,9 +105,9 @@ func (s *server) blobOrigin() string {
 // place, renderWeb). Each directive is what the pages actually load:
 //
 //   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js, and
-//     /assets/htmx.min.js, cliauth.templ's /assets/copy.js, and task.templ /
-//     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js. No
-//     page has an inline script.
+//     /assets/htmx.min.js, cliauth.templ's /assets/copy.js, task.templ /
+//     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js, and
+//     progress.templ's /assets/progress.js. No page has an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
 //     meta turns off the unnonced <style> htmx would otherwise inject for its
@@ -135,6 +135,16 @@ func (s *server) contentSecurityPolicy() string {
 		"frame-ancestors 'none'",
 		"form-action 'self'",
 	}, "; ")
+}
+
+// setWebHeaders sets the two headers every web response carries: the content
+// type and the Content-Security-Policy. It is a function of its own because
+// the Progress page's JSON write replies need the policy too (066 §4.4) —
+// a reply that arrived without frame-ancestors 'none' is a bug — and they
+// overwrite the content type with application/json on the way out.
+func (s *server) setWebHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", s.contentSecurityPolicy())
 }
 
 // selfAnd builds a source list of 'self' plus one optional origin, without
@@ -492,6 +502,7 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := placeholderProjectView(cockpit, sec.Title, sec.Message, section)
+	view.Project.HasSpecs = s.hasSpecs(r.Context(), cockpit.Project.ID)
 	s.renderWeb(w, r, http.StatusOK, "project section page", ui.Placeholder(view))
 }
 
@@ -808,6 +819,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
+	view.Project.HasSpecs = s.hasSpecs(ctx, id)
 	view.AgentSessions = projectAgentSessionRows(sessions, s.now())
 
 	// Also read off the store rather than the projection (WL-667), for the
@@ -879,8 +891,19 @@ func summarizeEntry(e model.TimelineEntry) ui.TimelineRow {
 	default:
 		row.Label = e.Type
 	}
+	// A body edit's "old -> new" runs to the whole task body, which is no
+	// summary at all. Any over-long summary is cut to fit the column and
+	// carries the full text in Detail, behind "see more".
+	if r := []rune(row.Summary); len(r) > timelineSummaryMax {
+		row.Detail = row.Summary
+		row.Summary = string(r[:timelineSummaryMax]) + "\u2026"
+	}
 	return row
 }
+
+// timelineSummaryMax is how much of a timeline summary stays in the table
+// cell before the rest moves behind "see more".
+const timelineSummaryMax = 120
 
 // stateChange is the state_log "change" payload store.LogChange writes: a
 // stored row, not an HTTP body, which is why it is declared here rather than

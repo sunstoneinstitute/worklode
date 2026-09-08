@@ -3,6 +3,8 @@ package progress
 import (
 	"fmt"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // PositionFacts is one task's run-board facts (032 §8), typed so Position
@@ -26,8 +28,14 @@ type LeaseFact struct {
 
 // PRFact is the open pull request carrying a task.
 type PRFact struct {
-	Number int
+	Repo   string
+	Number int64
 	URL    string
+	// MergeQueue reports whether the PR's repo runs a merge queue on its
+	// base branch, sourced from stored branch rules (WL-SPEC-66 §6.3).
+	// Unknown reads as false — the merge button's fact, not the ladder's:
+	// Position decides the queued rung from Queued, not this field.
+	MergeQueue bool
 }
 
 // CIFact is the latest CI run for a PR's head SHA.
@@ -74,6 +82,32 @@ func Position(f PositionFacts) string {
 	default:
 		return f.State
 	}
+}
+
+// MergeAct describes §3.6's act on a task's open pull request: which PR the
+// button posts about, whether the base branch runs a merge queue (which
+// decides queue-or-merge), and the reason the act is unavailable. Nil when
+// there is nothing to act on — no open PR, or a task whose delivery state
+// already outran it.
+//
+// Merge's own preconditions are the ones worklode holds facts for: a PR
+// already in the queue, and a latest CI run that has not concluded success.
+// Whether a PR is a draft or mergeable is not stored, so GitHub refuses
+// those and its message reaches the page as a 409.
+func MergeAct(f PositionFacts) *model.ProgressMerge {
+	if f.PR == nil || TaskClass(f.State) == "landed" {
+		return nil
+	}
+	m := &model.ProgressMerge{Repo: f.PR.Repo, Number: f.PR.Number, Queue: f.PR.MergeQueue}
+	switch {
+	case f.Queued:
+		m.Reason = "already queued for merge"
+	case !m.Queue && (f.CI == nil || f.CI.Conclusion != "success"):
+		// The queue runs its own checks, so only the plain merge waits for
+		// them here.
+		m.Reason = "checks have not passed"
+	}
+	return m
 }
 
 // humanAge renders a duration in the coarsest single unit that stays

@@ -37,6 +37,12 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --notes, --pick, --text, --value
 - `lode decision show` — Show one question, its options and its answer
 
+## `lode deliverable` — Deliverables: a project's declared, checkable outputs
+
+- `lode deliverable add` — Declare a deliverable on a project
+  Flags: --artifact, --description, --milestone, --url
+- `lode deliverable list` — List a project's deliverables
+
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
@@ -44,8 +50,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --file, --kind, --number, --owner, --project, --repo, --slug
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
-- `lode doc edit` — Replace a document's body (a draft, or a plan at any status)
-  Flags: --file
+- `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment)
+  Flags: --file, --note, --substantive
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
@@ -54,6 +60,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
 - `lode doc note` — Leave an anchored, non-blocking note on a document section
   Flags: --body, --body-file
+- `lode doc progress` — How much of each spec in a project exists, and what moves it next
+  Flags: --project, --repo
 - `lode doc referrers` — List the open work pointing at one section of a document
 - `lode doc reviewers` — Show a document's assigned reviewer set
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision
@@ -213,8 +221,8 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
 - `lode task detach` — Remove an attached blob from a task
 - `lode task duplicate` — Mark a task as a duplicate of the canonical task for the same request
   Flags: --of
-- `lode task edit` — Edit a task's title, body, concern, priority, milestone, needs-decomposition or human-only flag, or declare an artifact it is verified by
-  Flags: --artifact, --body, --body-file, --concern, --human-only, --kind, --milestone, --needs-decomposition, --no-upload, --priority, --secrets, --title
+- `lode task edit` — Edit a task's title, body, concern, priority, milestone, plan link, needs-decomposition or human-only flag, or declare an artifact it is verified by
+  Flags: --artifact, --body, --body-file, --concern, --human-only, --kind, --milestone, --needs-decomposition, --no-upload, --plan, --priority, --secrets, --title
 - `lode task follow-up` — Record that a task was spun out of the work on another task
   Flags: --of
 - `lode task frontier` — Ready, unblocked tasks in pickup order

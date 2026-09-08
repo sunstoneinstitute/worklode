@@ -1,0 +1,313 @@
+package ui
+
+// progress.templ renders a project's Progress page (GET
+// /projects/{id}/progress, WL-SPEC-66 §2) inside the same project sidebar
+// frame as the run board (runboard.templ), with active key "progress".
+//
+// Top to bottom, §2.1: the rally band (always rendered, always the same
+// height, so the page never moves when a rally starts or ends), the four
+// group counts, the section bar and its legend, the §1.3 groups of spec
+// rows, and the rally footer in its reserved slot (§3.5).
+//
+// Nothing here derives anything: model.ProjectProgress arrives already
+// derived (internal/progress), and every label, class and hover string comes
+// from the helpers in views.go. Two rules the page holds by construction: no
+// count carries a percentage (§2.5), and a bound-only section is not drawn at
+// all — no cell, no slice, no legend entry, no count (§1.4).
+//
+// Every row is followed by its detail block (§2.3), rendered server-side and
+// hidden by the stylesheet until progress.js puts the "open" class on the row.
+// That script also owns the page's tooltips (§2.4), which it reads from the
+// data-tip attributes written here — the page carries no title attribute on a
+// cell or a reference, so nothing shows two tooltips at once.
+//
+// The live swap (§5.2) reads three more attributes: data-doc names the spec a
+// row is, data-group the group it belongs in, and data-anchor the section a
+// strip cell is about, so a pinned tooltip survives its cell being replaced.
+
+import "strconv"
+import "strings"
+
+import "github.com/sunstoneinstitute/worklode/internal/model"
+
+templ Progress(v ProgressView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "progress") {
+			<div class="canvas">
+				@progressBand(v.P.Rally)
+				@progressCounts(v.P.Counts)
+				@progressBar(v)
+				<div class="prog-groups">
+					for _, g := range v.P.Groups {
+						@progressGroup(g, v.Viewer, v.ReviewEnabled, v.MergeEnabled)
+					}
+				</div>
+				@progressFooter(v.P.Draft, v.Viewer)
+			</div>
+			<script src={ assetURL("progress.js") } defer></script>
+		}
+	}
+}
+
+// ProgressRowFragment is GET /projects/{id}/progress/spec/{doc}'s payload
+// (§5.2): one spec's row and its detail block, the same markup progressGroup
+// draws inline on the full page. viewer and reviewEnabled decide the row's
+// actions exactly as they do there — the fragment and the page can never
+// disagree about what a viewer may do to this spec.
+templ ProgressRowFragment(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
+	@progressRow(s, viewer, reviewEnabled, mergeEnabled)
+}
+
+// ProgressSummaryFragment is GET /projects/{id}/progress/summary's payload
+// (§5.2): the rally band, the four group counts, the section bar and legend,
+// and the rally footer — everything on the page outside the spec groups
+// themselves. v carries the same model.ProjectProgress the full page
+// renders, from an unfiltered ProjectProgress read (these pieces are
+// project-wide, not one spec's).
+templ ProgressSummaryFragment(v ProgressView) {
+	@progressBand(v.P.Rally)
+	@progressCounts(v.P.Counts)
+	@progressBar(v)
+	@progressFooter(v.P.Draft, v.Viewer)
+}
+
+// progressFooter is §3.5's rally footer, in §2.1's reserved slot. The slot is
+// the same height whether or not a draft rally exists, so confirming or
+// discarding one moves nothing on the page above it. With no draft rally
+// there is nothing to say and nothing to press: the bar is empty and hidden
+// from the accessibility tree rather than filled with a placeholder.
+templ progressFooter(d *model.RallyBand, viewer string) {
+	if d == nil {
+		<div class="prog-footer h-14" aria-hidden="true"></div>
+	} else {
+		<div class="prog-footer h-14">
+			<span class="t">Rally: { strconv.Itoa(d.Members) } tasks from { strconv.Itoa(d.Specs) } specs</span>
+			for _, a := range progressFooterActions(viewer) {
+				@progressAct(a)
+			}
+		</div>
+	}
+}
+
+// progressBand is §2.1's rally band. It keeps its height whether or not a
+// rally is running, and says plainly when none is.
+templ progressBand(r *model.RallyBand) {
+	<div class="card prog-band h-12">
+		if r == nil {
+			<span class="muted">No active rally</span>
+		} else {
+			<a href={ "/tasks/" + r.ID } class="mono">{ r.ID }</a>
+			<span class="t">{ r.Title }</span>
+			<span class="muted small">{ strconv.Itoa(r.Landed) } of { strconv.Itoa(r.Members) } members landed</span>
+		}
+	</div>
+}
+
+// progressCounts is §2.1's four tiles: the sizes of §1.3's four groups.
+templ progressCounts(c model.ProgressCounts) {
+	<div class="prog-counts">
+		@progressCount("Active", c.Active)
+		@progressCount("Needs planning", c.Planning)
+		@progressCount("No execution record", c.NoRecord)
+		@progressCount("Built", c.Built)
+	</div>
+}
+
+templ progressCount(label string, n int) {
+	<div class="card pad prog-count h-20">
+		<div class="n">{ strconv.Itoa(n) }</div>
+		<div class="muted small">{ label }</div>
+	</div>
+}
+
+// progressBar is §2.1's section bar and legend: every owed section in the
+// project as one slice per state, in state order, with no scale and no
+// labels beyond the legend's counts.
+templ progressBar(v ProgressView) {
+	<section class="card" aria-labelledby="prog-bar-h">
+		<div class="hd"><h3 id="prog-bar-h">Sections</h3></div>
+		<div class="bd">
+			if len(v.P.Bar) == 0 {
+				<p class="muted">No sections owe work.</p>
+			} else {
+				<div class="prog-bar">
+					for i, s := range v.P.Bar {
+						<i class={ progressSliceClass(v.P.Bar, i) } title={ progressSliceTitle(s) }></i>
+					}
+				</div>
+			}
+			<ul class="prog-legend">
+				for _, e := range v.Legend {
+					<li>
+						<i class={ "cell cell-" + e.State } aria-hidden="true"></i>
+						<span class="l">{ e.Label }</span>
+						<span class="n">{ strconv.Itoa(e.Count) }</span>
+						<span class="muted small">{ e.Help }</span>
+					</li>
+				}
+			</ul>
+		</div>
+	</section>
+}
+
+// progressGroup renders one §1.3 group: its label, its size, its one-line
+// reason, then a row per spec. An empty group is omitted rather than
+// rendered as a heading over nothing.
+templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled, mergeEnabled bool) {
+	if len(g.Specs) > 0 {
+		<section class="card" data-group={ g.Key }>
+			<div class="hd">
+				<h3>{ progressGroupLabel(g.Key) } &middot; <span class="n">{ strconv.Itoa(len(g.Specs)) }</span></h3>
+				<div class="meta">{ progressGroupMeaning(g.Key) }</div>
+			</div>
+			<div class="bd">
+				for _, sp := range g.Specs {
+					@progressRow(sp, viewer, reviewEnabled, mergeEnabled)
+				}
+			</div>
+		</section>
+	}
+}
+
+// progressRow is §2.2's row: reference, title, strip, next act, and the
+// right-aligned action slot the row-level acts of §3 render into — Accept
+// (§3.2), Plan (§3.4), Rally (§3.5) and Review (§3.3), the last disabled
+// until hasReviewSurface (internal/api) says spec 059's routes exist. A spec
+// whose planning task is already open shows it as a link there instead of the
+// Plan button (§3.4). The reference is the row's only link. A bound-only
+// section gets no cell. Clicking the row anywhere but a link expands the
+// detail block that follows it; the row is focusable so a keyboard can do the
+// same.
+templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
+	<div class="prog-row" data-doc={ strconv.FormatInt(s.Doc, 10) } data-group={ s.Group } tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
+		<div class="ref"><a href={ "/docs/ref/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
+		<div class="t">{ s.Title }</div>
+		<div class="strip">
+			for _, sec := range s.Sections {
+				if sec.State != "bound" {
+					<i class={ progressCellClass(sec) } data-anchor={ sec.Anchor } data-tip={ progressCellTip(sec) }></i>
+				}
+			}
+		</div>
+		<div class="next muted small">{ s.Next.Text }</div>
+		<div class="act">
+			if s.PlanningTask != "" {
+				<a href={ "/tasks/" + s.PlanningTask } class="mono">Planning: { s.PlanningTask }</a>
+			}
+			for _, a := range progressSpecActions(s, viewer, reviewEnabled) {
+				@progressAct(a)
+			}
+		</div>
+	</div>
+	@progressDetail(s, viewer, reviewEnabled, mergeEnabled)
+}
+
+// progressDetail is §2.3's expanded row: the plans that cover the spec, then
+// every section of it. It is always rendered — the stylesheet hides it until
+// the row carries "open" — so expanding costs no request and the markup a
+// test reads is the markup a reader expands.
+templ progressDetail(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
+	<div class="detail" id={ progressDetailID(s.Ref) }>
+		if len(s.Plans) == 0 {
+			<p class="muted small">No plan covers this spec.</p>
+		} else {
+			<div class="plans">
+				for _, p := range s.Plans {
+					@progressPlanLine(p, viewer, reviewEnabled, mergeEnabled)
+				}
+			</div>
+		}
+		@tableWrap("Sections of " + s.Ref) {
+			<table class="secs">
+				<thead>
+					<tr><th scope="col">Section</th><th scope="col">Heading</th><th scope="col">State</th><th scope="col">Plans</th></tr>
+				</thead>
+				<tbody>
+					for _, sec := range s.Sections {
+						<tr class={ templ.KV("muted", sec.State == "bound") }>
+							<td class="mono">{ progressSectionNumber(sec.Anchor) }</td>
+							<td class={ templ.KV("sub", sec.Depth > 2) }>{ sec.Heading }</td>
+							<td>
+								if sec.State == "bound" {
+									bound only
+								} else {
+									@progressPill(sec.State)
+									if sec.Partial {
+										<span class="muted small">partial</span>
+									}
+								}
+							</td>
+							<td class="muted small">{ strings.Join(sec.Plans, ", ") }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+// progressPill is a state pill: the same swatch the legend draws, with §1.2's
+// label beside it, so one vocabulary of colour covers strip, bar and detail.
+templ progressPill(state string) {
+	<span class="pill">
+		<i class={ "cell cell-" + state } aria-hidden="true"></i>
+		{ progressStateLabel(state) }
+	</span>
+}
+
+// progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
+// after, its state, and one cell per minted task. A plan with no minted task
+// says so rather than drawing an empty strip (§1.1's no_record).
+templ progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled, mergeEnabled bool) {
+	<div class="plan">
+		<a href={ "/docs/ref/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
+		<span class="t">{ p.Title }</span>
+		if len(p.Requires) > 0 {
+			<span class="muted small">after { strings.Join(p.Requires, ", ") }</span>
+		}
+		@progressPill(p.State)
+		if p.State == "no_record" {
+			<span class="muted small">no tasks minted</span>
+		} else {
+			<span class="tasks">
+				for _, t := range p.Tasks {
+					<i class={ "task task-" + t.Class } data-task={ t.ID } data-tip={ progressTaskTip(t) }></i>
+					if t.Merge != nil {
+						<span class="tip-act" hidden>
+							@progressAct(progressMergeAction(t, mergeEnabled))
+						</span>
+					}
+				}
+			</span>
+			<span class="muted small">{ strconv.Itoa(p.Landed) } landed &middot; { strconv.Itoa(p.Open) } open</span>
+		}
+		for _, a := range progressPlanActions(p, viewer, reviewEnabled) {
+			@progressAct(a)
+		}
+	</div>
+}
+
+// A task cell's merge button (§3.6) is rendered here and hidden: it belongs
+// in the cell's pinned tooltip, and progress.js moves a copy there when a
+// click pins one. Rendering it server-side keeps the label, the body and the
+// disabled reason decided in one place, like every other act on this page.
+
+// progressAct is §3.1's two-step control, the one button every act on this
+// page uses. It carries what progress.js needs and nothing else: the route
+// to post to, the body to send, and the sentence the confirmation step
+// shows. The first click never writes — the script swaps this element's
+// content for that sentence with Confirm and Cancel, at the width it
+// measured first, so nothing on the page moves. That step guards against a
+// mis-click; what makes the write safe from another origin is the gate in
+// internal/api's beginJSONPost (§4.2, §4.3).
+//
+// A viewer who may not act gets the button disabled with the reason in its
+// hover text rather than no button at all (§3).
+templ progressAct(a ProgressAction) {
+	if a.Reason != "" {
+		<button type="button" class="act" data-route={ a.Route } data-reason={ a.Reason } data-tip={ a.Reason } disabled>{ a.Label }</button>
+	} else {
+		<button type="button" class="act" data-route={ a.Route } data-body={ a.Body } data-confirm={ a.Confirm }>{ a.Label }</button>
+	}
+}

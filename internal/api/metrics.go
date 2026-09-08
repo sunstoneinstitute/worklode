@@ -56,6 +56,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			") and outcome (" + strings.Join(milestoneChangeOutcomes, ", ") +
 			"). Labels are bounded: the project, the milestone and the actor are deliberately not among them.",
 	}, []string{"action", "outcome"})
+	s.referenceWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_reference_writes_total",
+		Help: "Reference (entity_edges, spec 029 §5) write attempts, by rel (" +
+			strings.Join(referenceRels, ", ") +
+			") and outcome (ok, error). Labels are bounded: the from and to ids are deliberately not among them.",
+	}, []string{"rel", "outcome"})
 	s.repoMappings = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_repo_mapping_changes_total",
 		Help: "Project/repo mapping changes, by action (add, edit, remove) and outcome (ok, rejected, error). Labels are bounded: the repo and the project are deliberately not among them.",
@@ -121,8 +127,22 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
-		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
+		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove, milestone_reference) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
 	}, []string{"form", "outcome"})
+	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_progress_writes_total",
+		Help: "Progress page writes issued by the page script (066 §4.2), by route (" +
+			strings.Join(progressWriteRoutes, ", ") + ") and outcome (" +
+			strings.Join(progressWriteOutcomes, ", ") +
+			"). \"refused\" is the act declined before anything changed — a wrong origin, a missing page header, a body naming its own actor, an actor without standing — and \"conflict\" is the backbone refusing the document's state, so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
+	}, []string{"route", "outcome"})
+	s.progressFragmentRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_progress_fragment_renders_total",
+		Help: "Progress page fragment requests (066 §5.2), by fragment (" +
+			strings.Join(progressFragments, ", ") + ") and outcome (" +
+			strings.Join(progressFragmentOutcomes, ", ") +
+			"). \"not_found\" on the spec fragment is a doc id that is not a live spec of this project; on the summary fragment it is a project with no spec, same as the full page. Labels are bounded: the project and the document are deliberately not among them.",
+	}, []string{"fragment", "outcome"})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
 		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
@@ -221,6 +241,19 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_event_stream_events_sent_total",
 		Help: "Events pushed to event-log followers, summed across all open streams.",
 	})
+	// The Progress page's own follow (§5.1), the same two-instrument shape as
+	// the admin log stream above, for the same reason: how many page follows
+	// are open, and how much they are pushing, are the two operational
+	// questions, and http_requests_total answers neither for a request that
+	// lasts as long as the page stays open.
+	s.progressStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "worklode_progress_streams_active",
+		Help: "Open Progress page follows (GET /projects/{id}/progress/events, WL-SPEC-66 §5.1).",
+	})
+	s.progressStreamFramesSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "worklode_progress_stream_frames_sent_total",
+		Help: "Frames pushed to Progress page followers, summed across all open streams.",
+	})
 	// Spec 007's two families. http_requests_total cannot answer either
 	// question: a 503 from a graph-less instance and a 500 from a broken
 	// SPARQL endpoint are both "not 200", and one POST /api/v1/derive runs
@@ -257,22 +290,35 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	if s.st != nil {
 		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
 	}
+	// githubCalls counts the GitHub API calls worklode makes itself: the
+	// branch-rules refresh on its own schedule, and the three §3.6 makes for
+	// a Progress page merge act. op is a fixed set of call sites
+	// (branch_rules, pr_node_id, enqueue_pr, merge_pr), never a repo or a
+	// URL, so the cardinality is bounded by the code.
+	s.githubCalls = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_github_calls_total",
+		Help: "GitHub API calls worklode makes itself, by operation.",
+	}, []string{"op"})
+
 	// The task-body render cache owns its own instruments (WL-222), so it is
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
+		s.referenceWrites,
 		s.repoMappings,
 		s.localMerges,
-		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent, s.listExpansions,
+		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent,
+		s.progressStreamsActive, s.progressStreamFramesSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.posterExtractions, s.taskBlobRefs,
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns,
-		s.morningBriefRenders, s.briefReviews)
+		s.morningBriefRenders, s.briefReviews,
+		s.githubCalls)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -313,6 +359,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			s.milestoneChanges.WithLabelValues(action, outcome)
 		}
 	}
+	for _, rel := range referenceRels {
+		for _, outcome := range []string{"ok", "error"} {
+			s.referenceWrites.WithLabelValues(rel, outcome)
+		}
+	}
 	for _, action := range repoMappingActions {
 		for _, outcome := range repoMappingOutcomes {
 			s.repoMappings.WithLabelValues(action, outcome)
@@ -334,9 +385,24 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.inboxRenders.WithLabelValues(outcome)
 	}
 	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove",
-		formRestoreTask, formRestoreDoc} {
+		formRestoreTask, formRestoreDoc, formMilestoneRef} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
+		}
+	}
+	// Every route/outcome pair, so a route nobody has exercised reads as a
+	// flat zero rather than as no-data — the difference that matters for
+	// "refused" is between none refused and none counted.
+	for _, route := range progressWriteRoutes {
+		for _, outcome := range progressWriteOutcomes {
+			s.progressWrites.WithLabelValues(route, outcome)
+		}
+	}
+	// Every fragment/outcome pair, so a fragment nobody has hit yet reads as
+	// a flat zero rather than as no-data.
+	for _, fragment := range progressFragments {
+		for _, outcome := range progressFragmentOutcomes {
+			s.progressFragmentRenders.WithLabelValues(fragment, outcome)
 		}
 	}
 	for _, outcome := range dictationOutcomes {
@@ -591,6 +657,40 @@ func (s *server) observeMilestoneChange(action string, err error) {
 		outcome = "error"
 	}
 	s.milestoneChanges.WithLabelValues(action, outcome).Inc()
+}
+
+// referenceRels are every rel label worklode_reference_writes_total carries:
+// the entity_edges vocabulary (029 §5, store.referenceShapes), pinned here so
+// an instance where nobody has declared a reference of a given rel reads as a
+// flat zero rather than as no-data. A rel outside this list (a caller's typo,
+// refused as ErrInvalidInput before the write reaches the table) is folded
+// into "unknown" so the label stays bounded regardless of what a caller
+// sends.
+var referenceRels = []string{"depends_on", "seeded_by"}
+
+// observeReferenceWrite records one attempted reference write, called
+// exactly once per POST /api/v1/references attempt with the rel it was
+// attempted for and the error the attempt returned.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeReferenceWrite(rel string, err error) {
+	if s.referenceWrites == nil {
+		return
+	}
+	known := false
+	for _, r := range referenceRels {
+		if r == rel {
+			known = true
+			break
+		}
+	}
+	if !known {
+		rel = "unknown"
+	}
+	outcome := "ok"
+	if err != nil {
+		outcome = "error"
+	}
+	s.referenceWrites.WithLabelValues(rel, outcome).Inc()
 }
 
 // repoMappingActions are every action label worklode_repo_mapping_changes_total
@@ -865,6 +965,44 @@ func (s *server) observeFormSubmission(form, outcome string) {
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
 }
 
+// progressWriteRoutes and progressWriteOutcomes bound
+// worklode_progress_writes_total's two labels. The routes are 066 §7's write
+// table; the outcomes are the gate's one ("refused") plus the three a write
+// handler reports for itself.
+var (
+	progressWriteRoutes   = []string{"accept", "plan", "rally/add", "rally/confirm", "rally/discard", "merge"}
+	progressWriteOutcomes = []string{"ok", "refused", "conflict", "error"}
+)
+
+// observeProgressWrite records one Progress page write, called once per POST:
+// by beginJSONPost when the gate answers the request itself, by the handler
+// otherwise.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressWrite(route, outcome string) {
+	if s.progressWrites == nil {
+		return
+	}
+	s.progressWrites.WithLabelValues(route, outcome).Inc()
+}
+
+// progressFragments and progressFragmentOutcomes bound
+// worklode_progress_fragment_renders_total's two labels: the two fragment
+// routes 066 §5.2 adds, and the outcomes a GET on either of them can report.
+var (
+	progressFragments        = []string{"spec", "summary"}
+	progressFragmentOutcomes = []string{"ok", "not_found", "error"}
+)
+
+// observeProgressFragmentRender records one Progress page fragment request,
+// called once per GET on either route in progress.go.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressFragmentRender(fragment, outcome string) {
+	if s.progressFragmentRenders == nil {
+		return
+	}
+	s.progressFragmentRenders.WithLabelValues(fragment, outcome).Inc()
+}
+
 // taskTokenOutcomes bounds worklode_task_tokens_total's one label.
 var taskTokenOutcomes = []string{"ok", "not_found", "error"}
 
@@ -887,6 +1025,17 @@ func (s *server) observeDictation(outcome string) {
 		return
 	}
 	s.dictations.WithLabelValues(outcome).Inc()
+}
+
+// observeGitHubCall records one GitHub API call worklode makes itself, by
+// operation. Counted per attempt, so a failing GitHub still shows the call
+// rate. Nil-safe: tests build a *server directly without
+// initMetrics.
+func (s *server) observeGitHubCall(op string) {
+	if s.githubCalls == nil {
+		return
+	}
+	s.githubCalls.WithLabelValues(op).Inc()
 }
 
 // observeEventSubscriberSeek records one successful admin seek of a
@@ -925,6 +1074,34 @@ func (s *server) observeEventStreamSent(n int) {
 		return
 	}
 	s.eventStreamEventsSent.Add(float64(n))
+}
+
+// observeProgressStreamOpen and observeProgressStreamClose bracket one open
+// Progress page follow, the same way observeEventStreamOpen/Close do for the
+// admin log stream; progress.go pairs them with a defer.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressStreamOpen() {
+	if s.progressStreamsActive == nil {
+		return
+	}
+	s.progressStreamsActive.Inc()
+}
+
+func (s *server) observeProgressStreamClose() {
+	if s.progressStreamsActive == nil {
+		return
+	}
+	s.progressStreamsActive.Dec()
+}
+
+// observeProgressStreamFrames records n frames pushed to one follower, called
+// once per flushed batch rather than once per frame.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressStreamFrames(n int) {
+	if s.progressStreamFramesSent == nil {
+		return
+	}
+	s.progressStreamFramesSent.Add(float64(n))
 }
 
 // observeListExpansion records one expanded list request. Nil-safe: tests

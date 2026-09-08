@@ -1,0 +1,10 @@
+{
+  "action": "checks_requested",
+  "repository": {"full_name": "sunstoneinstitute/demo"},
+  "merge_group": {
+    "head_sha": "aaaa000000000000000000000000000000000000",
+    "head_ref": "refs/heads/gh-readonly-queue/main/not-a-pr-ref",
+    "base_sha": "bbbb000000000000000000000000000000000000",
+    "base_ref": "refs/heads/main"
+  }
+}

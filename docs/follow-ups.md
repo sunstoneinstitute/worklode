@@ -839,3 +839,35 @@ Recorded by WL-667 (the rally task kind, 005 §2a and 004 §6.1):
   concurrent `blocks` edge or posed decision can still slip past the retag
   checks. The race needs two interleaved transactions and is untested; closing
   it means locking the task row in both paths.
+
+Recorded by WL-762 (`deliverable` joins 061 §1's L1 entity set):
+
+- `[P3]` **`internal/cmd/CLAUDE.md`'s "resulting top-level" table lags its own
+  L1 rule.** The table still lists thirteen entities and calls the top level
+  "twenty-one commands"; `decision`, `deliverable` and `milestone` have since
+  joined L1. The rule bullet above it is now current. The table is a snapshot,
+  not the law, so nothing enforces it — refresh it the next time a top-level
+  command lands.
+
+Recorded by WL-747 (e2e and docs alignment, WL-SPEC-66 §8):
+
+- `[P3]` **The Progress page's live stream polls the event log once a
+  second**, the same interval `GET /api/v1/events/stream` (`lode event tail
+  --follow`) uses (`defaultStreamPollInterval`, `internal/api/eventstream.go`).
+  Every open Progress page runs its own poll loop against Postgres, so cost
+  scales with concurrent viewers, not with how often the log actually moves.
+  Fine at today's connection counts; the upgrade if that changes is a
+  push-based bus (`LISTEN`/`NOTIFY` or an in-process fan-out) that both
+  streams' poll loops can subscribe to instead of each hitting the store on
+  its own tick.
+
+Recorded by WL-754 (backfill the historic plan record, WL-SPEC-66 §6.2):
+
+- `[P4]` **Three accepted plans have no execution record and never will.**
+  `WL-PLAN-67` (human assignment), `WL-PLAN-68` (branch and worktree naming)
+  and `WL-PLAN-75` (Keycloak-primary auth) were written and executed before the
+  tracker carried its own work, so no task names them and none can be linked.
+  `scripts/plan-record-candidates.py` finds no candidate for any of the three.
+  They stay in the Progress page's "No execution record" group permanently;
+  read that group as three known-empty plans plus whatever is genuinely
+  unlinked.

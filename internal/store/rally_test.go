@@ -206,9 +206,10 @@ func TestRallyMembersIgnoreClosedRally(t *testing.T) {
 	}
 }
 
-// TestRallyMembersCycleTerminates: 'blocks' is not cycle-checked on write, so
-// only the CTE's UNION dedup keeps the walk finite. A UNION ALL regression
-// hangs here instead of returning.
+// TestRallyMembersCycleTerminates: AddEdge now refuses the write that closes
+// a 'blocks' cycle, but rows written before that guard existed can still hold
+// one, so only the CTE's UNION dedup keeps the walk finite. A UNION ALL
+// regression hangs here instead of returning.
 func TestRallyMembersCycleTerminates(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -216,9 +217,7 @@ func TestRallyMembersCycleTerminates(t *testing.T) {
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, e := range [][2]string{{a.ID, rally.ID}, {b.ID, a.ID}, {a.ID, b.ID}} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
-			t.Fatalf("addEdge %s blocks %s: %v", e[0], e[1], err)
-		}
+		insertEdgeRaw(t, s, e[0], e[1], "blocks")
 	}
 
 	got, err := s.rallyMembers(t.Context())
@@ -355,21 +354,6 @@ func draftRallyInput() TaskInput {
 	return in
 }
 
-// TestDraftRalliesAreUnlimited: the one-per-project index covers active
-// rallies only, so a project may hold any number of drafts.
-func TestDraftRalliesAreUnlimited(t *testing.T) {
-	t.Parallel()
-	s := openTaskStore(t)
-	first := createTask(t, s, taskTestNow, draftRallyInput())
-	second := createTask(t, s, taskTestNow, draftRallyInput())
-	if first.ID == second.ID {
-		t.Fatalf("both draft rallies got id %s", first.ID)
-	}
-	if _, err := s.ActiveRally(t.Context(), "horndb"); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("ActiveRally with only drafts: want ErrNotFound, got %v", err)
-	}
-}
-
 // TestPublishingASecondRallyIsRefused: publishing is draft -> ready, and that
 // is what activates a rally. The second one to try finds the slot taken. The
 // refusal comes from the index, so it reads as ErrInvalidInput rather than as
@@ -378,11 +362,12 @@ func TestPublishingASecondRallyIsRefused(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
 	first := createTask(t, s, taskTestNow, draftRallyInput())
-	second := createTask(t, s, taskTestNow, draftRallyInput())
-
 	if err := transition(t, s, taskTestNow, first.ID, "draft", "ready"); err != nil {
 		t.Fatalf("publish the first rally: %v", err)
 	}
+	// Only now: a project holds one draft rally at a time (0072), so the
+	// second one cannot exist until the first has left draft.
+	second := createTask(t, s, taskTestNow, draftRallyInput())
 	err := transition(t, s, taskTestNow, second.ID, "draft", "ready")
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("publish a second rally: want ErrInvalidInput, got %v", err)
@@ -698,5 +683,205 @@ func TestRallyMemberCountSkipsTombstoned(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("member count = %d, want 1 (the tombstoned member does not count)", n)
+	}
+}
+
+// --- the draft rally (WL-SPEC-66 §3.5) --------------------------------------
+
+// rallyTx runs one rally write through RecordEvent, the way the Progress
+// page's routes will.
+func rallyTx(t *testing.T, s *Store, apply func(tx *sql.Tx, eventID int64) error) error {
+	t.Helper()
+	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "rally.write", nil, apply)
+	return err
+}
+
+// TestEnsureDraftRally: the first add creates the draft rally, every later one
+// finds it. Two draft rallies in a project would each collect half a rally.
+func TestEnsureDraftRally(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+
+	if _, err := s.DraftRally(ctx, "horndb"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("DraftRally with none: want ErrNotFound, got %v", err)
+	}
+
+	var first, second *model.Task
+	for _, into := range []**model.Task{&first, &second} {
+		if err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+			r, err := EnsureDraftRally(tx, taskTestNow, "horndb", "stig", eventID)
+			*into = r
+			return err
+		}); err != nil {
+			t.Fatalf("EnsureDraftRally: %v", err)
+		}
+	}
+	if first.ID != second.ID {
+		t.Fatalf("EnsureDraftRally made two rallies, %s and %s", first.ID, second.ID)
+	}
+	if first.Kind != "rally" || first.State != "draft" {
+		t.Errorf("draft rally is %s/%s, want rally/draft", first.Kind, first.State)
+	}
+	if want := "Rally 2026-07-19"; first.Title != want {
+		t.Errorf("title = %q, want %q", first.Title, want)
+	}
+
+	got, err := s.DraftRally(ctx, "horndb")
+	if err != nil {
+		t.Fatalf("DraftRally: %v", err)
+	}
+	if got.ID != first.ID {
+		t.Fatalf("DraftRally = %s, want %s", got.ID, first.ID)
+	}
+	// A draft rally is inert, so it must not become the active one.
+	if _, err := s.ActiveRally(ctx, "horndb"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ActiveRally with only a draft: want ErrNotFound, got %v", err)
+	}
+}
+
+// TestOneDraftRallyPerProject: migration 0072's index, not a prior read, is
+// what stops two concurrent adds from each making their own draft rally.
+func TestOneDraftRallyPerProject(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	first := createTask(t, s, taskTestNow, draftRallyInput())
+
+	err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+		_, err := CreateTask(tx, taskTestNow, draftRallyInput(), eventID)
+		return err
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("second draft rally: want ErrInvalidInput, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "draft rally") {
+		t.Errorf("refusal %q does not say which rally is in the way", err)
+	}
+
+	// The two indexes are about different rows: an active rally alongside a
+	// draft one is the ordinary case, not a conflict.
+	active := createTask(t, s, taskTestNow, rallyInput())
+	got, err := s.ActiveRally(t.Context(), "horndb")
+	if err != nil || got.ID != active.ID {
+		t.Fatalf("ActiveRally = %v, %v, want %s", got, err, active.ID)
+	}
+	if got, err := s.DraftRally(t.Context(), "horndb"); err != nil || got.ID != first.ID {
+		t.Fatalf("DraftRally = %v, %v, want %s", got, err, first.ID)
+	}
+}
+
+// TestAddRallyMembers: adding is set-like (066 §3.5). A task named twice in
+// one call, or already in the rally from an earlier add, joins once.
+func TestAddRallyMembers(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	ctx := t.Context()
+	rally := createTask(t, s, taskTestNow, rallyInput())
+	a := createTask(t, s, taskTestNow, defaultTaskInput())
+	b := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	add := func(ids ...string) int {
+		t.Helper()
+		var added int
+		if err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+			var err error
+			added, err = AddRallyMembers(tx, taskTestNow, rally.ID, ids, eventID)
+			return err
+		}); err != nil {
+			t.Fatalf("AddRallyMembers(%v): %v", ids, err)
+		}
+		return added
+	}
+
+	if got := add(a.ID, a.ID, b.ID); got != 2 {
+		t.Fatalf("added = %d, want 2 (%s named twice)", got, a.ID)
+	}
+	if got := add(a.ID, b.ID); got != 0 {
+		t.Fatalf("re-adding the same members added %d, want 0", got)
+	}
+	if got := add(); got != 0 {
+		t.Fatalf("adding nothing added %d, want 0", got)
+	}
+	n, err := s.RallyMemberCount(ctx, rally.ID)
+	if err != nil {
+		t.Fatalf("RallyMemberCount: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("rally has %d members, want 2", n)
+	}
+}
+
+// TestMintAcceptDecision: the rally holds the prompt to accept a draft plan
+// as a decision task with one yes/no question, and OpenTaskForDoc — the guard
+// the route runs before minting a second — finds it.
+func TestMintAcceptDecision(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Number: 7, Slug: "007-plan",
+		Body: "---\nstatus: draft\n---\n\n# A plan\n", CreatedBy: "stig",
+	})
+
+	if open, err := s.OpenTaskForDoc(ctx, plan.ID, "decision"); err != nil || open != "" {
+		t.Fatalf("OpenTaskForDoc before the mint = %q, %v, want empty", open, err)
+	}
+
+	var task *model.Task
+	if err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+		var err error
+		task, err = MintAcceptDecision(tx, s.Now(), plan.ID, "stig", eventID)
+		return err
+	}); err != nil {
+		t.Fatalf("MintAcceptDecision: %v", err)
+	}
+	if want := "Accept P1-PLAN-7?"; task.Title != want {
+		t.Errorf("title = %q, want %q", task.Title, want)
+	}
+	if task.Kind != "decision" || task.AboutDoc != plan.ID {
+		t.Errorf("task is %s about doc %d, want decision about %d", task.Kind, task.AboutDoc, plan.ID)
+	}
+
+	open, err := s.OpenTaskForDoc(ctx, plan.ID, "decision")
+	if err != nil {
+		t.Fatalf("OpenTaskForDoc: %v", err)
+	}
+	if open != task.ID {
+		t.Fatalf("OpenTaskForDoc = %q, want %s", open, task.ID)
+	}
+
+	rows, err := s.ListDecisions(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("ListDecisions: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("got %d decision rows, want 1", len(rows))
+	}
+	if rows[0].Key != "accept" || rows[0].ResponseType != "yes_no" || rows[0].Question != task.Title {
+		t.Errorf("decision = %+v, want key accept, yes_no, question %q", rows[0], task.Title)
+	}
+}
+
+// TestMintAcceptDecisionRefusesNonPlan: the prompt is about a plan. A spec
+// has no acceptance a rally can ask for.
+func TestMintAcceptDecisionRefusesNonPlan(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 8, Slug: "008-spec",
+		Body: "---\nstatus: draft\n---\n\n# A spec\n", CreatedBy: "stig",
+	})
+	err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+		_, err := MintAcceptDecision(tx, s.Now(), spec.ID, "stig", eventID)
+		return err
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("mint about a spec: want ErrInvalidInput, got %v", err)
+	}
+	if err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+		_, err := MintAcceptDecision(tx, s.Now(), 9999, "stig", eventID)
+		return err
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("mint about an unknown doc: want ErrNotFound, got %v", err)
 	}
 }

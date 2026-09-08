@@ -219,7 +219,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
 	)
 	if err != nil {
-		if mapped := rallyAlreadyActive(err, id); mapped != err {
+		if mapped := rallyUniqueConflict(err, id); mapped != err {
 			return nil, mapped
 		}
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -305,7 +305,7 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 		to, now.UTC(), taskID,
 	)
 	if err != nil {
-		if mapped := rallyAlreadyActive(err, taskID); mapped != err {
+		if mapped := rallyUniqueConflict(err, taskID); mapped != err {
 			return mapped
 		}
 		return fmt.Errorf("update task %s state: %w", taskID, err)
@@ -398,7 +398,7 @@ func secretsJSON(names []string) ([]byte, error) {
 //
 // The project's one-active-rally rule is not checked here. It is a partial
 // unique index, so the UPDATE below is what enforces it, reported through
-// rallyAlreadyActive.
+// rallyUniqueConflict.
 func checkKindRetag(tx *sql.Tx, id, kind string) error {
 	if kind != "decision" && kind != "rally" {
 		return nil
@@ -587,7 +587,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 		fmt.Sprintf(`UPDATE tasks SET %s WHERE id = $%d`, strings.Join(sets, `, `), len(args)),
 		args...)
 	if err != nil {
-		if mapped := rallyAlreadyActive(err, id); mapped != err {
+		if mapped := rallyUniqueConflict(err, id); mapped != err {
 			return mapped
 		}
 		return fmt.Errorf("update task %s: %w", id, err)
@@ -709,6 +709,60 @@ func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error 
 	}
 	return requireOneAffected(res, "set task skills "+id,
 		fmt.Errorf("task %s: %w", id, ErrNotFound))
+}
+
+// SetTaskPlan links task id to the plan document it executed (WL-SPEC-66
+// §6.2): `lode task edit --plan` retrofitting a plan onto a task that was not
+// minted from it. plan_task_key is set to the task's current title, the same
+// value AcceptDoc's mint records for a task minted straight from a plan's
+// `## Tasks` declaration (migration 0043) — there is no declaration behind
+// this link, so the title is the only identity there is to key it on.
+//
+// Idempotent when the task already carries this planDoc. Refuses (all
+// ErrInvalidInput) a task already linked to a different plan document, a
+// planDoc that does not name a plan, or one in a different project than the
+// task's own; ErrNotFound if the task does not exist.
+func SetTaskPlan(tx *sql.Tx, now time.Time, taskID string, planDoc int64, eventID int64) error {
+	var taskProject, title string
+	var curPlanDoc sql.NullInt64
+	if err := tx.QueryRow(`SELECT project_id, title, plan_doc FROM tasks WHERE id = $1`, taskID).
+		Scan(&taskProject, &title, &curPlanDoc); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+		}
+		return fmt.Errorf("look up task %s: %w", taskID, err)
+	}
+	if curPlanDoc.Valid {
+		if curPlanDoc.Int64 == planDoc {
+			return nil
+		}
+		return fmt.Errorf("task %s already carries plan doc %d: %w", taskID, curPlanDoc.Int64, ErrInvalidInput)
+	}
+
+	var docProject, docKind string
+	if err := tx.QueryRow(`SELECT project_id, kind FROM docs WHERE id = $1`, planDoc).
+		Scan(&docProject, &docKind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("unknown document %d: %w", planDoc, ErrInvalidInput)
+		}
+		return fmt.Errorf("look up document %d: %w", planDoc, err)
+	}
+	if docKind != "plan" {
+		return fmt.Errorf("document %d is a %s, not a plan: %w", planDoc, docKind, ErrInvalidInput)
+	}
+	if docProject != taskProject {
+		return fmt.Errorf("cross-project plan %d (%s) for task %s (%s): %w",
+			planDoc, docProject, taskID, taskProject, ErrInvalidInput)
+	}
+
+	if _, err := tx.Exec(`UPDATE tasks SET plan_doc = $1, plan_task_key = $2, updated_at = $3 WHERE id = $4`,
+		planDoc, title, now.UTC(), taskID); err != nil {
+		if isUniqueViolationOn(err, "tasks_plan_task_key") {
+			return fmt.Errorf("plan %d already has a task titled %q: %w", planDoc, title, ErrInvalidInput)
+		}
+		return fmt.Errorf("set plan for task %s: %w", taskID, err)
+	}
+	return LogChange(tx, "task", taskID, eventID, map[string]any{"field": "plan_doc", "new": planDoc})
 }
 
 // SlugifyTitle turns a task title into a branch-name slug: lowercase, every
@@ -896,7 +950,8 @@ func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
 // edges. A 'blocks' edge may not start at a rally: a rally's own blockers are
-// its membership, and it blocks nothing in turn. follow_up_to and
+// its membership, and it blocks nothing in turn; nor may it close a 'blocks'
+// loop, which would deadlock every task on it (ErrCycle). follow_up_to and
 // duplicate_of are unchecked beyond their partial unique indexes: both are
 // cross-project by design and nothing walks either transitively. A missing
 // endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
@@ -938,6 +993,16 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 			return fmt.Errorf("task %s is a rally and cannot block another task: %w",
 				fromTask, ErrInvalidInput)
 		}
+		// A 'blocks' loop is a deadlock: every task on it waits for the next
+		// one and none can ever be worked. The readers already survive a
+		// stored cycle, but only the write closing it can refuse it.
+		reaches, err := reachesViaEdge(tx, toTask, fromTask, "blocks")
+		if err != nil {
+			return err
+		}
+		if reaches {
+			return fmt.Errorf("edge %s blocks %s: %w", fromTask, toTask, ErrCycle)
+		}
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, $3, $4)`,
@@ -972,10 +1037,12 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 	return nil
 }
 
-// reachesViaChildOf reports whether target is reachable from start by
-// walking child_of edges upward (child -> parent). The visited set keeps the
-// walk terminating even if the stored graph already contains a cycle.
-func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
+// reachesViaEdge reports whether target is reachable from start by following
+// edges of type typ in the from_task -> to_task direction. The visited set
+// keeps the walk terminating even if the stored graph already contains a
+// cycle. Used to refuse the edge that would close one: for child_of that
+// direction is child -> parent, for blocks it is blocker -> blocked.
+func reachesViaEdge(tx *sql.Tx, start, target, typ string) (bool, error) {
 	visited := map[string]bool{start: true}
 	frontier := []string{start}
 	for len(frontier) > 0 {
@@ -983,22 +1050,22 @@ func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
 		frontier = frontier[1:]
 
 		rows, err := tx.Query(
-			`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`, cur)
+			`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = $2`, cur, typ)
 		if err != nil {
-			return false, fmt.Errorf("walk child_of parents of %s: %w", cur, err)
+			return false, fmt.Errorf("walk %s edges out of %s: %w", typ, cur, err)
 		}
 		var parents []string
 		for rows.Next() {
 			var p string
 			if err := rows.Scan(&p); err != nil {
 				rows.Close()
-				return false, fmt.Errorf("scan parent of %s: %w", cur, err)
+				return false, fmt.Errorf("scan %s edge out of %s: %w", typ, cur, err)
 			}
 			parents = append(parents, p)
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close()
-			return false, fmt.Errorf("walk child_of parents of %s: %w", cur, err)
+			return false, fmt.Errorf("walk %s edges out of %s: %w", typ, cur, err)
 		}
 		rows.Close()
 

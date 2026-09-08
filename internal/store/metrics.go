@@ -73,7 +73,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|accept|submit|revise|discard|edges|note|delete|undelete|list-versions|get-version) and outcome.",
+			Help: "Design-document operations by op (create|update|patch|accept|submit|revise|discard|edges|note|delete|undelete|list-versions|get-version) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (025 §7.3), or refused-mechanical|no-reviewers for patch's gate (025 §8.4)).",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
@@ -188,7 +188,28 @@ func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
 		return
 	}
-	m.docOps.WithLabelValues(op, outcome(err)).Inc()
+	m.docOps.WithLabelValues(op, docOpOutcome(op, err)).Inc()
+}
+
+// docOpOutcome maps one document operation's error to its metric label.
+// accept and patch are the two ops with a third outcome: refused-reviewers
+// picks out AcceptDoc's mechanical multi-approval gate (025 §7.3,
+// ErrMissingApprovals); PatchRule picks out PatchDoc's own refusals
+// (025 §8.4) — refused-mechanical for a rule that fired, no-reviewers for a
+// substantive patch with no one to re-approve it. Both come from a single op
+// each, so no other op's errors can land on these labels.
+func docOpOutcome(op string, err error) string {
+	if op == "accept" && errors.Is(err, ErrMissingApprovals) {
+		return "refused-reviewers"
+	}
+	switch rule := PatchRule(err); {
+	case rule == "no-reviewers":
+		return "no-reviewers"
+	case rule != "":
+		return "refused-mechanical"
+	default:
+		return outcome(err)
+	}
 }
 
 // planTasksMinted adds n to worklode_doc_plan_tasks_minted_total, the tasks

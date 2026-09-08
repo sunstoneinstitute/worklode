@@ -16,7 +16,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,24 +63,29 @@ type githubHandler struct {
 // appAuth, if non-nil, resolves a release's branch-name target_commitish to a
 // commit sha (see resolveReleaseCommitish); nil disables resolution and the
 // release falls back to main's head, as it did before this App integration.
-func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, m *Metrics) http.Handler {
+//
+// onRuleset, if non-nil, is called when a mapped repo's rulesets change
+// (WL-SPEC-66 §6.3). The event carries no fact worth storing — the merge-queue
+// rule is read per branch from the rules API — so all it does is tell the
+// server's refresh loop to look again.
+func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, onRuleset func(), m *Metrics) http.Handler {
 	var resolveBranch func(ctx context.Context, repo, branch string) (string, error)
 	if appAuth != nil {
 		resolveBranch = appAuth.BranchSHA
 	}
-	return newGitHubHandler(st, secret, log, onSkillPush, resolveBranch, m)
+	return newGitHubHandler(st, secret, log, onSkillPush, resolveBranch, onRuleset, m)
 }
 
 // newGitHubHandler is the common constructor: NewGitHubHandler derives
 // resolveBranch from appAuth, and tests reach it directly (export_test.go) to
 // stub branch resolution without a fake GitHub App server.
-func newGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, resolveBranch func(ctx context.Context, repo, branch string) (string, error), m *Metrics) *githubHandler {
+func newGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, resolveBranch func(ctx context.Context, repo, branch string) (string, error), onRuleset func(), m *Metrics) *githubHandler {
 	if log == nil {
 		log = slog.Default()
 	}
 	return &githubHandler{
 		st: st, secret: secret, log: log, onSkillPush: onSkillPush, metrics: m,
-		ap: &applier{st: st, log: log, resolveBranch: resolveBranch, metrics: m},
+		ap: &applier{st: st, log: log, resolveBranch: resolveBranch, onRuleset: onRuleset, metrics: m},
 	}
 }
 
@@ -274,10 +281,11 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handledEvents are the GitHub event names applyFunc routes. It is the single
 // source of truth: applyFunc switches over these names, and the repo-add
 // subscription check compares an installation's subscriptions against them, so
-// adding a ninth event cannot leave the check behind.
+// adding one more event cannot leave the check behind.
 var handledEvents = []string{
 	"issues", "push", "pull_request", "deployment_status",
 	"pull_request_review", "workflow_run", "release", "registry_package",
+	"merge_group", "repository_ruleset",
 }
 
 // HandledEvents returns the event names this handler routes.
@@ -385,10 +393,28 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	if err != nil {
 		return err
 	}
+
+	// A closed PR is out of the merge queue either way (merged or not,
+	// correlated to a task or not), so this clears unconditionally rather
+	// than living inside the merged/task-correlated branch below.
+	if action == "closed" {
+		if err := store.SetPRQueued(tx, repo, gh.Number, nil); err != nil {
+			return err
+		}
+	}
+
 	if pr.TaskID == nil {
 		return nil
 	}
 	taskID := *pr.TaskID
+
+	// The delivery body is GitHub's, and names no worklode task; the
+	// correlation only exists once UpsertPR has run. Recording it on the
+	// event is what lets a reader name the task without re-joining
+	// (WL-SPEC-66 §5.1).
+	if err := store.MergeEventPayload(tx, eventID, map[string]string{"task": taskID}); err != nil {
+		return err
+	}
 
 	// The lifecycle effects below stay unconditional even when UpsertPR's
 	// non-regression guard rejected the fact columns: they are order-safe on
@@ -441,6 +467,60 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return store.ResolveDelivery(tx, now, taskID, repo, eventID)
 	}
 	return nil
+}
+
+// mergeGroupHeadRef extracts the PR number from a merge_group's head_ref,
+// shaped refs/heads/gh-readonly-queue/<base>/pr-<number>-<base sha>. The base
+// branch name may itself contain slashes, so the match anchors on the
+// trailing "pr-<digits>-<hex>" segment instead of splitting on "/".
+var mergeGroupHeadRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
+
+// applyMergeGroup sets or clears pull_requests.queued_at for the PR named in
+// the merge_group's head_ref (WL-SPEC-66 §6.1): checks_requested marks the PR
+// queued as of now, destroyed clears it. action is caller-guaranteed to be
+// one of those two (applyFunc filters). A head_ref that does not match the
+// expected shape names no PR to update; that is logged and treated as a
+// no-op, not a delivery failure — a correlation must never fail the
+// delivery. The task the PR carries is recorded on the event, as
+// applyPullRequest does.
+func (a *applier) applyMergeGroup(tx *sql.Tx, eventID int64, repo, action string, body []byte) error {
+	var p struct {
+		MergeGroup struct {
+			HeadRef string `json:"head_ref"`
+		} `json:"merge_group"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return fmt.Errorf("parse merge_group payload: %w", err)
+	}
+	m := mergeGroupHeadRef.FindStringSubmatch(p.MergeGroup.HeadRef)
+	if m == nil {
+		a.log.Warn("merge_group: unparsed head_ref", "repo", repo, "head_ref", p.MergeGroup.HeadRef)
+		return nil
+	}
+	number, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return nil // unreachable: the regexp only captures digits
+	}
+	var at *time.Time
+	if action == "checks_requested" {
+		now := a.st.Now()
+		at = &now
+	}
+	if err := store.SetPRQueued(tx, repo, number, at); err != nil {
+		return err
+	}
+	// The delivery names a queue entry, not a task; the correlation lives on
+	// the PR row. Recording it on the event is what lets the Progress page's
+	// stream resolve this to a task and refresh its position line
+	// (WL-SPEC-66 §5.1) without re-joining.
+	taskID, err := store.PRTaskID(tx, repo, number)
+	if err != nil {
+		return err
+	}
+	if taskID == "" {
+		return nil
+	}
+	return store.MergeEventPayload(tx, eventID, map[string]string{"task": taskID})
 }
 
 func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
@@ -611,7 +691,7 @@ func firstKnownActor(tx *sql.Tx, logins []string) (*string, error) {
 	return nil, nil
 }
 
-func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
+func (a *applier) applyWorkflowRun(tx *sql.Tx, eventID int64, repo string, body []byte) error {
 	var p struct {
 		WorkflowRun struct {
 			Name         string    `json:"name"`
@@ -635,7 +715,7 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
 	if run.Status == "completed" && !run.UpdatedAt.IsZero() {
 		completedAt = &run.UpdatedAt
 	}
-	return store.UpsertCIRun(tx, store.CIRun{
+	if err := store.UpsertCIRun(tx, store.CIRun{
 		Repo:        repo,
 		HeadSHA:     run.HeadSHA,
 		Workflow:    run.Name,
@@ -645,7 +725,21 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
 		UpdatedAt:   run.UpdatedAt,
-	})
+	}); err != nil {
+		return err
+	}
+	// Same reason as applyPullRequest: name the task on the event so a
+	// reader does not re-join (WL-SPEC-66 §5.1). The head sha is the only
+	// handle a run carries, and it is attributed to one task or to none —
+	// several means the correlation is ambiguous, so record nothing.
+	tasks, err := store.TaskIDsForSHA(tx, repo, run.HeadSHA)
+	if err != nil {
+		return err
+	}
+	if len(tasks) != 1 {
+		return nil
+	}
+	return store.MergeEventPayload(tx, eventID, map[string]string{"task": tasks[0]})
 }
 
 func (a *applier) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {

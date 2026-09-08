@@ -95,6 +95,14 @@ const (
 	permMilestoneWrite Permission = "milestone.write"
 	permMilestoneRead  Permission = "milestone.read"
 
+	// permReferenceRead and permReferenceWrite cover entity_edges (spec 029
+	// §5): typed references between entities of different kinds, the only
+	// edges allowed to cross a project boundary. Any crew member may declare
+	// a dependency, matching deliverable creation, so both grant to
+	// {RoleUser, RoleAdmin}.
+	permReferenceRead  Permission = "reference.read"
+	permReferenceWrite Permission = "reference.write"
+
 	// permCrewWrite covers changing a project's Crew: who is on it and with
 	// which role labels (spec 029 §6.1). Its own capability rather than a
 	// flavour of project.admin, because Crew is the working group of a
@@ -270,6 +278,9 @@ var grants = map[Permission][]Role{
 
 	permMilestoneWrite: {RoleUser, RoleAdmin},
 	permMilestoneRead:  {RoleUser, RoleAdmin},
+
+	permReferenceRead:  {RoleUser, RoleAdmin},
+	permReferenceWrite: {RoleUser, RoleAdmin},
 
 	// Every authenticated actor, which is wider than spec 029 §6.1 asks for:
 	// the spec scopes the change to the project's own Crew ("any Crew member

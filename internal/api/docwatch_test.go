@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -120,6 +121,33 @@ func (f *docWatchFixture) accepted(t *testing.T, version int) store.Event {
 		Doc: store.DocIRI(*f.doc), Actor: "alice", At: f.st.Now(),
 		Version: version, From: "wlc:draft", To: "wlc:accepted",
 	})
+}
+
+// patched records the doc.patched event patchDoc writes (025 §8.4): a dotted
+// backbone type, so it goes through RecordEvent rather than eventbus.Emit,
+// and it names its document by numeric id with no wl:subject.
+func (f *docWatchFixture) patched(t *testing.T, version int, classification string, anchors ...string) store.Event {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"doc": f.doc.ID, "actor": "alice",
+		"anchors": anchors, "classification": classification, "rule": "judged",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, inserted, err := f.st.RecordEvent(t.Context(), "cli",
+		fmt.Sprintf("doc-patch-%d", version), watcher.TypeDocPatched, payload, nil)
+	if err != nil {
+		t.Fatalf("record patch event: %v", err)
+	}
+	if !inserted {
+		t.Fatalf("record patch event: version %d already recorded", version)
+	}
+	row, err := f.st.GetEvent(t.Context(), id)
+	if err != nil {
+		t.Fatalf("get event %d: %v", id, err)
+	}
+	return row
 }
 
 // handle runs the handler on one event and fails on any error.
@@ -339,4 +367,68 @@ func slicesContainsSubstring(entries []store.StateLogEntry, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestDocWatchMintsReviewOnPatch is 025 §7.3's re-review: a substantive
+// in-place amendment left approved text modified since, so the rule mints one
+// review task naming the sections it touched — once, however often the event
+// is redelivered.
+func TestDocWatchMintsReviewOnPatch(t *testing.T) {
+	t.Parallel()
+	f := newDocWatchFixture(t)
+	ev := f.patched(t, 2, "substantive", "sec-1")
+
+	if got := f.handle(t, ev); got != eventbus.OutcomeApplied {
+		t.Errorf("outcome = %q, want %q", got, eventbus.OutcomeApplied)
+	}
+	f.handle(t, ev)
+
+	tasks := f.tasksAbout(t)
+	if len(tasks) != 1 {
+		t.Fatalf("tasks about the doc = %d, want 1: %+v", len(tasks), tasks)
+	}
+	got := tasks[0]
+	if got.Kind != "review" {
+		t.Errorf("kind = %q, want review", got.Kind)
+	}
+	// The ref, not the title: §7.3's task names the document the way a
+	// reader cites it, and the sections that need looking at.
+	if want := "Re-review patched sections of WL-SPEC-25: sec-1"; got.Title != want {
+		t.Errorf("title = %q, want %q", got.Title, want)
+	}
+
+	entries, err := f.st.StateLogForEntity(t.Context(), "task", got.ID)
+	if err != nil {
+		t.Fatalf("state log for %s: %v", got.ID, err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("state log for %s = %+v, want exactly the mint entry", got.ID, entries)
+	}
+	mint, err := f.st.GetEvent(t.Context(), entries[0].EventID)
+	if err != nil {
+		t.Fatalf("get mint event %d: %v", entries[0].EventID, err)
+	}
+	wantExtID := "doc-lifecycle:review-on-patch:" + strconv.FormatInt(ev.ID, 10)
+	if mint.Source != watcherEventSource || mint.ExternalID != wantExtID {
+		t.Errorf("mint event = (%q, %q), want (%q, %q)",
+			mint.Source, mint.ExternalID, watcherEventSource, wantExtID)
+	}
+	f.wantActions(t, "review-on-patch", "applied", 1)
+}
+
+// TestDocWatchIgnoresNonSubstantivePatch: §8.5's note is the whole record of a
+// non-substantive amendment, so there is nothing to re-review and the rule
+// does not fire at all — not even as a suppression.
+func TestDocWatchIgnoresNonSubstantivePatch(t *testing.T) {
+	t.Parallel()
+	f := newDocWatchFixture(t)
+
+	if got := f.handle(t, f.patched(t, 2, "non-substantive", "sec-1")); got != eventbus.OutcomeApplied {
+		t.Errorf("outcome = %q, want %q", got, eventbus.OutcomeApplied)
+	}
+	if tasks := f.tasksAbout(t); len(tasks) != 0 {
+		t.Fatalf("tasks about the doc = %d, want 0: %+v", len(tasks), tasks)
+	}
+	f.wantActions(t, "review-on-patch", "applied", 0)
+	f.wantActions(t, "review-on-patch", "suppressed", 0)
 }

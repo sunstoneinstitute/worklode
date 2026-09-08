@@ -23,6 +23,7 @@ type applier struct {
 	st            *store.Store
 	log           *slog.Logger
 	resolveBranch func(ctx context.Context, repo, branch string) (string, error)
+	onRuleset     func()
 	metrics       *Metrics
 }
 
@@ -84,8 +85,8 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 			return a.applyReview(tx, repo, body)
 		}
 	case "workflow_run":
-		return func(tx *sql.Tx, _ int64) error {
-			return a.applyWorkflowRun(tx, repo, body)
+		return func(tx *sql.Tx, eventID int64) error {
+			return a.applyWorkflowRun(tx, eventID, repo, body)
 		}
 	case "release":
 		if env.Action != "published" {
@@ -100,6 +101,23 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 		}
 		return func(tx *sql.Tx, _ int64) error {
 			return a.applyRegistryPackage(tx, repo, body)
+		}
+	case "repository_ruleset":
+		// Nothing in the payload is the fact: §6.3's merge-queue rule is read
+		// per branch from the rules API. The event only says "look again", so
+		// there is no typed-table apply — just a poke at the refresh loop.
+		// Outside the apply callback on purpose: that one runs in an open
+		// transaction.
+		if a.onRuleset != nil {
+			a.onRuleset()
+		}
+		return nil
+	case "merge_group":
+		if env.Action != "checks_requested" && env.Action != "destroyed" {
+			return nil
+		}
+		return func(tx *sql.Tx, eventID int64) error {
+			return a.applyMergeGroup(tx, eventID, repo, env.Action, body)
 		}
 	default:
 		return nil

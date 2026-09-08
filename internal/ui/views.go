@@ -9,6 +9,7 @@ package ui
 // reference api's DTOs (ADR 036 §3).
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"strconv"
@@ -284,7 +285,11 @@ type TimelineRow struct {
 	Type    string
 	Label   string
 	Summary string
-	URL     string
+	// Detail is the untruncated summary, set only when Summary was cut to
+	// fit the column (a body edit carries the whole new body). The task page
+	// puts it behind a "see more" disclosure; empty means nothing was cut.
+	Detail string
+	URL    string
 }
 
 // --- placeholder ------------------------------------------------------------
@@ -381,6 +386,11 @@ type CockpitProject struct {
 	Key       string
 	ModeName  string
 	ModeBasis string
+
+	// HasSpecs says whether the project has at least one spec. The sidebar's
+	// Progress entry is conditional on it (WL-SPEC-66 §2, amending 056 §2):
+	// a project with no spec has no Progress page to link to.
+	HasSpecs bool
 }
 
 // CockpitWork holds the cockpit's four work buckets.
@@ -570,6 +580,37 @@ type MilestoneSection struct {
 	DeliverablesLive  int
 	Tasks             []MilestoneTaskRow
 	Deliverables      []DeliverableRow
+
+	// References are the deliverables this milestone depends_on (029 §5),
+	// the one edge kind allowed to cross a project boundary — so each row
+	// carries its own project, and its id links to that project's
+	// Deliverables page rather than to this one.
+	References []MilestoneRefRow
+
+	// AddAction is where this milestone's add-a-reference form POSTs;
+	// AddValue and AddError carry a refused submit back to the field that
+	// was typed into, so only the milestone that was submitted re-renders
+	// with a message.
+	AddAction string
+	AddValue  string
+	AddError  string
+}
+
+// MilestoneRefRow is one deliverable a milestone depends on. State is the
+// deliverable's reported state, "" when nothing has reported — rendered by
+// the same chip the Deliverables page uses, so an unreported reference reads
+// as "Declared" rather than as live.
+type MilestoneRefRow struct {
+	ID      string
+	Project string
+	Name    string
+	State   string
+}
+
+// DeliverablesURL is where the row's id links: the origin project's
+// Deliverables page.
+func (r MilestoneRefRow) DeliverablesURL() string {
+	return "/projects/" + r.Project + "/deliverables"
 }
 
 // MilestoneTaskRow is one task in a milestone section, linking to the task
@@ -1154,4 +1195,383 @@ func routineLabel(n int) string {
 		return "1 routine update"
 	}
 	return strconv.Itoa(n) + " routine updates"
+}
+
+// --- progress (WL-SPEC-66 §2) ------------------------------------------------
+
+// ProgressView is a project's Progress page: the rally band, the four group
+// counts, the section bar with its legend, and the §1.3 groups of spec rows.
+// Everything on it is derived per request (model.ProjectProgress); the page
+// stores no progress figure of its own, and shows no percentage (§2.5).
+type ProgressView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	// Viewer is the session's actor, empty for an anonymous viewer of an
+	// open instance. Every act on the page is enabled or disabled against
+	// it (§3); the server never derives an actor from anything the page
+	// sends back (§4.2 rule 6).
+	Viewer string
+	P      model.ProjectProgress
+	Legend []LegendEntry
+	// ReviewEnabled is hasReviewSurface's answer (internal/api): whether spec
+	// 059's routes are registered yet. The server decides it, not this
+	// package (§3.3) — every Review button on the page renders off this one
+	// bit rather than each act guessing at it.
+	ReviewEnabled bool
+	// MergeEnabled is whether the server has a GitHub App to act with
+	// (internal/api). §3.6's button needs one, and only the server knows;
+	// without it the button renders disabled with that reason rather than
+	// posting a route that would answer 503.
+	MergeEnabled bool
+}
+
+// LegendEntry is one section state in the bar's legend: §1.2's label, a
+// one-line meaning, and how many owed sections carry it. The bound state has
+// no entry — §1.4 keeps it off the page entirely.
+type LegendEntry struct {
+	State, Label, Help string
+	Count              int
+}
+
+// progressStates is §2.1's section-bar order, which is also the legend's.
+// "bound" is absent by design (§1.4).
+var progressStates = []string{"built", "in_progress", "not_started", "no_record", "draft", "unplanned"}
+
+// progressStateLabels is §1.2's "Label on the page" column, verbatim.
+var progressStateLabels = map[string]string{
+	"built":       "Built",
+	"in_progress": "In progress",
+	"not_started": "Accepted, not started",
+	"no_record":   "Accepted, no execution record",
+	"draft":       "Plan awaiting acceptance",
+	"unplanned":   "Unplanned",
+}
+
+// progressStateHelp is the legend's one-line meaning for each state.
+var progressStateHelp = map[string]string{
+	"built":       "every covering plan's tasks have landed",
+	"in_progress": "a covering plan has work under way",
+	"not_started": "a covering plan is accepted and no task has started",
+	"no_record":   "a covering plan is accepted with no minted task",
+	"draft":       "every covering plan is still a draft",
+	"unplanned":   "no plan covers this section",
+}
+
+// progressGroupLabels and progressGroupHelp are §1.3's group names and its
+// "Why this order" column, one line each.
+var progressGroupLabels = map[string]string{
+	"active": "Active", "planning": "Needs planning",
+	"no_record": "No execution record", "built": "Built",
+}
+
+var progressGroupHelp = map[string]string{
+	"active":    "work is claimable now",
+	"planning":  "a human has to plan or accept",
+	"no_record": "the record is missing, not the work",
+	"built":     "nothing to do",
+}
+
+func progressStateLabel(state string) string { return progressStateLabels[state] }
+func progressGroupLabel(key string) string   { return progressGroupLabels[key] }
+func progressGroupMeaning(key string) string { return progressGroupHelp[key] }
+
+// ProgressLegend builds the section bar's legend from a derived progress
+// model: every state in bar order with its own count, so a state the project
+// has none of still explains its colour.
+func ProgressLegend(p model.ProjectProgress) []LegendEntry {
+	counts := make(map[string]int, len(p.Bar))
+	for _, s := range p.Bar {
+		counts[s.State] = s.Count
+	}
+	out := make([]LegendEntry, 0, len(progressStates))
+	for _, st := range progressStates {
+		out = append(out, LegendEntry{
+			State: st, Label: progressStateLabel(st),
+			Help: progressStateHelp[st], Count: counts[st],
+		})
+	}
+	return out
+}
+
+// progressCellClass is a strip cell's class: its state colour plus the inset
+// ring a partially covered section carries (§1.2).
+func progressCellClass(s model.ProgressSection) string {
+	c := "cell cell-" + s.State
+	if s.Partial {
+		c += " cell-partial"
+	}
+	return c
+}
+
+// progressSectionNumber renders an anchor as the section number a reader
+// recognises: "sec-3.1" reads "§3.1".
+func progressSectionNumber(anchor string) string {
+	return "§" + strings.TrimPrefix(anchor, "sec-")
+}
+
+// progressCellTip is a strip cell's tooltip text (§2.4): the section, its
+// state, and the plans covering it, in the "·" form the spec spells out
+// (§3.1 Renewal · In progress · WL-PLAN-99). progress.js reads it from
+// data-tip; the page carries no title attribute for it, so a reader never
+// sees two tooltips for one cell.
+func progressCellTip(s model.ProgressSection) string {
+	t := progressSectionNumber(s.Anchor) + " " + s.Heading + " · " + progressStateLabel(s.State)
+	if len(s.Plans) > 0 {
+		t += " · " + strings.Join(s.Plans, ", ")
+	}
+	return t
+}
+
+// progressTaskTip is a task cell's tooltip text (§2.4): the task, its title,
+// and its position — the furthest fact the backbone holds about it, already
+// rendered as one line by internal/progress.
+func progressTaskTip(t model.ProgressTask) string {
+	s := t.ID + " · " + t.Title
+	if t.Position != "" {
+		s += " · " + t.Position
+	}
+	return s
+}
+
+// progressRefTip is a plan or spec reference's tooltip text (§2.4).
+func progressRefTip(ref, title string) string { return ref + " · " + title }
+
+// progressSliceTitle is a bar slice's hover text: what the colour means and
+// how many owed sections it covers. A count, never a percentage (§2.5).
+func progressSliceTitle(s model.ProgressSlice) string {
+	return progressStateLabel(s.State) + ": " + strconv.Itoa(s.Count) + " sections"
+}
+
+// progressSliceClass is one bar slice's whole class list: the state colour it
+// shares with the strips, plus the .seg-N rule that gives it its share of the
+// bar. The share cannot be an inline style — the cockpit is served under
+// style-src 'self' with no nonce, so the attribute would be dropped and every
+// slice would come out the same width (csp_test.go holds that line) — so the
+// count is turned into a whole percent here and app.tailwind.css carries one
+// flex-grow rule per percent. Whole percent is the finest granularity a fixed
+// class set can hold, and it is exact to about a pixel at any bar width the
+// page draws. A slice with a count never rounds away to nothing.
+func progressSliceClass(bar []model.ProgressSlice, i int) string {
+	total := 0
+	for _, s := range bar {
+		total += s.Count
+	}
+	s := bar[i]
+	pct := 0
+	if total > 0 {
+		pct = (s.Count*200 + total) / (total * 2) // round half up
+		if pct == 0 && s.Count > 0 {
+			pct = 1
+		}
+	}
+	return "seg cell-" + s.State + " seg-" + strconv.Itoa(pct)
+}
+
+// progressDetailID is the id of a row's detail block, which the row points at
+// with aria-controls so the two are one control to assistive technology.
+func progressDetailID(ref string) string { return "d-" + ref }
+
+// ProgressAction is one §3.1 action button: the route progress.js posts to
+// under /projects/{id}/progress/, the JSON body it sends, and the sentence
+// the confirmation step shows. A non-empty Reason renders the button
+// disabled with that reason as its hover text, because a hidden button reads
+// as a missing feature (§3).
+type ProgressAction struct {
+	Route   string
+	Body    string
+	Label   string
+	Confirm string
+	Reason  string
+}
+
+// progressPlanActions are the acts on one plan line (§2.3). Accept applies
+// only to a draft plan — the document `lode doc accept` accepts (§3.2).
+// Review (§3.3) is offered on every plan line, whatever its state.
+func progressPlanActions(p model.ProgressPlan, viewer string, reviewEnabled bool) []ProgressAction {
+	var acts []ProgressAction
+	if p.State == "draft" {
+		acts = append(acts, progressAcceptAction(p.Doc, p.Ref, p.Owner, viewer))
+	}
+	acts = append(acts, progressReviewAction(p.Doc, p.Ref, reviewEnabled))
+	return acts
+}
+
+// progressSpecActions are the acts on a spec row (§2.2's action slot). A
+// draft spec is accepted from here the same way a draft plan is (§3.2); an
+// accepted one has nothing to accept. Plan (§3.4) joins it when the spec has
+// a section no plan covers and no planning task is open — an open one is
+// drawn as a link instead, because minting a second is not an act this page
+// offers. Rally (§3.5) and Review (§3.3) end the row and are offered on
+// every spec.
+func progressSpecActions(s model.ProgressSpec, viewer string, reviewEnabled bool) []ProgressAction {
+	var acts []ProgressAction
+	if s.Status == "draft" {
+		acts = append(acts, progressAcceptAction(s.Doc, s.Ref, s.Owner, viewer))
+	}
+	if s.PlanningTask == "" && progressHasUnplanned(s) {
+		acts = append(acts, progressPlanAction(s.Doc, s.Ref, viewer))
+	}
+	acts = append(acts, progressRallyAction(s.Doc, s.Ref, viewer))
+	acts = append(acts, progressReviewAction(s.Doc, s.Ref, reviewEnabled))
+	return acts
+}
+
+// progressReviewAction is §3.3's Review button. Whether it may be pressed at
+// all is not this page's call: hasReviewSurface (internal/api) reports
+// whether spec 059's routes exist, and reviewEnabled is that answer, passed
+// in rather than re-derived here (ui depends on nothing beyond stdlib and
+// model). Disabled carries the reason rather than hiding the button, the
+// same rule every other act on this page follows (§3).
+func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAction {
+	a := ProgressAction{
+		Route:   "review",
+		Body:    progressDocBody(doc),
+		Label:   "Review",
+		Confirm: "Request review for " + ref,
+	}
+	if !reviewEnabled {
+		a.Reason = "Review surface (spec 059) not yet built"
+	}
+	return a
+}
+
+// progressRallyAction is §3.5's Rally button. Every spec row carries one,
+// whatever group it is in: a spec with nothing outstanding is a no-op the
+// route answers with added 0, not an act to hide. Any signed-in viewer may
+// assemble a rally — a draft rally is inert until someone confirms it (005
+// §9) — so having no session is the only reason it is ever disabled.
+func progressRallyAction(doc int64, ref, viewer string) ProgressAction {
+	a := ProgressAction{
+		Route:   "rally/add",
+		Body:    progressDocBody(doc),
+		Label:   "Rally",
+		Confirm: "Add " + ref + " to the rally",
+	}
+	if viewer == "" {
+		a.Reason = "sign in to assemble a rally"
+	}
+	return a
+}
+
+// progressFooterActions are §3.5's footer controls: publish the draft rally,
+// or drop it. Both are two-step buttons like every other write on this page,
+// and both send an empty body — the draft rally a project has is the one they
+// act on, so there is nothing to name.
+func progressFooterActions(viewer string) []ProgressAction {
+	confirm := ProgressAction{
+		Route: "rally/confirm", Body: "{}", Label: "Confirm Rally",
+		Confirm: "Publish this rally",
+	}
+	discard := ProgressAction{
+		Route: "rally/discard", Body: "{}", Label: "Discard",
+		Confirm: "Discard this rally",
+	}
+	if viewer == "" {
+		confirm.Reason = "sign in to publish a rally"
+		discard.Reason = "sign in to discard a rally"
+	}
+	return []ProgressAction{confirm, discard}
+}
+
+// progressHasUnplanned is §3.4's condition: a section no plan covers. It is
+// the same fact the route checks before it mints, so the button and the route
+// agree about when planning is owed.
+func progressHasUnplanned(s model.ProgressSpec) bool {
+	for _, sec := range s.Sections {
+		if sec.State == "unplanned" {
+			return true
+		}
+	}
+	return false
+}
+
+// progressPlanAction is §3.4's Plan button: it mints 025 §15.4's planning
+// task for the spec. Any signed-in viewer may ask for it — the task is a
+// prompt to plan, not the plan — so the only reason it is ever disabled is
+// having no session to act as.
+func progressPlanAction(doc int64, ref, viewer string) ProgressAction {
+	a := ProgressAction{
+		Route:   "plan",
+		Body:    progressDocBody(doc),
+		Label:   "Plan",
+		Confirm: "Mint a planning task for " + ref,
+	}
+	if viewer == "" {
+		a.Reason = "sign in to mint a planning task"
+	}
+	return a
+}
+
+// progressAcceptAction is §3.2's Accept button for one document. It is
+// enabled only for the document's owner, because that is the only actor
+// store.AcceptDoc admits (025 §7) — a button this page enabled for anyone
+// else would promise a write the backbone refuses. Everyone else gets it
+// disabled with the reason, never hidden: a missing button reads as a
+// missing feature (§3).
+func progressAcceptAction(doc int64, ref, owner, viewer string) ProgressAction {
+	a := ProgressAction{
+		Route:   "accept",
+		Body:    progressDocBody(doc),
+		Label:   "Accept",
+		Confirm: "Accept " + ref,
+	}
+	switch {
+	case viewer == "":
+		a.Reason = "sign in to accept"
+	case owner == "":
+		a.Reason = ref + " has no owner to accept it"
+	case owner != viewer:
+		a.Reason = ref + " is owned by " + owner
+	}
+	return a
+}
+
+// progressDocBody is the one-field body every document act sends (§7). It is
+// built from an integer, so it is a well-formed JSON object by construction.
+func progressDocBody(doc int64) string {
+	return `{"doc":` + strconv.FormatInt(doc, 10) + `}`
+}
+
+// progressMergeAction is §3.6's act on a task's open pull request. What the
+// repository's default branch does with a PR decides the label: a
+// queue-protected branch takes it into the queue, anything else merges it.
+// The page moves this button into the task cell's pinned tooltip, which is
+// where §3.6 puts it.
+//
+// mergeEnabled is the server's answer about the GitHub App; t.Merge.Reason
+// carries what the backbone can already tell (checks not passed, already
+// queued). Either one renders the button disabled with that reason rather
+// than hidden (§3).
+func progressMergeAction(t model.ProgressTask, mergeEnabled bool) ProgressAction {
+	m := t.Merge
+	pr := "PR #" + strconv.FormatInt(m.Number, 10)
+	a := ProgressAction{
+		Route:   "merge",
+		Body:    progressMergeBody(t.ID, *m),
+		Label:   "Merge",
+		Confirm: "Merge " + pr,
+	}
+	if m.Queue {
+		a.Label = "Queue for merge"
+		a.Confirm = "Queue " + pr + " for merge"
+	}
+	a.Reason = m.Reason
+	if !mergeEnabled {
+		a.Reason = "no GitHub App is configured"
+	}
+	return a
+}
+
+// progressMergeBody is the merge act's body, marshalled from the wire type
+// the route decodes, so the two cannot drift apart.
+func progressMergeBody(task string, m model.ProgressMerge) string {
+	b, err := json.Marshal(model.ProgressMergeInput{
+		Task: task,
+		PR:   model.ProgressPR{Repo: m.Repo, Number: m.Number},
+	})
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }

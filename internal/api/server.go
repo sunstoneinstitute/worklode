@@ -313,6 +313,13 @@ type server struct {
 	// nil-safe, so the handler is still callable directly in tests.
 	watcherMetrics *watcher.Metrics
 
+	// branchRulesKick pokes the branch-rules refresh loop (branchrules.go)
+	// from the repository_ruleset webhook. Buffered to one, so a kick that
+	// arrives mid-refresh is remembered and a burst collapses into one extra
+	// pass. Nil in a server that starts no loop; the send has a default, so
+	// a kick then drops instead of blocking the delivery.
+	branchRulesKick chan struct{}
+
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
@@ -334,6 +341,11 @@ type server struct {
 
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
+
+	// githubCalls counts the GitHub API calls worklode makes itself — on its
+	// own schedule (branchrules.go) or for a Progress page act
+	// (progressmerge.go) — by op; see metrics.go's observeGitHubCall.
+	githubCalls *prometheus.CounterVec
 
 	syncRuns     *prometheus.CounterVec
 	syncDuration prometheus.Histogram
@@ -374,9 +386,17 @@ type server struct {
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
 	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
 	// observeFormSubmission.
-	// These are the only web routes that write, so this is where a rejected
-	// or refused cockpit write becomes visible.
+	// These are the cockpit's form writes; the Progress page's script writes
+	// are counted by progressWrites.
 	formSubmissions *prometheus.CounterVec
+	// progressWrites counts the Progress page's script writes (066 §4.2), by
+	// route and outcome; see webform.go and observeProgressWrite.
+	progressWrites *prometheus.CounterVec
+	// progressFragmentRenders counts the Progress page's row/summary fragment
+	// requests (GET .../progress/spec/{doc}, GET .../progress/summary, 066
+	// §5.2), by fragment (spec, summary) and outcome; see progress.go and
+	// observeProgressFragmentRender.
+	progressFragmentRenders *prometheus.CounterVec
 	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
 	dictations *prometheus.CounterVec
 	// taskTokens counts task-scoped token mints (WL-306); see metrics.go.
@@ -394,6 +414,12 @@ type server struct {
 	// observeMilestoneChange. The project, milestone and actor ids are
 	// deliberately not labels: all three are unbounded.
 	milestoneChanges *prometheus.CounterVec
+
+	// referenceWrites counts entity_edges writes (spec 029 §5), by rel (see
+	// referenceRels) and outcome (ok, error); see references.go and
+	// observeReferenceWrite. The from/to ids are deliberately not labels:
+	// both are unbounded.
+	referenceWrites *prometheus.CounterVec
 
 	// repoMappings counts project/repo mapping changes, by action (add, edit,
 	// remove) and outcome; see admin.go and observeRepoMapping. The repo and
@@ -438,6 +464,15 @@ type server struct {
 	// one.
 	eventStreamsActive    prometheus.Gauge
 	eventStreamEventsSent prometheus.Counter
+
+	// progressStreamsActive is the number of open Progress page follows
+	// (GET /projects/{id}/progress/events, §5.1) and progressStreamFramesSent
+	// the frames pushed over them; see progress.go. A per-project label is
+	// deliberately not added: unlike the admin log follow, one of these opens
+	// per Progress page view, so a project label here would be the page's own
+	// unbounded traffic all over again.
+	progressStreamsActive    prometheus.Gauge
+	progressStreamFramesSent prometheus.Counter
 
 	// listExpansions counts list endpoint requests that asked for an
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
@@ -588,7 +623,22 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/crew", s.navWrap("crew", s.addCrewMemberFromForm))
 	r.web("POST /projects/{id}/crew/remove", s.navWrap("crew", s.removeCrewMemberFromForm))
 	r.web("GET /projects/{id}/milestones", s.navWrap("milestones", s.milestonesPage))
+	r.web("POST /projects/{id}/milestones/{mid}/references", s.navWrap("milestones", s.addMilestoneReferenceFromForm))
 	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
+	r.web("GET /projects/{id}/progress", s.navWrap("progress", s.progressPage))
+	r.web("GET /projects/{id}/progress/events", s.progressEvents)
+	// Not navWrapped: fragments are fetched by the page script, never
+	// navigated to directly, like the events stream above.
+	r.web("GET /projects/{id}/progress/spec/{doc}", s.progressRowFragment)
+	r.web("GET /projects/{id}/progress/summary", s.progressSummaryFragment)
+	// Not navWrapped: the page script fetches it and reads JSON back, so it
+	// is never a navigated page (066 §4.2 rule 4), like /preview and /dictate.
+	r.web("POST /projects/{id}/progress/accept", s.progressAccept)
+	r.web("POST /projects/{id}/progress/plan", s.progressPlan)
+	r.web("POST /projects/{id}/progress/rally/add", s.progressRallyAdd)
+	r.web("POST /projects/{id}/progress/rally/confirm", s.progressRallyConfirm)
+	r.web("POST /projects/{id}/progress/rally/discard", s.progressRallyDiscard)
+	r.web("POST /projects/{id}/progress/merge", s.progressMerge)
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
@@ -664,7 +714,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	hookMetrics := hooks.NewMetrics(reg)
 	s.hookMetrics = hookMetrics
 	s.pollMetrics = reconcile.NewMetrics(reg)
-	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
+	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, s.kickBranchRules, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
 
@@ -731,6 +781,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/docs/{id}/referrers", s.listDocReferrers)
 	r.api("GET /api/v1/docs/{id}/versions/{n}", s.getDocVersion)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
+	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)
 	r.api("POST /api/v1/docs/{id}/submit", s.submitDoc)
 	r.api("POST /api/v1/docs/{id}/accept", s.acceptDoc)
@@ -778,12 +829,16 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}", s.getProject)
 	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
 	r.api("GET /api/v1/projects/{id}/rally", s.getProjectRally)
+	r.api("GET /api/v1/projects/{id}/progress", s.getProjectProgress)
 	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
 	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
 	r.api("PATCH /api/v1/deliverables/{id}", s.patchDeliverable)
+	r.api("GET /api/v1/deliverables/{id}", s.getDeliverable)
 	r.api("GET /api/v1/projects/{id}/milestones", s.listProjectMilestones)
 	r.api("POST /api/v1/projects/{id}/milestones", s.createMilestone)
 	r.api("GET /api/v1/milestones/{id}", s.getMilestone)
+	r.api("POST /api/v1/references", s.createReference)
+	r.api("GET /api/v1/references", s.listReferences)
 	r.api("GET /api/v1/projects/{id}/participants", s.listCrewMembers)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
@@ -1080,6 +1135,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			Store: st, Embed: s.embedder, Metrics: indexer.NewMetrics(reg), Log: s.log,
 		}).Loop(cfg.BackgroundCtx, cfg.IndexInterval)
 
+		// The branch-rules refresh loop (WL-SPEC-66 §6.3). Also needs the
+		// App: with no GitHub credentials there is nothing to read, so the
+		// fact stays unknown and readers treat it as "no queue".
+		if appAuth != nil {
+			s.branchRulesKick = make(chan struct{}, 1)
+			go s.branchRulesLoop(cfg.BackgroundCtx)
+		}
+
 		s.watcherMetrics = watcher.NewMetrics(reg)
 		// First and only registration of the eventbus instruments: this is
 		// the process's one subscriber loop. The horizon collector in
@@ -1281,7 +1344,7 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
+// ErrRevisionExists/ErrReferenceExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
 // generic body (the detail is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
@@ -1312,7 +1375,8 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrKeyTaken),
 		errors.Is(err, store.ErrEdgeExists),
 		errors.Is(err, store.ErrDocExists),
-		errors.Is(err, store.ErrRevisionExists):
+		errors.Is(err, store.ErrRevisionExists),
+		errors.Is(err, store.ErrReferenceExists):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)

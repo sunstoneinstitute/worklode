@@ -820,3 +820,118 @@ func TestReviewsForPRs(t *testing.T) {
 		t.Fatalf("ReviewsForPRs(nil): got %v, want empty non-nil map", empty)
 	}
 }
+
+// TestSetPRQueuedRoundTrip covers WL-SPEC-66 §6.1: queued_at is scanned back
+// through GetPR after being set, and clears back to nil.
+func TestSetPRQueuedRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := openChangesStore(t)
+
+	pr := defaultPR("ignored")
+	pr.HeadRef = "some-branch"
+	if _, err := upsertPR(t, s, pr, "no marker here"); err != nil {
+		t.Fatalf("upsertPR: %v", err)
+	}
+
+	got, err := s.GetPR(t.Context(), pr.Repo, pr.Number)
+	if err != nil {
+		t.Fatalf("GetPR: %v", err)
+	}
+	if got.QueuedAt != nil {
+		t.Fatalf("QueuedAt before SetPRQueued: got %v, want nil", got.QueuedAt)
+	}
+
+	queuedAt := changesTestNow.Add(5 * time.Minute)
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetPRQueued(tx, pr.Repo, pr.Number, &queuedAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = s.GetPR(t.Context(), pr.Repo, pr.Number)
+	if err != nil {
+		t.Fatalf("GetPR after SetPRQueued: %v", err)
+	}
+	if got.QueuedAt == nil || !got.QueuedAt.Equal(queuedAt.UTC()) {
+		t.Fatalf("QueuedAt after SetPRQueued: got %v, want %v", got.QueuedAt, queuedAt.UTC())
+	}
+
+	tx, err = s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetPRQueued(tx, pr.Repo, pr.Number, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = s.GetPR(t.Context(), pr.Repo, pr.Number)
+	if err != nil {
+		t.Fatalf("GetPR after clearing QueuedAt: %v", err)
+	}
+	if got.QueuedAt != nil {
+		t.Fatalf("QueuedAt after clearing: got %v, want nil", got.QueuedAt)
+	}
+}
+
+// TestBranchRulesRoundTrip covers WL-SPEC-66 §6.3: an unknown repo/branch
+// reports known=false, and UpsertBranchRules's second write overwrites the
+// first rather than erroring on the (repo, branch) primary key.
+func TestBranchRulesRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := openChangesStore(t)
+
+	mergeQueue, known, err := s.BranchRules(t.Context(), "sunstoneinstitute/demo", "main")
+	if err != nil {
+		t.Fatalf("BranchRules on unknown pair: %v", err)
+	}
+	if known {
+		t.Fatalf("BranchRules on unknown pair: got known=true, mergeQueue=%v", mergeQueue)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertBranchRules(tx, "sunstoneinstitute/demo", "main", true, changesTestNow); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	mergeQueue, known, err = s.BranchRules(t.Context(), "sunstoneinstitute/demo", "main")
+	if err != nil {
+		t.Fatalf("BranchRules: %v", err)
+	}
+	if !known || !mergeQueue {
+		t.Fatalf("BranchRules after upsert: got known=%v mergeQueue=%v, want true true", known, mergeQueue)
+	}
+
+	// A later observation overwrites the rule for the same repo/branch.
+	tx, err = s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertBranchRules(tx, "sunstoneinstitute/demo", "main", false, changesTestNow.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	mergeQueue, known, err = s.BranchRules(t.Context(), "sunstoneinstitute/demo", "main")
+	if err != nil {
+		t.Fatalf("BranchRules after re-upsert: %v", err)
+	}
+	if !known || mergeQueue {
+		t.Fatalf("BranchRules after re-upsert: got known=%v mergeQueue=%v, want true false", known, mergeQueue)
+	}
+}

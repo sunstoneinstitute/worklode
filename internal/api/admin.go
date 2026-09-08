@@ -320,6 +320,9 @@ func (s *server) addRepo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.observeRepoMapping("add", "ok")
+	// A newly mapped repo's branch rules are unknown until something reads
+	// them; §6.3 wants that at mapping time, not a day later.
+	s.kickBranchRules()
 	doneState := store.DefaultDoneState
 	var warnings []string
 	switch {

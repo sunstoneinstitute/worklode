@@ -184,35 +184,9 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	diff := designdoc.CompareSections(accepted.doc, candidate.doc, docDepthLimit)
-	// Lowering the limit is one-way-safe by construction (025 §6.1): the check
-	// re-runs at every publication, so a too-deep anchor the accepted version
-	// already published is refused here. It gets its own wording — the fix is
-	// to raise the limit back, not to restructure the document.
-	var orphaned []string
-	for _, anchor := range diff.TooDeep {
-		if prior[anchor].published {
-			orphaned = append(orphaned, anchor)
-		}
-	}
-	if len(orphaned) > 0 {
-		return nil, fmt.Errorf(
-			"revision of doc %d cannot be accepted: depth limit %d orphans accepted anchors: %s "+
-				"(§6.1: lower the limit only for documents never accepted): %w",
-			id, docDepthLimit, strings.Join(orphaned, ", "), ErrInvalidInput)
-	}
-	// Removed is filtered down to the published anchors before Violations
-	// renders it, so the text stays in one place and an unpublished removal
-	// raises nothing.
-	removed := diff.Removed[:0:0]
-	for _, anchor := range diff.Removed {
-		if prior[anchor].published {
-			removed = append(removed, anchor)
-		}
-	}
-	diff.Removed = removed
-	if v := diff.Violations(); len(v) > 0 {
-		return nil, fmt.Errorf("revision of doc %d cannot be accepted: %s: %w",
-			id, strings.Join(v, "; "), ErrInvalidInput)
+	if err := checkAnchorFreeze(fmt.Sprintf("revision of doc %d cannot be accepted", id),
+		&diff, prior); err != nil {
+		return nil, err
 	}
 
 	version := d.version + 1
@@ -264,6 +238,14 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 			return nil, fmt.Errorf("stamp last_revised_in on doc %d: %w", id, err)
 		}
 	}
+
+	// 025 §7.3: a landed revision is a reviewed replacement for the text the
+	// §8.4 marks were on, so nothing here is still "approved text, modified
+	// since". The section rebuild carries the flag forward deliberately — one
+	// patch must not clear another's mark — so this is where it ends.
+	if err := ClearPatchedSections(tx, id, version); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(
 		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
 		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
@@ -283,6 +265,48 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 		return nil, err
 	}
 	return getDocTx(tx, id)
+}
+
+// checkAnchorFreeze applies 025 §6's anchor rules to a diff between a
+// document's accepted text and the text about to replace it: append-only
+// anchors, no renumbering, no anchor past the depth limit. Both publication
+// paths run it — an accepted revision and an §8.4 in-place patch — since an
+// in-place amendment relaxes nothing about the freeze. what names the act in
+// the refusal message (e.g. "revision of doc 25 cannot be accepted").
+//
+// The freeze protects the anchors the accepted version *published*, so a
+// never-published row that disappears is legal; renumbering and excess depth
+// are violations regardless. diff.Removed is narrowed to the published
+// anchors in place, so the caller's later reads see the same set the refusal
+// was decided on.
+func checkAnchorFreeze(what string, diff *designdoc.SectionDiff, prior map[string]priorSection) error {
+	// Lowering the limit is one-way-safe by construction (025 §6.1): the check
+	// re-runs at every publication, so a too-deep anchor the accepted version
+	// already published is refused here. It gets its own wording — the fix is
+	// to raise the limit back, not to restructure the document.
+	var orphaned []string
+	for _, anchor := range diff.TooDeep {
+		if prior[anchor].published {
+			orphaned = append(orphaned, anchor)
+		}
+	}
+	if len(orphaned) > 0 {
+		return fmt.Errorf(
+			"%s: depth limit %d orphans accepted anchors: %s "+
+				"(§6.1: lower the limit only for documents never accepted): %w",
+			what, docDepthLimit, strings.Join(orphaned, ", "), ErrInvalidInput)
+	}
+	removed := diff.Removed[:0:0]
+	for _, anchor := range diff.Removed {
+		if prior[anchor].published {
+			removed = append(removed, anchor)
+		}
+	}
+	diff.Removed = removed
+	if v := diff.Violations(); len(v) > 0 {
+		return fmt.Errorf("%s: %s: %w", what, strings.Join(v, "; "), ErrInvalidInput)
+	}
+	return nil
 }
 
 // GetDocRevision returns a document's open candidate revision, or ErrNotFound
