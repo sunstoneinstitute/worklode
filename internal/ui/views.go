@@ -17,6 +17,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/a-h/templ"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -381,6 +383,11 @@ type CockpitProject struct {
 	Key       string
 	ModeName  string
 	ModeBasis string
+
+	// HasSpecs says whether the project has at least one spec. The sidebar's
+	// Progress entry is conditional on it (WL-SPEC-66 §2, amending 056 §2):
+	// a project with no spec has no Progress page to link to.
+	HasSpecs bool
 }
 
 // CockpitWork holds the cockpit's four work buckets.
@@ -1154,4 +1161,120 @@ func routineLabel(n int) string {
 		return "1 routine update"
 	}
 	return strconv.Itoa(n) + " routine updates"
+}
+
+// --- progress (WL-SPEC-66 §2) ------------------------------------------------
+
+// ProgressView is a project's Progress page: the rally band, the four group
+// counts, the section bar with its legend, and the §1.3 groups of spec rows.
+// Everything on it is derived per request (model.ProjectProgress); the page
+// stores no progress figure of its own, and shows no percentage (§2.5).
+type ProgressView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	P            model.ProjectProgress
+	Legend       []LegendEntry
+}
+
+// LegendEntry is one section state in the bar's legend: §1.2's label, a
+// one-line meaning, and how many owed sections carry it. The bound state has
+// no entry — §1.4 keeps it off the page entirely.
+type LegendEntry struct {
+	State, Label, Help string
+	Count              int
+}
+
+// progressStates is §2.1's section-bar order, which is also the legend's.
+// "bound" is absent by design (§1.4).
+var progressStates = []string{"built", "in_progress", "not_started", "no_record", "draft", "unplanned"}
+
+// progressStateLabels is §1.2's "Label on the page" column, verbatim.
+var progressStateLabels = map[string]string{
+	"built":       "Built",
+	"in_progress": "In progress",
+	"not_started": "Accepted, not started",
+	"no_record":   "Accepted, no execution record",
+	"draft":       "Plan awaiting acceptance",
+	"unplanned":   "Unplanned",
+}
+
+// progressStateHelp is the legend's one-line meaning for each state.
+var progressStateHelp = map[string]string{
+	"built":       "every covering plan's tasks have landed",
+	"in_progress": "a covering plan has work under way",
+	"not_started": "a covering plan is accepted and no task has started",
+	"no_record":   "a covering plan is accepted with no minted task",
+	"draft":       "every covering plan is still a draft",
+	"unplanned":   "no plan covers this section",
+}
+
+// progressGroupLabels and progressGroupHelp are §1.3's group names and its
+// "Why this order" column, one line each.
+var progressGroupLabels = map[string]string{
+	"active": "Active", "planning": "Needs planning",
+	"no_record": "No execution record", "built": "Built",
+}
+
+var progressGroupHelp = map[string]string{
+	"active":    "work is claimable now",
+	"planning":  "a human has to plan or accept",
+	"no_record": "the record is missing, not the work",
+	"built":     "nothing to do",
+}
+
+func progressStateLabel(state string) string { return progressStateLabels[state] }
+func progressGroupLabel(key string) string   { return progressGroupLabels[key] }
+func progressGroupMeaning(key string) string { return progressGroupHelp[key] }
+
+// ProgressLegend builds the section bar's legend from a derived progress
+// model: every state in bar order with its own count, so a state the project
+// has none of still explains its colour.
+func ProgressLegend(p model.ProjectProgress) []LegendEntry {
+	counts := make(map[string]int, len(p.Bar))
+	for _, s := range p.Bar {
+		counts[s.State] = s.Count
+	}
+	out := make([]LegendEntry, 0, len(progressStates))
+	for _, st := range progressStates {
+		out = append(out, LegendEntry{
+			State: st, Label: progressStateLabel(st),
+			Help: progressStateHelp[st], Count: counts[st],
+		})
+	}
+	return out
+}
+
+// progressCellClass is a strip cell's class: its state colour plus the inset
+// ring a partially covered section carries (§1.2).
+func progressCellClass(s model.ProgressSection) string {
+	c := "cell cell-" + s.State
+	if s.Partial {
+		c += " cell-partial"
+	}
+	return c
+}
+
+// progressCellTitle is a strip cell's hover text (§2.4): the section, its
+// state, and the plans covering it. The anchor's "sec-" prefix is dropped so
+// the tooltip reads "§3.1", the section number a reader recognises.
+func progressCellTitle(s model.ProgressSection) string {
+	t := "§" + strings.TrimPrefix(s.Anchor, "sec-") + " " + s.Heading +
+		" — " + progressStateLabel(s.State)
+	if len(s.Plans) > 0 {
+		t += " — " + strings.Join(s.Plans, ", ")
+	}
+	return t
+}
+
+// progressSliceTitle is a bar slice's hover text: what the colour means and
+// how many owed sections it covers. A count, never a percentage (§2.5).
+func progressSliceTitle(s model.ProgressSlice) string {
+	return progressStateLabel(s.State) + ": " + strconv.Itoa(s.Count) + " sections"
+}
+
+// progressSliceStyle sizes one bar slice in proportion to its count. The
+// value is built from an integer, so it is safe by construction.
+func progressSliceStyle(s model.ProgressSlice) templ.SafeCSS {
+	return templ.SafeCSS("flex:" + strconv.Itoa(s.Count))
 }

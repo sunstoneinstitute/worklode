@@ -1,0 +1,188 @@
+package api_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
+)
+
+// progressSpecBody is a spec with three anchored sections — the ones
+// progressPlanBody covers at coverage none, full and partial.
+const progressSpecBody = `---
+status: draft
+---
+
+# Progress
+
+## 0. Why {#sec-0}
+
+Why body.
+
+## 1. Scope {#sec-1}
+
+Scope body.
+
+## 2. Model {#sec-2}
+
+Model body.
+`
+
+// progressPlanBody covers those three sections at none/full/partial and
+// mints two tasks, so accepting it puts the plan in not_started (§1.1) and
+// both owed sections in "Accepted, not started" (§1.2).
+const progressPlanBody = `---
+status: draft
+covers:
+  - spec: 066-progress.md#sec-0
+    coverage: none
+  - spec: 066-progress.md#sec-1
+    coverage: full
+  - spec: 066-progress.md#sec-2
+    coverage: partial
+---
+
+# Progress plan
+
+## Tasks
+
+### Task 1 — First task
+
+` + "```yaml" + `
+kind: feature
+priority: high
+` + "```" + `
+
+Do the first thing.
+
+### Task 2 — Second task
+
+` + "```yaml" + `
+kind: feature
+priority: medium
+` + "```" + `
+
+Do the second thing.
+`
+
+// seedProgressProject creates the project, its spec, and an accepted plan
+// covering the spec.
+func seedProgressProject(t *testing.T, h http.Handler, token, project string) {
+	t.Helper()
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: project, Kind: "spec", Number: 66, Slug: "066-progress",
+		Body: progressSpecBody,
+	})
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: project, Kind: "plan", Slug: "066-progress-plan",
+		Body: progressPlanBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var accepted model.AcceptDocResponse
+	decodeInto(t, rr, &accepted)
+	if len(accepted.Tasks) != 2 {
+		t.Fatalf("accepting the plan minted %d tasks, want 2", len(accepted.Tasks))
+	}
+}
+
+// TestProgressPage: the page over real data. One spec covered by one accepted
+// plan whose tasks are all unstarted lands in Active, draws one cell per owed
+// section and none for the coverage-none section (§1.4), says so about the
+// missing rally, and carries no percentage anywhere (§2.5).
+func TestProgressPage(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedProgressProject(t, h, token, "proj")
+
+	body := getPage(t, h, "/projects/proj/progress").Body.String()
+
+	for _, want := range []string{
+		"WL-SPEC-66", // the spec's ref, the row's only link
+		"/docs/ref/WL-SPEC-66",
+		">Active<",        // §1.3's first group
+		"No active rally", // §2.1's band with nothing to show
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("progress page does not contain %q", want)
+		}
+	}
+
+	// Two owed sections, both "accepted, not started"; the coverage-none
+	// section is bound only and gets no cell at all (§1.4). The legend draws
+	// one swatch per state, so count the strip's cells alone.
+	strip := between(t, body, `<div class="strip">`, "</div>")
+	if got := strings.Count(strip, "cell-not_started"); got != 2 {
+		t.Errorf("strip has %d not_started cells, want 2 — strip was %s", got, strip)
+	}
+	if got := strings.Count(strip, `<i class="cell `); got != 2 {
+		t.Errorf("strip has %d cells, want 2 (the bound-only section draws none) — strip was %s", got, strip)
+	}
+	if !strings.Contains(strip, "cell-partial") {
+		t.Errorf("strip has no partial ring for the partially covered section — strip was %s", strip)
+	}
+
+	// §2.5: counts are counts. No count element carries a percentage.
+	for _, block := range []string{`class="prog-counts"`, `class="prog-legend"`} {
+		if seg := between(t, body, block, "</section>"); strings.Contains(seg, "%") {
+			t.Errorf("a count element carries a percentage, which 032 §4 forbids: %s", seg)
+		}
+	}
+}
+
+// TestProgressPageNeedsASpec: a project with no spec has no Progress page and
+// no sidebar entry pointing at one (§2, amending 056 §2).
+func TestProgressPageNeedsASpec(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "bare")
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/projects/bare/progress", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("GET /projects/bare/progress = %d, want 404", rec.Code)
+	}
+
+	overview := getPage(t, h, "/projects/bare").Body.String()
+	if strings.Contains(overview, "/projects/bare/progress") {
+		t.Error("a project with no spec still links to Progress from its sidebar")
+	}
+	if !strings.Contains(overview, "/projects/bare/work") {
+		t.Error("the sidebar lost its Work entry")
+	}
+}
+
+// TestProgressSidebarEntry: the entry appears once the project has a spec.
+func TestProgressSidebarEntry(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedProgressProject(t, h, token, "proj")
+
+	for _, page := range []string{"/projects/proj", "/projects/proj/work", "/projects/proj/progress"} {
+		if !strings.Contains(getPage(t, h, page).Body.String(), "/projects/proj/progress") {
+			t.Errorf("%s has no Progress entry in its sidebar", page)
+		}
+	}
+}
+
+// between returns the substring of body from the first occurrence of open
+// through the next close, for assertions scoped to one block of markup.
+func between(t *testing.T, body, open, close string) string {
+	t.Helper()
+	i := strings.Index(body, open)
+	if i < 0 {
+		t.Fatalf("markup %q not found on the page", open)
+	}
+	rest := body[i+len(open):]
+	j := strings.Index(rest, close)
+	if j < 0 {
+		t.Fatalf("markup %q has no closing %q", open, close)
+	}
+	return rest[:j]
+}

@@ -656,6 +656,44 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .mb-collapsed p{margin:6px 0 0}
 .morningbrief form{margin-top:12px}
 
+/* ---------- Progress page (WL-SPEC-66 §2) ---------- */
+/* A .cell is one spec section, coloured by the state derived in §1.2; a .seg
+ * is one slice of the section bar, taking the same colours so the bar and the
+ * strips read as one vocabulary. Every colour is an existing palette token,
+ * so both themes follow the blocks at the top of this file. A partial cover
+ * adds an inset ring rather than a seventh colour, and no rule here draws a
+ * percentage: §2.5 forbids one. */
+.prog-band{display:flex;align-items:center;gap:10px;padding:0 16px;overflow:hidden}
+.prog-band .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.prog-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.prog-count .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+@media(max-width:720px){.prog-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.prog-bar{display:flex;gap:2px;height:14px}
+.prog-bar .seg{display:block;min-width:3px;border:1px solid transparent;border-radius:3px}
+
+.prog-legend{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.prog-legend li{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.prog-legend .l{font-weight:600}
+.prog-legend .n{font-variant-numeric:tabular-nums;color:var(--ink-3)}
+
+.prog-row{display:grid;grid-template-columns:minmax(96px,auto) minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);
+  gap:12px;align-items:start;padding:9px 0;border-top:1px solid var(--line)}
+.prog-row:first-of-type{border-top:0}
+.prog-row .ref a{font-weight:600}
+.prog-row .strip{display:flex;flex-wrap:wrap;gap:2px}
+@media(max-width:880px){.prog-row{grid-template-columns:minmax(0,1fr)}}
+
+.cell{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid transparent;flex:0 0 auto}
+.cell-built{background:var(--ok);border-color:var(--ok)}
+.cell-in_progress{background:var(--accent);border-color:var(--accent-line)}
+.cell-not_started{background:var(--info-bg);border-color:var(--info)}
+.cell-no_record{background:repeating-linear-gradient(135deg,var(--line-2) 0 2px,var(--sunk) 2px 4px);border-color:var(--line-2)}
+.cell-draft{background:transparent;border-style:dashed;border-color:var(--info)}
+.cell-unplanned{background:var(--warn-bg);border-color:var(--warn)}
+.cell-partial{box-shadow:inset 0 0 0 2px var(--surface)}
+
 /* ---------- Fonts (self-hosted variable fonts) ---------- */
 /* JetBrains Mono has no self-hosted font file yet (see .mono above); it
  * falls back to ui-monospace. Add a @font-face here if/when the file lands. */
