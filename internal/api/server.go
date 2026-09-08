@@ -415,6 +415,12 @@ type server struct {
 	// deliberately not labels: all three are unbounded.
 	milestoneChanges *prometheus.CounterVec
 
+	// referenceWrites counts entity_edges writes (spec 029 §5), by rel (see
+	// referenceRels) and outcome (ok, error); see references.go and
+	// observeReferenceWrite. The from/to ids are deliberately not labels:
+	// both are unbounded.
+	referenceWrites *prometheus.CounterVec
+
 	// repoMappings counts project/repo mapping changes, by action (add, edit,
 	// remove) and outcome; see admin.go and observeRepoMapping. The repo and
 	// the project are deliberately not labels: both are unbounded.
@@ -830,6 +836,8 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}/milestones", s.listProjectMilestones)
 	r.api("POST /api/v1/projects/{id}/milestones", s.createMilestone)
 	r.api("GET /api/v1/milestones/{id}", s.getMilestone)
+	r.api("POST /api/v1/references", s.createReference)
+	r.api("GET /api/v1/references", s.listReferences)
 	r.api("GET /api/v1/projects/{id}/participants", s.listCrewMembers)
 	r.api("POST /api/v1/projects/{id}/participants", s.addCrewMember)
 	r.api("DELETE /api/v1/projects/{id}/participants/{actor}", s.removeCrewMember)
@@ -1335,7 +1343,7 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
+// ErrRevisionExists/ErrReferenceExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
 // generic body (the detail is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
@@ -1366,7 +1374,8 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrKeyTaken),
 		errors.Is(err, store.ErrEdgeExists),
 		errors.Is(err, store.ErrDocExists),
-		errors.Is(err, store.ErrRevisionExists):
+		errors.Is(err, store.ErrRevisionExists),
+		errors.Is(err, store.ErrReferenceExists):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)
