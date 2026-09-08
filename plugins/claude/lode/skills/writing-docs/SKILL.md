@@ -226,6 +226,45 @@ empty `## Tasks` section, or a `## Task 1` heading that missed the em-dash
 format above, is an authoring mistake and still fails both the lint and the
 accept (025 §9.2).
 
+## After editing an accepted spec or plan, check what it invalidated
+
+**A minted task's body is a snapshot.** `lode doc accept` copies each
+declaration's prose into the task it mints and never looks again, so editing
+the document afterwards leaves every existing task carrying the old text.
+Re-accepting does not repair it: 025 §9.2 mints only declarations with no row
+yet and never mutates a body. Nothing reports the divergence, so the edit is
+not finished until you have walked it yourself:
+
+```bash
+lode task list --plan <slug> --status all --json   # every task the plan minted
+lode show <task-id> --json                         # the body as minted
+lode task edit <task-id> --body-file <file>        # re-body a drifted one
+```
+
+Compare each `### Task N` declaration against its task. The join is exact, not
+a guess: a minted task records `plan_doc` and `plan_task_key` (the declaration
+title), unique together, so a task renamed during execution still points at
+the declaration it came from.
+
+The judgment is yours, and it splits on task state:
+
+- **Open (`ready`, `claimed`, in flight)** — re-body it. Someone is about to
+  work from prose you now know is wrong.
+- **Closed (`deployed_dev`, `merged`, abandoned)** — leave it. A finished
+  task is execution fact, and a title naming the wrong migration number is
+  history, not an error to correct.
+
+Two failure modes worth checking for by hand, since no linter covers them:
+**repo paths that stopped resolving** (a deleted doc, a renamed script) —
+`lode doc lint` checks doc-to-doc references only — and **numbers assigned
+downstream**, migrations above all, where `./scripts/check-migrations.sh`
+renumbers on collision and what shipped is rarely the number the plan named.
+
+For a spec edit, the same question runs one hop further out: `lode doc todo
+<ref>` for what the change leaves unplanned, and `lode doc list --kind plan`
+for the plans covering the section you touched — each of those plans then has
+its own minted tasks to walk.
+
 ## The `ns/` ontology
 
 `ns/` holds the `wl:` ontology extracted from specs 006/016/025/026 —
