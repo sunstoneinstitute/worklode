@@ -377,3 +377,24 @@ func renderProgressFooter(t *testing.T, d *model.RallyBand) string {
 	}
 	return b.String()
 }
+
+// TestProgressSliceClass pins the widths the section bar can no longer put in
+// a style attribute (WL-769): a slice's share of the bar, rounded to the whole
+// percent app.tailwind.css has a rule for, and never rounded away to nothing.
+func TestProgressSliceClass(t *testing.T) {
+	bar := []model.ProgressSlice{
+		{State: "built", Count: 3},
+		{State: "in_progress", Count: 1},
+		{State: "unplanned", Count: 396},
+	}
+	want := []string{"seg cell-built seg-1", "seg cell-in_progress seg-1", "seg cell-unplanned seg-99"}
+	for i := range bar {
+		if got := progressSliceClass(bar, i); got != want[i] {
+			t.Errorf("slice %d = %q, want %q", i, got, want[i])
+		}
+	}
+	one := []model.ProgressSlice{{State: "built", Count: 7}}
+	if got := progressSliceClass(one, 0); got != "seg cell-built seg-100" {
+		t.Errorf("lone slice = %q, want the whole bar", got)
+	}
+}

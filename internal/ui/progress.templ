@@ -132,8 +132,8 @@ templ progressBar(v ProgressView) {
 				<p class="muted">No sections owe work.</p>
 			} else {
 				<div class="prog-bar">
-					for _, s := range v.P.Bar {
-						<i class={ "seg cell-" + s.State } style={ progressSliceStyle(s) } title={ progressSliceTitle(s) }></i>
+					for i, s := range v.P.Bar {
+						<i class={ progressSliceClass(v.P.Bar, i) } title={ progressSliceTitle(s) }></i>
 					}
 				</div>
 			}

@@ -18,8 +18,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/a-h/templ"
-
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -1314,10 +1312,29 @@ func progressSliceTitle(s model.ProgressSlice) string {
 	return progressStateLabel(s.State) + ": " + strconv.Itoa(s.Count) + " sections"
 }
 
-// progressSliceStyle sizes one bar slice in proportion to its count. The
-// value is built from an integer, so it is safe by construction.
-func progressSliceStyle(s model.ProgressSlice) templ.SafeCSS {
-	return templ.SafeCSS("flex:" + strconv.Itoa(s.Count))
+// progressSliceClass is one bar slice's whole class list: the state colour it
+// shares with the strips, plus the .seg-N rule that gives it its share of the
+// bar. The share cannot be an inline style — the cockpit is served under
+// style-src 'self' with no nonce, so the attribute would be dropped and every
+// slice would come out the same width (csp_test.go holds that line) — so the
+// count is turned into a whole percent here and app.tailwind.css carries one
+// flex-grow rule per percent. Whole percent is the finest granularity a fixed
+// class set can hold, and it is exact to about a pixel at any bar width the
+// page draws. A slice with a count never rounds away to nothing.
+func progressSliceClass(bar []model.ProgressSlice, i int) string {
+	total := 0
+	for _, s := range bar {
+		total += s.Count
+	}
+	s := bar[i]
+	pct := 0
+	if total > 0 {
+		pct = (s.Count*200 + total) / (total * 2) // round half up
+		if pct == 0 && s.Count > 0 {
+			pct = 1
+		}
+	}
+	return "seg cell-" + s.State + " seg-" + strconv.Itoa(pct)
 }
 
 // progressDetailID is the id of a row's detail block, which the row points at
