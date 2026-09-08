@@ -38,3 +38,11 @@ data:
   # Must match the blob-spool volumeMount in deployment.yaml; unset means
   # os.TempDir(), which is on the read-only root.
   LODE_BLOB_SPOOL_DIR: "/var/spool/worklode/blobs"
+  # Blob storage is off unless endpoint and bucket are both set (spec 021).
+  # Empty here on purpose: WL-231 has not settled whether hzprod gets its own
+  # bucket or shares hzdev's, so only the hzdev overlay patches these to a
+  # real value. LODE_BLOB_ACCESS_KEY / LODE_BLOB_SECRET_KEY are secrets, wired
+  # through the per-environment ExternalSecret instead of here.
+  LODE_BLOB_ENDPOINT: ""
+  LODE_BLOB_BUCKET: ""
+  LODE_BLOB_REGION: ""
