@@ -38,6 +38,17 @@ patches:
       - op: add
         path: /data/LODE_OIDC_CLIENT_ID
         value: "worklode-dev"
+      # WL-240/WL-241: the hzdev Hetzner Object Storage bucket. Prod is
+      # deliberately unset in base until WL-231 settles dev/prod separation.
+      - op: replace
+        path: /data/LODE_BLOB_ENDPOINT
+        value: "https://hel1.your-objectstorage.com"
+      - op: replace
+        path: /data/LODE_BLOB_BUCKET
+        value: "worklode-dev"
+      - op: replace
+        path: /data/LODE_BLOB_REGION
+        value: "hel1"
   - target:
       kind: Ingress
       name: worklode-ingress
