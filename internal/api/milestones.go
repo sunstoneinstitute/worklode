@@ -7,8 +7,11 @@ package api
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
@@ -111,18 +114,39 @@ func (s *server) milestonesPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
-	milestones, err := s.st.ListMilestones(ctx, project.ID)
+	v, err := s.milestonesPageView(ctx, project)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
+	}
+	s.renderWeb(w, r, http.StatusOK, "milestones page", ui.Milestones(v))
+}
+
+// milestonesPageView reads everything the page renders. Both the GET and the
+// re-render a refused reference submit needs go through it, so the two views
+// cannot drift.
+func (s *server) milestonesPageView(ctx context.Context, project ui.CockpitProject) (ui.MilestonesView, error) {
+	milestones, err := s.st.ListMilestones(ctx, project.ID)
+	if err != nil {
+		return ui.MilestonesView{}, err
 	}
 	tasks, deliverables, err := s.st.ListMilestoneChildren(ctx, project.ID)
 	if err != nil {
-		s.webStoreErr(w, err)
-		return
+		return ui.MilestonesView{}, err
 	}
-	s.renderWeb(w, r, http.StatusOK, "milestones page",
-		ui.Milestones(milestonesView(project, milestones, tasks, deliverables)))
+	// One read per milestone: references cross project boundaries (029 §5),
+	// so they are not in ListMilestoneChildren's project-scoped result.
+	// ponytail: a project holds a handful of milestones; batch it if that
+	// stops being true.
+	refs := make(map[string][]model.Deliverable, len(milestones))
+	for _, m := range milestones {
+		got, err := s.st.MilestoneDeliverableRefs(ctx, m.ID)
+		if err != nil {
+			return ui.MilestonesView{}, err
+		}
+		refs[m.ID] = got
+	}
+	return milestonesView(project, milestones, tasks, deliverables, refs), nil
 }
 
 // milestonesView maps a project's milestones and their children into the
@@ -130,7 +154,8 @@ func (s *server) milestonesPage(w http.ResponseWriter, r *http.Request) {
 // the page repeats the numbers the store derived, and never re-derives them
 // from the rows it happens to be rendering.
 func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
-	tasks map[string][]model.Task, deliverables map[string][]model.Deliverable) ui.MilestonesView {
+	tasks map[string][]model.Task, deliverables map[string][]model.Deliverable,
+	refs map[string][]model.Deliverable) ui.MilestonesView {
 	v := ui.MilestonesView{
 		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Milestones"},
 		CanonicalURL: "/projects/" + project.ID + "/milestones",
@@ -140,6 +165,7 @@ func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
 	for _, m := range milestones {
 		section := ui.MilestoneSection{
 			ID:                m.ID,
+			AddAction:         "/projects/" + project.ID + "/milestones/" + m.ID + "/references",
 			Title:             m.Title,
 			TasksTotal:        m.Progress.TasksTotal,
 			TasksClosed:       m.Progress.TasksClosed,
@@ -164,7 +190,88 @@ func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
 				ReportedAt:    d.ReportedAt,
 			})
 		}
+		for _, d := range refs[m.ID] {
+			section.References = append(section.References, ui.MilestoneRefRow{
+				ID: d.ID, Project: d.Project, Name: d.Name, State: d.ReportedState,
+			})
+		}
 		v.Milestones = append(v.Milestones, section)
 	}
 	return v
+}
+
+// formMilestoneRef is the worklode_web_form_submissions_total form label for
+// the milestone page's add-a-reference form.
+const formMilestoneRef = "milestone_reference"
+
+// addMilestoneReferenceFromForm handles POST
+// /projects/{id}/milestones/{mid}/references, the milestones page's own add
+// affordance. It writes through the same recordReference path POST
+// /api/v1/references writes through, under the "web" event source, so a
+// reference typed into a browser and one posted by the CLI differ only in
+// which surface the event log names. A refused add re-renders the page with
+// the message on the milestone it was typed into; a good one 303s back, so a
+// reload never adds a second edge.
+func (s *server) addMilestoneReferenceFromForm(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	project, ok := s.beginFormPost(w, r, formMilestoneRef)
+	if !ok {
+		return
+	}
+	milestoneID := r.PathValue("mid")
+	typed := strings.TrimSpace(r.PostFormValue("deliverable"))
+
+	err := errMissingDeliverable
+	if typed != "" {
+		_, err = s.recordReference(ctx, "web", store.CreateEntityEdgeInput{
+			FromKind: "milestone", From: milestoneID,
+			ToKind: "deliverable", To: typed,
+			Rel:       "depends_on",
+			CreatedBy: actorIDFrom(r),
+		})
+	}
+	if err != nil {
+		s.observeFormSubmission(formMilestoneRef, formOutcome(err))
+		// A refused add is about what was typed — an unknown id, an id that
+		// is already referenced — so it belongs back on the form. Only a
+		// genuine fault falls through to the error page.
+		if !errors.Is(err, store.ErrInvalidInput) && !errors.Is(err, store.ErrNotFound) &&
+			!errors.Is(err, store.ErrReferenceExists) {
+			s.webStoreErr(w, err)
+			return
+		}
+		v, viewErr := s.milestonesPageView(ctx, project)
+		if viewErr != nil {
+			s.webStoreErr(w, viewErr)
+			return
+		}
+		for i := range v.Milestones {
+			if v.Milestones[i].ID == milestoneID {
+				v.Milestones[i].AddValue = typed
+				v.Milestones[i].AddError = referenceFormMessage(err)
+			}
+		}
+		s.renderWeb(w, r, http.StatusUnprocessableEntity, "milestones page", ui.Milestones(v))
+		return
+	}
+	s.observeFormSubmission(formMilestoneRef, "created")
+	http.Redirect(w, r, "/projects/"+project.ID+"/milestones", http.StatusSeeOther)
+}
+
+// errMissingDeliverable stands in for the store refusal an empty field would
+// have produced, so the empty case and the unknown-id case take one path.
+var errMissingDeliverable = fmt.Errorf("a deliverable id is required: %w", store.ErrInvalidInput)
+
+// referenceFormMessage turns a refused add into the sentence the form shows.
+// An unknown id and a duplicate both name what to do about them; anything
+// else falls back to the store's own message, which is what the person has
+// to act on.
+func referenceFormMessage(err error) string {
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return "No deliverable with that id. Check the id, or declare it first."
+	case errors.Is(err, store.ErrReferenceExists):
+		return "This milestone already references that deliverable."
+	}
+	return formMessage(strings.TrimSuffix(err.Error(), ": "+store.ErrInvalidInput.Error()))
 }
