@@ -31,7 +31,7 @@ func TestClassify(t *testing.T) {
 		{"WL-SPEC-14#sec-a_b", targetDoc, ""},
 		{"WL-PLAN-7", targetDoc, ""},
 		{"WL-MILE-2", targetMilestone, ""},
-		{"WL-DEL-3", targetUnshowable, "DEL"},
+		{"WL-DEL-3", targetDeliverable, ""},
 		{"XX-FOO-3", targetUnknownType, "FOO"},
 		{"WL-SPEC-0", targetDoc, ""},
 		// Doc-ref shapes: slugs, number forms, paths — resolveDocRef owns
@@ -654,29 +654,110 @@ func TestShowMilestoneDispatch(t *testing.T) {
 	}
 }
 
-// TestShowDeliverableErrors pins the one "not showable yet" message that does
-// not claim its entity is unbuilt: a deliverable is a real row (spec 029 §3),
-// so `lode show` points at the surfaces that read it instead of sending
-// someone to wait for spec 029.
-func TestShowDeliverableErrors(t *testing.T) {
-	setupDocServer(t, "WL", map[string]string{"014-fixture.md": fixtureSpec})
+// TestShowDeliverableDispatch covers the classify-and-dispatch path for a
+// full deliverable id (029 §3, WL-715): `lode show WL-DEL-3` fetches through
+// Client.GetDeliverable and renders it via cli.DeliverableRender, the same as
+// every other show arm.
+func TestShowDeliverableDispatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/deliverables/WL-DEL-3" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"WL-DEL-3","project":"proj","name":"Casualty dataset",`+
+			`"description":"","url":"","created_by":"ada","created_at":"2026-09-03T10:00:00Z",`+
+			`"updated_at":"2026-09-03T10:00:00Z","artifact":"bigquery://sunstone-prod/cow/casualties",`+
+			`"milestone":"WL-MILE-2","reported_state":"published","reported_at":"2026-09-04T09:00:00Z"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+	t.Setenv("HOME", t.TempDir())
 
-	for _, tt := range []struct {
-		args []string
-		want string
-	}{
-		{[]string{"show", "WL-DEL-3"}, "WL-DEL-3 is a deliverable id; deliverables are not showable yet " +
-			"(the entity exists; only the project's Deliverables page and GET /api/v1/projects/{id}/deliverables read it so far)"},
-		{[]string{"show", "--deliverable", "3"}, "deliverable 3 is not showable yet " +
-			"(the entity exists; only the project's Deliverables page and GET /api/v1/projects/{id}/deliverables read it so far)"},
+	out, err := runLode(t, "show", "WL-DEL-3")
+	if err != nil {
+		t.Fatalf("lode show WL-DEL-3: %v\noutput: %s", err, out)
+	}
+	for _, want := range []string{
+		"WL-DEL-3", "Casualty dataset", "bigquery://sunstone-prod/cow/casualties",
+		"WL-MILE-2", "published",
 	} {
-		out, err := runLode(t, tt.args...)
-		if err == nil {
-			t.Fatalf("lode %v succeeded\noutput: %s", tt.args, out)
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
 		}
-		if err.Error() != tt.want {
-			t.Errorf("err = %q; want %q", err.Error(), tt.want)
+	}
+}
+
+// TestShowDeliverableFlagEquivalence covers --deliverable <ordinal> and
+// --kind deliverable <ordinal> building the same full id (<KEY>-DEL-<n>) the
+// positional path classifies directly, the same equivalence
+// TestShowMilestoneFlagEquivalence checks for --milestone.
+func TestShowDeliverableFlagEquivalence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".worklode"), 0o755); err != nil {
+		t.Fatalf("mkdir repo config dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".worklode", "config.toml"),
+		[]byte("current_project = \"proj\"\nproject_key = \"WL\"\n"), 0o600); err != nil {
+		t.Fatalf("write repo config: %v", err)
+	}
+	t.Chdir(repo)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/deliverables/WL-DEL-3" {
+			w.WriteHeader(http.StatusNotFound)
+			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"WL-DEL-3","project":"proj","name":"Casualty dataset"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	outFlag, err := runLode(t, "show", "--deliverable", "3")
+	if err != nil {
+		t.Fatalf("lode show --deliverable 3: %v\noutput: %s", err, outFlag)
+	}
+	if !strings.Contains(outFlag, "WL-DEL-3") || !strings.Contains(outFlag, "Casualty dataset") {
+		t.Fatalf("show --deliverable 3 output = %q; want it to name the deliverable", outFlag)
+	}
+
+	outPositional, err := runLode(t, "show", "WL-DEL-3")
+	if err != nil {
+		t.Fatalf("lode show WL-DEL-3: %v\noutput: %s", err, outPositional)
+	}
+	if outFlag != outPositional {
+		t.Fatalf("show --deliverable 3 = %q; want it to match positional WL-DEL-3 = %q", outFlag, outPositional)
+	}
+
+	outKind, err := runLode(t, "show", "--kind", "deliverable", "3")
+	if err != nil {
+		t.Fatalf("lode show --kind deliverable 3: %v\noutput: %s", err, outKind)
+	}
+	if outKind != outFlag {
+		t.Fatalf("show --kind deliverable 3 = %q; want it to match --deliverable 3 = %q", outKind, outFlag)
+	}
+}
+
+// TestShowDeliverableFlagNoProjectKey covers --deliverable <ordinal> with no
+// project key configured: like a milestone id, a deliverable id has no
+// bare-number fallback form to fall back to, so this is refused outright
+// rather than silently reaching for one.
+func TestShowDeliverableFlagNoProjectKey(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(t.TempDir())
+
+	out, err := runLode(t, "show", "--deliverable", "3")
+	if err == nil {
+		t.Fatalf("lode show --deliverable 3 succeeded\noutput: %s", out)
+	}
+	want := "no project key configured; pass the full id (e.g. WL-DEL-3) positionally"
+	if err.Error() != want {
+		t.Fatalf("err = %q; want %q", err.Error(), want)
 	}
 }
 

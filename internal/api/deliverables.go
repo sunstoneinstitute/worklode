@@ -139,6 +139,16 @@ func (s *server) recordDeliverable(ctx context.Context, source string, in store.
 	return created, nil
 }
 
+// getDeliverable handles GET /api/v1/deliverables/{id}.
+func (s *server) getDeliverable(w http.ResponseWriter, r *http.Request) {
+	d, err := s.st.GetDeliverable(r.Context(), r.PathValue("id"))
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
 // listProjectDeliverables handles GET /api/v1/projects/{id}/deliverables.
 func (s *server) listProjectDeliverables(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
