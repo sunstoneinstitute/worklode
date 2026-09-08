@@ -2,6 +2,8 @@ package store
 
 import (
 	"database/sql"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -102,7 +104,7 @@ func TestProjectProgress(t *testing.T) {
 	specID, planID, taskIDs := seedProgressCorpus(t, s)
 	walkTo(t, s, taskIDs[0], "merged")
 
-	in, err := s.ProjectProgress(t.Context(), "p1")
+	in, err := s.ProjectProgress(t.Context(), "p1", nil)
 	if err != nil {
 		t.Fatalf("ProjectProgress: %v", err)
 	}
@@ -206,7 +208,7 @@ func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 		t.Fatalf("UpsertCIRun: %v", err)
 	}
 
-	in, err := s.ProjectProgress(t.Context(), "p1")
+	in, err := s.ProjectProgress(t.Context(), "p1", nil)
 	if err != nil {
 		t.Fatalf("ProjectProgress: %v", err)
 	}
@@ -232,7 +234,7 @@ func TestProjectProgressPlanningTask(t *testing.T) {
 	s := openDocStore(t)
 	specID, _, _ := seedProgressCorpus(t, s)
 
-	if in, err := s.ProjectProgress(t.Context(), "p1"); err != nil {
+	if in, err := s.ProjectProgress(t.Context(), "p1", nil); err != nil {
 		t.Fatalf("ProjectProgress: %v", err)
 	} else if in.Specs[0].PlanningTask != "" {
 		t.Fatalf("PlanningTask = %q before any mint, want empty", in.Specs[0].PlanningTask)
@@ -242,7 +244,7 @@ func TestProjectProgressPlanningTask(t *testing.T) {
 		ProjectID: "p1", Title: "Plan it", Body: "body", Priority: "medium",
 		Kind: "design", AboutDoc: specID, CreatedBy: "stig",
 	})
-	in, err := s.ProjectProgress(t.Context(), "p1")
+	in, err := s.ProjectProgress(t.Context(), "p1", nil)
 	if err != nil {
 		t.Fatalf("ProjectProgress: %v", err)
 	}
@@ -252,11 +254,87 @@ func TestProjectProgressPlanningTask(t *testing.T) {
 
 	// The same rule OpenTaskForDoc holds: an abandoned task is not open.
 	walkTo(t, s, planning.ID, "abandoned")
-	if in, err := s.ProjectProgress(t.Context(), "p1"); err != nil {
+	if in, err := s.ProjectProgress(t.Context(), "p1", nil); err != nil {
 		t.Fatalf("ProjectProgress: %v", err)
 	} else if in.Specs[0].PlanningTask != "" {
 		t.Errorf("PlanningTask = %q after abandoning it, want empty", in.Specs[0].PlanningTask)
 	}
+}
+
+// TestProjectProgressSpecsFilter: a non-empty specs filter narrows the read
+// to those spec ids and the plans that cover at least one of them (WL-SPEC-66
+// §5.2) — a second, unrelated spec and its own plan are absent from the
+// result entirely, while the requested spec's own sections, covering plan
+// and derived group/next act come back exactly as an unfiltered read
+// produces them.
+func TestProjectProgressSpecsFilter(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	specID, planID, _ := seedProgressCorpus(t, s)
+
+	otherSpec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 67, Slug: "067-other",
+		Body: progressSpecBody, CreatedBy: "stig",
+	})
+	otherPlan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "067-other-plan",
+		Body:      strings.ReplaceAll(progressPlanBody, "066-progress.md", "067-other.md"),
+		CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, otherPlan.ID, "stig"); err != nil {
+		t.Fatalf("AcceptDoc(otherPlan): %v", err)
+	}
+
+	full, err := s.ProjectProgress(t.Context(), "p1", nil)
+	if err != nil {
+		t.Fatalf("ProjectProgress (unfiltered): %v", err)
+	}
+	if len(full.Specs) != 2 || len(full.Plans) != 2 {
+		t.Fatalf("unfiltered read: got %d specs, %d plans, want 2, 2", len(full.Specs), len(full.Plans))
+	}
+
+	filtered, err := s.ProjectProgress(t.Context(), "p1", []int64{specID})
+	if err != nil {
+		t.Fatalf("ProjectProgress (filtered): %v", err)
+	}
+	if len(filtered.Specs) != 1 || filtered.Specs[0].Doc != specID {
+		t.Fatalf("filtered specs = %+v, want just spec %d", filtered.Specs, specID)
+	}
+	if len(filtered.Plans) != 1 || filtered.Plans[0].Doc != planID {
+		t.Fatalf("filtered plans = %+v, want just plan %d (not otherSpec's %d)",
+			filtered.Plans, planID, otherSpec.ID)
+	}
+	if len(filtered.Plans[0].Tasks) != 2 {
+		t.Fatalf("filtered plan carries %d tasks, want 2", len(filtered.Plans[0].Tasks))
+	}
+
+	fullSpec, ok := findProgressSpec(progress.Derive(full), specID)
+	if !ok {
+		t.Fatalf("unfiltered derivation has no spec %d", specID)
+	}
+	filteredSpec, ok := findProgressSpec(progress.Derive(filtered), specID)
+	if !ok {
+		t.Fatalf("filtered derivation has no spec %d", specID)
+	}
+	if filteredSpec.Group != fullSpec.Group {
+		t.Errorf("filtered Group = %q, want %q (same as unfiltered)", filteredSpec.Group, fullSpec.Group)
+	}
+	if !reflect.DeepEqual(filteredSpec.Next, fullSpec.Next) {
+		t.Errorf("filtered Next = %+v, want %+v (same as unfiltered)", filteredSpec.Next, fullSpec.Next)
+	}
+}
+
+// findProgressSpec finds one spec in a derived model.ProjectProgress by its
+// document id.
+func findProgressSpec(p model.ProjectProgress, doc int64) (model.ProgressSpec, bool) {
+	for _, g := range p.Groups {
+		for _, sp := range g.Specs {
+			if sp.Doc == doc {
+				return sp, true
+			}
+		}
+	}
+	return model.ProgressSpec{}, false
 }
 
 // TestProgressRefs: a minted task resolves through plan_doc to the specs its

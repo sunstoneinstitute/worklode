@@ -130,6 +130,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(progressWriteOutcomes, ", ") +
 			"). \"refused\" is the act declined before anything changed — a wrong origin, a missing page header, a body naming its own actor, an actor without standing — and \"conflict\" is the backbone refusing the document's state, so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
 	}, []string{"route", "outcome"})
+	s.progressFragmentRenders = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_progress_fragment_renders_total",
+		Help: "Progress page fragment requests (066 §5.2), by fragment (" +
+			strings.Join(progressFragments, ", ") + ") and outcome (" +
+			strings.Join(progressFragmentOutcomes, ", ") +
+			"). \"not_found\" on the spec fragment is a doc id that is not a live spec of this project; on the summary fragment it is a project with no spec, same as the full page. Labels are bounded: the project and the document are deliberately not among them.",
+	}, []string{"fragment", "outcome"})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
 		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
@@ -281,7 +288,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -366,6 +373,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, route := range progressWriteRoutes {
 		for _, outcome := range progressWriteOutcomes {
 			s.progressWrites.WithLabelValues(route, outcome)
+		}
+	}
+	// Every fragment/outcome pair, so a fragment nobody has hit yet reads as
+	// a flat zero rather than as no-data.
+	for _, fragment := range progressFragments {
+		for _, outcome := range progressFragmentOutcomes {
+			s.progressFragmentRenders.WithLabelValues(fragment, outcome)
 		}
 	}
 	for _, outcome := range dictationOutcomes {
@@ -912,6 +926,24 @@ func (s *server) observeProgressWrite(route, outcome string) {
 		return
 	}
 	s.progressWrites.WithLabelValues(route, outcome).Inc()
+}
+
+// progressFragments and progressFragmentOutcomes bound
+// worklode_progress_fragment_renders_total's two labels: the two fragment
+// routes 066 §5.2 adds, and the outcomes a GET on either of them can report.
+var (
+	progressFragments        = []string{"spec", "summary"}
+	progressFragmentOutcomes = []string{"ok", "not_found", "error"}
+)
+
+// observeProgressFragmentRender records one Progress page fragment request,
+// called once per GET on either route in progress.go.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressFragmentRender(fragment, outcome string) {
+	if s.progressFragmentRenders == nil {
+		return
+	}
+	s.progressFragmentRenders.WithLabelValues(fragment, outcome).Inc()
 }
 
 // taskTokenOutcomes bounds worklode_task_tokens_total's one label.
