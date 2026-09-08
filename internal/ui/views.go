@@ -580,6 +580,37 @@ type MilestoneSection struct {
 	DeliverablesLive  int
 	Tasks             []MilestoneTaskRow
 	Deliverables      []DeliverableRow
+
+	// References are the deliverables this milestone depends_on (029 §5),
+	// the one edge kind allowed to cross a project boundary — so each row
+	// carries its own project, and its id links to that project's
+	// Deliverables page rather than to this one.
+	References []MilestoneRefRow
+
+	// AddAction is where this milestone's add-a-reference form POSTs;
+	// AddValue and AddError carry a refused submit back to the field that
+	// was typed into, so only the milestone that was submitted re-renders
+	// with a message.
+	AddAction string
+	AddValue  string
+	AddError  string
+}
+
+// MilestoneRefRow is one deliverable a milestone depends on. State is the
+// deliverable's reported state, "" when nothing has reported — rendered by
+// the same chip the Deliverables page uses, so an unreported reference reads
+// as "Declared" rather than as live.
+type MilestoneRefRow struct {
+	ID      string
+	Project string
+	Name    string
+	State   string
+}
+
+// DeliverablesURL is where the row's id links: the origin project's
+// Deliverables page.
+func (r MilestoneRefRow) DeliverablesURL() string {
+	return "/projects/" + r.Project + "/deliverables"
 }
 
 // MilestoneTaskRow is one task in a milestone section, linking to the task

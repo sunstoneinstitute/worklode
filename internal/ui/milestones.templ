@@ -82,6 +82,52 @@ templ milestoneSection(m MilestoneSection) {
 					</div>
 				}
 			}
+			@milestoneRefs(m)
 		</div>
 	</section>
+}
+
+// milestoneRefs renders the milestone's deliverable references (spec 029 §5)
+// and the affordance to declare another. A reference is the one edge allowed
+// to cross a project boundary, so each row shows the deliverable id whole —
+// its project key is what makes a cross-project origin visible — and links
+// to the origin project's Deliverables page. The state is the deliverable's
+// own reported state, chipped exactly as the Deliverables page chips it.
+//
+// The deliverable is typed rather than picked: a menu here would have to
+// list every deliverable on the instance to be useful, which is more than
+// this project's page is entitled to show.
+templ milestoneRefs(m MilestoneSection) {
+	<h4>References</h4>
+	<div aria-live="polite">
+		if m.AddError != "" {
+			<p class="formerr" role="alert">{ m.AddError }</p>
+		}
+	</div>
+	if len(m.References) == 0 {
+		<p class="muted">No deliverable references.</p>
+	} else {
+		@tableWrap(m.Title + " references") {
+			<table>
+				<tr><th>Deliverable</th><th>Name</th><th>State</th></tr>
+				for _, r := range m.References {
+					<tr>
+						<td><a href={ r.DeliverablesURL() }>{ r.ID }</a></td>
+						<td>{ r.Name }</td>
+						<td><span class={ "chip " + deliverableChip(r.State) }>{ deliverableLabel(r.State) }</span></td>
+					</tr>
+				}
+			</table>
+		}
+	}
+	<form method="post" action={ m.AddAction }>
+		<p class="fieldrow">
+			<label for={ "ref-" + m.ID }>Deliverable id</label>
+			<input id={ "ref-" + m.ID } name="deliverable" type="text" required maxlength="200" value={ m.AddValue }/>
+			<span class="hint">A deliverable this milestone depends on, in this project or another (for example COW-DEL-3).</span>
+		</p>
+		<div class="btnrow">
+			<button type="submit" class="btn">Add reference</button>
+		</div>
+	</form>
 }
