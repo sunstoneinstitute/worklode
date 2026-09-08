@@ -58,8 +58,8 @@ def ttl(body):
 
 class TestHappyPath(unittest.TestCase):
     def test_extracts_both_schemes(self):
-        kinds, statuses = nsgen.extract(ttl(TWO_KINDS))
-        self.assertEqual(kinds, ["bug", "feature"])
+        schemes, statuses = nsgen.extract(ttl(TWO_KINDS))
+        self.assertEqual(schemes["TaskKind"], ["bug", "feature"])
         # Lifecycle order from skos:memberList, not alphabetical.
         self.assertEqual(statuses, ["draft", "accepted", "superseded"])
 
@@ -68,27 +68,27 @@ class TestHappyPath(unittest.TestCase):
 wlc:feature a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "feature" .
 wlc:bug a skos:Concept ; skos:inScheme wlc:TaskKind ; skos:prefLabel "bug" .
 """
-        kinds, _ = nsgen.extract(ttl(reversed_body))
-        self.assertEqual(kinds, ["bug", "feature"])
+        schemes, _ = nsgen.extract(ttl(reversed_body))
+        self.assertEqual(schemes["TaskKind"], ["bug", "feature"])
 
     def test_prefixed_name_before_an_unspaced_terminator(self):
         # A local part may contain '.' but not end in one, so `wlc:TaskKind.`
         # is a name plus the statement terminator. Lexing it as one name would
         # drop the concept with no error, which is why the rule is explicit.
-        kinds, _ = nsgen.extract(
+        schemes, _ = nsgen.extract(
             ttl(TWO_KINDS + "wlc:chore a skos:Concept ; skos:inScheme wlc:TaskKind.\n")
         )
-        self.assertEqual(kinds, ["bug", "chore", "feature"])
+        self.assertEqual(schemes["TaskKind"], ["bug", "chore", "feature"])
 
     def test_dot_inside_a_local_name_is_kept(self):
-        kinds, _ = nsgen.extract(
+        schemes, _ = nsgen.extract(
             ttl(TWO_KINDS + "wlc:a.b a skos:Concept ; skos:inScheme wlc:TaskKind .\n")
         )
-        self.assertEqual(kinds, ["a.b", "bug", "feature"])
+        self.assertEqual(schemes["TaskKind"], ["a.b", "bug", "feature"])
 
     def test_real_corpus_parses(self):
-        kinds, statuses = nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))
-        self.assertIn("design", kinds)
+        schemes, statuses = nsgen.extract(CONCEPT_TTL.read_text(encoding="utf-8"))
+        self.assertIn("design", schemes["TaskKind"])
         self.assertEqual(statuses[0], "draft")
 
 
