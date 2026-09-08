@@ -29,6 +29,10 @@ type PullRequest struct {
 	// UpdatedAt is GitHub's pull_request.updated_at, the non-regression
 	// guard's clock. See UpsertPR.
 	UpdatedAt time.Time
+	// QueuedAt is when the PR entered the merge queue, nil when it never
+	// has or has since left it. Set via SetPRQueued (WL-SPEC-66 §6.1), not
+	// UpsertPR — it isn't part of GitHub's pull_request payload.
+	QueuedAt *time.Time
 }
 
 // CIRun is one workflow run reported for a commit.
@@ -248,15 +252,15 @@ func ExistingPRNumbers(tx *sql.Tx, repo string) (map[int64]bool, error) {
 }
 
 // prColumns is the SELECT list scanPR expects, in order.
-const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author`
+const prColumns = `repo, number, title, state, task_id, head_ref, head_sha, merge_sha, url, opened_at, merged_at, updated_at, author, queued_at`
 
 func scanPR(row rowScanner) (*PullRequest, error) {
 	var pr PullRequest
 	var title, state, taskID, headRef, headSHA, mergeSHA, url, author sql.NullString
-	var openedAt, mergedAt, updatedAt sql.NullTime
+	var openedAt, mergedAt, updatedAt, queuedAt sql.NullTime
 	if err := row.Scan(&pr.Repo, &pr.Number, &title, &state, &taskID,
 		&headRef, &headSHA, &mergeSHA, &url, &openedAt, &mergedAt, &updatedAt,
-		&author); err != nil {
+		&author, &queuedAt); err != nil {
 		return nil, err
 	}
 	pr.Author = author.String
@@ -280,6 +284,10 @@ func scanPR(row rowScanner) (*PullRequest, error) {
 	}
 	if updatedAt.Valid {
 		pr.UpdatedAt = updatedAt.Time.UTC()
+	}
+	if queuedAt.Valid {
+		t := queuedAt.Time.UTC()
+		pr.QueuedAt = &t
 	}
 	return &pr, nil
 }
@@ -380,6 +388,58 @@ func (s *Store) OpenPRsForProject(ctx context.Context, projectID string) ([]Pull
 		out = []PullRequest{}
 	}
 	return out, nil
+}
+
+// SetPRQueued sets or clears pull_requests.queued_at (WL-SPEC-66 §6.1): a
+// non-nil at marks the PR as entering the merge queue, nil marks it as
+// having left (merged, or removed from the queue). Unlike UpsertPR this
+// carries no non-regression guard — queue membership is a fact this store
+// itself asserts, not a replayable GitHub payload racing older deliveries.
+func SetPRQueued(tx *sql.Tx, repo string, number int64, at *time.Time) error {
+	var queuedAt sql.NullTime
+	if at != nil {
+		queuedAt = sql.NullTime{Time: at.UTC(), Valid: true}
+	}
+	_, err := tx.Exec(
+		`UPDATE pull_requests SET queued_at = $1 WHERE repo = $2 AND number = $3`,
+		queuedAt, repo, number,
+	)
+	if err != nil {
+		return fmt.Errorf("set PR %s#%d queued: %w", repo, number, err)
+	}
+	return nil
+}
+
+// UpsertBranchRules records the merge-queue rule last observed for a
+// repo/branch pair (WL-SPEC-66 §6.3), overwriting whatever was known before.
+func UpsertBranchRules(tx *sql.Tx, repo, branch string, mergeQueue bool, at time.Time) error {
+	_, err := tx.Exec(
+		`INSERT INTO repo_branch_rules (repo, branch, merge_queue, checked_at)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (repo, branch) DO UPDATE SET
+		   merge_queue = excluded.merge_queue,
+		   checked_at = excluded.checked_at`,
+		repo, branch, mergeQueue, at.UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("upsert branch rules %s@%s: %w", repo, branch, err)
+	}
+	return nil
+}
+
+// BranchRules reports the merge-queue rule last observed for repo/branch.
+// known is false when no rule has been recorded yet, in which case
+// mergeQueue is meaningless.
+func (s *Store) BranchRules(ctx context.Context, repo, branch string) (mergeQueue bool, known bool, err error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT merge_queue FROM repo_branch_rules WHERE repo = $1 AND branch = $2`, repo, branch)
+	if err := row.Scan(&mergeQueue); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, false, nil
+		}
+		return false, false, fmt.Errorf("branch rules %s@%s: %w", repo, branch, err)
+	}
+	return mergeQueue, true, nil
 }
 
 // ciRunColumns is the SELECT list scanCIRun expects, in order.
