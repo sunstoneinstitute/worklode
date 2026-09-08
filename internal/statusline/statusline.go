@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -261,6 +262,12 @@ func renderLocation(p *Payload, fallbackDir string, dark bool) string {
 		dir, _ = os.Getwd()
 	}
 
+	// A task-bound workspace needs nothing else: the id is the whole segment,
+	// so this returns before the rev-parse and the remote lookup below.
+	if taskID, ok := worktree.StampedTaskID(dir); ok {
+		return formatTaskLocation(taskID, cli.ServerURLFrom(dir), dark)
+	}
+
 	// One rev-parse for toplevel, common .git dir, and branch.
 	info, err := gitexec.Text(dir, "rev-parse", "--path-format=absolute",
 		"--show-toplevel", "--git-common-dir", "--abbrev-ref", "HEAD")
@@ -272,36 +279,27 @@ func renderLocation(p *Payload, fallbackDir string, dark bool) string {
 	mainWorktree := filepath.Dir(lines[1]) // parent of the common .git dir
 	branch := lines[2]
 
-	project := gitProject(dir, mainWorktree)
-	if taskID, ok := worktree.StampedTaskID(dir); ok {
-		return formatTaskLocation(project, taskID, branch, dark)
-	}
-	return formatLocation(project, toplevel != mainWorktree, branch)
+	return formatLocation(gitProject(dir, mainWorktree), toplevel != mainWorktree, branch)
 }
 
-// formatTaskLocation renders a workspace bound to a task: the task id in
-// blue, then project, then slug as three words. The branch is rendered from
-// the id and slug (`WL-7-fix-the-thing`), so splitting the id back off
-// recovers the slug, and a space where the joining dash was reads as two
-// facts rather than one long token.
+// formatTaskLocation renders a workspace bound to a task: the task id alone,
+// in blue, hyperlinked to the task on the worklode server when the terminal
+// renders OSC 8 links and a server URL is configured.
 //
-// A branch that does not carry the id — renamed by hand, or produced by a
-// LODE_BRANCH_TEMPLATE that orders the parts differently — yields no slug, and
-// the id stands alone rather than having a guess appended to it.
-//
-// The id's colour is reset back to locationColor rather than ansiReset alone,
-// because the caller wraps the whole location segment in locationColor and
-// this text sits inside that span.
-func formatTaskLocation(project, taskID, branch string, dark bool) string {
-	taskIDColor, resumeColor := taskIDColorLight, locationColorLight
+// Project, branch and worktree state are all implied by the id — a task
+// branch is rendered *from* the id (`WL-7-fix-the-thing`), and the worktree
+// exists because the task does — so at the width of a terminal prompt they
+// are the same fact three more times.
+func formatTaskLocation(taskID, server string, dark bool) string {
+	color := taskIDColorLight
 	if dark {
-		taskIDColor, resumeColor = taskIDColorDark, locationColorDark
+		color = taskIDColorDark
 	}
-	out := fmt.Sprintf("%s%s%s%s %s", taskIDColor, taskID, ansiReset, resumeColor, project)
-	if slug := strings.TrimPrefix(branch, taskID+"-"); slug != branch && slug != "" {
-		out += " " + slug
+	text := taskID
+	if server != "" && cli.TerminalHyperlinks() {
+		text = cli.Hyperlink(server+"/"+taskID, taskID)
 	}
-	return out
+	return color + text + ansiReset
 }
 
 // gitProject returns the project name: the basename of the remote URL with any
@@ -323,11 +321,8 @@ func gitProject(dir, mainWorktree string) string {
 // workspace that carries no task binding. Both symbols sit together
 // immediately before the branch name when in a worktree.
 //
-// A workspace bound to a task shows the task id here instead: the id is the
-// name of the work, and once it is known the branch and worktree symbols only
-// spell out what the id already implies — a task branch is rendered *from* the
-// id (`WL-7-fix-the-thing`), so showing both is the same fact twice at the
-// width of a terminal prompt.
+// A workspace bound to a task never reaches here: renderLocation shows the
+// task id alone instead — see formatTaskLocation.
 func formatLocation(project string, isWorktree bool, branch string) string {
 	out := project
 	hasBranch := branch != "" && branch != "HEAD"
