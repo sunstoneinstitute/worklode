@@ -257,17 +257,24 @@ func AcceptDecisionTitle(planRef string) string { return "Accept " + planRef + "
 // makes it answerable. The rally holds the prompt; accepting the plan stays
 // the owner's act through §3.2, so answering this changes no document.
 //
+// §3.5 puts the prompt in the plan owner's queue, so the task is assigned to
+// them — but only when they are on the project's crew, which is the whole of
+// what may hold a task (029 §6.1). An owner who is not gets an unassigned
+// prompt rather than a failed mint: the rally still carries the question, and
+// the answer is to add them to the crew, not to refuse the rally.
+//
 // The caller guards with OpenTaskForDoc(planDoc, "decision") before opening
 // the transaction — the same shape POST .../progress/plan uses for the
 // planning task — so a second click mints nothing.
 func MintAcceptDecision(tx *sql.Tx, now time.Time, planDoc int64, actorID string, eventID int64) (*model.Task, error) {
 	var d model.Doc
-	var projectID string
+	var projectID, owner string
 	err := tx.QueryRow(
-		`SELECT d.project_id, d.kind, coalesce(d.number, 0), coalesce(p.key, '')
+		`SELECT d.project_id, d.kind, coalesce(d.number, 0), coalesce(p.key, ''),
+		        coalesce(d.owner, '')
 		   FROM docs d JOIN projects p ON p.id = d.project_id
 		  WHERE d.id = $1 AND d.deleted_at IS NULL`, planDoc,
-	).Scan(&projectID, &d.Kind, &d.Number, &d.ProjectKey)
+	).Scan(&projectID, &d.Kind, &d.Number, &d.ProjectKey, &owner)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("doc %d: %w", planDoc, ErrNotFound)
 	}
@@ -295,6 +302,18 @@ func MintAcceptDecision(tx *sql.Tx, now time.Time, planDoc int64, actorID string
 		Key: "accept", Question: title, ResponseType: "yes_no",
 	}); err != nil {
 		return nil, err
+	}
+	if owner != "" {
+		crew, err := isCrewMember(tx, projectID, owner)
+		if err != nil {
+			return nil, err
+		}
+		if crew {
+			if err := AssignTask(tx, now, t.ID, owner, eventID); err != nil {
+				return nil, err
+			}
+			t.Assignee = owner
+		}
 	}
 	return t, nil
 }

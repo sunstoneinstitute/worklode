@@ -8,16 +8,24 @@ import "time"
 type ProjectProgress struct {
 	Project string          `json:"project"`
 	Rally   *RallyBand      `json:"rally,omitempty"` // the active rally, if any (§2.1)
+	Draft   *RallyBand      `json:"draft,omitempty"` // the draft rally the footer offers, if any (§3.5)
 	Counts  ProgressCounts  `json:"counts"`
 	Bar     []ProgressSlice `json:"bar"`    // owed sections by state, in state order
 	Groups  []ProgressGroup `json:"groups"` // §1.3 order: active, planning, no_record, built
 }
 
+// RallyBand is one rally reduced to what a fixed-height bar can show. The
+// active rally fills §2.1's band, where Landed is the number that moves; the
+// draft rally fills §3.5's footer, where Specs is — "Rally: N tasks from M
+// specs". Each reads the field the other leaves at zero.
 type RallyBand struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Members int    `json:"members"`
 	Landed  int    `json:"landed"`
+	// Specs is how many specs the members come from: the distinct specs of
+	// their plans, plus the specs they are directly about. Zero on the band.
+	Specs int `json:"specs,omitempty"`
 }
 
 type ProgressCounts struct {
@@ -127,4 +135,36 @@ type ProgressPlanInput struct {
 type ProgressPlanResponse struct {
 	Task     string `json:"task"`
 	Existing bool   `json:"existing"`
+}
+
+// ProgressRallyAddInput is the body POST /projects/{id}/progress/rally/add
+// takes (WL-SPEC-66 §3.5): the spec whose remaining work joins the draft
+// rally. The acting actor is the session's (§4.2 rule 6).
+type ProgressRallyAddInput struct {
+	Doc int64 `json:"doc"`
+}
+
+// ProgressRallyAddResponse is the reply to one add: the draft rally, how many
+// members this call was the first to add, and what the footer now says.
+// Added is 0 with a 200 when the spec had nothing outstanding (§3.5).
+type ProgressRallyAddResponse struct {
+	Rally   string `json:"rally"`
+	Added   int    `json:"added"`
+	Members int    `json:"members"`
+	Specs   int    `json:"specs"`
+}
+
+// ProgressRallyResponse is the reply to Confirm Rally and to Discard: the
+// rally that moved and the state it now holds ("ready" or "abandoned").
+type ProgressRallyResponse struct {
+	Rally string `json:"rally"`
+	State string `json:"state"`
+}
+
+// ProgressRallyConflict is the 409 Confirm Rally answers when the project
+// already has an active rally: the reason the footer shows, and the rally
+// that holds the slot, so the page can name it without a second read.
+type ProgressRallyConflict struct {
+	Error  string `json:"error"`
+	Active string `json:"active"`
 }

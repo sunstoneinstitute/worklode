@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/progress"
@@ -230,26 +231,17 @@ func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var minted string
-	iri := store.DocIRI(*doc)
 	err = s.recordEvent(ctx, "web", "task.created",
-		map[string]any{"doc": iri, "kind": "design", "route": "progress/plan"},
+		map[string]any{"doc": store.DocIRI(*doc), "kind": "design", "route": "progress/plan"},
 		func(tx *sql.Tx, eventID int64) error {
-			t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
-				ProjectID: doc.Project,
-				Title:     watcher.PlanningTitle(doc.Title),
-				Body:      watcher.PlanningBody(iri, doc.Version, eventID),
-				Kind:      "design",
-				Priority:  "medium",
-				AboutDoc:  doc.ID,
-				CreatedBy: sub.ActorID,
-			}, eventID)
+			id, err := s.mintPlanningTask(tx, doc, sub.ActorID, eventID)
 			if err != nil {
 				return err
 			}
-			minted = t.ID
+			minted = id
 			// The id is allocated inside this transaction, after the payload
 			// was marshalled, so the event names its task from here (025 §15.2).
-			return store.AttributeEventToTask(tx, eventID, t.ID)
+			return store.AttributeEventToTask(tx, eventID, id)
 		})
 	if err != nil {
 		s.observeProgressWrite("plan", progressWriteOutcome(err))
@@ -260,26 +252,252 @@ func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.ProgressPlanResponse{Task: minted})
 }
 
-// specHasUnplannedSection reports whether the spec still has a section no
-// plan covers (§1.2). It reads the page's own derivation rather than a query
-// of its own, so the route can never refuse an act the page offered, or offer
-// one the route refuses.
-func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, doc int64) (bool, error) {
+// progressSpec is one spec's row as the page derives it, or nil when the
+// project's progress model holds no such spec. Every write that has to know
+// what the page showed reads it through here rather than a query of its own,
+// so a route can never refuse an act the page offered, or offer one the route
+// refuses.
+func (s *server) progressSpec(ctx context.Context, projectID string, doc int64) (*model.ProgressSpec, error) {
 	in, err := s.st.ProjectProgress(ctx, projectID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	for _, g := range progress.Derive(in).Groups {
-		for _, spec := range g.Specs {
-			if spec.Doc != doc {
-				continue
-			}
-			for _, sec := range spec.Sections {
-				if sec.State == "unplanned" {
-					return true, nil
-				}
+		for i, spec := range g.Specs {
+			if spec.Doc == doc {
+				return &g.Specs[i], nil
 			}
 		}
 	}
+	return nil, nil
+}
+
+// specHasUnplannedSection reports whether the spec still has a section no
+// plan covers (§1.2) — §3.4's condition for offering the Plan button.
+func (s *server) specHasUnplannedSection(ctx context.Context, projectID string, doc int64) (bool, error) {
+	spec, err := s.progressSpec(ctx, projectID, doc)
+	if err != nil || spec == nil {
+		return false, err
+	}
+	for _, sec := range spec.Sections {
+		if sec.State == "unplanned" {
+			return true, nil
+		}
+	}
 	return false, nil
+}
+
+// mintPlanningTask creates 025 §15.4's planning task about doc inside tx —
+// §3.4's act. Title and body come from internal/watcher, so a task minted
+// here, one minted by the Plan button, and one minted when the spec was
+// accepted are all the same thing. The caller guards with OpenTaskForDoc
+// first; this mints unconditionally.
+func (s *server) mintPlanningTask(tx *sql.Tx, doc *model.Doc, actorID string, eventID int64) (string, error) {
+	iri := store.DocIRI(*doc)
+	t, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
+		ProjectID: doc.Project,
+		Title:     watcher.PlanningTitle(doc.Title),
+		Body:      watcher.PlanningBody(iri, doc.Version, eventID),
+		Kind:      "design",
+		Priority:  "medium",
+		AboutDoc:  doc.ID,
+		CreatedBy: actorID,
+	}, eventID)
+	if err != nil {
+		return "", err
+	}
+	return t.ID, nil
+}
+
+// --- the rally act (WL-SPEC-66 §3.5) -----------------------------------------
+
+// progressRallyAdd handles POST /projects/{id}/progress/rally/add: put the
+// work that drives one spec to completion into the project's draft rally,
+// minting what does not exist yet. Membership is progress.RallyMembers, a
+// pure rule over the same derivation the page rendered, so the button and the
+// route cannot disagree about what "the rest of this spec" means.
+//
+// Everything the act does commits together under one rally.assembled event:
+// the draft rally is created if the project has none, the planning task and
+// the accept prompts are minted, and every member is added. Adding is
+// set-like in the store, so a second add of the same spec reuses what the
+// first minted and answers 200 with added 0 (§4.2 rule 7).
+func (s *server) progressRallyAdd(w http.ResponseWriter, r *http.Request) {
+	var body model.ProgressRallyAddInput
+	sub, project, ok := s.beginJSONPost(w, r, "rally/add", &body)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+
+	doc, err := s.st.GetDoc(ctx, body.Doc)
+	if err != nil {
+		s.observeProgressWrite("rally/add", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	// A rally is assembled from a spec of this project. Anything else is not
+	// found here, whatever it is elsewhere.
+	if doc.Project != project.ID || doc.Kind != "spec" {
+		s.observeProgressWrite("rally/add", "refused")
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	spec, err := s.progressSpec(ctx, project.ID, doc.ID)
+	if err != nil {
+		s.observeProgressWrite("rally/add", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+	if spec == nil {
+		s.observeProgressWrite("rally/add", "refused")
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	// The one fact RallyMembers needs and the derivation does not carry: the
+	// open prompt to accept each draft plan, which is a member in its own
+	// right once it exists (§3.5 case 3).
+	facts := map[string]progress.PlanFacts{}
+	for _, p := range spec.Plans {
+		if p.State != "draft" {
+			continue
+		}
+		open, err := s.st.OpenTaskForDoc(ctx, p.Doc, "decision")
+		if err != nil {
+			s.observeProgressWrite("rally/add", progressWriteOutcome(err))
+			s.mapStoreErr(w, err)
+			return
+		}
+		facts[p.Ref] = progress.PlanFacts{DecisionTask: open}
+	}
+	members := progress.RallyMembers(*spec, facts)
+
+	var rallyID string
+	var added int
+	err = s.recordEvent(ctx, "web", "rally.assembled",
+		map[string]any{"doc": store.DocIRI(*doc), "route": "progress/rally/add"},
+		func(tx *sql.Tx, eventID int64) error {
+			now := s.st.Now()
+			rally, err := store.EnsureDraftRally(tx, now, project.ID, sub.ActorID, eventID)
+			if err != nil {
+				return err
+			}
+			rallyID = rally.ID
+			ids := slices.Clone(members.Execute)
+			if members.NeedsPlanning {
+				id, err := s.mintPlanningTask(tx, doc, sub.ActorID, eventID)
+				if err != nil {
+					return err
+				}
+				ids = append(ids, id)
+			}
+			for _, planDoc := range members.NeedsAccept {
+				t, err := store.MintAcceptDecision(tx, now, planDoc, sub.ActorID, eventID)
+				if err != nil {
+					return err
+				}
+				ids = append(ids, t.ID)
+			}
+			added, err = store.AddRallyMembers(tx, now, rally.ID, ids, eventID)
+			if err != nil {
+				return err
+			}
+			// The rally's id is only known inside this transaction when the
+			// add created it, so the event names its task from here.
+			return store.AttributeEventToTask(tx, eventID, rally.ID)
+		})
+	if err != nil {
+		s.observeProgressWrite("rally/add", progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	band, err := s.st.DraftRallyBand(ctx, project.ID)
+	if err != nil || band == nil {
+		s.observeProgressWrite("rally/add", "error")
+		s.mapStoreErr(w, err)
+		return
+	}
+	s.observeProgressWrite("rally/add", "ok")
+	writeJSON(w, http.StatusOK, model.ProgressRallyAddResponse{
+		Rally: rallyID, Added: added, Members: band.Members, Specs: band.Specs,
+	})
+}
+
+// progressRallyConfirm handles POST /projects/{id}/progress/rally/confirm:
+// publish the draft rally, which is what 005 §2a calls activation. The
+// backbone allows one active rally per project and migration 0069's partial
+// unique index is what enforces it, so a project that already has one is
+// refused there rather than by a check here — and the refusal names the rally
+// holding the slot, which is the sentence the footer shows (§3.5).
+func (s *server) progressRallyConfirm(w http.ResponseWriter, r *http.Request) {
+	s.progressRallyMove(w, r, "rally/confirm", "ready")
+}
+
+// progressRallyDiscard handles POST /projects/{id}/progress/rally/discard:
+// abandon the draft rally, which drops it from every reader and takes its
+// edges out of the footer's count.
+func (s *server) progressRallyDiscard(w http.ResponseWriter, r *http.Request) {
+	s.progressRallyMove(w, r, "rally/discard", "abandoned")
+}
+
+// progressRallyMove is the body Confirm and Discard share: both move the one
+// draft rally out of draft, and both are a 409 when the project has none —
+// the footer is not drawn without one, so a request arriving here came from a
+// stale page.
+func (s *server) progressRallyMove(w http.ResponseWriter, r *http.Request, route, to string) {
+	_, project, ok := s.beginJSONPost(w, r, route, nil)
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+
+	rally, err := s.st.DraftRally(ctx, project.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		s.observeProgressWrite(route, "conflict")
+		writeErr(w, http.StatusConflict, "this project has no draft rally")
+		return
+	}
+	if err != nil {
+		s.observeProgressWrite(route, progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	err = s.recordTaskEvent(ctx, "web", "task.transition", rally.ID,
+		map[string]string{"from": "draft", "to": to, "route": "progress/" + route},
+		func(tx *sql.Tx, eventID int64) error {
+			return store.Transition(tx, s.st.Now(), rally.ID, "draft", to, eventID)
+		})
+	switch {
+	case err == nil:
+		s.observeProgressWrite(route, "ok")
+		writeJSON(w, http.StatusOK, model.ProgressRallyResponse{Rally: rally.ID, State: to})
+	// The project already has an active rally (the unique index refused the
+	// publish), or the draft moved between the read above and the write.
+	// Both are the page being stale, which is a 409, not a fault.
+	case errors.Is(err, store.ErrInvalidInput), errors.Is(err, store.ErrBadTransition):
+		s.observeProgressWrite(route, "conflict")
+		s.writeRallyConflict(ctx, w, project.ID, err)
+	default:
+		s.observeProgressWrite(route, progressWriteOutcome(err))
+		s.mapStoreErr(w, err)
+	}
+}
+
+// writeRallyConflict writes the 409 a refused Confirm gets. When the project
+// has an active rally it is named, in the sentence §3.5 puts in the footer,
+// so the page can say which rally holds the slot without a second read; with
+// no active rally the store's own reason stands.
+func (s *server) writeRallyConflict(ctx context.Context, w http.ResponseWriter, projectID string, cause error) {
+	active, err := s.st.ActiveRally(ctx, projectID)
+	if err != nil {
+		writeErr(w, http.StatusConflict, cause.Error())
+		return
+	}
+	writeJSON(w, http.StatusConflict, model.ProgressRallyConflict{
+		Error:  active.ID + " is already active; finish or abandon it first",
+		Active: active.ID,
+	})
 }
