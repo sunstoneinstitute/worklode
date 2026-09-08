@@ -49,12 +49,13 @@ func (s *server) progressPage(w http.ResponseWriter, r *http.Request) {
 
 	p := progress.Derive(in)
 	s.renderWeb(w, r, http.StatusOK, "progress page", ui.Progress(ui.ProgressView{
-		Page:         ui.PageProps{Title: "worklode: " + project.Name + ": Progress"},
-		CanonicalURL: "/projects/" + project.ID + "/progress",
-		Project:      project,
-		Viewer:       actorIDFrom(r),
-		P:            p,
-		Legend:       ui.ProgressLegend(p),
+		Page:          ui.PageProps{Title: "worklode: " + project.Name + ": Progress"},
+		CanonicalURL:  "/projects/" + project.ID + "/progress",
+		Project:       project,
+		Viewer:        actorIDFrom(r),
+		P:             p,
+		Legend:        ui.ProgressLegend(p),
+		ReviewEnabled: s.hasReviewSurface(),
 	}))
 }
 

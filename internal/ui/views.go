@@ -1180,6 +1180,11 @@ type ProgressView struct {
 	Viewer string
 	P      model.ProjectProgress
 	Legend []LegendEntry
+	// ReviewEnabled is hasReviewSurface's answer (internal/api): whether spec
+	// 059's routes are registered yet. The server decides it, not this
+	// package (§3.3) — every Review button on the page renders off this one
+	// bit rather than each act guessing at it.
+	ReviewEnabled bool
 }
 
 // LegendEntry is one section state in the bar's legend: §1.2's label, a
@@ -1322,15 +1327,16 @@ type ProgressAction struct {
 	Reason  string
 }
 
-// progressPlanActions are the acts on one plan line (§2.3). Accept is the
-// only one so far: a draft plan is the document `lode doc accept` accepts
-// (§3.2). Review (§3.3) and the rally acts (§3.5) join it as their routes
-// land.
-func progressPlanActions(p model.ProgressPlan, viewer string) []ProgressAction {
-	if p.State != "draft" {
-		return nil
+// progressPlanActions are the acts on one plan line (§2.3). Accept applies
+// only to a draft plan — the document `lode doc accept` accepts (§3.2).
+// Review (§3.3) is offered on every plan line, whatever its state.
+func progressPlanActions(p model.ProgressPlan, viewer string, reviewEnabled bool) []ProgressAction {
+	var acts []ProgressAction
+	if p.State == "draft" {
+		acts = append(acts, progressAcceptAction(p.Doc, p.Ref, p.Owner, viewer))
 	}
-	return []ProgressAction{progressAcceptAction(p.Doc, p.Ref, p.Owner, viewer)}
+	acts = append(acts, progressReviewAction(p.Doc, p.Ref, reviewEnabled))
+	return acts
 }
 
 // progressSpecActions are the acts on a spec row (§2.2's action slot). A
@@ -1338,8 +1344,9 @@ func progressPlanActions(p model.ProgressPlan, viewer string) []ProgressAction {
 // accepted one has nothing to accept. Plan (§3.4) joins it when the spec has
 // a section no plan covers and no planning task is open — an open one is
 // drawn as a link instead, because minting a second is not an act this page
-// offers. Rally (§3.5) ends the row and is offered on every spec.
-func progressSpecActions(s model.ProgressSpec, viewer string) []ProgressAction {
+// offers. Rally (§3.5) and Review (§3.3) end the row and are offered on
+// every spec.
+func progressSpecActions(s model.ProgressSpec, viewer string, reviewEnabled bool) []ProgressAction {
 	var acts []ProgressAction
 	if s.Status == "draft" {
 		acts = append(acts, progressAcceptAction(s.Doc, s.Ref, s.Owner, viewer))
@@ -1348,7 +1355,27 @@ func progressSpecActions(s model.ProgressSpec, viewer string) []ProgressAction {
 		acts = append(acts, progressPlanAction(s.Doc, s.Ref, viewer))
 	}
 	acts = append(acts, progressRallyAction(s.Doc, s.Ref, viewer))
+	acts = append(acts, progressReviewAction(s.Doc, s.Ref, reviewEnabled))
 	return acts
+}
+
+// progressReviewAction is §3.3's Review button. Whether it may be pressed at
+// all is not this page's call: hasReviewSurface (internal/api) reports
+// whether spec 059's routes exist, and reviewEnabled is that answer, passed
+// in rather than re-derived here (ui depends on nothing beyond stdlib and
+// model). Disabled carries the reason rather than hiding the button, the
+// same rule every other act on this page follows (§3).
+func progressReviewAction(doc int64, ref string, reviewEnabled bool) ProgressAction {
+	a := ProgressAction{
+		Route:   "review",
+		Body:    progressDocBody(doc),
+		Label:   "Review",
+		Confirm: "Request review for " + ref,
+	}
+	if !reviewEnabled {
+		a.Reason = "Review surface (spec 059) not yet built"
+	}
+	return a
 }
 
 // progressRallyAction is §3.5's Rally button. Every spec row carries one,

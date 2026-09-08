@@ -301,3 +301,23 @@ func TestSubjectFromActorGroups(t *testing.T) {
 		t.Errorf("Groups = %v, want %v", sub.Groups, groups)
 	}
 }
+
+// TestHasReviewSurface: with today's table, spec 059's routes do not exist,
+// so the Progress page's Review button stays disabled (WL-SPEC-66 §3.3).
+func TestHasReviewSurface(t *testing.T) {
+	t.Parallel()
+	if hasReviewSurfaceIn(routeGuards) {
+		t.Error("hasReviewSurfaceIn(routeGuards) = true; want false until spec 059 registers its routes")
+	}
+}
+
+// TestHasReviewSurfaceOnceRegistered: the day spec 059 adds a route under
+// POST /api/v1/reviews, this flips to true with no change to the predicate —
+// only the table needs to grow.
+func TestHasReviewSurfaceOnceRegistered(t *testing.T) {
+	t.Parallel()
+	guards := map[string]routeGuard{"POST /api/v1/reviews/_x": guarded(permWebRead)}
+	if !hasReviewSurfaceIn(guards) {
+		t.Error("hasReviewSurfaceIn = false with a POST /api/v1/reviews/_x entry; want true")
+	}
+}
