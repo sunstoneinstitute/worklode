@@ -1259,3 +1259,74 @@ func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
 		t.Errorf("approval rows = %d, want 1 (reopen, not a second row)", n)
 	}
 }
+
+// eventPayloadTask reads the task the applier named on a delivery's stored
+// event payload; "" when it named none.
+func (e *env) eventPayloadTask(t *testing.T, deliveryID string) string {
+	t.Helper()
+	var task sql.NullString
+	if err := e.st.DBForTests().QueryRow(
+		`SELECT payload->>'task' FROM events WHERE source = 'github' AND external_id = $1`,
+		deliveryID).Scan(&task); err != nil {
+		t.Fatalf("event payload for %s: %v", deliveryID, err)
+	}
+	return task.String
+}
+
+// workflowRunBody builds a completed workflow_run payload for one head sha.
+func workflowRunBody(sha string) []byte {
+	return []byte(`{
+		"action": "completed",
+		"repository": {"full_name": "sunstoneinstitute/demo"},
+		"workflow_run": {
+			"name": "CI", "head_sha": "` + sha + `", "status": "completed",
+			"conclusion": "success", "html_url": "https://github.com/x/y/actions/runs/1",
+			"run_started_at": "2026-07-19T10:05:00Z", "updated_at": "2026-07-19T10:10:00Z"
+		}
+	}`)
+}
+
+// TestDeliveryNamesResolvedTask: a GitHub body names no worklode task, so the
+// applier records the correlation it resolved on the event's own payload —
+// what lets a reader of the log name the task without re-joining
+// (WL-SPEC-66 §5.1).
+func TestDeliveryNamesResolvedTask(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t) // WL-1
+
+	deliverOK(t, e, "pull_request", "d-pr", "pull_request_opened.json")
+	if got := e.eventPayloadTask(t, "d-pr"); got != taskID {
+		t.Fatalf("pull_request event names task %q, want %q", got, taskID)
+	}
+
+	// A run carries only its head sha; the branch push is what attributes
+	// that sha to the task.
+	deliverPushOK(t, e, "d-push", "push_branch.json")
+	const branchSHA = "2222222222222222222222222222222222222222"
+	if rr := deliverBody(t, e.h, "workflow_run", "d-ci", workflowRunBody(branchSHA)); rr.Code != http.StatusOK {
+		t.Fatalf("workflow_run: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := e.eventPayloadTask(t, "d-ci"); got != taskID {
+		t.Fatalf("workflow_run event names task %q, want %q", got, taskID)
+	}
+}
+
+// TestDeliveryNamesNoTaskWhenUncorrelated: a delivery that resolves to no
+// task leaves the payload as GitHub sent it.
+func TestDeliveryNamesNoTaskWhenUncorrelated(t *testing.T) {
+	e := newEnv(t)
+	e.seedTask(t)
+
+	deliverOK(t, e, "pull_request", "d-pr", "pull_request_opened_uncorrelated.json")
+	if got := e.eventPayloadTask(t, "d-pr"); got != "" {
+		t.Fatalf("uncorrelated pull_request event names task %q, want none", got)
+	}
+
+	const unknownSHA = "9999999999999999999999999999999999999999"
+	if rr := deliverBody(t, e.h, "workflow_run", "d-ci", workflowRunBody(unknownSHA)); rr.Code != http.StatusOK {
+		t.Fatalf("workflow_run: code=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if got := e.eventPayloadTask(t, "d-ci"); got != "" {
+		t.Fatalf("uncorrelated workflow_run event names task %q, want none", got)
+	}
+}
