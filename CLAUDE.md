@@ -158,7 +158,11 @@ endpoint cannot ship unguarded. `internal/api/authz.go` holds the policy: a
 per-request `Subject`, a `grants` table of permission → roles, and a
 default-deny `Decide`. There is no RBAC model yet — the two roles are the
 `user`/`admin` Keycloak already syncs (001 §9.2) — so add real roles by editing
-that table, never by adding a check inside a handler.
+that table, never by adding a check inside a handler. A page-script write such
+as the Progress page's goes through one more gate on top of that table's
+permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-66
+§4.2), which enforces same-origin, the page's `X-Requested-With` header, a
+JSON body, and an actor taken from the session rather than the request.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
 and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer for crash
