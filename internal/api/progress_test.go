@@ -334,6 +334,36 @@ func TestProgressSummaryFragment(t *testing.T) {
 	}
 }
 
+// TestProgressSummaryFragmentFixedHeights holds §5.4 rule 1: the band, the
+// counts, the section bar and the footer have fixed heights, so a live swap
+// of any of them moves nothing else on the page. The band and footer keep
+// their reserved slot's height whether or not there is anything to say
+// (h-12, h-14); the counts tiles hold theirs against a wrapping label
+// (h-20); the section bar renders in its own card regardless of content.
+func TestProgressSummaryFragmentFixedHeights(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedProgressProject(t, h, token, "proj")
+
+	rr := doReq(t, h, "GET", "/projects/proj/progress/summary", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET progress/summary = %d, body %s", rr.Code, rr.Body)
+	}
+
+	body := rr.Body.String()
+	for _, want := range []string{
+		`class="card prog-band h-12"`,
+		`class="card pad prog-count h-20"`,
+		`class="card" aria-labelledby="prog-bar-h"`,
+		`class="prog-footer h-14"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("summary fragment does not contain %q: %s", want, body)
+		}
+	}
+}
+
 // TestProgressSummaryFragmentNeedsASpec: a project with no spec 404s here
 // too, matching the full page (§2, §5.2).
 func TestProgressSummaryFragmentNeedsASpec(t *testing.T) {

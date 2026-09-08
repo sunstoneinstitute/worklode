@@ -237,15 +237,22 @@
 
   // Frames arrive one per backbone event, so a single transition can produce
   // several in a row. A burst is coalesced into one fetch per named spec and
-  // one summary fetch.
+  // one summary fetch. wantTasks carries along which task(s) named a given
+  // spec in the burst, so the row that spec swaps into can pulse them (§5.3).
   var wantRows = {};
+  var wantTasks = {};
   var wantSummary = false;
   var flushTimer = null;
 
-  function schedule(docs) {
+  function schedule(docs, task) {
     for (var i = 0; i < docs.length; i++) {
       var doc = String(docs[i]);
-      if (/^\d+$/.test(doc)) wantRows[doc] = true;
+      if (!/^\d+$/.test(doc)) continue;
+      wantRows[doc] = true;
+      if (task) {
+        wantTasks[doc] = wantTasks[doc] || {};
+        wantTasks[doc][task] = true;
+      }
     }
     wantSummary = true;
     if (flushTimer === null) flushTimer = setTimeout(flush, 150);
@@ -255,7 +262,11 @@
     flushTimer = null;
     var docs = Object.keys(wantRows);
     wantRows = {};
-    for (var i = 0; i < docs.length; i++) refreshRow(docs[i]);
+    for (var i = 0; i < docs.length; i++) {
+      var tasks = wantTasks[docs[i]] ? Object.keys(wantTasks[docs[i]]) : [];
+      delete wantTasks[docs[i]];
+      refreshRow(docs[i], tasks);
+    }
     if (!wantSummary) return;
     wantSummary = false;
     get(base() + "/summary").then(function (html) {
@@ -263,9 +274,9 @@
     });
   }
 
-  function refreshRow(doc) {
+  function refreshRow(doc, tasks) {
     get(base() + "/spec/" + doc).then(function (html) {
-      if (html !== null) swapRow(doc, html);
+      if (html !== null) swapRow(doc, html, tasks);
     });
   }
 
@@ -273,7 +284,9 @@
   // carrying over what the reader had done to them: the row's expansion, a
   // pinned tooltip's target, and a confirmation the row is in the middle of.
   // A spec the page does not show yet joins the end of its group instead.
-  function swapRow(doc, html) {
+  // tasks names which task(s) an event just named for this spec, so the
+  // fresh row can flash them (§5.3); it is empty on a summary-only refresh.
+  function swapRow(doc, html, tasks) {
     var frag = parse(html);
     var row = frag.querySelector(".prog-row");
     var detail = frag.querySelector(".detail");
@@ -282,6 +295,7 @@
     var oldRow = rowFor(doc);
     if (!oldRow) {
       appendRow(row, detail);
+      touch(row, detail, tasks);
       return;
     }
     var oldDetail = document.getElementById(oldRow.getAttribute("aria-controls"));
@@ -299,6 +313,7 @@
     bindRow(row);
     restoreTip(row, detail, tipWas);
     restoreAct(row, detail, actWas);
+    touch(row, detail, tasks);
 
     // The swap is always in place; only the move between groups waits for the
     // pointer to leave the list (§5.4 rule 3).
@@ -307,6 +322,33 @@
       if (overList) deferred[doc] = true;
       else moveRow(doc);
     }
+  }
+
+  // touch is §5.3's activity feedback: the row that just swapped flashes
+  // along its left edge, and any task cell a frame named pulses within it.
+  // Both classes come off on animationend (app.tailwind.css keeps that event
+  // firing under prefers-reduced-motion too, just with no motion in it), so a
+  // stalled removal cannot leave a cell stuck flashing.
+  function touch(row, detail, tasks) {
+    flash(row, "touched");
+    for (var i = 0; i < (tasks || []).length; i++) {
+      var cell = detail.querySelector('[data-task="' + tasks[i] + '"]');
+      if (cell) flash(cell, "pulse");
+    }
+  }
+
+  // flash (re)starts one CSS animation-driven class on el. The remove/reflow/
+  // add sequence restarts the animation even if el was still mid-flash from a
+  // previous event.
+  function flash(el, cls) {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+    el.addEventListener("animationend", function handler(e) {
+      if (e.target !== el) return;
+      el.classList.remove(cls);
+      el.removeEventListener("animationend", handler);
+    });
   }
 
   // A pinned tooltip is re-found in the fresh markup by what it was about: a
@@ -463,7 +505,7 @@
   stream.addEventListener("progress", function (e) {
     var frame;
     try { frame = JSON.parse(e.data); } catch (err) { return; }
-    schedule(frame.specs || []);
+    schedule(frame.specs || [], frame.task);
   });
 
   stream.addEventListener("open", function () {
