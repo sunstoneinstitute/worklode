@@ -390,6 +390,14 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	}
 	taskID := *pr.TaskID
 
+	// The delivery body is GitHub's, and names no worklode task; the
+	// correlation only exists once UpsertPR has run. Recording it on the
+	// event is what lets a reader name the task without re-joining
+	// (WL-SPEC-66 §5.1).
+	if err := store.MergeEventPayload(tx, eventID, map[string]string{"task": taskID}); err != nil {
+		return err
+	}
+
 	// The lifecycle effects below stay unconditional even when UpsertPR's
 	// non-regression guard rejected the fact columns: they are order-safe on
 	// their own (Transition guards on the from-state, ResolveDelivery derives
@@ -611,7 +619,7 @@ func firstKnownActor(tx *sql.Tx, logins []string) (*string, error) {
 	return nil, nil
 }
 
-func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
+func (a *applier) applyWorkflowRun(tx *sql.Tx, eventID int64, repo string, body []byte) error {
 	var p struct {
 		WorkflowRun struct {
 			Name         string    `json:"name"`
@@ -635,7 +643,7 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
 	if run.Status == "completed" && !run.UpdatedAt.IsZero() {
 		completedAt = &run.UpdatedAt
 	}
-	return store.UpsertCIRun(tx, store.CIRun{
+	if err := store.UpsertCIRun(tx, store.CIRun{
 		Repo:        repo,
 		HeadSHA:     run.HeadSHA,
 		Workflow:    run.Name,
@@ -645,7 +653,21 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, repo string, body []byte) error {
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
 		UpdatedAt:   run.UpdatedAt,
-	})
+	}); err != nil {
+		return err
+	}
+	// Same reason as applyPullRequest: name the task on the event so a
+	// reader does not re-join (WL-SPEC-66 §5.1). The head sha is the only
+	// handle a run carries, and it is attributed to one task or to none —
+	// several means the correlation is ambiguous, so record nothing.
+	tasks, err := store.TaskIDsForSHA(tx, repo, run.HeadSHA)
+	if err != nil {
+		return err
+	}
+	if len(tasks) != 1 {
+		return nil
+	}
+	return store.MergeEventPayload(tx, eventID, map[string]string{"task": tasks[0]})
 }
 
 func (a *applier) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {
