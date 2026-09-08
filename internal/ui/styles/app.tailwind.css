@@ -703,6 +703,24 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .task-active{background:var(--accent);border-color:var(--accent-line)}
 .task-unstarted{background:var(--info-bg);border-color:var(--info)}
 
+/* An action button (§3.1). It is one control in two states: the act, and the
+ * confirmation the first click swaps in. The button keeps the width it had
+ * as a button — progress.js pins it — and the confirmation is laid over that
+ * width, so neither step moves anything around it. A disabled one stays
+ * visible: its reason is in the tooltip. */
+.act{border:1px solid var(--control-line);background:var(--surface);color:var(--ink);
+  border-radius:7px;padding:3px 9px;font-size:12px;font-weight:600;position:relative}
+.act:hover:not(:disabled){background:var(--surface-2)}
+.act:disabled{opacity:.55;cursor:default}
+.act .confirm-box{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:30;
+  display:flex;align-items:center;gap:6px;white-space:nowrap;font-weight:500;
+  padding:4px 6px;border-radius:8px;border:1px solid var(--line);
+  background:var(--surface);box-shadow:var(--shadow)}
+.act .confirm-box button{border:1px solid var(--control-line);background:var(--surface);
+  color:var(--ink);border-radius:6px;padding:2px 8px;font-size:12px;font-weight:600}
+.act .confirm-box .confirm{background:var(--accent);border-color:var(--accent-line);color:var(--accent-ink)}
+.act-err{color:var(--danger);font-size:12px}
+
 /* One tooltip element, moved and refilled per hover (§2.4). It never takes the
  * pointer unless a click pinned it, so a moving pointer cannot land on a link
  * inside one. */
