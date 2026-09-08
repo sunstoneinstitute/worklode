@@ -16,7 +16,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -278,6 +280,7 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var handledEvents = []string{
 	"issues", "push", "pull_request", "deployment_status",
 	"pull_request_review", "workflow_run", "release", "registry_package",
+	"merge_group",
 }
 
 // HandledEvents returns the event names this handler routes.
@@ -385,6 +388,16 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	if err != nil {
 		return err
 	}
+
+	// A closed PR is out of the merge queue either way (merged or not,
+	// correlated to a task or not), so this clears unconditionally rather
+	// than living inside the merged/task-correlated branch below.
+	if action == "closed" {
+		if err := store.SetPRQueued(tx, repo, gh.Number, nil); err != nil {
+			return err
+		}
+	}
+
 	if pr.TaskID == nil {
 		return nil
 	}
@@ -449,6 +462,45 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return store.ResolveDelivery(tx, now, taskID, repo, eventID)
 	}
 	return nil
+}
+
+// mergeGroupHeadRef extracts the PR number from a merge_group's head_ref,
+// shaped refs/heads/gh-readonly-queue/<base>/pr-<number>-<base sha>. The base
+// branch name may itself contain slashes, so the match anchors on the
+// trailing "pr-<digits>-<hex>" segment instead of splitting on "/".
+var mergeGroupHeadRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
+
+// applyMergeGroup sets or clears pull_requests.queued_at for the PR named in
+// the merge_group's head_ref (WL-SPEC-66 §6.1): checks_requested marks the PR
+// queued as of now, destroyed clears it. action is caller-guaranteed to be
+// one of those two (applyFunc filters). A head_ref that does not match the
+// expected shape names no PR to update; that is logged and treated as a
+// no-op, not a delivery failure — a correlation must never fail the
+// delivery.
+func (a *applier) applyMergeGroup(tx *sql.Tx, repo, action string, body []byte) error {
+	var p struct {
+		MergeGroup struct {
+			HeadRef string `json:"head_ref"`
+		} `json:"merge_group"`
+	}
+	if err := json.Unmarshal(body, &p); err != nil {
+		return fmt.Errorf("parse merge_group payload: %w", err)
+	}
+	m := mergeGroupHeadRef.FindStringSubmatch(p.MergeGroup.HeadRef)
+	if m == nil {
+		a.log.Warn("merge_group: unparsed head_ref", "repo", repo, "head_ref", p.MergeGroup.HeadRef)
+		return nil
+	}
+	number, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return nil // unreachable: the regexp only captures digits
+	}
+	var at *time.Time
+	if action == "checks_requested" {
+		now := a.st.Now()
+		at = &now
+	}
+	return store.SetPRQueued(tx, repo, number, at)
 }
 
 func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {

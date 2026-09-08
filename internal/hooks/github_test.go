@@ -1098,7 +1098,7 @@ func TestHandledEventsMatchesApplyFunc(t *testing.T) {
 	want := map[string]bool{
 		"issues": true, "push": true, "pull_request": true, "deployment_status": true,
 		"pull_request_review": true, "workflow_run": true, "release": true,
-		"registry_package": true,
+		"registry_package": true, "merge_group": true,
 	}
 	got := hooks.HandledEvents()
 	if len(got) != len(want) {
@@ -1328,5 +1328,72 @@ func TestDeliveryNamesNoTaskWhenUncorrelated(t *testing.T) {
 	}
 	if got := e.eventPayloadTask(t, "d-ci"); got != "" {
 		t.Fatalf("uncorrelated workflow_run event names task %q, want none", got)
+	}
+}
+
+// prQueuedAt reads pull_requests.queued_at for repo/number, nil when unset.
+func (e *dbEnv) prQueuedAt(t *testing.T, repo string, number int64) *time.Time {
+	t.Helper()
+	var queuedAt sql.NullTime
+	if !e.rawQueryRow(t, []any{&queuedAt},
+		`SELECT queued_at FROM pull_requests WHERE repo = $1 AND number = $2`, repo, number) {
+		t.Fatalf("pull_requests row not found for %s#%d", repo, number)
+	}
+	if !queuedAt.Valid {
+		return nil
+	}
+	return &queuedAt.Time
+}
+
+// TestMergeGroupSetsAndClearsQueuedAt: WL-SPEC-66 §6.1 — checks_requested
+// marks a PR queued, destroyed clears it, and a pull_request closed event
+// clears it too (independent of the merge_group lifecycle, e.g. when a PR
+// leaves the queue by ordinary merge rather than by "destroyed").
+func TestMergeGroupSetsAndClearsQueuedAt(t *testing.T) {
+	e := newEnv(t)
+	const repo = "sunstoneinstitute/demo"
+	const prNumber = 42
+
+	// The PR must exist before queued_at can be set on it.
+	deliverOK(t, e, "pull_request", "d-open", "pull_request_opened.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after open = %v, want nil", got)
+	}
+
+	deliverOK(t, e, "merge_group", "d-mg-1", "merge_group_checks_requested.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got == nil {
+		t.Fatal("queued_at after checks_requested = nil, want set")
+	}
+
+	deliverOK(t, e, "merge_group", "d-mg-2", "merge_group_destroyed.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after destroyed = %v, want nil", got)
+	}
+
+	// Re-queue, then close the PR outright: closed clears queued_at
+	// regardless of how the PR left the queue.
+	deliverOK(t, e, "merge_group", "d-mg-3", "merge_group_checks_requested.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got == nil {
+		t.Fatal("queued_at after re-queue = nil, want set")
+	}
+	deliverOK(t, e, "pull_request", "d-close", "pull_request_closed_merged.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after pull_request closed = %v, want nil", got)
+	}
+}
+
+// TestMergeGroupUnparseableHeadRefIsNoOp: a head_ref that does not match the
+// documented gh-readonly-queue shape names no PR to update. The delivery
+// still succeeds (recorded, applied) and writes nothing rather than panicking
+// or guessing a PR number.
+func TestMergeGroupUnparseableHeadRefIsNoOp(t *testing.T) {
+	e := newEnv(t)
+	const repo = "sunstoneinstitute/demo"
+	const prNumber = 42
+
+	deliverOK(t, e, "pull_request", "d-open", "pull_request_opened.json")
+	deliverOK(t, e, "merge_group", "d-mg-bad", "merge_group_unparseable_ref.json")
+	if got := e.prQueuedAt(t, repo, prNumber); got != nil {
+		t.Fatalf("queued_at after unparseable head_ref = %v, want nil", got)
 	}
 }
