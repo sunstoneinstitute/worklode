@@ -383,17 +383,29 @@ func (s *Store) progressRally(ctx context.Context, projectID string) (*model.Ral
 	if err != nil {
 		return nil, err
 	}
+	landed, err := s.rallyLandedCount(ctx, rally.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &model.RallyBand{
+		ID: rally.ID, Title: rally.Title, Members: members, Landed: landed,
+	}, nil
+}
+
+// rallyLandedCount counts a rally's members whose state has landed —
+// deliveredRankStates, the same ranks that decide "landed" everywhere else
+// in this package. Shared by progressRally and ProgressRefs so the two never
+// disagree about what counts.
+func (s *Store) rallyLandedCount(ctx context.Context, rallyID string) (int, error) {
 	var landed int
 	if err := s.db.QueryRowContext(ctx, `
 SELECT count(*) FROM task_edges e
   JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
  WHERE e.to_task = $1 AND e.type = 'blocks'
-   AND f.state IN (`+deliveredRankStates+`)`, rally.ID).Scan(&landed); err != nil {
-		return nil, fmt.Errorf("rally landed count for %s: %w", rally.ID, err)
+   AND f.state IN (`+deliveredRankStates+`)`, rallyID).Scan(&landed); err != nil {
+		return 0, fmt.Errorf("rally landed count for %s: %w", rallyID, err)
 	}
-	return &model.RallyBand{
-		ID: rally.ID, Title: rally.Title, Members: members, Landed: landed,
-	}, nil
+	return landed, nil
 }
 
 // DraftRallyBand reads the project's draft rally as WL-SPEC-66 §3.5's
@@ -453,6 +465,253 @@ SELECT count(*) FROM (
 		return 0, fmt.Errorf("rally spec count for %s: %w", rallyID, err)
 	}
 	return n, nil
+}
+
+// ProgressRef maps tasks and documents to the project and specs the
+// Progress page shows them under (WL-SPEC-66 §5.1): a task through its
+// plan_doc or about_doc to the specs that plan covers, a plan through its
+// covers edges, a spec to itself.
+type ProgressRef struct {
+	Project string
+	Task    string
+	State   string
+	Plan    int64
+	Specs   []int64
+	Rally   *model.RallyBand // set when Task is a rally or a rally member
+}
+
+// ProgressRefs resolves tasks and docs to the project and specs WL-SPEC-66's
+// Progress page groups them under, one query per id family — no per-id round
+// trips. A task's plan_doc wins over its about_doc when both are set; either
+// way the referenced doc is joined on kind and deleted_at only, so a plan
+// stuck at the "no_record" progress state still resolves through plan_doc —
+// that state is progress.Derive's judgment, not a fact this read filters on.
+func (s *Store) ProgressRefs(ctx context.Context, tasks []string, docs []int64) ([]ProgressRef, error) {
+	if len(tasks) == 0 && len(docs) == 0 {
+		return nil, nil
+	}
+
+	taskRows, err := s.progressRefTasks(ctx, tasks)
+	if err != nil {
+		return nil, err
+	}
+
+	docIDs := append([]int64{}, docs...)
+	for _, t := range taskRows {
+		if t.resolveDoc != 0 {
+			docIDs = append(docIDs, t.resolveDoc)
+		}
+	}
+	docInfo, err := s.progressRefDocs(ctx, docIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	var planIDs []int64
+	for id, d := range docInfo {
+		if d.kind == "plan" {
+			planIDs = append(planIDs, id)
+		}
+	}
+	covers, err := s.progressRefCovers(ctx, planIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	rallyOf, bands, err := s.progressRefRallies(ctx, tasks)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []ProgressRef
+	for _, id := range docs {
+		d, ok := docInfo[id]
+		if !ok {
+			continue
+		}
+		ref := ProgressRef{Project: d.project}
+		if d.kind == "spec" {
+			ref.Specs = []int64{id}
+		} else {
+			ref.Plan, ref.Specs = id, covers[id]
+		}
+		out = append(out, ref)
+	}
+	for _, t := range taskRows {
+		ref := ProgressRef{
+			Project: t.project, Task: t.id, State: t.state, Rally: bands[rallyOf[t.id]],
+		}
+		if d, ok := docInfo[t.resolveDoc]; ok {
+			switch d.kind {
+			case "spec":
+				ref.Specs = []int64{t.resolveDoc}
+			case "plan":
+				ref.Plan, ref.Specs = t.resolveDoc, covers[t.resolveDoc]
+			}
+		}
+		out = append(out, ref)
+	}
+	return out, nil
+}
+
+// progressRefTask is one task's identity plus the single doc id its
+// plan_doc or about_doc resolves to (plan_doc wins, 0 means neither is set).
+type progressRefTask struct {
+	id, project, state string
+	resolveDoc         int64
+}
+
+func (s *Store) progressRefTasks(ctx context.Context, ids []string) ([]progressRefTask, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, project_id, state, coalesce(plan_doc, about_doc, 0)
+  FROM tasks
+ WHERE id = ANY($1) AND deleted_at IS NULL`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("progress ref tasks: %w", err)
+	}
+	defer rows.Close()
+
+	var out []progressRefTask
+	for rows.Next() {
+		var t progressRefTask
+		if err := rows.Scan(&t.id, &t.project, &t.state, &t.resolveDoc); err != nil {
+			return nil, fmt.Errorf("scan progress ref task: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// progressRefDoc is one doc's project and kind — enough to tell a spec from
+// a plan and to place either under its project.
+type progressRefDoc struct {
+	project, kind string
+}
+
+func (s *Store) progressRefDocs(ctx context.Context, ids []int64) (map[int64]progressRefDoc, error) {
+	out := map[int64]progressRefDoc{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, project_id, kind
+  FROM docs
+ WHERE id = ANY($1) AND deleted_at IS NULL`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("progress ref docs: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int64
+		var d progressRefDoc
+		if err := rows.Scan(&id, &d.project, &d.kind); err != nil {
+			return nil, fmt.Errorf("scan progress ref doc: %w", err)
+		}
+		out[id] = d
+	}
+	return out, rows.Err()
+}
+
+// progressRefCovers maps each plan id to the specs it covers, DISTINCT
+// because progressPlanBody-style plans name the same spec once per section.
+func (s *Store) progressRefCovers(ctx context.Context, planIDs []int64) (map[int64][]int64, error) {
+	out := map[int64][]int64{}
+	if len(planIDs) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT DISTINCT from_doc, to_doc
+  FROM doc_edges
+ WHERE type = 'covers' AND from_doc = ANY($1) AND to_doc IS NOT NULL`, planIDs)
+	if err != nil {
+		return nil, fmt.Errorf("progress ref covers: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var from, to int64
+		if err := rows.Scan(&from, &to); err != nil {
+			return nil, fmt.Errorf("scan progress ref cover: %w", err)
+		}
+		out[from] = append(out[from], to)
+	}
+	return out, rows.Err()
+}
+
+// progressRefRallyInfo is one rally's identity as read off the tasks row —
+// title and state are what progressRefRallyBand needs to pick its branch.
+type progressRefRallyInfo struct {
+	id, title, state string
+}
+
+// progressRefRallies resolves, for each task, the rally it is either a
+// member of or itself is: one query joining each task to a 'blocks' edge
+// (its membership, if any) and then to whichever of the task itself or that
+// edge's target is a live rally row — a task that is neither drops out of
+// the join. The bands are then built per distinct rally found, a count
+// bounded by how many rallies a project can have (one active, one draft),
+// never by how many tasks were asked about.
+func (s *Store) progressRefRallies(ctx context.Context, taskIDs []string) (map[string]string, map[string]*model.RallyBand, error) {
+	byTask := map[string]string{}
+	if len(taskIDs) == 0 {
+		return byTask, nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT t.id, r.id, r.title, r.state
+  FROM tasks t
+  LEFT JOIN task_edges e ON e.from_task = t.id AND e.type = 'blocks'
+  JOIN tasks r ON r.id = CASE WHEN t.kind = 'rally' THEN t.id ELSE e.to_task END
+              AND r.kind = 'rally' AND r.deleted_at IS NULL
+ WHERE t.id = ANY($1) AND t.deleted_at IS NULL`, taskIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("progress ref rallies: %w", err)
+	}
+	defer rows.Close()
+
+	rallies := map[string]progressRefRallyInfo{}
+	for rows.Next() {
+		var memberID string
+		var info progressRefRallyInfo
+		if err := rows.Scan(&memberID, &info.id, &info.title, &info.state); err != nil {
+			return nil, nil, fmt.Errorf("scan progress ref rally: %w", err)
+		}
+		byTask[memberID] = info.id
+		rallies[info.id] = info
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("progress ref rallies: %w", err)
+	}
+
+	bands := map[string]*model.RallyBand{}
+	for id, info := range rallies {
+		band, err := s.progressRefRallyBand(ctx, info)
+		if err != nil {
+			return nil, nil, err
+		}
+		bands[id] = band
+	}
+	return byTask, bands, nil
+}
+
+// progressRefRallyBand builds one rally's band the way progressRally and
+// DraftRallyBand do, branching on the rally's own state: draft counts specs
+// (§3.5's footer), anything else counts landed members (§2.1's bar).
+func (s *Store) progressRefRallyBand(ctx context.Context, info progressRefRallyInfo) (*model.RallyBand, error) {
+	members, err := s.RallyMemberCount(ctx, info.id)
+	if err != nil {
+		return nil, err
+	}
+	band := &model.RallyBand{ID: info.id, Title: info.title, Members: members}
+	if info.state == "draft" {
+		band.Specs, err = s.rallySpecCount(ctx, info.id)
+		return band, err
+	}
+	band.Landed, err = s.rallyLandedCount(ctx, info.id)
+	return band, err
 }
 
 // ProjectHasSpecs reports whether the project has at least one live spec —

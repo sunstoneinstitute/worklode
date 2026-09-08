@@ -1,8 +1,10 @@
 package store
 
 import (
+	"database/sql"
 	"testing"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/progress"
 )
 
@@ -254,5 +256,80 @@ func TestProjectProgressPlanningTask(t *testing.T) {
 		t.Fatalf("ProjectProgress: %v", err)
 	} else if in.Specs[0].PlanningTask != "" {
 		t.Errorf("PlanningTask = %q after abandoning it, want empty", in.Specs[0].PlanningTask)
+	}
+}
+
+// TestProgressRefs: a minted task resolves through plan_doc to the specs its
+// plan covers, a planning task resolves through about_doc straight to the
+// spec it is about, and a task in the project's draft rally carries that
+// rally's band while a sibling task does not.
+func TestProgressRefs(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	specID, planID, taskIDs := seedProgressCorpus(t, s)
+
+	planning := createTask(t, s, s.Now(), TaskInput{
+		ProjectID: "p1", Title: "Plan it", Body: "body", Priority: "medium",
+		Kind: "design", AboutDoc: specID, CreatedBy: "stig",
+	})
+
+	var rally *model.Task
+	if err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+		var err error
+		rally, err = EnsureDraftRally(tx, s.Now(), "p1", "stig", eventID)
+		return err
+	}); err != nil {
+		t.Fatalf("EnsureDraftRally: %v", err)
+	}
+	if err := rallyTx(t, s, func(tx *sql.Tx, eventID int64) error {
+		_, err := AddRallyMembers(tx, s.Now(), rally.ID, []string{taskIDs[0]}, eventID)
+		return err
+	}); err != nil {
+		t.Fatalf("AddRallyMembers: %v", err)
+	}
+
+	refs, err := s.ProgressRefs(t.Context(),
+		[]string{taskIDs[0], taskIDs[1], planning.ID}, nil)
+	if err != nil {
+		t.Fatalf("ProgressRefs: %v", err)
+	}
+	byTask := map[string]ProgressRef{}
+	for _, r := range refs {
+		byTask[r.Task] = r
+	}
+
+	for _, id := range taskIDs {
+		ref, ok := byTask[id]
+		if !ok {
+			t.Fatalf("no ref for minted task %s", id)
+		}
+		if ref.Plan != planID {
+			t.Errorf("task %s Plan = %d, want %d", id, ref.Plan, planID)
+		}
+		if len(ref.Specs) != 1 || ref.Specs[0] != specID {
+			t.Errorf("task %s Specs = %v, want [%d]", id, ref.Specs, specID)
+		}
+	}
+
+	planningRef, ok := byTask[planning.ID]
+	if !ok {
+		t.Fatalf("no ref for planning task %s", planning.ID)
+	}
+	if planningRef.Plan != 0 {
+		t.Errorf("planning task Plan = %d, want 0 (about_doc names the spec directly)", planningRef.Plan)
+	}
+	if len(planningRef.Specs) != 1 || planningRef.Specs[0] != specID {
+		t.Errorf("planning task Specs = %v, want [%d]", planningRef.Specs, specID)
+	}
+
+	member := byTask[taskIDs[0]]
+	if member.Rally == nil {
+		t.Fatalf("rally member %s: Rally = nil, want set", taskIDs[0])
+	}
+	if member.Rally.ID != rally.ID {
+		t.Errorf("rally member %s: Rally.ID = %s, want %s", taskIDs[0], member.Rally.ID, rally.ID)
+	}
+	if other := byTask[taskIDs[1]]; other.Rally != nil {
+		t.Errorf("non-member %s: Rally = %+v, want nil", taskIDs[1], other.Rally)
 	}
 }
