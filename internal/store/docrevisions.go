@@ -238,6 +238,14 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 			return nil, fmt.Errorf("stamp last_revised_in on doc %d: %w", id, err)
 		}
 	}
+
+	// 025 §7.3: a landed revision is a reviewed replacement for the text the
+	// §8.4 marks were on, so nothing here is still "approved text, modified
+	// since". The section rebuild carries the flag forward deliberately — one
+	// patch must not clear another's mark — so this is where it ends.
+	if err := ClearPatchedSections(tx, id, version); err != nil {
+		return nil, err
+	}
 	if _, err := tx.Exec(
 		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
 		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)

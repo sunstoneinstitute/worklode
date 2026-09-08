@@ -54,7 +54,9 @@ const watcherEventSource = "watcher"
 // eventbus's JSON-LD payload validation does not apply to them — they are
 // backbone bookkeeping, not RDF the knowledge graph consumes.
 func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventbus.Outcome, error) {
-	if ev.Type != eventbus.TypeDocumentSubmitted && ev.Type != eventbus.TypeDocumentAccepted {
+	switch ev.Type {
+	case eventbus.TypeDocumentSubmitted, eventbus.TypeDocumentAccepted, watcher.TypeDocPatched:
+	default:
 		// The vendor/webhook population of the log passes through
 		// untouched: it carries dotted types (push, pod.crashloop, …;
 		// 025 §15.2) that are not RDF and that these rules say nothing
@@ -66,16 +68,16 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 	// Run ignores the outcome whenever the error is non-nil (it counts
 	// outcome="error" itself), and 025 §15.7 forbids a handler from
 	// returning OutcomeError.
-	subject, err := eventSubject(ev)
-	if err != nil {
-		return eventbus.OutcomeApplied, err
+	var payload map[string]any
+	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
+		return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d payload: %w", ev.ID, err)
 	}
-	// A wl:subject that resolves to no row is an error, not a skip.
-	// Redelivery retries it, which is right while the doc is merely
-	// not visible yet; if the document is really gone, the operator
-	// steps the subscriber past it with `lode event seek` — that is
-	// what the verb is for.
-	doc, err := s.st.DocBySubjectIRI(ctx, subject)
+	// A document the payload names but that resolves to no row is an
+	// error, not a skip. Redelivery retries it, which is right while the
+	// doc is merely not visible yet; if the document is really gone, the
+	// operator steps the subscriber past it with `lode event seek` — that
+	// is what the verb is for.
+	doc, iri, err := s.docForEvent(ctx, ev, payload)
 	if err != nil {
 		return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
 	}
@@ -84,7 +86,7 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 		EventID:   ev.ID,
 		EventType: ev.Type,
 		DocID:     doc.ID,
-		DocIRI:    subject,
+		DocIRI:    iri,
 		DocKind:   doc.Kind,
 		DocTitle:  doc.Title,
 		Version:   doc.Version,
@@ -99,6 +101,14 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 		in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review")
 	case eventbus.TypeDocumentAccepted:
 		in.OpenDesignTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "design")
+	case watcher.TypeDocPatched:
+		// Only this rule's title cites the document by ref, and the key
+		// FormatRef needs is a second read — so it is paid here rather
+		// than on every lifecycle event.
+		in.DocRef = s.withProjectKey(ctx, *doc).FormatRef()
+		in.Classification, _ = payload["classification"].(string)
+		in.ChangedAnchors = payloadStrings(payload["anchors"])
+		in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review")
 	}
 	if err != nil {
 		return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
@@ -195,21 +205,49 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 	return nil
 }
 
-// eventSubject reads wl:subject out of a typed event's payload. A payload
-// that is not an object, or that carries no string wl:subject, is a
-// malformed typed event: eventbus.Emit validates the property set at emit
-// time, so reaching the subscriber without one is a bug upstream, not an
-// event to skip.
-func eventSubject(ev store.Event) (string, error) {
-	var payload map[string]any
-	if err := json.Unmarshal(ev.Payload, &payload); err != nil {
-		return "", fmt.Errorf("doc-lifecycle: event %d payload: %w", ev.ID, err)
+// docForEvent resolves the document one lifecycle event is about, plus the
+// IRI to name it by. The two typed events carry a wl:subject that Emit
+// validated at emit time, so a missing one is a bug upstream rather than an
+// event to skip. doc.patched is a dotted backbone type with no such
+// property: it names the document by numeric id, which resolves directly.
+func (s *server) docForEvent(ctx context.Context, ev store.Event, payload map[string]any) (*model.Doc, string, error) {
+	if ev.Type == watcher.TypeDocPatched {
+		id, ok := payload["doc"].(float64)
+		if !ok {
+			return nil, "", fmt.Errorf("event %d (%s) names no document", ev.ID, ev.Type)
+		}
+		doc, err := s.st.GetDoc(ctx, int64(id))
+		if err != nil {
+			return nil, "", err
+		}
+		return doc, store.DocIRI(*doc), nil
 	}
 	subject, _ := payload["wl:subject"].(string)
 	if subject == "" {
-		return "", fmt.Errorf("doc-lifecycle: event %d (%s) carries no wl:subject", ev.ID, ev.Type)
+		return nil, "", fmt.Errorf("event %d (%s) carries no wl:subject", ev.ID, ev.Type)
 	}
-	return subject, nil
+	doc, err := s.st.DocBySubjectIRI(ctx, subject)
+	if err != nil {
+		return nil, "", err
+	}
+	return doc, subject, nil
+}
+
+// payloadStrings reads a JSON string array out of a decoded payload; nil for
+// anything else, including the null a patch that changed no anchored section
+// records.
+func payloadStrings(v any) []string {
+	list, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, e := range list {
+		if s, ok := e.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // eventIRI renders 025 §15.2's identifier for one event row.
