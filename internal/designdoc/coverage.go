@@ -163,7 +163,18 @@ type PlanIndex struct {
 	resolveDocs   []model.Doc     // synthetic candidates for ResolveRef, ID = index into resolvePaths
 	resolvePaths  []string        // resolveDocs[i]'s corpus-relative Path
 	resolveByPath map[string]bool // every document's corpus-relative Path, for the "guess already matches" check
+
+	// unresolved names every `covers` target that resolved to a path no
+	// document in the corpus holds, "<plan> covers <raw target>" (WL-756).
+	// Such a claim is filed under a key no section ever queries, so the
+	// sections it names read as unplanned; a caller surfaces this as a
+	// stated gap rather than letting it pass as data.
+	unresolved []string
 }
+
+// UnresolvedTargets is every `covers` target that named no document in the
+// corpus, deduplicated and sorted.
+func (ix *PlanIndex) UnresolvedTargets() []string { return ix.unresolved }
 
 // NewPlanIndex indexes docs for Section queries: every plan document's
 // coverage claims, plus (from any spec/ADR docs present) the spec-corpus
@@ -202,6 +213,7 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 		knownSpecs[resolveDoc(d.Path, ix.specCanon, ix.specDir)] = true
 	}
 
+	unresolved := map[string]bool{}
 	for _, d := range docs {
 		if d.Kind != "plan" {
 			continue
@@ -218,6 +230,9 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 				continue
 			}
 			target := resolveNumberedAlias(ix.normalizeRef(rawTarget, home), knownSpecs)
+			if !knownSpecs[target] {
+				unresolved[plan+" covers "+rawTarget] = true
+			}
 			key := sectionKey{spec: target, anchor: anchor}
 			ix.claims[key] = append(ix.claims[key], claim{
 				plan:             plan,
@@ -244,6 +259,10 @@ func NewPlanIndex(docs []CorpusDoc, projectKey string) *PlanIndex {
 			})
 		}
 	}
+	for s := range unresolved {
+		ix.unresolved = append(ix.unresolved, s)
+	}
+	sort.Strings(ix.unresolved)
 	return ix
 }
 
