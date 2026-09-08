@@ -393,6 +393,25 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/derive": guarded(permDeriveRun),
 }
 
+// hasReviewSurface reports whether spec 059's routes are registered. The
+// Progress page renders Review disabled until they are, and enables it the
+// day they land with no change here (WL-SPEC-66 §3.3).
+func (s *server) hasReviewSurface() bool {
+	return hasReviewSurfaceIn(routeGuards)
+}
+
+// hasReviewSurfaceIn is hasReviewSurface over an explicit table, so a test
+// can ask the question of a table that carries spec 059's routes without
+// mutating the real one.
+func hasReviewSurfaceIn(guards map[string]routeGuard) bool {
+	for pattern := range guards {
+		if strings.HasPrefix(pattern, "POST /api/v1/reviews") {
+			return true
+		}
+	}
+	return false
+}
+
 // router wires handlers onto a ServeMux through routeGuards, recording which
 // entries were used so NewServer can reject a table that has drifted from the
 // routes it claims to describe.
