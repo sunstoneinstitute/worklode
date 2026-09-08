@@ -14,29 +14,36 @@ import (
 )
 
 // progressEventsRecorder wraps httptest.NewRecorder and cancels the request's
-// context the moment the first frame is written. The handler's poll loop
-// checks ctx.Done() only after a write, so this makes one ServeHTTP call
-// return synchronously right after its first frame — no goroutine, no sleep,
-// and no dependency on the poll interval.
+// context once an actual "event: progress" frame has been written — not on
+// the first write of any kind. ListEvents is commit-horizon bounded (see
+// internal/store/events.go), and that horizon is cluster-wide: a concurrent
+// test elsewhere on the same Postgres instance can hold it back past the
+// stream's heartbeat interval, so the just-recorded event can still be
+// invisible on the first few polls. The handler correctly emits a heartbeat
+// comment while it waits — normal SSE keep-alive, harmless to any consumer —
+// so cancelling on "the first write" raced the heartbeat. Waiting for the
+// frame's own text fires exactly when the frame lands, however many
+// heartbeats precede it.
 type progressEventsRecorder struct {
 	*httptest.ResponseRecorder
 	cancel context.CancelFunc
-	wrote  bool
+	done   bool
 }
 
 func (w *progressEventsRecorder) Write(p []byte) (int, error) {
 	n, err := w.ResponseRecorder.Write(p)
-	if !w.wrote {
-		w.wrote = true
+	if !w.done && strings.Contains(w.Body.String(), "event: progress") {
+		w.done = true
 		w.cancel()
 	}
 	return n, err
 }
 
 // openProgressEvents issues one GET .../progress/events?after=0 and returns
-// once the handler's first write (a frame) cancels the request, or once ctx
-// itself is done — whichever comes first. A caller that expects no frame at
-// all supplies an already-timeout-bound ctx.
+// once a progress frame cancels the request, or once ctx itself is done —
+// whichever comes first. A caller that expects no frame at all supplies an
+// already-timeout-bound ctx; a caller that expects one should still bound
+// ctx, so a genuine handler regression fails the test instead of hanging it.
 func openProgressEvents(t *testing.T, ctx context.Context, h http.Handler, project string) *progressEventsRecorder {
 	t.Helper()
 	ctx, cancel := context.WithCancel(ctx)
@@ -101,7 +108,13 @@ func TestProgressEventsHandler(t *testing.T) {
 		t.Fatalf("record task.transition: %v", err)
 	}
 
-	rec := openProgressEvents(t, context.Background(), h, "proj")
+	// Bounded, not indefinite: a real handler regression must fail the test,
+	// not hang it. 20s matches store.AwaitCommitHorizon's own deadline for
+	// the same cluster-wide-horizon wait, since a slow horizon is the one
+	// legitimate reason this takes a while (see progressEventsRecorder).
+	frameCtx, cancelFrame := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancelFrame()
+	rec := openProgressEvents(t, frameCtx, h, "proj")
 	body := rec.Body.String()
 	if !strings.Contains(body, "event: progress") {
 		t.Fatalf("no progress frame in body: %q", body)
