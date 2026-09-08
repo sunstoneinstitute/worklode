@@ -32,6 +32,22 @@ func TestDocAcceptPlanRejected(t *testing.T) {
 	}
 }
 
+// planCoverageOnlyBody is a coverage-only plan: it records coverage for work
+// already built and declares no tasks, so accepting it mints nothing.
+const planCoverageOnlyBody = `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-5
+    coverage: full
+---
+
+# Retroactive coverage backfill
+
+## Background
+
+Every section above is already built; this plan only records that.
+`
+
 // TestDocAcceptCoverageOnlyPlanMintsNothing: a plan that records coverage for
 // work already built declares no tasks at all, and accepting it is the only way
 // its claims reach the aggregate coverage query, which reads accepted-or-
