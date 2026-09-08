@@ -120,8 +120,13 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 	actorID := actorIDFrom(r)
 	now := s.st.Now()
 
-	// Document id 0 in the payload: the row does not exist until CreateDoc
-	// runs, and it is the event's own consequence.
+	// The payload goes in with document id 0 — the row does not exist until
+	// CreateDoc runs, and it is the event's own consequence — and the real id
+	// is merged back inside the same transaction, exactly as a minted task id
+	// is (025 §15.2, store.AttributeEventToTask). Without it the log's one
+	// record of a document's creation names no document, and every reader of
+	// it, the Progress stream included, has nothing to resolve
+	// (WL-SPEC-66 §5.1).
 	var created *model.Doc
 	err := s.recordDocEvent(w, r, "create", "doc.created", 0, req,
 		func(tx *sql.Tx, eventID int64) error {
@@ -143,7 +148,7 @@ func (s *server) createDoc(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			created = d
-			return nil
+			return store.MergeEventPayload(tx, eventID, map[string]any{"doc": d.ID})
 		})
 	if err != nil {
 		return

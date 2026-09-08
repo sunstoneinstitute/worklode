@@ -412,7 +412,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 	// correlation only exists once UpsertPR has run. Recording it on the
 	// event is what lets a reader name the task without re-joining
 	// (WL-SPEC-66 §5.1).
-	if err := store.MergeEventPayload(tx, eventID, map[string]string{"task": taskID}); err != nil {
+	if err := store.MergeEventPayload(tx, eventID, map[string]any{"task": taskID}); err != nil {
 		return err
 	}
 
@@ -520,7 +520,7 @@ func (a *applier) applyMergeGroup(tx *sql.Tx, eventID int64, repo, action string
 	if taskID == "" {
 		return nil
 	}
-	return store.MergeEventPayload(tx, eventID, map[string]string{"task": taskID})
+	return store.MergeEventPayload(tx, eventID, map[string]any{"task": taskID})
 }
 
 func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {
@@ -739,7 +739,7 @@ func (a *applier) applyWorkflowRun(tx *sql.Tx, eventID int64, repo string, body 
 	if len(tasks) != 1 {
 		return nil
 	}
-	return store.MergeEventPayload(tx, eventID, map[string]string{"task": tasks[0]})
+	return store.MergeEventPayload(tx, eventID, map[string]any{"task": tasks[0]})
 }
 
 func (a *applier) applyRelease(tx *sql.Tx, eventID int64, repo string, body []byte, resolvedCommitish string) error {

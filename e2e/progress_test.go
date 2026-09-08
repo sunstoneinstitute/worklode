@@ -178,7 +178,7 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 	if streamResp.StatusCode != 200 {
 		t.Fatalf("GET progress/events status = %d", streamResp.StatusCode)
 	}
-	frame := readProgressFrame(t, streamResp.Body, spec.ID)
+	frame := readProgressFrame(t, streamResp.Body, spec.ID, accepted.Tasks[0].ID)
 	if frame.Task != accepted.Tasks[0].ID || frame.State != "merged" {
 		t.Fatalf("progress frame = %+v, want task %s merged", frame, accepted.Tasks[0].ID)
 	}
@@ -346,11 +346,13 @@ func pollProgressFragment(t *testing.T, url, why string, ok func(body string) bo
 }
 
 // readProgressFrame scans an open progress-events response body, line by
-// line, until a "data: " line decodes to a frame naming doc among its
-// Specs — tolerating any number of ":" heartbeat comments and blank lines
-// ahead of it. It fails the test if the stream ends or its context expires
-// first, rather than hanging or trusting the first line written.
-func readProgressFrame(t *testing.T, body io.Reader, doc int64) model.ProgressEventFrame {
+// line, until a "data: " line decodes to a frame naming both doc among its
+// Specs and task — tolerating any number of ":" heartbeat comments and
+// blank lines ahead of it, and skipping the document's own doc.created/
+// wl:DocumentAccepted frames, which also name doc (WL-768). It fails the
+// test if the stream ends or its context expires first, rather than
+// hanging or trusting the first line written.
+func readProgressFrame(t *testing.T, body io.Reader, doc int64, task string) model.ProgressEventFrame {
 	t.Helper()
 	sc := bufio.NewScanner(body)
 	for sc.Scan() {
@@ -362,11 +364,11 @@ func readProgressFrame(t *testing.T, body io.Reader, doc int64) model.ProgressEv
 		if err := json.Unmarshal([]byte(line), &frame); err != nil {
 			t.Fatalf("decode progress frame %q: %v", line, err)
 		}
-		if slices.Contains(frame.Specs, doc) {
+		if frame.Task == task && slices.Contains(frame.Specs, doc) {
 			return frame
 		}
 	}
-	t.Fatalf("progress stream ended without a frame naming doc %d: %v", doc, sc.Err())
+	t.Fatalf("progress stream ended without a frame naming doc %d task %s: %v", doc, task, sc.Err())
 	return model.ProgressEventFrame{}
 }
 
