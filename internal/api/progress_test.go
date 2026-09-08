@@ -3,6 +3,7 @@ package api_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -168,6 +169,65 @@ func TestProgressSidebarEntry(t *testing.T) {
 		if !strings.Contains(getPage(t, h, page).Body.String(), "/projects/proj/progress") {
 			t.Errorf("%s has no Progress entry in its sidebar", page)
 		}
+	}
+}
+
+// TestProgressExpandedRow: every row ships with its detail block (§2.3) and
+// every cell with the text its tooltip shows (§2.4). progress.js has no test
+// harness, so what a Go test holds is the DOM it drives: a .detail after each
+// row, data-tip on each section and task cell, data-task on each task cell,
+// and the script tag that reads them.
+func TestProgressExpandedRow(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedProgressProject(t, h, token, "proj")
+
+	body := getPage(t, h, "/projects/proj/progress").Body.String()
+
+	for _, want := range []string{
+		`src="/assets/progress.js`,               // the script that expands a row
+		`aria-controls="d-WL-SPEC-66"`,           // the row names its own detail
+		`<div class="detail" id="d-WL-SPEC-66">`, // rendered server-side, hidden by CSS
+		"0 landed",                               // the plan's counts, still no percentage
+		"2 open",
+		"bound only", // §1.4's section: listed in the table, drawn nowhere
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("expanded row does not contain %q", want)
+		}
+	}
+
+	rows := strings.Count(body, `<div class="prog-row"`)
+	if rows == 0 {
+		t.Fatal("the page renders no spec row")
+	}
+	if got := strings.Count(body, `<div class="detail" `); got != rows {
+		t.Errorf("%d rows but %d detail blocks — every row expands into one", rows, got)
+	}
+
+	// Both minted tasks get a cell, and each carries what progress.js reads:
+	// the task id it pins on, and the line §2.4 shows.
+	cells := regexp.MustCompile(`<i class="task task-[a-z]+"[^>]*>`).FindAllString(body, -1)
+	if len(cells) != 2 {
+		t.Fatalf("task strip has %d cells, want 2: %v", len(cells), cells)
+	}
+	for _, c := range cells {
+		if !strings.Contains(c, `data-task="WL-`) || !strings.Contains(c, `data-tip="WL-`) {
+			t.Errorf("task cell %s carries no data-task/data-tip pair", c)
+		}
+	}
+
+	// Section cells carry their tooltip as data too — and no title attribute,
+	// which would show a second, native tooltip over the same cell.
+	strip := between(t, body, `<div class="strip">`, "</div>")
+	for _, c := range regexp.MustCompile(`<i class="cell[^>]*>`).FindAllString(strip, -1) {
+		if !strings.Contains(c, `data-tip="`) {
+			t.Errorf("section cell %s carries no data-tip", c)
+		}
+	}
+	if strings.Contains(strip, "title=") {
+		t.Errorf("a section cell still carries a title attribute, so it shows two tooltips: %s", strip)
 	}
 }
 
