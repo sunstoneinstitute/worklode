@@ -174,10 +174,10 @@ func TestRefShortcutBareNumberAcrossProjects(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("/029 status = %d, want 404 (ambiguous across projects)", rr.Code)
 	}
-	// The candidates are named by slug, which is what the resolver has: the
-	// ambiguity is over documents, before either has been reduced to a
-	// project-scoped shorthand.
-	for _, want := range []string{"029-here", "029-there"} {
+	// Candidates are named by citable id (025 §14.3): the project key is
+	// exactly what a bare number does not carry, so it is what the reader
+	// needs back.
+	for _, want := range []string{"WL-SPEC-29", "OTHER-SPEC-29"} {
 		if !strings.Contains(rr.Body.String(), want) {
 			t.Errorf("/029 body does not name candidate %s: %s", want, rr.Body.String())
 		}
