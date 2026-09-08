@@ -14,6 +14,12 @@
 // busy until the reply. The confirmation step is a mis-click guard and
 // nothing more; what stands between a hostile page and a write is that gate.
 //
+// The page follows its project's event stream (WL-SPEC-66 §5.1) and redraws
+// from server-rendered fragments: a frame naming a spec swaps that spec's row
+// and detail, and any frame refreshes the band, counts, bar and footer. The
+// page derives nothing from a frame — it re-reads what the server renders — so
+// a swapped row can never disagree with a reloaded page.
+//
 // A tooltip is one <div id="tip"> reused for every element carrying data-tip,
 // positioned from the hovered element's rect. It appears after 150ms so a
 // pointer crossing the strip does not flash a tooltip per cell, and it never
@@ -56,6 +62,7 @@
 
   var timer = null;
   var pinned = false;
+  var pinnedEl = null; // the element a pinned tooltip came from, re-found after a swap
 
   function show(el) {
     tip.textContent = el.getAttribute("data-tip");
@@ -69,9 +76,17 @@
     tip.style.top = top + "px";
   }
 
+  function pin(el) {
+    show(el);
+    pinned = true;
+    pinnedEl = el;
+    tip.setAttribute("data-pinned", "");
+  }
+
   function hide() {
     clearTimeout(timer);
     pinned = false;
+    pinnedEl = null;
     tip.removeAttribute("data-pinned");
     tip.hidden = true;
   }
@@ -95,9 +110,7 @@
     var el = e.target.closest("[data-tip]");
     hide();
     if (!el) return;
-    show(el);
-    pinned = true;
-    tip.setAttribute("data-pinned", "");
+    pin(el);
   });
 
   document.addEventListener("keydown", function (e) {
@@ -109,7 +122,7 @@
   // --- actions (§3.1) -------------------------------------------------------
 
   var armed = null; // the button currently showing its confirmation
-  var busy = false; // a write is in flight; every button ignores clicks
+  var sending = null; // the button whose write is in flight; every button ignores clicks
 
   // arm turns a button into its confirmation in place. The width is pinned to
   // what the button measured as a button, and the confirmation is laid over
@@ -142,7 +155,7 @@
   }
 
   function restore(refocus) {
-    if (!armed || busy) return;
+    if (!armed || sending) return;
     var a = armed;
     armed = null;
     a.textContent = a.dataset.label;
@@ -156,15 +169,18 @@
   // result of its own — the server records the change and the row is read
   // back from the backbone.
   function send(a) {
-    busy = true;
+    sending = a;
     a.setAttribute("aria-busy", "true");
     var done = function (msg) {
-      busy = false;
-      a.removeAttribute("aria-busy");
+      // A stream swap may have replaced the button mid-flight; sending points
+      // at whichever node is on the page now, so the reply lands on it.
+      var el = sending;
+      sending = null;
+      if (el) el.removeAttribute("aria-busy");
       restore(true);
-      if (msg) showError(a, msg);
+      if (msg && el) showError(el, msg);
     };
-    fetch(location.pathname.replace(/\/+$/, "") + "/" + a.getAttribute("data-route"), {
+    fetch(base() + "/" + a.getAttribute("data-route"), {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", "X-Requested-With": "lode-cockpit" },
@@ -178,7 +194,7 @@
           return;
         }
         done("");
-        refreshRow(a);
+        // Nothing else: the stream re-renders the row from the backbone.
       });
     }, function () {
       done("the request could not be sent");
@@ -198,39 +214,272 @@
     }, 5000);
   }
 
-  // TODO(part 3): GET /projects/{id}/progress/spec/{doc} serves the row and
-  // its detail as a fragment (§5.2), and the event stream swaps it in. Until
-  // that route exists the page re-reads itself and lifts the one row out,
-  // which is the same swap over a much larger response.
-  function refreshRow(a) {
-    var detail = a.closest(".detail");
-    var row = a.closest(".prog-row") || (detail && detail.previousElementSibling);
-    var id = row && row.getAttribute("aria-controls");
-    if (!id) {
-      location.reload();
+  // --- live updates (§5) ---------------------------------------------------
+
+  // Every route this page reads or writes hangs off the page's own path, so
+  // one base is all the script needs to know about where it is.
+  function base() { return location.pathname.replace(/\/+$/, ""); }
+
+  function get(url) {
+    return fetch(url, { credentials: "same-origin" }).then(function (res) {
+      return res.ok ? res.text() : null;
+    }, function () { return null; });
+  }
+
+  function parse(html) { return new DOMParser().parseFromString(html, "text/html"); }
+
+  function rowFor(doc) { return document.querySelector('.prog-row[data-doc="' + doc + '"]'); }
+
+  function groupBody(key) {
+    var g = key && document.querySelector('section[data-group="' + key + '"]');
+    return g && g.querySelector(".bd");
+  }
+
+  // Frames arrive one per backbone event, so a single transition can produce
+  // several in a row. A burst is coalesced into one fetch per named spec and
+  // one summary fetch.
+  var wantRows = {};
+  var wantSummary = false;
+  var flushTimer = null;
+
+  function schedule(docs) {
+    for (var i = 0; i < docs.length; i++) {
+      var doc = String(docs[i]);
+      if (/^\d+$/.test(doc)) wantRows[doc] = true;
+    }
+    wantSummary = true;
+    if (flushTimer === null) flushTimer = setTimeout(flush, 150);
+  }
+
+  function flush() {
+    flushTimer = null;
+    var docs = Object.keys(wantRows);
+    wantRows = {};
+    for (var i = 0; i < docs.length; i++) refreshRow(docs[i]);
+    if (!wantSummary) return;
+    wantSummary = false;
+    get(base() + "/summary").then(function (html) {
+      if (html !== null) swapSummary(html);
+    });
+  }
+
+  function refreshRow(doc) {
+    get(base() + "/spec/" + doc).then(function (html) {
+      if (html !== null) swapRow(doc, html);
+    });
+  }
+
+  // swapRow replaces one spec's row and detail with the server's fragment,
+  // carrying over what the reader had done to them: the row's expansion, a
+  // pinned tooltip's target, and a confirmation the row is in the middle of.
+  // A spec the page does not show yet joins the end of its group instead.
+  function swapRow(doc, html) {
+    var frag = parse(html);
+    var row = frag.querySelector(".prog-row");
+    var detail = frag.querySelector(".detail");
+    if (!row || !detail) return;
+
+    var oldRow = rowFor(doc);
+    if (!oldRow) {
+      appendRow(row, detail);
       return;
     }
-    fetch(location.href, { credentials: "same-origin" }).then(function (res) {
-      return res.text();
-    }).then(function (html) {
-      var page = new DOMParser().parseFromString(html, "text/html");
-      var freshRow = page.querySelector('.prog-row[aria-controls="' + id + '"]');
-      var freshDetail = page.getElementById(id);
-      var oldRow = document.querySelector('.prog-row[aria-controls="' + id + '"]');
-      var oldDetail = document.getElementById(id);
-      if (!freshRow || !freshDetail || !oldRow || !oldDetail) {
-        location.reload();
-        return;
-      }
-      if (oldRow.classList.contains("open")) {
-        freshRow.classList.add("open");
-        freshRow.setAttribute("aria-expanded", "true");
-      }
-      oldRow.parentNode.replaceChild(freshRow, oldRow);
-      oldDetail.parentNode.replaceChild(freshDetail, oldDetail);
-      bindRow(freshRow);
-    }, function () { location.reload(); });
+    var oldDetail = document.getElementById(oldRow.getAttribute("aria-controls"));
+    if (!oldDetail) return;
+
+    if (oldRow.classList.contains("open")) {
+      row.classList.add("open");
+      row.setAttribute("aria-expanded", "true");
+    }
+    var tipWas = carriedTip(oldRow, oldDetail);
+    var actWas = carriedAct(oldRow, oldDetail);
+
+    oldRow.parentNode.replaceChild(row, oldRow);
+    oldDetail.parentNode.replaceChild(detail, oldDetail);
+    bindRow(row);
+    restoreTip(row, detail, tipWas);
+    restoreAct(row, detail, actWas);
+
+    // The swap is always in place; only the move between groups waits for the
+    // pointer to leave the list (§5.4 rule 3).
+    var holder = row.closest("section[data-group]");
+    if (holder && holder.getAttribute("data-group") !== row.getAttribute("data-group")) {
+      if (overList) deferred[doc] = true;
+      else moveRow(doc);
+    }
   }
+
+  // A pinned tooltip is re-found in the fresh markup by what it was about: a
+  // task cell by its task, a section cell by its anchor. Anything else pinned
+  // inside the swapped row has no stable identity and the tooltip closes.
+  function carriedTip(row, detail) {
+    if (!pinned || !pinnedEl) return null;
+    if (!row.contains(pinnedEl) && !detail.contains(pinnedEl)) return null;
+    var task = pinnedEl.getAttribute("data-task");
+    if (task) return '[data-task="' + task + '"]';
+    var anchor = pinnedEl.getAttribute("data-anchor");
+    return anchor ? '[data-anchor="' + anchor + '"]' : "";
+  }
+
+  function restoreTip(row, detail, sel) {
+    if (sel === null) return;
+    hide();
+    var el = sel && (row.querySelector(sel) || detail.querySelector(sel));
+    if (el) pin(el);
+  }
+
+  // An armed or in-flight action is matched in the fresh markup by what it
+  // would post: the same route and the same body is the same act.
+  function carriedAct(row, detail) {
+    if (!armed) return null;
+    if (!row.contains(armed) && !detail.contains(armed)) return null;
+    return {
+      route: armed.getAttribute("data-route"),
+      body: armed.getAttribute("data-body") || "",
+      inflight: sending === armed
+    };
+  }
+
+  function restoreAct(row, detail, want) {
+    if (!want) return;
+    armed = null;
+    var acts = [].slice.call(row.querySelectorAll(".act"));
+    acts = acts.concat([].slice.call(detail.querySelectorAll(".act")));
+    var found = null;
+    for (var i = 0; i < acts.length && !found; i++) {
+      if (acts[i].getAttribute("data-route") === want.route &&
+        (acts[i].getAttribute("data-body") || "") === want.body) found = acts[i];
+    }
+    if (!found) {
+      sending = null;
+      return;
+    }
+    arm(found);
+    if (!want.inflight) return;
+    sending = found;
+    found.setAttribute("aria-busy", "true");
+  }
+
+  function appendRow(row, detail) {
+    var body = groupBody(row.getAttribute("data-group"));
+    if (!body) {
+      reloadWhenIdle();
+      return;
+    }
+    body.appendChild(row);
+    body.appendChild(detail);
+    bindRow(row);
+    recount();
+  }
+
+  // moveRow re-parents an existing row and its detail, which keeps their
+  // handlers and the "open" class they already carry.
+  function moveRow(doc) {
+    var row = rowFor(doc);
+    if (!row) return;
+    var detail = document.getElementById(row.getAttribute("aria-controls"));
+    var body = groupBody(row.getAttribute("data-group"));
+    if (!detail || !body) {
+      reloadWhenIdle();
+      return;
+    }
+    body.appendChild(row);
+    body.appendChild(detail);
+    recount();
+  }
+
+  // A group heading carries its size, and the server renders no group that is
+  // empty, so an emptied one goes away rather than heading nothing.
+  function recount() {
+    var groups = document.querySelectorAll("section[data-group]");
+    for (var i = 0; i < groups.length; i++) {
+      var n = groups[i].querySelectorAll(".prog-row").length;
+      var slot = groups[i].querySelector(".hd h3 .n");
+      if (slot) slot.textContent = String(n);
+      groups[i].hidden = n === 0;
+    }
+  }
+
+  // A group the server would have to draw from scratch is the one case the
+  // page cannot assemble itself. Re-reading the page is the honest answer, and
+  // it waits for the pointer to leave the list like every other move.
+  function reloadWhenIdle() {
+    if (overList) pendingReload = true;
+    else location.reload();
+  }
+
+  // §5.2's second fragment. Each piece is replaced by its content, never by
+  // its container: the band, the counts and the footer hold §5.4's fixed
+  // heights, and the reconnect note lives in the band.
+  function swapSummary(html) {
+    var frag = parse(html);
+    var parts = [".prog-band", ".prog-counts", 'section[aria-labelledby="prog-bar-h"]', ".prog-footer"];
+    for (var i = 0; i < parts.length; i++) {
+      var fresh = frag.querySelector(parts[i]);
+      var cur = document.querySelector(parts[i]);
+      if (!fresh || !cur) continue;
+      cur.innerHTML = fresh.innerHTML;
+      if (fresh.hasAttribute("aria-hidden")) cur.setAttribute("aria-hidden", "true");
+      else cur.removeAttribute("aria-hidden");
+    }
+    placeNote();
+  }
+
+  var note = document.createElement("span");
+  note.className = "prog-recon muted small";
+  note.setAttribute("role", "status");
+
+  function placeNote() {
+    var band = document.querySelector(".prog-band");
+    if (band) band.appendChild(note);
+  }
+
+  placeNote();
+
+  // Moving a row between groups is the one redraw that would shift the list
+  // under the pointer, so the list says when it is being pointed at.
+  var overList = false;
+  var deferred = {};
+  var pendingReload = false;
+
+  var list = document.querySelector(".prog-groups");
+  if (list) {
+    list.addEventListener("mouseenter", function () { overList = true; });
+    list.addEventListener("mouseleave", function () {
+      overList = false;
+      var docs = Object.keys(deferred);
+      deferred = {};
+      for (var i = 0; i < docs.length; i++) moveRow(docs[i]);
+      if (pendingReload) location.reload();
+    });
+  }
+
+  // The stream itself (§5.1). EventSource reconnects on its own and resumes
+  // from Last-Event-ID, so a drop needs no retry logic here: only the note in
+  // the band, and the one full refresh that follows the reconnect (§5.2).
+  var dropped = false;
+  var stream = new EventSource(base() + "/events");
+
+  stream.addEventListener("progress", function (e) {
+    var frame;
+    try { frame = JSON.parse(e.data); } catch (err) { return; }
+    schedule(frame.specs || []);
+  });
+
+  stream.addEventListener("open", function () {
+    if (!dropped) return;
+    dropped = false;
+    note.textContent = "";
+    var all = document.querySelectorAll(".prog-row[data-doc]");
+    var docs = [];
+    for (var i = 0; i < all.length; i++) docs.push(all[i].getAttribute("data-doc"));
+    schedule(docs);
+  });
+
+  stream.addEventListener("error", function () {
+    dropped = true;
+    note.textContent = "reconnecting…";
+  });
 
   document.addEventListener("click", function (e) {
     var a = e.target.closest("button.act");
@@ -238,7 +487,7 @@
       restore(false);
       return;
     }
-    if (a.disabled || busy) return;
+    if (a.disabled || sending) return;
     if (e.target.closest(".cancel")) {
       restore(true);
       return;
