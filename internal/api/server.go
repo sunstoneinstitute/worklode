@@ -374,9 +374,12 @@ type server struct {
 	// formSubmissions counts the web UI's creation-form POSTs, by form (task,
 	// deliverable, crew_add, crew_remove) and outcome; see webform.go and
 	// observeFormSubmission.
-	// These are the only web routes that write, so this is where a rejected
-	// or refused cockpit write becomes visible.
+	// These are the cockpit's form writes; the Progress page's script writes
+	// are counted by progressWrites.
 	formSubmissions *prometheus.CounterVec
+	// progressWrites counts the Progress page's script writes (066 §4.2), by
+	// route and outcome; see webform.go and observeProgressWrite.
+	progressWrites *prometheus.CounterVec
 	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
 	dictations *prometheus.CounterVec
 	// taskTokens counts task-scoped token mints (WL-306); see metrics.go.
