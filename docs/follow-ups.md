@@ -860,3 +860,14 @@ Recorded by WL-747 (e2e and docs alignment, WL-SPEC-66 §8):
   push-based bus (`LISTEN`/`NOTIFY` or an in-process fan-out) that both
   streams' poll loops can subscribe to instead of each hitting the store on
   its own tick.
+
+Recorded by WL-754 (backfill the historic plan record, WL-SPEC-66 §6.2):
+
+- `[P4]` **Three accepted plans have no execution record and never will.**
+  `WL-PLAN-67` (human assignment), `WL-PLAN-68` (branch and worktree naming)
+  and `WL-PLAN-75` (Keycloak-primary auth) were written and executed before the
+  tracker carried its own work, so no task names them and none can be linked.
+  `scripts/plan-record-candidates.py` finds no candidate for any of the three.
+  They stay in the Progress page's "No execution record" group permanently;
+  read that group as three known-empty plans plus whatever is genuinely
+  unlinked.
