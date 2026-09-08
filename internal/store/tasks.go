@@ -711,6 +711,60 @@ func SetTaskSkills(tx *sql.Tx, now time.Time, id string, skills []string) error 
 		fmt.Errorf("task %s: %w", id, ErrNotFound))
 }
 
+// SetTaskPlan links task id to the plan document it executed (WL-SPEC-66
+// §6.2): `lode task edit --plan` retrofitting a plan onto a task that was not
+// minted from it. plan_task_key is set to the task's current title, the same
+// value AcceptDoc's mint records for a task minted straight from a plan's
+// `## Tasks` declaration (migration 0043) — there is no declaration behind
+// this link, so the title is the only identity there is to key it on.
+//
+// Idempotent when the task already carries this planDoc. Refuses (all
+// ErrInvalidInput) a task already linked to a different plan document, a
+// planDoc that does not name a plan, or one in a different project than the
+// task's own; ErrNotFound if the task does not exist.
+func SetTaskPlan(tx *sql.Tx, now time.Time, taskID string, planDoc int64, eventID int64) error {
+	var taskProject, title string
+	var curPlanDoc sql.NullInt64
+	if err := tx.QueryRow(`SELECT project_id, title, plan_doc FROM tasks WHERE id = $1`, taskID).
+		Scan(&taskProject, &title, &curPlanDoc); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("task %s: %w", taskID, ErrNotFound)
+		}
+		return fmt.Errorf("look up task %s: %w", taskID, err)
+	}
+	if curPlanDoc.Valid {
+		if curPlanDoc.Int64 == planDoc {
+			return nil
+		}
+		return fmt.Errorf("task %s already carries plan doc %d: %w", taskID, curPlanDoc.Int64, ErrInvalidInput)
+	}
+
+	var docProject, docKind string
+	if err := tx.QueryRow(`SELECT project_id, kind FROM docs WHERE id = $1`, planDoc).
+		Scan(&docProject, &docKind); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("unknown document %d: %w", planDoc, ErrInvalidInput)
+		}
+		return fmt.Errorf("look up document %d: %w", planDoc, err)
+	}
+	if docKind != "plan" {
+		return fmt.Errorf("document %d is a %s, not a plan: %w", planDoc, docKind, ErrInvalidInput)
+	}
+	if docProject != taskProject {
+		return fmt.Errorf("cross-project plan %d (%s) for task %s (%s): %w",
+			planDoc, docProject, taskID, taskProject, ErrInvalidInput)
+	}
+
+	if _, err := tx.Exec(`UPDATE tasks SET plan_doc = $1, plan_task_key = $2, updated_at = $3 WHERE id = $4`,
+		planDoc, title, now.UTC(), taskID); err != nil {
+		if isUniqueViolationOn(err, "tasks_plan_task_key") {
+			return fmt.Errorf("plan %d already has a task titled %q: %w", planDoc, title, ErrInvalidInput)
+		}
+		return fmt.Errorf("set plan for task %s: %w", taskID, err)
+	}
+	return LogChange(tx, "task", taskID, eventID, map[string]any{"field": "plan_doc", "new": planDoc})
+}
+
 // SlugifyTitle turns a task title into a branch-name slug: lowercase, every
 // run of non-alphanumeric (ASCII) characters becomes a single '-', leading and
 // trailing '-' are trimmed, at most 40 characters, and "task" if nothing

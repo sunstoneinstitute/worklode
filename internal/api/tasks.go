@@ -506,7 +506,8 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Title == nil && req.Body == nil && req.Priority == nil && req.Concern == nil &&
 		req.NeedsDecomposition == nil && req.HumanOnly == nil && req.State == nil &&
-		req.Secrets == nil && req.Artifacts == nil && req.Kind == nil && req.Milestone == nil {
+		req.Secrets == nil && req.Artifacts == nil && req.Kind == nil && req.Milestone == nil &&
+		req.Plan == nil {
 		writeErr(w, http.StatusUnprocessableEntity, "no fields to update")
 		return
 	}
@@ -558,6 +559,25 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		empty := ""
 		req.Milestone = &empty
 	}
+	// planDoc is resolved outside the transaction the same way `--plan` on
+	// `task list` resolves one (id or slug, 025 §9.2): store.ResolveDocRef
+	// alone, no KEY-TYPE-n grammar — plans carry no corpus number for that
+	// grammar to address. SetTaskPlan re-checks kind and project once the id
+	// is known, since a ref can resolve to a document that is not a plan.
+	var planDoc int64
+	if req.Plan != nil {
+		ref := strings.TrimSpace(*req.Plan)
+		if ref == "" {
+			writeErr(w, http.StatusUnprocessableEntity, "plan must not be blank")
+			return
+		}
+		d, err := s.st.ResolveDocRef(r.Context(), ref)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		planDoc = d.ID
+	}
 	var stateFrom string
 	if req.State != nil {
 		var ok bool
@@ -573,6 +593,11 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 		func(tx *sql.Tx, eventID int64) error {
 			if err := store.UpdateTaskFields(tx, s.st.Now(), id, req.Title, req.Body, req.Priority, req.Concern, req.Secrets, req.NeedsDecomposition, req.HumanOnly, req.Kind, req.Milestone); err != nil {
 				return err
+			}
+			if req.Plan != nil {
+				if err := store.SetTaskPlan(tx, s.st.Now(), id, planDoc, eventID); err != nil {
+					return err
+				}
 			}
 			for field, val := range map[string]*string{
 				"title": req.Title, "body": req.Body, "priority": req.Priority, "concern": req.Concern,
