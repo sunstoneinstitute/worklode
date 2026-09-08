@@ -195,6 +195,9 @@
       max-width: 96rem;
     }
   }
+  .block {
+    display: block;
+  }
   .contents {
     display: contents;
   }
@@ -2144,11 +2147,12 @@ nav.local a .cnt {
 }
 .prog-row {
   display: grid;
-  grid-template-columns: minmax(96px,auto) minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr);
+  grid-template-columns: minmax(96px,auto) minmax(0,1.2fr) minmax(0,1.4fr) minmax(0,1fr) auto;
   gap: 12px;
   align-items: start;
   padding: 9px 0;
   border-top: 1px solid var(--line);
+  cursor: pointer;
 }
 .prog-row:first-of-type {
   border-top: 0;
@@ -2161,10 +2165,96 @@ nav.local a .cnt {
   flex-wrap: wrap;
   gap: 2px;
 }
+.prog-row .act {
+  display: flex;
+  gap: 6px;
+  justify-self: end;
+}
 @media (max-width:880px) {
   .prog-row {
     grid-template-columns: minmax(0,1fr);
   }
+}
+.prog-row + .detail {
+  display: none;
+}
+.prog-row.open + .detail {
+  display: block;
+  padding: 2px 0 12px;
+  font-size: 12.5px;
+}
+.detail .plan {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 3px 0;
+}
+.detail .plan .t {
+  font-weight: 600;
+}
+.detail .tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.detail .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.detail table.secs {
+  width: 100%;
+  border-collapse: collapse;
+}
+.detail table.secs th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink-3);
+  padding: 4px 10px 4px 0;
+}
+.detail table.secs td {
+  padding: 3px 10px 3px 0;
+  vertical-align: top;
+}
+.detail table.secs td.sub {
+  padding-left: 16px;
+}
+.task {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  flex: 0 0 auto;
+}
+.task-landed {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.task-active {
+  background: var(--accent);
+  border-color: var(--accent-line);
+}
+.task-unstarted {
+  background: var(--info-bg);
+  border-color: var(--info);
+}
+#tip {
+  position: fixed;
+  z-index: 60;
+  max-width: 320px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+#tip[data-pinned] {
+  pointer-events: auto;
 }
 .cell {
   display: inline-block;
