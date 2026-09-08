@@ -46,7 +46,7 @@
     });
     row.addEventListener("keydown", function (e) {
       if (e.key !== "Enter" && e.key !== " ") return;
-      if (e.target.closest(".act")) return;
+      if (e.target.closest("a") || e.target.closest(".act")) return;
       e.preventDefault();
       toggle(this);
     });
@@ -78,6 +78,8 @@
       }
     }
     tip.hidden = false;
+    tip.style.left = "0px";
+    tip.style.top = "0px";
     var r = el.getBoundingClientRect();
     var box = tip.getBoundingClientRect();
     var left = Math.min(Math.max(4, r.left), window.innerWidth - box.width - 4);
