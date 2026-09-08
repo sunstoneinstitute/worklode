@@ -410,8 +410,10 @@ func (s *Store) progressPositions(ctx context.Context, projectID string, tasks [
 		return err
 	}
 	prs := map[string]*progress.PRFact{}
+	queued := map[string]bool{}
 	shas := map[string]RepoSHA{}
 	var keys []RepoSHA
+	repoSet := map[string]bool{}
 	// OpenPRsForProject is newest first, so the first PR seen for a task is
 	// the one that wins.
 	for _, pr := range openPRs {
@@ -419,9 +421,23 @@ func (s *Store) progressPositions(ctx context.Context, projectID string, tasks [
 			continue
 		}
 		prs[*pr.TaskID] = &progress.PRFact{Number: int(pr.Number), URL: pr.URL}
+		queued[*pr.TaskID] = pr.QueuedAt != nil
+		repoSet[pr.Repo] = true
 		key := RepoSHA{Repo: pr.Repo, SHA: pr.HeadSHA}
 		shas[*pr.TaskID] = key
 		keys = append(keys, key)
+	}
+
+	var repos []string
+	for repo := range repoSet {
+		repos = append(repos, repo)
+	}
+	mergeQueues, err := s.BranchRulesForRepos(ctx, repos)
+	if err != nil {
+		return err
+	}
+	for taskID, pr := range prs {
+		pr.MergeQueue = mergeQueues[shas[taskID].Repo]
 	}
 
 	runs, err := s.CIRunsForSHAs(ctx, keys)
@@ -434,6 +450,7 @@ func (s *Store) progressPositions(ctx context.Context, projectID string, tasks [
 		}
 		if open[pt.task.ID] != nil {
 			f.Lease, f.PR = leases[pt.task.ID], prs[pt.task.ID]
+			f.Queued = queued[pt.task.ID]
 			if latest := latestRun(runs[shas[pt.task.ID]]); latest != nil {
 				f.CI = &progress.CIFact{Status: latest.Status}
 				if latest.Conclusion != nil {
