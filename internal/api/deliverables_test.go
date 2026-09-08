@@ -300,3 +300,37 @@ func TestDeliverableCreationMaterializesFlowLanes(t *testing.T) {
 		t.Errorf("metrics missing four flow-materialized requirements:\n%s", metrics)
 	}
 }
+
+// TestGetDeliverableAPI covers GET /api/v1/deliverables/{id}: the read
+// projection carries the reported state/timestamp alongside the declared
+// fields, and an unknown id 404s (WL-715).
+func TestGetDeliverableAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token,
+		model.CreateDeliverableInput{Name: "Casualty datapackage", Artifact: "bigquery://sunstone-prod/cow/casualties"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201; body %s", rr.Code, rr.Body.String())
+	}
+	id := decodeMap(t, rr)["id"].(string)
+
+	rr = doReq(t, h, "GET", "/api/v1/deliverables/"+id, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var got model.Deliverable
+	decodeInto(t, rr, &got)
+	if got.ID != id || got.Name != "Casualty datapackage" {
+		t.Fatalf("get = %+v, want id/name of the created deliverable", got)
+	}
+	if got.ReportedState != "" || got.ReportedAt != nil {
+		t.Errorf("reported state = %q at %v, want unreported", got.ReportedState, got.ReportedAt)
+	}
+
+	rr = doReq(t, h, "GET", "/api/v1/deliverables/WL-DEL-999", token, nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("get unknown status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}

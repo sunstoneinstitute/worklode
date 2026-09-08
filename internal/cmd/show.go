@@ -36,9 +36,8 @@ const (
 	targetDoc
 	// targetMilestone: a MILE id — dispatch to runMilestoneShow.
 	targetMilestone
-	// targetUnshowable: a DEL id — a real entity kind with no show support
-	// yet (spec 029 §4).
-	targetUnshowable
+	// targetDeliverable: a DEL id — dispatch to runDeliverableShow.
+	targetDeliverable
 	// targetUnknownType: a typed id whose <TYPE> segment names no known kind.
 	targetUnknownType
 	// targetUnclassified: matches no known shape at all.
@@ -46,26 +45,10 @@ const (
 )
 
 // showTarget is classify's result: the kind, plus the <TYPE> token for
-// targetUnshowable and targetUnknownType, where the error message needs it.
+// targetUnknownType, where the error message needs it.
 type showTarget struct {
 	Kind targetKind
 	Type string
-}
-
-// unshowableKindWords names the entity a DEL id refers to, singular, for the
-// "not showable yet" error. MILE left this map with the addition of
-// targetMilestone (WL-536); PLAN left it when 029 §4 gave plans a number: a
-// plan is a document and `lode show` renders it like any other.
-var unshowableKindWords = map[string]string{
-	"DEL": "deliverable",
-}
-
-// unshowableReason is the parenthetical each "not showable yet" error ends
-// with, keyed by the singular kind word. A deliverable exists as a row
-// (spec 029 §3); only the surfaces its reason names read it so far.
-var unshowableReason = map[string]string{
-	"deliverable": "the entity exists; only the project's Deliverables page and " +
-		"GET /api/v1/projects/{id}/deliverables read it so far",
 }
 
 // classify decides what arg names, by grammar alone — no filesystem or
@@ -85,7 +68,7 @@ func classify(arg string) showTarget {
 		case "MILE":
 			return showTarget{Kind: targetMilestone}
 		case "DEL":
-			return showTarget{Kind: targetUnshowable, Type: typ}
+			return showTarget{Kind: targetDeliverable}
 		default:
 			return showTarget{Kind: targetUnknownType, Type: typ}
 		}
@@ -133,8 +116,8 @@ func newShowCmd() *cobra.Command {
 		Long: `Show any entity, in one of two forms:
 
   lode show <id>                    classify the id and dispatch (a task,
-                                    a document, or an entity kind with no
-                                    show support yet). A document is named
+                                    a document, a milestone, or a
+                                    deliverable). A document is named
                                     by shorthand (WL-SPEC-25), slug
                                     (design-doc-queries), number-and-slug
                                     (025-documents-in-the-backbone), or
@@ -209,7 +192,7 @@ anchor; -s 3 is shorthand for -s sec-3.`,
 	cmd.Flags().StringVar(&milestoneFlag, "milestone", "", "show a milestone by number (e.g. --milestone 2)")
 	cmd.Flags().StringVar(&projectFlag, "project", "", "show a project's detail by id (e.g. --project worklode)")
 	completeProjectFlag(cmd, "project")
-	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3); not showable yet — see the project's Deliverables page")
+	cmd.Flags().StringVar(&deliverableFlag, "deliverable", "", "show a deliverable by number (e.g. --deliverable 3)")
 	cmd.Flags().StringVarP(&section, "section", "s", "", "print only this section (spec/adr only), by anchor: sec-3, #sec-3, or just 3")
 	cmd.Flags().BoolVarP(&pager, "pager", "p", false, pagerFlagUsage)
 	cmd.Flags().BoolVar(&inline, "inline", false, "for a spec or ADR: fold every effective amendment and supersession into the section it acts on (026 §3.2); ignored for tasks and projects")
@@ -273,7 +256,7 @@ func dispatchShowKind(cmd *cobra.Command, kind, value, section string, sectionSe
 	case "milestone":
 		return runMilestoneShowByOrdinal(cmd, value)
 	case "deliverable":
-		return fmt.Errorf("%s %s is not showable yet (%s)", kind, value, unshowableReason[kind])
+		return runDeliverableShowByOrdinal(cmd, value)
 	case "project":
 		if value == "" {
 			return errors.New("--project needs a value")
@@ -349,6 +332,43 @@ func runMilestoneShowByOrdinal(cmd *cobra.Command, value string) error {
 	return runMilestoneShow(cmd, fmt.Sprintf("%s-MILE-%s", cfg.ProjectKey, value))
 }
 
+// runDeliverableShow fetches and renders one deliverable by its full id
+// (e.g. WL-DEL-3), shared between the classify-and-dispatch path
+// (dispatchShowPositional) and the ordinal-flag path
+// (runDeliverableShowByOrdinal).
+func runDeliverableShow(cmd *cobra.Command, id string) error {
+	c, err := newAPIClient()
+	if err != nil {
+		return err
+	}
+	d, raw, err := c.GetDeliverable(cmd.Context(), id)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.DeliverableRender(cmd.OutOrStdout(), d)
+	return nil
+}
+
+// runDeliverableShowByOrdinal resolves a --deliverable flag's bare ordinal to
+// a full id the same way runMilestoneShowByOrdinal resolves --milestone: a
+// flag can only ever mean this repo's own project, so the id is built from
+// the configured project key, and an unconfigured key is refused outright —
+// a deliverable id has no bare-number fallback form to fall back to.
+func runDeliverableShowByOrdinal(cmd *cobra.Command, value string) error {
+	cfg, err := cli.LoadConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.ProjectKey == "" {
+		return errors.New("no project key configured; pass the full id (e.g. WL-DEL-3) positionally")
+	}
+	return runDeliverableShow(cmd, fmt.Sprintf("%s-DEL-%s", cfg.ProjectKey, value))
+}
+
 // dispatchShowPositional is the classify-and-dispatch path for a plain `lode
 // show <id>` (no kind flags): unchanged from the original show.go behavior,
 // plus the --section-applies-only-to-docs check the flag-routed path also
@@ -368,9 +388,8 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 		return runDocShow(cmd, arg, section, "", inline)
 	case targetMilestone:
 		return runMilestoneShow(cmd, arg)
-	case targetUnshowable:
-		word := unshowableKindWords[t.Type]
-		return fmt.Errorf("%s is a %s id; %ss are not showable yet (%s)", arg, word, word, unshowableReason[word])
+	case targetDeliverable:
+		return runDeliverableShow(cmd, arg)
 	case targetUnknownType:
 		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
