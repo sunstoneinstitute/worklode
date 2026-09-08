@@ -88,8 +88,8 @@ func ParseNumberForm(base string) (NumberForm, bool) {
 }
 
 // AmbiguousRefError reports a ref that matched more than one document. Error
-// lists every candidate slug, one per line, so a caller printing it as-is
-// gives the reader enough to disambiguate.
+// lists every candidate's citable id (025 §14.3), one per line, so a caller
+// printing it as-is hands the reader refs they can cite straight back.
 type AmbiguousRefError struct {
 	Ref        string
 	Candidates []string
@@ -118,7 +118,8 @@ func (e *UnresolvedError) Error() string {
 
 // KindMismatchError reports a ref whose <TYPE> token names one document kind
 // (spec or adr) while the document it resolved to is the other (026 §4.2).
-// Doc names the target — its slug, the identity a reader can look up.
+// Doc names the target by its citable id (025 §14.3), the identity a reader
+// cites back.
 type KindMismatchError struct {
 	Doc  string
 	Want string // the kind the ref's <TYPE> token asked for
