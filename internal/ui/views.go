@@ -1173,8 +1173,13 @@ type ProgressView struct {
 	Page         PageProps
 	CanonicalURL string
 	Project      CockpitProject
-	P            model.ProjectProgress
-	Legend       []LegendEntry
+	// Viewer is the session's actor, empty for an anonymous viewer of an
+	// open instance. Every act on the page is enabled or disabled against
+	// it (§3); the server never derives an actor from anything the page
+	// sends back (§4.2 rule 6).
+	Viewer string
+	P      model.ProjectProgress
+	Legend []LegendEntry
 }
 
 // LegendEntry is one section state in the bar's legend: §1.2's label, a
@@ -1321,16 +1326,45 @@ type ProgressAction struct {
 // only one so far: a draft plan is the document `lode doc accept` accepts
 // (§3.2). Review (§3.3) and the rally acts (§3.5) join it as their routes
 // land.
-func progressPlanActions(p model.ProgressPlan) []ProgressAction {
+func progressPlanActions(p model.ProgressPlan, viewer string) []ProgressAction {
 	if p.State != "draft" {
 		return nil
 	}
-	return []ProgressAction{{
+	return []ProgressAction{progressAcceptAction(p.Doc, p.Ref, p.Owner, viewer)}
+}
+
+// progressSpecActions are the acts on a spec row (§2.2's action slot). A
+// draft spec is accepted from here the same way a draft plan is (§3.2); an
+// accepted one has nothing to accept.
+func progressSpecActions(s model.ProgressSpec, viewer string) []ProgressAction {
+	if s.Status != "draft" {
+		return nil
+	}
+	return []ProgressAction{progressAcceptAction(s.Doc, s.Ref, s.Owner, viewer)}
+}
+
+// progressAcceptAction is §3.2's Accept button for one document. It is
+// enabled only for the document's owner, because that is the only actor
+// store.AcceptDoc admits (025 §7) — a button this page enabled for anyone
+// else would promise a write the backbone refuses. Everyone else gets it
+// disabled with the reason, never hidden: a missing button reads as a
+// missing feature (§3).
+func progressAcceptAction(doc int64, ref, owner, viewer string) ProgressAction {
+	a := ProgressAction{
 		Route:   "accept",
-		Body:    progressDocBody(p.Doc),
+		Body:    progressDocBody(doc),
 		Label:   "Accept",
-		Confirm: "Accept " + p.Ref,
-	}}
+		Confirm: "Accept " + ref,
+	}
+	switch {
+	case viewer == "":
+		a.Reason = "sign in to accept"
+	case owner == "":
+		a.Reason = ref + " has no owner to accept it"
+	case owner != viewer:
+		a.Reason = ref + " is owned by " + owner
+	}
+	return a
 }
 
 // progressDocBody is the one-field body every document act sends (§7). It is

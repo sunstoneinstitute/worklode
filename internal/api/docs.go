@@ -691,6 +691,44 @@ func (s *server) replaceDocEdges(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, detail)
 }
 
+// emitDocAccepted is the shared body of the two routes that accept a
+// document: POST /api/v1/docs/{id}/accept and the Progress page's Accept
+// button (WL-SPEC-66 §3.2). It emits 025 §15.3's typed wl:DocumentAccepted
+// and applies store.AcceptDoc inside it, so the owner gate, the state gate
+// and plan minting stay the store's for both callers and the page cannot
+// grant what `lode doc accept` would refuse.
+//
+// A false inserted means the (source, external_id) conflict fired: this
+// document at this version was already accepted, so apply never ran and
+// accepted is nil. What that means is the caller's contract to state.
+func (s *server) emitDocAccepted(ctx context.Context, doc *model.Doc, actorID string) (
+	accepted *model.Doc, minted []model.Task, inserted bool, err error) {
+
+	now := s.st.Now()
+	// From is the status the document is actually leaving, not a constant: a
+	// plan re-accepted while accepted leaves "accepted" (025 §9.2), and an
+	// event saying otherwise would put a transition that did not happen in the
+	// append-only log.
+	ev := eventbus.DocumentAccepted{
+		Doc: store.DocIRI(*doc), Actor: actorID, At: now,
+		Version: doc.Version, From: "wlc:" + doc.Status, To: "wlc:accepted",
+	}
+	_, inserted, err = eventbus.Emit(ctx, s.st, docSource, ev,
+		func(tx *sql.Tx, eventID int64) error {
+			d, tasks, err := store.AcceptDoc(tx, now, doc.ID, actorID, eventID)
+			if err != nil {
+				return err
+			}
+			accepted, minted = d, tasks
+			return nil
+		})
+	// Counted before the caller's error branch, exactly as RecordDocEvent
+	// counts it: a refused accept is an outcome of the accept op, not an
+	// absence of one.
+	s.st.RecordDocOp("accept", err)
+	return accepted, minted, inserted, err
+}
+
 // acceptDoc handles POST /api/v1/docs/{id}/accept: the manual commit of
 // 025 §7, gated on the document's owner. On a plan this also mints its
 // execution tasks (025 §9.2) in the same transaction; the response carries
@@ -716,29 +754,7 @@ func (s *server) acceptDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actorID := actorIDFrom(r)
-	now := s.st.Now()
-	var accepted *model.Doc
-	var minted []model.Task
-	// From is the status the document is actually leaving, not a constant: a
-	// plan re-accepted while accepted leaves "accepted" (025 §9.2), and an
-	// event saying otherwise would put a transition that did not happen in the
-	// append-only log.
-	ev := eventbus.DocumentAccepted{
-		Doc: store.DocIRI(*doc), Actor: actorID, At: now,
-		Version: doc.Version, From: "wlc:" + doc.Status, To: "wlc:accepted",
-	}
-	_, inserted, err := eventbus.Emit(r.Context(), s.st, docSource, ev,
-		func(tx *sql.Tx, eventID int64) error {
-			d, tasks, err := store.AcceptDoc(tx, now, id, actorID, eventID)
-			if err != nil {
-				return err
-			}
-			accepted, minted = d, tasks
-			return nil
-		})
-	// Counted before the error branch, exactly as RecordDocEvent counts it:
-	// a refused accept is an outcome of the accept op, not an absence of one.
-	s.st.RecordDocOp("accept", err)
+	accepted, minted, inserted, err := s.emitDocAccepted(r.Context(), doc, actorID)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
