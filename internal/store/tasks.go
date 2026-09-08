@@ -219,7 +219,7 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
 	)
 	if err != nil {
-		if mapped := rallyAlreadyActive(err, id); mapped != err {
+		if mapped := rallyUniqueConflict(err, id); mapped != err {
 			return nil, mapped
 		}
 		return nil, fmt.Errorf("insert task %s: %w", id, err)
@@ -305,7 +305,7 @@ func transitionKnown(tx *sql.Tx, now time.Time, taskID, current, from, to string
 		to, now.UTC(), taskID,
 	)
 	if err != nil {
-		if mapped := rallyAlreadyActive(err, taskID); mapped != err {
+		if mapped := rallyUniqueConflict(err, taskID); mapped != err {
 			return mapped
 		}
 		return fmt.Errorf("update task %s state: %w", taskID, err)
@@ -398,7 +398,7 @@ func secretsJSON(names []string) ([]byte, error) {
 //
 // The project's one-active-rally rule is not checked here. It is a partial
 // unique index, so the UPDATE below is what enforces it, reported through
-// rallyAlreadyActive.
+// rallyUniqueConflict.
 func checkKindRetag(tx *sql.Tx, id, kind string) error {
 	if kind != "decision" && kind != "rally" {
 		return nil
@@ -587,7 +587,7 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 		fmt.Sprintf(`UPDATE tasks SET %s WHERE id = $%d`, strings.Join(sets, `, `), len(args)),
 		args...)
 	if err != nil {
-		if mapped := rallyAlreadyActive(err, id); mapped != err {
+		if mapped := rallyUniqueConflict(err, id); mapped != err {
 			return mapped
 		}
 		return fmt.Errorf("update task %s: %w", id, err)
