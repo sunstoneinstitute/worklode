@@ -118,6 +118,11 @@ func TestProjectProgress(t *testing.T) {
 	if spec.Ref != "P1-SPEC-66" {
 		t.Errorf("spec Ref = %q, want P1-SPEC-66", spec.Ref)
 	}
+	// Status and owner ride along for 066 §3.2's Accept button, which is
+	// offered on a draft document and enabled only for its owner.
+	if spec.Status != "draft" || spec.Owner != "stig" {
+		t.Errorf("spec Status/Owner = %q/%q, want draft/stig", spec.Status, spec.Owner)
+	}
 	wantAnchors := []string{"sec-0", "sec-1", "sec-2"}
 	if len(spec.Sections) != len(wantAnchors) {
 		t.Fatalf("got %d sections, want %d", len(spec.Sections), len(wantAnchors))
@@ -137,6 +142,9 @@ func TestProjectProgress(t *testing.T) {
 	}
 	if plan.Status != "accepted" {
 		t.Errorf("plan Status = %q, want accepted", plan.Status)
+	}
+	if plan.Owner != "stig" {
+		t.Errorf("plan Owner = %q, want stig", plan.Owner)
 	}
 	wantLevels := map[string]string{"sec-0": "none", "sec-1": "full", "sec-2": "partial"}
 	if len(plan.Covers) != len(wantLevels) {

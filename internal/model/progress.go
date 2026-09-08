@@ -38,10 +38,14 @@ type ProgressGroup struct {
 }
 
 type ProgressSpec struct {
-	Doc      int64             `json:"doc"`
-	Ref      string            `json:"ref"`
-	Title    string            `json:"title"`
-	Updated  time.Time         `json:"updated_at"`
+	Doc     int64     `json:"doc"`
+	Ref     string    `json:"ref"`
+	Title   string    `json:"title"`
+	Updated time.Time `json:"updated_at"`
+	// Status and Owner are the document's own, not derived: §3.2's Accept
+	// button is offered on a draft spec and enabled only for its owner.
+	Status   string            `json:"status"`
+	Owner    string            `json:"owner,omitempty"`
 	Group    string            `json:"group"`
 	Next     ProgressAct       `json:"next"`
 	Sections []ProgressSection `json:"sections"`
@@ -70,7 +74,8 @@ type ProgressPlan struct {
 	Ref      string         `json:"ref"`
 	Title    string         `json:"title"`
 	Status   string         `json:"status"` // draft | accepted | superseded
-	State    string         `json:"state"`  // draft | built | in_progress | not_started | no_record
+	Owner    string         `json:"owner,omitempty"`
+	State    string         `json:"state"` // draft | built | in_progress | not_started | no_record
 	Requires []string       `json:"requires"`
 	Tasks    []ProgressTask `json:"tasks"`
 	Landed   int            `json:"landed"`
@@ -83,4 +88,23 @@ type ProgressTask struct {
 	State    string `json:"state"`
 	Class    string `json:"class"`    // landed | active | unstarted (§1.1)
 	Position string `json:"position"` // §2.4's ladder, one line
+}
+
+// ProgressAcceptInput is the body POST /projects/{id}/progress/accept takes
+// (WL-SPEC-66 §3.2): the document to accept, and nothing else. The acting
+// actor is the session's, never the body's (§4.2 rule 6), and the write gate
+// refuses a body that names one.
+type ProgressAcceptInput struct {
+	Doc int64 `json:"doc"`
+}
+
+// ProgressAcceptResponse is the reply to POST /projects/{id}/progress/accept
+// (WL-SPEC-66 §3.2): the document that was accepted, the status it now
+// carries, and how many tasks the acceptance minted (025 §9.2 — zero for a
+// spec or ADR). The page applies none of it; it re-reads the row from the
+// backbone (§3.1).
+type ProgressAcceptResponse struct {
+	Doc    int64  `json:"doc"`
+	Status string `json:"status"`
+	Minted int    `json:"minted"`
 }

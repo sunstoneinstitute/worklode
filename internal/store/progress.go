@@ -83,7 +83,7 @@ func (s *Store) progressDocs(ctx context.Context, projectID string) (
 
 	rows, err := s.db.QueryContext(ctx, `
 SELECT d.id, d.kind, coalesce(d.number, 0), d.title, d.status, d.updated_at,
-       coalesce(p.key, '')
+       coalesce(p.key, ''), coalesce(d.owner, '')
   FROM docs d
   JOIN projects p ON p.id = d.project_id
  WHERE d.project_id = $1 AND d.kind IN ('spec', 'plan') AND d.deleted_at IS NULL`,
@@ -96,20 +96,21 @@ SELECT d.id, d.kind, coalesce(d.number, 0), d.title, d.status, d.updated_at,
 	specs, plans = map[int64]*progress.Spec{}, map[int64]*progress.Plan{}
 	for rows.Next() {
 		var d model.Doc
-		var status string
+		var status, owner string
 		var updated = &d.UpdatedAt
 		if err := rows.Scan(&d.ID, &d.Kind, &d.Number, &d.Title, &status, updated,
-			&d.ProjectKey); err != nil {
+			&d.ProjectKey, &owner); err != nil {
 			return nil, nil, fmt.Errorf("scan progress doc: %w", err)
 		}
 		if d.Kind == "spec" {
 			specs[d.ID] = &progress.Spec{
 				Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Updated: d.UpdatedAt,
+				Status: status, Owner: owner,
 			}
 			continue
 		}
 		plans[d.ID] = &progress.Plan{
-			Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Status: status,
+			Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Status: status, Owner: owner,
 		}
 	}
 	if err := rows.Err(); err != nil {

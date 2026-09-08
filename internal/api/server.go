@@ -593,6 +593,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/milestones", s.navWrap("milestones", s.milestonesPage))
 	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
 	r.web("GET /projects/{id}/progress", s.navWrap("progress", s.progressPage))
+	// Not navWrapped: the page script fetches it and reads JSON back, so it
+	// is never a navigated page (066 §4.2 rule 4), like /preview and /dictate.
+	r.web("POST /projects/{id}/progress/accept", s.progressAccept)
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
