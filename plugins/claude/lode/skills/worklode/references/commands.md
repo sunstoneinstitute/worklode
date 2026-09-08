@@ -50,8 +50,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --file, --kind, --number, --owner, --project, --repo, --slug
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
-- `lode doc edit` — Replace a document's body (a draft, or a plan at any status)
-  Flags: --file
+- `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment)
+  Flags: --file, --note, --substantive
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references

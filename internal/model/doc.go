@@ -90,6 +90,10 @@ type DocSection struct {
 	Position      int    `json:"position"` // 0-based document order
 	LastRevisedIn int    `json:"last_revised_in"`
 	Published     bool   `json:"published"`
+	// Patched marks a section a substantive in-place amendment changed since
+	// the document was last approved as a whole (025 §8.4). It survives every
+	// later section rebuild until the reviewers settle the document again.
+	Patched bool `json:"patched"`
 }
 
 // DocSectionRow is one section of one document as the cross-corpus listing
@@ -285,6 +289,48 @@ type TransferDocOwnerInput struct {
 // included, since the body is the authority for title, issued and edges.
 type UpdateDocBodyInput struct {
 	Body string `json:"body"`
+}
+
+// PatchDocInput is the request body for POST /api/v1/docs/{id}/patch: the
+// 025 §8.4 in-place amendment of an accepted spec or ADR. Body is the whole
+// markdown source, the same authority UpdateDocBodyInput carries.
+//
+// Substantive is the caller's own judgment (§8.3 leaves it to them once the
+// mechanical rules pass): true reopens the document's reviewers on the new
+// version, false requires Note — what changed and why — which lands as an
+// anchored note. Task and Session are filled by the CLI from the worktree it
+// stands in, the way AddDocNoteInput's are; Task also names the plan whose
+// own tasks do not block the amendment.
+type PatchDocInput struct {
+	Body        string `json:"body"`
+	Substantive bool   `json:"substantive,omitempty"`
+	Note        string `json:"note,omitempty"`
+	Task        string `json:"task,omitempty"`
+	Session     string `json:"session,omitempty"`
+}
+
+// DocPatchResult is what an in-place amendment did (025 §8.4).
+// Classification is "substantive" or "non-substantive"; RuleFired is "judged"
+// on a substantive patch and "none" on a clean non-substantive one — a patch
+// a mechanical rule fires on is refused rather than returned.
+//
+// UnexecutedCoveringPlans is informational and never blocking: accepted plans
+// covering a changed section that nobody has claimed work from yet. They state
+// an intention against text that just moved, which is §8.6's stale-marking
+// business rather than this patch's.
+type DocPatchResult struct {
+	ChangedAnchors          []string `json:"changed_anchors"`
+	Classification          string   `json:"classification"`
+	RuleFired               string   `json:"rule_fired"`
+	NewVersion              int      `json:"new_version"`
+	UnexecutedCoveringPlans []int64  `json:"unexecuted_covering_plans,omitempty"`
+}
+
+// DocPatchResponse is the body of POST /api/v1/docs/{id}/patch: the document
+// as it now stands, and what the amendment did to it.
+type DocPatchResponse struct {
+	Doc   Doc            `json:"doc"`
+	Patch DocPatchResult `json:"patch"`
 }
 
 // DocDetail is the wire form of GET /api/v1/docs/{id}: the document plus the

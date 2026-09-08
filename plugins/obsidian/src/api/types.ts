@@ -96,6 +96,9 @@ export interface DocSection {
   position: number; // 0-based document order
   last_revised_in: number;
   published: boolean;
+  /** Changed by a substantive in-place amendment since the document was
+   *  last approved as a whole (025 §8.4). */
+  patched: boolean;
 }
 
 /**
