@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -733,5 +734,102 @@ func TestDocTodoThinBodyDegrades(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q\noutput:\n%s", want, out)
 		}
+	}
+}
+
+// todoPlanShorthandCovers covers sec-1 in full, naming the spec by the
+// WL-SPEC-1 shorthand rather than a corpus path — the form 025 §14.3 asks an
+// author to write, and the only form whose resolution needs a project key.
+const todoPlanShorthandCovers = `---
+status: accepted
+covers:
+  - spec: WL-SPEC-1#sec-1
+    coverage: full
+---
+# Plan 1-1 — Build the first section
+
+Body.
+`
+
+// TestDocTodoShorthandCoversWithoutConfigKey pins WL-756: the key that
+// resolves a shorthand `covers:` target is the target document's own, not
+// the checkout's. A .worklode/config.toml carrying no project_key used to
+// fail every shorthand in the corpus at once, so every covered section read
+// as unplanned — a silent false negative indistinguishable from a real gap.
+func TestDocTodoShorthandCoversWithoutConfigKey(t *testing.T) {
+	setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{"001-1-first.md": todoPlanShorthandCovers}, noTasks)
+	// The state that failed: current_project set, project_key absent.
+	repo, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	cfg := filepath.Join(repo, ".worklode", "config.toml")
+	if err := os.WriteFile(cfg, []byte("current_project = \"proj\"\n"), 0o600); err != nil {
+		t.Fatalf("rewrite repo config: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1", "--json")
+	if err != nil {
+		t.Fatalf("doc todo: %v\noutput: %s", err, out)
+	}
+	var got docTodoResult
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode --json: %v\noutput: %s", err, out)
+	}
+	var sawUnexecuted bool
+	for _, it := range got.Items {
+		if it.Type == designdoc.TodoUnexecuted && it.Anchor == "sec-1" {
+			sawUnexecuted = true
+		}
+		if slices.Contains(it.Anchors, "sec-1") {
+			t.Errorf("sec-1 reported as %s despite its covering plan: %+v", it.Type, it)
+		}
+	}
+	if !sawUnexecuted {
+		t.Errorf("sec-1's covering plan not attributed:\n%s", out)
+	}
+	for _, n := range got.Diagnostics.Notes {
+		if strings.Contains(n, "names no document in this corpus") {
+			t.Errorf("shorthand target reported unresolvable: %q", n)
+		}
+	}
+}
+
+// TestDocTodoUnresolvableCoversIsStated pins the other half of WL-756: a
+// covers target that resolves to nothing must be named in the footer, never
+// silently reclassified as an unplanned section.
+func TestDocTodoUnresolvableCoversIsStated(t *testing.T) {
+	const plan = `---
+status: accepted
+covers:
+  - spec: WL-SPEC-404#sec-1
+    coverage: full
+---
+# Plan 1-1 — Build the first section
+
+Body.
+`
+	setupTodoCorpus(t,
+		map[string]string{"001-example.md": todoSpec},
+		map[string]string{"001-1-first.md": plan}, noTasks)
+
+	out, err := runLode(t, "doc", "todo", "WL-SPEC-1", "--json")
+	if err != nil {
+		t.Fatalf("doc todo: %v\noutput: %s", err, out)
+	}
+	var got docTodoResult
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode --json: %v\noutput: %s", err, out)
+	}
+	var stated bool
+	for _, n := range got.Diagnostics.Notes {
+		if strings.Contains(n, "WL-SPEC-404") && strings.Contains(n, "names no document in this corpus") {
+			stated = true
+		}
+	}
+	if !stated {
+		t.Errorf("unresolvable covers target not stated:\n%s", out)
 	}
 }
