@@ -111,6 +111,7 @@ lode doc list --needs-planning     # accepted specs with a section no accepted p
 lode doc list --needs-execution    # accepted plans whose minted task set still has an open task
 lode doc list --bare-superseded    # superseded docs with a section nothing replaces
 lode doc todo <slug> --deps        # one spec's remaining work, recursively through its dependencies
+lode doc progress                  # the whole project at a glance: each spec's state and next act
 ```
 
 `implements` (component → doc section, "this code realises this intent") is
