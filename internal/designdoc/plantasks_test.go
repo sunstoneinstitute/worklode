@@ -559,3 +559,49 @@ Second.
 		}
 	}
 }
+
+// TestIsCoverageOnlyPlan: a plan that records coverage for work already built
+// has no "## Tasks" section to mint from, and accepting it is the only way its
+// claims count (026 §2.1). The near misses — an empty "## Tasks" heading, and a
+// plan claiming nothing at all — stay PlanTasks' error.
+func TestIsCoverageOnlyPlan(t *testing.T) {
+	const coversFront = `---
+status: draft
+covers:
+  - spec: docs/specs/004-execution-backbone.md#sec-6.3
+    coverage: full
+---
+`
+	const defersFront = `---
+status: draft
+defers:
+  - spec: docs/specs/025-documents-in-the-backbone.md#sec-12
+    to: docs/specs/006-knowledge-graph.md
+---
+`
+	const bareFront = "---\nstatus: draft\n---\n"
+
+	tests := map[string]struct {
+		front, body string
+		want        bool
+	}{
+		"covers, no Tasks section": {coversFront, "## Background\n\nProse.\n", true},
+		"defers, no Tasks section": {defersFront, "## Background\n\nProse.\n", true},
+		"no claims, no Tasks":      {bareFront, "## Background\n\nProse.\n", false},
+		"no frontmatter":           {"", "## Background\n\nProse.\n", false},
+		"covers, empty Tasks":      {coversFront, "## Tasks\n\n## Background\n\nProse.\n", false},
+		"covers, declared Tasks": {coversFront, "## Tasks\n\n### Task 1 — Do the thing\n\n" +
+			"```yaml\nkind: chore\n```\n", false},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			d, err := Parse([]byte(tc.front + "\n# Plan title\n\n" + tc.body))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := IsCoverageOnlyPlan(d); got != tc.want {
+				t.Errorf("IsCoverageOnlyPlan = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

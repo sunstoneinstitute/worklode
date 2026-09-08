@@ -12,9 +12,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
-// TestDocAcceptPlanRejected: a plan whose body defines no ## Tasks section
-// refuses to accept — PlanTasks's error surfaces as ErrInvalidInput, and an
-// accepted plan with no tasks must never exist (025 §9.2).
+// TestDocAcceptPlanRejected: a plan reaching for the task format and missing
+// it refuses to accept — planBody's "## Task 1" is an authoring mistake, so
+// PlanTasks's error surfaces as ErrInvalidInput rather than being read as the
+// coverage-only plan of TestDocAcceptCoverageOnlyPlanMintsNothing.
 func TestDocAcceptPlanRejected(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -28,6 +29,30 @@ func TestDocAcceptPlanRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "task") {
 		t.Errorf("err = %v, want it to name task minting", err)
+	}
+}
+
+// TestDocAcceptCoverageOnlyPlanMintsNothing: a plan that records coverage for
+// work already built declares no tasks at all, and accepting it is the only way
+// its claims reach the aggregate coverage query, which reads accepted-or-
+// superseded plans only (026 §2.1). It accepts, and mints nothing.
+func TestDocAcceptCoverageOnlyPlanMintsNothing(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "coverage-only", Body: planCoverageOnlyBody,
+		CreatedBy: "stig",
+	})
+
+	accepted, minted, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("AcceptDoc: %v", err)
+	}
+	if accepted.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", accepted.Status)
+	}
+	if len(minted) != 0 {
+		t.Errorf("minted %d tasks, want 0", len(minted))
 	}
 }
 

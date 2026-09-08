@@ -298,6 +298,22 @@ wasDerivedFrom: 025-documents-in-the-backbone.md
 Do the thing.
 `
 
+// planCoverageOnlyBody is a coverage-only plan: it records coverage for work
+// already built and declares no tasks, so accepting it mints nothing.
+const planCoverageOnlyBody = `---
+status: draft
+covers:
+  - spec: 025-documents-in-the-backbone.md#sec-5
+    coverage: full
+---
+
+# Retroactive coverage backfill
+
+## Background
+
+Every section above is already built; this plan only records that.
+`
+
 // planMintBody is a well-formed plan in the mintable ## Tasks format
 // (025 §9.1): three definitions, Task 2 blocked by Task 1.
 const planMintBody = `---
