@@ -174,6 +174,21 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 		t.Fatalf("progress page missing next act %q:\n%s", wantNext, body)
 	}
 
+	// 4b. The spec row offers the Rally button, and both it and the plan
+	// line offer Review disabled with the reason spec 059 not existing yet
+	// gives (WL-SPEC-66 §3.3, §3.5) — this instance is WebOpen, so nobody is
+	// signed in and every act is offered disabled rather than hidden (§3).
+	if !strings.Contains(body, `data-route="rally/add"`) {
+		t.Fatalf("progress page has no Rally button:\n%s", body)
+	}
+	const reviewReason = `data-reason="Review surface (spec 059) not yet built"`
+	if got := strings.Count(body, `data-route="review"`); got != 2 {
+		t.Fatalf("progress page has %d Review buttons, want 2 (the spec row and the plan line):\n%s", got, body)
+	}
+	if got := strings.Count(body, reviewReason); got != 2 {
+		t.Fatalf("progress page has %d disabled Review reasons, want 2:\n%s", got, body)
+	}
+
 	// 5. `lode doc progress --json` decodes to the same derived value.
 	out, err := runLodeCLI(t, "doc", "progress", "--project", "prog", "--json")
 	if err != nil {
