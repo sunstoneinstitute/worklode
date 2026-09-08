@@ -661,6 +661,57 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *updated))
 }
 
+// patchDoc handles POST /api/v1/docs/{id}/patch: 025 §8.4's in-place
+// amendment of an accepted spec or ADR, the one write that changes accepted
+// text without a revision cycle. The §8.3 gates are the store's — the CLI
+// re-checks none of them, so the rule that refuses an edit is stated in one
+// place — and a refusal is a 422 carrying the rule's own message.
+//
+// The doc.patched event says what the amendment did, which the store only
+// knows once it has done it: the payload is rewritten inside the same
+// transaction. A refused patch rolls that transaction back and records no
+// event at all; worklode_doc_operations_total{op="patch"} is where a refusal
+// is counted.
+func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.PatchDocInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	actorID := actorIDFrom(r)
+	now := s.st.Now()
+	var doc *model.Doc
+	var patch *model.DocPatchResult
+	err := s.recordDocEvent(w, r, "patch", "doc.patched", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			d, p, err := store.PatchDoc(tx, now, store.DocPatchInput{
+				ID: id, Body: req.Body, Substantive: req.Substantive, Note: req.Note,
+				ActorID: actorID, TaskID: req.Task, SessionID: req.Session,
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			doc, patch = d, p
+			payload, err := store.EventPayload(map[string]any{
+				"doc": id, "actor": actorID, "request": req,
+				"anchors": p.ChangedAnchors, "classification": p.Classification, "rule": p.RuleFired,
+			})
+			if err != nil {
+				return err
+			}
+			return store.SetEventPayload(tx, eventID, payload)
+		})
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, model.DocPatchResponse{
+		Doc: s.withProjectKey(r.Context(), *doc), Patch: *patch})
+}
+
 // replaceDocEdges handles PUT /api/v1/docs/{id}/edges. It re-resolves the
 // document's frontmatter references against the documents that exist now,
 // turning to_external placeholders into real to_doc edges. CreateDoc re-points

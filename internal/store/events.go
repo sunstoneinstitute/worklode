@@ -259,6 +259,19 @@ func (s *Store) RecordEventWithID(
 	return id, inserted, nil
 }
 
+// SetEventPayload rewrites the payload of an event from inside the same
+// transaction its apply runs in. RecordEvent inserts the payload before apply,
+// so a mutation whose event has to state what it did — doc.patched names the
+// sections it changed and how the caller classified them (025 §15.5) — cannot
+// know it in time. The rewrite commits with the mutation or not at all, so the
+// log never carries a payload for a write that rolled back.
+func SetEventPayload(tx *sql.Tx, eventID int64, payload []byte) error {
+	if _, err := tx.Exec(`UPDATE events SET payload = $2 WHERE id = $1`, eventID, payload); err != nil {
+		return fmt.Errorf("set payload of event %d: %w", eventID, err)
+	}
+	return nil
+}
+
 // EventPayload marshals v as an event payload. Every payload is a JSON
 // object naming what the event is about; an event about one task names it
 // under the "task" key, so GET /api/v1/events attributes the event on its
