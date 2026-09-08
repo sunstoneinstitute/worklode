@@ -116,8 +116,8 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 		if env.Action != "checks_requested" && env.Action != "destroyed" {
 			return nil
 		}
-		return func(tx *sql.Tx, _ int64) error {
-			return a.applyMergeGroup(tx, repo, env.Action, body)
+		return func(tx *sql.Tx, eventID int64) error {
+			return a.applyMergeGroup(tx, eventID, repo, env.Action, body)
 		}
 	default:
 		return nil

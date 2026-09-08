@@ -342,8 +342,9 @@ type server struct {
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
 
-	// githubCalls counts GitHub API reads worklode makes on its own schedule
-	// (branchrules.go), by op; see metrics.go's observeGitHubCall.
+	// githubCalls counts the GitHub API calls worklode makes itself — on its
+	// own schedule (branchrules.go) or for a Progress page act
+	// (progressmerge.go) — by op; see metrics.go's observeGitHubCall.
 	githubCalls *prometheus.CounterVec
 
 	syncRuns     *prometheus.CounterVec
@@ -630,6 +631,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/progress/rally/add", s.progressRallyAdd)
 	r.web("POST /projects/{id}/progress/rally/confirm", s.progressRallyConfirm)
 	r.web("POST /projects/{id}/progress/rally/discard", s.progressRallyDiscard)
+	r.web("POST /projects/{id}/progress/merge", s.progressMerge)
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))

@@ -780,6 +780,9 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
   background:var(--ink);color:var(--surface);font-size:12px;line-height:1.35;
   box-shadow:var(--shadow);pointer-events:none}
 #tip[data-pinned]{pointer-events:auto}
+/* §3.6's merge button, copied into a pinned tooltip. Its own line, so the
+ * position line above it keeps reading as a sentence. */
+#tip .act{display:block;margin-top:6px}
 
 .cell{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid transparent;flex:0 0 auto}
 .cell-built{background:var(--ok);border-color:var(--ok)}

@@ -100,6 +100,21 @@ type ProgressTask struct {
 	State    string `json:"state"`
 	Class    string `json:"class"`    // landed | active | unstarted (§1.1)
 	Position string `json:"position"` // §2.4's ladder, one line
+	// Merge is the open pull request §3.6's button acts on, nil when the
+	// task has none.
+	Merge *ProgressMerge `json:"merge,omitempty"`
+}
+
+// ProgressMerge is what the Progress page needs to offer §3.6's act on a
+// task's open pull request: which PR it is, whether its base branch runs a
+// merge queue (§6.3, so the button says "Queue for merge" rather than
+// "Merge"), and the reason the act cannot be taken now. An empty Reason
+// means the button is live.
+type ProgressMerge struct {
+	Repo   string `json:"repo"`
+	Number int64  `json:"number"`
+	Queue  bool   `json:"queue"`
+	Reason string `json:"reason,omitempty"`
 }
 
 // ProgressAcceptInput is the body POST /projects/{id}/progress/accept takes
@@ -167,6 +182,31 @@ type ProgressRallyResponse struct {
 type ProgressRallyConflict struct {
 	Error  string `json:"error"`
 	Active string `json:"active"`
+}
+
+// ProgressMergeInput is the body POST /projects/{id}/progress/merge takes
+// (WL-SPEC-66 §3.6): the task whose pull request to act on, and the PR
+// itself. Both are named so the route can refuse a page whose facts have
+// gone stale — a PR that no longer carries the task is a 409, not a merge.
+// The acting actor is the session's (§4.2 rule 6).
+type ProgressMergeInput struct {
+	Task string     `json:"task"`
+	PR   ProgressPR `json:"pr"`
+}
+
+// ProgressPR names one pull request by repository and number.
+type ProgressPR struct {
+	Repo   string `json:"repo"`
+	Number int64  `json:"number"`
+}
+
+// ProgressMergeResponse is the reply to one merge act: which operation the
+// branch's rules called for ("enqueue" or "merge"), and whether the PR is
+// now in a merge queue. The page applies neither — the position line changes
+// on the stream event that follows (§3.6).
+type ProgressMergeResponse struct {
+	Op     string `json:"op"`
+	Queued bool   `json:"queued"`
 }
 
 // ProgressEventFrame is the data: payload of GET /projects/{id}/progress/events
