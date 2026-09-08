@@ -77,6 +77,7 @@ func newDocCmd() *cobra.Command {
 		newDocLintCmd(),
 		newDocImportCmd(),
 		newDocTodoCmd(),
+		newDocProgressCmd(),
 		newDocDeleteCmd(),
 		newDocUndeleteCmd(),
 		newDocTransferCmd(),

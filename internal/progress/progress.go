@@ -76,9 +76,10 @@ type CoverState struct {
 // sectionRank is §1.2's "furthest along" order, most complete first.
 var sectionRank = []string{"built", "in_progress", "not_started", "no_record", "draft"}
 
-// barOrder is §2.1's section-bar order: sectionRank plus "unplanned" at the
-// end. "bound" never appears — it is not owed (§1.4).
-var barOrder = append(append([]string{}, sectionRank...), "unplanned")
+// BarOrder is §2.1's section-bar order: sectionRank plus "unplanned" at the
+// end. "bound" never appears — it is not owed (§1.4). It is exported because
+// every renderer of the derived model orders section states by it.
+var BarOrder = append(append([]string{}, sectionRank...), "unplanned")
 
 // groupOrder is §1.3's fixed group order.
 var groupOrder = []string{"active", "planning", "no_record", "built"}
@@ -200,7 +201,7 @@ func Derive(in Input) model.ProjectProgress {
 	}
 
 	byGroup := make(map[string][]model.ProgressSpec, len(groupOrder))
-	barCounts := make(map[string]int, len(barOrder))
+	barCounts := make(map[string]int, len(BarOrder))
 
 	for _, spec := range in.Specs {
 		coversByAnchor := make(map[string][]CoverState)
@@ -316,7 +317,7 @@ func Derive(in Input) model.ProjectProgress {
 			out.Counts.Built = len(specs)
 		}
 	}
-	for _, state := range barOrder {
+	for _, state := range BarOrder {
 		if n := barCounts[state]; n > 0 {
 			out.Bar = append(out.Bar, model.ProgressSlice{State: state, Count: n})
 		}

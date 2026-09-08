@@ -67,6 +67,7 @@ var l3DomainActions = map[string]bool{
 // spec's own words — adding a member is part of adding the command.
 var nounViews = map[string]bool{
 	"lode doc referrers":      true,
+	"lode doc progress":       true,
 	"lode doc reviewers":      true,
 	"lode doc sections":       true,
 	"lode doc todo":           true,
