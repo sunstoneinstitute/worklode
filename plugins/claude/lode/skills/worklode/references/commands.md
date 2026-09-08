@@ -37,6 +37,12 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --notes, --pick, --text, --value
 - `lode decision show` — Show one question, its options and its answer
 
+## `lode deliverable` — Deliverables: a project's declared, checkable outputs
+
+- `lode deliverable add` — Declare a deliverable on a project
+  Flags: --artifact, --description, --milestone, --url
+- `lode deliverable list` — List a project's deliverables
+
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
