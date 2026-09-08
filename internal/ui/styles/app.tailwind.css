@@ -721,6 +721,40 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .task-active{background:var(--accent);border-color:var(--accent-line)}
 .task-unstarted{background:var(--info-bg);border-color:var(--info)}
 
+/* Activity feedback for a live-updated task cell or row (§5.3). Both rules
+ * animate only transform and box-shadow/color, never a box's size, so §5.4's
+ * "nothing may move" holds through the flash: box-shadow and outline-color
+ * draw outside layout regardless of an inset offset. progress.js adds
+ * .pulse/.touched after a swap and removes both on animationend, so a
+ * reduced-motion animation still has to run to the end for that event to
+ * fire — its keyframes just hold one value instead of easing toward it. */
+@media (prefers-reduced-motion:no-preference){
+  .task.pulse{animation:task-pulse 1s ease}
+  @keyframes task-pulse{
+    0%{transform:scale(1);box-shadow:0 0 0 0 var(--accent-line)}
+    30%{transform:scale(1.35);box-shadow:0 0 6px 2px var(--accent-line)}
+    100%{transform:scale(1);box-shadow:0 0 0 0 var(--accent-line)}
+  }
+  .prog-row.touched{animation:row-touched 1s ease}
+  @keyframes row-touched{
+    0%{box-shadow:inset 3px 0 0 0 transparent}
+    30%{box-shadow:inset 3px 0 0 0 var(--accent)}
+    100%{box-shadow:inset 3px 0 0 0 transparent}
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .task.pulse{animation:task-pulse-instant 1s steps(1,end)}
+  @keyframes task-pulse-instant{
+    0%,70%{box-shadow:0 0 0 2px var(--accent-line)}
+    100%{box-shadow:0 0 0 0 var(--accent-line)}
+  }
+  .prog-row.touched{animation:row-touched-instant 1s steps(1,end)}
+  @keyframes row-touched-instant{
+    0%,70%{box-shadow:inset 3px 0 0 0 var(--accent)}
+    100%{box-shadow:inset 3px 0 0 0 transparent}
+  }
+}
+
 /* An action button (§3.1). It is one control in two states: the act, and the
  * confirmation the first click swaps in. The button keeps the width it had
  * as a button — progress.js pins it — and the confirmation is laid over that
