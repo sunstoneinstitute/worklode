@@ -60,6 +60,7 @@ func (s *server) progressPage(w http.ResponseWriter, r *http.Request) {
 		P:             p,
 		Legend:        ui.ProgressLegend(p),
 		ReviewEnabled: s.hasReviewSurface(),
+		MergeEnabled:  s.appAuth != nil,
 	}))
 }
 
@@ -96,7 +97,7 @@ func (s *server) progressRowFragment(w http.ResponseWriter, r *http.Request) {
 	}
 	s.observeProgressFragmentRender("spec", "ok")
 	s.renderWeb(w, r, http.StatusOK, "progress row fragment",
-		ui.ProgressRowFragment(spec, actorIDFrom(r), s.hasReviewSurface()))
+		ui.ProgressRowFragment(spec, actorIDFrom(r), s.hasReviewSurface(), s.appAuth != nil))
 }
 
 // progressDerivedSpec finds one spec in a derived model.ProjectProgress by

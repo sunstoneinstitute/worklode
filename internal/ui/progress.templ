@@ -40,7 +40,7 @@ templ Progress(v ProgressView) {
 				@progressBar(v)
 				<div class="prog-groups">
 					for _, g := range v.P.Groups {
-						@progressGroup(g, v.Viewer, v.ReviewEnabled)
+						@progressGroup(g, v.Viewer, v.ReviewEnabled, v.MergeEnabled)
 					}
 				</div>
 				@progressFooter(v.P.Draft, v.Viewer)
@@ -55,8 +55,8 @@ templ Progress(v ProgressView) {
 // draws inline on the full page. viewer and reviewEnabled decide the row's
 // actions exactly as they do there — the fragment and the page can never
 // disagree about what a viewer may do to this spec.
-templ ProgressRowFragment(s model.ProgressSpec, viewer string, reviewEnabled bool) {
-	@progressRow(s, viewer, reviewEnabled)
+templ ProgressRowFragment(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
+	@progressRow(s, viewer, reviewEnabled, mergeEnabled)
 }
 
 // ProgressSummaryFragment is GET /projects/{id}/progress/summary's payload
@@ -154,7 +154,7 @@ templ progressBar(v ProgressView) {
 // progressGroup renders one §1.3 group: its label, its size, its one-line
 // reason, then a row per spec. An empty group is omitted rather than
 // rendered as a heading over nothing.
-templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled bool) {
+templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled, mergeEnabled bool) {
 	if len(g.Specs) > 0 {
 		<section class="card" data-group={ g.Key }>
 			<div class="hd">
@@ -163,7 +163,7 @@ templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled bool) {
 			</div>
 			<div class="bd">
 				for _, sp := range g.Specs {
-					@progressRow(sp, viewer, reviewEnabled)
+					@progressRow(sp, viewer, reviewEnabled, mergeEnabled)
 				}
 			</div>
 		</section>
@@ -179,7 +179,7 @@ templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled bool) {
 // section gets no cell. Clicking the row anywhere but a link expands the
 // detail block that follows it; the row is focusable so a keyboard can do the
 // same.
-templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled bool) {
+templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
 	<div class="prog-row" data-doc={ strconv.FormatInt(s.Doc, 10) } data-group={ s.Group } tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
 		<div class="ref"><a href={ "/docs/ref/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
 		<div class="t">{ s.Title }</div>
@@ -200,21 +200,21 @@ templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled bool) {
 			}
 		</div>
 	</div>
-	@progressDetail(s, viewer, reviewEnabled)
+	@progressDetail(s, viewer, reviewEnabled, mergeEnabled)
 }
 
 // progressDetail is §2.3's expanded row: the plans that cover the spec, then
 // every section of it. It is always rendered — the stylesheet hides it until
 // the row carries "open" — so expanding costs no request and the markup a
 // test reads is the markup a reader expands.
-templ progressDetail(s model.ProgressSpec, viewer string, reviewEnabled bool) {
+templ progressDetail(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabled bool) {
 	<div class="detail" id={ progressDetailID(s.Ref) }>
 		if len(s.Plans) == 0 {
 			<p class="muted small">No plan covers this spec.</p>
 		} else {
 			<div class="plans">
 				for _, p := range s.Plans {
-					@progressPlanLine(p, viewer, reviewEnabled)
+					@progressPlanLine(p, viewer, reviewEnabled, mergeEnabled)
 				}
 			</div>
 		}
@@ -259,7 +259,7 @@ templ progressPill(state string) {
 // progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
 // after, its state, and one cell per minted task. A plan with no minted task
 // says so rather than drawing an empty strip (§1.1's no_record).
-templ progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled bool) {
+templ progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled, mergeEnabled bool) {
 	<div class="plan">
 		<a href={ "/docs/ref/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
 		<span class="t">{ p.Title }</span>
@@ -273,6 +273,11 @@ templ progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled bool) 
 			<span class="tasks">
 				for _, t := range p.Tasks {
 					<i class={ "task task-" + t.Class } data-task={ t.ID } data-tip={ progressTaskTip(t) }></i>
+					if t.Merge != nil {
+						<span class="tip-act" hidden>
+							@progressAct(progressMergeAction(t, mergeEnabled))
+						</span>
+					}
 				}
 			</span>
 			<span class="muted small">{ strconv.Itoa(p.Landed) } landed &middot; { strconv.Itoa(p.Open) } open</span>
@@ -282,6 +287,11 @@ templ progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled bool) 
 		}
 	</div>
 }
+
+// A task cell's merge button (§3.6) is rendered here and hidden: it belongs
+// in the cell's pinned tooltip, and progress.js moves a copy there when a
+// click pins one. Rendering it server-side keeps the label, the body and the
+// disabled reason decided in one place, like every other act on this page.
 
 // progressAct is §3.1's two-step control, the one button every act on this
 // page uses. It carries what progress.js needs and nothing else: the route

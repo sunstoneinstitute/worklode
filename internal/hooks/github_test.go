@@ -1382,6 +1382,23 @@ func TestMergeGroupSetsAndClearsQueuedAt(t *testing.T) {
 	}
 }
 
+// TestMergeGroupNamesResolvedTask: a merge_group delivery names a queue
+// entry, not a worklode task; the correlation lives on the PR row. The
+// applier records it on the event so the Progress page's stream can resolve
+// the delivery to the task whose position line just became "queued for
+// merge" (WL-SPEC-66 §5.1).
+func TestMergeGroupNamesResolvedTask(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+
+	deliverOK(t, e, "pull_request", "d-open", "pull_request_opened.json")
+	deliverOK(t, e, "merge_group", "d-mg", "merge_group_checks_requested.json")
+
+	if got := e.eventPayloadTask(t, "d-mg"); got != taskID {
+		t.Fatalf("merge_group event names task %q, want %q", got, taskID)
+	}
+}
+
 // TestRepositoryRulesetKicksRefresh: WL-SPEC-66 §6.3 — a ruleset change on a
 // mapped repo pokes the server's branch-rules refresh loop. The payload
 // carries no fact worth storing (the merge-queue rule is read per branch from

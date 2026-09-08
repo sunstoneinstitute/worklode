@@ -284,13 +284,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	if s.st != nil {
 		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
 	}
-	// githubCalls counts the GitHub API reads worklode makes on its own
-	// schedule rather than in answer to a request. op is a fixed set of call
-	// sites (branch_rules), never a repo or a URL, so the cardinality is
-	// bounded by the code.
+	// githubCalls counts the GitHub API calls worklode makes itself: the
+	// branch-rules refresh on its own schedule, and the three §3.6 makes for
+	// a Progress page merge act. op is a fixed set of call sites
+	// (branch_rules, pr_node_id, enqueue_pr, merge_pr), never a repo or a
+	// URL, so the cardinality is bounded by the code.
 	s.githubCalls = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_github_calls_total",
-		Help: "GitHub API reads made on worklode's own schedule, by operation.",
+		Help: "GitHub API calls worklode makes itself, by operation.",
 	}, []string{"op"})
 
 	// The task-body render cache owns its own instruments (WL-222), so it is
@@ -980,9 +981,9 @@ func (s *server) observeDictation(outcome string) {
 	s.dictations.WithLabelValues(outcome).Inc()
 }
 
-// observeGitHubCall records one GitHub API read made on worklode's own
-// schedule, by operation. Counted per attempt, so a failing GitHub still
-// shows the call rate. Nil-safe: tests build a *server directly without
+// observeGitHubCall records one GitHub API call worklode makes itself, by
+// operation. Counted per attempt, so a failing GitHub still shows the call
+// rate. Nil-safe: tests build a *server directly without
 // initMetrics.
 func (s *server) observeGitHubCall(op string) {
 	if s.githubCalls == nil {

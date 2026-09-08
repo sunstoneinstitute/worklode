@@ -114,12 +114,17 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/progress/rally/add":     guarded(permTaskWrite),
 	"POST /projects/{id}/progress/rally/confirm": guarded(permTaskWrite),
 	"POST /projects/{id}/progress/rally/discard": guarded(permTaskWrite),
-	"GET /projects/{id}/milestones":              guarded(permWebRead),
-	"GET /projects/{id}/deliverables":            guarded(permWebRead),
-	"GET /projects/{id}/deliverables/new":        guarded(permWebWrite),
-	"POST /projects/{id}/deliverables":           guarded(permWebWrite),
-	"GET /projects/{id}/tasks/new":               guarded(permWebWrite),
-	"POST /projects/{id}/tasks":                  guarded(permWebWrite),
+	// permTaskWrite for the merge act (§3.6): it is the last step of
+	// delivering a task, and it moves that task's state by way of the
+	// webhooks the merge produces. The App's installation token, not the
+	// caller's, does the writing at GitHub (§4.2 rule 9).
+	"POST /projects/{id}/progress/merge":  guarded(permTaskWrite),
+	"GET /projects/{id}/milestones":       guarded(permWebRead),
+	"GET /projects/{id}/deliverables":     guarded(permWebRead),
+	"GET /projects/{id}/deliverables/new": guarded(permWebWrite),
+	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
+	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
+	"POST /projects/{id}/tasks":           guarded(permWebWrite),
 	// The cockpit's tombstone review (044 §2) and its two Restore buttons.
 	// Reading the page is an ordinary web read; restoring carries the
 	// permission the JSON API's undelete carries — permTaskWrite for a task,

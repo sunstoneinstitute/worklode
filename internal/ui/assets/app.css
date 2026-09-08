@@ -2403,6 +2403,10 @@ nav.local a .cnt {
 #tip[data-pinned] {
   pointer-events: auto;
 }
+#tip .act {
+  display: block;
+  margin-top: 6px;
+}
 .cell {
   display: inline-block;
   width: 12px;

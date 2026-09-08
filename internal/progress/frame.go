@@ -48,6 +48,7 @@ var touchKinds = map[string]string{
 	"rally": "rally",
 	// internal/hooks: the GitHub and Flux deliveries the page reacts to.
 	"pull_request":      "pr",
+	"merge_group":       "pr",
 	"workflow_run":      "ci",
 	"push":              "deploy",
 	"deployment_status": "deploy",

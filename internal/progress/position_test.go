@@ -113,3 +113,62 @@ func TestHumanAge(t *testing.T) {
 		}
 	}
 }
+
+// TestMergeAct covers §3.6's button facts: which PR, queue or plain merge,
+// and the reasons worklode can tell before asking GitHub.
+func TestMergeAct(t *testing.T) {
+	pr := func() *PRFact { return &PRFact{Repo: "acme/app", Number: 7} }
+	queued := func() *PRFact { p := pr(); p.MergeQueue = true; return p }
+	success := &CIFact{Status: "completed", Conclusion: "success"}
+	failed := &CIFact{Status: "completed", Conclusion: "failure"}
+
+	cases := []struct {
+		name       string
+		facts      PositionFacts
+		wantNil    bool
+		wantQueue  bool
+		wantReason string
+	}{
+		{name: "no PR, nothing to merge",
+			facts: PositionFacts{State: "in_progress"}, wantNil: true},
+		{name: "a landed task's PR is history",
+			facts: PositionFacts{State: "merged", PR: pr()}, wantNil: true},
+		{name: "a queue-protected branch queues, checks or no checks",
+			facts: PositionFacts{State: "in_review", PR: queued()}, wantQueue: true},
+		{name: "a plain merge waits for green checks",
+			facts:      PositionFacts{State: "in_review", PR: pr(), CI: failed},
+			wantReason: "checks have not passed"},
+		{name: "no CI run at all is not green either",
+			facts:      PositionFacts{State: "in_review", PR: pr()},
+			wantReason: "checks have not passed"},
+		{name: "green checks enable the plain merge",
+			facts: PositionFacts{State: "in_review", PR: pr(), CI: success}},
+		{name: "a PR already in the queue is not queued twice",
+			facts:      PositionFacts{State: "in_review", PR: queued(), Queued: true},
+			wantQueue:  true,
+			wantReason: "already queued for merge"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := MergeAct(c.facts)
+			if c.wantNil {
+				if got != nil {
+					t.Fatalf("MergeAct = %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("MergeAct = nil, want an act")
+			}
+			if got.Repo != "acme/app" || got.Number != 7 {
+				t.Errorf("MergeAct names %s#%d, want acme/app#7", got.Repo, got.Number)
+			}
+			if got.Queue != c.wantQueue {
+				t.Errorf("Queue = %v, want %v", got.Queue, c.wantQueue)
+			}
+			if got.Reason != c.wantReason {
+				t.Errorf("Reason = %q, want %q", got.Reason, c.wantReason)
+			}
+		})
+	}
+}
