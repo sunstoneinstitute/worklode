@@ -72,6 +72,19 @@ func requireCrewMember(tx *sql.Tx, projectID, actorID string) error {
 	return nil
 }
 
+// isCrewMember is requireCrewMember as a question rather than a refusal, for
+// a caller who has somewhere else to go when the answer is no —
+// MintAcceptDecision, which assigns its prompt to a plan's owner when it can
+// and mints it unassigned when it cannot. Only the crew refusal becomes
+// false; every other error is still an error.
+func isCrewMember(tx *sql.Tx, projectID, actorID string) (bool, error) {
+	err := requireCrewMember(tx, projectID, actorID)
+	if errors.Is(err, ErrInvalidInput) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // AssignTask sets taskID's assignee to assignee inside the given
 // transaction, recording provenance via LogChange. assignee must name an
 // existing actor (ErrNotFound otherwise) who is on the task project's Crew

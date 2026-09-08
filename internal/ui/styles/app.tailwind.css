@@ -666,6 +666,12 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 .prog-band{display:flex;align-items:center;gap:10px;padding:0 16px;overflow:hidden}
 .prog-band .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
+/* The rally footer (§3.5) sits in the slot reserved for it at all times, so
+ * confirming or discarding a rally moves nothing above it. Same box as the
+ * band, so both bars read as one pair. */
+.prog-footer{display:flex;align-items:center;gap:10px;padding:0 16px;overflow:hidden}
+.prog-footer .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 .prog-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .prog-count .n{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
 @media(max-width:720px){.prog-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}

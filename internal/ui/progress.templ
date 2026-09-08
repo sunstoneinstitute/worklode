@@ -7,7 +7,7 @@ package ui
 // Top to bottom, §2.1: the rally band (always rendered, always the same
 // height, so the page never moves when a rally starts or ends), the four
 // group counts, the section bar and its legend, the §1.3 groups of spec
-// rows, and a reserved footer slot the rally footer will fill (§3.5).
+// rows, and the rally footer in its reserved slot (§3.5).
 //
 // Nothing here derives anything: model.ProjectProgress arrives already
 // derived (internal/progress), and every label, class and hover string comes
@@ -37,10 +37,28 @@ templ Progress(v ProgressView) {
 				for _, g := range v.P.Groups {
 					@progressGroup(g, v.Viewer)
 				}
-				<div class="prog-footer h-14" aria-hidden="true"></div>
+				@progressFooter(v.P.Draft, v.Viewer)
 			</div>
 			<script src={ assetURL("progress.js") } defer></script>
 		}
+	}
+}
+
+// progressFooter is §3.5's rally footer, in §2.1's reserved slot. The slot is
+// the same height whether or not a draft rally exists, so confirming or
+// discarding one moves nothing on the page above it. With no draft rally
+// there is nothing to say and nothing to press: the bar is empty and hidden
+// from the accessibility tree rather than filled with a placeholder.
+templ progressFooter(d *model.RallyBand, viewer string) {
+	if d == nil {
+		<div class="prog-footer h-14" aria-hidden="true"></div>
+	} else {
+		<div class="prog-footer h-14">
+			<span class="t">Rally: { strconv.Itoa(d.Members) } tasks from { strconv.Itoa(d.Specs) } specs</span>
+			for _, a := range progressFooterActions(viewer) {
+				@progressAct(a)
+			}
+		</div>
 	}
 }
 

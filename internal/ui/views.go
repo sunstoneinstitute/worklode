@@ -1338,7 +1338,7 @@ func progressPlanActions(p model.ProgressPlan, viewer string) []ProgressAction {
 // accepted one has nothing to accept. Plan (§3.4) joins it when the spec has
 // a section no plan covers and no planning task is open — an open one is
 // drawn as a link instead, because minting a second is not an act this page
-// offers.
+// offers. Rally (§3.5) ends the row and is offered on every spec.
 func progressSpecActions(s model.ProgressSpec, viewer string) []ProgressAction {
 	var acts []ProgressAction
 	if s.Status == "draft" {
@@ -1347,7 +1347,46 @@ func progressSpecActions(s model.ProgressSpec, viewer string) []ProgressAction {
 	if s.PlanningTask == "" && progressHasUnplanned(s) {
 		acts = append(acts, progressPlanAction(s.Doc, s.Ref, viewer))
 	}
+	acts = append(acts, progressRallyAction(s.Doc, s.Ref, viewer))
 	return acts
+}
+
+// progressRallyAction is §3.5's Rally button. Every spec row carries one,
+// whatever group it is in: a spec with nothing outstanding is a no-op the
+// route answers with added 0, not an act to hide. Any signed-in viewer may
+// assemble a rally — a draft rally is inert until someone confirms it (005
+// §9) — so having no session is the only reason it is ever disabled.
+func progressRallyAction(doc int64, ref, viewer string) ProgressAction {
+	a := ProgressAction{
+		Route:   "rally/add",
+		Body:    progressDocBody(doc),
+		Label:   "Rally",
+		Confirm: "Add " + ref + " to the rally",
+	}
+	if viewer == "" {
+		a.Reason = "sign in to assemble a rally"
+	}
+	return a
+}
+
+// progressFooterActions are §3.5's footer controls: publish the draft rally,
+// or drop it. Both are two-step buttons like every other write on this page,
+// and both send an empty body — the draft rally a project has is the one they
+// act on, so there is nothing to name.
+func progressFooterActions(viewer string) []ProgressAction {
+	confirm := ProgressAction{
+		Route: "rally/confirm", Body: "{}", Label: "Confirm Rally",
+		Confirm: "Publish this rally",
+	}
+	discard := ProgressAction{
+		Route: "rally/discard", Body: "{}", Label: "Discard",
+		Confirm: "Discard this rally",
+	}
+	if viewer == "" {
+		confirm.Reason = "sign in to publish a rally"
+		discard.Reason = "sign in to discard a rally"
+	}
+	return []ProgressAction{confirm, discard}
 }
 
 // progressHasUnplanned is §3.4's condition: a section no plan covers. It is
