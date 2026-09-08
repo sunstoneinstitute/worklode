@@ -38,8 +38,12 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err != nil {
 		return nil, nil, err
 	}
+	// A coverage-only plan declares no tasks and mints none: its whole content
+	// is the coverage it records for work already built, and accepting it is
+	// what puts those claims in force (026 §2.1). Everything below runs over an
+	// empty definition set and is a no-op.
 	defs, err := designdoc.PlanTasks(parsed.doc)
-	if err != nil {
+	if err != nil && !designdoc.IsCoverageOnlyPlan(parsed.doc) {
 		return nil, nil, fmt.Errorf("doc %d cannot be accepted: %w: %w", id, err, ErrInvalidInput)
 	}
 	minted, err := plantaskRows(tx, id)
