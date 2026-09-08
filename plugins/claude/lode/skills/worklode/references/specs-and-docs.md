@@ -82,7 +82,7 @@ kind, so `WL-SPEC-1` and `WL-PLAN-1` are different documents. A shorthand
 naming a project this checkout can't reach resolves as `unresolved`, not an
 error; `lode show <ref>` is what actually verifies one.
 
-## Anchors are frozen, there is no "inlined" view
+## Anchors are frozen; `--inline` is how you read the current text
 
 Once a spec is accepted, its `{#sec-N}` anchors never move and never get
 renumbered — inserting between `2.1` and `2.2` uses a letter suffix
@@ -90,11 +90,14 @@ renumbered — inserting between `2.1` and `2.2` uses a letter suffix
 anchor and gets a note saying what replaced it; deleting it breaks whoever
 linked it.
 
-There is no consolidated/inlined document that folds amendments into one
-reading. **What a section says now is that section plus whatever amends it**
-— `lode doc show <ref> --json`'s `edges_in` names `amendedBy` and
-`isReplacedBy` on it; follow those before treating the body on screen as
-current. Both directions of an amendment are always recorded (the amending
+A stored body is therefore never rewritten, so **what a section says now is
+that section plus whatever amends it**. `lode show <ref> --inline` does that
+fold for you (026 §3.2), attributing each change to the document it came
+from; without the flag you get the text as first written, which is what you
+want for provenance and not what you want before acting on a requirement.
+`lode doc show <ref> --json`'s `edges_in` names `amendedBy` and
+`isReplacedBy` when you need the edges rather than the reading. Both
+directions of an amendment are always recorded (the amending
 doc's `amends`, the amended doc's `amendedBy`) so either document alone
 answers "what still constrains this section" without a corpus-wide scan.
 
