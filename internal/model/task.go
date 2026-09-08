@@ -168,6 +168,13 @@ type EditTaskInput struct {
 	// (spec 029 §2): "" or "none" detaches, any other value must name a
 	// milestone in the task's own project.
 	Milestone *string `json:"milestone,omitempty"`
+	// Plan, when non-nil, links the task to the plan document it executed
+	// (WL-SPEC-66 §6.2): an id or slug, resolved server-side the same way
+	// `--plan` on `task list` resolves one. Refused if the task already
+	// carries a different plan document, or the resolved document is not a
+	// plan in the task's own project. There is no detach — once set, a
+	// task's plan_doc does not change.
+	Plan *string `json:"plan,omitempty"`
 }
 
 // EdgeInput is the request body for adding or removing a task edge

@@ -916,6 +916,47 @@ func TestTaskEditMilestone(t *testing.T) {
 	}
 }
 
+// TestTaskEditPlan covers --plan on `lode task edit` (WL-SPEC-66 §6.2): the
+// flag sends a "plan" field carrying the ref verbatim (resolution happens
+// server-side, the same way `--plan` on `task list` resolves one), and
+// leaving the flag off carries no plan field at all so an unrelated edit
+// cannot attach one by accident.
+func TestTaskEditPlan(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"PE-1","project":"planproj","title":"t","priority":"medium","kind":"chore","state":"ready"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	cmd := newTaskEditCmd()
+	cmd.SetArgs([]string{"PE-1", "--plan", "a-plan"})
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task edit --plan: %v", err)
+	}
+	if !strings.Contains(gotBody, `"plan":"a-plan"`) {
+		t.Errorf("--plan a-plan sent %q; want it to carry the ref", gotBody)
+	}
+
+	// Without the flag the field stays absent.
+	gotBody = ""
+	cmd = newTaskEditCmd()
+	cmd.SetArgs([]string{"PE-1", "--priority", "low"})
+	cmd.SetOut(io.Discard)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("task edit --priority: %v", err)
+	}
+	if strings.Contains(gotBody, `"plan"`) {
+		t.Errorf("unrelated edit sent %q; want no plan field", gotBody)
+	}
+}
+
 // TestTaskClaimRefusesMainCheckout guards WL-383: claiming from the main
 // checkout used to bind the lease straight to the clone path — a lease
 // `lode work resume`/`lode work status` can never resolve back to a
