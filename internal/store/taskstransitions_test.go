@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 func TestTransitionLegal(t *testing.T) {
@@ -184,6 +186,19 @@ func TestDeliveredStateSetCoversDeliveryRanks(t *testing.T) {
 	slices.Sort(want)
 	if got := slices.Sorted(maps.Keys(deliveredStateSet)); !slices.Equal(got, want) {
 		t.Fatalf("deliveredStateSet = %v, want %v", got, want)
+	}
+}
+
+// TestDeliveryRanksMatchSettableTaskStates pins the store's delivery axis
+// against model.SettableTaskStates: "carries a delivery rank" (deliveryRanks)
+// and "landed" (internal/progress.TaskClass, WL-SPEC-66 §1.1) read the same
+// state names, so the two cannot drift apart. Needs no Postgres.
+func TestDeliveryRanksMatchSettableTaskStates(t *testing.T) {
+	t.Parallel()
+	want := slices.Sorted(slices.Values(model.SettableTaskStates))
+	got := slices.Sorted(maps.Keys(deliveryRanks))
+	if !slices.Equal(got, want) {
+		t.Fatalf("deliveryRanks keys = %v, want model.SettableTaskStates = %v", got, want)
 	}
 }
 
