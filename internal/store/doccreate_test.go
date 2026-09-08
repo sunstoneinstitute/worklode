@@ -100,6 +100,21 @@ func TestDocCreateAutoAssignsNumber(t *testing.T) {
 	if third.Number != 11 {
 		t.Fatalf("third auto number = %d, want 11", third.Number)
 	}
+
+	// An explicit number behind the counter — a gap being backfilled — lands
+	// as asked without rewinding the counter onto numbers already handed out.
+	behind := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 5, Slug: "auto-behind", Body: specBody, CreatedBy: "stig",
+	})
+	if behind.Number != 5 {
+		t.Fatalf("backfilled number = %d, want 5", behind.Number)
+	}
+	fourth := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Slug: "auto-4", Body: specBody, CreatedBy: "stig",
+	})
+	if fourth.Number != 12 {
+		t.Fatalf("fourth auto number = %d, want 12 (the counter did not rewind to 5)", fourth.Number)
+	}
 }
 
 // TestDocCreateAutoAssignsNumberPerKind: spec and ADR draw from separate
