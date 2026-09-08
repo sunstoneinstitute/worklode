@@ -207,6 +207,16 @@ plans) is the document-level `blocks`/`blockedBy` above, never a task
 number — `lode doc lint <file>` runs this whole parse first, so a
 malformed task block is caught locally.
 
+**A plan may legitimately declare no tasks.** A *coverage-only* plan records
+coverage for work already built: it carries at least one `covers` or `defers`
+entry and no tasks at all, and accepting it mints nothing. Acceptance is still
+what puts the record in force, since the aggregate coverage query counts
+accepted plans only (026 §2.1). "No tasks at all" is exact — no `## Tasks`
+heading, and no heading opening with `Task`/`Tasks` followed by a number. An
+empty `## Tasks` section, or a `## Task 1` heading that missed the em-dash
+format above, is an authoring mistake and still fails both the lint and the
+accept (025 §9.2).
+
 ## The `ns/` ontology
 
 `ns/` holds the `wl:` ontology extracted from specs 006/016/025/026 —
