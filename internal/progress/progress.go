@@ -24,11 +24,15 @@ type Input struct {
 	Rally   *model.RallyBand
 }
 
-// Spec is one spec document and its sections, in document order.
+// Spec is one spec document and its sections, in document order. Status and
+// Owner are carried for §3.2's Accept button, which is offered on a draft
+// spec and enabled only for its owner; the derivation itself reads neither.
 type Spec struct {
 	Doc      int64
 	Ref      string
 	Title    string
+	Status   string // draft | accepted | superseded
+	Owner    string
 	Updated  time.Time
 	Sections []Section
 }
@@ -48,6 +52,7 @@ type Plan struct {
 	Ref      string
 	Title    string
 	Status   string // draft | accepted | superseded
+	Owner    string // §3.2: the only actor who may accept it
 	Covers   []Cover
 	Requires []string
 	Tasks    []Task
@@ -278,6 +283,7 @@ func Derive(in Input) model.ProjectProgress {
 			pi := plans[d]
 			specPlans = append(specPlans, model.ProgressPlan{
 				Doc: pi.Doc, Ref: pi.Ref, Title: pi.Title, Status: pi.Status,
+				Owner: pi.Owner,
 				State: pi.State, Requires: pi.Requires, Tasks: pi.TaskCells,
 				Landed: pi.Landed, Open: pi.Open,
 			})
@@ -294,6 +300,8 @@ func Derive(in Input) model.ProjectProgress {
 
 		byGroup[groupKey] = append(byGroup[groupKey], model.ProgressSpec{
 			Doc: spec.Doc, Ref: spec.Ref, Title: spec.Title, Updated: spec.Updated,
+			Status:   spec.Status,
+			Owner:    spec.Owner,
 			Group:    groupKey,
 			Next:     nextAct(openTasks, openPlans, draftPlans, unplannedCount, noRecordPlans),
 			Sections: sections,

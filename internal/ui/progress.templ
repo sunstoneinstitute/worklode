@@ -35,7 +35,7 @@ templ Progress(v ProgressView) {
 				@progressCounts(v.P.Counts)
 				@progressBar(v)
 				for _, g := range v.P.Groups {
-					@progressGroup(g)
+					@progressGroup(g, v.Viewer)
 				}
 				<div class="prog-footer h-14" aria-hidden="true"></div>
 			</div>
@@ -108,7 +108,7 @@ templ progressBar(v ProgressView) {
 // progressGroup renders one §1.3 group: its label, its size, its one-line
 // reason, then a row per spec. An empty group is omitted rather than
 // rendered as a heading over nothing.
-templ progressGroup(g model.ProgressGroup) {
+templ progressGroup(g model.ProgressGroup, viewer string) {
 	if len(g.Specs) > 0 {
 		<section class="card">
 			<div class="hd">
@@ -117,7 +117,7 @@ templ progressGroup(g model.ProgressGroup) {
 			</div>
 			<div class="bd">
 				for _, sp := range g.Specs {
-					@progressRow(sp)
+					@progressRow(sp, viewer)
 				}
 			</div>
 		</section>
@@ -126,11 +126,12 @@ templ progressGroup(g model.ProgressGroup) {
 
 // progressRow is §2.2's row: reference, title, strip, next act, and the
 // right-aligned action slot the row-level acts of §3 render into as they
-// land, each one a progressAct. The reference is the row's only link. A
-// bound-only section gets no cell. Clicking the row anywhere but a link
-// expands the detail block that follows it; the row is focusable so a
+// land, each one a progressAct — Accept (§3.2) today, Review (§3.3), Plan
+// (§3.4) and Rally (§3.5) as their routes land. The reference is the row's
+// only link. A bound-only section gets no cell. Clicking the row anywhere but
+// a link expands the detail block that follows it; the row is focusable so a
 // keyboard can do the same.
-templ progressRow(s model.ProgressSpec) {
+templ progressRow(s model.ProgressSpec, viewer string) {
 	<div class="prog-row" tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
 		<div class="ref"><a href={ "/docs/ref/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
 		<div class="t">{ s.Title }</div>
@@ -142,23 +143,27 @@ templ progressRow(s model.ProgressSpec) {
 			}
 		</div>
 		<div class="next muted small">{ s.Next.Text }</div>
-		<div class="act"></div>
+		<div class="act">
+			for _, a := range progressSpecActions(s, viewer) {
+				@progressAct(a)
+			}
+		</div>
 	</div>
-	@progressDetail(s)
+	@progressDetail(s, viewer)
 }
 
 // progressDetail is §2.3's expanded row: the plans that cover the spec, then
 // every section of it. It is always rendered — the stylesheet hides it until
 // the row carries "open" — so expanding costs no request and the markup a
 // test reads is the markup a reader expands.
-templ progressDetail(s model.ProgressSpec) {
+templ progressDetail(s model.ProgressSpec, viewer string) {
 	<div class="detail" id={ progressDetailID(s.Ref) }>
 		if len(s.Plans) == 0 {
 			<p class="muted small">No plan covers this spec.</p>
 		} else {
 			<div class="plans">
 				for _, p := range s.Plans {
-					@progressPlanLine(p)
+					@progressPlanLine(p, viewer)
 				}
 			</div>
 		}
@@ -203,7 +208,7 @@ templ progressPill(state string) {
 // progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
 // after, its state, and one cell per minted task. A plan with no minted task
 // says so rather than drawing an empty strip (§1.1's no_record).
-templ progressPlanLine(p model.ProgressPlan) {
+templ progressPlanLine(p model.ProgressPlan, viewer string) {
 	<div class="plan">
 		<a href={ "/docs/ref/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
 		<span class="t">{ p.Title }</span>
@@ -221,7 +226,7 @@ templ progressPlanLine(p model.ProgressPlan) {
 			</span>
 			<span class="muted small">{ strconv.Itoa(p.Landed) } landed &middot; { strconv.Itoa(p.Open) } open</span>
 		}
-		for _, a := range progressPlanActions(p) {
+		for _, a := range progressPlanActions(p, viewer) {
 			@progressAct(a)
 		}
 	</div>
