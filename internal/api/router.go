@@ -98,13 +98,19 @@ var routeGuards = map[string]routeGuard{
 	"POST /projects/{id}/progress/accept": guarded(permDocWrite),
 	// permTaskWrite for minting the planning task (§3.4): the act creates a
 	// task, whatever document it is about.
-	"POST /projects/{id}/progress/plan":   guarded(permTaskWrite),
-	"GET /projects/{id}/milestones":       guarded(permWebRead),
-	"GET /projects/{id}/deliverables":     guarded(permWebRead),
-	"GET /projects/{id}/deliverables/new": guarded(permWebWrite),
-	"POST /projects/{id}/deliverables":    guarded(permWebWrite),
-	"GET /projects/{id}/tasks/new":        guarded(permWebWrite),
-	"POST /projects/{id}/tasks":           guarded(permWebWrite),
+	"POST /projects/{id}/progress/plan": guarded(permTaskWrite),
+	// permTaskWrite for the rally acts (§3.5): assembling one mints and links
+	// tasks, and confirming or discarding it moves a task's state. The rally
+	// is a task like any other (004 §6.3).
+	"POST /projects/{id}/progress/rally/add":     guarded(permTaskWrite),
+	"POST /projects/{id}/progress/rally/confirm": guarded(permTaskWrite),
+	"POST /projects/{id}/progress/rally/discard": guarded(permTaskWrite),
+	"GET /projects/{id}/milestones":              guarded(permWebRead),
+	"GET /projects/{id}/deliverables":            guarded(permWebRead),
+	"GET /projects/{id}/deliverables/new":        guarded(permWebWrite),
+	"POST /projects/{id}/deliverables":           guarded(permWebWrite),
+	"GET /projects/{id}/tasks/new":               guarded(permWebWrite),
+	"POST /projects/{id}/tasks":                  guarded(permWebWrite),
 	// The cockpit's tombstone review (044 §2) and its two Restore buttons.
 	// Reading the page is an ordinary web read; restoring carries the
 	// permission the JSON API's undelete carries — permTaskWrite for a task,

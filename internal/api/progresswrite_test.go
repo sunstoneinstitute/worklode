@@ -8,6 +8,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -590,4 +591,370 @@ func TestProgressPlanRefusesNonSpec(t *testing.T) {
 	if rr := planPost(t, s, probeActor, plan.ID); rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body=%s; want 404", rr.Code, rr.Body.String())
 	}
+}
+
+// --- the rally act (WL-SPEC-66 §3.5) -----------------------------------------
+
+// probeRallySpec is §8 criterion 17's spec: one section an accepted plan
+// covers, one a draft plan covers, and one nothing covers at all.
+const probeRallySpec = `---
+status: accepted
+---
+
+# Rally spec
+
+## 1. Executed {#sec-1}
+
+Covered by the accepted plan.
+
+## 2. Proposed {#sec-2}
+
+Covered by the draft plan.
+
+## 3. Unplanned {#sec-3}
+
+Covered by nothing.
+`
+
+// probeRallyPlanA covers the first section and declares the two tasks that
+// become the rally's execute members once it is accepted.
+const probeRallyPlanA = `---
+status: draft
+covers:
+  - spec: rally-spec.md#sec-1
+    coverage: full
+---
+
+# Rally plan A
+
+## Tasks
+
+### Task 1 — First
+
+` + "```yaml" + `
+kind: feature
+priority: medium
+` + "```" + `
+
+Do the first thing.
+
+### Task 2 — Second
+
+` + "```yaml" + `
+kind: feature
+priority: medium
+` + "```" + `
+
+Do the second thing.
+`
+
+// probeRallyPlanB stays draft, so the rally owes a prompt to accept it.
+const probeRallyPlanB = `---
+status: draft
+covers:
+  - spec: rally-spec.md#sec-2
+    coverage: full
+---
+
+# Rally plan B
+
+Nothing to mint; this plan is the question.
+`
+
+// newRallyServer seeds criterion 17's fixture: the spec, an accepted plan
+// with two open tasks, and a draft plan. probeActor owns every document and
+// is on the project's crew, so the accept prompt has somewhere to land.
+func newRallyServer(t *testing.T) (*server, *model.Doc, *model.Doc) {
+	t.Helper()
+	s := newProbeServer(t)
+	for _, id := range []string{probeActor, otherActor} {
+		if err := s.st.CreateActor(t.Context(), id, "human", id, false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	if err := s.recordEvent(t.Context(), "cli", "project.participant_added", map[string]string{"actor": probeActor},
+		func(tx *sql.Tx, eventID int64) error {
+			return store.AddParticipant(tx, s.st.Now(), "p", probeActor, "engineer", false, false, probeActor, eventID)
+		}); err != nil {
+		t.Fatalf("add crew member: %v", err)
+	}
+	spec := seedProbeDoc(t, s, store.DocInput{
+		Project: "p", Kind: "spec", Slug: "rally-spec", Number: 66,
+		Body: probeRallySpec, Owner: probeActor, CreatedBy: probeActor,
+	})
+	planA := seedProbeDoc(t, s, store.DocInput{
+		Project: "p", Kind: "plan", Slug: "rally-plan-a",
+		Body: probeRallyPlanA, Owner: probeActor, CreatedBy: probeActor,
+	})
+	planB := seedProbeDoc(t, s, store.DocInput{
+		Project: "p", Kind: "plan", Slug: "rally-plan-b",
+		Body: probeRallyPlanB, Owner: probeActor, CreatedBy: probeActor,
+	})
+	if rr := acceptPost(t, s, probeActor, planA.ID); rr.Code != http.StatusOK {
+		t.Fatalf("accept plan A = %d body=%s; want 200", rr.Code, rr.Body.String())
+	}
+	return s, spec, planB
+}
+
+// rallyPost runs one POST /projects/p/progress/rally/<act> as actor.
+func rallyPost(t *testing.T, s *server, h http.HandlerFunc, actor, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := goodPost(body)
+	req.SetPathValue("id", "p")
+	req = withSubject(req, Subject{ActorID: actor})
+	rr := httptest.NewRecorder()
+	h(rr, req)
+	return rr
+}
+
+func rallyAddPost(t *testing.T, s *server, doc int64) model.ProgressRallyAddResponse {
+	t.Helper()
+	rr := rallyPost(t, s, s.progressRallyAdd, probeActor, `{"doc":`+strconv.FormatInt(doc, 10)+`}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("rally add = %d body=%s; want 200", rr.Code, rr.Body.String())
+	}
+	var got model.ProgressRallyAddResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rr.Body.String(), err)
+	}
+	return got
+}
+
+// TestProgressRallyAddAssemblesFourMembers is §8 criterion 17 and 10: a spec
+// with one draft plan, one unplanned section and two open tasks yields four
+// members — the two tasks, one design task about the spec, one decision task
+// about the plan — and adding the same spec again adds nothing.
+func TestProgressRallyAddAssemblesFourMembers(t *testing.T) {
+	t.Parallel()
+	s, spec, planB := newRallyServer(t)
+
+	first := rallyAddPost(t, s, spec.ID)
+	if first.Added != 4 || first.Members != 4 {
+		t.Fatalf("first add = %+v; want four members added", first)
+	}
+	if first.Specs != 1 {
+		t.Errorf("specs = %d; want the one spec they all come from", first.Specs)
+	}
+
+	kinds := map[string]int{}
+	for _, id := range rallyMemberIDs(t, s, first.Rally) {
+		task, err := s.st.GetTask(t.Context(), id)
+		if err != nil {
+			t.Fatalf("get member %s: %v", id, err)
+		}
+		kinds[task.Kind]++
+	}
+	if kinds["feature"] != 2 || kinds["design"] != 1 || kinds["decision"] != 1 {
+		t.Fatalf("member kinds = %v; want two feature, one design, one decision", kinds)
+	}
+
+	// §3.5's accept prompt is about the draft plan and lands in its owner's
+	// queue, so the person who can accept it is the person holding it.
+	prompt, err := s.st.OpenTaskForDoc(t.Context(), planB.ID, "decision")
+	if err != nil || prompt == "" {
+		t.Fatalf("open decision about plan B = %q, %v; want one", prompt, err)
+	}
+	task, err := s.st.GetTask(t.Context(), prompt)
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	if task.Assignee != probeActor {
+		t.Errorf("prompt assignee = %q; want the plan's owner %s", task.Assignee, probeActor)
+	}
+
+	second := rallyAddPost(t, s, spec.ID)
+	if second.Added != 0 || second.Members != 4 || second.Rally != first.Rally {
+		t.Fatalf("second add = %+v; want nothing added to %s", second, first.Rally)
+	}
+	if n := testutil.ToFloat64(s.progressWrites.WithLabelValues("rally/add", "ok")); n != 2 {
+		t.Fatalf("progressWrites{rally/add,ok} = %v, want 2", n)
+	}
+}
+
+// TestProgressRallyAddAssignsNonCrewOwnerNothing: the accept prompt is
+// assigned to the plan's owner only when the owner can hold a task. An owner
+// who is not on the crew (029 §6.1) gets an unassigned prompt rather than a
+// refused rally.
+func TestProgressRallyAddAssignsNonCrewOwnerNothing(t *testing.T) {
+	t.Parallel()
+	s, spec, planB := newRallyServer(t)
+	// otherActor owns plan B and is on no crew.
+	if err := s.recordEvent(t.Context(), "cli", "doc.updated", map[string]string{"owner": otherActor},
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.TransferDocOwner(tx, s.st.Now(), planB.ID, otherActor, probeActor, eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("reassign plan B: %v", err)
+	}
+
+	if got := rallyAddPost(t, s, spec.ID); got.Added != 4 {
+		t.Fatalf("add = %+v; want the rally assembled anyway", got)
+	}
+	prompt, err := s.st.OpenTaskForDoc(t.Context(), planB.ID, "decision")
+	if err != nil || prompt == "" {
+		t.Fatalf("open decision about plan B = %q, %v; want one", prompt, err)
+	}
+	task, err := s.st.GetTask(t.Context(), prompt)
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	if task.Assignee != "" {
+		t.Errorf("prompt assignee = %q; want none for an owner off the crew", task.Assignee)
+	}
+}
+
+// TestProgressRallyAddRefusesAForeignDoc: the act is assembled from a spec of
+// this project, so a plan, and a document of another project, are not found.
+func TestProgressRallyAddRefusesAForeignDoc(t *testing.T) {
+	t.Parallel()
+	s, _, planB := newRallyServer(t)
+
+	rr := rallyPost(t, s, s.progressRallyAdd, probeActor,
+		`{"doc":`+strconv.FormatInt(planB.ID, 10)+`}`)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("add of a plan = %d body=%s; want 404", rr.Code, rr.Body.String())
+	}
+}
+
+// TestProgressRallyConfirmActivates: Confirm publishes the draft, which is
+// what 005 §2a calls activation — ActiveRally returns it afterwards, and the
+// project has no draft left.
+func TestProgressRallyConfirmActivates(t *testing.T) {
+	t.Parallel()
+	s, spec, _ := newRallyServer(t)
+	added := rallyAddPost(t, s, spec.ID)
+
+	rr := rallyPost(t, s, s.progressRallyConfirm, probeActor, "{}")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("confirm = %d body=%s; want 200", rr.Code, rr.Body.String())
+	}
+	var got model.ProgressRallyResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rr.Body.String(), err)
+	}
+	if want := (model.ProgressRallyResponse{Rally: added.Rally, State: "ready"}); got != want {
+		t.Fatalf("reply = %+v; want %+v", got, want)
+	}
+	active, err := s.st.ActiveRally(t.Context(), "p")
+	if err != nil || active.ID != added.Rally {
+		t.Fatalf("active rally = %+v, %v; want %s", active, err, added.Rally)
+	}
+	if _, err := s.st.DraftRally(t.Context(), "p"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("draft rally after confirm = %v; want ErrNotFound", err)
+	}
+	if n := testutil.ToFloat64(s.progressWrites.WithLabelValues("rally/confirm", "ok")); n != 1 {
+		t.Fatalf("progressWrites{rally/confirm,ok} = %v, want 1", n)
+	}
+}
+
+// TestProgressRallyConfirmRefusesASecondActive is §8 criterion 9: the
+// backbone allows one active rally per project, so a second Confirm is a 409
+// naming the rally that holds the slot, and it activates nothing.
+func TestProgressRallyConfirmRefusesASecondActive(t *testing.T) {
+	t.Parallel()
+	s, spec, _ := newRallyServer(t)
+
+	var running string
+	if err := s.recordEvent(t.Context(), "web", "task.created", map[string]string{"kind": "rally"},
+		func(tx *sql.Tx, eventID int64) error {
+			r, err := store.CreateTask(tx, s.st.Now(), store.TaskInput{
+				ProjectID: "p", Title: "Running rally", Kind: "rally",
+				Priority: "medium", CreatedBy: probeActor,
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			running = r.ID
+			return store.AttributeEventToTask(tx, eventID, r.ID)
+		}); err != nil {
+		t.Fatalf("seed active rally: %v", err)
+	}
+	draft := rallyAddPost(t, s, spec.ID)
+
+	rr := rallyPost(t, s, s.progressRallyConfirm, probeActor, "{}")
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("confirm = %d body=%s; want 409", rr.Code, rr.Body.String())
+	}
+	var got model.ProgressRallyConflict
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rr.Body.String(), err)
+	}
+	if got.Active != running || !strings.Contains(got.Error, running) {
+		t.Fatalf("conflict = %+v; want it to name the active rally %s", got, running)
+	}
+	// Nothing was activated: the draft is still a draft.
+	still, err := s.st.DraftRally(t.Context(), "p")
+	if err != nil || still.ID != draft.Rally {
+		t.Fatalf("draft rally = %+v, %v; want %s untouched", still, err, draft.Rally)
+	}
+	if n := testutil.ToFloat64(s.progressWrites.WithLabelValues("rally/confirm", "conflict")); n != 1 {
+		t.Fatalf("progressWrites{rally/confirm,conflict} = %v, want 1", n)
+	}
+}
+
+// TestProgressRallyDiscard: Discard abandons the draft, which drops it from
+// every reader — the footer included.
+func TestProgressRallyDiscard(t *testing.T) {
+	t.Parallel()
+	s, spec, _ := newRallyServer(t)
+	added := rallyAddPost(t, s, spec.ID)
+
+	rr := rallyPost(t, s, s.progressRallyDiscard, probeActor, "{}")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("discard = %d body=%s; want 200", rr.Code, rr.Body.String())
+	}
+	if _, err := s.st.DraftRally(t.Context(), "p"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("draft rally after discard = %v; want ErrNotFound", err)
+	}
+	if band, err := s.st.DraftRallyBand(t.Context(), "p"); err != nil || band != nil {
+		t.Fatalf("draft band after discard = %+v, %v; want none", band, err)
+	}
+	// The tasks it held are untouched: discarding a rally drops the rally,
+	// not the work.
+	if _, err := s.st.GetTask(t.Context(), added.Rally); err != nil {
+		t.Fatalf("get discarded rally: %v", err)
+	}
+}
+
+// TestProgressRallyMoveNeedsADraft: the footer is not drawn without a draft
+// rally, so a Confirm or Discard arriving here came from a stale page.
+func TestProgressRallyMoveNeedsADraft(t *testing.T) {
+	t.Parallel()
+	s, _, _ := newRallyServer(t)
+
+	for _, tc := range []struct {
+		name  string
+		h     http.HandlerFunc
+		route string
+	}{
+		{name: "confirm", h: s.progressRallyConfirm, route: "rally/confirm"},
+		{name: "discard", h: s.progressRallyDiscard, route: "rally/discard"},
+	} {
+		rr := rallyPost(t, s, tc.h, probeActor, "{}")
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("%s = %d body=%s; want 409", tc.name, rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "no draft rally") {
+			t.Errorf("%s body = %s; want it to say why", tc.name, rr.Body.String())
+		}
+		if n := testutil.ToFloat64(s.progressWrites.WithLabelValues(tc.route, "conflict")); n != 1 {
+			t.Fatalf("progressWrites{%s,conflict} = %v, want 1", tc.route, n)
+		}
+	}
+}
+
+// rallyMemberIDs lists the tasks a rally's 'blocks' edges name.
+func rallyMemberIDs(t *testing.T, s *server, rallyID string) []string {
+	t.Helper()
+	_, in, err := s.st.ListEdges(t.Context(), rallyID)
+	if err != nil {
+		t.Fatalf("list edges of %s: %v", rallyID, err)
+	}
+	var out []string
+	for _, e := range in {
+		if e.Type == "blocks" {
+			out = append(out, e.FromTask)
+		}
+	}
+	return out
 }
