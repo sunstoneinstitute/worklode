@@ -3,12 +3,17 @@
 package e2e
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/cli"
@@ -140,6 +145,44 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 		t.Fatalf("task %s state = %q, want merged", done.ID, done.State)
 	}
 
+	// 2b. The live stream (WL-743), opened after the fact with ?after=0,
+	// replays that transition as a frame naming this spec. ListEvents is
+	// bounded by a cluster-wide commit horizon, so a just-recorded event can
+	// stay invisible for several polls; the stream correctly emits
+	// heartbeats while it waits, so frames are read in a loop rather than
+	// trusting the first line, bounded by a timeout matching
+	// store.AwaitCommitHorizon's own deadline.
+	streamCtx, cancelStream := context.WithTimeout(ctx, 20*time.Second)
+	defer cancelStream()
+	streamReq, err := http.NewRequestWithContext(streamCtx, http.MethodGet,
+		srv.URL+"/projects/prog/progress/events?after=0", nil)
+	if err != nil {
+		t.Fatalf("build progress events request: %v", err)
+	}
+	streamResp, err := http.DefaultClient.Do(streamReq)
+	if err != nil {
+		t.Fatalf("GET progress/events: %v", err)
+	}
+	defer streamResp.Body.Close()
+	if streamResp.StatusCode != 200 {
+		t.Fatalf("GET progress/events status = %d", streamResp.StatusCode)
+	}
+	frame := readProgressFrame(t, streamResp.Body, spec.ID)
+	if frame.Task != accepted.Tasks[0].ID || frame.State != "merged" {
+		t.Fatalf("progress frame = %+v, want task %s merged", frame, accepted.Tasks[0].ID)
+	}
+
+	// 2c. The row fragment for this spec shows the merged task with a
+	// tooltip naming its new position on the ladder.
+	fragStatus, fragBody := getPage(t, fmt.Sprintf("%s/projects/prog/progress/spec/%d", srv.URL, spec.ID))
+	if fragStatus != 200 {
+		t.Fatalf("GET progress/spec/%d status = %d", spec.ID, fragStatus)
+	}
+	wantTip := fmt.Sprintf(`data-tip="%s · %s · merged"`, accepted.Tasks[0].ID, accepted.Tasks[0].Title)
+	if !strings.Contains(fragBody, wantTip) {
+		t.Fatalf("progress row fragment missing %q:\n%s", wantTip, fragBody)
+	}
+
 	wantNext := fmt.Sprintf("1 open task(s) in %s", plan.Ref)
 
 	// 3. The JSON API: the spec is in the active group with that next act.
@@ -201,6 +244,31 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 	if cliSpec := progressSpecByRef(t, fromCLI, spec.Ref); cliSpec.Next.Text != wantNext {
 		t.Fatalf("lode doc progress next = %q, want %q", cliSpec.Next.Text, wantNext)
 	}
+}
+
+// readProgressFrame scans an open progress-events response body, line by
+// line, until a "data: " line decodes to a frame naming doc among its
+// Specs — tolerating any number of ":" heartbeat comments and blank lines
+// ahead of it. It fails the test if the stream ends or its context expires
+// first, rather than hanging or trusting the first line written.
+func readProgressFrame(t *testing.T, body io.Reader, doc int64) model.ProgressEventFrame {
+	t.Helper()
+	sc := bufio.NewScanner(body)
+	for sc.Scan() {
+		line, ok := strings.CutPrefix(sc.Text(), "data: ")
+		if !ok {
+			continue
+		}
+		var frame model.ProgressEventFrame
+		if err := json.Unmarshal([]byte(line), &frame); err != nil {
+			t.Fatalf("decode progress frame %q: %v", line, err)
+		}
+		if slices.Contains(frame.Specs, doc) {
+			return frame
+		}
+	}
+	t.Fatalf("progress stream ended without a frame naming doc %d: %v", doc, sc.Err())
+	return model.ProgressEventFrame{}
 }
 
 // progressSpecByRef returns the one spec with the given reference, whichever
