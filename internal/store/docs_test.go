@@ -927,6 +927,132 @@ func TestDocAcceptWrongActorForbidden(t *testing.T) {
 	}
 }
 
+// approveDocReviewerLane resolves reviewer's open lane on doc's current
+// version 'approved', the way a decide-approval act would.
+func approveDocReviewerLane(t *testing.T, s *Store, docID int64, reviewer string) {
+	t.Helper()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	a, err := OpenApprovalForLane(tx, "doc", DocEntityID(docID), reviewer)
+	if err != nil {
+		t.Fatalf("open approval for lane %s: %v", reviewer, err)
+	}
+	if err := ResolveApproval(tx, a.ID, "approved", &reviewer, s.Now()); err != nil {
+		t.Fatalf("resolve approval for lane %s: %v", reviewer, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAcceptDocReviewerGate is AcceptDoc's mechanical multi-approval gate
+// (025 §7.3): a spec/ADR with an assigned reviewer set cannot be accepted
+// until every reviewer has approved the current version, and a document with
+// no reviewers assigned accepts exactly as it did before this gate existed.
+func TestAcceptDocReviewerGate(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	seedDocsActor(t, s, "rev-a")
+	seedDocsActor(t, s, "rev-b")
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	assignDocReviewers(t, s, doc.ID, []string{"rev-a", "rev-b"})
+
+	// submit -> two awaiting lanes at v1.
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RequestDocApproval(tx, s.Now(), doc.ID, doc.Version); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = acceptDoc(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("accept with two open lanes: err = %v, want ErrForbidden", err)
+	}
+	if !strings.Contains(err.Error(), "rev-a") || !strings.Contains(err.Error(), "rev-b") {
+		t.Errorf("err = %v, want it to name both rev-a and rev-b", err)
+	}
+	if !strings.Contains(err.Error(), "/reviews") {
+		t.Errorf("err = %v, want it to point at /reviews", err)
+	}
+
+	// approve rev-a's lane; accept again -> still refused, names only rev-b.
+	approveDocReviewerLane(t, s, doc.ID, "rev-a")
+	_, _, err = acceptDoc(t, s, doc.ID, "stig")
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("accept with rev-b still open: err = %v, want ErrForbidden", err)
+	}
+	if strings.Contains(err.Error(), "rev-a") {
+		t.Errorf("err = %v, should no longer name rev-a", err)
+	}
+	if !strings.Contains(err.Error(), "rev-b") {
+		t.Errorf("err = %v, want it to name rev-b", err)
+	}
+
+	// approve rev-b's lane; accept -> succeeds.
+	approveDocReviewerLane(t, s, doc.ID, "rev-b")
+	accepted, _, err := acceptDoc(t, s, doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept once both reviewers approved: %v", err)
+	}
+	if accepted.Status != "accepted" {
+		t.Errorf("status = %q, want accepted", accepted.Status)
+	}
+
+	// a document with no reviewers accepts as today.
+	doc2 := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 26, Slug: "026-y", Body: specBody, CreatedBy: "stig",
+	})
+	if _, _, err := acceptDoc(t, s, doc2.ID, "stig"); err != nil {
+		t.Fatalf("accept doc with no reviewers: %v", err)
+	}
+}
+
+// TestCheckDocAcceptableReviewerGate: the pre-flight CheckDocAcceptable runs
+// (025 §7.3) must answer the same as AcceptDoc, so a caller that checks
+// first never sees "acceptable" for a document AcceptDoc would then refuse.
+func TestCheckDocAcceptableReviewerGate(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	seedDocsActor(t, s, "rev-a")
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 25, Slug: "025-x", Body: specBody, CreatedBy: "stig",
+	})
+	assignDocReviewers(t, s, doc.ID, []string{"rev-a"})
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := RequestDocApproval(tx, s.Now(), doc.ID, doc.Version); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.CheckDocAcceptable(t.Context(), doc.ID, "stig"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("CheckDocAcceptable with an open lane: err = %v, want ErrForbidden", err)
+	}
+
+	approveDocReviewerLane(t, s, doc.ID, "rev-a")
+	settled, err := s.CheckDocAcceptable(t.Context(), doc.ID, "stig")
+	if err != nil {
+		t.Fatalf("CheckDocAcceptable once approved: %v", err)
+	}
+	if settled {
+		t.Errorf("settled = true, want false: this is a first accept, not a re-accepted plan")
+	}
+}
+
 // TestDocAcceptAlreadyAccepted: accept is a draft-only transition.
 func TestDocAcceptAlreadyAccepted(t *testing.T) {
 	t.Parallel()
@@ -994,11 +1120,15 @@ func TestRecordDocOpMetric(t *testing.T) {
 
 	s.RecordDocOp("submit", nil)
 	s.RecordDocOp("accept", errors.New("boom"))
+	s.RecordDocOp("accept", fmt.Errorf("doc 9 is missing review approval from ada: %w", ErrMissingApprovals))
 	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("submit", "ok")); got != 1 {
 		t.Errorf(`docOps{op=submit,outcome=ok} = %v, want 1`, got)
 	}
 	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("accept", "error")); got != 1 {
 		t.Errorf(`docOps{op=accept,outcome=error} = %v, want 1`, got)
+	}
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("accept", "refused-reviewers")); got != 1 {
+		t.Errorf(`docOps{op=accept,outcome=refused-reviewers} = %v, want 1`, got)
 	}
 }
 

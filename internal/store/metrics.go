@@ -73,7 +73,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|accept|submit|revise|discard|edges|note|delete|undelete|list-versions|get-version) and outcome.",
+			Help: "Design-document operations by op (create|update|accept|submit|revise|discard|edges|note|delete|undelete|list-versions|get-version) and outcome (ok|error, or refused-reviewers for accept's reviewer gate, 025 §7.3).",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
@@ -188,7 +188,20 @@ func (m *storeMetrics) docOp(op string, err error) {
 	if m == nil {
 		return
 	}
-	m.docOps.WithLabelValues(op, outcome(err)).Inc()
+	m.docOps.WithLabelValues(op, docOpOutcome(op, err)).Inc()
+}
+
+// docOpOutcome maps one document operation's error to its metric label.
+// accept is the one op with a third outcome: refused-reviewers picks out
+// AcceptDoc's mechanical multi-approval gate (025 §7.3, ErrMissingApprovals)
+// from every other refusal, so the reviewer gate's rate is visible on its
+// own rather than folded into the generic error outcome every other op still
+// gets from outcome().
+func docOpOutcome(op string, err error) string {
+	if op == "accept" && errors.Is(err, ErrMissingApprovals) {
+		return "refused-reviewers"
+	}
+	return outcome(err)
 }
 
 // planTasksMinted adds n to worklode_doc_plan_tasks_minted_total, the tasks
