@@ -226,6 +226,61 @@ func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 	}
 }
 
+// TestProjectProgressPositionQueued covers WL-SPEC-66 §2.4, §8 criterion 5:
+// a task whose PR has entered the merge queue reads as "queued for merge"
+// ahead of any PR/CI rung, and a task whose PR has not is unaffected.
+func TestProjectProgressPositionQueued(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	_, _, taskIDs := seedProgressCorpus(t, s)
+
+	queuedTask, openTask := taskIDs[0], taskIDs[1]
+	if _, err := upsertPR(t, s, PullRequest{
+		Repo: "org/repo", Number: 7, Title: "First task", State: "open",
+		HeadRef: queuedTask + "-first-task", HeadSHA: "aaaaaaa",
+		URL: "https://example.test/pr/7", OpenedAt: s.Now(), UpdatedAt: s.Now(),
+	}, "body"); err != nil {
+		t.Fatalf("UpsertPR(queued): %v", err)
+	}
+	if _, err := upsertPR(t, s, PullRequest{
+		Repo: "org/repo", Number: 8, Title: "Second task", State: "open",
+		HeadRef: openTask + "-second-task", HeadSHA: "bbbbbbb",
+		URL: "https://example.test/pr/8", OpenedAt: s.Now(), UpdatedAt: s.Now(),
+	}, "body"); err != nil {
+		t.Fatalf("UpsertPR(open): %v", err)
+	}
+
+	queuedAt := s.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetPRQueued(tx, "org/repo", 7, &queuedAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	in, err := s.ProjectProgress(t.Context(), "p1", nil)
+	if err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	}
+	if len(in.Plans) != 1 {
+		t.Fatalf("got %d plans, want 1", len(in.Plans))
+	}
+	positions := map[string]string{}
+	for _, task := range in.Plans[0].Tasks {
+		positions[task.ID] = task.Position
+	}
+	if got, want := positions[queuedTask], "queued for merge"; got != want {
+		t.Errorf("queued task position = %q, want %q", got, want)
+	}
+	if got, want := positions[openTask], "PR #8 open"; got != want {
+		t.Errorf("open task position = %q, want %q", got, want)
+	}
+}
+
 // TestProjectProgressPlanningTask: the open design task about a spec rides
 // along on the read, so the page can draw it as a link instead of 066 §3.4's
 // Plan button. A closed one is not carried — that spec owes planning again.
