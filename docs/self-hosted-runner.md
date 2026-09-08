@@ -107,21 +107,32 @@ docker run -d --name gha-ci-postgres --restart=always \
   -p 127.0.0.1:15432:5432 \
   -e POSTGRES_PASSWORD=postgres \
   --health-cmd='pg_isready -U postgres' --health-interval=5s --health-timeout=5s --health-retries=10 \
-  pgvector/pgvector:pg17 postgres -c max_connections=400
+  pgvector/pgvector:pg17 postgres -c max_connections=800
 ```
 
-`max_connections=400` (WL-465): a single `make test` run against this
-container peaks around 120 concurrent connections (measured directly on
-hel01 — `SELECT count(*) FROM pg_stat_activity` polled through a full
-`make test`, TEST_POSTGRES_DSN pointed at :15432). The default 100, and
-even the 200 this instance had drifted to via an undocumented `ALTER
-SYSTEM` on the running container, leave no room for two `test / test`
-jobs landing within seconds of each other, which the shared-runner setup
-routinely produces — hence "sorry, too many clients already"
-(SQLSTATE 53300) failing unrelated tests on both jobs. 400 covers three
-peak-concurrent runs with headroom; hel01 has 251GB RAM and no memory
-limit on the container, so the extra connections cost nothing that
-matters here.
+`max_connections=800` (WL-465, raised from 400 on 2026-09-08): a single
+`make test` run against this container peaks around 120 concurrent
+connections (measured directly on hel01 — `SELECT count(*) FROM
+pg_stat_activity` polled through a full `make test`, TEST_POSTGRES_DSN
+pointed at :15432). The default 100, and even the 200 this instance had
+drifted to via an undocumented `ALTER SYSTEM` on the running container,
+leave no room for two `test / test` jobs landing within seconds of each
+other, which the shared-runner setup routinely produces — hence "sorry,
+too many clients already" (SQLSTATE 53300) failing unrelated tests on
+both jobs.
+
+400 was still not enough: PR #546's `test / test` failed across every
+Postgres-backed package on 53300 while a second job ran, and passed
+untouched on re-run. Peak concurrency is higher than the 120 a lone
+`make test` shows, because `-race` slows each package enough that more of
+them overlap, and because two runners plus a merge-queue job make three
+suites concurrent rather than two. 800 covers that with headroom; hel01
+has 251GB RAM and no memory limit on the container, so the extra
+connections cost nothing that matters here.
+
+A 53300 failure is infrastructure, not a broken change: it hits every
+Postgres-backed package at once with a connection error rather than an
+assertion. Re-run the job before reading it as a real failure.
 
 **Applying this to the already-running container** needs a manual step —
 recreating it loses the anonymous data volume, which is fine (CI-only,
@@ -135,13 +146,16 @@ docker run -d --name gha-ci-postgres --restart=always \
   -p 127.0.0.1:15432:5432 \
   -e POSTGRES_PASSWORD=postgres \
   --health-cmd='pg_isready -U postgres' --health-interval=5s --health-timeout=5s --health-retries=10 \
-  pgvector/pgvector:pg17 postgres -c max_connections=400
+  pgvector/pgvector:pg17 postgres -c max_connections=800
 ```
 
 Or, to keep the same container and volume: `ALTER SYSTEM SET
-max_connections = 400;` via `docker exec gha-ci-postgres psql -U postgres`,
+max_connections = 800;` via `docker exec gha-ci-postgres psql -U postgres`,
 then `docker restart gha-ci-postgres` (`max_connections` needs a restart,
-not just a reload).
+not just a reload). This is the path actually used on 2026-09-08; editing
+`postgresql.conf` inside the container does not survive, and `ALTER
+SYSTEM` alone changes nothing until the restart — check with `SHOW
+max_connections` rather than assuming the edit took.
 
 Port 15432, not 5432 — hel01 already runs the project's own local-dev
 compose stack (`worklode-event-stream-postgres-1`) bound to
