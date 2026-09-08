@@ -158,6 +158,25 @@ func mergeEvents(t *testing.T, s *server) []store.Event {
 	return out
 }
 
+// mergeEventsWithin waits for want merge events to be readable, and returns
+// what it saw. Cursor reads of the log are commit-horizon bounded (spec 025
+// §15): an event is committed the moment recordTaskEvent returns, but stays
+// invisible while any transaction anywhere on the instance holds
+// pg_snapshot_xmin back, which on a shared CI Postgres it does. 20s matches
+// store.AwaitCommitHorizon's bound for the same wait — a real regression
+// still fails the test rather than hanging it.
+func mergeEventsWithin(t *testing.T, s *server, want int) []store.Event {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		got := mergeEvents(t, s)
+		if len(got) >= want || time.Now().After(deadline) {
+			return got
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func payloadField(t *testing.T, e store.Event, key string) string {
 	t.Helper()
 	var fields map[string]any
@@ -181,7 +200,10 @@ func TestProgressMergeEnqueues(t *testing.T) {
 	s, task := newMergeServer(t, f.start(t), true)
 	f.beforeCall = func() {
 		if recordedByCallTime == nil {
-			recordedByCallTime = mergeEvents(t, s)
+			// Exactly one, not "at least one": the result event cannot
+			// exist yet, so waiting for the first one and finding it is
+			// pr.merge_requested is the ordering proof.
+			recordedByCallTime = mergeEventsWithin(t, s, 1)
 		}
 	}
 
@@ -214,7 +236,7 @@ func TestProgressMergeEnqueues(t *testing.T) {
 		t.Errorf("recorded task = %q; want %q", got, task)
 	}
 
-	events := mergeEvents(t, s)
+	events := mergeEventsWithin(t, s, 2)
 	if len(events) != 2 || events[0].Type != "pr.merge_requested" || events[1].Type != "pr.merge_result" {
 		t.Fatalf("events = %+v; want the request then the result", events)
 	}
@@ -272,7 +294,7 @@ func TestProgressMergeRefusedByGitHub(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Required status check") {
 		t.Errorf("body = %s; want GitHub's own message", rr.Body.String())
 	}
-	events := mergeEvents(t, s)
+	events := mergeEventsWithin(t, s, 2)
 	if len(events) != 2 {
 		t.Fatalf("events = %+v; want the request and the result", events)
 	}
