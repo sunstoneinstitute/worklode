@@ -47,9 +47,10 @@ func TestBlockingFanOutChainAndBranch(t *testing.T) {
 }
 
 // TestBlockingFanOutCycleTerminates pins the query's one real failure mode:
-// the schema does not prevent blocks-cycles (AddEdge only cycle-checks
-// child_of), and only the CTE's UNION dedup keeps the recursion finite. A
-// UNION ALL regression would hang here instead of returning.
+// the schema does not prevent blocks-cycles — AddEdge refuses the write that
+// closes one, but rows predating that guard can still hold one — and only the
+// CTE's UNION dedup keeps the recursion finite. A UNION ALL regression would
+// hang here instead of returning.
 func TestBlockingFanOutCycleTerminates(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -60,9 +61,7 @@ func TestBlockingFanOutCycleTerminates(t *testing.T) {
 	if err := addEdge(t, s, a.ID, b.ID, "blocks"); err != nil {
 		t.Fatalf("AddEdge a blocks b: %v", err)
 	}
-	if err := addEdge(t, s, b.ID, a.ID, "blocks"); err != nil {
-		t.Fatalf("AddEdge b blocks a: %v", err)
-	}
+	insertEdgeRaw(t, s, b.ID, a.ID, "blocks")
 
 	got, err := s.BlockingFanOut(t.Context())
 	if err != nil {

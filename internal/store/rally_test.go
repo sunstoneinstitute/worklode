@@ -206,9 +206,10 @@ func TestRallyMembersIgnoreClosedRally(t *testing.T) {
 	}
 }
 
-// TestRallyMembersCycleTerminates: 'blocks' is not cycle-checked on write, so
-// only the CTE's UNION dedup keeps the walk finite. A UNION ALL regression
-// hangs here instead of returning.
+// TestRallyMembersCycleTerminates: AddEdge now refuses the write that closes
+// a 'blocks' cycle, but rows written before that guard existed can still hold
+// one, so only the CTE's UNION dedup keeps the walk finite. A UNION ALL
+// regression hangs here instead of returning.
 func TestRallyMembersCycleTerminates(t *testing.T) {
 	t.Parallel()
 	s := openTaskStore(t)
@@ -216,9 +217,7 @@ func TestRallyMembersCycleTerminates(t *testing.T) {
 	a := createTask(t, s, taskTestNow, defaultTaskInput())
 	b := createTask(t, s, taskTestNow, defaultTaskInput())
 	for _, e := range [][2]string{{a.ID, rally.ID}, {b.ID, a.ID}, {a.ID, b.ID}} {
-		if err := addEdge(t, s, e[0], e[1], "blocks"); err != nil {
-			t.Fatalf("addEdge %s blocks %s: %v", e[0], e[1], err)
-		}
+		insertEdgeRaw(t, s, e[0], e[1], "blocks")
 	}
 
 	got, err := s.rallyMembers(t.Context())

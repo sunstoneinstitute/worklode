@@ -896,7 +896,8 @@ func taskProjects(tx *sql.Tx, ids ...string) (map[string]string, error) {
 // must also satisfy the spec-004 hierarchy invariants (see checkHierarchy):
 // one project, one parent per task, no cycle, and at most maxHierarchyDepth
 // edges. A 'blocks' edge may not start at a rally: a rally's own blockers are
-// its membership, and it blocks nothing in turn. follow_up_to and
+// its membership, and it blocks nothing in turn; nor may it close a 'blocks'
+// loop, which would deadlock every task on it (ErrCycle). follow_up_to and
 // duplicate_of are unchecked beyond their partial unique indexes: both are
 // cross-project by design and nothing walks either transitively. A missing
 // endpoint returns ErrNotFound. Appends a state_log row for both endpoints,
@@ -938,6 +939,16 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 			return fmt.Errorf("task %s is a rally and cannot block another task: %w",
 				fromTask, ErrInvalidInput)
 		}
+		// A 'blocks' loop is a deadlock: every task on it waits for the next
+		// one and none can ever be worked. The readers already survive a
+		// stored cycle, but only the write closing it can refuse it.
+		reaches, err := reachesViaEdge(tx, toTask, fromTask, "blocks")
+		if err != nil {
+			return err
+		}
+		if reaches {
+			return fmt.Errorf("edge %s blocks %s: %w", fromTask, toTask, ErrCycle)
+		}
 	}
 	if _, err := tx.Exec(
 		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, $3, $4)`,
@@ -972,10 +983,12 @@ func AddEdge(tx *sql.Tx, now time.Time, fromTask, toTask, typ string, eventID in
 	return nil
 }
 
-// reachesViaChildOf reports whether target is reachable from start by
-// walking child_of edges upward (child -> parent). The visited set keeps the
-// walk terminating even if the stored graph already contains a cycle.
-func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
+// reachesViaEdge reports whether target is reachable from start by following
+// edges of type typ in the from_task -> to_task direction. The visited set
+// keeps the walk terminating even if the stored graph already contains a
+// cycle. Used to refuse the edge that would close one: for child_of that
+// direction is child -> parent, for blocks it is blocker -> blocked.
+func reachesViaEdge(tx *sql.Tx, start, target, typ string) (bool, error) {
 	visited := map[string]bool{start: true}
 	frontier := []string{start}
 	for len(frontier) > 0 {
@@ -983,22 +996,22 @@ func reachesViaChildOf(tx *sql.Tx, start, target string) (bool, error) {
 		frontier = frontier[1:]
 
 		rows, err := tx.Query(
-			`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = 'child_of'`, cur)
+			`SELECT to_task FROM task_edges WHERE from_task = $1 AND type = $2`, cur, typ)
 		if err != nil {
-			return false, fmt.Errorf("walk child_of parents of %s: %w", cur, err)
+			return false, fmt.Errorf("walk %s edges out of %s: %w", typ, cur, err)
 		}
 		var parents []string
 		for rows.Next() {
 			var p string
 			if err := rows.Scan(&p); err != nil {
 				rows.Close()
-				return false, fmt.Errorf("scan parent of %s: %w", cur, err)
+				return false, fmt.Errorf("scan %s edge out of %s: %w", typ, cur, err)
 			}
 			parents = append(parents, p)
 		}
 		if err := rows.Err(); err != nil {
 			rows.Close()
-			return false, fmt.Errorf("walk child_of parents of %s: %w", cur, err)
+			return false, fmt.Errorf("walk %s edges out of %s: %w", typ, cur, err)
 		}
 		rows.Close()
 
