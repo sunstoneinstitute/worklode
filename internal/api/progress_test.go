@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -69,10 +70,11 @@ Do the second thing.
 `
 
 // seedProgressProject creates the project, its spec, and an accepted plan
-// covering the spec.
-func seedProgressProject(t *testing.T, h http.Handler, token, project string) {
+// covering the spec. It returns the spec document, for tests that need its
+// id.
+func seedProgressProject(t *testing.T, h http.Handler, token, project string) model.Doc {
 	t.Helper()
-	createDocViaAPI(t, h, token, model.CreateDocInput{
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
 		Project: project, Kind: "spec", Number: 66, Slug: "066-progress",
 		Body: progressSpecBody,
 	})
@@ -89,6 +91,7 @@ func seedProgressProject(t *testing.T, h http.Handler, token, project string) {
 	if len(accepted.Tasks) != 2 {
 		t.Fatalf("accepting the plan minted %d tasks, want 2", len(accepted.Tasks))
 	}
+	return spec
 }
 
 // TestProgressPage: the page over real data. One spec covered by one accepted
@@ -228,6 +231,119 @@ func TestProgressExpandedRow(t *testing.T) {
 	}
 	if strings.Contains(strip, "title=") {
 		t.Errorf("a section cell still carries a title attribute, so it shows two tooltips: %s", strip)
+	}
+}
+
+// TestProgressRowFragment: GET .../progress/spec/{doc} renders exactly the
+// one spec's row and its detail block (§5.2), through renderWeb, so it
+// carries the page's own CSP (§4.4).
+func TestProgressRowFragment(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	spec := seedProgressProject(t, h, token, "proj")
+
+	rr := doReq(t, h, "GET", fmt.Sprintf("/projects/proj/progress/spec/%d", spec.ID), "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET progress/spec/%d = %d, body %s", spec.ID, rr.Code, rr.Body)
+	}
+	if got := rr.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want frame-ancestors 'none'", got)
+	}
+
+	body := rr.Body.String()
+	if got := strings.Count(body, `<div class="prog-row"`); got != 1 {
+		t.Errorf("row fragment has %d .prog-row elements, want 1: %s", got, body)
+	}
+	if got := strings.Count(body, `<div class="detail" `); got != 1 {
+		t.Errorf("row fragment has %d .detail elements, want 1: %s", got, body)
+	}
+	if !strings.Contains(body, "WL-SPEC-66") {
+		t.Errorf("row fragment does not contain the spec's ref: %s", body)
+	}
+}
+
+// TestProgressRowFragmentNotFound: a doc id that is not a live spec of this
+// project 404s — a plan's own id, a spec of another project, and an id that
+// names no document at all (§5.2).
+func TestProgressRowFragmentNotFound(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "other")
+	spec := seedProgressProject(t, h, token, "proj")
+	otherSpec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "other", Kind: "spec", Number: 1, Slug: "001-other",
+		Body: progressSpecBody,
+	})
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "066-progress-plan-2",
+		Body: progressPlanBody,
+	})
+
+	for name, doc := range map[string]int64{
+		"a plan's own id":           plan.ID,
+		"a spec of another project": otherSpec.ID,
+		"an id naming nothing":      spec.ID + 10000,
+	} {
+		t.Run(name, func(t *testing.T) {
+			rr := doReq(t, h, "GET", fmt.Sprintf("/projects/proj/progress/spec/%d", doc), "", nil)
+			if rr.Code != http.StatusNotFound {
+				t.Errorf("GET progress/spec/%d = %d, want 404", doc, rr.Code)
+			}
+		})
+	}
+}
+
+// TestProgressSummaryFragment: GET .../progress/summary renders the band,
+// counts, bar/legend and footer's slot — the markup the full page draws
+// outside its spec groups — through renderWeb, so it too carries
+// frame-ancestors 'none' (§4.4, §5.2).
+func TestProgressSummaryFragment(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	seedProgressProject(t, h, token, "proj")
+
+	rr := doReq(t, h, "GET", "/projects/proj/progress/summary", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("GET progress/summary = %d, body %s", rr.Code, rr.Body)
+	}
+	if got := rr.Header().Get("Content-Security-Policy"); !strings.Contains(got, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want frame-ancestors 'none'", got)
+	}
+
+	body := rr.Body.String()
+	for _, want := range []string{
+		"prog-band",
+		`class="prog-counts"`,
+		`class="prog-bar"`,
+		`class="prog-legend"`,
+		`class="prog-footer`,
+		"No active rally",
+		">Active<",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("summary fragment does not contain %q: %s", want, body)
+		}
+	}
+	// The fragment stops at the summary: no spec row and no detail block, both
+	// of which the row fragment owns (§5.2).
+	if strings.Contains(body, `class="prog-row"`) {
+		t.Error("summary fragment renders a spec row, which is the row fragment's job")
+	}
+}
+
+// TestProgressSummaryFragmentNeedsASpec: a project with no spec 404s here
+// too, matching the full page (§2, §5.2).
+func TestProgressSummaryFragmentNeedsASpec(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "bare")
+
+	rr := doReq(t, h, "GET", "/projects/bare/progress/summary", "", nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("GET progress/summary = %d, want 404", rr.Code)
 	}
 }
 

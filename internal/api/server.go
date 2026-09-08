@@ -380,6 +380,11 @@ type server struct {
 	// progressWrites counts the Progress page's script writes (066 §4.2), by
 	// route and outcome; see webform.go and observeProgressWrite.
 	progressWrites *prometheus.CounterVec
+	// progressFragmentRenders counts the Progress page's row/summary fragment
+	// requests (GET .../progress/spec/{doc}, GET .../progress/summary, 066
+	// §5.2), by fragment (spec, summary) and outcome; see progress.go and
+	// observeProgressFragmentRender.
+	progressFragmentRenders *prometheus.CounterVec
 	// dictations counts POST /dictate outcomes (WL-299); see metrics.go.
 	dictations *prometheus.CounterVec
 	// taskTokens counts task-scoped token mints (WL-306); see metrics.go.
@@ -603,6 +608,10 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/work", s.navWrap("work", s.runBoardPage))
 	r.web("GET /projects/{id}/progress", s.navWrap("progress", s.progressPage))
 	r.web("GET /projects/{id}/progress/events", s.progressEvents)
+	// Not navWrapped: fragments are fetched by the page script, never
+	// navigated to directly, like the events stream above.
+	r.web("GET /projects/{id}/progress/spec/{doc}", s.progressRowFragment)
+	r.web("GET /projects/{id}/progress/summary", s.progressSummaryFragment)
 	// Not navWrapped: the page script fetches it and reads JSON back, so it
 	// is never a navigated page (066 §4.2 rule 4), like /preview and /dictate.
 	r.web("POST /projects/{id}/progress/accept", s.progressAccept)
