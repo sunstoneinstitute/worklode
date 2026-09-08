@@ -1797,9 +1797,12 @@ func TestResolveDocRefFullGrammar(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("resolve ambiguous number: status = %d, body %s, want 422", rr.Code, rr.Body.String())
 	}
+	// Candidates are named by citable id, not slug: a bare number is ambiguous
+	// exactly when the project differs, so the project key is the fact the
+	// reader needs to pick one.
 	msg, _ := decodeMap(t, rr)["error"].(string)
-	if !strings.Contains(msg, "025-x") || !strings.Contains(msg, "025-y") {
-		t.Errorf("error = %q, want both real candidates named", msg)
+	if !strings.Contains(msg, "WL-SPEC-25") || !strings.Contains(msg, "OTHER-SPEC-25") {
+		t.Errorf("error = %q, want both candidates named by ref", msg)
 	}
 }
 

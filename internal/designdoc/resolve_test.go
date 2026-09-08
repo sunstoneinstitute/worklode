@@ -101,8 +101,8 @@ func TestUnresolvedErrorMessage(t *testing.T) {
 }
 
 func TestAmbiguousRefErrorMessage(t *testing.T) {
-	err := &AmbiguousRefError{Ref: "4", Candidates: []string{"004-execution", "004-other"}}
-	want := "ambiguous ref \"4\":\n004-execution\n004-other"
+	err := &AmbiguousRefError{Ref: "4", Candidates: []string{"OTHER-SPEC-4", "WL-SPEC-4"}}
+	want := "ambiguous ref \"4\":\nOTHER-SPEC-4\nWL-SPEC-4"
 	if got := err.Error(); got != want {
 		t.Errorf("Error() = %q, want %q", got, want)
 	}
