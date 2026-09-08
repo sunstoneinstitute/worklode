@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +17,12 @@ import (
 func (c *Client) SetDeliverableMilestone(ctx context.Context, deliverable, milestone string) (model.Deliverable, []byte, error) {
 	return doJSON[model.Deliverable](ctx, c, http.MethodPatch,
 		"/api/v1/deliverables/"+url.PathEscape(deliverable), model.EditDeliverableInput{Milestone: &milestone}, "deliverable")
+}
+
+// GetDeliverable calls GET /api/v1/deliverables/{id}.
+func (c *Client) GetDeliverable(ctx context.Context, id string) (model.Deliverable, []byte, error) {
+	return doJSON[model.Deliverable](ctx, c,
+		http.MethodGet, "/api/v1/deliverables/"+url.PathEscape(id), nil, "deliverable")
 }
 
 // ListDeliverables calls GET /api/v1/projects/{id}/deliverables.
@@ -54,4 +61,30 @@ func DeliverableTable(w io.Writer, ds []model.Deliverable) {
 		tbl.add(d.ID, d.Name, state, dash(d.Artifact), dash(d.Milestone), reported)
 	}
 	tbl.flush(w)
+}
+
+// DeliverableRender prints one deliverable's detail: the `lode show
+// <deliverable>` view. ReportedState is "declared" until something reports
+// against Artifact (029 §3.2) — the deliverable itself carries no state of
+// its own.
+func DeliverableRender(w io.Writer, d model.Deliverable) {
+	fmt.Fprintf(w, "%s  %s\n", d.ID, d.Name)
+	fmt.Fprintf(w, "  project:   %s\n", d.Project)
+	fmt.Fprintf(w, "  milestone: %s\n", dash(d.Milestone))
+	fmt.Fprintf(w, "  artifact:  %s\n", dash(d.Artifact))
+	fmt.Fprintf(w, "  url:       %s\n", dash(d.URL))
+	state := d.ReportedState
+	if state == "" {
+		state = "declared"
+	}
+	if d.ReportedAt != nil {
+		fmt.Fprintf(w, "  state:     %s (reported %s)\n", state, LocalTime(*d.ReportedAt))
+	} else {
+		fmt.Fprintf(w, "  state:     %s\n", state)
+	}
+	fmt.Fprintf(w, "  created:   %s by %s\n", LocalTime(d.CreatedAt), dash(d.CreatedBy))
+	fmt.Fprintf(w, "  updated:   %s\n", LocalTime(d.UpdatedAt))
+	if d.Description != "" {
+		fmt.Fprintf(w, "\n%s\n", d.Description)
+	}
 }
