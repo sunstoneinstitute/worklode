@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -729,6 +730,90 @@ func TestPatchTaskMilestone(t *testing.T) {
 	}
 	if !strings.Contains(metrics, `worklode_milestone_changes_total{action="task_attach",outcome="rejected"} 2`) {
 		t.Errorf("metrics missing two rejected task_attach counts:\n%s", metrics)
+	}
+}
+
+// TestPatchTaskPlan is `lode task edit --plan` (WL-SPEC-66 §6.2): PATCH
+// resolves a "plan" ref the same way `--plan` on `task list` does (id or
+// slug), then SetTaskPlan's own gates apply — a non-plan document, a plan in
+// another project, and a task already linked to a different plan all refuse,
+// while linking to the same plan twice is a no-op.
+func TestPatchTaskPlan(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createProject(t, st, "proj2")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Historic task", "priority": "high", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj2", "title": "Other project task", "priority": "high", "kind": "feature",
+	})
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "a-plan", Body: docPlanBody,
+	})
+	spec := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Slug: "a-spec", Body: docSpecBody,
+	})
+	otherPlan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj2", Kind: "plan", Slug: "other-plan", Body: docPlanBody,
+	})
+
+	// Blank ref.
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": "  "})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("blank plan status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Unresolvable ref.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": "no-such-slug"})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("unknown plan ref status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Resolves to a document that is not a plan.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": spec.Slug})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("non-plan doc status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Plan in a different project.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": otherPlan.Slug})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("cross-project plan status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+
+	// Same-project link, by slug.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": plan.Slug})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("link status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if got := decodeMap(t, rr)["plan_doc"]; got != float64(plan.ID) {
+		t.Fatalf("patch response plan_doc = %v, want %v", got, plan.ID)
+	}
+	task, err := st.GetTask(context.Background(), "WL-1")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if task.PlanDoc != plan.ID {
+		t.Fatalf("stored plan_doc = %d, want %d", task.PlanDoc, plan.ID)
+	}
+
+	// Linking to the same plan again, this time by id, is a no-op success.
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token,
+		map[string]any{"plan": strconv.FormatInt(plan.ID, 10)})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("re-link same plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	// A task already linked to a different plan refuses.
+	secondPlan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "second-plan", Body: docPlanBody,
+	})
+	rr = doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"plan": secondPlan.Slug})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("relink to a different plan status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
 }
 
