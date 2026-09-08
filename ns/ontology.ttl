@@ -267,6 +267,14 @@ wl:deliveredBy a owl:ObjectProperty ;
         rather than derived because the derivable route (Artifact→Build→Commit→paths→Component)
         needs wl:Build, which has no v1 projection source (006 §11.1). SHACL enforces >=1.""" .
 
+wl:artifact a owl:DatatypeProperty ;
+    wl:layer wlc:intent ;
+    rdfs:range xsd:string ;
+    rdfs:comment """The declared catalog address or label selector an entity is verified by
+        (029 §3.1). No rdfs:domain: a Deliverable, a Task and a DesignDoc all declare one — the
+        `artifact` frontmatter/field key. Declares additively: removing the key undeclares
+        nothing (029 §3.3).""" .
+
 wl:status a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:intent ;
     rdfs:domain [ a owl:Class ; owl:unionOf ( wl:DesignDoc wl:Plan wl:Section ) ] ;
@@ -701,6 +709,11 @@ wl:layer a owl:AnnotationProperty ;
 #   wlc:TaskPriority,          wl:taskState, wl:priority and wl:concern are
 #   wlc:Concern                literal mirrors, so the backbone keeps the enums
 #                              and the transitions (006 Open Q3).
+#   wlc:EvidenceState,         no SKOS scheme for a backbone-owned enum: the
+#   wlc:EvidenceProvenance     artifact_evidence.state/provenance CHECKs are
+#                              the source, the same liability the
+#                              wlc:TaskState precedent already names
+#                              (WL-PLAN-102 Decisions).
 #   wlc:ActorKind              never minted: actors are foaf:Agent/prov:Agent
 #                              (006 §1, §10), and prov:Person vs
 #                              prov:SoftwareAgent already carries the split.
