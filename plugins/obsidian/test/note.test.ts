@@ -385,7 +385,7 @@ describe("docToNote", () => {
   it("ignores the rows only a fetched DocDetail carries", async () => {
     const detail = fixtureDetail({
       sections: [
-        { anchor: "sec-1", number: "1", heading: "Purpose", depth: 2, position: 0, last_revised_in: 3, published: true },
+        { anchor: "sec-1", number: "1", heading: "Purpose", depth: 2, position: 0, last_revised_in: 3, published: true, patched: false },
       ],
       edges: [
         fixtureEdge({

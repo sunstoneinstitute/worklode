@@ -698,6 +698,10 @@ func parseDocBody(kind, body string) (parsedDoc, error) {
 type priorSection struct {
 	lastRevisedIn int
 	published     bool
+	// patched is 025 §8.4's mark: this section was amended in place since the
+	// document was last approved as a whole. Carried forward like the other
+	// two, so a later patch of another section does not clear it.
+	patched bool
 }
 
 // rebuildSections replaces a document's section rows from its parsed source,
@@ -744,6 +748,7 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 		positions []int32
 		revisions []int32
 		published []bool
+		patched   []bool
 	)
 	for _, sec := range doc.Sections {
 		if sec.Anchor == "" {
@@ -760,18 +765,19 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 		positions = append(positions, int32(len(positions)))
 		revisions = append(revisions, int32(p.lastRevisedIn))
 		published = append(published, p.published)
+		patched = append(patched, p.patched)
 		after[sec.Anchor] = p
 	}
 	if len(anchors) == 0 {
 		return after, nil
 	}
 	if _, err := tx.Exec(
-		`INSERT INTO doc_sections (doc_id, anchor, number, heading, depth, position, last_revised_in, published)
+		`INSERT INTO doc_sections (doc_id, anchor, number, heading, depth, position, last_revised_in, published, patched)
 		 SELECT $1::bigint, s.anchor, s.number, s.heading, s.depth, s.position,
-		        s.last_revised_in, s.published
-		   FROM unnest($2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::int[], $8::boolean[])
-		        AS s(anchor, number, heading, depth, position, last_revised_in, published)`,
-		docID, anchors, numbers, headings, depths, positions, revisions, published,
+		        s.last_revised_in, s.published, s.patched
+		   FROM unnest($2::text[], $3::text[], $4::text[], $5::int[], $6::int[], $7::int[], $8::boolean[], $9::boolean[])
+		        AS s(anchor, number, heading, depth, position, last_revised_in, published, patched)`,
+		docID, anchors, numbers, headings, depths, positions, revisions, published, patched,
 	); err != nil {
 		return nil, fmt.Errorf("insert sections of doc %d: %w", docID, err)
 	}
@@ -782,7 +788,7 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 // keyed by anchor.
 func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 	rows, err := tx.Query(
-		`SELECT anchor, last_revised_in, published FROM doc_sections WHERE doc_id = $1`, docID)
+		`SELECT anchor, last_revised_in, published, patched FROM doc_sections WHERE doc_id = $1`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("read sections of doc %d: %w", docID, err)
 	}
@@ -791,7 +797,7 @@ func priorSections(tx *sql.Tx, docID int64) (map[string]priorSection, error) {
 	for rows.Next() {
 		var anchor string
 		var p priorSection
-		if err := rows.Scan(&anchor, &p.lastRevisedIn, &p.published); err != nil {
+		if err := rows.Scan(&anchor, &p.lastRevisedIn, &p.published, &p.patched); err != nil {
 			return nil, fmt.Errorf("scan section of doc %d: %w", docID, err)
 		}
 		out[anchor] = p
@@ -1082,7 +1088,7 @@ func (a appendScan) Scan(dest ...any) error {
 // carries none (025 §9), which is an empty result rather than an error.
 func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSection, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT anchor, coalesce(number,''), heading, depth, position, last_revised_in, published
+		`SELECT anchor, coalesce(number,''), heading, depth, position, last_revised_in, published, patched
 		   FROM doc_sections WHERE doc_id = $1 ORDER BY position`, docID)
 	if err != nil {
 		return nil, fmt.Errorf("list sections of doc %d: %w", docID, err)
@@ -1090,7 +1096,7 @@ func (s *Store) ListDocSections(ctx context.Context, docID int64) ([]model.DocSe
 	return collectRows(rows, fmt.Sprintf("list sections of doc %d", docID), func(r rowScanner) (model.DocSection, error) {
 		var sec model.DocSection
 		if err := r.Scan(&sec.Anchor, &sec.Number, &sec.Heading, &sec.Depth,
-			&sec.Position, &sec.LastRevisedIn, &sec.Published); err != nil {
+			&sec.Position, &sec.LastRevisedIn, &sec.Published, &sec.Patched); err != nil {
 			return model.DocSection{}, err
 		}
 		return sec, nil

@@ -568,12 +568,18 @@ func newDocSectionsCmd() *cobra.Command {
 	return cmd
 }
 
+// newDocEditCmd is `lode doc edit <ref>`: one verb over two writes, chosen by
+// what the document is. A draft or a plan is replaced in place; an accepted
+// spec or ADR goes through 025 §8.4's in-place amendment, which the server
+// gates mechanically (§8.3). Nothing here re-checks those gates — a refusal
+// is the server's message, verbatim — so the CLI cannot drift from the rule.
 func newDocEditCmd() *cobra.Command {
-	var file string
+	var file, note string
+	var substantive bool
 	cmd := &cobra.Command{
 		Use:               "edit <ref>",
 		ValidArgsFunction: docRefAt(0),
-		Short:             "Replace a document's body (a draft, or a plan at any status)",
+		Short:             "Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment)",
 		Args:              cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body, err := readBodyFile(cmd, file)
@@ -588,7 +594,32 @@ func newDocEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			d, raw, err := c.UpdateDocBody(cmd.Context(), id, body)
+			// The kind and status decide the endpoint, so they are read
+			// before the write rather than guessed from the ref.
+			detail, _, err := c.GetDoc(cmd.Context(), id)
+			if err != nil {
+				return err
+			}
+			// A draft or a plan carries no accepted text to amend, so
+			// --substantive and --note have nothing to describe here and are
+			// ignored: one `lode doc edit --note ...` in a script stays
+			// correct on both sides of the document's acceptance.
+			if detail.Kind == "plan" || detail.Status != "accepted" {
+				d, raw, err := c.UpdateDocBody(cmd.Context(), id, body)
+				if err != nil {
+					return err
+				}
+				if jsonOut(cmd) {
+					printRaw(cmd, raw)
+					return nil
+				}
+				cli.DocTable(cmd.OutOrStdout(), []model.Doc{d})
+				return nil
+			}
+			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
+				Body: body, Substantive: substantive, Note: note,
+				Task: currentTaskID(), Session: currentSessionID(),
+			})
 			if err != nil {
 				return err
 			}
@@ -596,11 +627,15 @@ func newDocEditCmd() *cobra.Command {
 				printRaw(cmd, raw)
 				return nil
 			}
-			cli.DocTable(cmd.OutOrStdout(), []model.Doc{d})
+			cli.DocPatchRender(cmd.OutOrStdout(), res.Doc, res.Patch, detail.Reviewers)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&file, "file", "", `markdown source file, frontmatter included ("-" for stdin) (required)`)
+	cmd.Flags().BoolVar(&substantive, "substantive", false,
+		"amending an accepted spec or ADR: the change is substantive, so its reviewers are asked again (025 §8.4)")
+	cmd.Flags().StringVar(&note, "note", "",
+		"amending an accepted spec or ADR: what changed and why, required unless --substantive")
 	cmd.MarkFlagRequired("file")
 	return cmd
 }

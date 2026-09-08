@@ -19,6 +19,8 @@ Draft the markdown — frontmatter included — in a scratch file, then:
 lode doc lint <file>                                # local lint: anchors, plan ## Tasks
 lode doc add --kind <spec, adr or plan> --slug <slug> --file <file>   # creates it, draft
 lode doc edit <ref> --file <file>            # replace a draft's body, or a plan's at any status
+lode doc edit <ref> --file <file> --note "why"   # amend an accepted spec/ADR in place (025 §8.4)
+lode doc edit <ref> --file <file> --substantive  # same, judged substantive: reviewers are asked again
 lode doc revise <ref>                        # open a candidate revision on an accepted doc
 lode doc revise <ref> --file <file>          # update the open candidate's body
 lode doc revise <ref> --accept               # land the candidate as the doc's next version
@@ -38,10 +40,17 @@ lint` with no argument reports the whole corpus's dangling references,
 unlike `lode doc lint <file>`, which only lints one local file.
 
 The scratch file is an editor buffer, not a copy of record — nothing reads
-it once the command above succeeds. `lode doc edit` only works on a draft,
-or on a plan (plans are edited in place at any status — 025 §9); an
-accepted spec or ADR instead goes through `lode doc revise`: open a
-candidate, edit it, `--accept` to land it or `--discard` to drop it.
+it once the command above succeeds. `lode doc edit` replaces a draft's body,
+and a plan's at any status (plans are edited in place — 025 §9). On an
+accepted spec or ADR it is 025 §8.4's in-place amendment, and the server
+gates it mechanically: an edit that changes a `wl:`/`wlc:` term, a code
+span or fenced block, an acceptance-criteria section, the frontmatter
+`requires` list, or a section that open work already points at (§8.2) is
+refused, naming the rule. That edit goes through `lode doc revise` instead:
+open a candidate, edit it, `--accept` to land it or `--discard` to drop it.
+An amendment that passes the gates needs `--note` saying what changed and
+why, or `--substantive`, which asks the document's reviewers again and marks
+the sections it touched.
 
 **The backbone assigns the number, not you.** Never hand-create a file for a
 document, and never read the next number off filenames. The corpus lives in
