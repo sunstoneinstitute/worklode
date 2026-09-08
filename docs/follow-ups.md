@@ -176,10 +176,6 @@ outright once it is fixed over annotating it as resolved.
   Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
   is not modelled — only by address. And no CLI verb exists: `lode deliverable
   list/add` would mirror `POST|GET /api/v1/projects/{id}/deliverables`.
-- `[gated]` **`project_entity_seq` carries only `DEL`**: spec 029 §4 gives milestones,
-  specs, ADRs, and plans their own per-project ordinals from the same counter
-  table. Its `kind` CHECK admits `'DEL'` alone, so each of those arrives with a
-  one-line CHECK widening, the same way the `tasks.kind` CHECK grows.
 - `[P3]` **k8s deployment manifests for the watcher**; RBAC for the `worklode-watch` image
   in-cluster. The server's own manifests landed in `deploy/base/`.
 - `[P4]` **Watcher test timing**: `TestBelowRestartThresholdNotReported` uses a 5s
@@ -706,14 +702,14 @@ while dogfooding it against the real corpus.
 ## From WL-238 — the cockpit's Deleted destination (2026-08-22)
 
 - `[P3]` **Spec 032 §2's project-local navigation still names eight
-  destinations; the cockpit now renders nine.** WL-238 adds Deleted — spec
-  044's tombstone review — as the last item in `localNav`
-  (`internal/ui/layout.templ`), deliberately outside 032 §2's fixed order
-  because it belongs to 044 rather than to the cockpit spec. 032 §2 (or 044
-  §5, which lists only the API and CLI surfaces) is owed an amendment naming
-  it, so the destination list stops being a spec that the page contradicts.
-  Spec 056 §1 does not settle this: it amends 032 §2's *global* list only and
-  says project-local navigation is untouched.
+  destinations; the cockpit now renders ten.** WL-238 added Deleted — spec
+  044's tombstone review; WL-532 added Milestones — spec 029 §2's container.
+  Both sit in `localNav` (`internal/ui/layout.templ`) outside 032 §2's fixed
+  order, because each belongs to its own spec, not to the cockpit spec. 032
+  §2 (or, for Deleted, 044 §5, which lists only the API and CLI surfaces) is
+  owed an amendment naming both, so the destination list stops being a spec
+  that the page contradicts. Spec 056 §1 does not settle this: it amends 032
+  §2's *global* list only and says project-local navigation is untouched.
 - `[P3]` **The Deleted page is per project and has no instance-wide view.** A
   document or task is always project-scoped, so nothing is unreachable, but
   reviewing every delete across an instance still means visiting each project.
