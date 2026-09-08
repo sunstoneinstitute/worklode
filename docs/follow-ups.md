@@ -848,3 +848,15 @@ Recorded by WL-762 (`deliverable` joins 061 §1's L1 entity set):
   joined L1. The rule bullet above it is now current. The table is a snapshot,
   not the law, so nothing enforces it — refresh it the next time a top-level
   command lands.
+
+Recorded by WL-747 (e2e and docs alignment, WL-SPEC-66 §8):
+
+- `[P3]` **The Progress page's live stream polls the event log once a
+  second**, the same interval `GET /api/v1/events/stream` (`lode event tail
+  --follow`) uses (`defaultStreamPollInterval`, `internal/api/eventstream.go`).
+  Every open Progress page runs its own poll loop against Postgres, so cost
+  scales with concurrent viewers, not with how often the log actually moves.
+  Fine at today's connection counts; the upgrade if that changes is a
+  push-based bus (`LISTEN`/`NOTIFY` or an in-process fan-out) that both
+  streams' poll loops can subscribe to instead of each hitting the store on
+  its own tick.
