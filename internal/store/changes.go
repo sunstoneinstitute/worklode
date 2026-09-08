@@ -442,6 +442,38 @@ func (s *Store) BranchRules(ctx context.Context, repo, branch string) (mergeQueu
 	return mergeQueue, true, nil
 }
 
+// BranchRulesForRepos is the bulk form of BranchRules, keyed by repo only: the
+// refresh loop (WL-750) only ever writes the row for a repo's default branch,
+// so repo_branch_rules holds at most one row per repo in practice, and that
+// row is the one a PR's base branch join would resolve to since
+// pull_requests carries no base branch of its own. A repo missing from the
+// result is unknown and reads as "no queue" (WL-SPEC-66 §6.3) — callers
+// should not distinguish absence from false.
+func (s *Store) BranchRulesForRepos(ctx context.Context, repos []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(repos) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT repo, merge_queue FROM repo_branch_rules WHERE repo = ANY($1)`, repos)
+	if err != nil {
+		return nil, fmt.Errorf("branch rules for %d repos: %w", len(repos), err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var repo string
+		var mergeQueue bool
+		if err := rows.Scan(&repo, &mergeQueue); err != nil {
+			return nil, fmt.Errorf("scan branch rules row: %w", err)
+		}
+		out[repo] = mergeQueue
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("branch rules for %d repos: %w", len(repos), err)
+	}
+	return out, nil
+}
+
 // ciRunColumns is the SELECT list scanCIRun expects, in order.
 const ciRunColumns = `repo, head_sha, workflow, status, conclusion, url, started_at, completed_at, updated_at`
 
