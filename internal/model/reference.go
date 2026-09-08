@@ -13,3 +13,8 @@ type EntityEdge struct {
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// ReferenceListResponse is the response body of GET /api/v1/references.
+type ReferenceListResponse struct {
+	References []EntityEdge `json:"references"`
+}
