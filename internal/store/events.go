@@ -299,7 +299,7 @@ func EventPayload(v any) ([]byte, error) {
 // row that has already committed).
 func AttributeEventToTask(tx *sql.Tx, eventID int64, taskID string) error {
 	what := fmt.Sprintf("attribute event %d to task %s", eventID, taskID)
-	return mergeEventPayload(tx, eventID, map[string]string{"task": taskID}, what)
+	return mergeEventPayload(tx, eventID, map[string]any{"task": taskID}, what)
 }
 
 // MergeEventPayload folds fields into an already-inserted event's payload,
@@ -307,13 +307,13 @@ func AttributeEventToTask(tx *sql.Tx, eventID int64, taskID string) error {
 // position resolved against the rows already there. Same rule and the same
 // justification as AttributeEventToTask — call it only from the apply
 // callback of the event it names.
-func MergeEventPayload(tx *sql.Tx, eventID int64, fields map[string]string) error {
+func MergeEventPayload(tx *sql.Tx, eventID int64, fields map[string]any) error {
 	return mergeEventPayload(tx, eventID, fields, fmt.Sprintf("merge into event %d payload", eventID))
 }
 
 // mergeEventPayload is the single writer both forms share; what names the
 // operation in every error it returns.
-func mergeEventPayload(tx *sql.Tx, eventID int64, fields map[string]string, what string) error {
+func mergeEventPayload(tx *sql.Tx, eventID int64, fields map[string]any, what string) error {
 	extra, err := json.Marshal(fields)
 	if err != nil {
 		return fmt.Errorf("%s: %w", what, err)
