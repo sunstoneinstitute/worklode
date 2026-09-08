@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 // stripANSI removes escape sequences so assertions read against the text the
@@ -450,25 +452,35 @@ func gitIn(t *testing.T, dir string, args ...string) {
 	}
 }
 
-// A workspace bound to a task shows the id and slug as separate words, with no
-// branch or worktree symbols: the branch is rendered from those two parts, so
-// the symbols would only repeat them.
+// noLinks isolates a test from the developer's own terminal and worklode
+// config: without it the id would come back wrapped in an OSC 8 hyperlink on
+// a machine that has both.
+func noLinks(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LODE_SERVER", "")
+	for _, key := range []string{"TERM_PROGRAM", "KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION", "VTE_VERSION", "TMUX"} {
+		t.Setenv(key, "")
+	}
+}
+
+// A workspace bound to a task shows the id alone: project, branch and
+// worktree state are all implied by it.
 func TestRenderLocationPrefersTheTaskID(t *testing.T) {
+	noLinks(t)
 	root := initRepo(t)
 	gitIn(t, root, "checkout", "-q", "-b", "WL-7-fix-the-thing")
 	gitIn(t, root, "config", "--worktree", "worklode.task-id", "WL-7")
 
 	got := stripANSI(renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "", false))
-	if want := "WL-7 worklode fix-the-thing"; got != want {
+	if want := "WL-7"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
-	}
-	if strings.ContainsAny(got, branchSymbol+strings.TrimSpace(worktreeSymbol)) {
-		t.Fatalf("got %q, want no branch or worktree symbols alongside the task id", got)
 	}
 }
 
 // The task id renders in blue.
 func TestRenderLocationColorsTaskIDBlue(t *testing.T) {
+	noLinks(t)
 	root := initRepo(t)
 	gitIn(t, root, "checkout", "-q", "-b", "WL-7-fix-the-thing")
 	gitIn(t, root, "config", "--worktree", "worklode.task-id", "WL-7")
@@ -479,43 +491,41 @@ func TestRenderLocationColorsTaskIDBlue(t *testing.T) {
 	}
 }
 
-// The id and slug are separate words, so the dash that joins them in the
-// branch must not survive; the slug keeps its own internal dashes.
+// The id is the whole segment, and it carries an OSC 8 hyperlink to the task
+// on the configured server when the terminal renders one.
 func TestFormatTaskLocation(t *testing.T) {
-	tests := []struct {
-		name   string
-		taskID string
-		branch string
-		want   string
-	}{
-		{"id and slug", "WL-7", "WL-7-fix-the-thing", "WL-7 worklode fix-the-thing"},
-		{"single-word slug", "WL-7", "WL-7-fix", "WL-7 worklode fix"},
-		{"branch is the bare id", "WL-7", "WL-7", "WL-7 worklode"},
-		{"branch renamed away from the id", "WL-7", "spike", "WL-7 worklode"},
-		// The split anchors on the full "WL-7-" join, not a bare "WL-7", so a
-		// neighbouring task's branch cannot be sliced into a bogus slug.
-		{"another task's branch", "WL-7", "WL-70-other", "WL-7 worklode"},
-		{"no branch", "WL-7", "", "WL-7 worklode"},
+	noLinks(t)
+	if got := stripANSI(formatTaskLocation("WL-7", "", false)); got != "WL-7" {
+		t.Fatalf("got %q, want %q", got, "WL-7")
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := stripANSI(formatTaskLocation("worklode", tt.taskID, tt.branch, false)); got != tt.want {
-				t.Fatalf("got %q, want %q", got, tt.want)
-			}
-		})
+	// A server is configured but the terminal is unknown: no escape leaks out.
+	if got := formatTaskLocation("WL-7", "https://wl.example.com", false); strings.Contains(got, "\x1b]8") {
+		t.Fatalf("got %q, want no hyperlink on an unknown terminal", got)
+	}
+	t.Setenv("TERM_PROGRAM", "iTerm.app")
+	got := formatTaskLocation("WL-7", "https://wl.example.com", false)
+	if want := cli.Hyperlink("https://wl.example.com/WL-7", "WL-7"); !strings.Contains(got, want) {
+		t.Fatalf("got %q, want it to contain %q", got, want)
+	}
+	// Inside tmux the link is dropped: tmux before 3.4 swallows the escape's
+	// text with it, which would cost the line the id itself.
+	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
+	if got := formatTaskLocation("WL-7", "https://wl.example.com", false); strings.Contains(got, "\x1b]8") {
+		t.Fatalf("got %q, want no hyperlink under tmux", got)
 	}
 }
 
 // The stamp is worktree-scoped: a linked worktree carrying one shows its own
-// id and slug while the main checkout it was created from keeps its branch.
+// id while the main checkout it was created from keeps its branch.
 func TestRenderLocationTaskIDIsPerWorktree(t *testing.T) {
+	noLinks(t)
 	root := initRepo(t)
 	wt := filepath.Join(root, ".worktrees", "WL-7-fix-the-thing")
 	gitIn(t, root, "worktree", "add", "-b", "WL-7-fix-the-thing", wt)
 	gitIn(t, wt, "config", "--worktree", "worklode.task-id", "WL-7")
 
-	if got := stripANSI(renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false)); got != "WL-7 worklode fix-the-thing" {
-		t.Fatalf("worktree location = %q, want %q", got, "WL-7 worklode fix-the-thing")
+	if got := stripANSI(renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: wt}}, "", false)); got != "WL-7" {
+		t.Fatalf("worktree location = %q, want %q", got, "WL-7")
 	}
 	if got := renderLocation(&Payload{Workspace: &WorkspaceInfo{CurrentDir: root}}, "", false); got != "worklode ⎇ main" {
 		t.Fatalf("main checkout location = %q, want the branch rendering", got)
