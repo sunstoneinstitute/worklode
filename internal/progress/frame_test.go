@@ -41,7 +41,8 @@ func TestResolve(t *testing.T) {
 		{"task.created", map[string]any{"project": "WL", "title": "t", "task": "WL-1"},
 			Touch{Task: "WL-1", Kind: "task"}, "api/tasks.go, webform.go (task merged by AttributeEventToTask)"},
 		{"task.created", map[string]any{"doc": "wlid:doc/spec-worklode-066", "kind": "design", "task": "WL-2"},
-			Touch{Task: "WL-2", Kind: "task"}, "api/progress.go mintPlanningTask; doc is an IRI, not an id"},
+			Touch{Task: "WL-2", DocIRI: "wlid:doc/spec-worklode-066", Kind: "task"},
+			"api/progress.go mintPlanningTask; doc is an IRI, not an id"},
 		{"task.updated", map[string]any{"rule": "plan_accepted", "task": "WL-3", "absorbed_event": 9},
 			Touch{Task: "WL-3", Kind: "task"}, "api/docwatch.go suppression note"},
 		{"task.done", task("WL-4"), Touch{Task: "WL-4", Kind: "task"}, "api/lifecycle.go finishTask"},
@@ -107,8 +108,11 @@ func TestResolve(t *testing.T) {
 			Touch{Kind: "task"}, "api/admin.go: names an inbox issue, no task"},
 
 		// --- documents ----------------------------------------------------
-		// doc.created records id 0: the row does not exist until apply runs.
-		{"doc.created", doc(0), Touch{Kind: "doc"}, "api/docs.go createDoc"},
+		// doc.created goes in with id 0 — the row does not exist until apply
+		// runs — and store.MergeEventPayload writes the real id back inside
+		// the same transaction, so what the log holds is this (WL-768).
+		{"doc.created", doc(10), Touch{Doc: 10, Kind: "doc"},
+			"api/docs.go createDoc (doc merged by MergeEventPayload)"},
 		{"doc.updated", doc(11), Touch{Doc: 11, Kind: "doc"}, "api/docs.go"},
 		{"doc.patched", doc(12), Touch{Doc: 12, Kind: "doc"}, "api/docs.go, watcher.TypeDocPatched"},
 		{"doc.revised", doc(13), Touch{Doc: 13, Kind: "doc"}, "api/docs.go"},
@@ -121,16 +125,19 @@ func TestResolve(t *testing.T) {
 		{"doc.approval_requested", doc(20), Touch{Doc: 20, Kind: "doc"}, "api/approvals.go"},
 		{"doc.reviewers_changed", doc(21), Touch{Doc: 21, Kind: "doc"}, "api/approvals.go"},
 		{"doc.deleted", doc(22), Touch{Doc: 22, Kind: "doc"}, "api/softdelete.go"},
-		// The two typed events name their subject by IRI, so the page gets
-		// the kind and nothing more (see the report on WL-741).
+		// The two typed events name their subject by IRI and nothing else
+		// (025 §15.3), so the touch carries the IRI for the reader to resolve.
 		{"wl:DocumentSubmitted", map[string]any{"wl:subject": "wlid:doc/spec-worklode-066"},
-			Touch{Kind: "doc"}, "eventbus.Emit from api/docs.go submitDoc"},
+			Touch{DocIRI: "wlid:doc/spec-worklode-066", Kind: "doc"},
+			"eventbus.Emit from api/docs.go submitDoc"},
 		{"wl:DocumentAccepted", map[string]any{"wl:subject": "wlid:doc/spec-worklode-066"},
-			Touch{Kind: "doc"}, "eventbus.Emit from api/docs.go acceptRevision"},
+			Touch{DocIRI: "wlid:doc/spec-worklode-066", Kind: "doc"},
+			"eventbus.Emit from api/docs.go acceptRevision"},
 
 		// --- rally ---------------------------------------------------------
 		{"rally.assembled", map[string]any{"doc": "wlid:doc/spec-worklode-066", "task": "WL-40"},
-			Touch{Task: "WL-40", Kind: "rally"}, "api/progress.go (task merged by AttributeEventToTask)"},
+			Touch{Task: "WL-40", DocIRI: "wlid:doc/spec-worklode-066", Kind: "rally"},
+			"api/progress.go (task merged by AttributeEventToTask)"},
 
 		// --- webhook deliveries --------------------------------------------
 		// The payload is GitHub's own body; "task" is merged in by the
