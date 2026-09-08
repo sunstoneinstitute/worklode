@@ -264,6 +264,95 @@ func (s *Store) DocReviewersAwaiting(ctx context.Context, docID int64) ([]string
 	return collectRows(rows, fmt.Sprintf("reviewers awaiting for doc %d", docID), scanString)
 }
 
+// checkDocReviewerGate is AcceptDoc's mechanical multi-approval gate over the
+// stored reviewer set (025 §7.3): every reviewer WL-359's doc_reviewers
+// names for id must hold an 'approved' approvals row at version, or the
+// accept is refused naming who is still owed a decision. A reviewer with no
+// row at all, an 'awaiting' row, or a 'changes_requested' row all read the
+// same here — not yet approved — so there is no separate "anything still
+// open" check to drift from this one. A row at an older version never
+// blocks: RequestDocApproval opens a fresh set of lanes on every revision,
+// and the version bump superseded whatever came before. An empty reviewer
+// set is a no-op, keeping the owner-only behavior from before this gate
+// existed — nothing already in flight is trapped by it.
+func checkDocReviewerGate(tx *sql.Tx, id int64, version int) error {
+	reviewers, err := docReviewers(tx, id)
+	if err != nil {
+		return err
+	}
+	if len(reviewers) == 0 {
+		return nil
+	}
+	entityID := DocEntityID(id)
+	revision := strconv.Itoa(version)
+	states := make(map[string]string, len(reviewers))
+	for _, r := range reviewers {
+		a, err := ApprovalByKey(tx, "doc", entityID, revision, r)
+		if errors.Is(err, ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		states[r] = a.State
+	}
+	return reviewerGateRefusal(id, reviewers, states)
+}
+
+// checkDocReviewerGateCtx is checkDocReviewerGate for CheckDocAcceptable's
+// pre-flight, which reads outside a transaction — so the two cannot answer
+// differently about whether an accept would be refused.
+func (s *Store) checkDocReviewerGateCtx(ctx context.Context, id int64, version int) error {
+	reviewers, err := s.docReviewersCtx(ctx, id)
+	if err != nil {
+		return err
+	}
+	if len(reviewers) == 0 {
+		return nil
+	}
+	entityID := DocEntityID(id)
+	revision := strconv.Itoa(version)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT lane, state FROM approvals
+		 WHERE entity_kind = 'doc' AND entity_id = $1 AND subject_revision = $2
+		   AND lane = ANY($3)`,
+		entityID, revision, reviewers)
+	if err != nil {
+		return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
+	}
+	states := make(map[string]string, len(reviewers))
+	for rows.Next() {
+		var lane, state string
+		if err := rows.Scan(&lane, &state); err != nil {
+			rows.Close()
+			return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
+		}
+		states[lane] = state
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
+	}
+	return reviewerGateRefusal(id, reviewers, states)
+}
+
+// reviewerGateRefusal builds checkDocReviewerGate's refusal from each
+// reviewer's approval state ("" when none is on file at this version):
+// anything but "approved" counts as missing, named in reviewer (assignment)
+// order. nil once nothing is missing.
+func reviewerGateRefusal(id int64, reviewers []string, states map[string]string) error {
+	var missing []string
+	for _, r := range reviewers {
+		if states[r] != "approved" {
+			missing = append(missing, r)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("doc %d is missing review approval from %s; see /reviews: %w: %w",
+		id, strings.Join(missing, ", "), ErrMissingApprovals, ErrForbidden)
+}
+
 // checkActorExists returns ErrInvalidInput naming id when no actor has it.
 func checkActorExists(tx *sql.Tx, id string) error {
 	var exists bool

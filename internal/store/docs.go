@@ -403,6 +403,9 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 	if d.status != "draft" {
 		return nil, nil, fmt.Errorf("doc %d is %s, not draft: %w", id, d.status, ErrInvalidInput)
 	}
+	if err := checkDocReviewerGate(tx, id, d.version); err != nil {
+		return nil, nil, err
+	}
 
 	parsed, err := parseDocBody(d.kind, d.body)
 	if err != nil {
@@ -496,8 +499,10 @@ func checkDocOwner(id int64, owner, actorID string) error {
 func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string) (settled bool, err error) {
 	var kind, status, owner string
 	var ownerCol sql.NullString
+	var version int
 	err = s.db.QueryRowContext(ctx,
-		`SELECT kind, status, owner FROM docs WHERE id = $1`, id).Scan(&kind, &status, &ownerCol)
+		`SELECT kind, status, owner, version FROM docs WHERE id = $1`, id,
+	).Scan(&kind, &status, &ownerCol, &version)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, fmt.Errorf("doc %d: %w", id, ErrNotFound)
 	}
@@ -516,6 +521,11 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 	}
 	if status != "draft" {
 		return false, fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
+	}
+	if kind != "plan" {
+		if err := s.checkDocReviewerGateCtx(ctx, id, version); err != nil {
+			return false, err
+		}
 	}
 	return false, nil
 }
