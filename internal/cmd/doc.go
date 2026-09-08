@@ -266,7 +266,7 @@ func lintDocFile(doc *designdoc.Document) []string {
 			"%s; checked against the default limit of %d, and the server's configured limit is the authority",
 			v, designdoc.DepthLimit))
 	}
-	if isPlanFile(doc) {
+	if isPlanFile(doc) && !designdoc.IsCoverageOnlyPlan(doc) {
 		if _, err := designdoc.PlanTasks(doc); err != nil {
 			findings = append(findings, err.Error())
 		}
