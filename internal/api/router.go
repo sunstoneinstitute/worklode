@@ -82,16 +82,20 @@ var routeGuards = map[string]routeGuard{
 	// boundary. requireSession, applied at registration like the decide
 	// route below, because a forged cutoff needs a live session's identity
 	// to attribute the advance to.
-	"POST /home/reviewed":                 guarded(permWebWrite),
-	"GET /ideas":                          guarded(permWebRead),
-	"GET /intake":                         guarded(permWebRead),
-	"GET /projects":                       guarded(permWebRead),
-	"GET /projects/{id}":                  guarded(permWebRead),
-	"GET /projects/{id}/crew":             guarded(permWebRead),
-	"POST /projects/{id}/crew":            guarded(permWebWrite),
-	"POST /projects/{id}/crew/remove":     guarded(permWebWrite),
-	"GET /projects/{id}/work":             guarded(permWebRead),
-	"GET /projects/{id}/progress":         guarded(permWebRead),
+	"POST /home/reviewed":             guarded(permWebWrite),
+	"GET /ideas":                      guarded(permWebRead),
+	"GET /intake":                     guarded(permWebRead),
+	"GET /projects":                   guarded(permWebRead),
+	"GET /projects/{id}":              guarded(permWebRead),
+	"GET /projects/{id}/crew":         guarded(permWebRead),
+	"POST /projects/{id}/crew":        guarded(permWebWrite),
+	"POST /projects/{id}/crew/remove": guarded(permWebWrite),
+	"GET /projects/{id}/work":         guarded(permWebRead),
+	"GET /projects/{id}/progress":     guarded(permWebRead),
+	// The Progress page's writes (066 §7). permDocWrite for accepting a
+	// document, matching POST /api/v1/docs/{id}/accept — the owner gate that
+	// decides who may actually accept it stays inside the store (§4.2 rule 5).
+	"POST /projects/{id}/progress/accept": guarded(permDocWrite),
 	"GET /projects/{id}/milestones":       guarded(permWebRead),
 	"GET /projects/{id}/deliverables":     guarded(permWebRead),
 	"GET /projects/{id}/deliverables/new": guarded(permWebWrite),

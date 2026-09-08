@@ -128,7 +128,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Progress page writes issued by the page script (066 §4.2), by route (" +
 			strings.Join(progressWriteRoutes, ", ") + ") and outcome (" +
 			strings.Join(progressWriteOutcomes, ", ") +
-			"). \"refused\" is the write gate answering before the act ran — a wrong origin, a missing page header, a body naming its own actor — so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
+			"). \"refused\" is the act declined before anything changed — a wrong origin, a missing page header, a body naming its own actor, an actor without standing — and \"conflict\" is the backbone refusing the document's state, so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
 	}, []string{"route", "outcome"})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
