@@ -77,6 +77,7 @@ make bin/lode-server   # one executable, by name: bin/<any of the six>
 make install    # build and install the three end-user binaries to /usr/local/bin
 make test       # go test -trimpath -race -count=1 ./...
 make test-e2e   # e2e suite (build tag required, TEST_POSTGRES_DSN reachable)
+make test-scripts # the tests scripts/ keeps for its own tooling; CI's lint job runs this
 make vet        # go vet ./...
 ```
 
