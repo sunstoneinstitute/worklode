@@ -544,7 +544,7 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 	}
 	if d.Body != "" {
 		fmt.Fprintln(w)
-		Markdown(w, InlineDocNotes(d.Body, d.Notes))
+		Markdown(w, InlineDocNotes(d.Body, d.Notes, d.Sections))
 	}
 	if len(d.Edges) > 0 || len(d.EdgesIn) > 0 {
 		fmt.Fprintln(w, "\nedges:")
@@ -584,20 +584,36 @@ func DocNoteRender(w io.Writer, d model.Doc, n model.DocNote) {
 		strings.Join(strings.Fields(n.Body), " "))
 }
 
+// docPatchedMarker is what a section amended in place since it was last
+// approved renders as (025 §7.3): one blockquoted line above the section's
+// notes, so the reader sees which paragraph has not passed the gate.
+const docPatchedMarker = "> **patched** — approved text, amended in place since (025 §7.3)."
+
 // InlineDocNotes returns body with each note folded in under the section it is
-// anchored to, as a blockquoted one-liner (025 §8.5). Notes anchored outside
-// body — the common case when body is one section's subtree — are left out
-// rather than collected somewhere else: a note belongs where it was left.
+// anchored to, as a blockquoted one-liner (025 §8.5), and a patched marker
+// above them on every section sections says carries one (025 §7.3). Notes and
+// marks anchored outside body — the common case when body is one section's
+// subtree — are left out rather than collected somewhere else: a note belongs
+// where it was left.
 //
 // Body is returned untouched when there is nothing to fold or when it does not
 // parse, so a render never degrades because of a note.
-func InlineDocNotes(body string, notes []model.DocNote) string {
-	if len(notes) == 0 || body == "" {
+func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSection) string {
+	if body == "" {
 		return body
 	}
 	byAnchor := make(map[string][]model.DocNote, len(notes))
 	for _, n := range notes {
 		byAnchor[n.Anchor] = append(byAnchor[n.Anchor], n)
+	}
+	patched := make(map[string]bool)
+	for _, sec := range sections {
+		if sec.Patched {
+			patched[sec.Anchor] = true
+		}
+	}
+	if len(byAnchor) == 0 && len(patched) == 0 {
+		return body
 	}
 	doc, err := designdoc.Parse([]byte(body))
 	if err != nil {
@@ -606,11 +622,14 @@ func InlineDocNotes(body string, notes []model.DocNote) string {
 	var folded bool
 	for _, sec := range doc.Sections {
 		secNotes := byAnchor[sec.Anchor]
-		if len(secNotes) == 0 {
+		if len(secNotes) == 0 && !patched[sec.Anchor] {
 			continue
 		}
 		var b strings.Builder
 		b.WriteString(strings.TrimRight(sec.Body, "\n"))
+		if patched[sec.Anchor] {
+			b.WriteString("\n\n" + docPatchedMarker)
+		}
 		for _, n := range secNotes {
 			b.WriteString("\n\n> " + DocNoteLine(n))
 		}

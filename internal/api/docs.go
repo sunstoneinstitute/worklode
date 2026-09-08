@@ -33,6 +33,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
 // validDocKinds mirrors the docs.kind CHECK constraint (migration 0027) and
@@ -686,7 +687,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 	now := s.st.Now()
 	var doc *model.Doc
 	var patch *model.DocPatchResult
-	err := s.recordDocEvent(w, r, "patch", "doc.patched", id, req,
+	err := s.recordDocEvent(w, r, "patch", watcher.TypeDocPatched, id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, p, err := store.PatchDoc(tx, now, store.DocPatchInput{
 				ID: id, Body: req.Body, Substantive: req.Substantive, Note: req.Note,

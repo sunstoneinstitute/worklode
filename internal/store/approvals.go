@@ -512,11 +512,53 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 	if err := ResolveApproval(tx, a.ID, state, &in.ActorID, in.Now); err != nil {
 		return nil, err
 	}
+	if err := clearPatchedOnFullApproval(tx, a, state); err != nil {
+		return nil, err
+	}
 	a.State = state
 	a.ResolvingActor = &in.ActorID
 	resolvedAt := in.Now.UTC()
 	a.ResolvedAt = &resolvedAt
 	return a, nil
+}
+
+// clearPatchedOnFullApproval is 025 §7.3's other half: the §8.4 patched marks
+// come off a document once its reviewers have settled the version that
+// carries them. It runs on a document row only, after the decision is
+// recorded, and clears nothing until every lane on that revision reads
+// 'approved' — an open lane means someone still owes a decision, and a
+// rejected one means the amendment did not pass, which is not a state the
+// last approver's decision can undo.
+//
+// It lives here rather than in the web handler because it is a consequence of
+// the decision, like the self-approval and qualification checks above it, and
+// this is the one place a decision is recorded.
+func clearPatchedOnFullApproval(tx *sql.Tx, a *Approval, state string) error {
+	if a.EntityKind != "doc" || state != "approved" {
+		return nil
+	}
+	docID, ok := model.DocIDFromEntityID(a.EntityID)
+	if !ok {
+		return nil
+	}
+	version, err := strconv.Atoi(a.SubjectRevision)
+	if err != nil {
+		// A document revision is always docs.version; anything else was
+		// written by an ad-hoc requester and names no version to clear at.
+		return nil
+	}
+	var unsettled int
+	if err := tx.QueryRow(
+		`SELECT count(*) FROM approvals
+		  WHERE entity_kind = 'doc' AND entity_id = $1 AND subject_revision = $2
+		    AND state <> 'approved'`,
+		a.EntityID, a.SubjectRevision).Scan(&unsettled); err != nil {
+		return fmt.Errorf("count open lanes on doc %d@%d: %w", docID, version, err)
+	}
+	if unsettled > 0 {
+		return nil
+	}
+	return ClearPatchedSections(tx, docID, version)
 }
 
 // prEntityIDSQL renders a pull_requests row's approvals entity_id in SQL,
