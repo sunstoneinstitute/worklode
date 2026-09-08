@@ -25,11 +25,11 @@ func TestProgressAcceptActionByViewer(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			acts := progressPlanActions(plan, tc.viewer)
-			if len(acts) != 1 {
-				t.Fatalf("draft plan has %d actions, want 1", len(acts))
+			acts := progressPlanActions(plan, tc.viewer, false)
+			a := actionOn(acts, "accept")
+			if a == nil {
+				t.Fatalf("draft plan actions = %+v; want an accept action", acts)
 			}
-			a := acts[0]
 			if a.Route != "accept" || a.Label != "Accept" {
 				t.Fatalf("action = %+v; want the accept route", a)
 			}
@@ -54,10 +54,11 @@ func TestProgressAcceptActionByViewer(t *testing.T) {
 // have nothing to accept, so neither carries the button at all.
 func TestProgressAcceptActionNeedsADraft(t *testing.T) {
 	t.Parallel()
-	if acts := progressPlanActions(model.ProgressPlan{State: "not_started", Owner: "alice"}, "alice"); acts != nil {
-		t.Errorf("an accepted plan carries %+v; want no Accept button", acts)
+	plan := progressPlanActions(model.ProgressPlan{State: "not_started", Owner: "alice"}, "alice", false)
+	if act := actionOn(plan, "accept"); act != nil {
+		t.Errorf("an accepted plan carries %+v; want no Accept button", act)
 	}
-	spec := progressSpecActions(model.ProgressSpec{Status: "accepted", Owner: "alice"}, "alice")
+	spec := progressSpecActions(model.ProgressSpec{Status: "accepted", Owner: "alice"}, "alice", false)
 	if act := actionOn(spec, "accept"); act != nil {
 		t.Errorf("an accepted spec carries %+v; want no Accept button", act)
 	}
@@ -65,7 +66,8 @@ func TestProgressAcceptActionNeedsADraft(t *testing.T) {
 
 // actionOn is the one action on the given route, or nil. Every test below
 // asks for the act it is about rather than counting the slot's contents: a
-// spec row carries Rally on every row (§3.5) and gains Review as 059 lands.
+// spec row and a plan line each carry Rally and Review on every row (§3.5,
+// §3.3) alongside whichever of Accept and Plan applies.
 func actionOn(acts []ProgressAction, route string) *ProgressAction {
 	for i, a := range acts {
 		if a.Route == route {
@@ -81,11 +83,11 @@ func TestProgressAcceptActionOnADraftSpec(t *testing.T) {
 	t.Parallel()
 	spec := model.ProgressSpec{Doc: 3, Ref: "WL-SPEC-66", Status: "draft", Owner: "alice"}
 
-	owner := actionOn(progressSpecActions(spec, "alice"), "accept")
+	owner := actionOn(progressSpecActions(spec, "alice", false), "accept")
 	if owner == nil || owner.Reason != "" || owner.Body != `{"doc":3}` {
 		t.Fatalf("the owner's action = %+v; want an enabled Accept", owner)
 	}
-	other := actionOn(progressSpecActions(spec, "bob"), "accept")
+	other := actionOn(progressSpecActions(spec, "bob", false), "accept")
 	if other == nil || !strings.Contains(other.Reason, "alice") {
 		t.Fatalf("another actor's action = %+v; want it disabled naming the owner", other)
 	}
@@ -96,8 +98,9 @@ func TestProgressAcceptActionOnADraftSpec(t *testing.T) {
 // says that rather than promising a write the store would refuse.
 func TestProgressAcceptActionUnowned(t *testing.T) {
 	t.Parallel()
-	acts := progressPlanActions(model.ProgressPlan{Doc: 1, Ref: "WL-PLAN-1", State: "draft"}, "alice")
-	if len(acts) != 1 || acts[0].Reason != "WL-PLAN-1 has no owner to accept it" {
+	acts := progressPlanActions(model.ProgressPlan{Doc: 1, Ref: "WL-PLAN-1", State: "draft"}, "alice", false)
+	act := actionOn(acts, "accept")
+	if act == nil || act.Reason != "WL-PLAN-1 has no owner to accept it" {
 		t.Fatalf("action = %+v; want it disabled for want of an owner", acts)
 	}
 }
@@ -110,21 +113,21 @@ func TestProgressPlanAction(t *testing.T) {
 	spec := model.ProgressSpec{Doc: 3, Ref: "WL-SPEC-66", Status: "accepted",
 		Sections: []model.ProgressSection{{Anchor: "sec-1", State: "unplanned"}}}
 
-	act := actionOn(progressSpecActions(spec, "alice"), "plan")
+	act := actionOn(progressSpecActions(spec, "alice", false), "plan")
 	if act == nil || act.Reason != "" {
 		t.Fatalf("action = %+v; want an enabled Plan button", act)
 	}
 	if act.Body != `{"doc":3}` || act.Confirm != "Mint a planning task for WL-SPEC-66" {
 		t.Errorf("action = %+v; want the doc body and the act named in full", act)
 	}
-	if out := actionOn(progressSpecActions(spec, ""), "plan"); out == nil || out.Reason == "" {
+	if out := actionOn(progressSpecActions(spec, "", false), "plan"); out == nil || out.Reason == "" {
 		t.Errorf("signed out action = %+v; want the button disabled with a reason", out)
 	}
 
 	// Nothing unplanned: nothing to mint.
 	covered := spec
 	covered.Sections = []model.ProgressSection{{Anchor: "sec-1", State: "built"}}
-	if out := actionOn(progressSpecActions(covered, "alice"), "plan"); out != nil {
+	if out := actionOn(progressSpecActions(covered, "alice", false), "plan"); out != nil {
 		t.Errorf("a fully covered spec carries %+v; want no Plan button", out)
 	}
 }
@@ -154,11 +157,12 @@ func TestProgressRowPlanningTaskLink(t *testing.T) {
 	}
 }
 
-// renderProgressRow renders one spec row as a signed-in viewer sees it.
+// renderProgressRow renders one spec row as a signed-in viewer sees it, with
+// the review surface disabled — today's reality (§3.3).
 func renderProgressRow(t *testing.T, s model.ProgressSpec) string {
 	t.Helper()
 	var b strings.Builder
-	if err := progressRow(s, "alice").Render(context.Background(), &b); err != nil {
+	if err := progressRow(s, "alice", false).Render(context.Background(), &b); err != nil {
 		t.Fatalf("render row: %v", err)
 	}
 	return b.String()
@@ -172,14 +176,14 @@ func TestProgressRallyActionOnEveryRow(t *testing.T) {
 	spec := model.ProgressSpec{Doc: 3, Ref: "WL-SPEC-66", Status: "accepted",
 		Sections: []model.ProgressSection{{Anchor: "sec-1", State: "built"}}}
 
-	act := actionOn(progressSpecActions(spec, "alice"), "rally/add")
+	act := actionOn(progressSpecActions(spec, "alice", false), "rally/add")
 	if act == nil || act.Reason != "" {
 		t.Fatalf("action = %+v; want an enabled Rally button", act)
 	}
 	if act.Body != `{"doc":3}` || act.Confirm != "Add WL-SPEC-66 to the rally" {
 		t.Errorf("action = %+v; want the doc body and the act named in full", act)
 	}
-	if out := actionOn(progressSpecActions(spec, ""), "rally/add"); out == nil || out.Reason == "" {
+	if out := actionOn(progressSpecActions(spec, "", false), "rally/add"); out == nil || out.Reason == "" {
 		t.Errorf("signed out action = %+v; want it disabled with a reason", out)
 	}
 	if html := renderProgressRow(t, spec); !strings.Contains(html, `data-route="rally/add"`) {
