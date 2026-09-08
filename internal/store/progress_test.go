@@ -221,3 +221,38 @@ func TestProjectProgressPositionFromPRAndCI(t *testing.T) {
 		t.Errorf("position = %q, want %q", got, want)
 	}
 }
+
+// TestProjectProgressPlanningTask: the open design task about a spec rides
+// along on the read, so the page can draw it as a link instead of 066 §3.4's
+// Plan button. A closed one is not carried — that spec owes planning again.
+func TestProjectProgressPlanningTask(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	specID, _, _ := seedProgressCorpus(t, s)
+
+	if in, err := s.ProjectProgress(t.Context(), "p1"); err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	} else if in.Specs[0].PlanningTask != "" {
+		t.Fatalf("PlanningTask = %q before any mint, want empty", in.Specs[0].PlanningTask)
+	}
+
+	planning := createTask(t, s, s.Now(), TaskInput{
+		ProjectID: "p1", Title: "Plan it", Body: "body", Priority: "medium",
+		Kind: "design", AboutDoc: specID, CreatedBy: "stig",
+	})
+	in, err := s.ProjectProgress(t.Context(), "p1")
+	if err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	}
+	if got := in.Specs[0].PlanningTask; got != planning.ID {
+		t.Fatalf("PlanningTask = %q, want %s", got, planning.ID)
+	}
+
+	// The same rule OpenTaskForDoc holds: an abandoned task is not open.
+	walkTo(t, s, planning.ID, "abandoned")
+	if in, err := s.ProjectProgress(t.Context(), "p1"); err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	} else if in.Specs[0].PlanningTask != "" {
+		t.Errorf("PlanningTask = %q after abandoning it, want empty", in.Specs[0].PlanningTask)
+	}
+}

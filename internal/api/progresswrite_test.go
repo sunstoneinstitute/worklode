@@ -18,8 +18,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
+	"github.com/sunstoneinstitute/worklode/internal/watcher"
 )
 
 const probeActor = "github:1"
@@ -438,6 +440,154 @@ func TestProgressAcceptRefusesAnotherProjectsDoc(t *testing.T) {
 
 	rr := acceptPost(t, s, probeActor, elsewhere.ID)
 	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d body=%s; want 404", rr.Code, rr.Body.String())
+	}
+}
+
+// probePlanSpec is a spec with one anchored section. Nothing covers it, so
+// the section is unplanned and §3.4's Plan button is offered on the row.
+const probePlanSpec = `---
+status: accepted
+---
+
+# Probe spec
+
+## 1. Scope {#sec-1}
+
+Scope body.
+`
+
+// probeCoveringPlan covers that one section, which leaves the spec with no
+// unplanned section at all.
+const probeCoveringPlan = `---
+status: draft
+covers:
+  - spec: probe-spec.md#sec-1
+    coverage: full
+---
+
+# Covering plan
+
+Covers the whole spec.
+`
+
+// newPlanServer is newProbeServer plus the actors and a spec whose only
+// section no plan covers.
+func newPlanServer(t *testing.T) (*server, *model.Doc) {
+	t.Helper()
+	s := newProbeServer(t)
+	for _, id := range []string{probeActor, otherActor} {
+		if err := s.st.CreateActor(t.Context(), id, "human", id, false); err != nil {
+			t.Fatalf("create actor %s: %v", id, err)
+		}
+	}
+	spec := seedProbeDoc(t, s, store.DocInput{
+		Project: "p", Kind: "spec", Slug: "probe-spec", Number: 66,
+		Body: probePlanSpec, Owner: probeActor, CreatedBy: probeActor,
+	})
+	return s, spec
+}
+
+// planPost runs one POST /projects/p/progress/plan as actor.
+func planPost(t *testing.T, s *server, actor string, doc int64) *httptest.ResponseRecorder {
+	t.Helper()
+	req := goodPost(`{"doc":` + strconv.FormatInt(doc, 10) + `}`)
+	req.SetPathValue("id", "p")
+	req = withSubject(req, Subject{ActorID: actor})
+	rr := httptest.NewRecorder()
+	s.progressPlan(rr, req)
+	return rr
+}
+
+func decodePlanReply(t *testing.T, rr *httptest.ResponseRecorder) model.ProgressPlanResponse {
+	t.Helper()
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s; want 200", rr.Code, rr.Body.String())
+	}
+	var got model.ProgressPlanResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode %s: %v", rr.Body.String(), err)
+	}
+	return got
+}
+
+// TestProgressPlanMintsOnce: the first request mints the planning task, the
+// second returns the same one with existing true and mints nothing (§3.4,
+// §4.2 rule 7).
+func TestProgressPlanMintsOnce(t *testing.T) {
+	t.Parallel()
+	s, spec := newPlanServer(t)
+
+	first := decodePlanReply(t, planPost(t, s, probeActor, spec.ID))
+	if first.Task == "" || first.Existing {
+		t.Fatalf("first reply = %+v; want a minted task and existing false", first)
+	}
+	second := decodePlanReply(t, planPost(t, s, probeActor, spec.ID))
+	if second.Task != first.Task || !second.Existing {
+		t.Fatalf("second reply = %+v; want %s with existing true", second, first.Task)
+	}
+	if n := testutil.ToFloat64(s.progressWrites.WithLabelValues("plan", "ok")); n != 2 {
+		t.Fatalf("progressWrites{plan,ok} = %v, want 2", n)
+	}
+
+	task, err := s.st.GetTask(t.Context(), first.Task)
+	if err != nil {
+		t.Fatalf("get minted task: %v", err)
+	}
+	if task.Kind != "design" {
+		t.Errorf("task kind = %q; want design", task.Kind)
+	}
+	if task.CreatedBy != probeActor {
+		t.Errorf("task created_by = %q; want the session actor %s", task.CreatedBy, probeActor)
+	}
+	// §3.4: a task minted here and one minted on acceptance are the same
+	// thing, so the title is the doc-lifecycle subscriber's own.
+	subscriber := watcher.Evaluate(watcher.Input{
+		EventType: eventbus.TypeDocumentAccepted,
+		DocKind:   "spec", DocTitle: spec.Title,
+	})
+	if len(subscriber) != 1 || task.Title != subscriber[0].Title {
+		t.Fatalf("minted title = %q; want the subscriber's %+v", task.Title, subscriber)
+	}
+	if task.Title != watcher.PlanningTitle(spec.Title) {
+		t.Errorf("minted title = %q; want %q", task.Title, watcher.PlanningTitle(spec.Title))
+	}
+}
+
+// TestProgressPlanRefusesFullyCoveredSpec: the button is offered on an
+// unplanned section, so a spec that has none is a 409 rather than a mint
+// nobody asked for.
+func TestProgressPlanRefusesFullyCoveredSpec(t *testing.T) {
+	t.Parallel()
+	s, spec := newPlanServer(t)
+	seedProbeDoc(t, s, store.DocInput{
+		Project: "p", Kind: "plan", Slug: "covering-plan",
+		Body: probeCoveringPlan, Owner: probeActor, CreatedBy: probeActor,
+	})
+
+	rr := planPost(t, s, probeActor, spec.ID)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d body=%s; want 409", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "unplanned") {
+		t.Errorf("body = %s; want it to name the reason", rr.Body.String())
+	}
+	if n := testutil.ToFloat64(s.progressWrites.WithLabelValues("plan", "conflict")); n != 1 {
+		t.Fatalf("progressWrites{plan,conflict} = %v, want 1", n)
+	}
+}
+
+// TestProgressPlanRefusesNonSpec: the planning task is about a spec, so a
+// plan document is not found on this route.
+func TestProgressPlanRefusesNonSpec(t *testing.T) {
+	t.Parallel()
+	s, _ := newPlanServer(t)
+	plan := seedProbeDoc(t, s, store.DocInput{
+		Project: "p", Kind: "plan", Slug: "not-a-spec",
+		Body: probeAcceptPlan, Owner: probeActor, CreatedBy: probeActor,
+	})
+
+	if rr := planPost(t, s, probeActor, plan.ID); rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body=%s; want 404", rr.Code, rr.Body.String())
 	}
 }
