@@ -189,7 +189,8 @@ both retrieval arms — dense over pgvector, lexical over a `simple` tsvector �
 fused by reciprocal rank behind `GET /api/v1/search` and `lode search`, spec
 040), and `internal/eventbus`
 (offset-tracked subscribers over the events log, read via `lode event tail
---follow`). Its one subscriber, `doc-lifecycle`, mints the review and planning
+--follow` and by the project Progress page's live stream, WL-SPEC-66 §5.1).
+Its one subscriber, `doc-lifecycle`, mints the review and planning
 tasks a document's lifecycle calls for (025 §15.4): the rules are a pure
 function in `internal/watcher`, the executor that feeds them is
 `internal/api/docwatch.go`, and `NewServer` starts the loop only when the
