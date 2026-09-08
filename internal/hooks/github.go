@@ -63,24 +63,29 @@ type githubHandler struct {
 // appAuth, if non-nil, resolves a release's branch-name target_commitish to a
 // commit sha (see resolveReleaseCommitish); nil disables resolution and the
 // release falls back to main's head, as it did before this App integration.
-func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, m *Metrics) http.Handler {
+//
+// onRuleset, if non-nil, is called when a mapped repo's rulesets change
+// (WL-SPEC-66 §6.3). The event carries no fact worth storing — the merge-queue
+// rule is read per branch from the rules API — so all it does is tell the
+// server's refresh loop to look again.
+func NewGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, appAuth *githubauth.AppAuth, onRuleset func(), m *Metrics) http.Handler {
 	var resolveBranch func(ctx context.Context, repo, branch string) (string, error)
 	if appAuth != nil {
 		resolveBranch = appAuth.BranchSHA
 	}
-	return newGitHubHandler(st, secret, log, onSkillPush, resolveBranch, m)
+	return newGitHubHandler(st, secret, log, onSkillPush, resolveBranch, onRuleset, m)
 }
 
 // newGitHubHandler is the common constructor: NewGitHubHandler derives
 // resolveBranch from appAuth, and tests reach it directly (export_test.go) to
 // stub branch resolution without a fake GitHub App server.
-func newGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, resolveBranch func(ctx context.Context, repo, branch string) (string, error), m *Metrics) *githubHandler {
+func newGitHubHandler(st *store.Store, secret string, log *slog.Logger, onSkillPush func(repo, branch string) bool, resolveBranch func(ctx context.Context, repo, branch string) (string, error), onRuleset func(), m *Metrics) *githubHandler {
 	if log == nil {
 		log = slog.Default()
 	}
 	return &githubHandler{
 		st: st, secret: secret, log: log, onSkillPush: onSkillPush, metrics: m,
-		ap: &applier{st: st, log: log, resolveBranch: resolveBranch, metrics: m},
+		ap: &applier{st: st, log: log, resolveBranch: resolveBranch, onRuleset: onRuleset, metrics: m},
 	}
 }
 
@@ -276,11 +281,11 @@ func (h *githubHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // handledEvents are the GitHub event names applyFunc routes. It is the single
 // source of truth: applyFunc switches over these names, and the repo-add
 // subscription check compares an installation's subscriptions against them, so
-// adding a ninth event cannot leave the check behind.
+// adding one more event cannot leave the check behind.
 var handledEvents = []string{
 	"issues", "push", "pull_request", "deployment_status",
 	"pull_request_review", "workflow_run", "release", "registry_package",
-	"merge_group",
+	"merge_group", "repository_ruleset",
 }
 
 // HandledEvents returns the event names this handler routes.

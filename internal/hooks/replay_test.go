@@ -22,7 +22,7 @@ func newUnmappedEnv(t *testing.T) *env {
 	st := store.OpenTestStore(t)
 	return &env{
 		dbEnv: dbEnv{st: st},
-		h:     hooks.NewGitHubHandler(st, testSecret, slog.Default(), nil, nil, nil),
+		h:     hooks.NewGitHubHandler(st, testSecret, slog.Default(), nil, nil, nil, nil),
 	}
 }
 

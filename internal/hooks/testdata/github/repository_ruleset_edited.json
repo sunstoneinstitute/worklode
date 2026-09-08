@@ -1,0 +1,13 @@
+{
+  "action": "edited",
+  "repository_ruleset": {
+    "id": 1234,
+    "name": "main",
+    "target": "branch",
+    "enforcement": "active"
+  },
+  "repository": {
+    "full_name": "sunstoneinstitute/demo",
+    "default_branch": "main"
+  }
+}

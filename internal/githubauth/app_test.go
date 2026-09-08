@@ -34,14 +34,15 @@ var testKey = sync.OnceValue(func() *rsa.PrivateKey {
 // token mint, and the two discovery endpoints, recording the Authorization
 // header seen on each path.
 type appFixture struct {
-	environments []string          // names returned by GET .../environments
-	envStatus    int               // 0 means 200
-	releaseCode  int               // status for GET .../releases/latest (0 means 404)
-	tokenCode    int               // status for the token mint (0 means 201)
-	tarball      []byte            // body for GET .../tarball/<ref>
-	tarballCode  int               // status for the tarball (0 means 200)
-	tarballTo    string            // when set, the tarball 302s here (as codeload does)
-	branchSHAs   map[string]string // branch name -> head sha for .../git/ref/heads/<branch>; unlisted branches 404
+	environments []string            // names returned by GET .../environments
+	envStatus    int                 // 0 means 200
+	releaseCode  int                 // status for GET .../releases/latest (0 means 404)
+	tokenCode    int                 // status for the token mint (0 means 201)
+	tarball      []byte              // body for GET .../tarball/<ref>
+	tarballCode  int                 // status for the tarball (0 means 200)
+	tarballTo    string              // when set, the tarball 302s here (as codeload does)
+	branchSHAs   map[string]string   // branch name -> head sha for .../git/ref/heads/<branch>; unlisted branches 404
+	branchRules  map[string][]string // branch name -> rule types for .../rules/branches/<branch>; unlisted branches get none
 
 	mu      sync.Mutex
 	auth    map[string]string
@@ -150,6 +151,18 @@ func (f *appFixture) start(t *testing.T) *AppAuth {
 					"ref":    "refs/heads/" + branch,
 					"object": map[string]any{"sha": sha, "type": "commit"},
 				})
+				return
+			}
+			// The branch rules are matched by prefix for the same reason;
+			// a branch nothing was said about answers with the empty array
+			// GitHub returns for an unruled branch.
+			if strings.HasPrefix(r.URL.Path, "/repos/acme/app/rules/branches/") {
+				branch := strings.TrimPrefix(r.URL.Path, "/repos/acme/app/rules/branches/")
+				rules := []map[string]any{}
+				for _, typ := range f.branchRules[branch] {
+					rules = append(rules, map[string]any{"type": typ})
+				}
+				json.NewEncoder(w).Encode(rules)
 				return
 			}
 			// The tarball ref is matched by prefix so a test can pick any ref

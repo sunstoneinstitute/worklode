@@ -313,6 +313,13 @@ type server struct {
 	// nil-safe, so the handler is still callable directly in tests.
 	watcherMetrics *watcher.Metrics
 
+	// branchRulesKick pokes the branch-rules refresh loop (branchrules.go)
+	// from the repository_ruleset webhook. Buffered to one, so a kick that
+	// arrives mid-refresh is remembered and a burst collapses into one extra
+	// pass. Nil in a server that starts no loop; the send has a default, so
+	// a kick then drops instead of blocking the delivery.
+	branchRulesKick chan struct{}
+
 	// cliCodes holds pending one-time codes for the server-mediated CLI login.
 	cliCodes *cliCodeStore
 
@@ -334,6 +341,10 @@ type server struct {
 
 	requests  *prometheus.CounterVec
 	durations *prometheus.HistogramVec
+
+	// githubCalls counts GitHub API reads worklode makes on its own schedule
+	// (branchrules.go), by op; see metrics.go's observeGitHubCall.
+	githubCalls *prometheus.CounterVec
 
 	syncRuns     *prometheus.CounterVec
 	syncDuration prometheus.Histogram
@@ -694,7 +705,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	hookMetrics := hooks.NewMetrics(reg)
 	s.hookMetrics = hookMetrics
 	s.pollMetrics = reconcile.NewMetrics(reg)
-	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, hookMetrics))
+	r.public("POST /hooks/github", hooks.NewGitHubHandler(s.st, s.cfg.GitHubWebhookSecret, s.log, onSkillPush, s.appAuth, s.kickBranchRules, hookMetrics))
 	r.public("POST /hooks/flux", hooks.NewFluxHandler(s.st, s.cfg.FluxWebhookSecret, s.cfg.ClusterEnvMap, s.log, hookMetrics))
 	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
 
@@ -1112,6 +1123,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		go (&indexer.Indexer{
 			Store: st, Embed: s.embedder, Metrics: indexer.NewMetrics(reg), Log: s.log,
 		}).Loop(cfg.BackgroundCtx, cfg.IndexInterval)
+
+		// The branch-rules refresh loop (WL-SPEC-66 §6.3). Also needs the
+		// App: with no GitHub credentials there is nothing to read, so the
+		// fact stays unknown and readers treat it as "no queue".
+		if appAuth != nil {
+			s.branchRulesKick = make(chan struct{}, 1)
+			go s.branchRulesLoop(cfg.BackgroundCtx)
+		}
 
 		s.watcherMetrics = watcher.NewMetrics(reg)
 		// First and only registration of the eventbus instruments: this is
