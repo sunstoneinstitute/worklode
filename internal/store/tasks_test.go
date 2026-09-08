@@ -119,6 +119,18 @@ func addEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	return err
 }
 
+// insertEdgeRaw writes a task_edges row straight past AddEdge's validation.
+// Only for tests that need a graph AddEdge now refuses — a 'blocks' cycle
+// stored before the guard existed — to prove the readers still terminate.
+func insertEdgeRaw(t *testing.T, s *Store, fromTask, toTask, typ string) {
+	t.Helper()
+	if _, err := s.db.ExecContext(t.Context(),
+		`INSERT INTO task_edges (from_task, to_task, type, created_at) VALUES ($1, $2, $3, $4)`,
+		fromTask, toTask, typ, taskTestNow.UTC()); err != nil {
+		t.Fatalf("insertEdgeRaw %s %s %s: %v", fromTask, typ, toTask, err)
+	}
+}
+
 func removeEdge(t *testing.T, s *Store, fromTask, toTask, typ string) error {
 	t.Helper()
 	_, _, err := s.RecordEvent(t.Context(), "cli", nextExt(t), "edge.remove", nil,
