@@ -159,14 +159,115 @@ func TestProgressRowPlanningTaskLink(t *testing.T) {
 }
 
 // renderProgressRow renders one spec row as a signed-in viewer sees it, with
-// the review surface disabled — today's reality (§3.3).
+// the review surface disabled — today's reality (§3.3) — and a GitHub App
+// configured, which is what §3.6's merge button needs.
 func renderProgressRow(t *testing.T, s model.ProgressSpec) string {
 	t.Helper()
+	return renderProgressRowWithApp(t, s, true)
+}
+
+func renderProgressRowWithApp(t *testing.T, s model.ProgressSpec, mergeEnabled bool) string {
+	t.Helper()
 	var b strings.Builder
-	if err := progressRow(s, "alice", false).Render(context.Background(), &b); err != nil {
+	if err := progressRow(s, "alice", false, mergeEnabled).Render(context.Background(), &b); err != nil {
 		t.Fatalf("render row: %v", err)
 	}
 	return b.String()
+}
+
+// specWithMerge is a spec whose one plan minted one task, carrying the open
+// PR §3.6 acts on.
+func specWithMerge(m *model.ProgressMerge) model.ProgressSpec {
+	return model.ProgressSpec{
+		Doc: 3, Ref: "WL-SPEC-66", Status: "accepted",
+		Sections: []model.ProgressSection{{Anchor: "sec-1", State: "in_progress"}},
+		Plans: []model.ProgressPlan{{
+			Doc: 4, Ref: "WL-PLAN-139", State: "in_progress", Open: 1,
+			Tasks: []model.ProgressTask{{ID: "WL-752", Title: "Queue for merge",
+				State: "in_review", Class: "active", Position: "PR #7 open", Merge: m}},
+		}},
+	}
+}
+
+// TestProgressMergeButton: criterion 18. A task whose PR sits on a
+// queue-protected branch offers "Queue for merge"; the same PR on a branch
+// without the rule offers "Merge", disabled while the reason the backbone
+// already knows applies.
+func TestProgressMergeButton(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                   string
+		merge                  model.ProgressMerge
+		label, confirm, reason string
+	}{
+		{
+			name:    "a queue-protected branch queues",
+			merge:   model.ProgressMerge{Repo: "acme/app", Number: 7, Queue: true},
+			label:   "Queue for merge",
+			confirm: "Queue PR #7 for merge",
+		},
+		{
+			name:    "a branch without the rule merges",
+			merge:   model.ProgressMerge{Repo: "acme/app", Number: 7},
+			label:   "Merge",
+			confirm: "Merge PR #7",
+		},
+		{
+			name:    "checks that have not passed disable the merge",
+			merge:   model.ProgressMerge{Repo: "acme/app", Number: 7, Reason: "checks have not passed"},
+			label:   "Merge",
+			confirm: "Merge PR #7",
+			reason:  "checks have not passed",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := tc.merge
+			html := renderProgressRow(t, specWithMerge(&m))
+			if !strings.Contains(html, `data-route="merge"`) {
+				t.Fatalf("row = %s; want the merge button", html)
+			}
+			if !strings.Contains(html, ">"+tc.label+"<") {
+				t.Errorf("row = %s; want the label %q", html, tc.label)
+			}
+			if tc.reason == "" {
+				if !strings.Contains(html, `data-confirm="`+tc.confirm+`"`) {
+					t.Errorf("row = %s; want the confirmation %q", html, tc.confirm)
+				}
+				if !strings.Contains(html, `data-body="{&#34;task&#34;:&#34;WL-752&#34;`) {
+					t.Errorf("row = %s; want the body to name the task and its PR", html)
+				}
+				if strings.Contains(html, `data-route="merge" data-reason`) {
+					t.Errorf("row = %s; want the button enabled", html)
+				}
+				return
+			}
+			if !strings.Contains(html, `data-reason="`+tc.reason+`"`) {
+				t.Errorf("row = %s; want it disabled with %q", html, tc.reason)
+			}
+		})
+	}
+}
+
+// A task with no open PR has nothing to merge, so the row carries no button
+// at all — there is no PR for a disabled one to name.
+func TestProgressMergeButtonNeedsAPR(t *testing.T) {
+	t.Parallel()
+	if html := renderProgressRow(t, specWithMerge(nil)); strings.Contains(html, `data-route="merge"`) {
+		t.Errorf("row = %s; want no merge button without an open PR", html)
+	}
+}
+
+// Without a GitHub App the server cannot act on a PR at all, so the button
+// renders disabled with that reason rather than posting a route that would
+// answer 503.
+func TestProgressMergeButtonWithoutApp(t *testing.T) {
+	t.Parallel()
+	m := model.ProgressMerge{Repo: "acme/app", Number: 7, Queue: true}
+	html := renderProgressRowWithApp(t, specWithMerge(&m), false)
+	if !strings.Contains(html, `data-reason="no GitHub App is configured"`) {
+		t.Errorf("row = %s; want the button disabled with the App reason", html)
+	}
 }
 
 // TestProgressRallyActionOnEveryRow: §3.5 puts a Rally button on every spec

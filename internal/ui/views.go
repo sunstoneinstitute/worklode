@@ -9,6 +9,7 @@ package ui
 // reference api's DTOs (ADR 036 §3).
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"strconv"
@@ -1189,6 +1190,11 @@ type ProgressView struct {
 	// package (§3.3) — every Review button on the page renders off this one
 	// bit rather than each act guessing at it.
 	ReviewEnabled bool
+	// MergeEnabled is whether the server has a GitHub App to act with
+	// (internal/api). §3.6's button needs one, and only the server knows;
+	// without it the button renders disabled with that reason rather than
+	// posting a route that would answer 503.
+	MergeEnabled bool
 }
 
 // LegendEntry is one section state in the bar's legend: §1.2's label, a
@@ -1477,4 +1483,47 @@ func progressAcceptAction(doc int64, ref, owner, viewer string) ProgressAction {
 // built from an integer, so it is a well-formed JSON object by construction.
 func progressDocBody(doc int64) string {
 	return `{"doc":` + strconv.FormatInt(doc, 10) + `}`
+}
+
+// progressMergeAction is §3.6's act on a task's open pull request. What the
+// repository's default branch does with a PR decides the label: a
+// queue-protected branch takes it into the queue, anything else merges it.
+// The page moves this button into the task cell's pinned tooltip, which is
+// where §3.6 puts it.
+//
+// mergeEnabled is the server's answer about the GitHub App; t.Merge.Reason
+// carries what the backbone can already tell (checks not passed, already
+// queued). Either one renders the button disabled with that reason rather
+// than hidden (§3).
+func progressMergeAction(t model.ProgressTask, mergeEnabled bool) ProgressAction {
+	m := t.Merge
+	pr := "PR #" + strconv.FormatInt(m.Number, 10)
+	a := ProgressAction{
+		Route:   "merge",
+		Body:    progressMergeBody(t.ID, *m),
+		Label:   "Merge",
+		Confirm: "Merge " + pr,
+	}
+	if m.Queue {
+		a.Label = "Queue for merge"
+		a.Confirm = "Queue " + pr + " for merge"
+	}
+	a.Reason = m.Reason
+	if !mergeEnabled {
+		a.Reason = "no GitHub App is configured"
+	}
+	return a
+}
+
+// progressMergeBody is the merge act's body, marshalled from the wire type
+// the route decodes, so the two cannot drift apart.
+func progressMergeBody(task string, m model.ProgressMerge) string {
+	b, err := json.Marshal(model.ProgressMergeInput{
+		Task: task,
+		PR:   model.ProgressPR{Repo: m.Repo, Number: m.Number},
+	})
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }

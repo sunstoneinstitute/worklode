@@ -481,8 +481,9 @@ var mergeGroupHeadRef = regexp.MustCompile(`/pr-(\d+)-[0-9a-f]+$`)
 // one of those two (applyFunc filters). A head_ref that does not match the
 // expected shape names no PR to update; that is logged and treated as a
 // no-op, not a delivery failure — a correlation must never fail the
-// delivery.
-func (a *applier) applyMergeGroup(tx *sql.Tx, repo, action string, body []byte) error {
+// delivery. The task the PR carries is recorded on the event, as
+// applyPullRequest does.
+func (a *applier) applyMergeGroup(tx *sql.Tx, eventID int64, repo, action string, body []byte) error {
 	var p struct {
 		MergeGroup struct {
 			HeadRef string `json:"head_ref"`
@@ -505,7 +506,21 @@ func (a *applier) applyMergeGroup(tx *sql.Tx, repo, action string, body []byte) 
 		now := a.st.Now()
 		at = &now
 	}
-	return store.SetPRQueued(tx, repo, number, at)
+	if err := store.SetPRQueued(tx, repo, number, at); err != nil {
+		return err
+	}
+	// The delivery names a queue entry, not a task; the correlation lives on
+	// the PR row. Recording it on the event is what lets the Progress page's
+	// stream resolve this to a task and refresh its position line
+	// (WL-SPEC-66 §5.1) without re-joining.
+	taskID, err := store.PRTaskID(tx, repo, number)
+	if err != nil {
+		return err
+	}
+	if taskID == "" {
+		return nil
+	}
+	return store.MergeEventPayload(tx, eventID, map[string]string{"task": taskID})
 }
 
 func (a *applier) applyReview(tx *sql.Tx, repo string, body []byte) error {

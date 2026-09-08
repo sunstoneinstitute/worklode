@@ -75,6 +75,9 @@ type Cover struct {
 // Task is one task minted from a plan.
 type Task struct {
 	ID, Title, State, Position string
+	// Merge is the open pull request §3.6's button acts on, nil when the
+	// task has none. A reader fills it with MergeAct.
+	Merge *model.ProgressMerge
 }
 
 // CoverState pairs a Cover with the state of the plan that made it, so
@@ -206,7 +209,7 @@ func Derive(in Input) model.ProjectProgress {
 			}
 			pi.TaskCells = append(pi.TaskCells, model.ProgressTask{
 				ID: t.ID, Title: t.Title, State: t.State,
-				Class: class, Position: t.Position,
+				Class: class, Position: t.Position, Merge: t.Merge,
 			})
 		}
 		plans[p.Doc] = pi
