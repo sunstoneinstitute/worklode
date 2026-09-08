@@ -68,8 +68,12 @@ func (s *Store) ProjectProgress(ctx context.Context, projectID string) (progress
 	if err != nil {
 		return progress.Input{}, err
 	}
+	draft, err := s.DraftRallyBand(ctx, projectID)
+	if err != nil {
+		return progress.Input{}, err
+	}
 
-	in.Rally = rally
+	in.Rally, in.Draft = rally, draft
 	for _, id := range slices.Sorted(maps.Keys(specs)) {
 		in.Specs = append(in.Specs, *specs[id])
 	}
@@ -390,6 +394,65 @@ SELECT count(*) FROM task_edges e
 	return &model.RallyBand{
 		ID: rally.ID, Title: rally.Title, Members: members, Landed: landed,
 	}, nil
+}
+
+// DraftRallyBand reads the project's draft rally as WL-SPEC-66 §3.5's
+// footer shows it — member count and the number of specs those members come
+// from — or nil when the project has none. Landed is left at zero: a draft
+// rally ranks nothing, so nothing in it has landed under it.
+func (s *Store) DraftRallyBand(ctx context.Context, projectID string) (*model.RallyBand, error) {
+	rally, err := s.DraftRally(ctx, projectID)
+	if errors.Is(err, ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	members, err := s.RallyMemberCount(ctx, rally.ID)
+	if err != nil {
+		return nil, err
+	}
+	specs, err := s.rallySpecCount(ctx, rally.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &model.RallyBand{
+		ID: rally.ID, Title: rally.Title, Members: members, Specs: specs,
+	}, nil
+}
+
+// rallySpecCount counts the distinct specs a rally's members work on: the
+// specs covered by the plan each member was minted from or is about, plus the
+// specs a member names directly (§3.4's planning task does). A member that
+// resolves to no spec — a task filed by hand into the rally — counts for
+// none, which is honest: the footer says how many specs are represented, not
+// how many members lack one.
+func (s *Store) rallySpecCount(ctx context.Context, rallyID string) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `
+WITH members AS (
+  SELECT f.plan_doc, f.about_doc
+    FROM task_edges e
+    JOIN tasks f ON f.id = e.from_task AND f.deleted_at IS NULL
+   WHERE e.to_task = $1 AND e.type = 'blocks'
+), plans AS (
+  SELECT plan_doc AS doc FROM members WHERE plan_doc IS NOT NULL
+  UNION
+  SELECT m.about_doc FROM members m
+    JOIN docs d ON d.id = m.about_doc AND d.kind = 'plan' AND d.deleted_at IS NULL
+)
+SELECT count(*) FROM (
+  SELECT e.to_doc AS spec FROM plans p
+    JOIN doc_edges e ON e.from_doc = p.doc AND e.type = 'covers'
+   WHERE e.to_doc IS NOT NULL
+  UNION
+  SELECT m.about_doc FROM members m
+    JOIN docs d ON d.id = m.about_doc AND d.kind = 'spec' AND d.deleted_at IS NULL
+) s`, rallyID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("rally spec count for %s: %w", rallyID, err)
+	}
+	return n, nil
 }
 
 // ProjectHasSpecs reports whether the project has at least one live spec —

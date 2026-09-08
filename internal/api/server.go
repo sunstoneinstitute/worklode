@@ -597,6 +597,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// is never a navigated page (066 §4.2 rule 4), like /preview and /dictate.
 	r.web("POST /projects/{id}/progress/accept", s.progressAccept)
 	r.web("POST /projects/{id}/progress/plan", s.progressPlan)
+	r.web("POST /projects/{id}/progress/rally/add", s.progressRallyAdd)
+	r.web("POST /projects/{id}/progress/rally/confirm", s.progressRallyConfirm)
+	r.web("POST /projects/{id}/progress/rally/discard", s.progressRallyDiscard)
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))

@@ -22,6 +22,9 @@ type Input struct {
 	Specs   []Spec
 	Plans   []Plan
 	Rally   *model.RallyBand
+	// Draft is the project's draft rally, the one §3.5's footer offers to
+	// confirm or discard. Nil when the project has none.
+	Draft *model.RallyBand
 }
 
 // Spec is one spec document and its sections, in document order. Status and
@@ -314,7 +317,7 @@ func Derive(in Input) model.ProjectProgress {
 		})
 	}
 
-	out := model.ProjectProgress{Project: in.Project, Rally: in.Rally}
+	out := model.ProjectProgress{Project: in.Project, Rally: in.Rally, Draft: in.Draft}
 	for _, key := range groupOrder {
 		specs := byGroup[key]
 		sort.SliceStable(specs, func(i, j int) bool { return specs[i].Updated.After(specs[j].Updated) })
