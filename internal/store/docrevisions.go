@@ -264,7 +264,7 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 // anchors, no renumbering, no anchor past the depth limit. Both publication
 // paths run it — an accepted revision and an §8.4 in-place patch — since an
 // in-place amendment relaxes nothing about the freeze. what names the act in
-// the refusal ("revision of doc 25 cannot be accepted").
+// the refusal message (e.g. "revision of doc 25 cannot be accepted").
 //
 // The freeze protects the anchors the accepted version *published*, so a
 // never-published row that disappears is legal; renumbering and excess depth
