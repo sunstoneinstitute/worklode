@@ -39,7 +39,7 @@ func (s *server) recordMilestone(ctx context.Context, source, projectID, title s
 		if err != nil {
 			return err
 		}
-		if err := store.MergeEventPayload(tx, eventID, map[string]string{
+		if err := store.MergeEventPayload(tx, eventID, map[string]any{
 			"id":       m.ID,
 			"title":    m.Title,
 			"position": strconv.Itoa(m.Position),

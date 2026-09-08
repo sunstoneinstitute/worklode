@@ -1164,6 +1164,40 @@ func (s *Store) DocBySubjectIRI(ctx context.Context, iri string) (*model.Doc, er
 	return d, nil
 }
 
+// DocIDsBySubjectIRI resolves a batch of wl:subject IRIs to row ids in one
+// query, for a reader holding a set of them rather than one — the Progress
+// stream resolving a poll's worth of events (WL-SPEC-66 §5.1). Same
+// reconstruct-the-IRI-in-SQL comparison as DocBySubjectIRI, for the same
+// reason.
+//
+// An IRI naming no live row is absent from the map rather than an error: the
+// caller is reducing events to the ones it can show, not answering a request
+// about one document.
+func (s *Store) DocIDsBySubjectIRI(ctx context.Context, iris []string) (map[string]int64, error) {
+	out := map[string]int64{}
+	if len(iris) == 0 {
+		return out, nil
+	}
+	const iriExpr = `'wlid:doc/' || kind || '-' || project_id || '-' ||
+	                 CASE WHEN kind = 'plan' THEN slug ELSE lpad(number::text, 3, '0') END`
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+iriExpr+`, id FROM docs
+		  WHERE `+iriExpr+` = ANY($1) AND deleted_at IS NULL`, iris)
+	if err != nil {
+		return nil, fmt.Errorf("resolve doc subjects: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var iri string
+		var id int64
+		if err := rows.Scan(&iri, &id); err != nil {
+			return nil, fmt.Errorf("scan doc subject: %w", err)
+		}
+		out[iri] = id
+	}
+	return out, rows.Err()
+}
+
 // ListCorpusSections is the cross-corpus section listing `scripts/secindex.py`
 // used to write into docs/specs/index.yaml before the file corpus went away
 // (055 §4): every section of every spec and ADR the caller asks for, in

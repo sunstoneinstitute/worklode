@@ -750,11 +750,30 @@ type progressOrigin struct {
 // the whole set of tasks it transitioned — has nothing to look up and
 // contributes no frame; the same is true of an event whose family this page
 // does not model at all (progress.Resolve's zero Touch).
+//
+// A document named by IRI rather than row id — the typed 025 §15.3 events,
+// whose wl:subject is the only name they carry — is resolved in one further
+// batched call before the refs read, so a submission or an acceptance on a
+// plan reaches the page as the frame §5.1 asks for.
 func (s *server) progressFrames(ctx context.Context, projectID string, events []store.Event) ([]progressFrame, error) {
 	var taskIDs []string
 	var docIDs []int64
+	var docIRIs []string
 	taskOrigin := map[string]progressOrigin{}
 	docOrigin := map[int64]progressOrigin{}
+	iriOrigin := map[string]progressOrigin{}
+	// noteDoc records which event a document's frame is attributed to. The
+	// latest event wins, which is the event id, because the IRI-named touches
+	// are merged in after the loop below has run through the poll in order.
+	noteDoc := func(id int64, o progressOrigin) {
+		prev, seen := docOrigin[id]
+		if !seen {
+			docIDs = append(docIDs, id)
+		} else if prev.eventID > o.eventID {
+			return
+		}
+		docOrigin[id] = o
+	}
 	for _, e := range events {
 		t := progress.Resolve(e.Type, e.Payload)
 		o := progressOrigin{eventID: e.ID, typ: e.Type, at: e.ReceivedAt}
@@ -765,10 +784,21 @@ func (s *server) progressFrames(ctx context.Context, projectID string, events []
 			}
 			taskOrigin[t.Task] = o
 		case t.Doc != 0:
-			if _, seen := docOrigin[t.Doc]; !seen {
-				docIDs = append(docIDs, t.Doc)
+			noteDoc(t.Doc, o)
+		case t.DocIRI != "":
+			if _, seen := iriOrigin[t.DocIRI]; !seen {
+				docIRIs = append(docIRIs, t.DocIRI)
 			}
-			docOrigin[t.Doc] = o
+			iriOrigin[t.DocIRI] = o
+		}
+	}
+	if len(docIRIs) > 0 {
+		ids, err := s.st.DocIDsBySubjectIRI(ctx, docIRIs)
+		if err != nil {
+			return nil, err
+		}
+		for iri, id := range ids {
+			noteDoc(id, iriOrigin[iri])
 		}
 	}
 	if len(taskIDs) == 0 && len(docIDs) == 0 {

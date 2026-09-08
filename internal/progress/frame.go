@@ -14,7 +14,11 @@ import (
 type Touch struct {
 	Task string
 	Doc  int64
-	Kind string // "task" | "doc" | "pr" | "ci" | "deploy" | "rally" | ""
+	// DocIRI is the document's subject IRI (wlid:doc/spec-worklode-066),
+	// set when the event names its document that way and not by row id.
+	// The reader resolves it to a row id; this package stays pure.
+	DocIRI string
+	Kind   string // "task" | "doc" | "pr" | "ci" | "deploy" | "rally" | ""
 }
 
 // touchKinds maps an event type's family — the segment before its first dot,
@@ -76,8 +80,15 @@ func Resolve(eventType string, payload []byte) Touch {
 	}
 	_ = json.Unmarshal(fields["task"], &t.Task)
 	// "doc" is the row id in a document mutation's payload and the document's
-	// IRI in the events minted about one (api/progress.go, api/docwatch.go).
-	// Only the number is an id this page can use.
-	_ = json.Unmarshal(fields["doc"], &t.Doc)
+	// IRI in the events minted about one (api/progress.go, api/docwatch.go);
+	// the typed 025 §15.3 events name their document in "wl:subject" and
+	// nowhere else. Whichever form is there, the document is named — the row
+	// id directly, the IRI for the reader to resolve (WL-SPEC-66 §5.1).
+	if json.Unmarshal(fields["doc"], &t.Doc) != nil {
+		_ = json.Unmarshal(fields["doc"], &t.DocIRI)
+	}
+	if t.Doc == 0 && t.DocIRI == "" {
+		_ = json.Unmarshal(fields["wl:subject"], &t.DocIRI)
+	}
 	return t
 }
