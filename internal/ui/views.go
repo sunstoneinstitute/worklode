@@ -1335,12 +1335,48 @@ func progressPlanActions(p model.ProgressPlan, viewer string) []ProgressAction {
 
 // progressSpecActions are the acts on a spec row (§2.2's action slot). A
 // draft spec is accepted from here the same way a draft plan is (§3.2); an
-// accepted one has nothing to accept.
+// accepted one has nothing to accept. Plan (§3.4) joins it when the spec has
+// a section no plan covers and no planning task is open — an open one is
+// drawn as a link instead, because minting a second is not an act this page
+// offers.
 func progressSpecActions(s model.ProgressSpec, viewer string) []ProgressAction {
-	if s.Status != "draft" {
-		return nil
+	var acts []ProgressAction
+	if s.Status == "draft" {
+		acts = append(acts, progressAcceptAction(s.Doc, s.Ref, s.Owner, viewer))
 	}
-	return []ProgressAction{progressAcceptAction(s.Doc, s.Ref, s.Owner, viewer)}
+	if s.PlanningTask == "" && progressHasUnplanned(s) {
+		acts = append(acts, progressPlanAction(s.Doc, s.Ref, viewer))
+	}
+	return acts
+}
+
+// progressHasUnplanned is §3.4's condition: a section no plan covers. It is
+// the same fact the route checks before it mints, so the button and the route
+// agree about when planning is owed.
+func progressHasUnplanned(s model.ProgressSpec) bool {
+	for _, sec := range s.Sections {
+		if sec.State == "unplanned" {
+			return true
+		}
+	}
+	return false
+}
+
+// progressPlanAction is §3.4's Plan button: it mints 025 §15.4's planning
+// task for the spec. Any signed-in viewer may ask for it — the task is a
+// prompt to plan, not the plan — so the only reason it is ever disabled is
+// having no session to act as.
+func progressPlanAction(doc int64, ref, viewer string) ProgressAction {
+	a := ProgressAction{
+		Route:   "plan",
+		Body:    progressDocBody(doc),
+		Label:   "Plan",
+		Confirm: "Mint a planning task for " + ref,
+	}
+	if viewer == "" {
+		a.Reason = "sign in to mint a planning task"
+	}
+	return a
 }
 
 // progressAcceptAction is §3.2's Accept button for one document. It is

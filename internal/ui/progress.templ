@@ -126,8 +126,9 @@ templ progressGroup(g model.ProgressGroup, viewer string) {
 
 // progressRow is §2.2's row: reference, title, strip, next act, and the
 // right-aligned action slot the row-level acts of §3 render into as they
-// land, each one a progressAct — Accept (§3.2) today, Review (§3.3), Plan
-// (§3.4) and Rally (§3.5) as their routes land. The reference is the row's
+// land, each one a progressAct — Accept (§3.2) and Plan (§3.4) today, Review
+// (§3.3) and Rally (§3.5) as their routes land. A spec whose planning task is
+// already open shows it as a link there instead of the Plan button (§3.4). The reference is the row's
 // only link. A bound-only section gets no cell. Clicking the row anywhere but
 // a link expands the detail block that follows it; the row is focusable so a
 // keyboard can do the same.
@@ -144,6 +145,9 @@ templ progressRow(s model.ProgressSpec, viewer string) {
 		</div>
 		<div class="next muted small">{ s.Next.Text }</div>
 		<div class="act">
+			if s.PlanningTask != "" {
+				<a href={ "/tasks/" + s.PlanningTask } class="mono">Planning: { s.PlanningTask }</a>
+			}
 			for _, a := range progressSpecActions(s, viewer) {
 				@progressAct(a)
 			}

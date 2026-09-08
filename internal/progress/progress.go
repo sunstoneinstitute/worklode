@@ -28,13 +28,17 @@ type Input struct {
 // Owner are carried for §3.2's Accept button, which is offered on a draft
 // spec and enabled only for its owner; the derivation itself reads neither.
 type Spec struct {
-	Doc      int64
-	Ref      string
-	Title    string
-	Status   string // draft | accepted | superseded
-	Owner    string
-	Updated  time.Time
-	Sections []Section
+	Doc     int64
+	Ref     string
+	Title   string
+	Status  string // draft | accepted | superseded
+	Owner   string
+	Updated time.Time
+	// PlanningTask is the open design task about this spec, when one exists
+	// (025 §15.4). §3.4 shows it instead of the Plan button; the derivation
+	// itself never reads it.
+	PlanningTask string
+	Sections     []Section
 }
 
 // Section is one heading of a spec: no body text, the derivation never reads it.
@@ -300,12 +304,13 @@ func Derive(in Input) model.ProjectProgress {
 
 		byGroup[groupKey] = append(byGroup[groupKey], model.ProgressSpec{
 			Doc: spec.Doc, Ref: spec.Ref, Title: spec.Title, Updated: spec.Updated,
-			Status:   spec.Status,
-			Owner:    spec.Owner,
-			Group:    groupKey,
-			Next:     nextAct(openTasks, openPlans, draftPlans, unplannedCount, noRecordPlans),
-			Sections: sections,
-			Plans:    specPlans,
+			Status:       spec.Status,
+			Owner:        spec.Owner,
+			PlanningTask: spec.PlanningTask,
+			Group:        groupKey,
+			Next:         nextAct(openTasks, openPlans, draftPlans, unplannedCount, noRecordPlans),
+			Sections:     sections,
+			Plans:        specPlans,
 		})
 	}
 
