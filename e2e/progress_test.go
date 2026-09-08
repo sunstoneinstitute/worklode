@@ -78,12 +78,20 @@ Test it.
 // it mints its two tasks, one task walked to merged. The spec then sits in
 // the "active" group with one open task in the plan, and all three readers —
 // the cockpit page, the JSON API and `lode doc progress --json` — say the
-// same thing, because each recomputes the same derivation per call.
+// same thing, because each recomputes the same derivation per call. The
+// still-open second task then carries a PR into GitHub's merge queue: a
+// signed pull_request delivery correlates the PR, and merge_group's
+// checks_requested and destroyed actions move its row tip onto and off
+// "queued for merge" (WL-SPEC-66 §6, §8).
 func TestProgressOverAMintedPlan(t *testing.T) {
 	ctx := context.Background()
 
 	st := store.OpenTestStore(t)
-	handler, _, err := api.NewServer(st, api.Config{BootstrapToken: bootstrapToken, WebOpen: true})
+	handler, _, err := api.NewServer(st, api.Config{
+		BootstrapToken:      bootstrapToken,
+		WebOpen:             true,
+		GitHubWebhookSecret: githubSecret,
+	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -95,6 +103,9 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 		ID: "prog", Name: "Progress", Key: "PRG",
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
+	}
+	if _, _, err := admin.AddRepo(ctx, "prog", repo, ""); err != nil {
+		t.Fatalf("add repo: %v", err)
 	}
 	if _, _, err := admin.CreateActor(ctx, model.CreateActorInput{
 		ID: "planner", Kind: "agent", DisplayName: "Planner",
@@ -243,6 +254,94 @@ func TestProgressOverAMintedPlan(t *testing.T) {
 	}
 	if cliSpec := progressSpecByRef(t, fromCLI, spec.Ref); cliSpec.Next.Text != wantNext {
 		t.Fatalf("lode doc progress next = %q, want %q", cliSpec.Next.Text, wantNext)
+	}
+
+	// 6. The still-open second task picks up a PR, correlated by a signed
+	// pull_request delivery, and then a signed merge_group checks_requested
+	// (Task 5's fake covers the merge route itself; e2e never calls GitHub).
+	// Both webhook deliveries are answered only once their apply has
+	// committed, but the row fragment is a separate read against the same
+	// shared Postgres instance, so its visibility of that write is polled
+	// against a bounded deadline rather than trusted on the first read
+	// (see readProgressFrame's comment on the commit horizon above).
+	openTask := accepted.Tasks[1]
+	const (
+		queuePR      = 7
+		queueHeadSHA = "ccc3330000000000000000000000000000000000"
+		queueBaseSHA = "ddd4440000000000000000000000000000000000"
+	)
+	deliverGitHub(t, srv.URL, "pull_request", "e2e-progress-pr-1", map[string]any{
+		"action":     "opened",
+		"repository": map[string]any{"full_name": repo},
+		"pull_request": map[string]any{
+			"number":     queuePR,
+			"title":      "Queue me",
+			"state":      "open",
+			"merged":     false,
+			"body":       "",
+			"html_url":   fmt.Sprintf("https://github.com/%s/pull/%d", repo, queuePR),
+			"created_at": "2026-07-19T10:00:00Z",
+			"updated_at": "2026-07-19T10:00:00Z",
+			"head":       map[string]any{"ref": openTask.ID + "-queue-it", "sha": queueHeadSHA},
+			"user":       map[string]any{"login": "planner"},
+		},
+	})
+	mergeGroupHeadRef := fmt.Sprintf("refs/heads/gh-readonly-queue/main/pr-%d-%s", queuePR, queueBaseSHA)
+	deliverGitHub(t, srv.URL, "merge_group", "e2e-progress-mg-1", map[string]any{
+		"action":     "checks_requested",
+		"repository": map[string]any{"full_name": repo},
+		"merge_group": map[string]any{
+			"head_sha": queueHeadSHA,
+			"head_ref": mergeGroupHeadRef,
+			"base_sha": queueBaseSHA,
+			"base_ref": "refs/heads/main",
+		},
+	})
+
+	fragURL := fmt.Sprintf("%s/projects/prog/progress/spec/%d", srv.URL, spec.ID)
+	wantQueuedTip := fmt.Sprintf(`data-tip="%s · %s · queued for merge"`, openTask.ID, openTask.Title)
+	pollProgressFragment(t, fragURL, "PR queued for merge",
+		func(body string) bool { return strings.Contains(body, wantQueuedTip) })
+
+	deliverGitHub(t, srv.URL, "merge_group", "e2e-progress-mg-2", map[string]any{
+		"action":     "destroyed",
+		"reason":     "merged",
+		"repository": map[string]any{"full_name": repo},
+		"merge_group": map[string]any{
+			"head_sha": queueHeadSHA,
+			"head_ref": mergeGroupHeadRef,
+			"base_sha": queueBaseSHA,
+			"base_ref": "refs/heads/main",
+		},
+	})
+	pollProgressFragment(t, fragURL, "PR left the merge queue",
+		func(body string) bool { return !strings.Contains(body, "queued for merge") })
+}
+
+// pollProgressFragment polls the project progress row fragment at url until
+// ok reports true on its body, or fails the test after 20s — the same bound
+// as store.AwaitCommitHorizon, since the fragment is read over a separate
+// connection from the one the webhook committed on, and a busy shared
+// Postgres instance (CI's e2e Postgres is one) can hold that back a while.
+// Never trust the first read: the caller states the condition it actually
+// needs, not "whatever is there right now".
+func pollProgressFragment(t *testing.T, url, why string, ok func(body string) bool) string {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	var status int
+	var body string
+	for {
+		status, body = getPage(t, url)
+		if status != 200 {
+			t.Fatalf("GET %s status = %d", url, status)
+		}
+		if ok(body) {
+			return body
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("progress row fragment: %s never true after 20s:\n%s", why, body)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
