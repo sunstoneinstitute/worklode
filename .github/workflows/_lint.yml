@@ -70,3 +70,8 @@ jobs:
       # only, so nothing to install.
       - name: ns codegen drift
         run: ./scripts/nsgen.py --check
+      # scripts/ keeps tests for its own tooling (nsgen, health, next_sim, the
+      # code-scope patterns in pr-checks.yml). Nothing ran them, so they drifted
+      # stale unnoticed (WL-764). Stdlib only, so nothing to install.
+      - name: scripts tests
+        run: make test-scripts

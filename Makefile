@@ -1,4 +1,4 @@
-.PHONY: build build-user build-all install test test-e2e vet clean graph-serve graph-query FORCE
+.PHONY: build build-user build-all install test test-scripts test-e2e vet clean graph-serve graph-query FORCE
 
 # 053 §1: six executables from one module. The three user binaries are what
 # Homebrew and Scoop install; the other three ship in the container images.
@@ -28,6 +28,13 @@ install: ## Build and install the three end-user binaries to $(PREFIX)/bin
 
 test: ## Run the unit test suite
 	go test -trimpath -race -count=1 ./...
+
+# The tests scripts/ keeps for its own tooling. Stdlib python and plain
+# shell, so there is nothing to install and no Go build. _lint.yml runs this;
+# it is out of `test` because that target is the slow -race Go suite.
+test-scripts: ## Run the tests for scripts/ (python + shell)
+	@set -e; for t in scripts/*_test.py; do echo "==> $$t"; python3 "$$t"; done
+	@set -e; for t in scripts/*_test.sh; do echo "==> $$t"; "$$t"; done
 
 test-e2e: ## Run the e2e suite (requires TEST_POSTGRES_DSN reachable)
 	go test -trimpath -race -count=1 -tags e2e ./e2e/
