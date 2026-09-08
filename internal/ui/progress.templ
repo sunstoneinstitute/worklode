@@ -15,9 +15,14 @@ package ui
 // count carries a percentage (§2.5), and a bound-only section is not drawn at
 // all — no cell, no slice, no legend entry, no count (§1.4).
 //
-// Rows do not expand yet; §2.3's expansion is its own task.
+// Every row is followed by its detail block (§2.3), rendered server-side and
+// hidden by the stylesheet until progress.js puts the "open" class on the row.
+// That script also owns the page's tooltips (§2.4), which it reads from the
+// data-tip attributes written here — the page carries no title attribute on a
+// cell or a reference, so nothing shows two tooltips at once.
 
 import "strconv"
+import "strings"
 
 import "github.com/sunstoneinstitute/worklode/internal/model"
 
@@ -34,6 +39,7 @@ templ Progress(v ProgressView) {
 				}
 				<div class="prog-footer h-14" aria-hidden="true"></div>
 			</div>
+			<script src={ assetURL("progress.js") } defer></script>
 		}
 	}
 }
@@ -118,19 +124,101 @@ templ progressGroup(g model.ProgressGroup) {
 	}
 }
 
-// progressRow is §2.2's row: reference, title, strip, next act. The
-// reference is the row's only link. A bound-only section gets no cell.
+// progressRow is §2.2's row: reference, title, strip, next act, and the
+// action slot §3 fills in part 2. The reference is the row's only link. A
+// bound-only section gets no cell. Clicking the row anywhere but a link
+// expands the detail block that follows it; the row is focusable so a
+// keyboard can do the same.
 templ progressRow(s model.ProgressSpec) {
-	<div class="prog-row">
-		<div class="ref"><a href={ "/docs/ref/" + s.Ref } title={ s.Ref + " — " + s.Title }>{ s.Ref }</a></div>
+	<div class="prog-row" tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
+		<div class="ref"><a href={ "/docs/ref/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
 		<div class="t">{ s.Title }</div>
 		<div class="strip">
 			for _, sec := range s.Sections {
 				if sec.State != "bound" {
-					<i class={ progressCellClass(sec) } title={ progressCellTitle(sec) }></i>
+					<i class={ progressCellClass(sec) } data-tip={ progressCellTip(sec) }></i>
 				}
 			}
 		</div>
 		<div class="next muted small">{ s.Next.Text }</div>
+		<div class="act"></div>
+	</div>
+	@progressDetail(s)
+}
+
+// progressDetail is §2.3's expanded row: the plans that cover the spec, then
+// every section of it. It is always rendered — the stylesheet hides it until
+// the row carries "open" — so expanding costs no request and the markup a
+// test reads is the markup a reader expands.
+templ progressDetail(s model.ProgressSpec) {
+	<div class="detail" id={ progressDetailID(s.Ref) }>
+		if len(s.Plans) == 0 {
+			<p class="muted small">No plan covers this spec.</p>
+		} else {
+			<div class="plans">
+				for _, p := range s.Plans {
+					@progressPlanLine(p)
+				}
+			</div>
+		}
+		@tableWrap("Sections of " + s.Ref) {
+			<table class="secs">
+				<thead>
+					<tr><th scope="col">Section</th><th scope="col">Heading</th><th scope="col">State</th><th scope="col">Plans</th></tr>
+				</thead>
+				<tbody>
+					for _, sec := range s.Sections {
+						<tr class={ templ.KV("muted", sec.State == "bound") }>
+							<td class="mono">{ progressSectionNumber(sec.Anchor) }</td>
+							<td class={ templ.KV("sub", sec.Depth > 2) }>{ sec.Heading }</td>
+							<td>
+								if sec.State == "bound" {
+									bound only
+								} else {
+									@progressPill(sec.State)
+									if sec.Partial {
+										<span class="muted small">partial</span>
+									}
+								}
+							</td>
+							<td class="muted small">{ strings.Join(sec.Plans, ", ") }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+// progressPill is a state pill: the same swatch the legend draws, with §1.2's
+// label beside it, so one vocabulary of colour covers strip, bar and detail.
+templ progressPill(state string) {
+	<span class="pill">
+		<i class={ "cell cell-" + state } aria-hidden="true"></i>
+		{ progressStateLabel(state) }
+	</span>
+}
+
+// progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
+// after, its state, and one cell per minted task. A plan with no minted task
+// says so rather than drawing an empty strip (§1.1's no_record).
+templ progressPlanLine(p model.ProgressPlan) {
+	<div class="plan">
+		<a href={ "/docs/ref/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
+		<span class="t">{ p.Title }</span>
+		if len(p.Requires) > 0 {
+			<span class="muted small">after { strings.Join(p.Requires, ", ") }</span>
+		}
+		@progressPill(p.State)
+		if p.State == "no_record" {
+			<span class="muted small">no tasks minted</span>
+		} else {
+			<span class="tasks">
+				for _, t := range p.Tasks {
+					<i class={ "task task-" + t.Class } data-task={ t.ID } data-tip={ progressTaskTip(t) }></i>
+				}
+			</span>
+			<span class="muted small">{ strconv.Itoa(p.Landed) } landed &middot; { strconv.Itoa(p.Open) } open</span>
+		}
 	</div>
 }

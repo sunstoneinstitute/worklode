@@ -1255,17 +1255,38 @@ func progressCellClass(s model.ProgressSection) string {
 	return c
 }
 
-// progressCellTitle is a strip cell's hover text (§2.4): the section, its
-// state, and the plans covering it. The anchor's "sec-" prefix is dropped so
-// the tooltip reads "§3.1", the section number a reader recognises.
-func progressCellTitle(s model.ProgressSection) string {
-	t := "§" + strings.TrimPrefix(s.Anchor, "sec-") + " " + s.Heading +
-		" — " + progressStateLabel(s.State)
+// progressSectionNumber renders an anchor as the section number a reader
+// recognises: "sec-3.1" reads "§3.1".
+func progressSectionNumber(anchor string) string {
+	return "§" + strings.TrimPrefix(anchor, "sec-")
+}
+
+// progressCellTip is a strip cell's tooltip text (§2.4): the section, its
+// state, and the plans covering it, in the "·" form the spec spells out
+// (§3.1 Renewal · In progress · WL-PLAN-99). progress.js reads it from
+// data-tip; the page carries no title attribute for it, so a reader never
+// sees two tooltips for one cell.
+func progressCellTip(s model.ProgressSection) string {
+	t := progressSectionNumber(s.Anchor) + " " + s.Heading + " · " + progressStateLabel(s.State)
 	if len(s.Plans) > 0 {
-		t += " — " + strings.Join(s.Plans, ", ")
+		t += " · " + strings.Join(s.Plans, ", ")
 	}
 	return t
 }
+
+// progressTaskTip is a task cell's tooltip text (§2.4): the task, its title,
+// and its position — the furthest fact the backbone holds about it, already
+// rendered as one line by internal/progress.
+func progressTaskTip(t model.ProgressTask) string {
+	s := t.ID + " · " + t.Title
+	if t.Position != "" {
+		s += " · " + t.Position
+	}
+	return s
+}
+
+// progressRefTip is a plan or spec reference's tooltip text (§2.4).
+func progressRefTip(ref, title string) string { return ref + " · " + title }
 
 // progressSliceTitle is a bar slice's hover text: what the colour means and
 // how many owed sections it covers. A count, never a percentage (§2.5).
@@ -1278,3 +1299,7 @@ func progressSliceTitle(s model.ProgressSlice) string {
 func progressSliceStyle(s model.ProgressSlice) templ.SafeCSS {
 	return templ.SafeCSS("flex:" + strconv.Itoa(s.Count))
 }
+
+// progressDetailID is the id of a row's detail block, which the row points at
+// with aria-controls so the two are one control to assistive technology.
+func progressDetailID(ref string) string { return "d-" + ref }
