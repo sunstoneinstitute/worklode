@@ -137,6 +137,16 @@ func (s *server) contentSecurityPolicy() string {
 	}, "; ")
 }
 
+// setWebHeaders sets the two headers every web response carries: the content
+// type and the Content-Security-Policy. It is a function of its own because
+// the Progress page's JSON write replies need the policy too (066 §4.4) —
+// a reply that arrived without frame-ancestors 'none' is a bug — and they
+// overwrite the content type with application/json on the way out.
+func (s *server) setWebHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", s.contentSecurityPolicy())
+}
+
 // selfAnd builds a source list of 'self' plus one optional origin, without
 // the stray space an unconfigured origin would otherwise leave behind.
 func selfAnd(origin string) string {

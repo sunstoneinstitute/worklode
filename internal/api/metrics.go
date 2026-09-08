@@ -123,6 +123,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_web_form_submissions_total",
 		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
 	}, []string{"form", "outcome"})
+	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_progress_writes_total",
+		Help: "Progress page writes issued by the page script (066 §4.2), by route (" +
+			strings.Join(progressWriteRoutes, ", ") + ") and outcome (" +
+			strings.Join(progressWriteOutcomes, ", ") +
+			"). \"refused\" is the write gate answering before the act ran — a wrong origin, a missing page header, a body naming its own actor — so steady refused traffic on a route people use means a stale page, not an attack. Labels are bounded: the project, the document and the actor are deliberately not among them.",
+	}, []string{"route", "outcome"})
 	s.localMerges = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_local_merge_reports_total",
 		Help: "Tasks named in a local merge report, by result (advanced, duplicate, unknown_task). Steady 'duplicate' traffic is what a healthy webhook-plus-clone pair looks like; its absence means a reporter has stopped.",
@@ -261,7 +268,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -337,6 +344,14 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		formRestoreTask, formRestoreDoc} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
+		}
+	}
+	// Every route/outcome pair, so a route nobody has exercised reads as a
+	// flat zero rather than as no-data — the difference that matters for
+	// "refused" is between none refused and none counted.
+	for _, route := range progressWriteRoutes {
+		for _, outcome := range progressWriteOutcomes {
+			s.progressWrites.WithLabelValues(route, outcome)
 		}
 	}
 	for _, outcome := range dictationOutcomes {
@@ -863,6 +878,26 @@ func (s *server) observeFormSubmission(form, outcome string) {
 		return
 	}
 	s.formSubmissions.WithLabelValues(form, outcome).Inc()
+}
+
+// progressWriteRoutes and progressWriteOutcomes bound
+// worklode_progress_writes_total's two labels. The routes are 066 §7's write
+// table; the outcomes are the gate's one ("refused") plus the three a write
+// handler reports for itself.
+var (
+	progressWriteRoutes   = []string{"accept", "plan", "rally/add", "rally/confirm", "rally/discard", "merge"}
+	progressWriteOutcomes = []string{"ok", "refused", "conflict", "error"}
+)
+
+// observeProgressWrite records one Progress page write, called once per POST:
+// by beginJSONPost when the gate answers the request itself, by the handler
+// otherwise.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProgressWrite(route, outcome string) {
+	if s.progressWrites == nil {
+		return
+	}
+	s.progressWrites.WithLabelValues(route, outcome).Inc()
 }
 
 // taskTokenOutcomes bounds worklode_task_tokens_total's one label.
