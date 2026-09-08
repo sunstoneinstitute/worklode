@@ -41,7 +41,7 @@ func (s *server) progressPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in, err := s.st.ProjectProgress(ctx, project.ID)
+	in, err := s.st.ProjectProgress(ctx, project.ID, nil)
 	if err != nil {
 		s.webStoreErr(w, err)
 		return
@@ -60,6 +60,92 @@ func (s *server) progressPage(w http.ResponseWriter, r *http.Request) {
 		P:             p,
 		Legend:        ui.ProgressLegend(p),
 		ReviewEnabled: s.hasReviewSurface(),
+	}))
+}
+
+// progressRowFragment handles GET /projects/{id}/progress/spec/{doc}: one
+// spec's row and detail block (§5.2), from a ProjectProgress read narrowed
+// to that spec so a fragment does not read the whole project. The group and
+// next act still derive from that spec's own covering plans, exactly as the
+// full page computes them — only the read is smaller. 404 for a doc that is
+// not a live spec of this project.
+func (s *server) progressRowFragment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	project, err := s.projectHeader(ctx, r.PathValue("id"))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	docID, err := strconv.ParseInt(r.PathValue("doc"), 10, 64)
+	if err != nil || docID <= 0 {
+		webErr(w, http.StatusBadRequest, "doc id must be a positive integer")
+		return
+	}
+
+	in, err := s.st.ProjectProgress(ctx, project.ID, []int64{docID})
+	if err != nil {
+		s.observeProgressFragmentRender("spec", "error")
+		s.webStoreErr(w, err)
+		return
+	}
+	spec, ok := progressDerivedSpec(progress.Derive(in), docID)
+	if !ok {
+		s.observeProgressFragmentRender("spec", "not_found")
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	s.observeProgressFragmentRender("spec", "ok")
+	s.renderWeb(w, r, http.StatusOK, "progress row fragment",
+		ui.ProgressRowFragment(spec, actorIDFrom(r), s.hasReviewSurface()))
+}
+
+// progressDerivedSpec finds one spec in a derived model.ProjectProgress by
+// its document id, or false when it holds none — the shape a
+// ProjectProgress(ctx, projectID, []int64{doc}) read always resolves to at
+// most one match for.
+func progressDerivedSpec(p model.ProjectProgress, doc int64) (model.ProgressSpec, bool) {
+	for _, g := range p.Groups {
+		for _, spec := range g.Specs {
+			if spec.Doc == doc {
+				return spec, true
+			}
+		}
+	}
+	return model.ProgressSpec{}, false
+}
+
+// progressSummaryFragment handles GET /projects/{id}/progress/summary: the
+// rally band, the four group counts, the section bar and legend, and the
+// footer's content (§5.2) — everything the page draws outside the spec
+// groups themselves. These facts are project-wide, not one spec's, so the
+// read is the same unfiltered ProjectProgress the full page runs; a project
+// with no spec 404s the same way the page does.
+func (s *server) progressSummaryFragment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	project, err := s.projectHeader(ctx, r.PathValue("id"))
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	in, err := s.st.ProjectProgress(ctx, project.ID, nil)
+	if err != nil {
+		s.observeProgressFragmentRender("summary", "error")
+		s.webStoreErr(w, err)
+		return
+	}
+	if len(in.Specs) == 0 {
+		s.observeProgressFragmentRender("summary", "not_found")
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	p := progress.Derive(in)
+	s.observeProgressFragmentRender("summary", "ok")
+	s.renderWeb(w, r, http.StatusOK, "progress summary fragment", ui.ProgressSummaryFragment(ui.ProgressView{
+		Viewer: actorIDFrom(r),
+		P:      p,
+		Legend: ui.ProgressLegend(p),
 	}))
 }
 
@@ -91,7 +177,7 @@ func (s *server) getProjectProgress(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
-	in, err := s.st.ProjectProgress(ctx, projectID)
+	in, err := s.st.ProjectProgress(ctx, projectID, nil)
 	if err != nil {
 		s.mapStoreErr(w, err)
 		return
@@ -263,16 +349,12 @@ func (s *server) progressPlan(w http.ResponseWriter, r *http.Request) {
 // so a route can never refuse an act the page offered, or offer one the route
 // refuses.
 func (s *server) progressSpec(ctx context.Context, projectID string, doc int64) (*model.ProgressSpec, error) {
-	in, err := s.st.ProjectProgress(ctx, projectID)
+	in, err := s.st.ProjectProgress(ctx, projectID, []int64{doc})
 	if err != nil {
 		return nil, err
 	}
-	for _, g := range progress.Derive(in).Groups {
-		for i, spec := range g.Specs {
-			if spec.Doc == doc {
-				return &g.Specs[i], nil
-			}
-		}
+	if spec, ok := progressDerivedSpec(progress.Derive(in), doc); ok {
+		return &spec, nil
 	}
 	return nil, nil
 }

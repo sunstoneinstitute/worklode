@@ -36,23 +36,31 @@ var deliveredRankStates = func() string {
 // Deleted documents and tasks are out; a covers or requires edge pointing
 // outside this backbone is kept only where it can be rendered (requires) and
 // dropped where it cannot be resolved to a section (covers).
-func (s *Store) ProjectProgress(ctx context.Context, projectID string) (progress.Input, error) {
+//
+// specs narrows the read to those spec ids and the plans that cover at
+// least one of them — the row/summary fragments (WL-SPEC-66 §5.2) ask for
+// one spec at a time rather than the whole project. Every downstream read
+// (sections, planning tasks, edges, tasks) then scopes itself to the docs
+// progressDocs actually returned, so the narrowing holds all the way down
+// instead of only at the first query. An empty specs reads the whole
+// project, as ProjectProgress always did.
+func (s *Store) ProjectProgress(ctx context.Context, projectID string, specs []int64) (progress.Input, error) {
 	in := progress.Input{Project: projectID}
 
-	specs, plans, err := s.progressDocs(ctx, projectID)
+	specDocs, plans, err := s.progressDocs(ctx, projectID, specs)
 	if err != nil {
 		return progress.Input{}, err
 	}
-	if err := s.progressSections(ctx, projectID, specs); err != nil {
+	if err := s.progressSections(ctx, projectID, specDocs); err != nil {
 		return progress.Input{}, err
 	}
-	if err := s.progressPlanningTasks(ctx, projectID, specs); err != nil {
+	if err := s.progressPlanningTasks(ctx, projectID, specDocs); err != nil {
 		return progress.Input{}, err
 	}
 	if err := s.progressEdges(ctx, projectID, plans); err != nil {
 		return progress.Input{}, err
 	}
-	tasks, err := s.progressTasks(ctx, projectID)
+	tasks, err := s.progressTasks(ctx, projectID, plans)
 	if err != nil {
 		return progress.Input{}, err
 	}
@@ -74,8 +82,8 @@ func (s *Store) ProjectProgress(ctx context.Context, projectID string) (progress
 	}
 
 	in.Rally, in.Draft = rally, draft
-	for _, id := range slices.Sorted(maps.Keys(specs)) {
-		in.Specs = append(in.Specs, *specs[id])
+	for _, id := range slices.Sorted(maps.Keys(specDocs)) {
+		in.Specs = append(in.Specs, *specDocs[id])
 	}
 	for _, id := range slices.Sorted(maps.Keys(plans)) {
 		in.Plans = append(in.Plans, *plans[id])
@@ -84,56 +92,121 @@ func (s *Store) ProjectProgress(ctx context.Context, projectID string) (progress
 }
 
 // progressDocs reads the project's live specs and plans, rendering each ref
-// through model.Doc.FormatRef — the same formatter cli.DocRef uses.
-func (s *Store) progressDocs(ctx context.Context, projectID string) (
-	specs map[int64]*progress.Spec, plans map[int64]*progress.Plan, err error) {
+// through model.Doc.FormatRef — the same formatter cli.DocRef uses. When
+// specs is non-empty, only those spec ids and the plans that cover at least
+// one of them are read (WL-SPEC-66 §5.2's fragment case); an empty specs
+// reads every live spec and plan of the project, as this always did.
+func (s *Store) progressDocs(ctx context.Context, projectID string, specs []int64) (
+	specDocs map[int64]*progress.Spec, plans map[int64]*progress.Plan, err error) {
 
-	rows, err := s.db.QueryContext(ctx, `
-SELECT d.id, d.kind, coalesce(d.number, 0), d.title, d.status, d.updated_at,
+	specDocs, err = s.progressSpecDocs(ctx, projectID, specs)
+	if err != nil {
+		return nil, nil, err
+	}
+	plans, err = s.progressPlanDocs(ctx, projectID, specs)
+	if err != nil {
+		return nil, nil, err
+	}
+	return specDocs, plans, nil
+}
+
+// progressSpecDocs reads the project's live specs, or just those named by
+// specs when it is non-empty.
+func (s *Store) progressSpecDocs(ctx context.Context, projectID string, specs []int64) (map[int64]*progress.Spec, error) {
+	query := `
+SELECT d.id, coalesce(d.number, 0), d.title, d.status, d.updated_at,
        coalesce(p.key, ''), coalesce(d.owner, '')
   FROM docs d
   JOIN projects p ON p.id = d.project_id
- WHERE d.project_id = $1 AND d.kind IN ('spec', 'plan') AND d.deleted_at IS NULL`,
-		projectID)
+ WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL`
+	args := []any{projectID}
+	if len(specs) > 0 {
+		query += " AND d.id = ANY($2)"
+		args = append(args, specs)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("progress docs of %s: %w", projectID, err)
+		return nil, fmt.Errorf("progress specs of %s: %w", projectID, err)
 	}
 	defer rows.Close()
 
-	specs, plans = map[int64]*progress.Spec{}, map[int64]*progress.Plan{}
+	out := map[int64]*progress.Spec{}
 	for rows.Next() {
 		var d model.Doc
 		var status, owner string
-		var updated = &d.UpdatedAt
-		if err := rows.Scan(&d.ID, &d.Kind, &d.Number, &d.Title, &status, updated,
+		if err := rows.Scan(&d.ID, &d.Number, &d.Title, &status, &d.UpdatedAt,
 			&d.ProjectKey, &owner); err != nil {
-			return nil, nil, fmt.Errorf("scan progress doc: %w", err)
+			return nil, fmt.Errorf("scan progress spec: %w", err)
 		}
-		if d.Kind == "spec" {
-			specs[d.ID] = &progress.Spec{
-				Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Updated: d.UpdatedAt,
-				Status: status, Owner: owner,
-			}
-			continue
+		d.Kind = "spec"
+		out[d.ID] = &progress.Spec{
+			Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Updated: d.UpdatedAt,
+			Status: status, Owner: owner,
 		}
-		plans[d.ID] = &progress.Plan{
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("progress specs of %s: %w", projectID, err)
+	}
+	return out, nil
+}
+
+// progressPlanDocs reads the project's live plans, or — when specs is
+// non-empty — only the ones with a covers edge into at least one of them.
+// A plan covering none of the requested specs contributes nothing to their
+// derivation (progress.Derive matches covers by spec id), so leaving it out
+// changes nothing about the fragment's answer.
+func (s *Store) progressPlanDocs(ctx context.Context, projectID string, specs []int64) (map[int64]*progress.Plan, error) {
+	query := `
+SELECT d.id, coalesce(d.number, 0), d.title, d.status, coalesce(p.key, ''), coalesce(d.owner, '')
+  FROM docs d
+  JOIN projects p ON p.id = d.project_id
+ WHERE d.project_id = $1 AND d.kind = 'plan' AND d.deleted_at IS NULL`
+	args := []any{projectID}
+	if len(specs) > 0 {
+		query += ` AND EXISTS (
+  SELECT 1 FROM doc_edges e
+   WHERE e.from_doc = d.id AND e.type = 'covers' AND e.to_doc = ANY($2))`
+		args = append(args, specs)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("progress plans of %s: %w", projectID, err)
+	}
+	defer rows.Close()
+
+	out := map[int64]*progress.Plan{}
+	for rows.Next() {
+		var d model.Doc
+		var status, owner string
+		if err := rows.Scan(&d.ID, &d.Number, &d.Title, &status, &d.ProjectKey, &owner); err != nil {
+			return nil, fmt.Errorf("scan progress plan: %w", err)
+		}
+		d.Kind = "plan"
+		out[d.ID] = &progress.Plan{
 			Doc: d.ID, Ref: d.FormatRef(), Title: d.Title, Status: status, Owner: owner,
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("progress docs of %s: %w", projectID, err)
+		return nil, fmt.Errorf("progress plans of %s: %w", projectID, err)
 	}
-	return specs, plans, nil
+	return out, nil
 }
 
-// progressSections attaches each spec's sections in document order.
+// progressSections attaches each spec's sections in document order. Scoped
+// to specs' own keys, not the whole project, so a caller that already
+// narrowed progressDocs to one spec reads only that spec's sections.
 func (s *Store) progressSections(ctx context.Context, projectID string, specs map[int64]*progress.Spec) error {
+	ids := slices.Collect(maps.Keys(specs))
+	if len(ids) == 0 {
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth
   FROM doc_sections sec
   JOIN docs d ON d.id = sec.doc_id
  WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL
- ORDER BY sec.doc_id, sec.position`, projectID)
+   AND d.id = ANY($2)
+ ORDER BY sec.doc_id, sec.position`, projectID, ids)
 	if err != nil {
 		return fmt.Errorf("progress sections of %s: %w", projectID, err)
 	}
@@ -161,13 +234,18 @@ SELECT sec.doc_id, sec.anchor, sec.heading, sec.depth
 // so the link the page draws names the task POST .../progress/plan would
 // return (066 §3.4).
 func (s *Store) progressPlanningTasks(ctx context.Context, projectID string, specs map[int64]*progress.Spec) error {
+	ids := slices.Collect(maps.Keys(specs))
+	if len(ids) == 0 {
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT t.about_doc, t.id
   FROM tasks t
   JOIN docs d ON d.id = t.about_doc
  WHERE d.project_id = $1 AND d.kind = 'spec' AND d.deleted_at IS NULL
+   AND d.id = ANY($2)
    AND t.kind = 'design' AND t.deleted_at IS NULL AND NOT `+taskClosed("t")+`
- ORDER BY t.created_at, t.id`, projectID)
+ ORDER BY t.created_at, t.id`, projectID, ids)
 	if err != nil {
 		return fmt.Errorf("progress planning tasks of %s: %w", projectID, err)
 	}
@@ -194,6 +272,10 @@ SELECT t.about_doc, t.id
 // backbone names no section here and is dropped; a requires edge renders as
 // the target's ref, falling back to the raw external reference.
 func (s *Store) progressEdges(ctx context.Context, projectID string, plans map[int64]*progress.Plan) error {
+	planIDs := slices.Collect(maps.Keys(plans))
+	if len(planIDs) == 0 {
+		return nil
+	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT e.from_doc, e.type, e.to_doc, coalesce(e.to_anchor, ''),
        coalesce(e.coverage, 'full'), coalesce(e.to_external, ''),
@@ -203,8 +285,9 @@ SELECT e.from_doc, e.type, e.to_doc, coalesce(e.to_anchor, ''),
   LEFT JOIN docs t ON t.id = e.to_doc
   LEFT JOIN projects tp ON tp.id = t.project_id
  WHERE d.project_id = $1 AND d.kind = 'plan' AND d.deleted_at IS NULL
+   AND d.id = ANY($2)
    AND e.type IN ('covers', 'requires')
- ORDER BY e.from_doc, e.id`, projectID)
+ ORDER BY e.from_doc, e.id`, projectID, planIDs)
 	if err != nil {
 		return fmt.Errorf("progress edges of %s: %w", projectID, err)
 	}
@@ -253,16 +336,22 @@ type progressTask struct {
 	assignee string
 }
 
-// progressTasks reads every live task minted from one of the project's
-// plans, in mint order.
-func (s *Store) progressTasks(ctx context.Context, projectID string) ([]*progressTask, error) {
+// progressTasks reads every live task minted from one of plans, in mint
+// order. Scoped to plans' own keys, so a caller that already narrowed
+// progressDocs to one spec's covering plans reads only their tasks.
+func (s *Store) progressTasks(ctx context.Context, projectID string, plans map[int64]*progress.Plan) ([]*progressTask, error) {
+	planIDs := slices.Collect(maps.Keys(plans))
+	if len(planIDs) == 0 {
+		return nil, nil
+	}
 	rows, err := s.db.QueryContext(ctx, `
 SELECT t.id, t.title, t.state, t.plan_doc, coalesce(t.assignee, '')
   FROM tasks t
   JOIN docs d ON d.id = t.plan_doc
  WHERE d.project_id = $1 AND d.kind = 'plan' AND d.deleted_at IS NULL
+   AND d.id = ANY($2)
    AND t.deleted_at IS NULL
- ORDER BY t.created_at, t.id`, projectID)
+ ORDER BY t.created_at, t.id`, projectID, planIDs)
 	if err != nil {
 		return nil, fmt.Errorf("progress tasks of %s: %w", projectID, err)
 	}
