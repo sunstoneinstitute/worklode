@@ -72,6 +72,9 @@ var (
 	// actor is not the one blocked, the document's review state is — so a
 	// caller mapping errors to HTTP status needs no new case for it.
 	ErrMissingApprovals = errors.New("document reviewer approval missing")
+	// ErrReferenceExists means the exact entity_edges row (from, to, rel)
+	// already exists (029 §5).
+	ErrReferenceExists = errors.New("reference already exists")
 )
 
 // pgViolation reports whether err is a Postgres error with the given
