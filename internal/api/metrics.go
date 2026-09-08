@@ -127,7 +127,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}, []string{"outcome"})
 	s.formSubmissions = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_form_submissions_total",
-		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
+		Help: "Web UI write-form submissions, by form (task, deliverable, crew_add, crew_remove, milestone_reference) and outcome (created, invalid, forbidden, not_found, error); \"created\" is an accepted submission, which for crew_remove means the member was removed.",
 	}, []string{"form", "outcome"})
 	s.progressWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_progress_writes_total",
@@ -385,7 +385,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.inboxRenders.WithLabelValues(outcome)
 	}
 	for _, form := range []string{"task", "deliverable", "crew_add", "crew_remove",
-		formRestoreTask, formRestoreDoc} {
+		formRestoreTask, formRestoreDoc, formMilestoneRef} {
 		for _, outcome := range []string{"created", "invalid", "forbidden", "not_found", "error"} {
 			s.formSubmissions.WithLabelValues(form, outcome)
 		}
