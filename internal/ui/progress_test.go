@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -231,6 +232,37 @@ func TestProgressFooterNeedsASession(t *testing.T) {
 	for _, a := range progressFooterActions("") {
 		if a.Reason == "" {
 			t.Errorf("signed out action %+v; want a reason", a)
+		}
+	}
+}
+
+// TestTaskPulseAnimationKeepsPageStill holds §5.3 and §5.4 together: the
+// activity animations exist (in both a full-motion and a
+// prefers-reduced-motion form, so a reader who has turned off motion still
+// gets an instant colour change rather than no feedback), and neither one
+// touches a property that would move layout around it.
+func TestTaskPulseAnimationKeepsPageStill(t *testing.T) {
+	flat := strings.Join(strings.Fields(builtCSS(t)), "")
+
+	if !strings.Contains(flat, "@media(prefers-reduced-motion:no-preference){.task.pulse{") {
+		t.Error("app.css: no prefers-reduced-motion:no-preference block for .task.pulse (§5.3)")
+	}
+	if !strings.Contains(flat, "@media(prefers-reduced-motion:reduce){.task.pulse{") {
+		t.Error("app.css: no prefers-reduced-motion:reduce fallback for .task.pulse (§5.3)")
+	}
+	if !strings.Contains(flat, ".prog-row.touched{") {
+		t.Error("app.css: no .prog-row.touched rule for the row's activity highlight (§5.3)")
+	}
+
+	rules := regexp.MustCompile(`\.task\.pulse\{([^}]*)\}`).FindAllStringSubmatch(flat, -1)
+	if len(rules) == 0 {
+		t.Fatal("app.css: no .task.pulse rule")
+	}
+	for _, r := range rules {
+		for _, layout := range []string{"width:", "height:", "margin:", "padding:"} {
+			if strings.Contains(r[1], layout) {
+				t.Errorf(".task.pulse rule %q sets %q; an activity animation must never change layout size (§5.4)", r[1], layout)
+			}
 		}
 	}
 }

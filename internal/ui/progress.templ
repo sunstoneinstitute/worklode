@@ -115,7 +115,7 @@ templ progressCounts(c model.ProgressCounts) {
 }
 
 templ progressCount(label string, n int) {
-	<div class="card pad prog-count">
+	<div class="card pad prog-count h-20">
 		<div class="n">{ strconv.Itoa(n) }</div>
 		<div class="muted small">{ label }</div>
 	</div>
