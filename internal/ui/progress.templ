@@ -1,0 +1,136 @@
+package ui
+
+// progress.templ renders a project's Progress page (GET
+// /projects/{id}/progress, WL-SPEC-66 §2) inside the same project sidebar
+// frame as the run board (runboard.templ), with active key "progress".
+//
+// Top to bottom, §2.1: the rally band (always rendered, always the same
+// height, so the page never moves when a rally starts or ends), the four
+// group counts, the section bar and its legend, the §1.3 groups of spec
+// rows, and a reserved footer slot the rally footer will fill (§3.5).
+//
+// Nothing here derives anything: model.ProjectProgress arrives already
+// derived (internal/progress), and every label, class and hover string comes
+// from the helpers in views.go. Two rules the page holds by construction: no
+// count carries a percentage (§2.5), and a bound-only section is not drawn at
+// all — no cell, no slice, no legend entry, no count (§1.4).
+//
+// Rows do not expand yet; §2.3's expansion is its own task.
+
+import "strconv"
+
+import "github.com/sunstoneinstitute/worklode/internal/model"
+
+templ Progress(v ProgressView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "progress") {
+			<div class="canvas">
+				@progressBand(v.P.Rally)
+				@progressCounts(v.P.Counts)
+				@progressBar(v)
+				for _, g := range v.P.Groups {
+					@progressGroup(g)
+				}
+				<div class="prog-footer h-14" aria-hidden="true"></div>
+			</div>
+		}
+	}
+}
+
+// progressBand is §2.1's rally band. It keeps its height whether or not a
+// rally is running, and says plainly when none is.
+templ progressBand(r *model.RallyBand) {
+	<div class="card prog-band h-12">
+		if r == nil {
+			<span class="muted">No active rally</span>
+		} else {
+			<a href={ "/tasks/" + r.ID } class="mono">{ r.ID }</a>
+			<span class="t">{ r.Title }</span>
+			<span class="muted small">{ strconv.Itoa(r.Landed) } of { strconv.Itoa(r.Members) } members landed</span>
+		}
+	</div>
+}
+
+// progressCounts is §2.1's four tiles: the sizes of §1.3's four groups.
+templ progressCounts(c model.ProgressCounts) {
+	<div class="prog-counts">
+		@progressCount("Active", c.Active)
+		@progressCount("Needs planning", c.Planning)
+		@progressCount("No execution record", c.NoRecord)
+		@progressCount("Built", c.Built)
+	</div>
+}
+
+templ progressCount(label string, n int) {
+	<div class="card pad prog-count">
+		<div class="n">{ strconv.Itoa(n) }</div>
+		<div class="muted small">{ label }</div>
+	</div>
+}
+
+// progressBar is §2.1's section bar and legend: every owed section in the
+// project as one slice per state, in state order, with no scale and no
+// labels beyond the legend's counts.
+templ progressBar(v ProgressView) {
+	<section class="card" aria-labelledby="prog-bar-h">
+		<div class="hd"><h3 id="prog-bar-h">Sections</h3></div>
+		<div class="bd">
+			if len(v.P.Bar) == 0 {
+				<p class="muted">No sections owe work.</p>
+			} else {
+				<div class="prog-bar">
+					for _, s := range v.P.Bar {
+						<i class={ "seg cell-" + s.State } style={ progressSliceStyle(s) } title={ progressSliceTitle(s) }></i>
+					}
+				</div>
+			}
+			<ul class="prog-legend">
+				for _, e := range v.Legend {
+					<li>
+						<i class={ "cell cell-" + e.State } aria-hidden="true"></i>
+						<span class="l">{ e.Label }</span>
+						<span class="n">{ strconv.Itoa(e.Count) }</span>
+						<span class="muted small">{ e.Help }</span>
+					</li>
+				}
+			</ul>
+		</div>
+	</section>
+}
+
+// progressGroup renders one §1.3 group: its label, its size, its one-line
+// reason, then a row per spec. An empty group is omitted rather than
+// rendered as a heading over nothing.
+templ progressGroup(g model.ProgressGroup) {
+	if len(g.Specs) > 0 {
+		<section class="card">
+			<div class="hd">
+				<h3>{ progressGroupLabel(g.Key) } &middot; { strconv.Itoa(len(g.Specs)) }</h3>
+				<div class="meta">{ progressGroupMeaning(g.Key) }</div>
+			</div>
+			<div class="bd">
+				for _, sp := range g.Specs {
+					@progressRow(sp)
+				}
+			</div>
+		</section>
+	}
+}
+
+// progressRow is §2.2's row: reference, title, strip, next act. The
+// reference is the row's only link. A bound-only section gets no cell.
+templ progressRow(s model.ProgressSpec) {
+	<div class="prog-row">
+		<div class="ref"><a href={ "/docs/ref/" + s.Ref } title={ s.Ref + " — " + s.Title }>{ s.Ref }</a></div>
+		<div class="t">{ s.Title }</div>
+		<div class="strip">
+			for _, sec := range s.Sections {
+				if sec.State != "bound" {
+					<i class={ progressCellClass(sec) } title={ progressCellTitle(sec) }></i>
+				}
+			}
+		</div>
+		<div class="next muted small">{ s.Next.Text }</div>
+	</div>
+}
