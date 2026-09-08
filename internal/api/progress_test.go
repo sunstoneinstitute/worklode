@@ -278,6 +278,36 @@ func TestProgressDraftPlanAction(t *testing.T) {
 	}
 }
 
+// TestProgressReviewActionDisabled: spec 059's routes do not exist in
+// today's routeGuards, so hasReviewSurface reports false and every spec row
+// and plan line renders its Review button disabled with that reason
+// (WL-SPEC-66 §3.3). The enabled shape, once a route lands, is
+// TestHasReviewSurfaceOnceRegistered's, in internal/api's own package —
+// this test only holds today's rendering to today's table.
+func TestProgressReviewActionDisabled(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 66, Slug: "066-progress",
+		Body: progressSpecBody,
+	})
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "066-progress-plan",
+		Body: progressPlanBody,
+	})
+
+	body := getPage(t, h, "/projects/proj/progress").Body.String()
+
+	const reason = `data-reason="Review surface (spec 059) not yet built"`
+	if got := strings.Count(body, `data-route="review"`); got != 2 {
+		t.Errorf("the page renders %d review buttons, want 2 (the spec row and the plan line): %s", got, body)
+	}
+	if got := strings.Count(body, reason); got != 2 {
+		t.Errorf("the page renders %d disabled review reasons, want 2: %s", got, body)
+	}
+}
+
 // between returns the substring of body from the first occurrence of open
 // through the next close, for assertions scoped to one block of markup.
 func between(t *testing.T, body, open, close string) string {

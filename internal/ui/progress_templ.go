@@ -113,7 +113,7 @@ func Progress(v ProgressView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				for _, g := range v.P.Groups {
-					templ_7745c5c3_Err = progressGroup(g, v.Viewer).Render(ctx, templ_7745c5c3_Buffer)
+					templ_7745c5c3_Err = progressGroup(g, v.Viewer, v.ReviewEnabled).Render(ctx, templ_7745c5c3_Buffer)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -623,7 +623,7 @@ func progressBar(v ProgressView) templ.Component {
 // progressGroup renders one §1.3 group: its label, its size, its one-line
 // reason, then a row per spec. An empty group is omitted rather than
 // rendered as a heading over nothing.
-func progressGroup(g model.ProgressGroup, viewer string) templ.Component {
+func progressGroup(g model.ProgressGroup, viewer string, reviewEnabled bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -689,7 +689,7 @@ func progressGroup(g model.ProgressGroup, viewer string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			for _, sp := range g.Specs {
-				templ_7745c5c3_Err = progressRow(sp, viewer).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = progressRow(sp, viewer, reviewEnabled).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -704,14 +704,15 @@ func progressGroup(g model.ProgressGroup, viewer string) templ.Component {
 }
 
 // progressRow is §2.2's row: reference, title, strip, next act, and the
-// right-aligned action slot the row-level acts of §3 render into as they
-// land, each one a progressAct — Accept (§3.2) and Plan (§3.4) today, Review
-// (§3.3) and Rally (§3.5) as their routes land. A spec whose planning task is
-// already open shows it as a link there instead of the Plan button (§3.4). The reference is the row's
-// only link. A bound-only section gets no cell. Clicking the row anywhere but
-// a link expands the detail block that follows it; the row is focusable so a
-// keyboard can do the same.
-func progressRow(s model.ProgressSpec, viewer string) templ.Component {
+// right-aligned action slot the row-level acts of §3 render into — Accept
+// (§3.2), Plan (§3.4), Rally (§3.5) and Review (§3.3), the last disabled
+// until hasReviewSurface (internal/api) says spec 059's routes exist. A spec
+// whose planning task is already open shows it as a link there instead of the
+// Plan button (§3.4). The reference is the row's only link. A bound-only
+// section gets no cell. Clicking the row anywhere but a link expands the
+// detail block that follows it; the row is focusable so a keyboard can do the
+// same.
+func progressRow(s model.ProgressSpec, viewer string, reviewEnabled bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -739,7 +740,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressDetailID(s.Ref))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 154, Col: 97}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 155, Col: 97}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 		if templ_7745c5c3_Err != nil {
@@ -752,7 +753,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var35 templ.SafeURL
 		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinURLErrs("/docs/ref/" + s.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 155, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 156, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 		if templ_7745c5c3_Err != nil {
@@ -765,7 +766,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressRefTip(s.Ref, s.Title))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 155, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 156, Col: 93}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 		if templ_7745c5c3_Err != nil {
@@ -778,7 +779,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(s.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 155, Col: 103}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 156, Col: 103}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
@@ -791,7 +792,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var38 string
 		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(s.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 156, Col: 26}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 157, Col: 26}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 		if templ_7745c5c3_Err != nil {
@@ -828,7 +829,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 				var templ_7745c5c3_Var41 string
 				templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressCellTip(sec))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 160, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 161, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 				if templ_7745c5c3_Err != nil {
@@ -847,7 +848,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var42 string
 		templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(s.Next.Text)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 164, Col: 45}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 165, Col: 45}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 		if templ_7745c5c3_Err != nil {
@@ -865,7 +866,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 			var templ_7745c5c3_Var43 templ.SafeURL
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinURLErrs("/tasks/" + s.PlanningTask)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 167, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 168, Col: 40}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -878,7 +879,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(s.PlanningTask)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 167, Col: 82}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 168, Col: 82}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -889,7 +890,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		for _, a := range progressSpecActions(s, viewer) {
+		for _, a := range progressSpecActions(s, viewer, reviewEnabled) {
 			templ_7745c5c3_Err = progressAct(a).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -899,7 +900,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = progressDetail(s, viewer).Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = progressDetail(s, viewer, reviewEnabled).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -911,7 +912,7 @@ func progressRow(s model.ProgressSpec, viewer string) templ.Component {
 // every section of it. It is always rendered — the stylesheet hides it until
 // the row carries "open" — so expanding costs no request and the markup a
 // test reads is the markup a reader expands.
-func progressDetail(s model.ProgressSpec, viewer string) templ.Component {
+func progressDetail(s model.ProgressSpec, viewer string, reviewEnabled bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -939,7 +940,7 @@ func progressDetail(s model.ProgressSpec, viewer string) templ.Component {
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressDetailID(s.Ref))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 182, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 183, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 		if templ_7745c5c3_Err != nil {
@@ -960,7 +961,7 @@ func progressDetail(s model.ProgressSpec, viewer string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			for _, p := range s.Plans {
-				templ_7745c5c3_Err = progressPlanLine(p, viewer).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = progressPlanLine(p, viewer, reviewEnabled).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -1012,7 +1013,7 @@ func progressDetail(s model.ProgressSpec, viewer string) templ.Component {
 				var templ_7745c5c3_Var50 string
 				templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(progressSectionNumber(sec.Anchor))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 200, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 201, Col: 59}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 				if templ_7745c5c3_Err != nil {
@@ -1047,7 +1048,7 @@ func progressDetail(s model.ProgressSpec, viewer string) templ.Component {
 				var templ_7745c5c3_Var53 string
 				templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(sec.Heading)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 201, Col: 65}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 202, Col: 65}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 				if templ_7745c5c3_Err != nil {
@@ -1085,7 +1086,7 @@ func progressDetail(s model.ProgressSpec, viewer string) templ.Component {
 				var templ_7745c5c3_Var54 string
 				templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(sec.Plans, ", "))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 212, Col: 62}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 213, Col: 62}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 				if templ_7745c5c3_Err != nil {
@@ -1166,7 +1167,7 @@ func progressPill(state string) templ.Component {
 		var templ_7745c5c3_Var58 string
 		templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(progressStateLabel(state))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 226, Col: 29}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 227, Col: 29}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
 		if templ_7745c5c3_Err != nil {
@@ -1183,7 +1184,7 @@ func progressPill(state string) templ.Component {
 // progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
 // after, its state, and one cell per minted task. A plan with no minted task
 // says so rather than drawing an empty strip (§1.1's no_record).
-func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
+func progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled bool) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -1211,7 +1212,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 		var templ_7745c5c3_Var60 templ.SafeURL
 		templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinURLErrs("/docs/ref/" + p.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 235, Col: 32}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 236, Col: 32}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 		if templ_7745c5c3_Err != nil {
@@ -1224,7 +1225,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 		var templ_7745c5c3_Var61 string
 		templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressRefTip(p.Ref, p.Title))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 235, Col: 89}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 236, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var61)
 		if templ_7745c5c3_Err != nil {
@@ -1237,7 +1238,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 		var templ_7745c5c3_Var62 string
 		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(p.Ref)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 235, Col: 99}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 236, Col: 99}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 		if templ_7745c5c3_Err != nil {
@@ -1250,7 +1251,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 		var templ_7745c5c3_Var63 string
 		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(p.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 236, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 237, Col: 27}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
 		if templ_7745c5c3_Err != nil {
@@ -1268,7 +1269,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 			var templ_7745c5c3_Var64 string
 			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(strings.Join(p.Requires, ", "))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 238, Col: 67}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 239, Col: 67}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 			if templ_7745c5c3_Err != nil {
@@ -1319,7 +1320,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 				var templ_7745c5c3_Var67 string
 				templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(t.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 246, Col: 57}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 247, Col: 57}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 				if templ_7745c5c3_Err != nil {
@@ -1332,7 +1333,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 				var templ_7745c5c3_Var68 string
 				templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.ResolveAttributeValue(progressTaskTip(t))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 246, Col: 89}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 247, Col: 89}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var68)
 				if templ_7745c5c3_Err != nil {
@@ -1350,7 +1351,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 			var templ_7745c5c3_Var69 string
 			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(p.Landed))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 249, Col: 53}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 250, Col: 53}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 			if templ_7745c5c3_Err != nil {
@@ -1363,7 +1364,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 			var templ_7745c5c3_Var70 string
 			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(p.Open))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 249, Col: 94}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 250, Col: 94}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 			if templ_7745c5c3_Err != nil {
@@ -1374,7 +1375,7 @@ func progressPlanLine(p model.ProgressPlan, viewer string) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		for _, a := range progressPlanActions(p, viewer) {
+		for _, a := range progressPlanActions(p, viewer, reviewEnabled) {
 			templ_7745c5c3_Err = progressAct(a).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
@@ -1428,7 +1429,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var72 string
 			templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.Route)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 270, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 271, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var72)
 			if templ_7745c5c3_Err != nil {
@@ -1441,7 +1442,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var73 string
 			templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.Reason)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 270, Col: 81}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 271, Col: 81}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var73)
 			if templ_7745c5c3_Err != nil {
@@ -1454,7 +1455,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var74 string
 			templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.Reason)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 270, Col: 103}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 271, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var74)
 			if templ_7745c5c3_Err != nil {
@@ -1467,7 +1468,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var75 string
 			templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.JoinStringErrs(a.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 270, Col: 124}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 271, Col: 124}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var75))
 			if templ_7745c5c3_Err != nil {
@@ -1485,7 +1486,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var76 string
 			templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.Route)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 272, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 273, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var76)
 			if templ_7745c5c3_Err != nil {
@@ -1498,7 +1499,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var77 string
 			templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.Body)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 272, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 273, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var77)
 			if templ_7745c5c3_Err != nil {
@@ -1511,7 +1512,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var78 string
 			templ_7745c5c3_Var78, templ_7745c5c3_Err = templ.ResolveAttributeValue(a.Confirm)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 272, Col: 104}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 273, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var78)
 			if templ_7745c5c3_Err != nil {
@@ -1524,7 +1525,7 @@ func progressAct(a ProgressAction) templ.Component {
 			var templ_7745c5c3_Var79 string
 			templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.JoinStringErrs(a.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 272, Col: 116}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/ui/progress.templ`, Line: 273, Col: 116}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var79))
 			if templ_7745c5c3_Err != nil {
