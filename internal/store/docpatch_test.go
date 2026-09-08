@@ -355,3 +355,97 @@ func TestPatchDocMetricOutcomes(t *testing.T) {
 		}
 	}
 }
+
+// decideDocLane approves one reviewer's open lane on a document, the way the
+// cockpit's decide act does, and commits — the clear is a consequence of the
+// decision, so the assertion after it reads committed rows.
+func decideDocLane(t *testing.T, s *Store, docID int64, lane string) {
+	t.Helper()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	a, err := OpenApprovalForLane(tx, "doc", DocEntityID(docID), lane)
+	if err != nil {
+		t.Fatalf("open lane %q on doc %d: %v", lane, docID, err)
+	}
+	if _, err := DecideApproval(tx, DecideInput{
+		ApprovalID: a.ID, Decision: "approve", ActorID: lane, Now: s.Now(),
+	}); err != nil {
+		t.Fatalf("decide lane %q on doc %d: %v", lane, docID, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestClearPatchedOnReapproval is the second half of 025 §7.3: the §8.4 marks
+// come off only when every lane the patch reopened has approved. One of two
+// reviewers is not the gate — that is the case a "clear on approve" that
+// forgot to look at its neighbours would pass.
+func TestClearPatchedOnReapproval(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	seedDocsActor(t, s, "bob")
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 170, Slug: "170-reapproval",
+		Body: patchSpecBody, CreatedBy: "stig", Status: "accepted",
+	})
+	assignDocReviewers(t, s, spec.ID, []string{"ada", "bob"})
+
+	if _, _, err := patchDoc(t, s, DocPatchInput{
+		ID: spec.ID, Body: narrowRule(patchSpecBody), Substantive: true, ActorID: "stig",
+	}); err != nil {
+		t.Fatalf("PatchDoc: %v", err)
+	}
+	if got := patchedAnchors(t, s, spec.ID); !slices.Equal(got, []string{"sec-3"}) {
+		t.Fatalf("patched anchors after the patch = %v, want [sec-3]", got)
+	}
+
+	decideDocLane(t, s, spec.ID, "ada")
+	if got := patchedAnchors(t, s, spec.ID); !slices.Equal(got, []string{"sec-3"}) {
+		t.Errorf("patched anchors with one lane still open = %v, want [sec-3]", got)
+	}
+
+	decideDocLane(t, s, spec.ID, "bob")
+	if got := patchedAnchors(t, s, spec.ID); got != nil {
+		t.Errorf("patched anchors after the last lane approved = %v, want none", got)
+	}
+}
+
+// TestClearPatchedOnRevisionLanding: the other way a mark ends. A landed
+// revision replaces the patched text with reviewed text, so nothing is
+// "approved text, modified since" any more. The section rebuild carries the
+// flag forward by design, so this is asserted rather than assumed.
+func TestClearPatchedOnRevisionLanding(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 172, Slug: "172-revision-clears",
+		Body: patchSpecBody, CreatedBy: "stig", Status: "accepted",
+	})
+	assignDocReviewers(t, s, spec.ID, []string{"ada"})
+
+	if _, _, err := patchDoc(t, s, DocPatchInput{
+		ID: spec.ID, Body: narrowRule(patchSpecBody), Substantive: true, ActorID: "stig",
+	}); err != nil {
+		t.Fatalf("PatchDoc: %v", err)
+	}
+	if got := patchedAnchors(t, s, spec.ID); !slices.Equal(got, []string{"sec-3"}) {
+		t.Fatalf("patched anchors after the patch = %v, want [sec-3]", got)
+	}
+
+	if err := reviseDoc(t, s, spec.ID, "stig"); err != nil {
+		t.Fatalf("ReviseDoc: %v", err)
+	}
+	if err := updateRevision(t, s, spec.ID, rewordSec2(narrowRule(patchSpecBody))); err != nil {
+		t.Fatalf("UpdateRevision: %v", err)
+	}
+	if _, err := acceptRevision(t, s, spec.ID, "stig"); err != nil {
+		t.Fatalf("AcceptRevision: %v", err)
+	}
+	if got := patchedAnchors(t, s, spec.ID); got != nil {
+		t.Errorf("patched anchors after the revision landed = %v, want none", got)
+	}
+}
