@@ -122,7 +122,9 @@ func (s *server) projectHeader(ctx context.Context, id string) (ui.CockpitProjec
 	if err != nil {
 		return ui.CockpitProject{}, err
 	}
-	return ui.CockpitProject{ID: p.ID, Name: p.Name, Key: p.Key}, nil
+	return ui.CockpitProject{
+		ID: p.ID, Name: p.Name, Key: p.Key, HasSpecs: s.hasSpecs(ctx, p.ID),
+	}, nil
 }
 
 // parseWebForm caps and parses a form body. A body over the cap or a

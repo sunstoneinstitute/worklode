@@ -353,3 +353,20 @@ SELECT count(*) FROM task_edges e
 		ID: rally.ID, Title: rally.Title, Members: members, Landed: landed,
 	}, nil
 }
+
+// ProjectHasSpecs reports whether the project has at least one live spec —
+// the fact WL-SPEC-66 §2 makes the Progress sidebar entry and the route
+// itself conditional on (065 §1: a surface appears when the project has
+// facts for it).
+func (s *Store) ProjectHasSpecs(ctx context.Context, projectID string) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+SELECT EXISTS (
+  SELECT 1 FROM docs
+   WHERE project_id = $1 AND kind = 'spec' AND deleted_at IS NULL)`,
+		projectID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("project %s has specs: %w", projectID, err)
+	}
+	return exists, nil
+}

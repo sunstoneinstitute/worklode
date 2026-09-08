@@ -492,6 +492,7 @@ func (s *server) projectSectionPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := placeholderProjectView(cockpit, sec.Title, sec.Message, section)
+	view.Project.HasSpecs = s.hasSpecs(r.Context(), cockpit.Project.ID)
 	s.renderWeb(w, r, http.StatusOK, "project section page", ui.Placeholder(view))
 }
 
@@ -808,6 +809,7 @@ func (s *server) projectPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := cockpitView(cockpit, "worklode: "+cockpit.Project.Name)
+	view.Project.HasSpecs = s.hasSpecs(ctx, id)
 	view.AgentSessions = projectAgentSessionRows(sessions, s.now())
 
 	// Also read off the store rather than the projection (WL-667), for the
