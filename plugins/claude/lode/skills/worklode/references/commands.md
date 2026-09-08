@@ -54,6 +54,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
 - `lode doc note` — Leave an anchored, non-blocking note on a document section
   Flags: --body, --body-file
+- `lode doc progress` — How much of each spec in a project exists, and what moves it next
+  Flags: --project, --repo
 - `lode doc referrers` — List the open work pointing at one section of a document
 - `lode doc reviewers` — Show a document's assigned reviewer set
 - `lode doc revise` — Open, update, land, or discard a document's candidate revision

@@ -64,3 +64,24 @@ func (s *server) hasSpecs(ctx context.Context, projectID string) bool {
 	}
 	return has
 }
+
+// getProjectProgress handles GET /api/v1/projects/{id}/progress: the same
+// derived model.ProjectProgress the page renders, as JSON, so an agent reads
+// what a person sees (066 §7). The project is read first so an unknown id
+// 404s rather than answering with an empty corpus. A project with no spec is
+// not a 404 here — the page hides itself because there is nothing to draw,
+// but "this project has no specs" is a real answer to an API question.
+func (s *server) getProjectProgress(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	projectID := r.PathValue("id")
+	if _, err := s.st.GetProject(ctx, projectID); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	in, err := s.st.ProjectProgress(ctx, projectID)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, progress.Derive(in))
+}
