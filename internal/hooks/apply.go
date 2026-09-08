@@ -84,8 +84,8 @@ func (a *applier) applyFunc(event string, env envelope, body []byte, resolvedCom
 			return a.applyReview(tx, repo, body)
 		}
 	case "workflow_run":
-		return func(tx *sql.Tx, _ int64) error {
-			return a.applyWorkflowRun(tx, repo, body)
+		return func(tx *sql.Tx, eventID int64) error {
+			return a.applyWorkflowRun(tx, eventID, repo, body)
 		}
 	case "release":
 		if env.Action != "published" {
