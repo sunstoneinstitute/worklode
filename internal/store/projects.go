@@ -352,6 +352,22 @@ func (s *Store) ListRepos(ctx context.Context, projectID string) ([]model.RepoMa
 	})
 }
 
+// MappedRepos returns every repo mapped to any project, ordered by repo. The
+// branch-rules refresh loop (WL-SPEC-66 §6.3) walks it; it asks nothing about
+// which project a repo belongs to, so this is the whole query rather than
+// ListRepos per project.
+func (s *Store) MappedRepos(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT repo FROM project_repos ORDER BY repo`)
+	if err != nil {
+		return nil, fmt.Errorf("list mapped repos: %w", err)
+	}
+	return collectRows(rows, "list mapped repos", func(r rowScanner) (string, error) {
+		var repo string
+		err := r.Scan(&repo)
+		return repo, err
+	})
+}
+
 // ListReposForProjects is the bulk form of ListRepos: the repos mapped to
 // every project in one query, keyed by project id. A list endpoint reporting
 // repos by calling ListRepos per row would issue one query per project.
