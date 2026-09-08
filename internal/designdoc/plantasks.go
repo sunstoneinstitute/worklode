@@ -329,3 +329,42 @@ func findBlockedByCycle(defs []PlanTask) []int {
 	}
 	return nil
 }
+
+// IsCoverageOnlyPlan reports whether d is a plan that records coverage and
+// mints nothing: no "## Tasks" heading at all, but at least one covers or
+// defers entry. Accepting such a plan is what puts its claims in force, since
+// the aggregate coverage query reads accepted-or-superseded plans only
+// (026 §2.1) — a retroactive backfill of work already built has nothing to
+// mint and would otherwise be stuck in draft forever.
+//
+// The absence has to be total, because "declares no tasks" and "declares them
+// wrongly" look alike from here and only the second is an authoring mistake
+// worth refusing. So a "## Tasks" heading that declares nothing, and any
+// heading at all that was reaching for the task format ("## Task 1", the
+// hyphen and en-dash near misses planTaskHeadingRE rejects), both leave this
+// false and stay PlanTasks' error.
+func IsCoverageOnlyPlan(d *Document) bool {
+	if d.Frontmatter == nil {
+		return false
+	}
+	if len(d.Frontmatter.CoverageEntries()) == 0 && len(d.Frontmatter.Defers) == 0 {
+		return false
+	}
+	for _, sec := range d.Sections {
+		title := strings.TrimSpace(sec.Title)
+		if sec.Level == 2 && title == "Tasks" {
+			return false
+		}
+		if taskishHeadingRE.MatchString(title) {
+			return false
+		}
+	}
+	return true
+}
+
+// taskishHeadingRE matches a heading reaching for the task-declaration format
+// of 025 §9.1 — anything opening with "Task" followed by a number. It is
+// deliberately looser than planTaskHeadingRE: its job is to spot a plan that
+// meant to declare tasks and got the spelling wrong, so that IsCoverageOnlyPlan
+// leaves it to PlanTasks' error rather than accepting it as minting nothing.
+var taskishHeadingRE = regexp.MustCompile(`^Tasks?\s+\d`)
