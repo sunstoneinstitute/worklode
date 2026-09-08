@@ -155,10 +155,14 @@ regenerated from the CLI itself so it can't drift: `references/commands.md`.
 
 Three kinds — `spec`, `adr`, `plan` — each `draft → accepted → superseded`.
 A spec/ADR's `{#sec-N}` section anchors are frozen once accepted: amend or
-supersede a section, never renumber it. **There is no consolidated "current
-text" view** — what a section says now is that section plus whatever amends
-it; `lode doc show <ref> --json`'s `edges_in` names `amendedBy`/`isReplacedBy`,
-and following those is how you find out. Frontmatter is mandatory, always;
+supersede a section, never renumber it. So the stored body is the text as
+first written, and **what a section says now is that section plus whatever
+amends it**: read one with `lode show <ref> --inline`, which folds every
+in-force amendment and supersession into the section it acts on, attributed
+to the document it came from (026 §3.2). A bare `lode show` gives you the
+original — fine for provenance, wrong for "what does this require of me".
+`lode doc show <ref> --json`'s `edges_in` names `amendedBy`/`isReplacedBy`
+when you want the edges rather than the reading. Frontmatter is mandatory, always;
 a plan's `covers` is how coverage becomes a query (`--needs-planning`) rather
 than a status someone remembers to flip. Full frontmatter schema, the
 cross-project `WL-SPEC-<n>` shorthand, and the doc-lifecycle watcher's two
@@ -179,6 +183,13 @@ Paste this into the project's `CLAUDE.md` so every session picks it up:
 This project is tracked in Worklode. Work is claimed, not assigned — load
 the `worklode` skill before filing or finding a task, and before creating or
 reading a spec, ADR, or plan.
+
+Specs, ADRs and plans live in the Worklode backbone, not in this tree. Read
+one with `lode show <ref> --inline`; create one with `lode doc add`. When a
+general-purpose planning skill says to save a design doc or plan under
+`docs/` (`superpowers:brainstorming` and `superpowers:writing-plans` both
+do), that path is a scratch buffer — the document is the `lode doc` row, and
+nothing reads the file once the row exists.
 ```
 
 ## Reference index
