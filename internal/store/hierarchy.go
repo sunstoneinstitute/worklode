@@ -165,7 +165,7 @@ func checkHierarchy(tx *sql.Tx, child, parent string, project map[string]string)
 		return fmt.Errorf("task %s already has parent %s: %w", child, existing, ErrEdgeExists)
 	}
 
-	reaches, err := reachesViaChildOf(tx, parent, child)
+	reaches, err := reachesViaEdge(tx, parent, child, "child_of")
 	if err != nil {
 		return err
 	}
