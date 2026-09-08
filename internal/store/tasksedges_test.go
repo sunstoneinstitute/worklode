@@ -207,3 +207,27 @@ func TestListEdgesForTasksEmpty(t *testing.T) {
 		t.Fatalf("ListEdgesForTasks(nil): len(m) = %d, want 0", len(m))
 	}
 }
+
+// TestAddEdgeBlocksCycleRejected: a 'blocks' loop deadlocks every task on it,
+// so the write that closes one is refused, direct or transitive.
+func TestAddEdgeBlocksCycleRejected(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+
+	t1 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t2 := createTask(t, s, taskTestNow, defaultTaskInput())
+	t3 := createTask(t, s, taskTestNow, defaultTaskInput())
+
+	if err := addEdge(t, s, t1.ID, t2.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge %s blocks %s: %v", t1.ID, t2.ID, err)
+	}
+	if err := addEdge(t, s, t2.ID, t1.ID, "blocks"); !errors.Is(err, ErrCycle) {
+		t.Fatalf("direct cycle: want ErrCycle, got %v", err)
+	}
+	if err := addEdge(t, s, t2.ID, t3.ID, "blocks"); err != nil {
+		t.Fatalf("AddEdge %s blocks %s: %v", t2.ID, t3.ID, err)
+	}
+	if err := addEdge(t, s, t3.ID, t1.ID, "blocks"); !errors.Is(err, ErrCycle) {
+		t.Fatalf("transitive cycle: want ErrCycle, got %v", err)
+	}
+}
