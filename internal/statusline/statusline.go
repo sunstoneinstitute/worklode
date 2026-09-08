@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -296,43 +295,11 @@ func formatTaskLocation(taskID, server string, dark bool) string {
 	if dark {
 		color = taskIDColorDark
 	}
-	var link string
-	if server != "" {
-		link = server + "/" + taskID
+	text := taskID
+	if server != "" && cli.TerminalHyperlinks() {
+		text = cli.Hyperlink(server+"/"+taskID, taskID)
 	}
-	return color + osc8(taskID, link) + ansiReset
-}
-
-// osc8 wraps text in an OSC 8 hyperlink to url. An empty url, or a terminal
-// that does not render the sequence, gets the text unchanged: a terminal
-// without support prints the escape as garbage rather than ignoring it.
-func osc8(text, url string) string {
-	if url == "" || !hyperlinksSupported() {
-		return text
-	}
-	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
-}
-
-// hyperlinksSupported reports whether the terminal the harness is drawing in
-// is known to render OSC 8 hyperlinks. Sniffing the environment is the only
-// signal there is: this command's stdout is a pipe to the harness, never a
-// terminal, so there is nothing to query. Unknown means no — a missed link
-// costs nothing, a printed escape sequence costs the line.
-func hyperlinksSupported() bool {
-	switch os.Getenv("TERM_PROGRAM") {
-	case "iTerm.app", "WezTerm", "ghostty", "vscode", "Hyper", "rio", "tabby":
-		return true
-	}
-	for _, key := range []string{"KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION"} {
-		if os.Getenv(key) != "" {
-			return true
-		}
-	}
-	// VTE (gnome-terminal, tilix, ...) gained OSC 8 in 0.50.
-	if v, err := strconv.Atoi(os.Getenv("VTE_VERSION")); err == nil {
-		return v >= 5000
-	}
-	return false
+	return color + text + ansiReset
 }
 
 // gitProject returns the project name: the basename of the remote URL with any

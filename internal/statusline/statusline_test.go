@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/cli"
 )
 
 // stripANSI removes escape sequences so assertions read against the text the
@@ -457,7 +459,7 @@ func noLinks(t *testing.T) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("LODE_SERVER", "")
-	for _, key := range []string{"TERM_PROGRAM", "KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION", "VTE_VERSION"} {
+	for _, key := range []string{"TERM_PROGRAM", "KITTY_WINDOW_ID", "WT_SESSION", "ALACRITTY_WINDOW_ID", "KONSOLE_VERSION", "VTE_VERSION", "TMUX"} {
 		t.Setenv(key, "")
 	}
 }
@@ -502,8 +504,14 @@ func TestFormatTaskLocation(t *testing.T) {
 	}
 	t.Setenv("TERM_PROGRAM", "iTerm.app")
 	got := formatTaskLocation("WL-7", "https://wl.example.com", false)
-	if want := "\x1b]8;;https://wl.example.com/WL-7\x1b\\WL-7\x1b]8;;\x1b\\"; !strings.Contains(got, want) {
+	if want := cli.Hyperlink("https://wl.example.com/WL-7", "WL-7"); !strings.Contains(got, want) {
 		t.Fatalf("got %q, want it to contain %q", got, want)
+	}
+	// Inside tmux the link is dropped: tmux before 3.4 swallows the escape's
+	// text with it, which would cost the line the id itself.
+	t.Setenv("TMUX", "/tmp/tmux-501/default,1,0")
+	if got := formatTaskLocation("WL-7", "https://wl.example.com", false); strings.Contains(got, "\x1b]8") {
+		t.Fatalf("got %q, want no hyperlink under tmux", got)
 	}
 }
 
