@@ -19,7 +19,7 @@ func TestGitHubWebhookMetrics(t *testing.T) {
 	st := store.OpenTestStore(t)
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
-	h := hooks.NewGitHubHandler(st, testSecret, nil, nil, nil, m)
+	h := hooks.NewGitHubHandler(st, testSecret, nil, nil, nil, nil, m)
 
 	// Unmapped repo → ignored (no project mapping exists in this store).
 	body := []byte(`{"action":"opened","repository":{"full_name":"acme/unmapped"}}`)
@@ -101,12 +101,12 @@ func TestReleaseBranchResolveMetrics(t *testing.T) {
 		t.Fatalf("unexpected branch %q", branch)
 		return "", nil
 	}
-	h := hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, m)
+	h := hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, resolve, nil, m)
 	deliverBody(t, h, "release", "d-1", releaseBody("v1", "release-1.2")) // resolved
 	deliverBody(t, h, "release", "d-2", releaseBody("v2", "gone"))        // unknown
 	deliverBody(t, h, "release", "d-3", releaseBody("v3", "boom"))        // error
 
-	noResolver := hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, nil, m)
+	noResolver := hooks.NewGitHubHandlerWithResolver(st, testSecret, slog.Default(), nil, nil, nil, m)
 	deliverBody(t, noResolver, "release", "d-4", releaseBody("v4", "release-1.2")) // skipped
 
 	for _, tc := range []struct {
