@@ -189,7 +189,12 @@ fused by reciprocal rank behind `GET /api/v1/search` and `lode search`, spec
 tasks a document's lifecycle calls for (025 §15.4): the rules are a pure
 function in `internal/watcher`, the executor that feeds them is
 `internal/api/docwatch.go`, and `NewServer` starts the loop only when the
-caller passes a `BackgroundCtx`.
+caller passes a `BackgroundCtx`. The project Progress page (spec 066) says how
+much of each spec exists and what moves it next: `internal/progress` is the
+pure derivation — plan state, section state, spec grouping, next act — from
+one `store.ProjectProgress` read, recomputed per request and never stored, and
+`internal/api/progress.go`, `internal/ui/progress.templ` and `lode doc
+progress` are the three readers of it.
 
 The backbone (this repo, Postgres) owns execution facts and — once spec 025 is
 implemented — design-document artifacts; derived architecture facts and the
