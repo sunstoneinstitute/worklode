@@ -56,6 +56,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			") and outcome (" + strings.Join(milestoneChangeOutcomes, ", ") +
 			"). Labels are bounded: the project, the milestone and the actor are deliberately not among them.",
 	}, []string{"action", "outcome"})
+	s.referenceWrites = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_reference_writes_total",
+		Help: "Reference (entity_edges, spec 029 §5) write attempts, by rel (" +
+			strings.Join(referenceRels, ", ") +
+			") and outcome (ok, error). Labels are bounded: the from and to ids are deliberately not among them.",
+	}, []string{"rel", "outcome"})
 	s.repoMappings = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_repo_mapping_changes_total",
 		Help: "Project/repo mapping changes, by action (add, edit, remove) and outcome (ok, rejected, error). Labels are bounded: the repo and the project are deliberately not among them.",
@@ -302,6 +308,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.approvalDecisions, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
+		s.referenceWrites,
 		s.repoMappings,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent,
@@ -350,6 +357,11 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, action := range milestoneChangeActions {
 		for _, outcome := range milestoneChangeOutcomes {
 			s.milestoneChanges.WithLabelValues(action, outcome)
+		}
+	}
+	for _, rel := range referenceRels {
+		for _, outcome := range []string{"ok", "error"} {
+			s.referenceWrites.WithLabelValues(rel, outcome)
 		}
 	}
 	for _, action := range repoMappingActions {
@@ -645,6 +657,40 @@ func (s *server) observeMilestoneChange(action string, err error) {
 		outcome = "error"
 	}
 	s.milestoneChanges.WithLabelValues(action, outcome).Inc()
+}
+
+// referenceRels are every rel label worklode_reference_writes_total carries:
+// the entity_edges vocabulary (029 §5, store.referenceShapes), pinned here so
+// an instance where nobody has declared a reference of a given rel reads as a
+// flat zero rather than as no-data. A rel outside this list (a caller's typo,
+// refused as ErrInvalidInput before the write reaches the table) is folded
+// into "unknown" so the label stays bounded regardless of what a caller
+// sends.
+var referenceRels = []string{"depends_on", "seeded_by"}
+
+// observeReferenceWrite records one attempted reference write, called
+// exactly once per POST /api/v1/references attempt with the rel it was
+// attempted for and the error the attempt returned.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeReferenceWrite(rel string, err error) {
+	if s.referenceWrites == nil {
+		return
+	}
+	known := false
+	for _, r := range referenceRels {
+		if r == rel {
+			known = true
+			break
+		}
+	}
+	if !known {
+		rel = "unknown"
+	}
+	outcome := "ok"
+	if err != nil {
+		outcome = "error"
+	}
+	s.referenceWrites.WithLabelValues(rel, outcome).Inc()
 }
 
 // repoMappingActions are every action label worklode_repo_mapping_changes_total
