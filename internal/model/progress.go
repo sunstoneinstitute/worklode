@@ -168,3 +168,20 @@ type ProgressRallyConflict struct {
 	Error  string `json:"error"`
 	Active string `json:"active"`
 }
+
+// ProgressEventFrame is the data: payload of GET /projects/{id}/progress/events
+// (WL-SPEC-66 §5.1): what one backbone event moved, reduced to the fields
+// the page redraws on. Event is the event's own type, e.g. "task.transition";
+// Task is empty when the touch is about a plan or spec rather than a task, in
+// which case Plan or Specs carries the touch instead. No field is omitted:
+// the page reads a fixed shape, so an absent task is "" and an absent rally
+// is null, never a missing key.
+type ProgressEventFrame struct {
+	Event string     `json:"event"`
+	Task  string     `json:"task"`
+	State string     `json:"state"`
+	Plan  int64      `json:"plan"`
+	Specs []int64    `json:"specs"`
+	Rally *RallyBand `json:"rally"`
+	At    time.Time  `json:"at"`
+}
