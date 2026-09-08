@@ -839,3 +839,12 @@ Recorded by WL-667 (the rally task kind, 005 §2a and 004 §6.1):
   concurrent `blocks` edge or posed decision can still slip past the retag
   checks. The race needs two interleaved transactions and is untested; closing
   it means locking the task row in both paths.
+
+Recorded by WL-762 (`deliverable` joins 061 §1's L1 entity set):
+
+- `[P3]` **`internal/cmd/CLAUDE.md`'s "resulting top-level" table lags its own
+  L1 rule.** The table still lists thirteen entities and calls the top level
+  "twenty-one commands"; `decision`, `deliverable` and `milestone` have since
+  joined L1. The rule bullet above it is now current. The table is a snapshot,
+  not the law, so nothing enforces it — refresh it the next time a top-level
+  command lands.
