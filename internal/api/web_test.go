@@ -1930,3 +1930,32 @@ func TestProjectPageShowsAgentSessions(t *testing.T) {
 	// The row has to name its task: the page lists work from every task.
 	bodyContains(t, rr.Body.String(), "Agent sessions", "Codex", `href="/tasks/WL-1"`)
 }
+
+// TestTaskPageTruncatesLongTimelineSummary pins summarizeEntry's cut: a body
+// edit logs the whole new body as its "old -> new" change, which used to fill
+// the timeline's Summary column outright. The cell keeps a lead-in, and the
+// full text moves behind the "see more" disclosure.
+func TestTaskPageTruncatesLongTimelineSummary(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Long body", "priority": "medium", "kind": "feature",
+	})
+
+	body := "tail-marker " + strings.Repeat("filler words that go on and on ", 20)
+	rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"body": body})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("patch body status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "GET", "/tasks/WL-1", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	page := rr.Body.String()
+	bodyContains(t, page, "see more", "body set to tail-marker")
+	if !strings.Contains(page, "…") {
+		t.Fatalf("long timeline summary was not truncated:\n%s", page)
+	}
+}
