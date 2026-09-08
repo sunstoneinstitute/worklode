@@ -20,6 +20,10 @@ package ui
 // That script also owns the page's tooltips (§2.4), which it reads from the
 // data-tip attributes written here — the page carries no title attribute on a
 // cell or a reference, so nothing shows two tooltips at once.
+//
+// The live swap (§5.2) reads three more attributes: data-doc names the spec a
+// row is, data-group the group it belongs in, and data-anchor the section a
+// strip cell is about, so a pinned tooltip survives its cell being replaced.
 
 import "strconv"
 import "strings"
@@ -34,9 +38,11 @@ templ Progress(v ProgressView) {
 				@progressBand(v.P.Rally)
 				@progressCounts(v.P.Counts)
 				@progressBar(v)
-				for _, g := range v.P.Groups {
-					@progressGroup(g, v.Viewer, v.ReviewEnabled)
-				}
+				<div class="prog-groups">
+					for _, g := range v.P.Groups {
+						@progressGroup(g, v.Viewer, v.ReviewEnabled)
+					}
+				</div>
 				@progressFooter(v.P.Draft, v.Viewer)
 			</div>
 			<script src={ assetURL("progress.js") } defer></script>
@@ -150,9 +156,9 @@ templ progressBar(v ProgressView) {
 // rendered as a heading over nothing.
 templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled bool) {
 	if len(g.Specs) > 0 {
-		<section class="card">
+		<section class="card" data-group={ g.Key }>
 			<div class="hd">
-				<h3>{ progressGroupLabel(g.Key) } &middot; { strconv.Itoa(len(g.Specs)) }</h3>
+				<h3>{ progressGroupLabel(g.Key) } &middot; <span class="n">{ strconv.Itoa(len(g.Specs)) }</span></h3>
 				<div class="meta">{ progressGroupMeaning(g.Key) }</div>
 			</div>
 			<div class="bd">
@@ -174,13 +180,13 @@ templ progressGroup(g model.ProgressGroup, viewer string, reviewEnabled bool) {
 // detail block that follows it; the row is focusable so a keyboard can do the
 // same.
 templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled bool) {
-	<div class="prog-row" tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
+	<div class="prog-row" data-doc={ strconv.FormatInt(s.Doc, 10) } data-group={ s.Group } tabindex="0" aria-expanded="false" aria-controls={ progressDetailID(s.Ref) }>
 		<div class="ref"><a href={ "/docs/ref/" + s.Ref } data-tip={ progressRefTip(s.Ref, s.Title) }>{ s.Ref }</a></div>
 		<div class="t">{ s.Title }</div>
 		<div class="strip">
 			for _, sec := range s.Sections {
 				if sec.State != "bound" {
-					<i class={ progressCellClass(sec) } data-tip={ progressCellTip(sec) }></i>
+					<i class={ progressCellClass(sec) } data-anchor={ sec.Anchor } data-tip={ progressCellTip(sec) }></i>
 				}
 			}
 		</div>
