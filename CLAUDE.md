@@ -165,9 +165,10 @@ permission check: `internal/api/webform.go`'s `beginJSONPost` (WL-SPEC-66
 JSON body, and an actor taken from the session rather than the request.
 
 Ingest paths write through the same store layer: `internal/hooks` (GitHub App
-and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer for crash
-loops/OOM kills), and `lode inbox import` (backfill through the webhook store
-path, so re-running is safe).
+webhooks — including `merge_group` and `repository_ruleset` for the merge
+queue — and Flux webhooks, both HMAC-signed), `internal/watch` (pod informer
+for crash loops/OOM kills), and `lode inbox import` (backfill through the
+webhook store path, so re-running is safe).
 
 Cross-cutting pieces: `internal/gitexec` (every `git` subprocess in the
 binary, so environment policy and error shape live in one place — a guard
