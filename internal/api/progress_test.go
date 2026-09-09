@@ -402,7 +402,7 @@ func TestProgressDraftPlanAction(t *testing.T) {
 
 	body := getPage(t, h, "/projects/proj/progress").Body.String()
 
-	line := between(t, body, `<div class="plan">`, "</div>")
+	line := between(t, body, `<div class="plan" id=`, "</div>")
 	for _, want := range []string{
 		`class="act"`,
 		`data-route="accept"`,

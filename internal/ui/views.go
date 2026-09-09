@@ -1368,6 +1368,12 @@ func progressSliceClass(bar []model.ProgressSlice, i int) string {
 	return "seg cell-" + s.State + " seg-" + strconv.Itoa(pct)
 }
 
+// progressPlanAnchorID is the id of a plan's line inside one spec's detail
+// block, which a section cell's pinned tooltip links to. A plan can cover
+// several specs, so the spec is part of the id: the same plan under two specs
+// is two lines on the page.
+func progressPlanAnchorID(specRef, planRef string) string { return "p-" + specRef + "-" + planRef }
+
 // progressDetailID is the id of a row's detail block, which the row points at
 // with aria-controls so the two are one control to assistive technology.
 func progressDetailID(ref string) string { return "d-" + ref }

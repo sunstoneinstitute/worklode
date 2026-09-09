@@ -798,6 +798,9 @@ nav.local a .cnt{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink
 /* §3.6's merge button, copied into a pinned tooltip. Its own line, so the
  * position line above it keeps reading as a sentence. */
 #tip .act{display:block;margin-top:6px}
+/* A section cell's covering-plan links, copied into a pinned tooltip: one per
+ * plan, each on its own line under the section's description. */
+#tip .tip-go{display:block;margin-top:6px;color:var(--surface);text-decoration:underline}
 
 .cell{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid transparent;flex:0 0 auto}
 .cell-built{background:var(--ok);border-color:var(--ok)}
