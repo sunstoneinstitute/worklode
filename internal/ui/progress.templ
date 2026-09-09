@@ -187,6 +187,13 @@ templ progressRow(s model.ProgressSpec, viewer string, reviewEnabled, mergeEnabl
 			for _, sec := range s.Sections {
 				if sec.State != "bound" {
 					<i class={ progressCellClass(sec) } data-anchor={ sec.Anchor } data-tip={ progressCellTip(sec) }></i>
+					if len(sec.Plans) > 0 {
+						<span class="tip-act" hidden>
+							for _, pr := range sec.Plans {
+								<a class="tip-go" href={ "#" + progressPlanAnchorID(s.Ref, pr) }>Go to { pr }</a>
+							}
+						</span>
+					}
 				}
 			}
 		</div>
@@ -214,7 +221,7 @@ templ progressDetail(s model.ProgressSpec, viewer string, reviewEnabled, mergeEn
 		} else {
 			<div class="plans">
 				for _, p := range s.Plans {
-					@progressPlanLine(p, viewer, reviewEnabled, mergeEnabled)
+					@progressPlanLine(s.Ref, p, viewer, reviewEnabled, mergeEnabled)
 				}
 			</div>
 		}
@@ -259,8 +266,8 @@ templ progressPill(state string) {
 // progressPlanLine is one plan of §2.3's plans list: what it is, what it comes
 // after, its state, and one cell per minted task. A plan with no minted task
 // says so rather than drawing an empty strip (§1.1's no_record).
-templ progressPlanLine(p model.ProgressPlan, viewer string, reviewEnabled, mergeEnabled bool) {
-	<div class="plan">
+templ progressPlanLine(specRef string, p model.ProgressPlan, viewer string, reviewEnabled, mergeEnabled bool) {
+	<div class="plan" id={ progressPlanAnchorID(specRef, p.Ref) }>
 		<a href={ "/docs/ref/" + p.Ref } class="mono" data-tip={ progressRefTip(p.Ref, p.Title) }>{ p.Ref }</a>
 		<span class="t">{ p.Title }</span>
 		if len(p.Requires) > 0 {
