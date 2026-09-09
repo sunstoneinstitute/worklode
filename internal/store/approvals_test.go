@@ -1605,3 +1605,223 @@ func TestOpenApprovalForLaneSelectsOnlyItsLane(t *testing.T) {
 		t.Errorf("absent lane: got err %v, want ErrNotFound", err)
 	}
 }
+
+// mustInsertAwaiting inserts an unlaned 'awaiting' approval at revision and
+// fails the test on error — the shared setup the designation tests below
+// need, without the per-call InsertAwaitingApproval/error-check boilerplate.
+func mustInsertAwaiting(t *testing.T, tx *sql.Tx, now time.Time,
+	entityKind, entityID, revision string, requiredRole, requiredActor *string) {
+	t.Helper()
+	if _, err := InsertAwaitingApproval(tx, now, entityKind, entityID, revision, "",
+		requiredRole, requiredActor, nil); err != nil {
+		t.Fatalf("insert awaiting %s %s@%s: %v", entityKind, entityID, revision, err)
+	}
+}
+
+// mustOpenApproval reads the unlaned open row and fails the test on error.
+func mustOpenApproval(t *testing.T, tx *sql.Tx, entityKind, entityID string) *Approval {
+	t.Helper()
+	a, err := OpenApprovalForLane(tx, entityKind, entityID, "")
+	if err != nil {
+		t.Fatalf("open approval %s %s: %v", entityKind, entityID, err)
+	}
+	return a
+}
+
+// mustResolve resolves id to state and fails the test on error.
+func mustResolve(t *testing.T, tx *sql.Tx, id int64, state string, now time.Time) {
+	t.Helper()
+	if err := ResolveApproval(tx, id, state, nil, now); err != nil {
+		t.Fatalf("resolve approval %d to %q: %v", id, state, err)
+	}
+}
+
+// TestDesignateRevisionMintsCandidateAfterDecision is 029 §7.1's "only
+// decided history exists" branch: the approved row keeps its exact revision
+// and a fresh awaiting candidate opens at the new one, inheriting the role
+// requirement the decided row carried.
+func TestDesignateRevisionMintsCandidateAfterDecision(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	role := "science-leads"
+	mustInsertAwaiting(t, tx, now, "pr", "acme/site#7", "aaa111", &role, nil)
+	ap := mustOpenApproval(t, tx, "pr", "acme/site#7")
+	mustResolve(t, tx, ap.ID, "approved", now)
+
+	out, err := DesignateRevision(tx, now, "pr", "acme/site#7", "bbb222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != RevisionCandidate {
+		t.Fatalf("outcome = %v, want RevisionCandidate", out)
+	}
+	rows, err := ListApprovalsForEntity(tx, "pr", "acme/site#7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The approved row keeps aaa111; the candidate is awaiting at bbb222
+	// and inherited the role requirement.
+	if len(rows) != 2 || rows[0].State != "awaiting" ||
+		rows[0].SubjectRevision != "bbb222" || rows[0].RequiredRole == nil ||
+		rows[1].SubjectRevision != "aaa111" || rows[1].State != "approved" {
+		t.Errorf("unexpected history: %+v", rows)
+	}
+}
+
+// TestDesignateRevisionRebindsOpenRow is the "never decided" branch: the
+// still-open row moves to the new revision in place, so history stays one
+// row long.
+func TestDesignateRevisionRebindsOpenRow(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	mustInsertAwaiting(t, tx, now, "pr", "acme/site#20", "aaa111", nil, nil)
+
+	out, err := DesignateRevision(tx, now, "pr", "acme/site#20", "bbb222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != RevisionRebind {
+		t.Fatalf("outcome = %v, want RevisionRebind", out)
+	}
+	rows, err := ListApprovalsForEntity(tx, "pr", "acme/site#20")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].SubjectRevision != "bbb222" || rows[0].State != "awaiting" {
+		t.Errorf("unexpected history: %+v, want one rebound row", rows)
+	}
+}
+
+// TestDesignateRevisionAlreadyBoundIsNoop: designating the revision a row
+// already carries — open or decided — must not mint a duplicate.
+func TestDesignateRevisionAlreadyBoundIsNoop(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	role := "science-leads"
+	mustInsertAwaiting(t, tx, now, "pr", "acme/site#21", "aaa111", &role, nil)
+	ap := mustOpenApproval(t, tx, "pr", "acme/site#21")
+	mustResolve(t, tx, ap.ID, "approved", now)
+
+	first, err := DesignateRevision(tx, now, "pr", "acme/site#21", "bbb222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != RevisionCandidate {
+		t.Fatalf("first outcome = %v, want RevisionCandidate", first)
+	}
+	second, err := DesignateRevision(tx, now, "pr", "acme/site#21", "bbb222")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != RevisionNoop {
+		t.Fatalf("second outcome = %v, want RevisionNoop", second)
+	}
+	rows, err := ListApprovalsForEntity(tx, "pr", "acme/site#21")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2 (the no-op must not add a third)", len(rows))
+	}
+}
+
+// TestDesignateRevisionNoHistoryIsNoop: an entity that never had a
+// requirement gets none conjured by a bare revision push.
+func TestDesignateRevisionNoHistoryIsNoop(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+
+	out, err := DesignateRevision(tx, now, "pr", "acme/site#22", "aaa111")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != RevisionNoop {
+		t.Fatalf("outcome = %v, want RevisionNoop", out)
+	}
+	rows, err := ListApprovalsForEntity(tx, "pr", "acme/site#22")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("got %d rows, want 0: a push never conjures a requirement", len(rows))
+	}
+}
+
+// TestGovernedRefsRoundTrip: what InsertGovernedRefs writes, GovernedRefsFor
+// reads back in full, and re-running the same insert is a no-op rather than
+// a conflict.
+func TestGovernedRefsRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+	refs := []GovernedRef{
+		{Kind: "doc", ID: "doc:1", Revision: "3"},
+		{Kind: "task", ID: "WL-1", Revision: "2"},
+	}
+	if err := InsertGovernedRefs(tx, now, nil, "pr", "acme/site#30", "sha1", refs); err != nil {
+		t.Fatal(err)
+	}
+	// Re-insert of the same set must not error or duplicate.
+	if err := InsertGovernedRefs(tx, now, nil, "pr", "acme/site#30", "sha1", refs); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GovernedRefsFor(tx, "pr", "acme/site#30", "sha1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []GovernedRef{
+		{Kind: "doc", ID: "doc:1", Revision: "3"},
+		{Kind: "task", ID: "WL-1", Revision: "2"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %+v, want %+v", got, want)
+	}
+}
+
+// TestDependentsOf: a referrer that recorded the reference at more than one
+// of its own revisions surfaces once, and a referrer that named a different
+// revision of the target than another referrer still counts.
+func TestDependentsOf(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	tx := mustBegin(t, s)
+	now := time.Now().UTC()
+
+	if err := InsertGovernedRefs(tx, now, nil, "pr", "acme/site#40", "sha1",
+		[]GovernedRef{{Kind: "doc", ID: "doc:5", Revision: "1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertGovernedRefs(tx, now.Add(time.Minute), nil, "pr", "acme/site#40", "sha2",
+		[]GovernedRef{{Kind: "doc", ID: "doc:5", Revision: "2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := InsertGovernedRefs(tx, now, nil, "task", "WL-9", "1",
+		[]GovernedRef{{Kind: "doc", ID: "doc:5", Revision: "1"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := DependentsOf(tx, "doc", "doc:5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d dependents, want 2 (one per referrer): %+v", len(got), got)
+	}
+	seen := map[string]bool{}
+	for _, g := range got {
+		seen[g.Kind+" "+g.ID] = true
+	}
+	if !seen["pr acme/site#40"] || !seen["task WL-9"] {
+		t.Errorf("got %+v, want pr acme/site#40 and task WL-9, each once", got)
+	}
+}
