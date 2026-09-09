@@ -2710,6 +2710,12 @@ nav.local a .cnt {
   display: block;
   margin-top: 6px;
 }
+#tip .tip-go {
+  display: block;
+  margin-top: 6px;
+  color: var(--surface);
+  text-decoration: underline;
+}
 .cell {
   display: inline-block;
   width: 12px;
