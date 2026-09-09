@@ -15,6 +15,7 @@ type Metrics struct {
 	withoutVector prometheus.Gauge
 	stale         *prometheus.GaugeVec
 	reembed       *prometheus.CounterVec
+	abandoned     *prometheus.CounterVec
 	convergence   prometheus.Histogram
 }
 
@@ -44,6 +45,10 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_index_reembed_total",
 			Help: "Subjects re-indexed by the convergence loop, by kind and outcome (ok, error).",
 		}, []string{"subject_kind", "outcome"}),
+		abandoned: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_index_kind_abandoned_total",
+			Help: "Passes that gave up on a kind after consecutive subject failures. Above zero means the embedding provider is failing, not one subject.",
+		}, []string{"subject_kind"}),
 		convergence: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name: "worklode_index_convergence_duration_seconds",
 			Help: "Duration of one full convergence pass over all subject kinds.",
@@ -52,13 +57,14 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Buckets: []float64{0.01, 0.1, 1, 5, 15, 60, 300, 900},
 		}),
 	}
-	reg.MustRegister(m.chunks, m.withoutVector, m.stale, m.reembed, m.convergence)
+	reg.MustRegister(m.chunks, m.withoutVector, m.stale, m.reembed, m.abandoned, m.convergence)
 
 	// Pre-initialise every bounded series so an alert expression sees 0
 	// rather than no-data before the first pass.
 	for _, kind := range kinds {
 		m.chunks.WithLabelValues(kind)
 		m.stale.WithLabelValues(kind)
+		m.abandoned.WithLabelValues(kind)
 		for _, outcome := range outcomes {
 			m.reembed.WithLabelValues(kind, outcome)
 		}
@@ -72,6 +78,14 @@ func (m *Metrics) Reembed(kind, outcome string) {
 		return
 	}
 	m.reembed.WithLabelValues(kind, outcome).Inc()
+}
+
+// Abandoned counts one pass giving up on a kind.
+func (m *Metrics) Abandoned(kind string) {
+	if m == nil {
+		return
+	}
+	m.abandoned.WithLabelValues(kind).Inc()
 }
 
 // Convergence records how long one full pass took.

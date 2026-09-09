@@ -20,7 +20,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_embed_requests_total",
-			Help: "Outbound embedding API calls by result. One per Embed call, however many texts it batches.",
+			Help: "Outbound embedding API calls by result. One per HTTP request, so an Embed call over more than MaxBatch texts counts several.",
 		}, []string{"result"}),
 		duration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "worklode_embed_request_duration_seconds",

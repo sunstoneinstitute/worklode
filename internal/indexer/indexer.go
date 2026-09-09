@@ -32,6 +32,18 @@ const DefaultInterval = 5 * time.Minute
 // transaction spacing, not how much a pass converges.
 const defaultBatch = 100
 
+// maxConsecutiveFailures is how many subjects in a row may fail before the
+// pass gives up on that kind and waits for the next interval.
+//
+// A failing embedding provider fails every subject, and the client giving up
+// does not stop the server: text-embeddings-inference keeps computing a
+// request whose caller has timed out, so each retry adds work to a backend
+// that is already behind, which makes the next request slower still. Walking
+// a full page of stale subjects turns one slow provider into a hundred
+// abandoned requests per pass. Three is enough to tell "this subject is bad"
+// from "the provider is down".
+const maxConsecutiveFailures = 3
+
 // kinds is the fixed set of subject kinds a pass walks, in a stable order so
 // a slow kind cannot starve the others across restarts.
 var kinds = []string{store.SubjectDoc, store.SubjectTask, store.SubjectSkill}
@@ -109,7 +121,8 @@ func (ix *Indexer) RunOnce(ctx context.Context) (int, error) {
 // progress. Failed subjects stay stale, so they come back in the next page:
 // stopping on zero progress is what keeps a permanently failing subject from
 // spinning the pass forever, while a page that was not full means nothing is
-// left but those failures.
+// left but those failures. maxConsecutiveFailures in a row ends the kind
+// early — see its comment for why retrying past that makes things worse.
 func (ix *Indexer) convergeKind(ctx context.Context, kind string) (int, error) {
 	batch := ix.Batch
 	if batch <= 0 {
@@ -121,7 +134,7 @@ func (ix *Indexer) convergeKind(ctx context.Context, kind string) (int, error) {
 		if err != nil {
 			return done, fmt.Errorf("converge %s: %w", kind, err)
 		}
-		progress := 0
+		progress, failures := 0, 0
 		for _, subj := range subjects {
 			if err := ctx.Err(); err != nil {
 				return done, err
@@ -133,10 +146,16 @@ func (ix *Indexer) convergeKind(ctx context.Context, kind string) (int, error) {
 				ix.log().Warn("index subject failed",
 					"kind", kind, "subject", subjectID(subj), "err", err)
 				ix.Metrics.Reembed(kind, "error")
+				failures++
+				if failures >= maxConsecutiveFailures {
+					ix.Metrics.Abandoned(kind)
+					return done, fmt.Errorf("converge %s: gave up after %d subjects failed in a row", kind, failures)
+				}
 				continue
 			}
 			ix.Metrics.Reembed(kind, "ok")
 			progress++
+			failures = 0
 		}
 		done += progress
 		if progress == 0 || len(subjects) < batch {
