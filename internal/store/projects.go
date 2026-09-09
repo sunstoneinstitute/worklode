@@ -43,6 +43,13 @@ type Project struct {
 	// the flow without unmarshalling it. Empty until a flow is applied.
 	ApprovalFlowName string
 	ApprovalFlowRev  string
+
+	// Labels and Horizon (migration 0074, 029 §1): free-form classification
+	// stamped at promotion and the bounded/standing horizon attribute. Both
+	// are NOT NULL with schema defaults ({} and "standing"), so unlike the
+	// fields above they never need a nullable scan type.
+	Labels  map[string]string
+	Horizon string
 }
 
 // projectExtras holds the nullable cockpit columns (migration 0013) and the
@@ -90,12 +97,14 @@ func nullIfZeroTime(t time.Time) any {
 }
 
 // projectColumns is the SELECT list shared by GetProject and ListProjects:
-// the base columns plus the migration-0013 cockpit columns and 0063's
-// approval-flow columns, in the order projectExtras.dest expects them.
+// the base columns plus the migration-0013 cockpit columns, 0063's
+// approval-flow columns, and 0074's labels/horizon, in the order
+// projectExtras.dest expects the middle group.
 const projectColumns = `id, name, key, focus,
 	focus_note, focus_pinned_by, focus_pinned_at,
 	decision_title, decision_accountable, decision_readiness,
-	approval_flow_name, approval_flow_rev`
+	approval_flow_name, approval_flow_rev,
+	labels, horizon`
 
 // scanProjectFocus unmarshals a jsonb focus column (read as raw bytes) into
 // a []string. An empty or null column yields a nil slice.
@@ -108,6 +117,21 @@ func scanProjectFocus(raw []byte) ([]string, error) {
 		return nil, fmt.Errorf("unmarshal focus: %w", err)
 	}
 	return focus, nil
+}
+
+// scanProjectLabels unmarshals the labels jsonb column (read as raw bytes)
+// into a map[string]string. Unlike focus the column is NOT NULL with a '{}'
+// default, so raw is never empty in practice; an empty map is returned
+// defensively all the same.
+func scanProjectLabels(raw []byte) (map[string]string, error) {
+	labels := map[string]string{}
+	if len(raw) == 0 {
+		return labels, nil
+	}
+	if err := json.Unmarshal(raw, &labels); err != nil {
+		return nil, fmt.Errorf("unmarshal labels: %w", err)
+	}
+	return labels, nil
 }
 
 // CreateProject registers a new project with the given immutable key.
@@ -130,9 +154,11 @@ var projectColumnsP = qualifyColumns(projectColumns, "p")
 // scanProject reads one row selected with projectColumns.
 func scanProject(row rowScanner) (*Project, error) {
 	var p Project
-	var focus []byte
+	var focus, labels []byte
 	var ext projectExtras
-	if err := row.Scan(append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)...); err != nil {
+	dest := append([]any{&p.ID, &p.Name, &p.Key, &focus}, ext.dest()...)
+	dest = append(dest, &labels, &p.Horizon)
+	if err := row.Scan(dest...); err != nil {
 		return nil, err
 	}
 	f, err := scanProjectFocus(focus)
@@ -140,6 +166,11 @@ func scanProject(row rowScanner) (*Project, error) {
 		return nil, fmt.Errorf("project %s focus: %w", p.ID, err)
 	}
 	p.Focus = f
+	l, err := scanProjectLabels(labels)
+	if err != nil {
+		return nil, fmt.Errorf("project %s labels: %w", p.ID, err)
+	}
+	p.Labels = l
 	ext.apply(&p)
 	return &p, nil
 }
@@ -170,6 +201,41 @@ func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
 	return collectRows(rows, "list projects", byValue(scanProject))
+}
+
+// validHorizons is the projects.horizon CHECK constraint (migration 0074),
+// mirrored in Go so a caller gets ErrInvalidInput instead of a raw
+// constraint violation.
+var validHorizons = map[string]bool{"bounded": true, "standing": true}
+
+// ValidHorizon reports whether horizon is an accepted projects.horizon value.
+func ValidHorizon(horizon string) bool { return validHorizons[horizon] }
+
+// SetProjectMetadata stamps a project's labels and horizon (029 §1,
+// migration 0074): free-form classification tags and whether the project is
+// bounded or standing. Tx-scoped so promotion can write it inside the same
+// event transaction as whatever act derived the values (021 §4). A nil
+// labels map is written as an empty JSON object, not null. Returns
+// ErrInvalidInput for an unknown horizon before the UPDATE runs.
+func SetProjectMetadata(tx *sql.Tx, projectID string, labels map[string]string, horizon string) error {
+	if !ValidHorizon(horizon) {
+		return fmt.Errorf("unknown horizon %q: %w", horizon, ErrInvalidInput)
+	}
+	if labels == nil {
+		labels = map[string]string{}
+	}
+	labelsJSON, err := json.Marshal(labels)
+	if err != nil {
+		return fmt.Errorf("marshal labels: %w", err)
+	}
+	res, err := tx.Exec(
+		`UPDATE projects SET labels = $1, horizon = $2 WHERE id = $3`,
+		labelsJSON, horizon, projectID)
+	if err != nil {
+		return fmt.Errorf("set metadata for project %s: %w", projectID, err)
+	}
+	return requireOneAffected(res, "set project metadata",
+		fmt.Errorf("project %s: %w", projectID, ErrNotFound))
 }
 
 // SetProjectFocus records the ordered list of concerns a project's ranking

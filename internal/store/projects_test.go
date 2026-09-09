@@ -515,6 +515,75 @@ func TestCreateProjectDuplicateKey(t *testing.T) {
 	}
 }
 
+// TestProjectMetadataRoundTrip covers 029 §1's labels/horizon columns
+// (migration 0074): SetProjectMetadata writes inside a caller-owned tx, and
+// GetProject reads back what was committed.
+func TestProjectMetadataRoundTrip(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "intake", "Intake", "IN"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	tx := mustBegin(t, s)
+	if err := SetProjectMetadata(tx, "intake",
+		map[string]string{"kind": "sunstone-story"}, "bounded"); err != nil {
+		t.Fatalf("SetProjectMetadata: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	p, err := s.GetProject(ctx, "intake")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if p.Labels["kind"] != "sunstone-story" || p.Horizon != "bounded" {
+		t.Errorf("got labels %v horizon %q", p.Labels, p.Horizon)
+	}
+}
+
+// TestProjectMetadataDefaults covers the schema defaults a freshly created
+// project gets without ever calling SetProjectMetadata (migration 0074).
+func TestProjectMetadataDefaults(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "plain", "Plain", "PL"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	p, err := s.GetProject(ctx, "plain")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if len(p.Labels) != 0 {
+		t.Errorf("default labels = %v, want empty", p.Labels)
+	}
+	if p.Horizon != "standing" {
+		t.Errorf("default horizon = %q, want standing", p.Horizon)
+	}
+}
+
+// TestSetProjectMetadataInvalidHorizon covers the guard SetProjectMetadata
+// runs before its UPDATE: an unknown horizon is ErrInvalidInput, and nothing
+// is written.
+func TestSetProjectMetadataInvalidHorizon(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "intake", "Intake", "IN"); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	tx := mustBegin(t, s)
+	err := SetProjectMetadata(tx, "intake", nil, "eternal")
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("SetProjectMetadata err = %v, want ErrInvalidInput", err)
+	}
+}
+
 // mustExtID returns a random external id for test events.
 func mustExtID(t *testing.T) string {
 	t.Helper()
