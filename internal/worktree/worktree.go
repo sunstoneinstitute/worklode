@@ -248,8 +248,8 @@ func IsMain(dir string) (isMain, ok bool) {
 // common to every worktree, so hooks installed from a task worktree land once,
 // for the whole repo. AGENTS.md is tracked content, so anchoring it at a
 // linked worktree's own root would dirty that worktree's branch with a change
-// the task never asked for (WL-219); CLAUDE.local.md is gitignored rather
-// than tracked, but it anchors at the same root so the pair stays together.
+// the task never asked for (WL-219). Shared agent instructions and their
+// root pointers are tracked together and inherited through branch updates.
 //
 // The main root is derived from the common git dir — <main>/.git — one level
 // up, and then verified: the candidate must itself be a worktree root whose

@@ -217,7 +217,7 @@ type installResult struct {
 	VCS        *vcsInstall         `json:"vcs,omitempty"`
 	Agents     []agentInstall      `json:"agents,omitempty"`
 	StatusLine []statusLineInstall `json:"status_line,omitempty"`
-	// Instructions is the repo-level AGENTS.md/CLAUDE.local.md pair, not a
+	// Instructions is the shared block and root read pointers, not a
 	// per-harness integration: nil when there was no repo root to write to.
 	Instructions *instructionsResult `json:"instructions,omitempty"`
 	// Skills is one entry per --skills publish target (spec 008 acceptance
@@ -367,9 +367,9 @@ func installHooks(cmd *cobra.Command, dir string, targets hookTargets, scope str
 	// *main* worktree, not dir's own root: AGENTS.md is a tracked file, so
 	// installing from a task worktree would otherwise dirty that task's branch
 	// with an unrelated change — a linked worktree inherits the main
-	// checkout's instruction files (WL-219). CLAUDE.local.md is gitignored
-	// rather than tracked, but anchoring it at the same root keeps the pair
-	// together. Outside a git repo there is no root to anchor to; warn and
+	// checkout's tracked instructions after a branch update (WL-219).
+	// The shared file and root pointers belong in the same commit.
+	// Outside a git repo there is no root to anchor to; warn and
 	// carry on, the same posture the worktree config extension takes.
 	if root, ok := worktree.MainRoot(dir); ok {
 		instr, err := ensureInstructions(root)
@@ -680,6 +680,11 @@ func reportInstall(cmd *cobra.Command, res installResult) error {
 		}
 	}
 	if i := res.Instructions; i != nil {
+		if i.SharedMD != "" {
+			fmt.Fprintf(out, "%s: %s\nAGENTS.md: %s read instruction\nCLAUDE.md: %s read instruction\n",
+				i.blockIn(), i.SharedMD, i.AgentsMD, i.ClaudeMD)
+			return nil
+		}
 		blockIn := i.blockIn()
 		switch i.AgentsMD {
 		case instrCreated:
@@ -753,6 +758,10 @@ func reportUninstall(cmd *cobra.Command, res uninstallResult) error {
 		}
 	}
 	if i := res.Instructions; i != nil {
+		if i.SharedMD != "" {
+			fmt.Fprintf(out, "%s: %s; root read instructions retained\n", i.blockIn(), i.SharedMD)
+			return nil
+		}
 		blockIn := i.blockIn()
 		switch i.AgentsMD {
 		case instrRemoved:
