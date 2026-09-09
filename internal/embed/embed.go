@@ -85,6 +85,22 @@ func Truncate(s string, n int) string {
 	return string(r[:n])
 }
 
+// DefaultMaxBatch is how many inputs one HTTP request carries when MaxBatch
+// says nothing, and DefaultTimeout is how long that request may take.
+//
+// The timeout is fixed and the caller's input count is not: the indexer hands
+// over a whole subject at once, and a long spec chunks into dozens of pieces
+// (040 §4.2) — the corpus holds one of 88. On the in-cluster CPU backend an
+// input costs on the order of a second, so an unsplit request for a large doc
+// cannot finish inside any timeout worth setting, and the retry that follows
+// it is more load on a server that is already behind. Eight inputs keeps one
+// request's work bounded and still amortises the round trip; a minute is
+// several times what eight should ever need.
+const (
+	DefaultMaxBatch = 8
+	DefaultTimeout  = 60 * time.Second
+)
+
 // OpenAI calls an OpenAI-compatible embeddings endpoint (the full URL,
 // e.g. https://api.example.com/v1/embeddings).
 type OpenAI struct {
@@ -100,7 +116,10 @@ type OpenAI struct {
 	// to truncate the model's native width. Leave it 0 for a sidecar that
 	// rejects the parameter, configured with a natively-768 model instead.
 	Dimensions int
-	// HTTPClient overrides the default 30s-timeout client.
+	// MaxBatch caps how many inputs one HTTP request carries; Embed splits a
+	// longer slice across several requests. 0 means DefaultMaxBatch.
+	MaxBatch int
+	// HTTPClient overrides the default DefaultTimeout client.
 	HTTPClient *http.Client
 	// Metrics records call outcomes and duration. Nil records nothing.
 	Metrics *Metrics
@@ -149,17 +168,33 @@ func (p *OpenAI) client() *http.Client {
 	if p.HTTPClient != nil {
 		return p.HTTPClient
 	}
-	return &http.Client{Timeout: 30 * time.Second}
+	return &http.Client{Timeout: DefaultTimeout}
 }
 
+// Embed sends texts in batches of at most MaxBatch inputs and concatenates
+// the results in order. A batch that fails fails the whole call: the caller
+// stores one subject's vectors as a set, so half of them is not a usable
+// answer.
 func (p *OpenAI) Embed(ctx context.Context, role Role, texts []string) ([][]float32, error) {
 	if len(texts) == 0 {
 		return nil, nil
 	}
-	start := time.Now()
-	vecs, err := p.embed(ctx, role, texts)
-	p.Metrics.observe(err, time.Since(start))
-	return vecs, err
+	size := p.MaxBatch
+	if size <= 0 {
+		size = DefaultMaxBatch
+	}
+	vecs := make([][]float32, 0, len(texts))
+	for start := 0; start < len(texts); start += size {
+		batch := texts[start:min(start+size, len(texts))]
+		began := time.Now()
+		got, err := p.embed(ctx, role, batch)
+		p.Metrics.observe(err, time.Since(began))
+		if err != nil {
+			return nil, err
+		}
+		vecs = append(vecs, got...)
+	}
+	return vecs, nil
 }
 
 func (p *OpenAI) embed(ctx context.Context, role Role, texts []string) ([][]float32, error) {

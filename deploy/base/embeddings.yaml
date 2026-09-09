@@ -54,11 +54,10 @@ spec:
             # so the server never contacts huggingface.co and needs no token.
             - --model-id=/model
             - --port=8080
-            # The indexer embeds one subject per call and sends all of that
-            # subject's chunks in one request (internal/indexer.vectors). A
-            # long spec chunks on every section anchor (040 §4.2), so the
-            # server's default client batch of 32 would 413 on the largest
-            # documents in the corpus.
+            # The client now splits a subject across requests of
+            # embed.DefaultMaxBatch inputs, so nothing it sends comes near
+            # this. It stays above the server's default of 32 as headroom for
+            # a larger client batch, not as a requirement.
             - --max-client-batch-size=256
             # A chunk over the model's 2048-token window truncates instead of
             # failing the whole pass. §4.1's chunk budget is what keeps chunks
@@ -73,6 +72,24 @@ spec:
             # and /health hang while /info still answers. Headroom for four
             # full client batches.
             - --max-concurrent-requests=2048
+          env:
+            # The router sizes its thread pools from the node's core count,
+            # not the container's CPU quota: on an 8-core node it ran 29
+            # threads against a 2-core quota and the kernel throttled 84% of
+            # CFS periods (nr_throttled 831 of 987 over the first 99 s of a
+            # freshly started pod, with system time larger than user time).
+            # Threads that overrun the quota sleep to the end of the 100 ms
+            # period, so an embed cost seconds per input on an idle pod and
+            # the indexer's whole-subject request never finished inside its
+            # client timeout.
+            #
+            # Keep these one below the CPU limit: the tokio HTTP threads and
+            # tokenization need a share too, and a compute pool sized to the
+            # whole quota puts the container back into throttling.
+            - name: OMP_NUM_THREADS
+              value: "3"
+            - name: RAYON_NUM_THREADS
+              value: "3"
           ports:
             - name: http
               containerPort: 8080
@@ -91,10 +108,17 @@ spec:
               # on the first pass. Quantised serving (llama.cpp, the §2.3
               # alternative) is what would earn the smaller number.
               memory: "1536Mi"
-              cpu: "500m"
+              # The pod embeds continuously until the corpus index converges,
+              # so it is not the bursty workload a 500m request describes: it
+              # held 2.0 cores for 47 hours straight and still fell behind.
+              cpu: "1"
             limits:
               memory: "3Gi"
-              cpu: "2"
+              # Model inference is the whole job and it is CPU-bound. Four
+              # cores with three compute threads is what brings one indexer
+              # request inside the client's timeout; the thread counts above
+              # have to move with this number.
+              cpu: "4"
           # Loading the baked weights off local disk takes tens of seconds. A
           # startup probe covers that without loosening liveness afterwards.
           startupProbe:
@@ -105,7 +129,7 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 24
           # Both probes are sized against a busy server, not an idle one.
-          # EmbeddingGemma on CPU saturates this pod's two cores for the length
+          # EmbeddingGemma on CPU saturates this pod's cores for the length
           # of one indexer request, and /health answers on the same starved
           # runtime, so a 3s timeout reads "pinned" as "hung". The old settings
           # killed the pod every few minutes: SIGKILL, a ~60s model warm-up,

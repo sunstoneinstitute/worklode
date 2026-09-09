@@ -3,9 +3,11 @@ package embed
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -466,5 +468,94 @@ func TestOpenAIEmbedEmptyPrefixesMatchLegacyBytes(t *testing.T) {
 		if string(gotBody) != want {
 			t.Fatalf("role %v: request body = %s, want %s", role, gotBody, want)
 		}
+	}
+}
+
+// TestOpenAIEmbedSplitsBatches: one HTTP request's work has to stay bounded,
+// because the client timeout is fixed and the caller's input count is not.
+// The indexer hands a whole subject over at once and a long spec chunks into
+// dozens of pieces, which on a CPU backend is minutes inside one request.
+func TestOpenAIEmbedSplitsBatches(t *testing.T) {
+	var sizes []int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode: %v", err)
+			return
+		}
+		sizes = append(sizes, len(req.Input))
+		// Echo each input's own number back as its vector, so batches
+		// concatenated in the wrong order are visible in the result.
+		w.Header().Set("Content-Type", "application/json")
+		var b strings.Builder
+		b.WriteString(`{"data":[`)
+		for i, in := range req.Input {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `{"index":%d,"embedding":[%s]}`, i, strings.TrimPrefix(in, "text-"))
+		}
+		b.WriteString(`]}`)
+		io.WriteString(w, b.String())
+	}))
+	defer srv.Close()
+
+	texts := make([]string, 40)
+	for i := range texts {
+		texts[i] = fmt.Sprintf("text-%d", i)
+	}
+	p := &OpenAI{URL: srv.URL, Model: "m", MaxBatch: 16}
+	vecs, err := p.Embed(context.Background(), RoleDocument, texts)
+	if err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	if want := []int{16, 16, 8}; !slices.Equal(sizes, want) {
+		t.Fatalf("request sizes %v, want %v", sizes, want)
+	}
+	if len(vecs) != len(texts) {
+		t.Fatalf("got %d vectors for %d inputs", len(vecs), len(texts))
+	}
+	for i, v := range vecs {
+		if len(v) != 1 || v[0] != float32(i) {
+			t.Fatalf("vector %d = %v, want [%d]: batches must concatenate in input order", i, v, i)
+		}
+	}
+}
+
+// TestOpenAIEmbedDefaultBatch: a caller that sets no MaxBatch is still split.
+// The indexer sets none.
+func TestOpenAIEmbedDefaultBatch(t *testing.T) {
+	var largest int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("decode: %v", err)
+			return
+		}
+		largest = max(largest, len(req.Input))
+		w.Header().Set("Content-Type", "application/json")
+		var b strings.Builder
+		b.WriteString(`{"data":[`)
+		for i := range req.Input {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `{"index":%d,"embedding":[1]}`, i)
+		}
+		b.WriteString(`]}`)
+		io.WriteString(w, b.String())
+	}))
+	defer srv.Close()
+
+	p := &OpenAI{URL: srv.URL, Model: "m"}
+	if _, err := p.Embed(context.Background(), RoleDocument, make([]string, DefaultMaxBatch*2+1)); err != nil {
+		t.Fatalf("embed: %v", err)
+	}
+	if largest > DefaultMaxBatch {
+		t.Fatalf("largest request carried %d inputs, want at most DefaultMaxBatch=%d", largest, DefaultMaxBatch)
 	}
 }

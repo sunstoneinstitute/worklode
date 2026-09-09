@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -307,6 +308,55 @@ func TestFailedSubjectStaysStale(t *testing.T) {
 	}
 	if _, without = chunkStats(t, st); without != 0 {
 		t.Fatalf("%d rows still have no vector after the recovery pass", without)
+	}
+}
+
+// TestPassGivesUpOnAFailingProvider: when the provider itself is down, every
+// subject fails, and retrying the rest of the page is not free — the
+// embedding server keeps computing a request whose client has already timed
+// out, so each retry makes the next one slower. The pass stops after
+// maxConsecutiveFailures in that kind and waits for the next interval.
+func TestPassGivesUpOnAFailingProvider(t *testing.T) {
+	t.Parallel()
+	st := store.OpenTestStore(t)
+	seedCorpus(t, st)
+	seedTasks(t, st, 6)
+	p := &fakeProvider{fails: 1000}
+	ix, m := newIndexer(st, p)
+
+	if _, err := ix.RunOnce(context.Background()); err == nil {
+		t.Fatal("a pass that gave up should say so, not report success")
+	}
+	// One doc and one skill fail on their own; the seven tasks stop after
+	// three, the maxConsecutiveFailures cap. Without the cap this is 1+7+1.
+	if want := 5; p.calls != want {
+		t.Fatalf("provider called %d times, want %d: a failing provider must not be retried once per stale subject", p.calls, want)
+	}
+	if got := testutil.ToFloat64(m.abandoned.WithLabelValues(store.SubjectTask)); got != 1 {
+		t.Fatalf("worklode_index_kind_abandoned_total{task} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(m.abandoned.WithLabelValues(store.SubjectDoc)); got != 0 {
+		t.Fatalf("worklode_index_kind_abandoned_total{doc} = %v, want 0: one failing subject is not a failing provider", got)
+	}
+}
+
+// seedTasks adds n more tasks, so a kind has more stale subjects than the
+// consecutive-failure cap allows.
+func seedTasks(t *testing.T, st *store.Store, n int) {
+	t.Helper()
+	if _, _, err := st.RecordEvent(context.Background(), "cli", "seed-tasks-"+t.Name(), "test.seed", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			for i := range n {
+				if _, err := store.CreateTask(tx, st.Now(), store.TaskInput{
+					ProjectID: "demo", Title: fmt.Sprintf("Task %d", i),
+					Body: "Body.", Priority: "medium", Kind: "bug",
+				}, eventID); err != nil {
+					return err
+				}
+			}
+			return nil
+		}); err != nil {
+		t.Fatalf("seed tasks: %v", err)
 	}
 }
 
