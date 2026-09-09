@@ -163,12 +163,24 @@ func TestHealthzNoAuth(t *testing.T) {
 	}
 }
 
-// /healthz and /metrics live on the admin handler only; the public handler
-// (the one behind the ingress) must not serve them.
+// TestPprofOnAdmin: the profiling endpoints answer on the admin handler.
+func TestPprofOnAdmin(t *testing.T) {
+	t.Parallel()
+	_, admin := newTestServerAdmin(t)
+	for _, path := range []string{"/debug/pprof/", "/debug/pprof/goroutine?debug=1", "/debug/pprof/cmdline"} {
+		rr := doReq(t, admin, "GET", path, "", nil)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("GET %s on admin handler = %d, want 200", path, rr.Code)
+		}
+	}
+}
+
+// /healthz, /metrics and the pprof endpoints live on the admin handler only;
+// the public handler (the one behind the ingress) must not serve them.
 func TestHealthzAndMetricsNotOnPublicHandler(t *testing.T) {
 	t.Parallel()
 	main, _ := newTestServerAdmin(t)
-	for _, path := range []string{"/healthz", "/metrics"} {
+	for _, path := range []string{"/healthz", "/metrics", "/debug/pprof/", "/debug/pprof/heap"} {
 		rr := doReq(t, main, "GET", path, "", nil)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("GET %s on public handler = %d, want 404", path, rr.Code)
