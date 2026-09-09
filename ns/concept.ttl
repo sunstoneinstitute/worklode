@@ -35,13 +35,17 @@ wlc:draft a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "d
     skos:definition "Being written, or under review with the review unresolved." .
 wlc:accepted a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "accepted" ;
     skos:definition "Crit-resolved and approved as intent." .
+wlc:stale a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "stale" ;
+    skos:definition "A plan whose covered section was amended before execution and needs re-planning." .
 wlc:superseded a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "superseded" ;
     skos:definition "Replaced (whole or in part) by a later doc via dct:replaces." .
+wlc:withdrawn a skos:Concept ; skos:inScheme wlc:DesignDocStatus ; skos:prefLabel "withdrawn" ;
+    skos:definition "An accepted document closed without a successor." .
 
 # The order is data, so "is X before Y" is queryable. RDF still does not enforce
 # legal transitions; those rules live with the authoring skill (spec 008).
 wlc:DesignDocStatusOrder a skos:OrderedCollection ;
-    skos:memberList ( wlc:draft wlc:accepted wlc:superseded ) .
+    skos:memberList ( wlc:draft wlc:accepted wlc:stale wlc:superseded wlc:withdrawn ) .
 
 
 # How completely one plan covers one spec section (026 §5). Only wlc:full — or a

@@ -58,7 +58,7 @@ func TestDesignDocStatusesMatchTurtle(t *testing.T) {
 		t.Errorf("ns.DesignDocStatuses = %v, want the %v of ns/concept.ttl — run ./scripts/nsgen.py",
 			ns.DesignDocStatuses, want)
 	}
-	if lifecycle := []string{"draft", "accepted", "superseded"}; !slices.Equal(ns.DesignDocStatuses, lifecycle) {
+	if lifecycle := []string{"draft", "accepted", "stale", "superseded", "withdrawn"}; !slices.Equal(ns.DesignDocStatuses, lifecycle) {
 		t.Errorf("ns.DesignDocStatuses = %v, want %v (wlc:DesignDocStatusOrder's order)",
 			ns.DesignDocStatuses, lifecycle)
 	}
