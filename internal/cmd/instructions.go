@@ -9,25 +9,14 @@ import (
 	"strings"
 )
 
-// The two repo-root instruction files `lode install` manages (spec 008 §17.7).
-// Six of the seven supported harnesses read AGENTS.md; Claude Code also reads
-// CLAUDE.local.md, which is why the import line exists there rather than in
-// CLAUDE.md — CLAUDE.md is committed, authored prose Worklode has no business
-// editing, while CLAUDE.local.md is per-checkout and gitignored, so the
-// import is safe to write unconditionally.
+// Root filenames used by the shared installer and legacy migration.
 const (
 	agentsFile       = "AGENTS.md"
 	claudeFile       = "CLAUDE.local.md"
 	claudeImportLine = "@AGENTS.md"
-	gitignoreFile    = ".gitignore"
 )
 
-// Actions reported for the instruction files. AGENTS.md is managed, so it is
-// created (no file at all), added (a file carrying no block of ours), updated
-// (a block of ours replaced) or unchanged; an existing CLAUDE.local.md may
-// carry a developer's own notes, so Worklode never edits it, and an existing
-// one yields suggested (say the line) or satisfied (the line is already
-// there, or AGENTS.md resolves to this same file).
+// Actions reported for managed content and root pointers.
 const (
 	instrCreated   = "created"
 	instrAdded     = "added"
@@ -64,10 +53,10 @@ The claimed task's brief carries the work itself; this block only says how to
 reach it.
 ` + agentsBlockEnd + "\n"
 
-// instructionsResult reports what one run did to each instruction file.
-// BlockFile is the file the managed block actually landed in — AGENTS.md
-// unless blockFile redirected it through an @-import.
+// instructionsResult reports shared content and root pointer changes.
+// SharedMD is empty only when uninstalling the legacy layout.
 type instructionsResult struct {
+	SharedMD  string `json:"shared_md,omitempty"`
 	AgentsMD  string `json:"agents_md,omitempty"`
 	ClaudeMD  string `json:"claude_md,omitempty"`
 	BlockFile string `json:"block_file,omitempty"`
@@ -81,30 +70,20 @@ func (r *instructionsResult) blockIn() string {
 	return agentsFile
 }
 
-// ensureInstructions writes the managed block into root's AGENTS.md and, where
-// Worklode may, bootstraps CLAUDE.local.md to import it. root is the *main*
-// worktree's root (worktree.MainRoot), so a run from inside a linked worktree
-// refreshes the main checkout's files rather than the worktree's own copies.
+// ensureInstructions installs shared content and root pointers in the main checkout.
 func ensureInstructions(root string) (*instructionsResult, error) {
-	agents, err := ensureAgentsMD(root)
-	if err != nil {
-		return nil, err
-	}
-	claude, err := ensureClaudeMD(root)
-	if err != nil {
-		return nil, err
-	}
-	block, err := blockFile(root)
-	if err != nil {
-		return nil, err
-	}
-	rel, _ := filepath.Rel(root, block)
-	return &instructionsResult{AgentsMD: agents, ClaudeMD: claude, BlockFile: rel}, nil
+	return ensureSharedInstructions(root)
 }
 
-// removeInstructions is ensureInstructions' inverse. AGENTS.md goes first so
-// the CLAUDE.local.md step sees the state the strip left behind.
+// removeInstructions strips the shared block, retaining conditional pointers.
+// Older layouts are still removable without first running the new installer.
 func removeInstructions(root string) (*instructionsResult, error) {
+	if _, err := os.Stat(filepath.Join(root, sharedInstructionsFile)); err == nil {
+		action, err := removeManagedBlock(filepath.Join(root, sharedInstructionsFile))
+		return &instructionsResult{SharedMD: action, BlockFile: sharedInstructionsFile}, err
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
 	block, err := blockFile(root)
 	if err != nil {
 		return nil, err
@@ -121,13 +100,8 @@ func removeInstructions(root string) (*instructionsResult, error) {
 	return &instructionsResult{AgentsMD: agents, ClaudeMD: claude, BlockFile: rel}, nil
 }
 
-// ensureAgentsMD splices the managed block into root's AGENTS.md, creating the
-// file when it is missing and leaving every byte outside the markers alone.
-func ensureAgentsMD(root string) (string, error) {
-	path, err := blockFile(root)
-	if err != nil {
-		return "", err
-	}
+// ensureManagedBlock preserves prose outside the managed region and follows symlinks.
+func ensureManagedBlock(path string) (string, error) {
 	old, err := os.ReadFile(path)
 	missing := errors.Is(err, fs.ErrNotExist)
 	if err != nil && !missing {
@@ -143,6 +117,9 @@ func ensureAgentsMD(root string) (string, error) {
 	// Reading and writing follow symlinks on purpose: AGENTS.md is very often
 	// a link to CLAUDE.md, and that layout is asking for the block to land in
 	// the target. Replacing the link with a regular file would break it.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
 	if err := os.WriteFile(path, []byte(next), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
@@ -248,60 +225,9 @@ func spliceAgentsBlock(existing string) string {
 	return rebuild(existing, regions, strings.TrimSuffix(agentsBlock, "\n"))
 }
 
-// ensureClaudeMD bootstraps the CLAUDE.local.md import Claude Code needs. It
-// writes a file only where none exists: an existing CLAUDE.local.md may carry
-// a developer's own local notes, so the addition is reported as a suggestion
-// instead (spec 008 §17.7). Either way, the file is gitignored, since it is
-// per-checkout state, never something to commit.
-func ensureClaudeMD(root string) (string, error) {
-	claudePath := filepath.Join(root, claudeFile)
-	block, err := blockFile(root)
-	if err != nil {
-		return "", err
-	}
-	// The block went into a file AGENTS.md imports rather than AGENTS.md
-	// itself. Claude Code reads CLAUDE.md and CLAUDE.local.md directly, so it
-	// already sees the block; there is no import line to add.
-	if filepath.Base(block) != agentsFile {
-		if block == claudePath {
-			if err := ensureGitignored(root, claudeFile); err != nil {
-				return "", err
-			}
-		}
-		return instrSatisfied, nil
-	}
-	same, err := sameFile(filepath.Join(root, agentsFile), claudePath)
-	if err != nil {
-		return "", err
-	}
-	// AGENTS.md symlinked to CLAUDE.local.md means the block already sits in
-	// the file Claude Code reads; there is nothing to create or suggest.
-	if same {
-		return instrSatisfied, nil
-	}
-	if err := ensureGitignored(root, claudeFile); err != nil {
-		return "", err
-	}
-	b, err := os.ReadFile(claudePath)
-	if errors.Is(err, fs.ErrNotExist) {
-		if err := os.WriteFile(claudePath, []byte(claudeImportLine+"\n"), 0o644); err != nil {
-			return "", fmt.Errorf("write %s: %w", claudePath, err)
-		}
-		return instrCreated, nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("read %s: %w", claudePath, err)
-	}
-	if hasImportLine(string(b)) {
-		return instrSatisfied, nil
-	}
-	return instrSuggested, nil
-}
-
 // importedPaths returns the files body @-imports: a line that is nothing but
-// `@path`, which is how both Claude Code and the AGENTS.md readers pull one
-// instruction file into another. A marker inside a fenced block is quoted
-// text, matching findBlockRegions.
+// `@path`, which older installs treated as instruction-file imports. A marker
+// inside a fenced block is quoted text, matching findBlockRegions.
 func importedPaths(body string) []string {
 	var out []string
 	inFence := false
@@ -354,35 +280,6 @@ func blockFile(root string) (string, error) {
 	return agents, nil
 }
 
-// ensureGitignored appends name to root's tracked .gitignore, once. Unlike
-// hookrun.ensureExcluded's info/exclude (worktree-local machine state), this
-// entry belongs in every clone's .gitignore: CLAUDE.local.md is a convention
-// every contributor's checkout produces, not just this machine's.
-func ensureGitignored(root, name string) error {
-	path := filepath.Join(root, gitignoreFile)
-	data, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("read %s: %w", path, err)
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.TrimSpace(line) == name {
-			return nil
-		}
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-	// A hand-edited file with no trailing newline would otherwise get name
-	// merged onto the end of its last pattern.
-	if len(data) > 0 && data[len(data)-1] != '\n' {
-		fmt.Fprintln(f)
-	}
-	fmt.Fprintln(f, name)
-	return nil
-}
-
 // removeAgentsBlock strips the managed region from root's AGENTS.md. The file
 // itself is deleted only when it is a regular file with nothing but the block
 // in it: a symlink's target belongs to whoever wrote it.
@@ -391,6 +288,10 @@ func removeAgentsBlock(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return removeManagedBlock(path)
+}
+
+func removeManagedBlock(path string) (string, error) {
 	old, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return instrNone, nil
@@ -421,10 +322,10 @@ func removeAgentsBlock(root string) (string, error) {
 	return instrRemoved, nil
 }
 
-// removeClaudeMD deletes the one-line CLAUDE.local.md ensureClaudeMD created.
+// removeClaudeMD deletes the import-only CLAUDE.local.md older installers created.
 // A CLAUDE.local.md holding anything else — including the target of an
 // AGENTS.md symlink — carries a developer's own notes and is left in place.
-// The .gitignore entry ensureGitignored added is left alone too: it is
+// Any existing .gitignore entry is left alone: it is
 // harmless to keep ignoring a file that may still hold those notes.
 func removeClaudeMD(root string) (string, error) {
 	claudePath := filepath.Join(root, claudeFile)
@@ -456,16 +357,6 @@ func removeClaudeMD(root string) (string, error) {
 		return "", fmt.Errorf("remove %s: %w", claudePath, err)
 	}
 	return instrRemoved, nil
-}
-
-// hasImportLine reports whether body already imports AGENTS.md.
-func hasImportLine(body string) bool {
-	for _, line := range strings.Split(body, "\n") {
-		if strings.TrimSpace(line) == claudeImportLine {
-			return true
-		}
-	}
-	return false
 }
 
 // sameFile reports whether a and b resolve to the same file. A missing file is

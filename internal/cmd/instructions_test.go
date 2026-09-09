@@ -223,88 +223,9 @@ func TestAgentsBlockInvocationsResolve(t *testing.T) {
 	}
 }
 
-func TestEnsureClaudeMD(t *testing.T) {
-	root := t.TempDir()
-
-	action, err := ensureClaudeMD(root)
-	if err != nil || action != instrCreated {
-		t.Fatalf("no CLAUDE.local.md: %s %v", action, err)
-	}
-	if got := readFile(t, filepath.Join(root, claudeFile)); strings.TrimSpace(got) != claudeImportLine {
-		t.Fatalf("CLAUDE.local.md = %q, want %q", got, claudeImportLine)
-	}
-	if got := readFile(t, filepath.Join(root, gitignoreFile)); !containsLine(got, claudeFile) {
-		t.Fatalf(".gitignore = %q, want a %s line", got, claudeFile)
-	}
-
-	// An existing CLAUDE.local.md may carry a developer's own notes: never
-	// edited (spec 008 §17.7).
-	const prose = "# Mine\n"
-	if err := os.WriteFile(filepath.Join(root, claudeFile), []byte(prose), 0o644); err != nil {
-		t.Fatalf("seed CLAUDE.local.md: %v", err)
-	}
-	action, err = ensureClaudeMD(root)
-	if err != nil || action != instrSuggested {
-		t.Fatalf("existing CLAUDE.local.md: %s %v", action, err)
-	}
-	if got := readFile(t, filepath.Join(root, claudeFile)); got != prose {
-		t.Fatalf("CLAUDE.local.md was edited: %q", got)
-	}
-
-	// Once the suggestion has been taken, there is nothing left to suggest.
-	if err := os.WriteFile(filepath.Join(root, claudeFile),
-		[]byte(prose+"\n"+claudeImportLine+"\n"), 0o644); err != nil {
-		t.Fatalf("seed CLAUDE.local.md with import: %v", err)
-	}
-	if action, err := ensureClaudeMD(root); err != nil || action != instrSatisfied {
-		t.Fatalf("CLAUDE.local.md already importing: %s %v", action, err)
-	}
-}
-
-// TestEnsureClaudeMDGitignoreConverges pins ensureGitignored's own edge cases:
-// a missing .gitignore is created, an existing one gains the entry once, a
-// hand-edited one missing its trailing newline is not corrupted, and a run
-// once the entry is already there changes nothing.
-func TestEnsureClaudeMDGitignoreConverges(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, gitignoreFile)
-	const existing = "*.log" // deliberately no trailing newline
-	if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
-		t.Fatalf("seed %s: %v", gitignoreFile, err)
-	}
-	if err := ensureGitignored(root, claudeFile); err != nil {
-		t.Fatalf("ensureGitignored: %v", err)
-	}
-	first := readFile(t, path)
-	if !strings.HasPrefix(first, existing+"\n") {
-		t.Fatalf(".gitignore = %q, want the existing pattern preserved with a newline", first)
-	}
-	if n := strings.Count(first, claudeFile); n != 1 {
-		t.Fatalf(".gitignore has %s %d times: %q", claudeFile, n, first)
-	}
-
-	if err := ensureGitignored(root, claudeFile); err != nil {
-		t.Fatalf("second ensureGitignored: %v", err)
-	}
-	if got := readFile(t, path); got != first {
-		t.Fatalf("second run changed .gitignore:\n%q\nwant\n%q", got, first)
-	}
-}
-
-// containsLine reports whether body has line among its lines, trimmed.
-func containsLine(body, line string) bool {
-	for _, l := range strings.Split(body, "\n") {
-		if strings.TrimSpace(l) == line {
-			return true
-		}
-	}
-	return false
-}
-
 // TestEnsureAgentsMDThroughSymlink pins the AGENTS.md-symlinked-to-CLAUDE.local.md
 // layout: the block must land in the target, the authored prose must
-// survive, the symlink must stay a symlink, and ensureClaudeMD must have
-// nothing to add.
+// survive, and the symlink must stay a symlink during legacy removal.
 func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 	root := t.TempDir()
 	claudePath := filepath.Join(root, claudeFile)
@@ -333,13 +254,6 @@ func TestEnsureAgentsMDThroughSymlink(t *testing.T) {
 	}
 	if fi.Mode()&os.ModeSymlink == 0 {
 		t.Fatal("AGENTS.md was replaced by a regular file")
-	}
-
-	if action, err := ensureClaudeMD(root); err != nil || action != instrSatisfied {
-		t.Fatalf("ensureClaudeMD: %s %v", action, err)
-	}
-	if after := readFile(t, claudePath); after != got {
-		t.Fatalf("ensureClaudeMD edited the file: %q", after)
 	}
 
 	// Uninstall must not delete the symlink target, which is authored prose.
@@ -407,9 +321,7 @@ func TestRemoveAgentsBlock(t *testing.T) {
 func TestRemoveClaudeMD(t *testing.T) {
 	// The one-line CLAUDE.local.md Worklode created is Worklode's to remove.
 	root := t.TempDir()
-	if _, err := ensureClaudeMD(root); err != nil {
-		t.Fatalf("ensureClaudeMD: %v", err)
-	}
+	writeFile(t, root, claudeFile, claudeImportLine+"\n")
 	if action, err := removeClaudeMD(root); err != nil || action != instrRemoved {
 		t.Fatalf("import-only CLAUDE.local.md: %s %v", action, err)
 	}
@@ -451,8 +363,8 @@ func TestInstallWritesInstructions(t *testing.T) {
 	if res.Instructions.AgentsMD != instrCreated || res.Instructions.ClaudeMD != instrCreated {
 		t.Fatalf("instructions = %+v, want both created", res.Instructions)
 	}
-	if got := readFile(t, filepath.Join(root, agentsFile)); !strings.Contains(got, agentsBlockBegin) {
-		t.Fatalf("AGENTS.md has no managed block: %q", got)
+	if got := readFile(t, filepath.Join(root, sharedInstructionsFile)); !strings.Contains(got, agentsBlockBegin) {
+		t.Fatalf("shared instructions have no managed block: %q", got)
 	}
 
 	ures, err := uninstallHooks(root, claudeTargets(vcsGit, false), harness.ScopeLocal)
@@ -462,11 +374,11 @@ func TestInstallWritesInstructions(t *testing.T) {
 	if ures.Instructions == nil {
 		t.Fatal("uninstall result carries no instructions stanza")
 	}
-	if ures.Instructions.AgentsMD != instrRemoved || ures.Instructions.ClaudeMD != instrRemoved {
-		t.Fatalf("instructions = %+v, want both removed", ures.Instructions)
+	if ures.Instructions.SharedMD != instrRemoved {
+		t.Fatalf("instructions = %+v, want shared block removed", ures.Instructions)
 	}
-	if _, err := os.Stat(filepath.Join(root, agentsFile)); !os.IsNotExist(err) {
-		t.Fatalf("AGENTS.md survived uninstall: %v", err)
+	if got := readFile(t, filepath.Join(root, agentsFile)); !strings.Contains(got, instructionReadLine) {
+		t.Fatalf("root pointer lost: %q", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, claudeFile)); !os.IsNotExist(err) {
 		t.Fatalf("CLAUDE.local.md survived uninstall: %v", err)
@@ -510,11 +422,9 @@ func assertWorktreeClean(t *testing.T, dir string) {
 }
 
 // TestInstallFromLinkedWorktreeWritesToMainCheckout is the WL-219 regression:
-// AGENTS.md is a tracked file, so an install run from a task worktree anchors
-// it at the main checkout — the worktree inherits it rather than committing a
-// copy onto its own branch. CLAUDE.local.md is gitignored rather than
-// tracked, but it anchors at the same root so the pair stays together and the
-// worktree does not grow its own separate copy.
+// Instruction files are tracked, so installing from a task worktree updates
+// the main checkout. The task branch stays clean and receives the shared file
+// and pointers through a later branch update.
 func TestInstallFromLinkedWorktreeWritesToMainCheckout(t *testing.T) {
 	root := initGitRepo(t)
 	wt := linkedWorktree(t, root, "WL-1-fix-the-thing")
@@ -529,8 +439,8 @@ func TestInstallFromLinkedWorktreeWritesToMainCheckout(t *testing.T) {
 	if res.Instructions.AgentsMD != instrCreated || res.Instructions.ClaudeMD != instrCreated {
 		t.Fatalf("instructions = %+v, want both created", res.Instructions)
 	}
-	if got := readFile(t, filepath.Join(root, agentsFile)); !strings.Contains(got, agentsBlockBegin) {
-		t.Fatalf("main checkout's AGENTS.md has no managed block: %q", got)
+	if got := readFile(t, filepath.Join(root, sharedInstructionsFile)); !strings.Contains(got, agentsBlockBegin) {
+		t.Fatalf("main checkout's shared instructions have no managed block: %q", got)
 	}
 	if fileExists(filepath.Join(wt, agentsFile)) {
 		t.Fatalf("%s written into the task worktree %s", agentsFile, wt)
@@ -549,17 +459,17 @@ func TestInstallFromLinkedWorktreeWritesToMainCheckout(t *testing.T) {
 	if ures.Instructions == nil {
 		t.Fatal("uninstall result carries no instructions stanza")
 	}
-	if ures.Instructions.AgentsMD != instrRemoved || ures.Instructions.ClaudeMD != instrRemoved {
-		t.Fatalf("instructions = %+v, want both removed", ures.Instructions)
+	if ures.Instructions.SharedMD != instrRemoved {
+		t.Fatalf("instructions = %+v, want shared block removed", ures.Instructions)
 	}
-	if fileExists(filepath.Join(root, agentsFile)) {
-		t.Fatalf("%s survived uninstall in the main checkout", agentsFile)
+	if fileExists(filepath.Join(root, sharedInstructionsFile)) {
+		t.Fatalf("%s survived uninstall in the main checkout", sharedInstructionsFile)
 	}
 	assertWorktreeClean(t, wt)
 }
 
 // TestInstallFromLinkedWorktreeFollowsAgentsSymlink covers AGENTS.md symlinked
-// to CLAUDE.local.md, both tracked. The block must land in the main
+// to CLAUDE.local.md, both tracked. The pointer must land in the main
 // checkout's CLAUDE.local.md, through the main checkout's own symlink,
 // leaving the task worktree's copies untouched — that pair is exactly what an
 // install from a WL-46 worktree dirtied.
@@ -584,13 +494,12 @@ func TestInstallFromLinkedWorktreeFollowsAgentsSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installHooks from a linked worktree: %v", err)
 	}
-	// AGENTS.md gained a block it did not have; CLAUDE.local.md *is* AGENTS.md,
-	// so it is already satisfied rather than suggested.
-	if res.Instructions.AgentsMD != instrAdded || res.Instructions.ClaudeMD != instrSatisfied {
-		t.Fatalf("instructions = %+v, want added/satisfied", res.Instructions)
+	// The root symlink gains a pointer and the shared file gains the block.
+	if res.Instructions.AgentsMD != instrAdded || res.Instructions.SharedMD != instrCreated {
+		t.Fatalf("instructions = %+v, want pointer added and shared file created", res.Instructions)
 	}
 
-	// The main checkout's symlink survives, and the block landed in its target.
+	// The main checkout's symlink survives, and the pointer lands in its target.
 	info, err := os.Lstat(filepath.Join(root, agentsFile))
 	if err != nil {
 		t.Fatalf("lstat main %s: %v", agentsFile, err)
@@ -599,8 +508,8 @@ func TestInstallFromLinkedWorktreeFollowsAgentsSymlink(t *testing.T) {
 		t.Fatalf("main %s is no longer a symlink", agentsFile)
 	}
 	mainClaude := readFile(t, filepath.Join(root, claudeFile))
-	if !strings.Contains(mainClaude, agentsBlockBegin) {
-		t.Fatalf("main %s has no managed block: %q", claudeFile, mainClaude)
+	if !strings.Contains(mainClaude, instructionReadLine) {
+		t.Fatalf("main %s has no read instruction: %q", claudeFile, mainClaude)
 	}
 	if !strings.Contains(mainClaude, "Authored prose.") {
 		t.Fatalf("main %s lost its authored prose: %q", claudeFile, mainClaude)
@@ -711,9 +620,8 @@ func TestReportInstallDistinguishesAddedFromRefreshed(t *testing.T) {
 	}
 }
 
-// An AGENTS.md that only @-imports other instruction files is a hub: appending
-// the block there would put it in a file Claude Code never reads, so it goes
-// into the imported CLAUDE.local.md instead — and stays there on refresh.
+// Legacy import hubs gain a plain-language pointer. Local notes remain local,
+// and reappearing legacy blocks are removed on subsequent installs.
 func TestInstructionsFollowAgentsImports(t *testing.T) {
 	root := t.TempDir()
 	const hub = "@CLAUDE.md\n@CLAUDE.local.md\n"
@@ -725,41 +633,49 @@ func TestInstructionsFollowAgentsImports(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ensure: %v", err)
 	}
-	if res.AgentsMD != instrAdded || res.ClaudeMD != instrSatisfied || res.BlockFile != claudeFile {
+	if res.AgentsMD != instrAdded || res.ClaudeMD != instrAdded || res.BlockFile != sharedInstructionsFile {
 		t.Fatalf("got %+v", res)
 	}
-	if got := readFile(t, filepath.Join(root, agentsFile)); got != hub {
-		t.Fatalf("hub was edited: %q", got)
+	if got := readFile(t, filepath.Join(root, agentsFile)); got != hub+"\n"+instructionReadLine+"\n" {
+		t.Fatalf("hub pointer missing: %q", got)
 	}
 	if got := readFile(t, filepath.Join(root, "CLAUDE.md")); strings.Contains(got, agentsBlockBegin) {
 		t.Fatalf("block landed in committed prose: %q", got)
 	}
 	local := readFile(t, filepath.Join(root, claudeFile))
-	if !strings.Contains(local, agentsBlockBegin) || !strings.Contains(local, "Local notes") {
-		t.Fatalf("block not spliced into %s: %q", claudeFile, local)
+	if strings.Contains(local, agentsBlockBegin) || !strings.Contains(local, "Local notes") {
+		t.Fatalf("local notes changed: %q", local)
 	}
 
-	// A stale block in the imported file is refreshed in place, not duplicated
-	// into the hub.
+	// A stale block in the local file is migrated out on the next install.
 	writeFile(t, root, claudeFile,
 		"## Local notes\n\n"+agentsBlockBegin+"\nstale\n"+agentsBlockEnd+"\n")
 	res, err = ensureInstructions(root)
-	if err != nil || res.AgentsMD != instrUpdated {
+	if err != nil || res.SharedMD != instrUnchanged {
 		t.Fatalf("refresh: %+v %v", res, err)
 	}
 	if got := readFile(t, filepath.Join(root, claudeFile)); strings.Contains(got, "stale") {
 		t.Fatalf("stale block survived: %q", got)
 	}
-	if got := readFile(t, filepath.Join(root, agentsFile)); got != hub {
-		t.Fatalf("hub was edited on refresh: %q", got)
+	if got := readFile(t, filepath.Join(root, agentsFile)); got != hub+"\n"+instructionReadLine+"\n" {
+		t.Fatalf("hub pointer duplicated on refresh: %q", got)
 	}
 
-	// Uninstall strips it from the same file and leaves the notes.
-	if res, err = removeInstructions(root); err != nil || res.AgentsMD != instrRemoved {
+	// Uninstall removes the shared block and leaves the local notes.
+	if res, err = removeInstructions(root); err != nil || res.SharedMD != instrRemoved {
 		t.Fatalf("remove: %+v %v", res, err)
 	}
 	got := readFile(t, filepath.Join(root, claudeFile))
 	if strings.Contains(got, agentsBlockBegin) || !strings.Contains(got, "Local notes") {
 		t.Fatalf("uninstall left %s wrong: %q", claudeFile, got)
 	}
+}
+
+// Seed a legacy layout to exercise marker preservation and legacy uninstall.
+func ensureAgentsMD(root string) (string, error) {
+	path, err := blockFile(root)
+	if err != nil {
+		return "", err
+	}
+	return ensureManagedBlock(path)
 }

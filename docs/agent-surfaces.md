@@ -13,6 +13,7 @@ and the rules for adding and retiring skills.
 | Surface | Path | Audience | Generated |
 |---|---|---|---|
 | Root instructions | `CLAUDE.md` (`AGENTS.md` is a symlink to it) | every agent working in this repo | no |
+| Worklode entry instructions | `.worklode/agent-instructions.md`, read through root `CLAUDE.md` and `AGENTS.md` pointers | every supported harness | managed block refreshed by `lode install` |
 | Command-package pointer | `internal/cmd/CLAUDE.md` | agents editing the CLI | no |
 | Marketing site accuracy guide | `www/CLAUDE.md` (`www/AGENTS.md` is a symlink to it) | agents editing `www/` | no |
 | Repo-development skills | `.claude/skills/*/SKILL.md` | agents changing this repo | no |
@@ -59,6 +60,21 @@ last checked against; bump the stamp whenever you touch it.
 `lode-hook <event>` and `lode-statusline`. The old subcommand spellings were
 removed with the WL-319 shim cleanup; `lode install` still recognises them in
 existing settings files so upgrades replace pre-split bindings.
+
+`lode install` writes the shared Worklode block to
+`.worklode/agent-instructions.md` and adds a plain-language read instruction
+to root `AGENTS.md` and `CLAUDE.md` when missing. Symlinked root files share
+one pointer. Commit the shared file and the root pointers together so clones
+and new worktrees inherit them. Installation from a linked worktree updates
+the main checkout; existing worktrees receive these tracked changes through
+their normal branch updates.
+
+Upgrades remove legacy Worklode blocks from the root instruction files and
+`CLAUDE.local.md`, preserving personal prose. An import-only `CLAUDE.local.md`
+created by the old installer is removed. Uninstall strips the shared managed
+block, preserves any other prose, and leaves the conditional root pointers.
+The install JSON's `instructions.shared_md` reports the shared block action;
+`agents_md` and `claude_md` report pointers in `AGENTS.md` and `CLAUDE.md`.
 
 ## When the CLI changes
 

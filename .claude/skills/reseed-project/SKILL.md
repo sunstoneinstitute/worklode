@@ -117,7 +117,7 @@ COMMIT;
    ```
 5. **Planning gaps need no seeding.** `lode doc list --needs-planning` answers
    from queries; create a `design` task per gap only when someone will pick it
-   up (the `/lode:spec-coverage` skill does exactly that).
+   up (use the `lode:spec-coverage` skill).
 
 ## 4. Verify
 
