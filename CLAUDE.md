@@ -23,10 +23,13 @@ skills together when you know what you are looking for but not where it is
 **To read what a spec says, use `lode show <ref> --inline`.** That folds every
 in-force amendment and supersession into the text, attributed to the section it
 came from. A bare `lode show WL-SPEC-4` gives you what 004 said when it was
-written; four other specs have amended it since. Write with `lode doc add` and
-`lode doc edit`; an accepted document is changed by `lode doc revise`, never in
-place. `docs/follow-ups.md` holds known non-blocking gaps — check it before
-filing something as new.
+written; four other specs have amended it since. For a targeted read, use the
+native selector (`lode show WL-SPEC-8 --inline --section sec-14`) rather than
+filtering rendered output with `sed`; use `lode doc show <ref> --json` for
+structured section and edge metadata. Write with `lode doc add` and `lode doc
+edit`; an accepted document is changed by `lode doc revise`, never in place.
+`docs/follow-ups.md` holds known non-blocking gaps — check it before filing
+something as new.
 
 ## Where the rest of the guidance lives
 
