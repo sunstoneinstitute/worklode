@@ -12,6 +12,9 @@ import "strconv"
 // approval names no revision says so in place of the decide form: the store
 // refuses that decide, so the page does not offer it. An empty queue states
 // that honestly rather than showing a fabricated record.
+//
+// It also renders the approval detail page (GET /approvals/{id}, 032 §7):
+// see ApprovalDetail's own doc comment below.
 
 templ Approvals(v ApprovalsView) {
 	@Page(v.Page) {
@@ -83,4 +86,117 @@ templ approvalRow(row ApprovalRow) {
 			<p class="muted">No revision designated for review yet.</p>
 		}
 	</li>
+}
+
+// ApprovalDetail renders GET /approvals/{id} (032 §7), the tracer for the
+// review-graph presentation surface: one approval, the entity it governs,
+// its full decision history, and the review-graph references its own
+// designation recorded. Read-only — Tasks 6 and 7 add the decide form's
+// action buttons here once their routes exist.
+//
+// It renders in the global shell with PageProps.ActiveGlobal left empty:
+// none of the five bar destinations names this page, so the bar marks
+// nothing (like Reviews, Home, and the task page). The page's one
+// aria-current="page" sits on the history row whose id matches the page's
+// own — an ordinary use of the attribute, since every history row links to
+// its own /approvals/{id} page and exactly one of them is the page the
+// browser is on.
+templ ApprovalDetail(v ApprovalDetailView) {
+	@Page(v.Page) {
+		@globalShell() {
+			<section class="card pad">
+				<h1>
+					if v.Kind != "" {
+						<span class="mono muted">{ v.Kind }</span>
+						{ " " }
+					}
+					{ v.EntityID }
+				</h1>
+				<p>
+					<span class={ "chip " + approvalStateChip(v.State) }>{ v.State }</span>
+					{ " " }
+					<span class="muted">revision <span class="mono">{ v.Revision }</span></span>
+				</p>
+				if v.URL != "" {
+					<p>
+						<a href={ v.URL } rel="noreferrer">
+							if v.Title != "" {
+								{ v.Title }
+							} else {
+								{ v.EntityID }
+							}
+						</a>
+					</p>
+				} else {
+					<p class="muted">No linked record for this entity yet.</p>
+				}
+				<p class="muted small">
+					if v.DecidedBy != "" {
+						{ "decided by " + v.DecidedBy }
+						if v.DecidedAt != nil {
+							{ " · " + fmtTime(*v.DecidedAt) }
+						}
+					} else {
+						Not yet decided.
+					}
+				</p>
+				if v.CompareURL != "" {
+					<p><a href={ v.CompareURL } rel="noreferrer">Compare with previous revision</a></p>
+				}
+				if v.Note != "" {
+					<p><strong>Impact note:</strong> { v.Note }</p>
+				}
+				if v.ExceptionAuthorizedBy != "" {
+					<p><strong>Self-review exception authorized by:</strong> { v.ExceptionAuthorizedBy }</p>
+				}
+			</section>
+
+			<section class="card" aria-labelledby="approval-history-heading">
+				<div class="hd"><h3 id="approval-history-heading">Decision history</h3></div>
+				<div class="bd">
+					<ul class="approvalq">
+						for _, row := range v.History {
+							<li>
+								<div>
+									<a
+										href={ "/approvals/" + strconv.FormatInt(row.ID, 10) }
+										if row.Current {
+											aria-current="page"
+										}
+									>
+										<span class="mono">{ row.Revision }</span>
+										{ " " }
+										<span class={ "chip " + approvalStateChip(row.State) }>{ row.State }</span>
+									</a>
+									if row.DecidedBy != "" {
+										<span class="muted small">
+											{ " decided by " + row.DecidedBy }
+											if row.DecidedAt != nil {
+												{ " · " + fmtTime(*row.DecidedAt) }
+											}
+										</span>
+									}
+								</div>
+							</li>
+						}
+					</ul>
+				</div>
+			</section>
+
+			<section class="card" aria-labelledby="governed-refs-heading">
+				<div class="hd"><h3 id="governed-refs-heading">Governed references</h3></div>
+				<div class="bd">
+					if len(v.Governed) == 0 {
+						<p class="muted">None recorded.</p>
+					} else {
+						<ul>
+							for _, g := range v.Governed {
+								<li class="mono">{ g.Kind + " " + g.ID + " @ " + g.Revision }</li>
+							}
+						</ul>
+					}
+				</div>
+			</section>
+		}
+	}
 }
