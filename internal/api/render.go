@@ -130,6 +130,92 @@ func approvalRows(rows []store.AwaitingApproval, now time.Time) []ui.ApprovalRow
 	return out
 }
 
+// approvalDetailView maps one approval plus its context into the detail
+// page's view (032 §7): the entity it governs (title/url, resolved through
+// EntityTitleURL — the exact join the Reviews queue uses, so the two pages
+// cannot disagree about what an entity is called or where it opens), its
+// full decision history (ListApprovalsForEntityCtx, newest first, this row
+// included), and the governed references its own designation recorded
+// (GovernedRefsForCtx). names resolves a resolving or authorizing actor id
+// to a display name; an id absent from names (or nil on the row) renders as
+// "" — honest empty, never a fabricated name.
+//
+// The compare link is offered only for a 'pr' row with a decided
+// predecessor: the nearest older history row (this row's revision aside)
+// whose state is 'approved' or 'rejected' — the same "decided" test
+// DesignateRevision's own hasDecided check uses.
+func approvalDetailView(a *store.Approval, title, url string,
+	history []store.Approval, governed []store.GovernedRef,
+	names map[string]string) ui.ApprovalDetailView {
+	v := ui.ApprovalDetailView{
+		Page:      ui.PageProps{Title: "worklode: " + a.EntityKind + " " + a.EntityID},
+		ID:        a.ID,
+		Kind:      a.EntityKind,
+		EntityID:  a.EntityID,
+		Title:     title,
+		URL:       url,
+		Revision:  a.SubjectRevision,
+		State:     a.State,
+		CreatedAt: a.CreatedAt,
+		DecidedAt: a.ResolvedAt,
+	}
+	if a.ResolvingActor != nil {
+		v.DecidedBy = names[*a.ResolvingActor]
+	}
+	if a.Note != nil {
+		v.Note = *a.Note
+	}
+	if a.ExceptionAuthorizedBy != nil {
+		v.ExceptionAuthorizedBy = names[*a.ExceptionAuthorizedBy]
+	}
+
+	v.History = make([]ui.ApprovalHistoryRow, 0, len(history))
+	var predecessor *store.Approval
+	seenCurrent := false
+	for i := range history {
+		h := &history[i]
+		row := ui.ApprovalHistoryRow{
+			ID: h.ID, Revision: h.SubjectRevision, State: h.State,
+			DecidedAt: h.ResolvedAt, Current: h.ID == a.ID,
+		}
+		if h.ResolvingActor != nil {
+			row.DecidedBy = names[*h.ResolvingActor]
+		}
+		v.History = append(v.History, row)
+
+		if h.ID == a.ID {
+			seenCurrent = true
+			continue
+		}
+		if seenCurrent && predecessor == nil && (h.State == "approved" || h.State == "rejected") {
+			predecessor = h
+		}
+	}
+	if a.EntityKind == "pr" && predecessor != nil {
+		v.CompareURL = prCompareURL(url, predecessor.SubjectRevision, a.SubjectRevision)
+	}
+
+	v.Governed = make([]ui.GovernedRefRow, 0, len(governed))
+	for _, g := range governed {
+		v.Governed = append(v.Governed, ui.GovernedRefRow{Kind: g.Kind, ID: g.ID, Revision: g.Revision})
+	}
+	return v
+}
+
+// prCompareURL builds the GitHub diff-from-previous jump-out link for a
+// 'pr'-kind approval with a decided predecessor (029 §7.1, 032 §7): the
+// compare view between the two head SHAs, derived from the stored PR URL
+// (".../pull/<n>" -> ".../compare/<prev>...<current>"). "" when either
+// revision is empty or prURL does not look like a GitHub PR URL — an honest
+// empty rather than a broken link.
+func prCompareURL(prURL, prev, current string) string {
+	i := strings.Index(prURL, "/pull/")
+	if i < 0 || prev == "" || current == "" {
+		return ""
+	}
+	return prURL[:i] + "/compare/" + prev + "..." + current
+}
+
 // agentSessionRows maps a task's agent sessions into rendered rows. The times
 // are formatted here, not in internal/ui: ui takes pre-formatted rows and has
 // no clock, and FmtAge is the phrasing every relative age on the cockpit
