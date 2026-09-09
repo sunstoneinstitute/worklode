@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"strconv"
 	"strings"
@@ -1093,6 +1094,14 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 	// metrics endpoint must not count its own scrapes.
 	admin := http.NewServeMux()
 	admin.HandleFunc("GET /healthz", s.healthz)
+	// Profiling, on the admin listener only — never reachable through the
+	// public ingress. Index also serves /heap, /goroutine and the other named
+	// profiles; Profile, Cmdline, Symbol and Trace need their own routes.
+	admin.HandleFunc("GET /debug/pprof/", pprof.Index)
+	admin.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+	admin.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	admin.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+	admin.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	// ContinueOnError: one failing collector (e.g. the store's lease query
 	// timing out) must not 500 the whole scrape and take every other family
 	// with it. Registry exposes promhttp_metric_handler_errors_total so a
