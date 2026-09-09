@@ -26,6 +26,8 @@
 // captures the pointer while hovering. A click pins it: a pinned tooltip stays
 // until the next click or Escape, and only a pinned one takes the pointer, so
 // a link inside one (part 4's PR link) can never be hit by a moving pointer.
+// A section cell's pinned tooltip also carries one "Go to" link per covering
+// plan, which opens the spec's row and scrolls to that plan's line.
 // Served at /assets/progress.js by internal/api's assetHandler; a static
 // asset, not a generated artifact, so it carries no drift-check surface.
 (function () {
@@ -73,8 +75,10 @@
     tip.textContent = el.getAttribute("data-tip");
     if (withAct) {
       var slot = el.nextElementSibling;
-      if (slot && slot.classList.contains("tip-act") && slot.firstElementChild) {
-        tip.appendChild(slot.firstElementChild.cloneNode(true));
+      if (slot && slot.classList.contains("tip-act")) {
+        for (var c = slot.firstElementChild; c; c = c.nextElementSibling) {
+          tip.appendChild(c.cloneNode(true));
+        }
       }
     }
     tip.hidden = false;
@@ -119,12 +123,31 @@
   });
 
   document.addEventListener("click", function (e) {
+    var go = tip.contains(e.target) && e.target.closest(".tip-go");
+    if (go) {
+      e.preventDefault();
+      hide();
+      reveal(go.getAttribute("href").slice(1));
+      return;
+    }
     if (tip.contains(e.target)) return;
     var el = e.target.closest("[data-tip]");
     hide();
     if (!el) return;
     pin(el);
   });
+
+  // reveal jumps to a plan's line in the expanded row a section cell belongs
+  // to. The detail block is hidden until the row carries "open", so the row is
+  // opened first — the browser cannot scroll to what is not displayed.
+  function reveal(id) {
+    var line = document.getElementById(id);
+    if (!line) return;
+    var detail = line.closest(".detail");
+    var row = detail && detail.previousElementSibling;
+    if (row && row.classList.contains("prog-row") && !row.classList.contains("open")) toggle(row);
+    line.scrollIntoView({ block: "center" });
+  }
 
   document.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;

@@ -398,3 +398,26 @@ func TestProgressSliceClass(t *testing.T) {
 		t.Errorf("lone slice = %q, want the whole bar", got)
 	}
 }
+
+// TestProgressSectionCellPlanLink: a section cell's hidden tip slot carries a
+// link per covering plan, and the plan's line in the detail block carries the
+// id that link points at. progress.js copies the link into the pinned tooltip
+// and opens the row to reach it.
+func TestProgressSectionCellPlanLink(t *testing.T) {
+	t.Parallel()
+	s := specWithMerge(nil)
+	s.Sections[0].Plans = []string{"WL-PLAN-139"}
+	html := renderProgressRow(t, s)
+
+	if !strings.Contains(html, `<a class="tip-go" href="#p-WL-SPEC-66-WL-PLAN-139"`) {
+		t.Errorf("section cell carries no link to its covering plan:\n%s", html)
+	}
+	if !strings.Contains(html, `id="p-WL-SPEC-66-WL-PLAN-139"`) {
+		t.Errorf("plan line carries no anchor for the cell's link:\n%s", html)
+	}
+
+	s.Sections[0].Plans = nil
+	if html := renderProgressRow(t, s); strings.Contains(html, "tip-go") {
+		t.Errorf("uncovered section cell offers a plan link:\n%s", html)
+	}
+}
