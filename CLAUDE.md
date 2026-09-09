@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+> Before starting work, read `.worklode/agent-instructions.md` in the repository root if it exists.
+
 Apply the `lode:anti-smartass` skill's plain-language style whenever writing
 specs, plans, docs, or other prose in this repo.
 
@@ -33,13 +35,24 @@ something as new.
 
 ## Where the rest of the guidance lives
 
-Two mechanisms carry it. A **rule** in `.claude/rules/` is scoped by a `paths:`
-glob and loads when you touch a file it matches, so it needs no trigger phrase
-and cannot fail to fire; that is where a rule about editing particular files
-belongs. A **skill** is invoked by name or by its `description` matching the
-work, and carries a procedure that spans files or has no single path. Rules
-here today: `migrations.md`, `cockpit-ui.md`, `store-error-mapping.md`
-(sentinel errors for store writes that can collide). The skills:
+Root `AGENTS.md` symlinks to this file. Repo skills are shared through
+`.agents/skills`, which symlinks to `.claude/skills`. Refer to a skill with
+"Use the `<plugin>:<skill>` skill"; keep slash syntax for actual Claude Code
+commands.
+
+Claude Code loads path-scoped rules from `.claude/rules/`. Codex uses nested
+`AGENTS.md` files carrying the same instructions. Before working in a subtree,
+read its applicable nested `AGENTS.md` files, including when starting from the
+repo root. The scopes are `deploy/base` (migrations), `internal/ui` (cockpit),
+`internal/api` (`render.go` only), `internal/store` (write errors), and
+`internal/cmd` (CLI conventions). `www/AGENTS.md` covers site copy.
+
+When editing `AGENTS.md`, `CLAUDE.md`, or `.claude/rules/**`, read
+`.claude/rules/instruction-sync.md` and update every corresponding surface
+in the same change. Preserve symlinks and the original path conditions.
+
+A **skill** is invoked by name or by its `description` matching the work,
+and carries a procedure that spans files or has no single path. The skills:
 
 - **Writing or editing a spec, ADR or plan through `lode doc`** —
   frontmatter, `covers:`, `{#sec-N}` anchors, amend/supersede, the `ns/`
