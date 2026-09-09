@@ -76,6 +76,112 @@ func TestIsSelfApproval(t *testing.T) {
 	}
 }
 
+func TestOnNewRevision(t *testing.T) {
+	t.Parallel()
+	open := &store.Approval{State: "awaiting", SubjectRevision: "aaa111"}
+	cases := []struct {
+		name         string
+		open         *store.Approval
+		hasDecided   bool
+		boundAlready bool
+		want         store.RevisionOutcome
+	}{
+		{"already bound is a noop", open, true, true, store.RevisionNoop},
+		{"open row rebinds", open, false, false, store.RevisionRebind},
+		{"open row rebinds even with decided history", open, true, false, store.RevisionRebind},
+		{"decided only mints a candidate", nil, true, false, store.RevisionCandidate},
+		{"no history is a noop", nil, false, false, store.RevisionNoop},
+	}
+	for _, c := range cases {
+		if got := store.OnNewRevision(c.open, c.hasDecided, c.boundAlready); got != c.want {
+			t.Errorf("%s: OnNewRevision = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestPriorApprover(t *testing.T) {
+	t.Parallel()
+	actor := func(s string) *string { return &s }
+	cases := []struct {
+		name    string
+		history []store.Approval
+		actorID string
+		want    bool
+	}{
+		{
+			"approved review row match",
+			[]store.Approval{{State: "approved", ResolvingActor: actor("alice")}},
+			"alice", true,
+		},
+		{
+			"impact row ignored",
+			[]store.Approval{{State: "approved", ResolvingActor: actor("alice"), ReviewKind: "impact"}},
+			"alice", false,
+		},
+		{
+			"changes_requested ignored",
+			[]store.Approval{{State: "changes_requested", ResolvingActor: actor("alice")}},
+			"alice", false,
+		},
+		{
+			"nil resolving_actor",
+			[]store.Approval{{State: "approved", ResolvingActor: nil}},
+			"alice", false,
+		},
+		{
+			"empty history",
+			nil,
+			"alice", false,
+		},
+	}
+	for _, c := range cases {
+		if got := store.PriorApprover(c.history, c.actorID); got != c.want {
+			t.Errorf("%s: PriorApprover(%v, %q) = %v, want %v",
+				c.name, c.history, c.actorID, got, c.want)
+		}
+	}
+}
+
+func TestImpactDecisionEffect(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		state string
+		want  store.ImpactEffect
+	}{
+		{"approved", store.ImpactConfirm},
+		{"changes_requested", store.ImpactReopen},
+		{"rejected", store.ImpactReopen},
+	}
+	for _, c := range cases {
+		if got := store.ImpactDecisionEffect(c.state); got != c.want {
+			t.Errorf("ImpactDecisionEffect(%q) = %v, want %v", c.state, got, c.want)
+		}
+	}
+}
+
+func TestSelfReviewExceptionValid(t *testing.T) {
+	t.Parallel()
+	actor := func(s string) *string { return &s }
+	cases := []struct {
+		name         string
+		policyAllows bool
+		authorizedBy *string
+		decider      string
+		want         bool
+	}{
+		{"policy off", false, actor("bob"), "alice", false},
+		{"nil authorizer", true, nil, "alice", false},
+		{"authorizer is the decider", true, actor("alice"), "alice", false},
+		{"valid case", true, actor("bob"), "alice", true},
+	}
+	for _, c := range cases {
+		if got := store.SelfReviewExceptionValid(c.policyAllows, c.authorizedBy, c.decider); got != c.want {
+			t.Errorf("%s: SelfReviewExceptionValid(%v, %v, %q) = %v, want %v",
+				c.name, c.policyAllows, c.authorizedBy, c.decider, got, c.want)
+		}
+	}
+}
+
 func TestMatchFlowOnLabels(t *testing.T) {
 	story := model.ApprovalFlow{Name: "story", Rev: "1",
 		Match: map[string]string{"kind": "sunstone-story"}}
