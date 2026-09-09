@@ -17,7 +17,7 @@ const testArtifact = "bigquery://sunstone-prod/cow/casualties"
 func declare(t *testing.T, s *Store, kind, id, artifact string) {
 	t.Helper()
 	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
-		return DeclareArtifact(tx, s.Now(), kind, id, artifact)
+		return DeclareArtifact(tx, s.Now(), kind, id, "address", artifact)
 	}); err != nil {
 		t.Fatalf("declare %s for %s %s: %v", artifact, kind, id, err)
 	}
@@ -28,7 +28,7 @@ func openDeclarations(t *testing.T, s *Store, artifact string) []DeclaredEntity 
 	var got []DeclaredEntity
 	if err := s.Tx(t.Context(), func(tx *sql.Tx) error {
 		var err error
-		got, err = OpenDeclarationsForArtifact(tx, artifact)
+		got, err = OpenDeclarationsForArtifact(tx, "address", artifact)
 		return err
 	}); err != nil {
 		t.Fatalf("open declarations for %s: %v", artifact, err)

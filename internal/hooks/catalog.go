@@ -254,7 +254,7 @@ func (a *catalogApplier) applyStored(payload []byte, out *catalogResult) (func(t
 // by the insert's conflict clause, so a replay writes nothing twice.
 func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (catalogResult, error) {
 	res := catalogResult{State: ev.State}
-	targets, err := store.OpenDeclarationsForArtifact(tx, ev.Artifact)
+	targets, err := store.OpenDeclarationsForArtifact(tx, "address", ev.Artifact)
 	if err != nil {
 		return catalogResult{}, err
 	}
