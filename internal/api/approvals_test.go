@@ -142,6 +142,84 @@ func seedAwaitingApprovalRow(t *testing.T, st *store.Store,
 	return 0
 }
 
+// seedDecidedThenCandidate seeds one pr-kind entity with a settled history:
+// decidedRev already approved (by actor "alice", the admin newTestServer
+// always seeds), then designated forward to candidateRev the way a new push
+// really moves it (store.DesignateRevision, not a hand-rolled second insert)
+// — so the approval detail page's decision history and compare link are
+// exercised against the real designation flow, not a shortcut that merely
+// looks like it. Returns the candidate row's id, the one /approvals/{id}
+// shows as still awaiting.
+func seedDecidedThenCandidate(t *testing.T, st *store.Store, entityID, decidedRev, candidateRev string) int64 {
+	t.Helper()
+	i := strings.LastIndex(entityID, "#")
+	if i < 0 {
+		t.Fatalf("entity id %q is not repo#number", entityID)
+	}
+	repo := entityID[:i]
+	number, err := strconv.ParseInt(entityID[i+1:], 10, 64)
+	if err != nil {
+		t.Fatalf("entity id %q: %v", entityID, err)
+	}
+
+	n := approvalSeedSeq.Add(1)
+	project := fmt.Sprintf("approval-seed-%d", n)
+	if err := st.CreateProject(context.Background(), project, project,
+		fmt.Sprintf("AQ%d", n)); err != nil {
+		t.Fatalf("create project %s: %v", project, err)
+	}
+
+	var taskID string
+	seedEvent(t, st, fmt.Sprintf("approval-seed-task-%d", n), func(tx *sql.Tx, eventID int64) error {
+		task, err := store.CreateTask(tx, st.Now(), store.TaskInput{
+			ProjectID: project, Title: "seed pr", Priority: "medium", Kind: "feature",
+		}, eventID)
+		if err != nil {
+			return err
+		}
+		taskID = task.ID
+		return nil
+	})
+
+	now := st.Now()
+	seedEvent(t, st, fmt.Sprintf("approval-seed-pr-%d", n), func(tx *sql.Tx, _ int64) error {
+		if _, _, err := store.UpsertPR(tx, store.PullRequest{
+			Repo: repo, Number: number, Title: "seed pr", State: "open",
+			HeadRef: taskID + "-approval-seed", HeadSHA: candidateRev,
+			URL:      fmt.Sprintf("https://github.com/%s/pull/%d", repo, number),
+			OpenedAt: now,
+		}, ""); err != nil {
+			return err
+		}
+		if _, err := store.InsertAwaitingApproval(tx, now, "pr", entityID,
+			decidedRev, "", nil, nil, nil); err != nil {
+			return err
+		}
+		decided, err := store.OpenApprovalForLane(tx, "pr", entityID, "")
+		if err != nil {
+			return err
+		}
+		actor := "alice"
+		if err := store.ResolveApproval(tx, decided.ID, "approved", &actor, now); err != nil {
+			return err
+		}
+		_, err = store.DesignateRevision(tx, now, "pr", entityID, candidateRev)
+		return err
+	})
+
+	rows, err := st.ListAwaitingApprovals(context.Background())
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	for _, row := range rows {
+		if row.EntityID == entityID && row.SubjectRevision == candidateRev {
+			return row.ID
+		}
+	}
+	t.Fatalf("seeded candidate approval %s@%s is not in the awaiting queue", entityID, candidateRev)
+	return 0
+}
+
 // seedAwaitingDeliverableLane seeds a deliverable-kind approval on a lane
 // with no designated revision (029 §7.2): the flow requires a decision, the
 // subject it is granted against has not been named yet.
