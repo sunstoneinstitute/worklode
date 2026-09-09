@@ -38,12 +38,13 @@ func DocEntityID(docID int64) string {
 }
 
 // InsertAwaitingApproval materializes one requirement as an 'awaiting' row,
-// idempotent on migration 0064's whole unique key: entity_kind, entity_id,
-// subject_revision and lane. Two reviewer lanes on one document revision
-// coexist; a redelivered or reopened PR, which rewrites the same no-lane
-// row, still does not duplicate the requirement. Returns whether a row was
-// inserted, so materialization can count and event payloads can say what
-// actually changed.
+// idempotent on the whole unique key: entity_kind, entity_id,
+// subject_revision, lane and review_kind. This writer creates ordinary
+// reviews, so review_kind takes its 'review' default. Two reviewer lanes on
+// one document revision coexist; a redelivered or reopened PR, which rewrites
+// the same no-lane row, still does not duplicate the requirement. Returns
+// whether a row was inserted, so materialization can count and event payloads
+// can say what actually changed.
 func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 	entityKind, entityID, subjectRevision, lane string,
 	requiredRole, requiredActor, createdBy *string) (bool, error) {
@@ -52,7 +53,7 @@ func InsertAwaitingApproval(tx *sql.Tx, now time.Time,
 		   (entity_kind, entity_id, subject_revision, required_role,
 		    required_actor, lane, state, created_at, created_by)
 		 VALUES ($1, $2, $3, $4, $5, $6, 'awaiting', $7, $8)
-		 ON CONFLICT (entity_kind, entity_id, subject_revision, lane) DO NOTHING`,
+		 ON CONFLICT (entity_kind, entity_id, subject_revision, lane, review_kind) DO NOTHING`,
 		entityKind, entityID, subjectRevision, requiredRole, requiredActor, lane,
 		now.UTC(), createdBy)
 	if err != nil {
