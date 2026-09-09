@@ -112,6 +112,93 @@ func matchesLabels(match, labels map[string]string) bool {
 	return true
 }
 
+// RevisionOutcome is what designating a new revision does to an entity's
+// approval history (029 §7.1).
+type RevisionOutcome int
+
+const (
+	// RevisionNoop: a row already binds this revision, or nothing was ever
+	// required — a push never conjures a requirement.
+	RevisionNoop RevisionOutcome = iota
+	// RevisionRebind: the open review row moves to the new revision. The
+	// requirement was never decided; the decision must bind what the
+	// reviewer will see.
+	RevisionRebind
+	// RevisionCandidate: only decided history exists. A new awaiting row is
+	// the visibly unreviewed candidate; the decided rows keep their exact
+	// revisions.
+	RevisionCandidate
+)
+
+// OnNewRevision decides the outcome. open is the entity's open review-kind
+// row (nil when none); hasDecided reports whether any decided review-kind
+// row exists; boundAlready reports whether any review-kind row (open or
+// decided) already carries exactly the new revision.
+func OnNewRevision(open *Approval, hasDecided, boundAlready bool) RevisionOutcome {
+	switch {
+	case boundAlready:
+		return RevisionNoop
+	case open != nil:
+		return RevisionRebind
+	case hasDecided:
+		return RevisionCandidate
+	default:
+		return RevisionNoop
+	}
+}
+
+// PriorApprover reports whether actorID is the resolving actor of an
+// 'approved' review-kind row in history (029 §7.1: "a qualified prior
+// approver confirms the existing decision still holds or reopens it").
+// Impact rows in history prove nothing and are ignored.
+func PriorApprover(history []Approval, actorID string) bool {
+	for _, a := range history {
+		if a.ReviewKind == "impact" {
+			continue
+		}
+		if a.State != "approved" {
+			continue
+		}
+		if a.ResolvingActor != nil && *a.ResolvingActor == actorID {
+			return true
+		}
+	}
+	return false
+}
+
+// ImpactEffect maps a decision state recorded on an impact row to its side
+// effect on the dependent's review row.
+type ImpactEffect int
+
+const (
+	ImpactConfirm ImpactEffect = iota // approved: the prior decision holds
+	ImpactReopen                      // changes_requested | rejected: reopen
+)
+
+// ImpactDecisionEffect maps a decision state recorded on an impact row to
+// its effect. Anything but 'approved' reopens — a fail-safe default rather
+// than treating an unrecognized state as confirmation.
+func ImpactDecisionEffect(state string) ImpactEffect {
+	if state == "approved" {
+		return ImpactConfirm
+	}
+	return ImpactReopen
+}
+
+// SelfReviewExceptionValid reports whether an author may decide their own
+// work (029 §7.1): only when the effective review policy allows it AND a
+// different authorized actor approved the exception before review.
+// authorizedBy == the decider is not "a different actor".
+func SelfReviewExceptionValid(policyAllows bool, authorizedBy *string, decider string) bool {
+	if !policyAllows {
+		return false
+	}
+	if authorizedBy == nil || *authorizedBy == "" {
+		return false
+	}
+	return *authorizedBy != decider
+}
+
 // RequirementsForEntity returns the lanes a flow demands of one entity:
 // requirements whose EntityKind matches and whose Target is empty or
 // equals name case-insensitively. Deterministic lane order.
