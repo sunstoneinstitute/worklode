@@ -368,14 +368,16 @@ func checkActorExists(tx *sql.Tx, id string) error {
 }
 
 // approvalColumns is the SELECT list scanApproval expects, in order.
+// review_kind, note and exception_authorized_by are migration 0075's columns.
 const approvalColumns = `id, entity_kind, entity_id, subject_revision, lane,
-	required_role, required_actor, resolving_actor, state, created_at,
-	created_by, resolved_at`
+	required_role, required_actor, resolving_actor, state, review_kind, note,
+	exception_authorized_by, created_at, created_by, resolved_at`
 
 func scanApproval(row rowScanner) (*Approval, error) {
 	var a Approval
 	err := row.Scan(&a.ID, &a.EntityKind, &a.EntityID, &a.SubjectRevision,
 		&a.Lane, &a.RequiredRole, &a.RequiredActor, &a.ResolvingActor, &a.State,
+		&a.ReviewKind, &a.Note, &a.ExceptionAuthorizedBy,
 		&a.CreatedAt, &a.CreatedBy, &a.ResolvedAt)
 	if err != nil {
 		return nil, err
@@ -759,7 +761,8 @@ func scanAwaitingApproval(row rowScanner) (*AwaitingApproval, error) {
 	var title, url, author, taskID, projectID, projectName, actorName sql.NullString
 	err := row.Scan(&aa.ID, &aa.EntityKind, &aa.EntityID, &aa.SubjectRevision,
 		&aa.Lane, &aa.RequiredRole, &aa.RequiredActor, &aa.ResolvingActor,
-		&aa.State, &aa.CreatedAt, &aa.CreatedBy, &aa.ResolvedAt,
+		&aa.State, &aa.ReviewKind, &aa.Note, &aa.ExceptionAuthorizedBy,
+		&aa.CreatedAt, &aa.CreatedBy, &aa.ResolvedAt,
 		&title, &url, &author, &taskID, &projectID, &projectName, &actorName)
 	if err != nil {
 		return nil, err
@@ -965,4 +968,167 @@ func (s *Store) HasInboxItems(ctx context.Context, actorID string) (bool, error)
 		return false, fmt.Errorf("has inbox items for %s: %w", actorID, err)
 	}
 	return exists, nil
+}
+
+// RevisionRef renders a revision-bound entity reference, "<id>@<revision>".
+// The one spelling for governed-edge endpoints (InsertGovernedRefs et al.)
+// and the CI gate's queries (029 §7.1).
+func RevisionRef(entityID, revision string) string {
+	return entityID + "@" + revision
+}
+
+// ImpactRevision renders an impact row's subject_revision:
+// "<dependentRevision>+<upstreamID>@<upstreamRevision>" — the pair the
+// impact decision reviews, unique per upstream move (029 §7.1).
+func ImpactRevision(dependentRevision, upstreamID, upstreamRevision string) string {
+	return dependentRevision + "+" + RevisionRef(upstreamID, upstreamRevision)
+}
+
+// ListApprovalsForEntity returns every row for (kind, id), newest first — the
+// shared history for the detail page, the impact checks (PriorApprover), and
+// the read API. No review_kind filter: an impact row is history too.
+func ListApprovalsForEntity(tx *sql.Tx, entityKind, entityID string) ([]Approval, error) {
+	rows, err := tx.Query(
+		`SELECT `+approvalColumns+` FROM approvals
+		 WHERE entity_kind = $1 AND entity_id = $2
+		 ORDER BY id DESC`,
+		entityKind, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("approval history for %s %s: %w", entityKind, entityID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("approval history for %s %s", entityKind, entityID),
+		byValue(scanApproval))
+}
+
+// designationScope narrows DesignateRevision's queries to the no-lane,
+// 'review'-kind row: the single decision a PR-style entity carries. A
+// document's several reviewer lanes (025 §7.3) are RequestDocApproval's
+// concern, not DesignateRevision's — nothing here reruns that fan-out.
+const designationScope = `lane = '' AND review_kind = 'review'`
+
+// DesignateRevision applies OnNewRevision (approval_rules.go) inside the
+// caller's event transaction (029 §7.1): rebinds the open review row's
+// subject_revision, or inserts a candidate row copying required_role/
+// required_actor from the newest decided review row. Returns the outcome for
+// the caller's metric.
+func DesignateRevision(tx *sql.Tx, now time.Time,
+	entityKind, entityID, newRevision string) (RevisionOutcome, error) {
+	open, err := scanApproval(tx.QueryRow(
+		`SELECT `+approvalColumns+` FROM approvals
+		 WHERE entity_kind = $1 AND entity_id = $2 AND `+designationScope+`
+		   AND state IN ('awaiting', 'changes_requested')
+		 ORDER BY id DESC LIMIT 1`,
+		entityKind, entityID))
+	if errors.Is(err, sql.ErrNoRows) {
+		open = nil
+	} else if err != nil {
+		return 0, fmt.Errorf("open review for %s %s: %w", entityKind, entityID, err)
+	}
+
+	var hasDecided, boundAlready bool
+	if err := tx.QueryRow(
+		`SELECT
+		   EXISTS (SELECT 1 FROM approvals WHERE entity_kind = $1 AND entity_id = $2
+		             AND `+designationScope+` AND state IN ('approved', 'rejected')),
+		   EXISTS (SELECT 1 FROM approvals WHERE entity_kind = $1 AND entity_id = $2
+		             AND `+designationScope+` AND subject_revision = $3)`,
+		entityKind, entityID, newRevision).Scan(&hasDecided, &boundAlready); err != nil {
+		return 0, fmt.Errorf("revision history for %s %s: %w", entityKind, entityID, err)
+	}
+
+	outcome := OnNewRevision(open, hasDecided, boundAlready)
+	switch outcome {
+	case RevisionRebind:
+		if _, err := tx.Exec(`UPDATE approvals SET subject_revision = $1 WHERE id = $2`,
+			newRevision, open.ID); err != nil {
+			return 0, fmt.Errorf("rebind %s %s to %s: %w", entityKind, entityID, newRevision, err)
+		}
+	case RevisionCandidate:
+		decided, err := scanApproval(tx.QueryRow(
+			`SELECT `+approvalColumns+` FROM approvals
+			 WHERE entity_kind = $1 AND entity_id = $2 AND `+designationScope+`
+			   AND state IN ('approved', 'rejected')
+			 ORDER BY id DESC LIMIT 1`,
+			entityKind, entityID))
+		if err != nil {
+			return 0, fmt.Errorf("newest decided review for %s %s: %w", entityKind, entityID, err)
+		}
+		if _, err := InsertAwaitingApproval(tx, now, entityKind, entityID, newRevision, "",
+			decided.RequiredRole, decided.RequiredActor, nil); err != nil {
+			return 0, err
+		}
+	}
+	return outcome, nil
+}
+
+// GovernedRef is one revision-bound reference a designation recorded (029
+// §7.1): an entity_edges endpoint split back into its kind, id and revision.
+type GovernedRef struct {
+	Kind, ID, Revision string
+}
+
+// InsertGovernedRefs writes rel='references_revision' entity_edges rows from
+// RevisionRef(fromID, fromRevision) to each RevisionRef(ref.ID, ref.Revision)
+// (029 §7.1). Idempotent on the table's primary key (from_kind, from_id,
+// to_kind, to_id, rel) — a re-designation that references the same set is a
+// no-op, not a conflict.
+func InsertGovernedRefs(tx *sql.Tx, now time.Time, createdBy *string,
+	fromKind, fromID, fromRevision string, refs []GovernedRef) error {
+	from := RevisionRef(fromID, fromRevision)
+	ts := now.UTC()
+	for _, ref := range refs {
+		to := RevisionRef(ref.ID, ref.Revision)
+		if _, err := tx.Exec(
+			`INSERT INTO entity_edges (from_kind, from_id, to_kind, to_id, rel, created_at, created_by)
+			 VALUES ($1, $2, $3, $4, 'references_revision', $5, $6)
+			 ON CONFLICT (from_kind, from_id, to_kind, to_id, rel) DO NOTHING`,
+			fromKind, from, ref.Kind, to, ts, createdBy,
+		); err != nil {
+			return fmt.Errorf("insert governed reference %s %s -> %s %s: %w",
+				fromKind, from, ref.Kind, to, err)
+		}
+	}
+	return nil
+}
+
+// scanGovernedRef reads one row selected as (kind, id, revision) — either
+// GovernedRefsFor's to_-side split or DependentsOf's from_-side split.
+func scanGovernedRef(row rowScanner) (GovernedRef, error) {
+	var g GovernedRef
+	err := row.Scan(&g.Kind, &g.ID, &g.Revision)
+	return g, err
+}
+
+// GovernedRefsFor returns the references recorded from (kind, id) at
+// revision — exactly what that revision's own designation wrote.
+func GovernedRefsFor(tx *sql.Tx, kind, id, revision string) ([]GovernedRef, error) {
+	from := RevisionRef(id, revision)
+	rows, err := tx.Query(
+		`SELECT to_kind, split_part(to_id, '@', 1), split_part(to_id, '@', 2)
+		 FROM entity_edges
+		 WHERE from_kind = $1 AND from_id = $2 AND rel = 'references_revision'
+		 ORDER BY to_kind, to_id`,
+		kind, from)
+	if err != nil {
+		return nil, fmt.Errorf("governed references from %s %s: %w", kind, from, err)
+	}
+	return collectRows(rows, fmt.Sprintf("governed references from %s %s", kind, from), scanGovernedRef)
+}
+
+// DependentsOf returns the distinct entities holding a references_revision
+// edge pointing at (kind, id) at any revision of it — the impact fan-out set
+// (029 §7.1). A referrer that recorded the reference at more than one of its
+// own revisions is returned once, at its newest.
+func DependentsOf(tx *sql.Tx, kind, id string) ([]GovernedRef, error) {
+	rows, err := tx.Query(
+		`SELECT DISTINCT ON (from_kind, split_part(from_id, '@', 1))
+		        from_kind, split_part(from_id, '@', 1), split_part(from_id, '@', 2)
+		 FROM entity_edges
+		 WHERE to_kind = $1 AND split_part(to_id, '@', 1) = $2 AND rel = 'references_revision'
+		 ORDER BY from_kind, split_part(from_id, '@', 1), created_at DESC`,
+		kind, id)
+	if err != nil {
+		return nil, fmt.Errorf("dependents of %s %s: %w", kind, id, err)
+	}
+	return collectRows(rows, fmt.Sprintf("dependents of %s %s", kind, id), scanGovernedRef)
 }
