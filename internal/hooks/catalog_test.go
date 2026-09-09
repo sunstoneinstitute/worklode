@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,11 +26,14 @@ const (
 )
 
 // catalogEnv is a webhook test fixture: a store with project "demo" and the
-// catalog handler. The raw-SQL assertions come from the embedded dbEnv,
-// shared with the GitHub and Flux fixtures.
+// catalog, ci and pipeline handlers, all sharing one secret (029 §8.3). The
+// raw-SQL assertions come from the embedded dbEnv, shared with the GitHub
+// and Flux fixtures.
 type catalogEnv struct {
 	dbEnv
-	h http.Handler
+	h         http.Handler // /hooks/catalog
+	ciH       http.Handler // /hooks/ci
+	pipelineH http.Handler // /hooks/pipeline
 }
 
 func newCatalogEnv(t *testing.T) *catalogEnv {
@@ -44,9 +48,39 @@ func newCatalogEnvWith(t *testing.T, secret string, m *hooks.Metrics) *catalogEn
 		t.Fatalf("create project: %v", err)
 	}
 	return &catalogEnv{
-		dbEnv: dbEnv{st: st},
-		h:     hooks.NewCatalogHandler(st, secret, nil, m),
+		dbEnv:     dbEnv{st: st},
+		h:         hooks.NewCatalogHandler(st, secret, nil, m),
+		ciH:       hooks.NewCIHandler(st, secret, nil, m),
+		pipelineH: hooks.NewPipelineHandler(st, secret, nil, m),
 	}
+}
+
+// deliverSigned posts a signed body to one mounted ingest route. The handler
+// itself never inspects the request path, so this is a lookup by path (a
+// stand-in for the server's mux) rather than real routing — it just picks the
+// right handler instance and delivery header.
+func (e *catalogEnv) deliverSigned(t *testing.T, path, deliveryHeader, delivery, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	var h http.Handler
+	switch path {
+	case "/hooks/catalog":
+		h = e.h
+	case "/hooks/ci":
+		h = e.ciH
+	case "/hooks/pipeline":
+		h = e.pipelineH
+	default:
+		t.Fatalf("deliverSigned: no handler mounted for %s", path)
+	}
+	b := []byte(body)
+	req := httptest.NewRequest("POST", path, bytes.NewReader(b))
+	req.Header.Set("X-Signature", catalogSign(b))
+	if delivery != "" {
+		req.Header.Set(deliveryHeader, delivery)
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr
 }
 
 // catalogHandlerNoDB builds the handler over a nil store. The 503, signature
@@ -76,6 +110,33 @@ func (e *catalogEnv) seedDeliverable(t *testing.T, name, artifact string) string
 		})
 	if err != nil {
 		t.Fatalf("seed deliverable %s: %v", name, err)
+	}
+	return id
+}
+
+// seedLabelDeliverable declares a label-identified deliverable (WL-581's mint
+// path, 029 §3.1) in a fresh project keyed projectKey, and returns its id.
+// The label it mints is "worklode.deliverable=<projectKey>/<slug of name>".
+func (e *catalogEnv) seedLabelDeliverable(t *testing.T, projectKey, name string) string {
+	t.Helper()
+	projectID := strings.ToLower(projectKey) + "-" + strings.ToLower(strings.ReplaceAll(t.Name(), "/", "-"))
+	if err := e.st.CreateProject(context.Background(), projectID, projectKey+" project", projectKey); err != nil {
+		t.Fatalf("create project %s: %v", projectKey, err)
+	}
+	var id string
+	_, _, err := e.st.RecordEvent(context.Background(), "cli", "seed-label-del:"+projectKey+"/"+name+t.Name(),
+		"deliverable.created", nil, func(tx *sql.Tx, _ int64) error {
+			d, err := store.CreateDeliverable(tx, e.st.Now(), store.DeliverableInput{
+				ProjectID: projectID, Name: name, Label: true,
+			})
+			if err != nil {
+				return err
+			}
+			id = d.ID
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("seed label deliverable %s/%s: %v", projectKey, name, err)
 	}
 	return id
 }
@@ -385,7 +446,7 @@ func TestCatalogRoutesOnlyToOpenDeclarers(t *testing.T) {
 }
 
 // TestCatalogWebhookMetrics: a routed delivery counts one webhook event under
-// its validated state and one evidence row under (state, entity_kind).
+// its validated state and one evidence row under (source, state, entity_kind).
 func TestCatalogWebhookMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
@@ -409,7 +470,111 @@ func TestCatalogWebhookMetrics(t *testing.T) {
 			t.Errorf("events{catalog,%s,%s} = %v, want 1", tc.event, tc.result, got)
 		}
 	}
-	if got := testutil.ToFloat64(m.CatalogEvidence().WithLabelValues("published", "deliverable")); got != 1 {
-		t.Errorf("catalog_evidence{published,deliverable} = %v, want 1", got)
+	if got := testutil.ToFloat64(m.ArtifactEvidence().WithLabelValues("catalog", "published", "deliverable")); got != 1 {
+		t.Errorf("artifact_evidence{catalog,published,deliverable} = %v, want 1", got)
+	}
+}
+
+// TestCIDeliveryFilesBySource: the ci route records its own events.source and
+// event type, sharing everything else with the catalog route.
+func TestCIDeliveryFilesBySource(t *testing.T) {
+	e := newCatalogEnv(t)
+	id := e.seedDeliverable(t, "casualties", catalogArtifact)
+
+	rr := e.deliverSigned(t, "/hooks/ci", "X-CI-Delivery", "ci-1",
+		`{"artifact":"`+catalogArtifact+`","state":"published"}`)
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
+		t.Fatalf("status = %d, ack = %q, want 200 ok", rr.Code, ackStatus(t, rr))
+	}
+	if got := e.rawQueryString(t, `SELECT type FROM events WHERE source = 'ci' AND external_id = $1`, "ci-1"); got != "ci.published" {
+		t.Errorf("event type = %q, want ci.published", got)
+	}
+	if got := e.rawQueryString(t, `SELECT source FROM artifact_evidence WHERE entity_id = $1`, id); got != "ci" {
+		t.Errorf("evidence source = %q, want ci", got)
+	}
+}
+
+// TestIngestRequiresArtifactOrLabel: a payload naming neither is a 400 on
+// every source, not just catalog.
+func TestIngestRequiresArtifactOrLabel(t *testing.T) {
+	e := newCatalogEnv(t)
+	body := `{"state":"published"}`
+	for _, tc := range []struct {
+		path, header string
+	}{
+		{"/hooks/catalog", "X-Catalog-Delivery"},
+		{"/hooks/ci", "X-CI-Delivery"},
+		{"/hooks/pipeline", "X-Pipeline-Delivery"},
+	} {
+		if rr := e.deliverSigned(t, tc.path, tc.header, "d-empty", body); rr.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", tc.path, rr.Code)
+		}
+	}
+}
+
+// TestPipelineDeliveryRoutesByLabel: a delivery naming both an artifact
+// address nothing declares and a label something does routes only through
+// the label, filing evidence keyed by the selector string that matched
+// (029 §3.1, §8.3).
+func TestPipelineDeliveryRoutesByLabel(t *testing.T) {
+	e := newCatalogEnv(t)                               // existing harness, extended to mount all sources
+	del := e.seedLabelDeliverable(t, "COW", "Datasets") // Task 2's mint path
+
+	body := `{"event":"dataset.registered","state":"published",
+	  "artifact":"iceberg://prod/cow/casualties@snap-991",
+	  "labels":{"worklode.deliverable":"COW/datasets"}}`
+	e.deliverSigned(t, "/hooks/pipeline", "X-Pipeline-Delivery", "p-1", body)
+
+	if got := e.rawQueryString(t,
+		`SELECT provenance FROM artifact_evidence WHERE entity_id = $1`, del); got != "observed" {
+		t.Errorf("provenance = %q, want observed", got)
+	}
+	if got := e.rawQueryString(t,
+		`SELECT artifact_uri FROM artifact_evidence WHERE entity_id = $1`, del); got != "worklode.deliverable=COW/datasets" {
+		t.Errorf("evidence key = %q, want the selector string", got)
+	}
+}
+
+// TestPipelineDeliveryRoutesByBoth: a delivery whose address matches one
+// declarer and whose label matches another files one evidence row per
+// routing key, not one row total.
+func TestPipelineDeliveryRoutesByBoth(t *testing.T) {
+	e := newCatalogEnv(t)
+	byAddress := e.seedDeliverable(t, "casualties", catalogArtifact)
+	byLabel := e.seedLabelDeliverable(t, "COW", "Datasets")
+
+	body := `{"state":"published","artifact":"` + catalogArtifact + `",` +
+		`"labels":{"worklode.deliverable":"COW/datasets"}}`
+	rr := e.deliverSigned(t, "/hooks/pipeline", "X-Pipeline-Delivery", "p-both", body)
+	if got := ackStatus(t, rr); got != "ok" {
+		t.Fatalf("ack = %q, want ok", got)
+	}
+	if got := e.evidenceRows(t, "deliverable", byAddress); got != 1 {
+		t.Errorf("address-matched evidence rows = %d, want 1", got)
+	}
+	if got := e.evidenceRows(t, "deliverable", byLabel); got != 1 {
+		t.Errorf("label-matched evidence rows = %d, want 1", got)
+	}
+	if got := e.rawQueryString(t,
+		`SELECT artifact_uri FROM artifact_evidence WHERE entity_id = $1`, byAddress); got != catalogArtifact {
+		t.Errorf("address-matched evidence key = %q, want the address", got)
+	}
+}
+
+// TestPipelineLabelRedeliveryIsIdempotent: label-routed evidence dedupes on
+// redelivery exactly like address-routed evidence does.
+func TestPipelineLabelRedeliveryIsIdempotent(t *testing.T) {
+	e := newCatalogEnv(t)
+	del := e.seedLabelDeliverable(t, "COW", "Datasets")
+	body := `{"state":"published","labels":{"worklode.deliverable":"COW/datasets"}}`
+
+	if got := ackStatus(t, e.deliverSigned(t, "/hooks/pipeline", "X-Pipeline-Delivery", "p-dup", body)); got != "ok" {
+		t.Fatalf("first ack = %q, want ok", got)
+	}
+	if got := ackStatus(t, e.deliverSigned(t, "/hooks/pipeline", "X-Pipeline-Delivery", "p-dup", body)); got != "duplicate" {
+		t.Fatalf("redelivery ack = %q, want duplicate", got)
+	}
+	if got := e.evidenceRows(t, "deliverable", del); got != 1 {
+		t.Fatalf("evidence rows = %d, want 1", got)
 	}
 }

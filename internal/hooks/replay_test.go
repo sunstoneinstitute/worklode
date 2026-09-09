@@ -443,8 +443,8 @@ func TestReplayFilesCatalogEvidenceAfterDeclaration(t *testing.T) {
 		  WHERE ev.external_id = 'd-early' AND ev.applied_at IS NOT NULL`); n != 1 {
 		t.Fatalf("evidence joined to the applied original event = %d rows, want 1", n)
 	}
-	if got := testutil.ToFloat64(m.CatalogEvidence().WithLabelValues("published", "deliverable")); got != 1 {
-		t.Errorf("catalog_evidence{published,deliverable} = %v, want 1", got)
+	if got := testutil.ToFloat64(m.ArtifactEvidence().WithLabelValues("catalog", "published", "deliverable")); got != 1 {
+		t.Errorf("artifact_evidence{catalog,published,deliverable} = %v, want 1", got)
 	}
 	if got := testutil.ToFloat64(m.ReplayEvents().WithLabelValues("replayed")); got != 1 {
 		t.Errorf("replay_events{replayed} = %v, want 1", got)
