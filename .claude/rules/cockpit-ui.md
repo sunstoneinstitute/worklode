@@ -1,6 +1,7 @@
 ---
-name: worklode-cockpit-ui
-description: Use when changing the web cockpit UI in internal/ui — "the cockpit", "the web page", "a templ component", "*_templ.go", "templ generate", "tailwind", "app.css", "the stylesheet", "restyle", "add a column to the page", "go generate", "LODE_WEB_OPEN". Covers the templ + Tailwind dev loop and the ui/api dependency direction. Not for the JSON API — that is internal/api plus internal/model.
+paths:
+  - "internal/ui/**"
+  - "internal/api/render.go"
 ---
 
 # Cockpit UI development

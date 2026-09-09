@@ -16,6 +16,7 @@ and the rules for adding and retiring skills.
 | Command-package pointer | `internal/cmd/CLAUDE.md` | agents editing the CLI | no |
 | Marketing site accuracy guide | `www/CLAUDE.md` (`www/AGENTS.md` is a symlink to it) | agents editing `www/` | no |
 | Repo-development skills | `.claude/skills/*/SKILL.md` | agents changing this repo | no |
+| Path-scoped rules | `.claude/rules/*.md` | agents editing the files each rule's `paths:` glob names | no |
 | Shipped plugin, Claude | `plugins/claude/lode/skills/*/SKILL.md`, `plugins/claude/lode/agents/`, `.claude-plugin/marketplace.json` | `lode` users on Claude Code | no — **source of truth** |
 | Shipped plugin, Codex | `.agents/plugins/marketplace.json`, `plugins/claude/lode/.codex-plugin/plugin.json` | `lode` users on Codex | yes — `scripts/sync-codex-marketplace.py` |
 | `worklode` orientation skill's command catalog | `plugins/claude/lode/skills/worklode/references/commands.md` | `lode` users, on demand | yes — `go test ./internal/cmd -run TestCommandReference -update-command-ref` |
@@ -125,6 +126,16 @@ comment saying why and when it comes out.
 
 Two populations, with different blast radius. `.claude/skills/` is internal to
 this repo; `plugins/claude/lode/skills/` ships to every `lode` user.
+
+### Rule or skill
+
+Guidance whose subject is a set of files is a rule in `.claude/rules/`: a
+`paths:` glob loads it whenever an agent touches a matching file, so it does
+not depend on a `description` matching the prompt. Guidance that spans files,
+or that has no path to key on, stays a skill. A rule's cost is that it loads
+in full on any match, so keep it to what an agent editing those files has to
+know. A rule needs no `CLAUDE.md` bullet of its own; the section's list of
+rule filenames is the index.
 
 ### Adding a skill
 

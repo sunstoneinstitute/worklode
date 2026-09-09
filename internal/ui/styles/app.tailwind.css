@@ -113,6 +113,15 @@ button{font-family:inherit;cursor:pointer}
 .brand:hover{text-decoration:none}
 .brand .mark{width:26px;height:22px;display:grid;place-items:center;flex:0 0 auto}
 .brand .mark img{width:100%;height:100%;display:block;object-fit:contain}
+/* The mark spins on every tenth click of a streak (assets/ching.js). */
+@media (prefers-reduced-motion:no-preference){
+  .brand .mark.struck{animation:mark-struck .6s ease}
+  @keyframes mark-struck{
+    0%{transform:rotate(0) scale(1)}
+    50%{transform:rotate(180deg) scale(1.3)}
+    100%{transform:rotate(360deg) scale(1)}
+  }
+}
 /* GitHub-style tabs: compact icon-and-label links whose active underline sits
  * on the bar's own bottom edge, which is why the nav stretches to the bar's
  * full height. The page's single Primary landmark at every width. */

@@ -1,6 +1,7 @@
 ---
-name: worklode-migrations
-description: Use when adding or changing a database migration in this repo — "add a migration", "add a column", "change the schema", "new table", "alter the tasks table", "migration number collision", "fix migration NNNN", "down.sql". Covers the deploy/base/migrations layout, the never-edit-a-shipped-migration rule, and the kustomization.yaml listing. For general golang-migrate CLI usage, see the golang-migrate plugin skills.
+paths:
+  - "deploy/base/migrations/**"
+  - "deploy/base/kustomization.yaml"
 ---
 
 # Database migrations
@@ -26,3 +27,5 @@ Rules:
 Store tests that exercise a new migration need a reachable Postgres with
 pgvector — see the Commands section of CLAUDE.md for the DSN and the
 skip-silently caveat.
+
+For general golang-migrate CLI usage, see the golang-migrate plugin skills.
