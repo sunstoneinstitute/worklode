@@ -5,8 +5,8 @@ import "testing"
 func TestApprovalRevisionBindingMigrationRoundTrip(t *testing.T) {
 	t.Parallel()
 	s := OpenUnmigratedTestStore(t)
-	if err := s.Migrate(migrationsThrough(t, 73)); err != nil {
-		t.Fatalf("migrate through 0073: %v", err)
+	if err := s.Migrate(migrationsThrough(t, 74)); err != nil {
+		t.Fatalf("migrate through 0074: %v", err)
 	}
 
 	migrateSteps(t, s, 1)
