@@ -24,13 +24,14 @@ func MarkEventApplied(tx *sql.Tx, eventID int64, at time.Time) error {
 }
 
 // replaySources are the event sources engine 1 can re-apply: a github
-// delivery recorded before its repo was mapped (or whose apply failed), and a
-// catalog delivery that matched no declaration when it arrived (029 §3.2,
-// WL-256). Both leave applied_at NULL exactly when there is still an apply to
-// run, so the candidate set stays finite. Flux is deliberately absent: its
-// handler never sets applied_at at all, so every flux row would be a
-// permanent candidate with nothing to replay.
-var replaySources = []string{"github", "catalog"}
+// delivery recorded before its repo was mapped (or whose apply failed), and
+// an artifact-evidence delivery (catalog, ci, pipeline) that matched no
+// declaration when it arrived (029 §3.2, §8.3, WL-256). All leave applied_at
+// NULL exactly when there is still an apply to run, so the candidate set
+// stays finite. Flux is deliberately absent: its handler never sets
+// applied_at at all, so every flux row would be a permanent candidate with
+// nothing to replay.
+var replaySources = []string{"github", "catalog", "ci", "pipeline"}
 
 // UnappliedFilter bounds the replay candidate set. Zero values disable each
 // filter. Repo matches the delivery payload's repository.full_name — which

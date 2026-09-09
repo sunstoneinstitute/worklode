@@ -7,12 +7,12 @@ import (
 // Metrics holds the webhook instruments, shared by the GitHub, Flux and
 // catalog handlers. A nil *Metrics records nothing, so tests can pass nil.
 type Metrics struct {
-	events          *prometheus.CounterVec
-	truncatedPush   prometheus.Counter
-	branchResolve   *prometheus.CounterVec
-	replay          *prometheus.CounterVec
-	approvals       *prometheus.CounterVec
-	catalogEvidence *prometheus.CounterVec
+	events           *prometheus.CounterVec
+	truncatedPush    prometheus.Counter
+	branchResolve    *prometheus.CounterVec
+	replay           *prometheus.CounterVec
+	approvals        *prometheus.CounterVec
+	artifactEvidence *prometheus.CounterVec
 }
 
 // NewMetrics registers the webhook counters and the reconcile replay counter
@@ -52,15 +52,17 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_approvals_ingest_total",
 			Help: "Approval-relevant actions taken by the GitHub webhook ingest, by action.",
 		}, []string{"action"}),
-		// catalogEvidence counts evidence rows the data-catalog ingest wrote.
-		// Both labels are bounded by the artifact_evidence CHECK constraints.
-		catalogEvidence: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "worklode_catalog_evidence_total",
-			Help: "Evidence rows written by the data catalog ingest, by artifact state and the kind of entity that declared it.",
-		}, []string{"state", "entity_kind"}),
+		// artifactEvidence counts evidence rows the artifact-evidence ingests
+		// (catalog, ci, pipeline, ...) wrote. source is the ingest that filed
+		// the row; state and entity_kind are bounded by the artifact_evidence
+		// CHECK constraints.
+		artifactEvidence: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_artifact_evidence_total",
+			Help: "Evidence rows written by the artifact-evidence ingests, by source, artifact state, and the kind of entity that declared it.",
+		}, []string{"source", "state", "entity_kind"}),
 	}
 	reg.MustRegister(m.events, m.truncatedPush, m.branchResolve, m.replay,
-		m.approvals, m.catalogEvidence)
+		m.approvals, m.artifactEvidence)
 	return m
 }
 
@@ -89,9 +91,9 @@ func (m *Metrics) ApprovalsIngest() *prometheus.CounterVec {
 	return m.approvals
 }
 
-// CatalogEvidence exposes the counter for test assertions.
-func (m *Metrics) CatalogEvidence() *prometheus.CounterVec {
-	return m.catalogEvidence
+// ArtifactEvidence exposes the counter for test assertions.
+func (m *Metrics) ArtifactEvidence() *prometheus.CounterVec {
+	return m.artifactEvidence
 }
 
 func (m *Metrics) truncatedPushDelivery() {
@@ -131,12 +133,13 @@ func (m *Metrics) approvalIngest(action string) {
 
 // catalogEvidenceFiled counts one apply's evidence rows — from a live
 // delivery or from reconcile's replay of a stored one, which write the same
-// rows and so are counted the same way.
-func (m *Metrics) catalogEvidenceFiled(res catalogResult) {
+// rows and so are counted the same way. source is the ingest that ran the
+// apply (catalog, ci, pipeline, ...).
+func (m *Metrics) catalogEvidenceFiled(source string, res catalogResult) {
 	if m == nil {
 		return
 	}
 	for _, e := range res.Written {
-		m.catalogEvidence.WithLabelValues(res.State, e.Kind).Inc()
+		m.artifactEvidence.WithLabelValues(source, res.State, e.Kind).Inc()
 	}
 }

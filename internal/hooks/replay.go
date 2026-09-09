@@ -1,7 +1,7 @@
 // Engine 1 of lode task reconcile (spec 013): re-apply stored events whose apply
 // never ran — GitHub *.ignored deliveries recorded before their repo was
-// mapped, and catalog deliveries that matched no declaration when they
-// arrived (029 §3.2, WL-256). Offline: the payload is intact in
+// mapped, and artifact-evidence deliveries (catalog, ci, pipeline, ...) that
+// matched no declaration when they arrived (029 §3.2, §8.3, WL-256). Offline: the payload is intact in
 // events.payload, so no GitHub call is needed. Re-running is harmless because
 // the applies are order-safe, not merely idempotent: a replayed event may be
 // older than facts that already landed, so the fact upserts are guarded to be
@@ -96,10 +96,10 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 		res.Errors = append(res.Errors, fmt.Sprintf(format, args...))
 	}
 	a := &applier{st: st, log: log, resolveBranch: opts.ResolveBranch, metrics: opts.Metrics}
-	ca := &catalogApplier{st: st, log: log}
 
 	for _, ev := range evs {
-		if ev.Source == "catalog" {
+		if cfg, ok := ingestConfigs[ev.Source]; ok {
+			ca := &catalogApplier{st: st, log: log, cfg: cfg}
 			replayCatalog(ctx, st, ca, ev, opts, res, addErr)
 			continue
 		}
@@ -143,11 +143,12 @@ func Replay(ctx context.Context, st *store.Store, opts ReplayOptions) (*model.Re
 	return res, nil
 }
 
-// replayCatalog re-applies one stored catalog delivery: it files the recorded
-// fact against whatever declares the artifact now. A delivery still matching
-// no declaration is left unapplied — counted in StillUnmapped, the same
-// "nothing routes it yet" outcome an unmapped repo gets — so a declaration
-// added later still finds it.
+// replayCatalog re-applies one stored artifact-evidence delivery (catalog,
+// ci, pipeline, ...): it files the recorded fact against whatever declares
+// its routing keys now. A delivery still matching no declaration is left
+// unapplied — counted in StillUnmapped, the same "nothing routes it yet"
+// outcome an unmapped repo gets — so a declaration added later still finds
+// it.
 func replayCatalog(ctx context.Context, st *store.Store, ca *catalogApplier,
 	ev store.Event, opts ReplayOptions, res *model.ReplayResult, addErr func(string, ...any)) {
 	var applied catalogResult
@@ -176,7 +177,7 @@ func replayCatalog(ctx context.Context, st *store.Store, ca *catalogApplier,
 		return
 	}
 	// Counted after the transaction committed, as the webhook path does it.
-	opts.Metrics.catalogEvidenceFiled(applied)
+	opts.Metrics.catalogEvidenceFiled(ca.cfg.Source, applied)
 	res.Replayed++
 	opts.Metrics.replayOutcome("replayed")
 }

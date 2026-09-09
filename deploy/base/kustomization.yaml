@@ -165,3 +165,5 @@ configMapGenerator:
       - migrations/0075_approval_revision_binding.down.sql
       - migrations/0076_governed_references.up.sql
       - migrations/0076_governed_references.down.sql
+      - migrations/0077_ingest_sources.up.sql
+      - migrations/0077_ingest_sources.down.sql
