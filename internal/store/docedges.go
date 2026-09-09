@@ -285,7 +285,7 @@ func rebuildEdges(tx *sql.Tx, now time.Time, docID int64, kind, project string, 
 			if utf8.RuneCountInString(a) > maxArtifactURI {
 				return fmt.Errorf("doc %d artifact %q is too long: %w", docID, a[:40]+"…", ErrInvalidInput)
 			}
-			if err := DeclareArtifact(tx, now, "doc", strconv.FormatInt(docID, 10), a); err != nil {
+			if err := DeclareArtifact(tx, now, "doc", strconv.FormatInt(docID, 10), "address", a); err != nil {
 				return err
 			}
 		}

@@ -29,7 +29,10 @@ type DeliverableInput struct {
 	// Artifact is the address the deliverable is verified by (029 §3.1), or
 	// "" when it declares none. It is not stored on the row: it becomes an
 	// artifact_declarations entry, which is what the catalog ingest routes on.
-	Artifact  string
+	Artifact string
+	// Label mints the project-scoped worklode.deliverable selector instead of
+	// declaring an artifact address (029 §3.1).
+	Label     bool
 	CreatedBy string
 	// MilestoneID attaches the deliverable to a milestone in the same
 	// project at declaration time (spec 029 §2), "" for none.
@@ -50,7 +53,7 @@ const deliverableColumns = `id, project_id, name, description, url, created_by, 
 // The last two are joined, never stored — 029 §3.2 keeps deliverable state a
 // reported fact, so the row itself has nothing to say about it.
 const deliverableSelect = deliverableColumns + `,
-	COALESCE(decl.artifact_uri, ''), COALESCE(ev.state, ''), ev.occurred_at`
+	COALESCE(decl.selector, ''), COALESCE(decl.artifact_uri, ''), COALESCE(ev.state, ''), ev.occurred_at`
 
 // deliverableFrom pairs the table with the declared address and the latest
 // evidence filed against that same address. The two LATERALs are chained on
@@ -65,7 +68,7 @@ const deliverableSelect = deliverableColumns + `,
 // the only reader of artifact_evidence.
 const deliverableFrom = `FROM deliverables
 	LEFT JOIN LATERAL (
-	    SELECT ad.artifact_uri FROM artifact_declarations ad
+	    SELECT ad.selector, ad.artifact_uri FROM artifact_declarations ad
 	     WHERE ad.entity_kind = 'deliverable' AND ad.entity_id = deliverables.id
 	     ORDER BY ad.id LIMIT 1
 	) decl ON true
@@ -90,10 +93,21 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 	if name == "" {
 		return nil, fmt.Errorf("deliverable name is empty: %w", ErrInvalidInput)
 	}
+	artifact := strings.TrimSpace(in.Artifact)
+	if in.Label && artifact != "" {
+		return nil, fmt.Errorf("declare an artifact address or a label, not both: %w", ErrInvalidInput)
+	}
 	milestoneID := strings.TrimSpace(in.MilestoneID)
 
 	var key string
-	if err := tx.QueryRow(`SELECT key FROM projects WHERE id = $1`, in.ProjectID).Scan(&key); err != nil {
+	projectQuery := `SELECT key FROM projects WHERE id = $1`
+	if in.Label {
+		// The project row serializes label minting before the duplicate check:
+		// two creators of the same title cannot both clear that check and then
+		// allocate distinct deliverable ordinals.
+		projectQuery += ` FOR UPDATE`
+	}
+	if err := tx.QueryRow(projectQuery, in.ProjectID).Scan(&key); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("project %s: %w", in.ProjectID, ErrNotFound)
 		}
@@ -112,6 +126,24 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 		if milestoneProject != in.ProjectID {
 			return nil, fmt.Errorf("cross-project milestone %s (%s) for new deliverable in %s: %w",
 				milestoneID, milestoneProject, in.ProjectID, ErrInvalidInput)
+		}
+	}
+
+	label := ""
+	if in.Label {
+		label = "worklode.deliverable=" + key + "/" + SlugifyTitle(name)
+		var exists bool
+		if err := tx.QueryRow(
+			`SELECT EXISTS (
+				SELECT 1 FROM artifact_declarations ad
+				JOIN deliverables d ON d.id = ad.entity_id
+				WHERE ad.entity_kind = 'deliverable' AND ad.selector = 'label'
+				  AND ad.artifact_uri = $1 AND d.project_id = $2
+			)`, label, in.ProjectID).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("check label %s: %w", label, err)
+		}
+		if exists {
+			return nil, fmt.Errorf("deliverable label %s already declared in project %s: %w", label, in.ProjectID, ErrInvalidInput)
 		}
 	}
 
@@ -144,7 +176,8 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 		CreatedBy:   in.CreatedBy,
 		CreatedAt:   ts,
 		UpdatedAt:   ts,
-		Artifact:    strings.TrimSpace(in.Artifact),
+		Artifact:    artifact,
+		Label:       label,
 		Milestone:   milestoneID,
 	}
 	var milestoneVal sql.NullString
@@ -159,7 +192,12 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 		return nil, fmt.Errorf("insert deliverable %s: %w", id, err)
 	}
 	if d.Artifact != "" {
-		if err := DeclareArtifact(tx, now, "deliverable", d.ID, d.Artifact); err != nil {
+		if err := DeclareArtifact(tx, now, "deliverable", d.ID, "address", d.Artifact); err != nil {
+			return nil, err
+		}
+	}
+	if d.Label != "" {
+		if err := DeclareArtifact(tx, now, "deliverable", d.ID, "label", d.Label); err != nil {
 			return nil, err
 		}
 	}
@@ -171,14 +209,20 @@ func CreateDeliverable(tx *sql.Tx, now time.Time, in DeliverableInput) (*model.D
 func scanDeliverable(row rowScanner) (*model.Deliverable, error) {
 	var d model.Deliverable
 	var createdBy, milestone sql.NullString
+	var selector, key string
 	var reportedAt sql.NullTime
 	if err := row.Scan(&d.ID, &d.Project, &d.Name, &d.Description, &d.URL,
 		&createdBy, &d.CreatedAt, &d.UpdatedAt, &milestone,
-		&d.Artifact, &d.ReportedState, &reportedAt); err != nil {
+		&selector, &key, &d.ReportedState, &reportedAt); err != nil {
 		return nil, err
 	}
 	d.CreatedBy = createdBy.String
 	d.Milestone = milestone.String
+	if selector == "label" {
+		d.Label = key
+	} else {
+		d.Artifact = key
+	}
 	if reportedAt.Valid {
 		t := reportedAt.Time
 		d.ReportedAt = &t
