@@ -41,8 +41,12 @@ func DocIDFromEntityID(entityID string) (int64, bool) {
 // carries several independent lanes, and the row is unique on lane, so ""
 // is the no-lane row a PR ingest or an ad-hoc request writes. CreatedBy is
 // who put the requirement here, nil for rows that predate the column.
-// internal/store aliases this type rather than declaring its own, so the
-// queue reader scans into the shape internal/api serializes (ADR 036 §2).
+// ReviewKind separates an ordinary review row ("review", the zero value)
+// from a dependent-object impact review ("impact", 029 §7.1) minted when an
+// upstream decision the dependent relied on gets reopened; its DB column
+// lands with the exact "review"/"impact" spelling. internal/store aliases
+// this type rather than declaring its own, so the queue reader scans into
+// the shape internal/api serializes (ADR 036 §2).
 type Approval struct {
 	ID              int64      `json:"id"`
 	EntityKind      string     `json:"entity_kind"`
@@ -53,6 +57,7 @@ type Approval struct {
 	RequiredActor   *string    `json:"required_actor,omitempty"`
 	ResolvingActor  *string    `json:"resolving_actor,omitempty"`
 	State           string     `json:"state"`
+	ReviewKind      string     `json:"review_kind,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	CreatedBy       *string    `json:"created_by,omitempty"`
 	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
