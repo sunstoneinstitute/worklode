@@ -30,16 +30,19 @@ filing something as new.
 
 ## Where the rest of the guidance lives
 
-Each area below has a skill that carries its detail; it fires on the work
-itself, but load it by name if it has not:
+Two mechanisms carry it. A **rule** in `.claude/rules/` is scoped by a `paths:`
+glob and loads when you touch a file it matches, so it needs no trigger phrase
+and cannot fail to fire; that is where a rule about editing particular files
+belongs. A **skill** is invoked by name or by its `description` matching the
+work, and carries a procedure that spans files or has no single path. Rules
+here today: `migrations.md`, `cockpit-ui.md`, `store-error-mapping.md`
+(sentinel errors for store writes that can collide). The skills:
 
 - **Writing or editing a spec, ADR or plan through `lode doc`** —
   frontmatter, `covers:`, `{#sec-N}` anchors, amend/supersede, the `ns/`
   `wl:` ontology and its camelCase term naming, and the spec/plan/task model
   (what is a claimable task vs a document status). See
   the `lode:writing-docs` skill.
-- **Adding or changing a database migration** under `deploy/base/migrations/`.
-  See the `worklode-migrations` skill.
 - **Touching `plugins/obsidian/`** — the TypeScript Obsidian plugin, its pnpm
   toolchain, and its hand-kept wire types. See the
   `worklode-obsidian-mirror` skill.
@@ -47,8 +50,6 @@ itself, but load it by name if it has not:
   `/lode:*` slash commands, the `lode-worker` agent, the marketplace, and the
   generated Codex mirror. See
   the `worklode-lode-plugin` skill.
-- **Working on the cockpit UI** — `internal/ui`, `templ` components, the
-  Tailwind build, the `go generate` loop. See the `worklode-cockpit-ui` skill.
 - **Changing CI, workflows, or `www/`** — the docs-only skip, the
   `can-be-tested` label, the subtree-scoped `obsidian` job. See
   the `worklode-ci` skill. Editing the site's own copy is a separate

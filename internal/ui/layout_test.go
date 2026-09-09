@@ -49,3 +49,14 @@ func TestInboxDotFollowsContextFlag(t *testing.T) {
 		t.Errorf("no flag set: dot rendered anyway\n%s", body)
 	}
 }
+
+// TestChingScriptReachesEveryPage pins the easter egg's one Go-visible fact:
+// the mark's click handler is embedded and loaded from the shell, so the
+// script cannot be dropped from the layout or the assets tree unnoticed.
+func TestChingScriptReachesEveryPage(t *testing.T) {
+	for name, body := range pages(t) {
+		if !strings.Contains(body, `src="/assets/ching.js?v=`) {
+			t.Errorf("%s: does not load /assets/ching.js", name)
+		}
+	}
+}

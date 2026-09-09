@@ -104,8 +104,9 @@ func (s *server) blobOrigin() string {
 // contentSecurityPolicy is the policy every rendered page carries (set in one
 // place, renderWeb). Each directive is what the pages actually load:
 //
-//   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js, and
-//     /assets/htmx.min.js, cliauth.templ's /assets/copy.js, task.templ /
+//   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js,
+//     /assets/ching.js and /assets/htmx.min.js, cliauth.templ's
+//     /assets/copy.js, task.templ /
 //     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js, and
 //     progress.templ's /assets/progress.js. No page has an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
