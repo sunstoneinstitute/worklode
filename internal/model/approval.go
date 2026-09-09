@@ -48,19 +48,26 @@ func DocIDFromEntityID(entityID string) (int64, bool) {
 // this type rather than declaring its own, so the queue reader scans into
 // the shape internal/api serializes (ADR 036 §2).
 type Approval struct {
-	ID              int64      `json:"id"`
-	EntityKind      string     `json:"entity_kind"`
-	EntityID        string     `json:"entity_id"`
-	SubjectRevision string     `json:"subject_revision"`
-	Lane            string     `json:"lane"`
-	RequiredRole    *string    `json:"required_role,omitempty"`
-	RequiredActor   *string    `json:"required_actor,omitempty"`
-	ResolvingActor  *string    `json:"resolving_actor,omitempty"`
-	State           string     `json:"state"`
-	ReviewKind      string     `json:"review_kind,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	CreatedBy       *string    `json:"created_by,omitempty"`
-	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+	ID              int64   `json:"id"`
+	EntityKind      string  `json:"entity_kind"`
+	EntityID        string  `json:"entity_id"`
+	SubjectRevision string  `json:"subject_revision"`
+	Lane            string  `json:"lane"`
+	RequiredRole    *string `json:"required_role,omitempty"`
+	RequiredActor   *string `json:"required_actor,omitempty"`
+	ResolvingActor  *string `json:"resolving_actor,omitempty"`
+	State           string  `json:"state"`
+	ReviewKind      string  `json:"review_kind,omitempty"`
+	// Note carries the downstream owner's impact note (029 §7.1); set on
+	// impact rows, empty on ordinary reviews. ExceptionAuthorizedBy is the
+	// actor who approved a policy-permitted self-review before review
+	// (SelfReviewExceptionValid) — one of the two facts 032 §7 renders
+	// beside the decision.
+	Note                  *string    `json:"note,omitempty"`
+	ExceptionAuthorizedBy *string    `json:"exception_authorized_by,omitempty"`
+	CreatedAt             time.Time  `json:"created_at"`
+	CreatedBy             *string    `json:"created_by,omitempty"`
+	ResolvedAt            *time.Time `json:"resolved_at,omitempty"`
 }
 
 // AwaitingApproval is one row of the awaiting queue: the approval plus what a
