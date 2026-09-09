@@ -12,11 +12,14 @@ name: Agent host
 # workflow holds credentials that outlive the job.
 
 on:
-  schedule:
-    # Every 15 minutes. This is also the recovery mechanism: the runner
-    # service's systemd unit kills its whole cgroup on restart, tmux included,
-    # so the tick is what brings the fleet back.
-    - cron: '*/15 * * * *'
+  # The schedule is off for now; the fleet is reconciled by hand through
+  # workflow_dispatch. Restore the cron to bring the babysitter back.
+  #
+  # schedule:
+  #   # Every 15 minutes. This is also the recovery mechanism: the runner
+  #   # service's systemd unit kills its whole cgroup on restart, tmux
+  #   # included, so the tick is what brings the fleet back.
+  #   - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       window:
