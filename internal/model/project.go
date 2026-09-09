@@ -21,6 +21,12 @@ type Project struct {
 	// flow is applied.
 	ApprovalFlowName string `json:"approval_flow_name,omitempty"`
 	ApprovalFlowRev  string `json:"approval_flow_rev,omitempty"`
+
+	// Labels are free-form classification stamped at promotion (029 §1),
+	// e.g. kind=sunstone-story. Horizon is "bounded" or "standing"
+	// (migration 0074).
+	Labels  map[string]string `json:"labels"`
+	Horizon string            `json:"horizon"`
 }
 
 // ProjectListResponse is the response body of GET /api/v1/projects.
@@ -34,6 +40,13 @@ type CreateProjectInput struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Key  string `json:"key"`
+
+	// Labels and Horizon are optional (029 §1); the schema default applies
+	// when omitted (labels {}, horizon "standing"). Horizon lets the
+	// standing intake project be created with horizon: "standing" over
+	// the API.
+	Labels  map[string]string `json:"labels,omitempty"`
+	Horizon string            `json:"horizon,omitempty"`
 }
 
 // PatchProjectInput is the settable-field set of PATCH

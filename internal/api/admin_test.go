@@ -483,6 +483,56 @@ func TestPatchProjectCuratedCards(t *testing.T) {
 	}
 }
 
+// TestCreateProjectMetadata covers 029 §1's optional labels/horizon body
+// fields (migration 0074): supplied values round-trip through the create
+// response, and an omitted body gets the schema defaults ({} / standing) —
+// the shape a standing intake project needs to be created with over the API.
+func TestCreateProjectMetadata(t *testing.T) {
+	t.Parallel()
+	_, h, token := newTestServer(t)
+
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
+		"id": "intake", "name": "Intake", "key": "IN",
+		"labels": map[string]any{"kind": "sunstone-story"}, "horizon": "bounded",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	if got["horizon"] != "bounded" {
+		t.Fatalf("horizon = %v, want bounded", got["horizon"])
+	}
+	labels, ok := got["labels"].(map[string]any)
+	if !ok || labels["kind"] != "sunstone-story" {
+		t.Fatalf("labels = %v, want kind=sunstone-story", got["labels"])
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
+		"id": "plain", "name": "Plain", "key": "PL",
+	})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create plain project status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got = decodeMap(t, rr)
+	if got["horizon"] != "standing" {
+		t.Fatalf("default horizon = %v, want standing", got["horizon"])
+	}
+	if labels, ok := got["labels"].(map[string]any); !ok || len(labels) != 0 {
+		t.Fatalf("default labels = %v, want empty", got["labels"])
+	}
+}
+
+func TestCreateProjectInvalidHorizon(t *testing.T) {
+	t.Parallel()
+	_, h, token := newTestServer(t)
+	rr := doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
+		"id": "bad", "name": "Bad", "key": "BD", "horizon": "eternal",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestCreateProjectValidation(t *testing.T) {
 	t.Parallel()
 	_, h, token := newTestServer(t)
