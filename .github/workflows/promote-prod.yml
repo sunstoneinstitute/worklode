@@ -100,8 +100,12 @@ jobs:
         env:
           TO_TAG: ${{ steps.promote.outputs.to-tag }}
 
-      # Pushed with GITHUB_TOKEN, same as promote-images' own tag push above,
-      # so this commit does not re-trigger any workflow.
+      # main's ruleset requires the merge queue, and GITHUB_TOKEN is not a
+      # bypass actor, so this one commit pushes over SSH with the
+      # "promote-prod main push" deploy key, which the ruleset does bypass.
+      # A deploy-key push does trigger workflows (GITHUB_TOKEN's does not), so
+      # the message carries [skip ci] to keep deploy-dev.yml from rebuilding a
+      # manifest-only commit.
       - name: Commit plugin version bumps
         run: |
           set -euo pipefail
@@ -112,11 +116,30 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .claude-plugin/marketplace.json plugins/claude/lode/.claude-plugin/marketplace.json plugins/claude/lode/.claude-plugin/plugin.json plugins/claude/lode/.codex-plugin/plugin.json plugins/obsidian/package.json plugins/obsidian/manifest.json
-          git commit -m "Bump plugin manifest versions to ${VERSION}"
+          git commit -m "Bump plugin manifest versions to ${VERSION} [skip ci]"
           git pull --rebase origin main
-          git push origin HEAD:main
+
+          # Same key handling as .github/actions/update-homebrew-tap: validate
+          # the secret up front so a bad one reads as a bad secret rather than
+          # a missing deploy key, and pin host keys from the meta API.
+          KEY_FILE="$RUNNER_TEMP/main_push_key"
+          KNOWN_HOSTS="$RUNNER_TEMP/known_hosts"
+          install -m 600 /dev/null "$KEY_FILE"
+          printf '%s\n' "$MAIN_PUSH_DEPLOY_KEY" > "$KEY_FILE"
+          if ! ssh-keygen -y -f "$KEY_FILE" > /dev/null 2>&1 < /dev/null; then
+            echo "::error::MAIN_PUSH_DEPLOY_KEY is not a usable OpenSSH private key" \
+                 "— ${#MAIN_PUSH_DEPLOY_KEY} bytes received. Check that this job" \
+                 "declares 'environment: prod'."
+            exit 1
+          fi
+          curl -fsS https://api.github.com/meta \
+            | jq -r '.ssh_keys[] | "github.com " + .' > "$KNOWN_HOSTS"
+          export GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$KNOWN_HOSTS"
+
+          git push "git@github.com:${GITHUB_REPOSITORY}.git" HEAD:main
         env:
           VERSION: ${{ steps.bump-versions.outputs.version }}
+          MAIN_PUSH_DEPLOY_KEY: ${{ secrets.MAIN_PUSH_DEPLOY_KEY }}
 
       - name: Output summary
         run: |
