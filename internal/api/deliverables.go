@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -33,13 +34,14 @@ const (
 // different deliverables. milestone is trimmed only — existence and
 // same-project containment (029 §2) are a store.CreateDeliverable check, not
 // a validator concern.
-func validateDeliverable(projectID, name, description, rawURL, artifact, milestone, createdBy string) (store.DeliverableInput, string) {
+func validateDeliverable(projectID, name, description, rawURL, artifact string, label bool, milestone, createdBy string) (store.DeliverableInput, string) {
 	in := store.DeliverableInput{
 		ProjectID:   projectID,
 		Name:        strings.TrimSpace(name),
 		Description: strings.TrimSpace(description),
 		URL:         strings.TrimSpace(rawURL),
 		Artifact:    strings.TrimSpace(artifact),
+		Label:       label,
 		MilestoneID: strings.TrimSpace(milestone),
 		CreatedBy:   createdBy,
 	}
@@ -115,6 +117,7 @@ func (s *server) recordDeliverable(ctx context.Context, source string, in store.
 		"description": in.Description,
 		"url":         in.URL,
 		"artifact":    in.Artifact,
+		"label":       strconv.FormatBool(in.Label),
 		"milestone":   in.MilestoneID,
 		"created_by":  in.CreatedBy,
 	}, func(tx *sql.Tx, _ int64) error {
@@ -178,7 +181,7 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID := actorIDFrom(r)
-	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, req.Artifact, req.Milestone, actorID)
+	in, msg := validateDeliverable(projectID, req.Name, req.Description, req.URL, req.Artifact, req.Label, req.Milestone, actorID)
 	if msg != "" {
 		writeErr(w, http.StatusUnprocessableEntity, msg)
 		return

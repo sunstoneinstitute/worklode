@@ -99,7 +99,7 @@ func (e *catalogEnv) seedTaskDeclaring(t *testing.T, state, artifact string) str
 					return err
 				}
 			}
-			return store.DeclareArtifact(tx, e.st.Now(), "task", id, artifact)
+			return store.DeclareArtifact(tx, e.st.Now(), "task", id, "address", artifact)
 		})
 	if err != nil {
 		t.Fatalf("seed %s task: %v", state, err)

@@ -385,7 +385,7 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 		Artifact:    strings.TrimSpace(r.PostFormValue("artifact")),
 		Milestone:   strings.TrimSpace(r.PostFormValue("milestone")),
 	}
-	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, values.Artifact, values.Milestone, actorIDFrom(r))
+	in, msg := validateDeliverable(project.ID, values.Name, values.Description, values.URL, values.Artifact, false, values.Milestone, actorIDFrom(r))
 	if msg != "" {
 		s.observeFormSubmission("deliverable", "invalid")
 		milestones, err := s.st.ListMilestones(ctx, project.ID)

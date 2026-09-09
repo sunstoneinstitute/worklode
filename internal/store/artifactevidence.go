@@ -22,17 +22,18 @@ import (
 const maxArtifactURI = 2000
 
 // DeclareArtifact records that (entityKind, entityID) is verified by the
-// artifact at this address. Re-declaring is a no-op, so a create path that
-// runs twice does not duplicate the routing target.
-func DeclareArtifact(tx *sql.Tx, now time.Time, entityKind, entityID, artifact string) error {
+// given selector: an artifact address, or a worklode.deliverable label
+// string (029 §3.1). Re-declaring is a no-op, so a create path that runs
+// twice does not duplicate the routing target.
+func DeclareArtifact(tx *sql.Tx, now time.Time, entityKind, entityID, selector, key string) error {
 	_, err := tx.Exec(
 		`INSERT INTO artifact_declarations
-		   (entity_kind, entity_id, artifact_uri, created_at)
-		 VALUES ($1, $2, $3, $4)
+		   (entity_kind, entity_id, selector, artifact_uri, created_at)
+		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (entity_kind, entity_id, artifact_uri) DO NOTHING`,
-		entityKind, entityID, artifact, now.UTC())
+		entityKind, entityID, selector, key, now.UTC())
 	if err != nil {
-		return fmt.Errorf("declare artifact %s for %s %s: %w", artifact, entityKind, entityID, err)
+		return fmt.Errorf("declare artifact %s for %s %s: %w", key, entityKind, entityID, err)
 	}
 	return nil
 }
@@ -59,28 +60,30 @@ type DeclaredEntity struct {
 var openDeclarationsSQL = `
 SELECT 'deliverable'::text, d.id FROM artifact_declarations ad
   JOIN deliverables d ON d.id = ad.entity_id
- WHERE ad.entity_kind = 'deliverable' AND ad.artifact_uri = $1
+ WHERE ad.entity_kind = 'deliverable' AND ad.artifact_uri = $1 AND ad.selector = $2
 UNION ALL
 SELECT 'task'::text, t.id FROM artifact_declarations ad
   JOIN tasks t ON t.id = ad.entity_id
- WHERE ad.entity_kind = 'task' AND ad.artifact_uri = $1
+ WHERE ad.entity_kind = 'task' AND ad.artifact_uri = $1 AND ad.selector = $2
    AND t.deleted_at IS NULL AND NOT ` + taskClosed("t") + `
 UNION ALL
 SELECT 'doc'::text, dc.id::text FROM artifact_declarations ad
   JOIN docs dc ON dc.id::text = ad.entity_id
- WHERE ad.entity_kind = 'doc' AND ad.artifact_uri = $1
+ WHERE ad.entity_kind = 'doc' AND ad.artifact_uri = $1 AND ad.selector = $2
    AND dc.deleted_at IS NULL AND dc.status <> 'superseded'
 ORDER BY 1, 2`
 
 // OpenDeclarationsForArtifact returns every open entity that declared
-// artifact, ordered by kind then id so a delivery writes its evidence rows in
-// the same order every time.
-func OpenDeclarationsForArtifact(tx *sql.Tx, artifact string) ([]DeclaredEntity, error) {
-	rows, err := tx.Query(openDeclarationsSQL, artifact)
+// one reported key — an address, or one label pair rendered as k=v — to every
+// still-open entity that declared it under the same selector. Results are
+// ordered by kind then id so a delivery writes its evidence rows in the same
+// order every time.
+func OpenDeclarationsForArtifact(tx *sql.Tx, selector, key string) ([]DeclaredEntity, error) {
+	rows, err := tx.Query(openDeclarationsSQL, key, selector)
 	if err != nil {
-		return nil, fmt.Errorf("open declarations for %s: %w", artifact, err)
+		return nil, fmt.Errorf("open declarations for %s: %w", key, err)
 	}
-	return collectRows(rows, "open declarations for "+artifact, func(r rowScanner) (DeclaredEntity, error) {
+	return collectRows(rows, "open declarations for "+key, func(r rowScanner) (DeclaredEntity, error) {
 		var d DeclaredEntity
 		err := r.Scan(&d.Kind, &d.ID)
 		return d, err

@@ -619,7 +619,7 @@ func (s *server) patchTask(w http.ResponseWriter, r *http.Request) {
 			}
 			if req.Artifacts != nil {
 				for _, a := range *req.Artifacts {
-					if err := store.DeclareArtifact(tx, s.st.Now(), "task", id, strings.TrimSpace(a)); err != nil {
+					if err := store.DeclareArtifact(tx, s.st.Now(), "task", id, "address", strings.TrimSpace(a)); err != nil {
 						return err
 					}
 				}

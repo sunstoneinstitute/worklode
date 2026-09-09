@@ -152,6 +152,169 @@ func TestCreateDeliverableRejectsBadInput(t *testing.T) {
 	}
 }
 
+// TestCreateDeliverableByLabelMintsSelector covers 029 §3.1's label form:
+// the project key and title mint a stable label, which routes only through
+// the label selector and is projected instead of an artifact address.
+func TestCreateDeliverableByLabelMintsSelector(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	ctx := context.Background()
+
+	d, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "cow", Name: "Datasets", Label: true,
+	})
+	if err != nil {
+		t.Fatalf("create label deliverable: %v", err)
+	}
+	const wantLabel = "worklode.deliverable=COW/datasets"
+	if d.Label != wantLabel || d.Artifact != "" {
+		t.Fatalf("created label/artifact = %q/%q, want %q/empty", d.Label, d.Artifact, wantLabel)
+	}
+
+	var routed []DeclaredEntity
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		var err error
+		routed, err = OpenDeclarationsForArtifact(tx, "label", d.Label)
+		return err
+	}); err != nil {
+		t.Fatalf("route label: %v", err)
+	}
+	if len(routed) != 1 || routed[0] != (DeclaredEntity{Kind: "deliverable", ID: d.ID}) {
+		t.Fatalf("label routes to %+v, want deliverable %s", routed, d.ID)
+	}
+
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		got, err := OpenDeclarationsForArtifact(tx, "address", d.Label)
+		if err != nil {
+			return err
+		}
+		if len(got) != 0 {
+			t.Errorf("address lookup for label routes to %+v, want none", got)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("route label as address: %v", err)
+	}
+
+	got, err := s.GetDeliverable(ctx, d.ID)
+	if err != nil {
+		t.Fatalf("get label deliverable: %v", err)
+	}
+	if got.Label != wantLabel || got.Artifact != "" {
+		t.Fatalf("GetDeliverable label/artifact = %q/%q, want %q/empty", got.Label, got.Artifact, wantLabel)
+	}
+	items, err := s.ListDeliverables(ctx, "cow")
+	if err != nil {
+		t.Fatalf("list label deliverable: %v", err)
+	}
+	if len(items) != 1 || items[0].Label != wantLabel || items[0].Artifact != "" {
+		t.Fatalf("ListDeliverables = %+v, want label %q and empty artifact", items, wantLabel)
+	}
+}
+
+// TestCreateDeliverableLabelRejectsConflicts keeps minting deterministic: a
+// label cannot be combined with an address or declared twice in a project,
+// and either refusal happens before allocating an ordinal.
+func TestCreateDeliverableLabelRejectsConflicts(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+
+	if _, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "cow", Name: "Datasets", Label: true, Artifact: testArtifact,
+	}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("label plus artifact error = %v, want ErrInvalidInput", err)
+	}
+	first, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "Datasets", Label: true})
+	if err != nil {
+		t.Fatalf("create first label: %v", err)
+	}
+	if first.ID != "COW-DEL-1" {
+		t.Fatalf("first label id = %q, want COW-DEL-1", first.ID)
+	}
+	if _, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "Datasets", Label: true}); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("duplicate label error = %v, want ErrInvalidInput", err)
+	}
+	next, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "Other"})
+	if err != nil {
+		t.Fatalf("create after duplicate: %v", err)
+	}
+	if next.ID != "COW-DEL-2" {
+		t.Fatalf("id after rejected labels = %q, want COW-DEL-2", next.ID)
+	}
+}
+
+// TestCreateDeliverableLabelRejectsConcurrentDuplicate keeps the duplicate
+// check ahead of ordinal allocation even when two declarations race. The
+// first transaction leaves its declaration uncommitted while the second
+// starts; after the first commits, the second must see that declaration and
+// fail without consuming COW-DEL-2.
+func TestCreateDeliverableLabelRejectsConcurrentDuplicate(t *testing.T) {
+	s := deliverableStore(t)
+	ctx := context.Background()
+
+	tx1, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin first transaction: %v", err)
+	}
+	if _, err := tx1.Exec(`SELECT 1 FROM projects WHERE id = $1 FOR UPDATE`, "cow"); err != nil {
+		tx1.Rollback()
+		t.Fatalf("lock project: %v", err)
+	}
+	label := "worklode.deliverable=COW/datasets"
+	if _, err := tx1.Exec(
+		`INSERT INTO deliverables (id, project_id, name, description, url, created_by, created_at, updated_at)
+		 VALUES ($1, $2, $3, '', '', NULL, $4, $4)`,
+		"COW-DEL-9", "cow", "Datasets", s.Now()); err != nil {
+		tx1.Rollback()
+		t.Fatalf("seed first label deliverable: %v", err)
+	}
+	if err := DeclareArtifact(tx1, s.Now(), "deliverable", "COW-DEL-9", "label", label); err != nil {
+		tx1.Rollback()
+		t.Fatalf("declare first label: %v", err)
+	}
+
+	started := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		tx2, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			secondDone <- err
+			return
+		}
+		close(started)
+		_, err = CreateDeliverable(tx2, s.Now(), DeliverableInput{
+			ProjectID: "cow", Name: "Datasets", Label: true,
+		})
+		if err == nil {
+			err = tx2.Commit()
+		} else {
+			tx2.Rollback()
+		}
+		secondDone <- err
+	}()
+	<-started
+	select {
+	case err := <-secondDone:
+		tx1.Rollback()
+		t.Fatalf("second create completed before first committed: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := tx1.Commit(); err != nil {
+		t.Fatalf("commit first label: %v", err)
+	}
+	if err := <-secondDone; !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("concurrent duplicate error = %v, want ErrInvalidInput", err)
+	}
+
+	next, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "Other"})
+	if err != nil {
+		t.Fatalf("create after concurrent duplicate: %v", err)
+	}
+	if next.ID != "COW-DEL-1" {
+		t.Fatalf("id after concurrent duplicate = %q, want COW-DEL-1", next.ID)
+	}
+}
+
 // TestCreateDeliverableMilestone checks that a declared milestone attach
 // (spec 029 §2) is stored, a cross-project or unknown milestone is
 // ErrInvalidInput, and neither rejected create burns an ordinal.

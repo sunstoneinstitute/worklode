@@ -24,6 +24,10 @@ type Deliverable struct {
 	// link. "" when the deliverable declares none.
 	Artifact string `json:"artifact"`
 
+	// Label is the worklode.deliverable selector this deliverable declares
+	// (029 §3.1). "" when it declares an artifact address or neither form.
+	Label string `json:"label"`
+
 	// Milestone is the milestone this deliverable is attached to (spec 029
 	// §2), "" when it is attached to none. Always in the deliverable's own
 	// project — the store refuses a cross-project attach.
@@ -49,6 +53,7 @@ type CreateDeliverableInput struct {
 	Description string `json:"description"`
 	URL         string `json:"url"`
 	Artifact    string `json:"artifact"`
+	Label       bool   `json:"label"`
 	// Milestone attaches the deliverable to a milestone in the same project
 	// at declaration time (spec 029 §2), "" for none.
 	Milestone string `json:"milestone,omitempty"`

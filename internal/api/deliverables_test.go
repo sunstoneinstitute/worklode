@@ -50,6 +50,32 @@ func TestCreateDeliverableWithArtifact(t *testing.T) {
 	}
 }
 
+// TestCreateDeliverableByLabel sends 029 §3.1's label form through the JSON
+// API, so the transport cannot silently drop the selector before it reaches
+// the store.
+func TestCreateDeliverableByLabel(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token,
+		model.CreateDeliverableInput{Name: "Datasets", Label: true})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("label create status = %d, want 201; body %s", rr.Code, rr.Body.String())
+	}
+	var created model.Deliverable
+	decodeInto(t, rr, &created)
+	if created.Label != "worklode.deliverable=WL/datasets" || created.Artifact != "" {
+		t.Fatalf("created label/artifact = %q/%q, want minted label and empty artifact", created.Label, created.Artifact)
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token,
+		model.CreateDeliverableInput{Name: "Both", Label: true, Artifact: "gs://proj/both"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("label plus artifact status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestCreateDeliverableArtifactBounds: the artifact is length-checked and
 // nothing else. A catalog address is not a browser link, so schemes the URL
 // field refuses are legal here.
