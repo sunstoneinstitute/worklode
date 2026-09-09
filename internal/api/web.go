@@ -457,6 +457,60 @@ func (s *server) reviewsPage(w http.ResponseWriter, r *http.Request) {
 	s.renderWeb(w, r, http.StatusOK, "reviews page", ui.Approvals(approvalsView(rows, s.st.Now())))
 }
 
+// approvalPage handles GET /approvals/{id} (032 §7): one approval with
+// everything an actor needs to trust or revisit it — the entity it governs,
+// its full decision history, and the review-graph references its own
+// designation recorded. Read-only: Tasks 6 and 7 add the decide form here
+// once their routes exist. 404 on an id nothing names.
+func (s *server) approvalPage(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	a, err := s.st.GetApproval(r.Context(), id)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	title, url, err := s.st.EntityTitleURL(r.Context(), a.ID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	history, err := s.st.ListApprovalsForEntityCtx(r.Context(), a.EntityKind, a.EntityID)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	governed, err := s.st.GovernedRefsForCtx(r.Context(), a.EntityKind, a.EntityID, a.SubjectRevision)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	ids := make([]string, 0, len(history)+2)
+	if a.ResolvingActor != nil {
+		ids = append(ids, *a.ResolvingActor)
+	}
+	if a.ExceptionAuthorizedBy != nil {
+		ids = append(ids, *a.ExceptionAuthorizedBy)
+	}
+	for _, h := range history {
+		if h.ResolvingActor != nil {
+			ids = append(ids, *h.ResolvingActor)
+		}
+	}
+	names, err := s.st.ActorDisplayNames(r.Context(), ids)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	s.renderWeb(w, r, http.StatusOK, "approval detail page",
+		ui.ApprovalDetail(approvalDetailView(a, title, url, history, governed, names)))
+}
+
 // globalPlaceholder returns a handler for a global destination with no
 // implemented capability yet (Intake, Deliveries). The rendered page is
 // honest: heading and owning-spec message only, no form, button, count, or

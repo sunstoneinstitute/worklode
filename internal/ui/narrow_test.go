@@ -295,6 +295,27 @@ func pages(t *testing.T) map[string]string {
 				ProjectName: "Worklode backbone", Age: "1d ago",
 			}},
 		}),
+		"approvaldetail": ApprovalDetail(ApprovalDetailView{
+			Page: PageProps{Title: "worklode: pr sunstoneinstitute/worklode#242"},
+			ID:   13, Kind: "pr", EntityID: "sunstoneinstitute/worklode#242",
+			Title: longTitle, URL: "https://github.com/sunstoneinstitute/worklode/pull/242",
+			Revision: "bbb222aaaa1111", State: "awaiting",
+			CreatedAt:             now,
+			CompareURL:            "https://github.com/sunstoneinstitute/worklode/compare/aaa111aaaa0000...bbb222aaaa1111",
+			Note:                  "Upstream " + token + " changed shape; downstream readers were not re-validated against the new column set.",
+			ExceptionAuthorizedBy: "Stig Bakken",
+			History: []ApprovalHistoryRow{
+				{ID: 13, Revision: "bbb222aaaa1111", State: "awaiting", Current: true},
+				{
+					ID: 12, Revision: "aaa111aaaa0000", State: "approved",
+					DecidedBy: "Stig Bakken", DecidedAt: &now,
+				},
+			},
+			Governed: []GovernedRefRow{
+				{Kind: "doc", ID: "doc:44", Revision: "7"},
+				{Kind: "deliverable", ID: "WL-DEL-3", Revision: ""},
+			},
+		}),
 		"newtask": NewTask(NewTaskView{
 			Form:  FormShell{Page: PageProps{Title: "New task"}, Project: proj, Action: "/projects/worklode/tasks/new", CancelURL: "/projects/worklode", Error: "A task needs a title before it can be created"},
 			Title: longTitle, Body: "The audit measured " + token + " and reported nothing.",

@@ -169,6 +169,37 @@ func scanActorGroups(raw []byte) ([]string, error) {
 	return groups, nil
 }
 
+// ActorDisplayNames resolves a set of actor ids to their display names in
+// one round trip — the approval detail page's decided-by column (032 §7),
+// which may name a different actor per history row. An id absent from the
+// result is honest empty (a deleted actor, or a nil id the caller filtered
+// out), never a fabricated name; ids may repeat and duplicates cost nothing
+// extra since the query is a single SELECT ... = ANY.
+func (s *Store) ActorDisplayNames(ctx context.Context, ids []string) (map[string]string, error) {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, display_name FROM actors WHERE id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("actor display names: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var name sql.NullString
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, fmt.Errorf("actor display names: %w", err)
+		}
+		out[id] = name.String
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("actor display names: %w", err)
+	}
+	return out, nil
+}
+
 // CreateToken mints a new bearer token for actorID and returns the plaintext
 // exactly once ("wl_" + 40 lowercase hex chars, i.e. 20 random bytes). Only
 // the SHA-256 hex digest of the plaintext is persisted. A nil expiresAt means

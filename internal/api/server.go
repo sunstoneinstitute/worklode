@@ -659,6 +659,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /work", s.navWrap("work", s.workPage))
 	r.web("GET /inbox", s.navWrap("inbox", s.inboxPage))
 	r.web("GET /reviews", s.navWrap("reviews", s.reviewsPage))
+	r.web("GET /approvals/{id}", s.navWrap("reviews", s.approvalPage))
 	r.web("GET /deliveries", s.navWrap("deliveries", s.globalPlaceholder("", "Deliveries",
 		"Publication, deployment, and operational delivery evidence arrive with spec 029 §3 and spec 004 §5.")))
 	// Knowledge is the document corpus: spec 032 §2 defines the destination

@@ -1000,6 +1000,62 @@ func ListApprovalsForEntity(tx *sql.Tx, entityKind, entityID string) ([]Approval
 		byValue(scanApproval))
 }
 
+// ListApprovalsForEntityCtx is ListApprovalsForEntity for the detail page
+// (GET /approvals/{id}, 032 §7), which reads outside the caller's own
+// transaction — the same shape docReviewersCtx gives docReviewers.
+func (s *Store) ListApprovalsForEntityCtx(ctx context.Context, entityKind, entityID string) ([]Approval, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+approvalColumns+` FROM approvals
+		 WHERE entity_kind = $1 AND entity_id = $2
+		 ORDER BY id DESC`,
+		entityKind, entityID)
+	if err != nil {
+		return nil, fmt.Errorf("approval history for %s %s: %w", entityKind, entityID, err)
+	}
+	return collectRows(rows, fmt.Sprintf("approval history for %s %s", entityKind, entityID),
+		byValue(scanApproval))
+}
+
+// GovernedRefsForCtx is GovernedRefsFor for the detail page, which reads
+// outside the caller's own transaction.
+func (s *Store) GovernedRefsForCtx(ctx context.Context, kind, id, revision string) ([]GovernedRef, error) {
+	from := RevisionRef(id, revision)
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT to_kind, split_part(to_id, '@', 1), split_part(to_id, '@', 2)
+		 FROM entity_edges
+		 WHERE from_kind = $1 AND from_id = $2 AND rel = 'references_revision'
+		 ORDER BY to_kind, to_id`,
+		kind, from)
+	if err != nil {
+		return nil, fmt.Errorf("governed references from %s %s: %w", kind, from, err)
+	}
+	return collectRows(rows, fmt.Sprintf("governed references from %s %s", kind, from), scanGovernedRef)
+}
+
+// EntityTitleURL resolves the title and URL for one approval's governed
+// entity, through the exact join and columns ListAwaitingApprovals's queue
+// uses (approvalEntityJoins, approvalEntityTitle, approvalEntityURL) — so
+// the detail page cannot name an entity, or link it, differently than the
+// queue row a reviewer reached it from. Both come back "" when no join
+// correlates (an entity kind with no row yet): an honest empty, not a
+// fabricated identity.
+func (s *Store) EntityTitleURL(ctx context.Context, approvalID int64) (title, url string, err error) {
+	var t, u sql.NullString
+	err = s.db.QueryRowContext(ctx,
+		`SELECT `+approvalEntityTitle+`, `+approvalEntityURL+`
+		 FROM approvals a
+		 `+approvalEntityJoins+`
+		 WHERE a.id = $1`,
+		approvalID).Scan(&t, &u)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", ErrNotFound
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("entity title/url for approval %d: %w", approvalID, err)
+	}
+	return t.String, u.String, nil
+}
+
 // designationScope narrows DesignateRevision's queries to the no-lane,
 // 'review'-kind row: the single decision a PR-style entity carries. A
 // document's several reviewer lanes (025 §7.3) are RequestDocApproval's

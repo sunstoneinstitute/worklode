@@ -188,6 +188,77 @@ type ApprovalRow struct {
 	ReturnURL string
 }
 
+// --- approval detail (spec 032 §7) ------------------------------------------
+
+// ApprovalDetailView is GET /approvals/{id}: one approval with everything an
+// actor needs to trust or revisit it (032 §7). Read-only for now — Tasks 6
+// and 7 add the decide form's action buttons here once their routes exist.
+//
+// Title/URL are the governed entity's jump-out link, resolved through the
+// same join the Reviews queue uses (EntityTitleURL); both are "" when
+// nothing correlates yet, rendered as an honest "no linked record" line
+// rather than a broken link. Revision is the bound subject_revision, stated
+// verbatim regardless of kind (unlike the queue, which hides a PR's own).
+//
+// Note and ExceptionAuthorizedBy are the facts Tasks 6/7 write beside a
+// decision (an impact review's note, a self-review exception's authorizer);
+// both "" until then.
+type ApprovalDetailView struct {
+	Page PageProps
+
+	ID       int64
+	Kind     string // entity_kind: "pr", "doc", "deliverable", "task"
+	EntityID string
+	Title    string
+	URL      string
+	Revision string
+	State    string
+
+	DecidedBy string // resolving actor's display name, "" until resolved
+	DecidedAt *time.Time
+	CreatedAt time.Time
+
+	// CompareURL is the GitHub diff-from-previous jump-out link for a 'pr'
+	// row with a decided predecessor (029 §7.1, 032 §7); "" otherwise — no
+	// predecessor, not a 'pr', or the stored PR URL does not parse into a
+	// compare base.
+	CompareURL string
+
+	Note                  string
+	ExceptionAuthorizedBy string
+
+	// History is every decision recorded for this entity, newest first
+	// (ListApprovalsForEntity) — this row included, so a stale approval
+	// beside an open candidate reads as exactly that. Each row links to its
+	// own /approvals/{id} page; Current marks the one this page is showing.
+	History []ApprovalHistoryRow
+
+	// Governed is the review-graph list (029 §7.1, 032 §7): the revision-
+	// bound references this approval's own designation recorded. Empty
+	// means the designation recorded none, never a fabricated lineage.
+	Governed []GovernedRefRow
+}
+
+// ApprovalHistoryRow is one row of an entity's full decision history: its
+// exact revision, state, and who decided it and when (both "" while open).
+type ApprovalHistoryRow struct {
+	ID        int64
+	Revision  string
+	State     string
+	DecidedBy string
+	DecidedAt *time.Time
+	// Current marks the row the detail page itself is showing, so it can
+	// carry aria-current="page" — this row's own href is exactly the URL
+	// the browser is on.
+	Current bool
+}
+
+// GovernedRefRow is one revision-bound reference an approval's designation
+// recorded, rendered "kind id @ revision" (029 §7.1, 032 §7).
+type GovernedRefRow struct {
+	Kind, ID, Revision string
+}
+
 // --- inbox (spec 056 §3) -----------------------------------------------------
 
 // InboxView is the cross-project inbox at "/inbox": what is waiting on the
@@ -964,6 +1035,23 @@ func stateChip(state string) string {
 		return "warn"
 	case "ready":
 		return "ok"
+	default:
+		return "plain"
+	}
+}
+
+// approvalStateChip returns the .chip variant class for an approval state
+// (the approval detail page, 032 §7).
+func approvalStateChip(state string) string {
+	switch state {
+	case "approved":
+		return "ok"
+	case "rejected":
+		return "crit"
+	case "changes_requested":
+		return "warn"
+	case "awaiting":
+		return "info"
 	default:
 		return "plain"
 	}
