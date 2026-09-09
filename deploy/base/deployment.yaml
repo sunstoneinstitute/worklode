@@ -90,7 +90,7 @@ spec:
           resources:
             requests:
               memory: "128Mi"
-              cpu: "100m"
+              cpu: "1"
               # The blob-spool emptyDir counts as this container's ephemeral
               # storage. Requesting some makes the scheduler account for it and
               # keeps the pod off the front of the queue when a node hits disk
@@ -101,7 +101,10 @@ spec:
               ephemeral-storage: "256Mi"
             limits:
               memory: "512Mi"
-              cpu: "500m"
+              # 500m throttled the container in 88% of CFS periods: a page
+              # render stalled long enough for its own Postgres dial to hit
+              # the context deadline. Keep headroom over the request.
+              cpu: "3"
               ephemeral-storage: "2Gi"
           livenessProbe:
             httpGet:
