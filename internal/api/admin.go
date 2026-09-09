@@ -42,9 +42,14 @@ func toProjectJSON(p *store.Project, repos []model.RepoMapping) model.Project {
 	if focus == nil {
 		focus = []string{}
 	}
+	labels := p.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
 	return model.Project{
 		ID: p.ID, Name: p.Name, Key: p.Key, Repos: rs, Focus: focus,
 		ApprovalFlowName: p.ApprovalFlowName, ApprovalFlowRev: p.ApprovalFlowRev,
+		Labels: labels, Horizon: p.Horizon,
 	}
 }
 
@@ -73,12 +78,33 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			"key SPEC and ADR are reserved by the document shorthand (025 §14.3)")
 		return
 	}
+	horizon := req.Horizon
+	if horizon == "" {
+		horizon = "standing" // schema default (migration 0074)
+	}
+	if !store.ValidHorizon(horizon) {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"invalid horizon: must be bounded or standing")
+		return
+	}
 	if err := s.st.CreateProject(r.Context(), req.ID, req.Name, req.Key); err != nil {
 		s.mapStoreErr(w, err)
 		return
 	}
+	// Labels/horizon are optional metadata (029 §1) layered on after the
+	// schema-default insert, only when the caller supplied either.
+	if req.Labels != nil || req.Horizon != "" {
+		err := s.st.Tx(r.Context(), func(tx *sql.Tx) error {
+			return store.SetProjectMetadata(tx, req.ID, req.Labels, horizon)
+		})
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+	}
 	writeJSON(w, http.StatusCreated, toProjectJSON(
-		&store.Project{ID: req.ID, Name: req.Name, Key: req.Key}, nil))
+		&store.Project{ID: req.ID, Name: req.Name, Key: req.Key,
+			Labels: req.Labels, Horizon: horizon}, nil))
 }
 
 // listProjects handles GET /api/v1/projects: every project with its mapped repos.

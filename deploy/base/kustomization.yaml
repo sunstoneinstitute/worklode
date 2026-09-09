@@ -159,3 +159,5 @@ configMapGenerator:
       - migrations/0072_one_draft_rally.down.sql
       - migrations/0073_merge_queue_facts.up.sql
       - migrations/0073_merge_queue_facts.down.sql
+      - migrations/0074_project_metadata.up.sql
+      - migrations/0074_project_metadata.down.sql
