@@ -10,6 +10,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -44,10 +45,13 @@ type DeclaredEntity struct {
 	ID   string
 }
 
-// openDeclarationsSQL routes an artifact address to the entities that
-// declared it and are still open. "Open" differs per kind:
+// openDeclarationsQuery renders the three-arm openness union both
+// openDeclarationsSQL (routing: one exact artifact_uri) and ProbeTargets
+// (probing: every artifact_uri under a selector) run. match is ANDed onto
+// each arm ahead of that arm's own openness predicate, so the two queries
+// share the one definition of "open" per kind and cannot drift apart:
 //
-//   - deliverable: always. It stores no state at all (029 §3.2), and
+//   - deliverable: always open. It stores no state at all (029 §3.2), and
 //     supplying the state it lacks is what this path is for.
 //   - task: live, and not past its repo's done_state — taskClosed's notion,
 //     shared with the ready set, so evidence and blocking cannot drift on
@@ -55,23 +59,30 @@ type DeclaredEntity struct {
 //   - doc: live, and not superseded. An accepted spec is still the live
 //     declaration; only superseded is past done.
 //
-// The task arm inherits taskClosed's bound aliases (ch, cht, tc, mc, pr), so
-// it binds only ad and t.
-var openDeclarationsSQL = `
-SELECT 'deliverable'::text, d.id FROM artifact_declarations ad
+// The task arm inherits taskClosed's bound aliases (ch, cht, tc, mc, pr).
+func openDeclarationsQuery(match string) string {
+	return `
+SELECT 'deliverable'::text AS kind, d.id AS id, ad.artifact_uri AS artifact_uri
+  FROM artifact_declarations ad
   JOIN deliverables d ON d.id = ad.entity_id
- WHERE ad.entity_kind = 'deliverable' AND ad.artifact_uri = $1 AND ad.selector = $2
+ WHERE ad.entity_kind = 'deliverable' AND ` + match + `
 UNION ALL
-SELECT 'task'::text, t.id FROM artifact_declarations ad
+SELECT 'task'::text, t.id, ad.artifact_uri FROM artifact_declarations ad
   JOIN tasks t ON t.id = ad.entity_id
- WHERE ad.entity_kind = 'task' AND ad.artifact_uri = $1 AND ad.selector = $2
+ WHERE ad.entity_kind = 'task' AND ` + match + `
    AND t.deleted_at IS NULL AND NOT ` + taskClosed("t") + `
 UNION ALL
-SELECT 'doc'::text, dc.id::text FROM artifact_declarations ad
+SELECT 'doc'::text, dc.id::text, ad.artifact_uri FROM artifact_declarations ad
   JOIN docs dc ON dc.id::text = ad.entity_id
- WHERE ad.entity_kind = 'doc' AND ad.artifact_uri = $1 AND ad.selector = $2
+ WHERE ad.entity_kind = 'doc' AND ` + match + `
    AND dc.deleted_at IS NULL AND dc.status <> 'superseded'
 ORDER BY 1, 2`
+}
+
+// openDeclarationsSQL routes an artifact address (or label) to the entities
+// that declared it and are still open. See openDeclarationsQuery for what
+// "open" means per kind.
+var openDeclarationsSQL = openDeclarationsQuery("ad.artifact_uri = $1 AND ad.selector = $2")
 
 // OpenDeclarationsForArtifact returns every open entity that declared
 // one reported key — an address, or one label pair rendered as k=v — to every
@@ -85,7 +96,8 @@ func OpenDeclarationsForArtifact(tx *sql.Tx, selector, key string) ([]DeclaredEn
 	}
 	return collectRows(rows, "open declarations for "+key, func(r rowScanner) (DeclaredEntity, error) {
 		var d DeclaredEntity
-		err := r.Scan(&d.Kind, &d.ID)
+		var uri string // always == key here (the match clause pins it); read to satisfy the shared column shape
+		err := r.Scan(&d.Kind, &d.ID, &uri)
 		return d, err
 	})
 }
@@ -118,6 +130,26 @@ func InsertArtifactEvidence(tx *sql.Tx, eventID int64, ev model.ArtifactEvidence
 			ev.EntityKind, ev.EntityID, err)
 	}
 	return n > 0, nil
+}
+
+// ProbeTargets returns the distinct artifact addresses ('address' selector)
+// declared by an entity that is still open (029 §3.2). Label declarations
+// are never probe targets: their addresses are minted at build time and
+// reach worklode by push, not poll. Reuses openDeclarationsQuery so probing
+// and routing cannot drift on what "open" means.
+func (s *Store) ProbeTargets(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DISTINCT artifact_uri FROM (`+openDeclarationsQuery("ad.selector = $1")+`) open_declarations
+		 ORDER BY artifact_uri`,
+		"address")
+	if err != nil {
+		return nil, fmt.Errorf("probe targets: %w", err)
+	}
+	return collectRows(rows, "probe targets", func(r rowScanner) (string, error) {
+		var uri string
+		err := r.Scan(&uri)
+		return uri, err
+	})
 }
 
 // There is deliberately no "read the latest evidence for an entity" helper

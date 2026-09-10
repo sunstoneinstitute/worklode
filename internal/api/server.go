@@ -563,6 +563,12 @@ type server struct {
 	// cursor forward), by outcome (advanced, noop, invalid); see
 	// metrics.go's observeBriefReview.
 	briefReviews *prometheus.CounterVec
+
+	// probeReports counts POST /api/v1/artifact-reports (029 §3.2), by state
+	// (hooks.CatalogStates, or "invalid" for one that fails validation) and
+	// result (ok, duplicate, unrouted, invalid, error); see probe.go and
+	// observeProbeReport.
+	probeReports *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -817,6 +823,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/search", s.search)
 
 	r.api("POST /api/v1/runtime-events", s.createRuntimeEvent)
+
+	r.api("GET /api/v1/probe-targets", s.probeTargets)
+	r.api("POST /api/v1/artifact-reports", s.createArtifactReport)
 
 	r.api("POST /api/v1/blobs", s.uploadBlob)
 	r.api("POST /api/v1/blobs/gc", s.blobGC)

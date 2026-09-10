@@ -312,6 +312,10 @@ var routeGuards = map[string]routeGuard{
 	// --- runtime -------------------------------------------------------------
 	"POST /api/v1/runtime-events": guarded(permRuntimeWrite),
 
+	// --- prober (029 §3.2) -----------------------------------------------------
+	"GET /api/v1/probe-targets":     guarded(permArtifactProbe),
+	"POST /api/v1/artifact-reports": guarded(permArtifactProbe),
+
 	// --- blobs (spec 021) -----------------------------------------------------
 	// The upload is an ordinary API route. The read is an asset route: it is
 	// registered with r.asset, which takes either a bearer token or a web
