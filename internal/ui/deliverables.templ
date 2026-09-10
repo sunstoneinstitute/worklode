@@ -88,6 +88,9 @@ templ deliverableRow(d DeliverableRow) {
 			if d.Artifact != "" {
 				<div class="def">verified by <span class="mono">{ d.Artifact }</span></div>
 			}
+			if d.Label != "" {
+				<div class="def">identified by label <span class="mono">{ d.Label }</span></div>
+			}
 			if d.URL != "" {
 				<div class="ev"><a href={ d.URL } rel="noreferrer">{ d.URL }</a></div>
 			}

@@ -413,6 +413,40 @@ func TestCreateDeliverableFromForm(t *testing.T) {
 		"bigquery://proj.releases.casualties")
 }
 
+// TestCreateDeliverableFromFormByLabel checks the label checkbox path: a
+// declaration with no artifact address gets a minted label instead, the
+// event lands with source "web" like every other cockpit write, and the
+// deliverables page renders the label row rather than an artifact one.
+func TestCreateDeliverableFromFormByLabel(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	createProject(t, st, "proj")
+
+	rr := doForm(t, h, "/projects/proj/deliverables", url.Values{
+		"name":  {"Datasets"},
+		"label": {"on"},
+	}, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+
+	items, err := st.ListDeliverables(context.Background(), "proj")
+	if err != nil {
+		t.Fatalf("list deliverables: %v", err)
+	}
+	if len(items) != 1 || items[0].Label != "worklode.deliverable=WL/datasets" || items[0].Artifact != "" {
+		t.Fatalf("stored deliverables = %+v, want one label deliverable", items)
+	}
+
+	events := storeEventsOfType(t, st, "deliverable.created", 1)
+	if events[0].Source != "web" {
+		t.Errorf("event source = %q, want web", events[0].Source)
+	}
+
+	body := doReq(t, h, "GET", "/projects/proj/deliverables", "", nil).Body.String()
+	bodyContains(t, body, "identified by label", "worklode.deliverable=WL/datasets")
+}
+
 // TestCreateDeliverableFromFormRejectsBadInput checks the two validation
 // rules a person can trip, including the URL scheme guard that keeps a
 // javascript: address out of the stored row entirely.
