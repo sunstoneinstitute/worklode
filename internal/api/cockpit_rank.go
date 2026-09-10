@@ -83,9 +83,9 @@ type rankedRoot struct {
 // entry per root cause, ordered highest-signal first. Returns an empty (never
 // nil) slice when the project has no ready-and-blocked task (§9 — an empty
 // concern set is not an error case to special-case, just the natural result
-// of an empty held set).
-func rankSecondaryConcerns(facts []store.ProjectWorkFact, now time.Time) []model.SecondaryConcern {
-	ranked := rankConcernRoots(facts, now)
+// of an empty held set), plus rankConcernRoots' rootCauses call count.
+func rankSecondaryConcerns(facts []store.ProjectWorkFact, now time.Time) ([]model.SecondaryConcern, int) {
+	ranked, calls := rankConcernRoots(facts, now)
 	out := make([]model.SecondaryConcern, 0, len(ranked))
 	for _, s := range ranked {
 		out = append(out, model.SecondaryConcern{
@@ -98,14 +98,15 @@ func rankSecondaryConcerns(facts []store.ProjectWorkFact, now time.Time) []model
 			},
 		})
 	}
-	return out
+	return out, calls
 }
 
 // rankConcernRoots is det-v1 itself: find each ready-and-blocked task's root
 // causes, score every root by (best held priority, fan-out, oldest
 // blocked-since) with the root id as the final tiebreak, and return them
-// highest-signal first.
-func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) []rankedRoot {
+// highest-signal first, plus the total number of rootCauses invocations
+// this pass took (worklode_cockpit_rootcauses_calls, metrics.go).
+func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) ([]rankedRoot, int) {
 	factsByID := make(map[string]store.ProjectWorkFact, len(facts))
 	for _, f := range facts {
 		factsByID[f.Task.ID] = f
@@ -118,7 +119,7 @@ func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) []rankedRoot
 		}
 	}
 	if len(held) == 0 {
-		return nil
+		return nil, 0
 	}
 
 	roots := map[string]*concernRoot{}
@@ -136,13 +137,16 @@ func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) []rankedRoot
 		return r
 	}
 
+	memo := map[string][]blockerRef{}
+	calls := 0
 	for _, h := range held {
 		for _, direct := range directBlockers(h) {
 			// visited is path-based (reset per direct edge) and seeded with
 			// h itself, so a blocked-by cycle that loops back to h cannot
-			// recurse forever (§9).
+			// recurse forever (§9). memo and calls are shared across the
+			// whole pass (WL-840) — see rootCauses' doc comment.
 			visited := map[string]bool{h.Task.ID: true}
-			for _, rootRef := range rootCauses(direct, factsByID, visited) {
+			for _, rootRef := range rootCauses(direct, factsByID, visited, memo, &calls) {
 				r := rootFor(rootRef)
 				r.held[h.Task.ID] = h
 				r.children[direct.id] = append(r.children[direct.id], h)
@@ -192,7 +196,7 @@ func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) []rankedRoot
 	for _, s := range stats {
 		out = append(out, rankedRoot{root: s.root, fanOut: s.fanOut, oldestAt: s.oldestAt})
 	}
-	return out
+	return out, calls
 }
 
 // rootCauses returns the actionable root(s) reached by chasing blocked-by
@@ -203,7 +207,34 @@ func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) []rankedRoot
 // chase path (a blocked-by cycle — named as its own root rather than
 // recursed into forever, §9). Otherwise it recurses into ref's own direct
 // blockers and returns their deduplicated roots.
-func rootCauses(ref blockerRef, factsByID map[string]store.ProjectWorkFact, visited map[string]bool) []blockerRef {
+//
+// memo caches a node's fully-resolved result across every top-level call in
+// one rankConcernRoots pass. On an acyclic graph this is path-independent:
+// once a node's root causes are computed, they are the same regardless of
+// which held task's chase reaches it, since the result is a pure function of
+// the node and the graph below it. Under a cycle it is not path-independent
+// in that strict sense — a visited[] hit returns whichever cycle member was
+// on the specific path that reached it, so the cached value for a node
+// inside a cycle can depend on which held task's walk resolved it first. It
+// is still correct to cache and reuse: every such value is a genuine member
+// of the same cycle (a visited[] hit is always a real ancestor on the
+// current path), and which one gets pinned first is deterministic given one
+// request's fixed fact order, so the result stays reproducible even though
+// it is not the unique acyclic answer. Do not hoist this memo across
+// requests or share it with a differently-ordered walk (e.g.
+// concernPositions' own pass) on the strength of "path-independent" — that
+// claim only holds off-cycle. This is what keeps the walk linear in the
+// number of distinct nodes instead of exponential in the number of paths
+// that reconverge on shared blockers — see WL-840. Deliberately not
+// consulted before the visited/cycle check: that check is path-dependent and
+// must run first every time.
+//
+// calls counts every invocation (memo hits and early returns included) for
+// worklode_cockpit_rootcauses_calls (metrics.go) — a direct measure of this
+// walk's cost, independent of how many of those calls the memo answered
+// for free.
+func rootCauses(ref blockerRef, factsByID map[string]store.ProjectWorkFact, visited map[string]bool, memo map[string][]blockerRef, calls *int) []blockerRef {
+	*calls++
 	if ref.isPlan {
 		return []blockerRef{ref}
 	}
@@ -211,13 +242,16 @@ func rootCauses(ref blockerRef, factsByID map[string]store.ProjectWorkFact, visi
 	if !ok || !f.Blocked() || visited[ref.id] {
 		return []blockerRef{ref}
 	}
+	if cached, ok := memo[ref.id]; ok {
+		return cached
+	}
 	visited[ref.id] = true
 	defer delete(visited, ref.id)
 
 	seen := map[string]bool{}
 	var out []blockerRef
 	for _, next := range directBlockers(f) {
-		for _, r := range rootCauses(next, factsByID, visited) {
+		for _, r := range rootCauses(next, factsByID, visited, memo, calls) {
 			if !seen[r.id] {
 				seen[r.id] = true
 				out = append(out, r)
@@ -227,8 +261,9 @@ func rootCauses(ref blockerRef, factsByID map[string]store.ProjectWorkFact, visi
 	if len(out) == 0 {
 		// f.Blocked() is true, so directBlockers(f) is never empty here —
 		// kept as a safety net so a chase can never return zero roots.
-		return []blockerRef{ref}
+		out = []blockerRef{ref}
 	}
+	memo[ref.id] = out
 	return out
 }
 

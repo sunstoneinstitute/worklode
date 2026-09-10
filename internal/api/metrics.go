@@ -71,6 +71,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_cockpit_projection_requests_total",
 		Help: "Project cockpit projection assembly attempts, by surface (api, web) and outcome (ok, not_found, error).",
 	}, []string{"surface", "outcome"})
+	s.cockpitRootCauseCalls = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "worklode_cockpit_rootcauses_calls",
+		Help: "rootCauses invocations per project cockpit assembly (cockpit_rank.go, det-v1, WL-840). " +
+			"Linear in the blocker graph's distinct node count; a spike flags a project whose graph is " +
+			"getting expensive to rank.",
+		Buckets: []float64{10, 50, 100, 500, 2000, 10000, 50000},
+	})
 	s.navigations = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_web_navigation_requests_total",
 		Help: "Web UI navigation requests, by destination and outcome (ok, not_found, error).",
@@ -319,7 +326,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// built here rather than in NewServer: this is where the registerer is.
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
-		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
+		s.cockpitProjections, s.cockpitRootCauseCalls, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
 		s.approvalDecisions, s.approvalActs, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
@@ -785,6 +792,16 @@ func (s *server) observeCockpitProjection(surface string, err error) {
 		return
 	}
 	s.cockpitProjections.WithLabelValues(surface, cockpitOutcome(err)).Inc()
+}
+
+// observeCockpitRootCauses records one project cockpit assembly's rootCauses
+// call count (WL-840). Nil-safe: tests build a *server directly without
+// initMetrics.
+func (s *server) observeCockpitRootCauses(calls int) {
+	if s.cockpitRootCauseCalls == nil {
+		return
+	}
+	s.cockpitRootCauseCalls.Observe(float64(calls))
 }
 
 // observeNavigation records one web UI page request, by destination (see

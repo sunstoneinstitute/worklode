@@ -125,14 +125,20 @@ func TestObserveCockpitProjectionRegistersMetric(t *testing.T) {
 	if err != nil {
 		t.Fatalf("gather: %v", err)
 	}
-	var found bool
+	var found, foundRootCauseCalls bool
 	for _, mf := range mfs {
 		if mf.GetName() == "worklode_cockpit_projection_requests_total" {
 			found = true
 		}
+		if mf.GetName() == "worklode_cockpit_rootcauses_calls" {
+			foundRootCauseCalls = true
+		}
 	}
 	if !found {
 		t.Fatalf("worklode_cockpit_projection_requests_total not registered")
+	}
+	if !foundRootCauseCalls {
+		t.Fatalf("worklode_cockpit_rootcauses_calls not registered")
 	}
 }
 
@@ -170,6 +176,45 @@ func TestObserveCockpitProjectionNilSafe(t *testing.T) {
 	t.Parallel()
 	s := &server{}
 	s.observeCockpitProjection("api", nil)
+}
+
+// TestObserveCockpitRootCauses covers the nil-safe recorder WL-840 added.
+// cockpitRootCauseCalls is an unlabeled Histogram, so testutil.CollectAndCount
+// (which counts collected metric series, always 1 here) can't distinguish one
+// observation from many — the sample count has to be read off the gathered
+// HistogramProto instead, as TestObserveSkillSync already does for
+// syncDuration above.
+func TestObserveCockpitRootCauses(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	s.observeCockpitRootCauses(42)
+	s.observeCockpitRootCauses(7)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var count uint64
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_cockpit_rootcauses_calls" {
+			count = mf.GetMetric()[0].GetHistogram().GetSampleCount()
+		}
+	}
+	if count != 2 {
+		t.Fatalf("cockpitRootCauseCalls observation count = %d, want 2", count)
+	}
+}
+
+// TestObserveCockpitRootCausesNilSafe checks a *server built without
+// initMetrics (as tests in this package do) does not panic when a handler
+// calls observeCockpitRootCauses.
+func TestObserveCockpitRootCausesNilSafe(t *testing.T) {
+	t.Parallel()
+	s := &server{}
+	s.observeCockpitRootCauses(42)
 }
 
 // TestObserveNavigation covers one successful route (home), one missing

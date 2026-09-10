@@ -380,6 +380,16 @@ type server struct {
 	// assemblies, by surface (api, web) and outcome; see cockpit.go.
 	cockpitProjections *prometheus.CounterVec
 
+	// cockpitRootCauseCalls records how many rootCauses invocations one
+	// project cockpit assembly took (cockpit_rank.go, WL-840) — a direct
+	// cost signal for det-v1's blocker-graph walk. A rising or bimodal
+	// distribution flags a project whose blocker graph is getting
+	// expensive to rank, the metric that would have shown edge-agent's
+	// hang building before nginx's own timeout did. No project/task id
+	// label: unbounded cardinality, and the point is a fleet-wide
+	// distribution, not a per-project breakdown.
+	cockpitRootCauseCalls prometheus.Histogram
+
 	// navigations counts web UI page requests, by destination and outcome;
 	// see web.go's navWrap and metrics.go's observeNavigation.
 	navigations *prometheus.CounterVec
