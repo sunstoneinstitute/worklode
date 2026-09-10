@@ -168,6 +168,11 @@ var routeGuards = map[string]routeGuard{
 	// The impact note (029 §7.1): authoring what an upstream change means for
 	// your own entity, which is not the decision that follows it.
 	"POST /approvals/{id}/note": guarded(permApprovalNote),
+	// Authorizing a self-review exception (029 §7.1). permApprovalDecide, not
+	// permApprovalNote: saying an author may review their own work is a
+	// decision-grade act, and the store refuses the authorizer who is the
+	// author.
+	"POST /approvals/{id}/exception": guarded(permApprovalDecide),
 
 	// --- unauthenticated by design ------------------------------------------
 	"GET /assets/": open("stylesheet and fonts; no project data, and a " +
