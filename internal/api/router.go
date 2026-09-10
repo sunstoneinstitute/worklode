@@ -165,6 +165,9 @@ var routeGuards = map[string]routeGuard{
 	// filing a task through a form, and the route is additionally gated by
 	// requireSession — see authz.go.
 	"POST /approvals/{id}/decide": guarded(permApprovalDecide),
+	// The impact note (029 §7.1): authoring what an upstream change means for
+	// your own entity, which is not the decision that follows it.
+	"POST /approvals/{id}/note": guarded(permApprovalNote),
 
 	// --- unauthenticated by design ------------------------------------------
 	"GET /assets/": open("stylesheet and fonts; no project data, and a " +

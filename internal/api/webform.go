@@ -472,7 +472,7 @@ func (s *server) decideApproval(w http.ResponseWriter, r *http.Request) {
 	})
 	s.observeApprovalDecision(decision, approvalDecisionOutcome(err))
 	if err != nil {
-		s.decideApprovalErr(w, err)
+		s.approvalActErr(w, err)
 		return
 	}
 	http.Redirect(w, r, decideReturn(r.PostFormValue("return")), http.StatusSeeOther)
@@ -494,11 +494,49 @@ func decideReturn(want string) string {
 	return want
 }
 
-// decideApprovalErr turns a refused decision into the page the person sees.
-// Each refusal names the rule that refused, since all four are things they
-// can act on: wait for someone else, ask for the role, look at what the row
-// already says, or designate a revision to review.
-func (s *server) decideApprovalErr(w http.ResponseWriter, err error) {
+// noteApproval handles POST /approvals/{id}/note, the dependent owner's note
+// on an open impact review (029 §7.1): what the upstream change means for
+// this entity, written down before a prior approver decides whether their
+// approval still holds. Registered behind requireSession like the decide
+// route, and it 303s back to the detail page the note is read on.
+func (s *server) noteApproval(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !s.sameOriginForm(r) {
+		s.observeApprovalAct("note", decisionInvalid)
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return
+	}
+	if !parseWebForm(w, r) {
+		s.observeApprovalAct("note", decisionInvalid)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.observeApprovalAct("note", "not_found")
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	sub := subjectFrom(r)
+	err = s.recordEvent(ctx, "web", "approval.impact_noted", map[string]any{
+		"approval_id": id, "actor": sub.ActorID,
+	}, func(tx *sql.Tx, _ int64) error {
+		return store.SetImpactNote(tx, id, r.PostFormValue("note"))
+	})
+	s.observeApprovalAct("note", approvalActOutcome(err))
+	if err != nil {
+		s.approvalActErr(w, err)
+		return
+	}
+	http.Redirect(w, r, "/approvals/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+}
+
+// approvalActErr turns a refused act on an approval — a decision or an impact
+// note — into the page the person sees. Each refusal names the rule that
+// refused, since every one of them is something they can act on: wait for
+// someone else, ask for the role, look at what the row already says, or
+// designate a revision to review.
+func (s *server) approvalActErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrApprovalResolved):
 		webErr(w, http.StatusConflict, "this approval has already been decided")
@@ -509,6 +547,11 @@ func (s *server) decideApprovalErr(w http.ResponseWriter, err error) {
 		webErr(w, http.StatusForbidden, "you authored this change, so you cannot decide it")
 	case errors.Is(err, store.ErrNotQualified):
 		webErr(w, http.StatusForbidden, "deciding this approval needs a role you do not hold")
+	case errors.Is(err, store.ErrNotPriorApprover):
+		webErr(w, http.StatusForbidden,
+			"only someone who approved this entity can say whether that decision still holds")
+	case errors.Is(err, store.ErrInvalidInput):
+		webErr(w, http.StatusUnprocessableEntity, err.Error())
 	default:
 		s.webStoreErr(w, err)
 	}
