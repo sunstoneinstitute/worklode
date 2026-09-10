@@ -55,7 +55,8 @@ const watcherEventSource = "watcher"
 // backbone bookkeeping, not RDF the knowledge graph consumes.
 func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventbus.Outcome, error) {
 	switch ev.Type {
-	case eventbus.TypeDocumentSubmitted, eventbus.TypeDocumentAccepted, watcher.TypeDocPatched:
+	case eventbus.TypeDocumentSubmitted, eventbus.TypeDocumentAccepted,
+		watcher.TypeDocPatched, watcher.TypeDocStale:
 	default:
 		// The vendor/webhook population of the log passes through
 		// untouched: it carries dotted types (push, pod.crashloop, …;
@@ -109,6 +110,9 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 		in.Classification, _ = payload["classification"].(string)
 		in.ChangedAnchors = payloadStrings(payload["anchors"])
 		in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review")
+	case watcher.TypeDocStale:
+		in.StaleCause, _ = payload["cause"].(string)
+		in.OpenDesignTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "design")
 	}
 	if err != nil {
 		return eventbus.OutcomeApplied, fmt.Errorf("doc-lifecycle: event %d: %w", ev.ID, err)
@@ -208,10 +212,11 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 // docForEvent resolves the document one lifecycle event is about, plus the
 // IRI to name it by. The two typed events carry a wl:subject that Emit
 // validated at emit time, so a missing one is a bug upstream rather than an
-// event to skip. doc.patched is a dotted backbone type with no such
-// property: it names the document by numeric id, which resolves directly.
+// event to skip. doc.patched and doc.stale are dotted backbone types with no
+// such property: they name the document by numeric id, which resolves
+// directly.
 func (s *server) docForEvent(ctx context.Context, ev store.Event, payload map[string]any) (*model.Doc, string, error) {
-	if ev.Type == watcher.TypeDocPatched {
+	if ev.Type == watcher.TypeDocPatched || ev.Type == watcher.TypeDocStale {
 		id, ok := payload["doc"].(float64)
 		if !ok {
 			return nil, "", fmt.Errorf("event %d (%s) names no document", ev.ID, ev.Type)

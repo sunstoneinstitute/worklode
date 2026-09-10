@@ -47,6 +47,9 @@ type Brief struct {
 	// parse markdown to find them. A vision-capable agent can read the
 	// screenshot the reporter actually saw; any agent can pull the log.
 	Blobs []model.TaskBlob
+	// StalePlan is the slug of the task's plan document when that plan is
+	// stale (025 §8.6), "" otherwise.
+	StalePlan string
 }
 
 // BriefOptions selects the optional work a brief does.
@@ -99,6 +102,11 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		return nil, err
 	}
 
+	stalePlan, err := s.StalePlanSlug(ctx, t.PlanDoc)
+	if err != nil {
+		return nil, err
+	}
+
 	var pinned []Skill
 	var warnings []string
 	if opts.Skills && len(t.Skills) > 0 {
@@ -119,6 +127,7 @@ func (s *Store) Brief(ctx context.Context, taskID string, opts BriefOptions) (*B
 		PinnedSkills:  pinned,
 		SkillWarnings: warnings,
 		Blobs:         blobs,
+		StalePlan:     stalePlan,
 	}, nil
 }
 

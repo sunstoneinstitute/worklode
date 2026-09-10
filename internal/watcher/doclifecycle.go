@@ -49,6 +49,11 @@ type Input struct {
 	// anchors the amendment moved. Empty for every other event type.
 	Classification string
 	ChangedAnchors []string
+	// StaleCause is a doc.stale event's payload cause: "amended" when a
+	// covered spec section moved under the plan (§8.6), empty for the idle
+	// sweeper (§8.7). One rule mints for both; only the body's first
+	// sentence differs.
+	StaleCause string
 }
 
 // Action is one consequence for the executor to perform.

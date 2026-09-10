@@ -29,10 +29,15 @@ import (
 // declaration and adding another: a minted task is execution fact and outlives
 // its declaration, so nothing here deletes a task whose declaration is gone.
 //
+// Accepting a stale plan runs the same code and is how §8.6's mark clears:
+// the re-planning edit bumped the plan's version and may have added
+// declarations, so the mint pass above picks those up and the status flip
+// below records stale -> accepted like any other move.
+//
 // Plans carry no sections and no anchors (025 §9), so none of the spec/ADR
 // branch's section or diff machinery runs here: there is nothing to publish
-// and no depth gate to evaluate. d.status is already known draft or accepted —
-// AcceptDoc checks it before branching.
+// and no depth gate to evaluate. d.status is already known draft, accepted or
+// stale — AcceptDoc checks it before branching.
 func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID string, eventID int64) (*model.Doc, []model.Task, error) {
 	parsed, err := parseDocBody(d.kind, d.body)
 	if err != nil {

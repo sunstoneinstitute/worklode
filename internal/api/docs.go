@@ -692,6 +692,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 	now := s.st.Now()
 	var doc *model.Doc
 	var patch *model.DocPatchResult
+	var stale int
 	err := s.recordDocEvent(w, r, "patch", watcher.TypeDocPatched, id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, p, err := store.PatchDoc(tx, now, store.DocPatchInput{
@@ -702,6 +703,15 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			doc, patch = d, p
+			// The plans this amendment left behind are marked in the same
+			// transaction (025 §8.6): the amendment and the staleness it
+			// causes commit together or not at all. The re-planning task is
+			// minted by the doc-lifecycle subscriber off the doc.stale
+			// events this records, not here.
+			stale, err = store.MarkPlansStale(tx, now, p.UnexecutedCoveringPlans, d.Slug, p.ChangedAnchors, eventID)
+			if err != nil {
+				return err
+			}
 			payload, err := store.EventPayload(map[string]any{
 				"doc": id, "actor": actorID, "request": req,
 				"anchors": p.ChangedAnchors, "classification": p.Classification, "rule": p.RuleFired,
@@ -714,6 +724,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+	s.st.RecordPlansStale(stale)
 	writeJSON(w, http.StatusOK, model.DocPatchResponse{
 		Doc: s.withProjectKey(r.Context(), *doc), Patch: *patch})
 }

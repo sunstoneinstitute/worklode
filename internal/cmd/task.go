@@ -781,7 +781,9 @@ func newTaskClaimCmd() *cobra.Command {
 				}
 				out := cmd.OutOrStdout()
 				fmt.Fprintf(out, "claimed %s, lease expires %s\n", id, cli.LocalTime(resp.Lease.ExpiresAt))
-				fmt.Fprintf(out, "branch: %s\n\n", resp.Branch)
+				fmt.Fprintf(out, "branch: %s\n", resp.Branch)
+				cli.StalePlanWarning(out, resp.StalePlan)
+				fmt.Fprintln(out)
 				fmt.Fprintf(out, "  git switch -c %s\n", resp.Branch)
 				return nil
 			}

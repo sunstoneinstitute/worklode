@@ -37,4 +37,8 @@ type Brief struct {
 	DefinitionOfDone   *string             `json:"definition_of_done"`
 	Skills             SkillRecommendation `json:"skills"`
 	Blobs              []TaskBlob          `json:"blobs"`
+	// StalePlan is the slug of the plan this task was minted from when that
+	// plan is stale (025 §8.6), "" otherwise: the task text may predate an
+	// amendment to the spec the plan covers.
+	StalePlan string `json:"stale_plan,omitempty"`
 }

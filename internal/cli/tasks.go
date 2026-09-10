@@ -586,6 +586,7 @@ func BriefRender(w io.Writer, b model.Brief) {
 	fmt.Fprintf(w, "%s: %s\n", b.Task.ID, b.Task.Title)
 	fmt.Fprintf(w, "state: %s   priority: %s\n", b.Task.State, b.Task.Priority)
 	fmt.Fprintf(w, "branch: %s\n", b.Branch)
+	StalePlanWarning(w, b.StalePlan)
 	if len(b.Task.Secrets) > 0 {
 		fmt.Fprintf(w, "secrets: %s\n", strings.Join(b.Task.Secrets, ", "))
 	}
@@ -612,6 +613,16 @@ func BriefRender(w io.Writer, b model.Brief) {
 			fmt.Fprintf(w, "  warning: %s\n", warn)
 		}
 	}
+}
+
+// StalePlanWarning prints 025 §8.6's claim-time flag, and nothing at all when
+// slug is empty. Shared by `lode work next`, `lode work resume` and `lode task
+// claim`, which is why the sentence lives here rather than in each of them.
+func StalePlanWarning(w io.Writer, slug string) {
+	if slug == "" {
+		return
+	}
+	fmt.Fprintf(w, "warning: plan %s is stale — task text may predate the amendment (025 §8.6)\n", slug)
 }
 
 // BlockersRender prints what is holding a task up, shared by `lode task
