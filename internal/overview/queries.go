@@ -3,6 +3,7 @@ package overview
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
@@ -10,10 +11,12 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
-const sparqlPrefixes = `PREFIX wl:  <https://worklode.io/ns/ontology#>
-PREFIX dct: <http://purl.org/dc/terms/>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+const sparqlPrefixes = `PREFIX wl:   <https://worklode.io/ns/ontology#>
+PREFIX wlc:  <https://worklode.io/ns/concept/>
+PREFIX dct:  <http://purl.org/dc/terms/>
+PREFIX dcat: <http://www.w3.org/ns/dcat#>
+PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
 `
 
 // The two named-graph families spec 007 §1.1 partitions the layers by. Both
@@ -112,6 +115,68 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
   GRAPH ?g { ?repo wl:unmatchedPath ?path . }
 } ORDER BY ?repo ?path`
 
+// The 025 §11.5 standing queries, over wl:implements claims and the sections
+// they name.
+//
+// A claim's data shape is RDF 1.2 (006 §3, wl:pinnedVersion): the asserted
+// edge, an IRI reifier bound to that edge's triple term by rdf:reifies, and
+// wl:pinnedVersion on the reifier. `<< ?c wl:implements ?s >> wl:pinnedVersion
+// ?pv` is the SPARQL 1.2 annotation pattern for exactly those three triples,
+// and it expands inside the enclosing GRAPH — so a claim's three triples must
+// be co-located in one named graph, which is how observed/repo-implements
+// writes them.
+//
+// §11.5's fifth row, delivered coverage, is deliberately not here: it joins a
+// claim's component through wl:deliveredBy to a wl:Deployment, and neither
+// Deliverable nor Deployment is projected yet, so the query would answer
+// nothing whatever the graph held. It belongs with that projection.
+
+// unimplementedQuery is §11.5 row 1: an accepted section no component claims.
+// A section carries wl:status only in its document's canonical graph
+// (graphproj.SectionTriples), so the status pattern confines the read to that
+// graph without naming it — a version snapshot's sections are not candidates.
+const unimplementedQuery = sparqlPrefixes + `SELECT DISTINCT ?s WHERE {
+  GRAPH ?g { ?s a wl:Section ; wl:status wlc:accepted . }
+  FILTER NOT EXISTS { GRAPH ?ig { ?c wl:implements ?s } }
+} ORDER BY ?s`
+
+// coverageQuery is §11.5 row 2: implemented ÷ non-superseded sections, per
+// document. A section nobody claims contributes nothing through the OPTIONAL,
+// so a document at zero coverage still gets a row — which is the whole corpus
+// until observed/repo-implements writes its first claim, and the honest
+// answer meanwhile.
+const coverageQuery = sparqlPrefixes + `SELECT ?doc (COUNT(DISTINCT ?s) AS ?total) (COUNT(DISTINCT ?impl) AS ?implemented) WHERE {
+  GRAPH ?g { ?s a wl:Section ; dct:isPartOf ?doc ; wl:status ?st . }
+  FILTER (?st != wlc:superseded)
+  OPTIONAL {
+    GRAPH ?ig { ?c wl:implements ?s }
+    BIND(?s AS ?impl)
+  }
+} GROUP BY ?doc ORDER BY ?doc`
+
+// staleClaimQuery is §11.5 row 3: a claim pinned at a version older than the
+// one that last revised the section it names. Both versions are compared as
+// xsd:integer, never as the strings or the IRIs carrying them — 025 §4.1: v10
+// does not sort after v3 either way round.
+const staleClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
+  GRAPH ?cg { << ?c wl:implements ?s >> wl:pinnedVersion ?pv . }
+  GRAPH ?pg { ?pv dcat:version ?pinned . }
+  GRAPH ?sg { ?s wl:lastRevisedIn ?rev . }
+  GRAPH ?rg { ?rev dcat:version ?current . }
+  FILTER (xsd:integer(?current) > xsd:integer(?pinned))
+} ORDER BY ?c ?s`
+
+// orphanedClaimQuery is §11.5 row 4: a claim naming a section its document no
+// longer has. The document is reached from the pinned snapshot through
+// dcat:hasVersion, and its current section set is the canonical graph's, since
+// graphproj.SectionTriples projects the published sections of the current
+// version and nothing else.
+const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
+  GRAPH ?cg { << ?c wl:implements ?s >> wl:pinnedVersion ?pv . }
+  GRAPH ?dg { ?doc dcat:hasVersion ?pv . }
+  FILTER NOT EXISTS { GRAPH ?sg { ?s dct:isPartOf ?doc } }
+} ORDER BY ?c ?s`
+
 // taskRequiresQuery pulls the KG half of the critical-path DAG:
 // wl:dependsOn is the projected task dependency (subPropertyOf
 // dct:requires; queried directly — no reasoner, spec 006).
@@ -183,4 +248,59 @@ func Gaps(ctx context.Context, c *graphserver.Client) ([]model.Gap, error) {
 		out = append(out, model.Gap{Repo: r["repo"], Path: r["path"]})
 	}
 	return out, nil
+}
+
+// Unimplemented runs §11.5's unimplemented-intent query, returning the
+// section IRIs no component claims.
+func Unimplemented(ctx context.Context, c *graphserver.Client) ([]string, error) {
+	rows, err := c.Select(ctx, unimplementedQuery)
+	if err != nil {
+		return nil, fmt.Errorf("unimplemented intent: %w", err)
+	}
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r["s"])
+	}
+	return out, nil
+}
+
+// Coverage runs §11.5's per-document coverage query.
+func Coverage(ctx context.Context, c *graphserver.Client) ([]model.DocCoverage, error) {
+	rows, err := c.Select(ctx, coverageQuery)
+	if err != nil {
+		return nil, fmt.Errorf("section coverage: %w", err)
+	}
+	out := make([]model.DocCoverage, 0, len(rows))
+	for _, r := range rows {
+		implemented, _ := strconv.Atoi(r["implemented"])
+		total, _ := strconv.Atoi(r["total"])
+		out = append(out, model.DocCoverage{Doc: r["doc"], Implemented: implemented, Total: total})
+	}
+	return out, nil
+}
+
+// StaleClaims runs §11.5's stale-claim query.
+func StaleClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, error) {
+	rows, err := c.Select(ctx, staleClaimQuery)
+	if err != nil {
+		return nil, fmt.Errorf("stale claims: %w", err)
+	}
+	return claims(rows), nil
+}
+
+// OrphanedClaims runs §11.5's orphaned-claim query.
+func OrphanedClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, error) {
+	rows, err := c.Select(ctx, orphanedClaimQuery)
+	if err != nil {
+		return nil, fmt.Errorf("orphaned claims: %w", err)
+	}
+	return claims(rows), nil
+}
+
+func claims(rows []map[string]string) []model.Claim {
+	out := make([]model.Claim, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, model.Claim{Component: r["c"], Section: r["s"]})
+	}
+	return out
 }
