@@ -372,6 +372,7 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable, mile
 			CreatedBy:     d.CreatedBy,
 			CreatedAt:     d.CreatedAt,
 			Artifact:      d.Artifact,
+			Label:         d.Label,
 			ReportedState: d.ReportedState,
 			ReportedAt:    d.ReportedAt,
 		}
@@ -637,6 +638,7 @@ func newDeliverableView(project ui.CockpitProject, v deliverableFormValues, mile
 		Description: v.Description,
 		URL:         v.URL,
 		Artifact:    v.Artifact,
+		Label:       v.Label,
 		Milestones:  milestoneFormOptions(milestones, v.Milestone),
 	}
 }
