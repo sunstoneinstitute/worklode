@@ -52,6 +52,23 @@ func TestCreateAndGetActor(t *testing.T) {
 	}
 }
 
+// TestCreateActorDuplicateIDIsSentinel: the caller picks the id, so
+// actors_pkey firing is a caller mistake and must reach the API as
+// ErrActorExists rather than a raw error the default branch logs as a 500.
+func TestCreateActorDuplicateIDIsSentinel(t *testing.T) {
+	t.Parallel()
+	s := openTestStore(t)
+	ctx := t.Context()
+
+	if err := s.CreateActor(ctx, "alice", "human", "Alice", false); err != nil {
+		t.Fatalf("CreateActor: %v", err)
+	}
+	err := s.CreateActor(ctx, "alice", "agent", "Alice Again", true)
+	if !errors.Is(err, ErrActorExists) {
+		t.Fatalf("duplicate CreateActor err = %v, want ErrActorExists", err)
+	}
+}
+
 // TestEnsureServiceActorIsIdempotent pins the property the boot path needs:
 // CreateActor is a plain INSERT and fails the second time, so a server that
 // asserts its service identity at every start needs this instead.
