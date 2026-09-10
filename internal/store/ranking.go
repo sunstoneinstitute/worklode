@@ -69,7 +69,9 @@ func (s *Store) BlockingFanOut(ctx context.Context) (map[string]int, error) {
 // 'blocks' edge from a task not
 // in a closed state, and not held by a plan-to-plan ordering edge
 // (planBlockedCondition, 025 §9.3). An empty projectID matches every
-// project; an empty kind matches every kind. A task with children is
+// project; kind is a comma-separated list of kinds and matches every kind
+// when empty, which is how a loop restricts itself to its own tier
+// (025 §8.8). A task with children is
 // excluded because the worktree is the unit of Worklode work and a
 // container has nothing to check out (spec 004 §6.3). A decision task is
 // excluded the same way and for the same reason — it has nothing to check
@@ -96,7 +98,7 @@ func (s *Store) readyCandidates(ctx context.Context, projectID, kind string) ([]
 		  AND NOT t.needs_decomposition
 		  AND NOT t.human_only
 		  AND ($1 = '' OR t.project_id = $1)
-		  AND ($2 = '' OR t.kind = $2)
+		  AND ($2 = '' OR t.kind = ANY(string_to_array($2, ',')))
 		  AND NOT EXISTS (SELECT 1 FROM leases l
 		                  WHERE l.task_id = t.id AND l.released_at IS NULL)
 		  AND NOT EXISTS (SELECT 1 FROM task_edges e
@@ -312,7 +314,9 @@ func rankTasks(in []rankInput, strictFocus bool) []model.Task {
 
 // ClaimNextOpts configures ClaimNext.
 type ClaimNextOpts struct {
-	ProjectID   string
+	ProjectID string
+	// Kind narrows the ready set to these kinds, comma-separated; empty
+	// matches every kind (025 §8.8).
 	Kind        string
 	StrictFocus bool
 	DryRun      bool
