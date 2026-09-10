@@ -418,6 +418,7 @@ type prWriteKey struct {
 // verdict so the caller can correct PollResult.Repaired[].PRsUpdated to what
 // was actually written, not what gatherRepo merely fetched (WL-250).
 func applyFacts(tx *sql.Tx, now time.Time, eventID int64, gathered []*repoFacts, prWrites map[prWriteKey]bool) error {
+	var movedIDs []string
 	for _, f := range gathered {
 		for _, pr := range f.prs {
 			_, written, err := store.UpsertPR(tx, pr, f.prBodies[pr.Number])
@@ -471,10 +472,20 @@ func applyFacts(tx *sql.Tx, now time.Time, eventID int64, gathered []*repoFacts,
 			}
 		}
 		for _, c := range f.tasks {
-			if err := store.ResolveDelivery(tx, now, c.TaskID, f.repo, eventID); err != nil {
+			moved, err := store.ResolveDelivery(tx, now, c.TaskID, f.repo, eventID)
+			if err != nil {
 				return err
 			}
+			if moved {
+				movedIDs = append(movedIDs, c.TaskID)
+			}
 		}
+	}
+	// One merge for the whole run: the transitions record no event of their
+	// own, so this event is the only record of which tasks reconcile moved
+	// (WL-SPEC-66 §5.1).
+	if len(movedIDs) > 0 {
+		return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs})
 	}
 	return nil
 }

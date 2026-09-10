@@ -909,7 +909,8 @@ func TestReopenVoidsDelivery(t *testing.T) {
 			if err := store.BumpEnvDeployGH(tx, now, "acme/app", "prod", id); err != nil {
 				return err
 			}
-			return store.ResolveDelivery(tx, now, "WL-1", "acme/app", eventID)
+			_, err = store.ResolveDelivery(tx, now, "WL-1", "acme/app", eventID)
+			return err
 		})
 	if err != nil {
 		t.Fatalf("deliver WL-1: %v", err)
@@ -940,12 +941,16 @@ func TestReopenVoidsDelivery(t *testing.T) {
 				return err
 			}
 			for _, id := range ids {
-				if err := store.ResolveDelivery(tx, st.Now(), id, "acme/app", eventID); err != nil {
+				if _, err := store.ResolveDelivery(tx, st.Now(), id, "acme/app", eventID); err != nil {
 					return err
 				}
 			}
 			// Even a direct resolve of the reopened task is a no-op.
-			return store.ResolveDelivery(tx, st.Now(), "WL-1", "acme/app", eventID)
+			moved, err := store.ResolveDelivery(tx, st.Now(), "WL-1", "acme/app", eventID)
+			if moved {
+				t.Error("resolve of a reopened task reported a transition")
+			}
+			return err
 		})
 	if err != nil {
 		t.Fatalf("re-resolve: %v", err)

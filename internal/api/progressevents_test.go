@@ -251,6 +251,65 @@ func TestProgressEventsDocumentFrames(t *testing.T) {
 	}
 }
 
+// TestProgressEventsDeliveryFansOut is WL-775: a delivery event transitions a
+// set of tasks at once, so its payload names them in "tasks" and the stream
+// must emit one frame per task. Before the fix the touch carried a kind and
+// no id, contributed no frame at all, and §5.3's per-cell landed pulse never
+// fired on the delivery path.
+func TestProgressEventsDeliveryFansOut(t *testing.T) {
+	t.Parallel()
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	st, h, _, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+
+	createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "spec", Number: 66, Slug: "066-progress",
+		Body: progressSpecBody,
+	})
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "066-progress-plan",
+		Body: progressPlanBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var accepted model.AcceptDocResponse
+	decodeInto(t, rr, &accepted)
+	if len(accepted.Tasks) < 2 {
+		t.Fatalf("accepting the plan minted %d tasks, want at least 2", len(accepted.Tasks))
+	}
+	moved := []string{accepted.Tasks[0].ID, accepted.Tasks[1].ID}
+
+	payload, err := json.Marshal(map[string]any{"tasks": moved})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.RecordEvent(context.Background(), "system", "progress-delivery-1",
+		"deployment_status.success", payload, nil); err != nil {
+		t.Fatalf("record deployment_status.success: %v", err)
+	}
+
+	// Bounded for the same reason as TestProgressEventsHandler's wait.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	rec := openProgressEvents(t, ctx, h, "proj", moved[1])
+	body := rec.Body.String()
+
+	var got []string
+	for _, f := range progressFramesOfType(t, body, "deployment_status.success") {
+		got = append(got, f.Task)
+	}
+	slices.Sort(got)
+	want := slices.Clone(moved)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("delivery frames named tasks %v, want one frame per transitioned task %v, in body %q",
+			got, want, body)
+	}
+}
+
 // progressDocFrame opens one stream, waits for a frame containing await, and
 // returns the single frame of type typ in what it read.
 func progressDocFrame(t *testing.T, h http.Handler, project, await, typ string, plan int64) model.ProgressEventFrame {
