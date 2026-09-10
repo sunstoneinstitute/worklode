@@ -137,6 +137,51 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.instruction("enqueue", "ok")
 	m.deliverInstructions(3)
 	m.decision("pose", "ok")
+	m.escalation("minted")
+}
+
+// TestEscalationMetrics drives the three outcomes of EscalateTask —
+// minted, joined and error — through a store with metrics attached.
+func TestEscalationMetrics(t *testing.T) {
+	t.Parallel()
+	s := openEscalateStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+	ctx := t.Context()
+
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "horndb", Kind: "plan", Number: 9, Slug: "009-plan",
+		Body: "---\nstatus: accepted\n---\n\n# A plan\n", CreatedBy: "alice",
+	})
+	for i, worktree := range []string{"wt-a", "wt-b"} {
+		task := createTask(t, s, taskTestNow, defaultTaskInput())
+		if _, err := s.Claim(ctx, task.ID, "stig", worktree, 0); err != nil {
+			t.Fatalf("claim %d: %v", i, err)
+		}
+		if _, err := s.EscalateTask(ctx, EscalateInput{
+			TaskID: task.ID, To: "plan", DocID: plan.ID,
+			Reason: "under-specified", ActorID: "stig",
+		}); err != nil {
+			t.Fatalf("escalate %d: %v", i, err)
+		}
+	}
+	// No lease: the error arm.
+	orphan := createTask(t, s, taskTestNow, defaultTaskInput())
+	if _, err := s.EscalateTask(ctx, EscalateInput{
+		TaskID: orphan.ID, To: "plan", DocID: plan.ID,
+		Reason: "under-specified", ActorID: "stig",
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("escalate without a lease err = %v, want ErrNotFound", err)
+	}
+
+	for _, outcome := range []string{"minted", "joined", "error"} {
+		if got := testutil.ToFloat64(s.metrics.escalations.WithLabelValues(outcome)); got != 1 {
+			t.Errorf("escalations{%s} = %v, want 1", outcome, got)
+		}
+	}
+	if !strings.Contains(gatheredNames(t, reg), "worklode_task_escalations_total") {
+		t.Error("worklode_task_escalations_total is not registered")
+	}
 }
 
 // TestLeaseMetricsCounters drives claim/renew/release/expire through a store

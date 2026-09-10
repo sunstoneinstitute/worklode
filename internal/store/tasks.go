@@ -51,6 +51,10 @@ type TaskInput struct {
 	// design task's reference to the document that triggered its minting
 	// (025 §15.4). Distinct from PlanDoc.
 	AboutDoc int64
+	// AboutAnchor narrows AboutDoc to one section ("sec-3"), "" for the whole
+	// document. Written by the escalation path (025 §8.1), which dedups on the
+	// (AboutDoc, AboutAnchor) pair.
+	AboutAnchor string
 }
 
 // TaskFilter narrows ListTasks. Zero-valued fields do not filter. Parent
@@ -213,10 +217,11 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		secretNames = []string{}
 	}
 	_, err = tx.Exec(
-		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16)`,
+		`INSERT INTO tasks (id, project_id, title, body, priority, kind, state, concern, created_by, created_at, updated_at, skills, secrets, plan_doc, plan_task_key, about_doc, about_anchor)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14, $15, $16, $17)`,
 		id, in.ProjectID, in.Title, in.Body, in.Priority, in.Kind, state, concern, createdBy, ts, ts,
 		string(skillsJSON), string(secretsVal), nullID(in.PlanDoc), nullText(in.PlanTaskKey), nullID(in.AboutDoc),
+		nullText(in.AboutAnchor),
 	)
 	if err != nil {
 		if mapped := rallyUniqueConflict(err, id); mapped != err {
@@ -229,21 +234,22 @@ func CreateTask(tx *sql.Tx, now time.Time, in TaskInput, eventID int64) (*model.
 		return nil, err
 	}
 	created := &model.Task{
-		ID:        id,
-		Project:   in.ProjectID,
-		Title:     in.Title,
-		Body:      in.Body,
-		Priority:  in.Priority,
-		Kind:      in.Kind,
-		State:     state,
-		Concern:   in.Concern,
-		CreatedBy: in.CreatedBy,
-		CreatedAt: ts,
-		UpdatedAt: ts,
-		Skills:    skills,
-		Secrets:   secretNames,
-		PlanDoc:   in.PlanDoc,
-		AboutDoc:  in.AboutDoc,
+		ID:          id,
+		Project:     in.ProjectID,
+		Title:       in.Title,
+		Body:        in.Body,
+		Priority:    in.Priority,
+		Kind:        in.Kind,
+		State:       state,
+		Concern:     in.Concern,
+		CreatedBy:   in.CreatedBy,
+		CreatedAt:   ts,
+		UpdatedAt:   ts,
+		Skills:      skills,
+		Secrets:     secretNames,
+		PlanDoc:     in.PlanDoc,
+		AboutDoc:    in.AboutDoc,
+		AboutAnchor: in.AboutAnchor,
 	}
 	created.Branch = BranchFor(created)
 	return created, nil
@@ -603,10 +609,10 @@ func UpdateTaskFields(tx *sql.Tx, now time.Time, id string, title, body, priorit
 // coalesce needed; plan_doc and about_doc are nullable bigints (migrations
 // 0027 and 0028), scanned into sql.NullInt64. The three tombstone columns
 // (migration 0034) are all-null or all-set together, human_only (migration
-// 0060) and milestone_id (migration 0062) are last for the same append-only
-// reason.
+// 0060), milestone_id (migration 0062) and about_anchor (migration 0078) are
+// last for the same append-only reason.
 // prefixedTaskColumns below requires each entry to be comma-free.
-const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id`
+const taskColumns = `id, project_id, title, body, priority, kind, state, concern, assignee, needs_decomposition, created_by, created_at, updated_at, skills::text, secrets::text, plan_doc, about_doc, deleted_at, deleted_by, delete_justification, human_only, milestone_id, about_anchor`
 
 // taskColumnsT is taskColumns under the `t` alias, for the queries that join
 // tasks against another table.
@@ -623,15 +629,16 @@ func scanTask(row rowScanner) (*model.Task, error) {
 	var planDoc, aboutDoc sql.NullInt64
 	var deletedAt sql.NullTime
 	var deletedBy, justification sql.NullString
-	var milestone sql.NullString
+	var milestone, aboutAnchor sql.NullString
 	if err := row.Scan(&t.ID, &t.Project, &t.Title, &body, &t.Priority, &t.Kind,
 		&t.State, &concern, &assignee, &t.NeedsDecomposition, &createdBy, &t.CreatedAt, &t.UpdatedAt, &skillsJSON, &secretsCol, &planDoc, &aboutDoc,
-		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone); err != nil {
+		&deletedAt, &deletedBy, &justification, &t.HumanOnly, &milestone, &aboutAnchor); err != nil {
 		return nil, err
 	}
 	t.Tombstone = tombstoneFrom(deletedAt, deletedBy, justification)
 	t.PlanDoc = planDoc.Int64
 	t.AboutDoc = aboutDoc.Int64
+	t.AboutAnchor = aboutAnchor.String
 	t.Body = body.String
 	t.Concern = concern.String
 	t.Assignee = assignee.String

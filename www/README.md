@@ -57,10 +57,11 @@ in `WL-SPEC-25` (documents in the backbone). When the architecture changes
 materially, update this copy too — nothing derives it automatically.
 
 The Escalation section (`#ladder`) describes 025 §8, which is fully specified
-but not yet implemented — no `lode task escalate`, no fixer subagent, no
-gap-tracking events exist in code today. Its copy is deliberately future-tense
-("will record", "will amend") to say so; when §8 ships, update the tense along
-with whatever the shipped behaviour actually does.
+and partly implemented: `lode task escalate` and its `task.gap_found` event
+ship (§8.1), the fixer subagent and the rest of the ladder do not. Its copy
+is deliberately future-tense ("will record", "will amend") to say so; as each
+part of §8 ships, update the tense along with whatever the shipped behaviour
+actually does.
 
 ## Logo
 

@@ -66,6 +66,11 @@ type Task struct {
 	// from PlanDoc, which names the plan whose acceptance minted the task
 	// (025 §9.2), not what the task is about.
 	AboutDoc int64 `json:"about_doc,omitempty"`
+	// AboutAnchor narrows AboutDoc to one section ("sec-3"), "" when the task
+	// is about the whole document (025 §8.1). Only meaningful alongside
+	// AboutDoc; it is what lets two escalations against different sections of
+	// one spec stay two tasks.
+	AboutAnchor string `json:"about_anchor,omitempty"`
 	// Milestone is the milestone this task is attached to (spec 029 §2), ""
 	// when it is attached to none. Always in the task's own project — the
 	// store refuses a cross-project attach.

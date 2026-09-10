@@ -354,15 +354,16 @@
         them mechanically. That only works if the executor has somewhere to go when it hits a
         case the plan missed, since fixing the plan is a call for whoever wrote it. This
         escalation ladder is fully specified and is the next major piece of the execution
-        backbone. Today an executor that hits a gap stops and hands the task back by hand.
+        backbone. The first rung ships today: <code>lode task escalate</code> files the gap and
+        hands the task back. The automatic fixer above it is still being built.
       </p>
 
       <div class="grid-2">
         <div class="card reveal">
           <h3>Gaps get recorded</h3>
           <p>
-            An executor that meets a gap the plan does not cover will record it and stop. The
-            discovery becomes an event in the backbone, not a line in a session transcript.
+            An executor that meets a gap the plan does not cover records it and stops. The
+            discovery becomes an event in the backbone, readable by everyone working the project.
           </p>
         </div>
         <div class="card reveal">
@@ -384,8 +385,8 @@
         <div class="card reveal">
           <h3>Judgement gets requested explicitly</h3>
           <p>
-            When a fix needs a person's judgement, <code>lode task escalate</code> will create a
-            design task assigned to whoever wrote the plan, and block the original work until
+            When a fix needs a person's judgement, <code>lode task escalate</code> creates a
+            design task assigned to whoever wrote the plan, and blocks the original work until
             it's resolved.
           </p>
         </div>
