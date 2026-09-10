@@ -871,3 +871,24 @@ Recorded by WL-754 (backfill the historic plan record, WL-SPEC-66 §6.2):
   They stay in the Progress page's "No execution record" group permanently;
   read that group as three known-empty plans plus whatever is genuinely
   unlinked.
+
+Recorded by WL-819 (the doc-lifecycle watcher series, spec 025 §15):
+
+- `[P4]` **`internal/eventbus/vocab.go` hand-mirrors the event ontology.**
+  Its constants (`TypeDocumentSubmitted`, `TypeDocumentAccepted`, ...) and
+  each type's allowed payload keys are copied by hand from `ns/ontology.ttl`
+  (025 §15.2). `vocab_test.go`'s `TestVocabMatchesOntology` catches the
+  constants drifting from the ontology, but adding a new event type or
+  payload key still means editing both files. The fix is `scripts/nsgen.py`
+  generating this file the way it already generates `internal/ns/gen.go`
+  (025 §17) — worth doing once that codegen lands, not before.
+- `[P4]` **A poison event blocks its subscriber, by design, with no DLQ.**
+  `eventbus.Run` acks a batch only up to the last event its handler
+  succeeded on; a handler error rewinds the read offset back onto the
+  failed event, so it's retried every poll and nothing behind it is
+  delivered until it's fixed. This is deliberate (025 §22): it keeps
+  delivery ordered and never silently drops an event. An operator sees the
+  stall today through `GET /api/v1/event-subscribers` (its lag and lock
+  holder are asserted by the e2e test). A dead-letter queue or a
+  skip-and-record path would let the subscriber move past a poison event,
+  but it's worth building when one actually occurs, not in anticipation.

@@ -209,9 +209,11 @@ fused by reciprocal rank behind `GET /api/v1/search` and `lode search`, spec
 (offset-tracked subscribers over the events log, read via `lode event tail
 --follow` and by the project Progress page's live stream, WL-SPEC-66 §5.1).
 Its one subscriber, `doc-lifecycle`, mints the review and planning
-tasks a document's lifecycle calls for (025 §15.4): the rules are a pure
-function in `internal/watcher`, the executor that feeds them is
-`internal/api/docwatch.go`, and `NewServer` starts the loop only when the
+tasks a document's lifecycle calls for (025 §15.4) — triggered by
+submitting a document (`lode doc submit`) or accepting a spec, and minting
+the task is not doing the review or the planning it asks for (025 §7): the
+rules are a pure function in `internal/watcher`, the executor that feeds them
+is `internal/api/docwatch.go`, and `NewServer` starts the loop only when the
 caller passes a `BackgroundCtx`. The project Progress page (spec 066) says how
 much of each spec exists and what moves it next: `internal/progress` is the
 pure derivation — plan state, section state, spec grouping, next act — from
