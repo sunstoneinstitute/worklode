@@ -225,10 +225,14 @@ Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --p
   Flags: --artifact, --body, --body-file, --concern, --human-only, --kind, --milestone, --needs-decomposition, --no-upload, --plan, --priority, --secrets, --title
 - `lode task escalate` — Report that the plan or spec does not cover this case, and hand the fix upward
   Flags: --doc, --reason, --section, --to
+- `lode task fix` — Log the start or finish of a design fix
+  Flags: --doc, --outcome, --phase, --tier
 - `lode task follow-up` — Record that a task was spun out of the work on another task
   Flags: --of
 - `lode task frontier` — Ready, unblocked tasks in pickup order
   Flags: --project, --repo
+- `lode task gap` — Log that the plan or spec does not cover this case, without escalating it
+  Flags: --reason
 - `lode task instruct` — Queue a steering instruction for whichever actor next holds the task's lease
 - `lode task list` — List tasks (delivered and abandoned are hidden unless requested with --status)
   Flags: --about, --assignee, --deleted, --kind, --parent, --plan, --priority, --project, --repo, --status
