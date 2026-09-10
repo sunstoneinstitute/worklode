@@ -964,3 +964,23 @@ Recorded by WL-586 (`/hooks/cms` ingest, 029 §8.3):
   for every delivery. Nothing emits to either endpoint yet, which is why it
   has gone unnoticed. Whoever wires the first real `ci` or `pipeline` emitter
   has to add the secret in the same change, or the emitter meets a 503.
+
+Recorded by WL-562 (the self-review exception, 029 §7.1):
+
+- `[P2]` **No accepted spec says where the self-review allowance lives, so the
+  exception ships dormant.** §7.1 makes a self-review exception valid only when
+  "the effective review policy allows it and a different authorized actor
+  approves the exception before review", but §7.2 defines a flow as declaring
+  only which entity kinds need which role's sign-off, and `model.ApprovalFlow`
+  carries no field for the allowance. Everything else is built and tested: the
+  `exception_authorized_by` column, `AuthorizeSelfReviewException`, the web act
+  and its event, the two facts the detail page renders, and `DecideApproval`
+  reading the column through `SelfReviewExceptionValid`. Only
+  `store.SelfReviewAllowed` is stuck — it resolves the project and its stamped
+  snapshot, then returns false because there is nothing to read. So the
+  authorize act refuses every call, the button never renders, and the behaviour
+  is exactly the unconditional refusal that preceded the task.
+  `TestDecideSelfApprovalStandsUnderStampedException` asserts the dormancy and
+  fails loudly once a flow declares the permission. The fix is a `lode doc
+  revise` on 029 §7.2 naming the field, after which reading it is a one-line
+  change inside `SelfReviewAllowed` and no caller moves.

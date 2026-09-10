@@ -8,6 +8,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -66,6 +67,37 @@ func ProjectApprovalFlow(tx *sql.Tx, projectID string) (*model.ApprovalFlowSnaps
 		return nil, fmt.Errorf("unmarshal approval flow of project %s: %w", projectID, err)
 	}
 	return &snap, nil
+}
+
+// SelfReviewPolicy reports what the approval detail page has to say about
+// self-review on one approval (029 §7.1, 032 §7): the stamped flow's name and
+// rev, which the page names beside a decision made under an exception, and
+// whether that flow permits self-review, which decides whether the page
+// offers the exception act at all.
+//
+// allowed is false for every project today; SelfReviewAllowed says why.
+func (s *Store) SelfReviewPolicy(ctx context.Context, kind, entityID string) (
+	name string, rev string, allowed bool, err error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return "", "", false, fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback()
+	projectID, err := projectForApproval(tx, kind, entityID)
+	if err != nil || projectID == "" {
+		return "", "", false, err
+	}
+	err = tx.QueryRow(
+		`SELECT coalesce(approval_flow_name, ''), coalesce(approval_flow_rev, '')
+		   FROM projects WHERE id = $1`, projectID).Scan(&name, &rev)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", false, nil
+	}
+	if err != nil {
+		return "", "", false, fmt.Errorf("approval flow stamp of project %s: %w", projectID, err)
+	}
+	allowed, err = SelfReviewAllowed(tx, kind, entityID)
+	return name, rev, allowed, err
 }
 
 // MaterializeForEntity inserts the 'awaiting' rows the snapshot's flow

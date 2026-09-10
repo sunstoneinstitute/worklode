@@ -108,7 +108,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Help: "Acts on an approval that are not decisions (029 §7.1), by act (" +
 			strings.Join(approvalActKinds, ", ") + ") and outcome (" +
 			strings.Join(approvalActOutcomes, ", ") +
-			"). Today that is the dependent owner's note on an open impact review. Labels are bounded: the approval and the actor are deliberately not among them. The decision that follows a note is counted by worklode_approval_decisions_total.",
+			"). Today those are the dependent owner's note on an open impact review and the authorization of a self-review exception. Labels are bounded: the approval and the actor are deliberately not among them. The decision that follows a note is counted by worklode_approval_decisions_total.",
 	}, []string{"act", "outcome"})
 	s.approvalRequirements = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_requirements_total",
@@ -900,13 +900,14 @@ var (
 )
 
 // approvalActKinds and approvalActOutcomes are the bounded label values of
-// worklode_approval_acts_total. "note" is the only act today (029 §7.1's
-// impact note); decisionInvalid stands for a submission refused before the
-// act could run.
+// worklode_approval_acts_total: 029 §7.1's impact note and its self-review
+// exception. decisionInvalid stands for a submission refused before the act
+// could run; "refused" is the store declining the act itself — a policy that
+// forbids self-review, or an authorizer who is the author.
 var (
-	approvalActKinds    = []string{"note"}
+	approvalActKinds    = []string{"note", "exception"}
 	approvalActOutcomes = []string{"recorded", "conflict", "not_found",
-		decisionInvalid, "error"}
+		"refused", decisionInvalid, "error"}
 )
 
 // observeApprovalAct records one non-decision act on an approval. Nil-safe:
@@ -928,6 +929,8 @@ func approvalActOutcome(err error) string {
 		return "not_found"
 	case errors.Is(err, store.ErrApprovalResolved):
 		return "conflict"
+	case errors.Is(err, store.ErrForbidden), errors.Is(err, store.ErrSelfApproval):
+		return "refused"
 	case errors.Is(err, store.ErrInvalidInput):
 		return decisionInvalid
 	default:

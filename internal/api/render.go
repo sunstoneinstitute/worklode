@@ -144,9 +144,14 @@ func approvalRows(rows []store.AwaitingApproval, now time.Time) []ui.ApprovalRow
 // predecessor: the nearest older history row (this row's revision aside)
 // whose state is 'approved' or 'rejected' — the same "decided" test
 // DesignateRevision's own hasDecided check uses.
+// policy is the project's self-review policy (store.SelfReviewPolicy): the
+// flow name@rev the page names beside a decision made under an exception, and
+// whether the flow permits self-review, which is what offers the exception
+// act on an open row. No flow permits it today, so the button does not
+// render — see store.SelfReviewAllowed.
 func approvalDetailView(a *store.Approval, title, url string,
 	history []store.Approval, governed []store.GovernedRef,
-	names map[string]string) ui.ApprovalDetailView {
+	names map[string]string, policy selfReviewPolicy) ui.ApprovalDetailView {
 	v := ui.ApprovalDetailView{
 		Page:      ui.PageProps{Title: "worklode: " + a.EntityKind + " " + a.EntityID},
 		ID:        a.ID,
@@ -169,7 +174,13 @@ func approvalDetailView(a *store.Approval, title, url string,
 		(a.State == "awaiting" || a.State == "changes_requested")
 	if a.ExceptionAuthorizedBy != nil {
 		v.ExceptionAuthorizedBy = names[*a.ExceptionAuthorizedBy]
+		if policy.flowName != "" {
+			v.ExceptionFlow = policy.flowName + "@" + policy.flowRev
+		}
 	}
+	v.CanAuthorizeException = policy.allowsSelfReview &&
+		a.ExceptionAuthorizedBy == nil &&
+		(a.State == "awaiting" || a.State == "changes_requested")
 
 	v.History = make([]ui.ApprovalHistoryRow, 0, len(history))
 	var predecessor *store.Approval

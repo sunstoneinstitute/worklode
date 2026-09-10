@@ -110,8 +110,9 @@ templ impactActs(id int64) {
 // ApprovalDetail renders GET /approvals/{id} (032 §7), the tracer for the
 // review-graph presentation surface: one approval, the entity it governs,
 // its full decision history, and the review-graph references its own
-// designation recorded. Read-only — Tasks 6 and 7 add the decide form's
-// action buttons here once their routes exist.
+// designation recorded. Read-mostly: the only acts it offers are an open
+// impact review's note and decision, and the self-review exception on a row
+// whose policy permits one.
 //
 // It renders in the global shell with PageProps.ActiveGlobal left empty:
 // none of the five bar destinations names this page, so the bar marks
@@ -166,7 +167,15 @@ templ ApprovalDetail(v ApprovalDetailView) {
 					<p><strong>Impact note:</strong> { v.Note }</p>
 				}
 				if v.ExceptionAuthorizedBy != "" {
+					if v.ExceptionFlow != "" {
+						<p><strong>Self-review permitted by flow</strong> <span class="mono">{ v.ExceptionFlow }</span></p>
+					}
 					<p><strong>Self-review exception authorized by:</strong> { v.ExceptionAuthorizedBy }</p>
+				}
+				if v.CanAuthorizeException {
+					<form method="post" action={ "/approvals/" + strconv.FormatInt(v.ID, 10) + "/exception" } class="decide">
+						<button type="submit" class="btn">Authorize self-review exception</button>
+					</form>
 				}
 				if v.ImpactOpen {
 					@impactActs(v.ID)
