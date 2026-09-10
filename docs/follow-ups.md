@@ -892,3 +892,17 @@ Recorded by WL-819 (the doc-lifecycle watcher series, spec 025 §15):
   holder are asserted by the e2e test). A dead-letter queue or a
   skip-and-record path would let the subscriber move past a poison event,
   but it's worth building when one actually occurs, not in anticipation.
+
+Recorded by WL-829 (`lode task escalate`, spec 025 §8.1):
+
+- `[P3]` **Spec 061's L3 domain-action list does not name `escalate`, so its
+  transcription in code no longer matches it.** Spec 025 §8.1 specifies
+  `lode task escalate --to plan|spec --reason "..."` verbatim, and shipping it
+  needed the verb in `internal/cmd/namerule_test.go`'s `l3DomainActions` and in
+  `internal/cmd/CLAUDE.md`'s Naming section. Both are transcriptions of spec
+  061 §5, so they now carry a verb the spec they transcribe does not. Spec 061
+  has been revised three times for exactly this — L3 gained `request` (WL-646),
+  then `pack`, then `note` for 025 §8.5 — so the fix is the same ceremony: a
+  `lode doc revise` on 061 adding `escalate` to L3, after which the two
+  transcriptions are true again. Not blocking: the code and the spec agree on
+  the command's name and shape, only the allowlist is behind.
