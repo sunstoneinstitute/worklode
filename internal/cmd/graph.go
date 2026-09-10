@@ -15,6 +15,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
+	"github.com/sunstoneinstitute/worklode/internal/kg/implements"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
 	"github.com/sunstoneinstitute/worklode/internal/kg/manifest"
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -156,12 +157,14 @@ func taskListDetailEdges(t model.TaskListDetail) (out, in []model.Edge) {
 }
 
 // runDeriveLocal computes the repo-local observed documents (go-imports,
-// repo-layout) for the repo at root. With dryRun it returns the rendered
-// N-Triples; otherwise it Runs each through the deriver contract against c,
-// passing opts through. A repo that is not a Go module derives layout only
-// (reported inline). A document with no triples is called out either way —
-// legitimate for some sources, a broken input for the rest, and invisible
-// otherwise.
+// repo-layout, repo-implements) for the repo at root. With dryRun it returns
+// the rendered N-Triples; otherwise it Runs each through the deriver contract
+// against c, passing opts through. A repo that is not a Go module derives
+// layout only (reported inline); a repo with no .worklode/implements.yaml
+// derives without repo-implements, likewise reported inline — most repos
+// claim nothing, so that absence is normal, not an error. A document with no
+// triples is called out either way — legitimate for some sources, a broken
+// input for the rest, and invisible otherwise.
 func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun bool, c *graphserver.Client, opts derive.Options) (string, error) {
 	manPath := filepath.Join(root, ".worklode", "components.yaml")
 	data, err := os.ReadFile(manPath)
@@ -176,9 +179,10 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 	// <this repo> dct:hasPart <other repo's component IRIs> without a
 	// complaint — a silently manufactured cross-repo edge (WL-270). The
 	// manifest states which repo it describes; hold it to that.
-	if want := host + "/" + owner + "/" + name; strings.TrimSpace(m.Repo) != want {
+	repoCoords := host + "/" + owner + "/" + name
+	if strings.TrimSpace(m.Repo) != repoCoords {
 		return "", fmt.Errorf("%s says repo: %s, but derive is running against %s — the manifest describes another repo",
-			manPath, m.Repo, want)
+			manPath, m.Repo, repoCoords)
 	}
 
 	docs := map[string][]byte{} // observed source → document
@@ -199,8 +203,29 @@ func runDeriveLocal(ctx context.Context, root, host, owner, name string, dryRun 
 		docs["go-imports"] = imports
 	}
 
+	// implements.yaml is optional — most repos claim nothing. Its absence is
+	// normal and noted like a go-imports skip; a file that exists but fails to
+	// parse, or a claim that resolves to no component or a conflicting pin, is
+	// a publication error naming the offender (025 §11.3) — a claim silently
+	// dropped is worse than a failed derive, so those are never downgraded to
+	// a note.
+	implPath := filepath.Join(root, ".worklode", "implements.yaml")
+	implFile, err := implements.Load(implPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		notes = append(notes, fmt.Sprintf("repo-implements skipped: %v", err))
+	} else {
+		claims, err := implements.Resolve(implFile, m, repoCoords)
+		if err != nil {
+			return "", err
+		}
+		docs["repo-implements"] = graphproj.Document(implements.Triples(claims))
+	}
+
 	var b strings.Builder
-	for _, source := range []string{"go-imports", "repo-layout"} {
+	for _, source := range []string{"go-imports", "repo-layout", "repo-implements"} {
 		doc, ok := docs[source]
 		if !ok {
 			continue
