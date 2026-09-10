@@ -210,6 +210,11 @@ type AddDocNoteInput struct {
 // Without it a client that links by slug has to assume the far end shares the
 // near end's project, which is right until it silently is not.
 //
+// ToStatus is the far end's document status, resolved in the same query as
+// its slug. It is what lets a render flag a reference to a document that has
+// gone stale or been withdrawn (025 §8.7) without a request per edge; empty
+// on an unresolved ToExternal edge, which names no row to read a status from.
+//
 // CompletedWith carries the doc_coverage_completed_with side-table (026 §5,
 // §5.3) that only a `covers` or `defers` edge ever populates: a `partial`
 // covers entry's fullCoverageWith closure, in authored order, or a `defers`
@@ -227,6 +232,7 @@ type DocEdge struct {
 	ToSlug        string   `json:"to_slug"`
 	ToKind        string   `json:"to_kind"`
 	ToNumber      int      `json:"to_number"`
+	ToStatus      string   `json:"to_status"`
 	CompletedWith []string `json:"completed_with,omitempty"`
 }
 
@@ -282,6 +288,15 @@ type CreateDocInput struct {
 // actor, so one whose owner has left the org is not stuck unacceptable.
 type TransferDocOwnerInput struct {
 	Owner string `json:"owner"`
+}
+
+// WithdrawDocInput is the request body for POST /api/v1/docs/{id}/withdraw
+// (025 §8.7): the close verb that takes an accepted or stale document out of
+// the corpus without pretending anything replaced it. Justification is why,
+// and is recorded on the doc.withdrawn event — a document that will never be
+// executed is worth a sentence saying so.
+type WithdrawDocInput struct {
+	Justification string `json:"justification"`
 }
 
 // UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and

@@ -73,6 +73,7 @@ func newDocCmd() *cobra.Command {
 		newDocAcceptCmd(),
 		newDocSubmitCmd(),
 		newDocReviseCmd(),
+		newDocWithdrawCmd(),
 		newDocNoteCmd(),
 		newDocLintCmd(),
 		newDocImportCmd(),
@@ -152,8 +153,8 @@ func newDocAddCmd() *cobra.Command {
 
 func newDocListCmd() *cobra.Command {
 	var scope scopeFlags
-	var kind, status, owner string
-	var needsPlanning, needsExecution, bareSuperseded, deleted, hasNotes bool
+	var kind, status, owner, olderThan string
+	var needsPlanning, needsExecution, bareSuperseded, unresolved, deleted, hasNotes bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List documents: specs, ADRs, and plans",
@@ -161,8 +162,15 @@ func newDocListCmd() *cobra.Command {
 			// Ahead of the client: a contradicting selector is an error
 			// whatever the server would say, and refusing it here costs no
 			// round trip.
-			if err := checkDocSelectors(kind, status, needsPlanning, needsExecution, bareSuperseded); err != nil {
+			if err := checkDocSelectors(kind, status, needsPlanning, needsExecution, bareSuperseded, unresolved); err != nil {
 				return err
+			}
+			olderThanDays, err := parseDayDuration(olderThan)
+			if err != nil {
+				return err
+			}
+			if olderThanDays > 0 && !unresolved {
+				return errors.New("--older-than applies to --unresolved only (025 §8.7)")
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -175,6 +183,7 @@ func newDocListCmd() *cobra.Command {
 			resp, raw, err := c.ListDocs(cmd.Context(), cli.DocListFilter{
 				Project: sc.Project, Kind: kind, Status: status, Owner: owner,
 				NeedsPlanning: needsPlanning, NeedsExecution: needsExecution, BareSuperseded: bareSuperseded,
+				Unresolved: unresolved, OlderThanDays: olderThanDays,
 				Deleted: deleted, HasNotes: hasNotes,
 			})
 			if err != nil {
@@ -189,6 +198,8 @@ func newDocListCmd() *cobra.Command {
 				cli.DocPlanningTable(cmd.OutOrStdout(), resp.Docs, resp.PlanningGaps)
 			case bareSuperseded:
 				cli.DocSupersessionTable(cmd.OutOrStdout(), resp.Docs, resp.SupersessionGaps)
+			case unresolved:
+				cli.DocUnresolvedTable(cmd.OutOrStdout(), resp.Docs)
 			default:
 				cli.DocTable(cmd.OutOrStdout(), resp.Docs)
 			}
@@ -207,25 +218,46 @@ func newDocListCmd() *cobra.Command {
 		"accepted plans whose task set has an open task")
 	cmd.Flags().BoolVar(&bareSuperseded, "bare-superseded", false,
 		"superseded documents with a section nothing replaces")
+	cmd.Flags().BoolVar(&unresolved, "unresolved", false,
+		"accepted specs and plans nothing has executed (025 §8.7)")
+	cmd.Flags().StringVar(&olderThan, "older-than", "",
+		`with --unresolved, only those untouched for at least this long, in days ("30d")`)
 	cmd.Flags().BoolVar(&deleted, "deleted", false,
 		"list deleted documents instead of live ones (044 §5)")
 	cmd.Flags().BoolVar(&hasNotes, "has-notes", false,
 		"only documents carrying an anchored note (025 §8.5)")
-	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded")
+	cmd.MarkFlagsMutuallyExclusive("needs-planning", "needs-execution", "bare-superseded", "unresolved")
 	return cmd
 }
 
+// parseDayDuration reads `--older-than`: a whole number of days, with or
+// without the "d" suffix ("30d", "30"). Days rather than time.ParseDuration's
+// units because 025 §8.7's clock counts in days and "720h" is nobody's way of
+// saying a month. "" is no bound, and returns 0.
+func parseDayDuration(s string) (int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	days, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+	if err != nil || days < 0 {
+		return 0, fmt.Errorf(`--older-than %q: want a whole number of days, like "30d"`, s)
+	}
+	return days, nil
+}
+
 // checkDocSelectors refuses a --kind or --status that contradicts one of the
-// derived selectors (026 §2.1, §2.4): each implies a status, and
+// derived selectors (026 §2.1, §2.4; 025 §8.7): each implies a status, and
 // needs-planning/needs-execution each imply a single kind while
-// bare-superseded implies one of two (spec or adr — a plan carries no
-// sections, 025 §6 rule 2). A contradicting restatement would make the
+// bare-superseded and unresolved each imply one of two (spec or adr — a plan
+// carries no sections, 025 §6 rule 2; spec or plan — an ADR is executed by
+// nothing). A contradicting restatement would make the
 // conjunction always empty, which would read as "nothing to plan"; only a
 // contradiction is refused, restating the implied value is fine. The server
 // enforces the same rule for clients that are not this one; the mutual
 // exclusion of the three selectors themselves is cobra's, declared on the
 // command.
-func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareSuperseded bool) error {
+func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareSuperseded, unresolved bool) error {
 	for _, c := range []struct {
 		on       bool
 		flag     string
@@ -237,6 +269,8 @@ func checkDocSelectors(kind, status string, needsPlanning, needsExecution, bareS
 		{needsExecution, "--needs-execution", "accepted", func(k string) bool { return k == "plan" }, "plan"},
 		{bareSuperseded, "--bare-superseded", "superseded",
 			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
+		{unresolved, "--unresolved", "accepted",
+			func(k string) bool { return k == "spec" || k == "plan" }, "spec or plan"},
 	} {
 		if !c.on {
 			continue
@@ -774,6 +808,52 @@ func newDocSubmitCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+// newDocWithdrawCmd is `lode doc withdraw` (025 §8.7): the close verb that
+// makes full resolution reachable. An accepted or stale document that will
+// not be executed and that nothing replaces leaves the corpus here, with a
+// justification on the event.
+//
+// Distinct from `lode doc delete`, which hides a row that should not have
+// existed (044 §5). A withdrawal is a decision about work that was agreed and
+// then abandoned: the document stays readable and keeps its number.
+func newDocWithdrawCmd() *cobra.Command {
+	var justification string
+	cmd := &cobra.Command{
+		Use:               "withdraw <ref>",
+		ValidArgsFunction: docRefAt(0),
+		Short:             "Withdraw an accepted or stale document that will not be executed",
+		Long: "Withdraw a document. It stays readable and keeps its corpus number;\n" +
+			"its status becomes withdrawn, so it leaves the unresolved set\n" +
+			"`lode doc list --unresolved` reports. A draft is deleted instead, and\n" +
+			"a superseded document is already resolved.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			id, err := resolveDocID(cmd.Context(), c, args[0])
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.WithdrawDoc(cmd.Context(), id, justification)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "withdrew doc %d: %s\n", d.ID, d.Slug)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&justification, "justification", "",
+		"why this document will not be executed (recorded on the doc.withdrawn event)")
+	cmd.MarkFlagRequired("justification")
 	return cmd
 }
 

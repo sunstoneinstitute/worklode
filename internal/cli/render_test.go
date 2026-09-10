@@ -755,17 +755,26 @@ func TestBriefRenderOmitsSkillsSectionWhenEmpty(t *testing.T) {
 }
 
 // TestBriefRenderRendersBlockingPlans: the plans holding a task (025 §9.3) are
-// rendered even when they have minted no task to list under "blocked by".
+// rendered even when they have minted no task to list under "blocked by", and
+// each carries its status — which is where 025 §8.7's brief-exclusion rule
+// lands, since a stale plan reaching an agent's context has to say so.
 func TestBriefRenderRendersBlockingPlans(t *testing.T) {
 	var buf bytes.Buffer
 	BriefRender(&buf, model.Brief{
-		Task:          model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
-		Branch:        "WL-1-t",
-		BlockingPlans: []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}},
-		Skills:        model.SkillRecommendation{Provider: "none"},
+		Task:   model.Task{ID: "WL-1", Title: "T", State: "ready", Priority: "high"},
+		Branch: "WL-1-t",
+		BlockingPlans: []model.DocRef{
+			{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"},
+			{ID: 8, Slug: "plan-b", Title: "Plan B", Status: "stale"},
+		},
+		Skills: model.SkillRecommendation{Provider: "none"},
 	})
-	if out := buf.String(); !strings.Contains(out, "blocked by plans:\n  - plan-a: Plan A (draft)") {
+	out := buf.String()
+	if !strings.Contains(out, "blocked by plans:\n  - plan-a: Plan A (draft)") {
 		t.Fatalf("output = %q, want the blocking plan rendered", out)
+	}
+	if !strings.Contains(out, "  - plan-b: Plan B (stale)") {
+		t.Fatalf("output = %q, want a stale blocking plan flagged as stale", out)
 	}
 }
 
