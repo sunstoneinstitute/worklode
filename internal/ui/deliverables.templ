@@ -7,10 +7,12 @@ package ui
 //
 // Each row shows what is stored — id, name, description, the declared
 // artifact address, and who declared it when — plus the newest state reported
-// about that address. Spec 029 §3.2 makes deliverable state something emitters
-// and probers report: an emitter can now report one (the catalog ingest), the
-// poll prober cannot yet, so a row with no report says "Declared" instead of
-// dressing a declaration up as a status.
+// about that address and where that report came from. Spec 029 §3.2 makes
+// deliverable state something reported, in one of two provenances: emitters
+// and the prober report observed facts, a person reports a user-reported one
+// through the row's Report control. A row with neither says "Declared" instead
+// of dressing a declaration up as a status, and a user report says so in words
+// so a claim never reads as a verified fact.
 //
 // A project with no milestones (or none holding a deliverable) shows exactly
 // one group — Groups' unattached entry — which renders with no subheading:
@@ -51,11 +53,13 @@ templ Deliverables(v DeliverablesView) {
 					</div>
 				</section>
 				<p class="muted small">
-					Deliverable state is reported, never declared (spec 029 §3.2). Emitters
-					can report it &mdash; a data catalog files a state against the declared
-					address &mdash; but the poll prober that would check an address nothing
-					reports on is not built yet, so a row shows a state only once something
-					has reported one.
+					Deliverable state is reported, never declared (spec 029 §3.2), and a row
+					says which of three things it is showing. Emitters and the prober report
+					observed facts: a data catalog files a state against the declared address,
+					the prober checks that address on a schedule. People report the rest with
+					the Report control, and those rows are marked User-reported, because a
+					person saying a thing shipped is a claim, not a check. A row with neither
+					says Declared, which is all a declaration carries on its own.
 				</p>
 			</div>
 		}
@@ -102,6 +106,9 @@ templ deliverableRow(d DeliverableRow) {
 			if d.ReportedAt != nil {
 				<div class="def">{ "reported " + fmtTime(*d.ReportedAt) }</div>
 			}
+			if d.ReportedProvenance == "user_reported" {
+				<div class="def muted">User-reported</div>
+			}
 			<div class="def">
 				if d.CreatedBy != "" {
 					{ "declared by " + d.CreatedBy + " · " + fmtTime(d.CreatedAt) }
@@ -109,6 +116,21 @@ templ deliverableRow(d DeliverableRow) {
 					{ "declared " + fmtTime(d.CreatedAt) }
 				}
 			</div>
+			@deliverableReportForm(d)
 		</div>
 	</div>
+}
+
+// deliverableReportForm is the row's Report control: a person files the state
+// they see (029 §3.2). Native controls only — a menu and a submit — so it is
+// keyboard-operable with no script on the page.
+templ deliverableReportForm(d DeliverableRow) {
+	<form class="def" method="post" action={ d.ReportURL }>
+		<select name="state" aria-label={ "Report a state for " + d.Name }>
+			for _, state := range deliverableStates {
+				<option value={ state }>{ state }</option>
+			}
+		</select>
+		<button type="submit">Report</button>
+	</form>
 }

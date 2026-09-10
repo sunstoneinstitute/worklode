@@ -915,6 +915,10 @@ withdraw`, spec 025 §8.7):
   true again. Not blocking: nothing disagrees about what the commands do, only
   the allowlist is behind.
 
+  WL-584 hit the same wall for `report` (`lode deliverable report`, 029 §3.2)
+  and added it to both transcriptions too, so the one outstanding revise on
+  061 now owes two verbs: `escalate` and `report`. Do them together.
+
 Recorded by WL-831 (§8.6 stale marking off the patch seam):
 
 - `[P4]` **Re-accepting an unedited stale plan cannot clear the mark.**

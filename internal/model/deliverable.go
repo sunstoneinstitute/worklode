@@ -38,6 +38,12 @@ type Deliverable struct {
 	// has reported; ReportedAt is when that report says it happened.
 	ReportedState string     `json:"reported_state"`
 	ReportedAt    *time.Time `json:"reported_at"`
+
+	// ReportedProvenance says where that state came from: "observed" for an
+	// emitter or the prober, "user_reported" for a person filing it by hand
+	// (029 §3.2), "" when nothing has reported. A reader that shows the state
+	// without this is letting a claim pass for a verified fact.
+	ReportedProvenance string `json:"reported_provenance"`
 }
 
 // DeliverableListResponse is the response body of GET
@@ -57,6 +63,17 @@ type CreateDeliverableInput struct {
 	// Milestone attaches the deliverable to a milestone in the same project
 	// at declaration time (spec 029 §2), "" for none.
 	Milestone string `json:"milestone,omitempty"`
+}
+
+// ReportDeliverableInput is the request body for POST
+// /api/v1/deliverables/{id}/report: a person filing the state they see
+// (029 §3.2). It files user-reported evidence, never an observed fact, and
+// the actor comes from the caller's identity rather than the body.
+type ReportDeliverableInput struct {
+	// State is one of ArtifactStates.
+	State string `json:"state"`
+	// Note is what the reporter wants on the record, "" for none.
+	Note string `json:"note"`
 }
 
 // EditDeliverableInput is the request body for PATCH /api/v1/deliverables/{id}.
