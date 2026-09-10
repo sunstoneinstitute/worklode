@@ -704,6 +704,24 @@ func TestClaimNextInvalidKindInList(t *testing.T) {
 	}
 }
 
+// TestClaimNextTrailingCommaKindRefused: an empty element is refused, not
+// dropped. Were it dropped the filter would widen to "any kind" and the
+// feature task below would be claimed by a loop that asked for design work —
+// the tier leak 025 §8.8 exists to close.
+func TestClaimNextTrailingCommaKindRefused(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "A task", "priority": "high", "kind": "feature"})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "kind": "design,", "worktree": "host:/wt-1",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+}
+
 // TestClaimNextInvalidKind covers the 422 guard on an unrecognized kind.
 func TestClaimNextInvalidKind(t *testing.T) {
 	t.Parallel()

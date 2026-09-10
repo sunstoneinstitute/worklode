@@ -59,9 +59,11 @@ or filling a gap the document was silent on.
 
 The fixer amends an accepted document in place with `lode doc edit
 --substantive`, or `lode doc edit --note "<what changed and why>"` when it is
-not. The server refuses a silent patch that touches a referenced section, a
-schema, migration, API surface, CLI flag, event name, enum, ontology term or
-definition of done, and names the rule that fired.
+not. Some edits are refused whichever flag you pass: a section open work
+already points at, a schema, migration, API surface, CLI flag, event name,
+enum, ontology term or definition of done. The server names the rule that
+fired, and that edit needs a full revision (`lode doc revise`), which is
+human work — escalate instead.
 `lode doc note <ref>#sec-N --body "..."` records a defect nobody is fixing.
 
 ## Before you call it done

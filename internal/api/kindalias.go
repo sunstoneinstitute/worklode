@@ -30,21 +30,24 @@ func (s *server) normalizeTaskKind(kind, surface string) string {
 
 // normalizeTaskKindList applies normalizeTaskKind to each element of a
 // comma-separated kind filter (025 §8.8) and returns the normalised list,
-// rejoined. bad names the first element that is not a task kind, so the
-// caller's 422 can point at the element rather than at the whole list; it is
-// "" when every element is valid. An empty filter stays empty: it means "any
-// kind", not "no kinds".
-func (s *server) normalizeTaskKindList(list, surface string) (normalized, bad string) {
+// rejoined. ok is false when an element is not a task kind, and bad names
+// that element, so the caller's 422 can point at it rather than at the whole
+// list. An empty filter stays empty and is ok: it means "any kind".
+//
+// An empty element is one of the rejections, not a value to drop. A trailing
+// comma that silently emptied the list would turn a tier filter into "claim
+// anything", which is the leak §8.8 exists to close.
+func (s *server) normalizeTaskKindList(list, surface string) (normalized, bad string, ok bool) {
 	if strings.TrimSpace(list) == "" {
-		return "", ""
+		return "", "", true
 	}
 	parts := strings.Split(list, ",")
 	for i, p := range parts {
 		k := s.normalizeTaskKind(strings.TrimSpace(p), surface)
 		if !validKinds[k] {
-			return "", k
+			return "", k, false
 		}
 		parts[i] = k
 	}
-	return strings.Join(parts, ","), ""
+	return strings.Join(parts, ","), "", true
 }

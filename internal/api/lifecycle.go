@@ -139,8 +139,8 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "worktree is required")
 		return
 	}
-	kinds, bad := s.normalizeTaskKindList(req.Kind, "claim_next")
-	if bad != "" {
+	kinds, bad, ok := s.normalizeTaskKindList(req.Kind, "claim_next")
+	if !ok {
 		writeErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("%s (got %q)", invalidKindMsg, bad))
 		return
 	}
