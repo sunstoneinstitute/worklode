@@ -8,6 +8,7 @@ resources:
   - database.yaml
   - configmap.yaml
   - embeddings.yaml
+  - embeddings-query.yaml
   - deployment.yaml
   - service.yaml
   - metrics-service.yaml
