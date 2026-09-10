@@ -490,7 +490,7 @@ func reportDeliverableState(s *Store, deliverableID, state, source, actorID, not
 
 // TestReportDeliverableStateWithoutDeclaration pins 029 §3.2's user report on
 // a deliverable that declares no address: the evidence lands against
-// artifact_uri = '' and the projection surfaces it, because the entity itself
+// artifact_uri = ” and the projection surfaces it, because the entity itself
 // is the subject when the state change has no address.
 func TestReportDeliverableStateWithoutDeclaration(t *testing.T) {
 	t.Parallel()
@@ -589,9 +589,9 @@ func TestReportDeliverableStateRejects(t *testing.T) {
 
 // TestDeclaredDeliverableKeepsObservedProjection pins the LATERAL widening
 // against a regression: broadening the evidence correlation to
-// COALESCE(decl.artifact_uri, '') must not change what a deliverable with a
+// COALESCE(decl.artifact_uri, ”) must not change what a deliverable with a
 // declared address reports. Evidence filed against another address still does
-// not surface, and evidence against '' does not leak onto it either.
+// not surface, and evidence against ” does not leak onto it either.
 func TestDeclaredDeliverableKeepsObservedProjection(t *testing.T) {
 	t.Parallel()
 	s := deliverableStore(t)
