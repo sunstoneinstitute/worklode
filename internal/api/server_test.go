@@ -431,7 +431,7 @@ func (c failingCollector) Collect(ch chan<- prometheus.Metric) {
 func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(failingCollector{prometheus.NewDesc("worklode_probe", "test", nil, nil)})
+	reg.MustRegister(failingCollector{prometheus.NewDesc("worklode_test_failing_collector", "test", nil, nil)})
 	main, admin, err := api.NewServer(newTestStore(t), api.Config{Metrics: reg})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -452,7 +452,7 @@ func TestMetricsEndpointSurvivesCollectorFailure(t *testing.T) {
 	if !strings.Contains(body, `promhttp_metric_handler_errors_total{cause="gathering"} 1`) {
 		t.Fatalf("collector failure not surfaced:\n%s", body)
 	}
-	if strings.Contains(body, "worklode_probe") {
+	if strings.Contains(body, "worklode_test_failing_collector") {
 		t.Fatalf("failing collector's family should be absent:\n%s", body)
 	}
 }

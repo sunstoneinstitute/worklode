@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sunstoneinstitute/worklode/internal/derive"
+	"github.com/sunstoneinstitute/worklode/internal/hooks"
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/ns"
@@ -299,6 +300,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_github_calls_total",
 		Help: "GitHub API calls worklode makes itself, by operation.",
 	}, []string{"op"})
+	s.probeReports = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_probe_reports_total",
+		Help: "POST /api/v1/artifact-reports attempts (029 §3.2), by state (" +
+			strings.Join(hooks.CatalogStates, ", ") +
+			", or \"invalid\" for a payload that failed validation) and result (" +
+			strings.Join(probeReportResults, ", ") + ").",
+	}, []string{"state", "result"})
 
 	// The task-body render cache owns its own instruments (WL-222), so it is
 	// built here rather than in NewServer: this is where the registerer is.
@@ -318,7 +326,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns,
 		s.morningBriefRenders, s.briefReviews,
-		s.githubCalls)
+		s.githubCalls, s.probeReports)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -508,6 +516,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	}
 	for _, outcome := range briefReviewOutcomes {
 		s.briefReviews.WithLabelValues(outcome)
+	}
+	// Every state (plus "invalid") and every result, so a state nobody has
+	// reported yet reads as a flat zero rather than as no-data.
+	for _, state := range append(append([]string{}, hooks.CatalogStates...), "invalid") {
+		for _, result := range probeReportResults {
+			s.probeReports.WithLabelValues(state, result)
+		}
 	}
 }
 
@@ -1036,6 +1051,21 @@ func (s *server) observeGitHubCall(op string) {
 		return
 	}
 	s.githubCalls.WithLabelValues(op).Inc()
+}
+
+// probeReportResults bounds worklode_probe_reports_total's result label:
+// "invalid" is a payload that failed validation (bad state, blank
+// dedupe_key) before RecordEvent ever ran.
+var probeReportResults = []string{"ok", "duplicate", "unrouted", "invalid", "error"}
+
+// observeProbeReport records one POST /api/v1/artifact-reports attempt, by
+// state (one of hooks.CatalogStates, or "invalid") and result.
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeProbeReport(state, result string) {
+	if s.probeReports == nil {
+		return
+	}
+	s.probeReports.WithLabelValues(state, result).Inc()
 }
 
 // observeEventSubscriberSeek records one successful admin seek of a
