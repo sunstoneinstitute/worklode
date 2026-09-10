@@ -71,15 +71,28 @@ func resolveFrontier(tx *sql.Tx, now time.Time, repo, env string, eventID int64)
 // at or below frontier in repo. The release handler calls it with the
 // release's own frontier; resolveFrontier calls it with the confirmed
 // deploy frontier.
+//
+// The tasks it moved are recorded on the deploy event: the transitions write
+// only a state_log row attributed to that event, so nothing else names the
+// set, and the Progress page reads it to redraw one cell per landed task
+// (WL-SPEC-66 §5.1).
 func resolveTasksBelow(tx *sql.Tx, now time.Time, repo string, frontier, eventID int64) error {
 	tasks, err := store.TasksBelowFrontier(tx, repo, frontier)
 	if err != nil {
 		return err
 	}
+	var movedIDs []string
 	for _, taskID := range tasks {
-		if err := store.ResolveDelivery(tx, now, taskID, repo, eventID); err != nil {
+		moved, err := store.ResolveDelivery(tx, now, taskID, repo, eventID)
+		if err != nil {
 			return err
 		}
+		if moved {
+			movedIDs = append(movedIDs, taskID)
+		}
+	}
+	if len(movedIDs) > 0 {
+		return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs})
 	}
 	return nil
 }

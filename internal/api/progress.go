@@ -746,10 +746,11 @@ type progressOrigin struct {
 // touch's task or document id is batched into one store.ProgressRefs call —
 // never one call per event — and a ref outside projectID is dropped (§5.1).
 //
-// A touch with a kind but no id — a deploy event, whose Touch cannot carry
-// the whole set of tasks it transitioned — has nothing to look up and
-// contributes no frame; the same is true of an event whose family this page
-// does not model at all (progress.Resolve's zero Touch).
+// A delivery event transitions a set of tasks, so its touch names them in
+// Tasks and fans out into one frame per task, batched into the same refs
+// call as everything else. A touch with a kind but no id at all contributes
+// no frame, as does an event whose family this page does not model
+// (progress.Resolve's zero Touch).
 //
 // A document named by IRI rather than row id — the typed 025 §15.3 events,
 // whose wl:subject is the only name they carry — is resolved in one further
@@ -774,15 +775,22 @@ func (s *server) progressFrames(ctx context.Context, projectID string, events []
 		}
 		docOrigin[id] = o
 	}
+	noteTask := func(id string, o progressOrigin) {
+		if _, seen := taskOrigin[id]; !seen {
+			taskIDs = append(taskIDs, id)
+		}
+		taskOrigin[id] = o
+	}
 	for _, e := range events {
 		t := progress.Resolve(e.Type, e.Payload)
 		o := progressOrigin{eventID: e.ID, typ: e.Type, at: e.ReceivedAt}
 		switch {
 		case t.Task != "":
-			if _, seen := taskOrigin[t.Task]; !seen {
-				taskIDs = append(taskIDs, t.Task)
+			noteTask(t.Task, o)
+		case len(t.Tasks) > 0:
+			for _, id := range t.Tasks {
+				noteTask(id, o)
 			}
-			taskOrigin[t.Task] = o
 		case t.Doc != 0:
 			noteDoc(t.Doc, o)
 		case t.DocIRI != "":

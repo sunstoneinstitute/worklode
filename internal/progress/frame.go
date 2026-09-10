@@ -13,7 +13,12 @@ import (
 // shows.
 type Touch struct {
 	Task string
-	Doc  int64
+	// Tasks is the set a delivery event transitioned, recorded on the event
+	// by the resolver's callers because the transitions log no event of their
+	// own. Task stays for the events that name exactly one task, which is
+	// most of them; a producer sets one field or the other, not both.
+	Tasks []string
+	Doc   int64
 	// DocIRI is the document's subject IRI (wlid:doc/spec-worklode-066),
 	// set when the event names its document that way and not by row id.
 	// The reader resolves it to a row id; this package stays pure.
@@ -79,6 +84,7 @@ func Resolve(eventType string, payload []byte) Touch {
 		return t
 	}
 	_ = json.Unmarshal(fields["task"], &t.Task)
+	_ = json.Unmarshal(fields["tasks"], &t.Tasks)
 	// "doc" is the row id in a document mutation's payload and the document's
 	// IRI in the events minted about one (api/progress.go, api/docwatch.go);
 	// the typed 025 §15.3 events name their document in "wl:subject" and

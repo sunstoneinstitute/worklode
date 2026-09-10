@@ -999,3 +999,17 @@ Recorded by WL-774 (decomposing spec 001 into plans):
   set the flag by hand. The fix is a fifth field on `planTaskFence` threaded
   into the mint, and a line about it in the `lode:writing-docs` skill, which
   says nothing about human-only tasks today.
+
+Recorded by WL-775 (delivery frames on the Progress page):
+
+- `[P3]` **`release` and `reconcile` events record their transitioned tasks and
+  nobody reads them.** WL-775 made every `store.ResolveDelivery` caller merge
+  the ids it moved onto the incoming event under `"tasks"`. Two of those paths
+  produce event families absent from `progress.touchKinds`
+  (`internal/progress/frame.go`): the release handler, which shares
+  `resolveTasksBelow` with the deploy handlers, and `internal/reconcile`'s
+  catch-up poll. The merge is right either way — it is what makes the event an
+  honest record of the transitions, which write only a `state_log` row — but
+  until those families are mapped, a task moved by a release or by reconciliation
+  still does not redraw its cell. Adding them is two map entries plus a decision
+  about whether a reconcile sweep should pulse the page at all.

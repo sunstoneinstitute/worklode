@@ -1376,6 +1376,26 @@ func (e *env) eventPayloadTask(t *testing.T, deliveryID string) string {
 	return task.String
 }
 
+// eventPayloadTasks reads the set of tasks a delivery's applier reported as
+// transitioned on the stored event payload; nil when it named none.
+func (e *env) eventPayloadTasks(t *testing.T, deliveryID string) []string {
+	t.Helper()
+	var raw []byte
+	if err := e.st.DBForTests().QueryRow(
+		`SELECT payload->'tasks' FROM events WHERE source = 'github' AND external_id = $1`,
+		deliveryID).Scan(&raw); err != nil {
+		t.Fatalf("event payload for %s: %v", deliveryID, err)
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	var ids []string
+	if err := json.Unmarshal(raw, &ids); err != nil {
+		t.Fatalf("decode tasks %q: %v", raw, err)
+	}
+	return ids
+}
+
 // workflowRunBody builds a completed workflow_run payload for one head sha.
 func workflowRunBody(sha string) []byte {
 	return []byte(`{
