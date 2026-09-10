@@ -27,16 +27,17 @@ type Event struct {
 	Type       string
 	Payload    []byte
 	ReceivedAt time.Time
+	Applied    bool
 }
 
 // eventColumns is the SELECT list scanEvent expects, in order.
-const eventColumns = `id, source, external_id, type, payload, received_at`
+const eventColumns = `id, source, external_id, type, payload, received_at, applied_at IS NOT NULL`
 
 // scanEvent reads one row selected with eventColumns, normalising the
 // timestamp to UTC the way every event reader wants it.
 func scanEvent(row rowScanner) (Event, error) {
 	var e Event
-	if err := row.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt); err != nil {
+	if err := row.Scan(&e.ID, &e.Source, &e.ExternalID, &e.Type, &e.Payload, &e.ReceivedAt, &e.Applied); err != nil {
 		return Event{}, err
 	}
 	e.ReceivedAt = e.ReceivedAt.UTC()

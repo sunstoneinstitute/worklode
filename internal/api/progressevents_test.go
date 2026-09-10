@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/sunstoneinstitute/worklode/internal/api"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
 // progressEventsRecorder wraps httptest.NewRecorder and cancels the request's
@@ -188,6 +190,70 @@ func TestProgressEventsHandler(t *testing.T) {
 	other := openProgressEvents(t, shortCtx, h, "other", "")
 	if body := other.Body.String(); strings.Contains(body, "event: progress") {
 		t.Errorf("other project's stream got a frame it should not see: %q", body)
+	}
+}
+
+// TestProgressEventsWaitsForWebhookCorrelation covers the gap between the
+// two durable webhook transactions. The event is readable after the first
+// commit, but its task is added by the second. The stream must hold its
+// cursor at that event until the apply commits, then emit the correlated
+// task frame rather than losing it behind the cursor.
+func TestProgressEventsWaitsForWebhookCorrelation(t *testing.T) {
+	t.Parallel()
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	st, h, _, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "webhook-correlation",
+		Body: progressPlanBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var accepted model.AcceptDocResponse
+	decodeInto(t, rr, &accepted)
+	if len(accepted.Tasks) == 0 {
+		t.Fatal("accepting the plan minted no tasks")
+	}
+	taskID := accepted.Tasks[0].ID
+
+	applyStarted := make(chan struct{})
+	finishApply := make(chan struct{})
+	recorded := make(chan error, 1)
+	go func() {
+		_, _, err := st.RecordEventThenApply(context.Background(), "github", "progress-webhook-correlation",
+			"pull_request.opened", []byte(`{"pull_request":{"number":648}}`),
+			func(tx *sql.Tx, eventID int64) error {
+				close(applyStarted)
+				<-finishApply
+				if err := store.MergeEventPayload(tx, eventID, map[string]any{"task": taskID}); err != nil {
+					return err
+				}
+				return store.MarkEventApplied(tx, eventID, st.Now())
+			})
+		recorded <- err
+	}()
+	<-applyStarted
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	streamed := make(chan *progressEventsRecorder, 1)
+	go func() { streamed <- openProgressEvents(t, ctx, h, "proj", "pull_request.opened") }()
+
+	// Several polls fit in this window. A broken stream consumes the
+	// unresolved event here and can no longer see it after apply commits.
+	time.Sleep(150 * time.Millisecond)
+	close(finishApply)
+	if err := <-recorded; err != nil {
+		t.Fatalf("record and apply webhook: %v", err)
+	}
+	rec := <-streamed
+	frame := progressFrameFor(t, rec.Body.String(), "pull_request.opened", plan.ID)
+	if frame.Task != taskID {
+		t.Errorf("frame task = %q, want %q", frame.Task, taskID)
 	}
 }
 
