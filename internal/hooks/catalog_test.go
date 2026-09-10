@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,14 +27,15 @@ const (
 )
 
 // catalogEnv is a webhook test fixture: a store with project "demo" and the
-// catalog, ci and pipeline handlers, all sharing one secret (029 §8.3). The
-// raw-SQL assertions come from the embedded dbEnv, shared with the GitHub
-// and Flux fixtures.
+// catalog, ci, pipeline and cms handlers, all sharing one secret (029 §8.3).
+// The raw-SQL assertions come from the embedded dbEnv, shared with the
+// GitHub and Flux fixtures.
 type catalogEnv struct {
 	dbEnv
 	h         http.Handler // /hooks/catalog
 	ciH       http.Handler // /hooks/ci
 	pipelineH http.Handler // /hooks/pipeline
+	cmsH      http.Handler // /hooks/cms
 }
 
 func newCatalogEnv(t *testing.T) *catalogEnv {
@@ -52,6 +54,7 @@ func newCatalogEnvWith(t *testing.T, secret string, m *hooks.Metrics) *catalogEn
 		h:         hooks.NewCatalogHandler(st, secret, nil, m),
 		ciH:       hooks.NewCIHandler(st, secret, nil, m),
 		pipelineH: hooks.NewPipelineHandler(st, secret, nil, m),
+		cmsH:      hooks.NewCMSHandler(st, secret, nil, m),
 	}
 }
 
@@ -69,6 +72,8 @@ func (e *catalogEnv) deliverSigned(t *testing.T, path, deliveryHeader, delivery,
 		h = e.ciH
 	case "/hooks/pipeline":
 		h = e.pipelineH
+	case "/hooks/cms":
+		h = e.cmsH
 	default:
 		t.Fatalf("deliverSigned: no handler mounted for %s", path)
 	}
@@ -576,5 +581,114 @@ func TestPipelineLabelRedeliveryIsIdempotent(t *testing.T) {
 	}
 	if got := e.evidenceRows(t, "deliverable", del); got != 1 {
 		t.Fatalf("evidence rows = %d, want 1", got)
+	}
+}
+
+// TestCMSDeliveryWithoutPersonIsRefused: the CMS source requires both
+// published_by and approved_by (029 §8.3) — omitting either is a 400 before
+// any event is recorded, not just an unrouted delivery.
+func TestCMSDeliveryWithoutPersonIsRefused(t *testing.T) {
+	e := newCatalogEnv(t)
+	e.seedDeliverable(t, "story", "https://sunstone.example/cow")
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"missing both", `{"artifact":"https://sunstone.example/cow","state":"published"}`},
+		{"blank published_by", `{"artifact":"https://sunstone.example/cow","state":"published",` +
+			`"published_by":"  ","approved_by":"ed"}`},
+		{"blank approved_by", `{"artifact":"https://sunstone.example/cow","state":"published",` +
+			`"published_by":"ed","approved_by":""}`},
+	} {
+		rr := e.deliverSigned(t, "/hooks/cms", "X-CMS-Delivery", "c-"+tc.name, tc.body)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, want 400", tc.name, rr.Code)
+		}
+		var msg struct{ Error string }
+		if err := json.Unmarshal(rr.Body.Bytes(), &msg); err != nil {
+			t.Fatalf("%s: decode body %q: %v", tc.name, rr.Body.String(), err)
+		}
+		if msg.Error != "published_by and approved_by are required" {
+			t.Errorf("%s: error = %q, want the exact required-fields message", tc.name, msg.Error)
+		}
+	}
+	if n := e.rawQueryInt(t, `SELECT count(*) FROM events WHERE source = 'cms'`); n != 0 {
+		t.Errorf("refused delivery recorded %d events, want 0", n)
+	}
+}
+
+// TestCMSDeliveryFilesEvidenceWithPerson: a complete delivery merges
+// published_by and approved_by into the evidence detail alongside whatever
+// the emitter itself sent, and the stored event payload keeps the whole body
+// — the event is the provenance record either way (029 §8.3).
+func TestCMSDeliveryFilesEvidenceWithPerson(t *testing.T) {
+	e := newCatalogEnv(t)
+	id := e.seedDeliverable(t, "story", "https://sunstone.example/cow")
+
+	body := `{"event":"post.published","artifact":"https://sunstone.example/cow",` +
+		`"state":"published","published_by":"ed@sunstone.example",` +
+		`"approved_by":"jo@sunstone.example","detail":{"note":"nightly"}}`
+	rr := e.deliverSigned(t, "/hooks/cms", "X-CMS-Delivery", "c-1", body)
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "ok" {
+		t.Fatalf("status = %d, ack = %q, want 200 ok", rr.Code, ackStatus(t, rr))
+	}
+
+	var detail string
+	if !e.rawQueryRow(t, []any{&detail},
+		`SELECT detail::text FROM artifact_evidence WHERE entity_kind = 'deliverable' AND entity_id = $1`, id) {
+		t.Fatalf("no evidence row for %s", id)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(detail), &got); err != nil {
+		t.Fatalf("decode detail %q: %v", detail, err)
+	}
+	if got["published_by"] != "ed@sunstone.example" || got["approved_by"] != "jo@sunstone.example" || got["note"] != "nightly" {
+		t.Errorf("detail = %v, want published_by/approved_by merged alongside the emitter's own note", got)
+	}
+
+	var publishedBy, approvedBy string
+	if !e.rawQueryRow(t, []any{&publishedBy, &approvedBy},
+		`SELECT payload->>'published_by', payload->>'approved_by' FROM events WHERE source = 'cms' AND external_id = 'c-1'`) {
+		t.Fatalf("no event recorded for c-1")
+	}
+	if publishedBy != "ed@sunstone.example" || approvedBy != "jo@sunstone.example" {
+		t.Errorf("event payload published_by/approved_by = %q/%q, want the delivered values", publishedBy, approvedBy)
+	}
+}
+
+// TestCMSRedeliveryIsIdempotent: a redelivered CMS delivery acks duplicate
+// and writes no second evidence row, same as the other ingest sources.
+func TestCMSRedeliveryIsIdempotent(t *testing.T) {
+	e := newCatalogEnv(t)
+	id := e.seedDeliverable(t, "story", "https://sunstone.example/cow")
+	body := `{"artifact":"https://sunstone.example/cow","state":"published",` +
+		`"published_by":"ed","approved_by":"jo"}`
+
+	if got := ackStatus(t, e.deliverSigned(t, "/hooks/cms", "X-CMS-Delivery", "c-dup", body)); got != "ok" {
+		t.Fatalf("first ack = %q, want ok", got)
+	}
+	if got := ackStatus(t, e.deliverSigned(t, "/hooks/cms", "X-CMS-Delivery", "c-dup", body)); got != "duplicate" {
+		t.Fatalf("redelivery ack = %q, want duplicate", got)
+	}
+	if got := e.evidenceRows(t, "deliverable", id); got != 1 {
+		t.Fatalf("evidence rows = %d, want 1", got)
+	}
+}
+
+// TestCMSUnroutedDeliveryStaysReplayCandidate: nothing declares the
+// artifact, so the ack is unrouted and the event's applied_at stays NULL —
+// exactly what puts it in the replay candidate set (WL-256).
+func TestCMSUnroutedDeliveryStaysReplayCandidate(t *testing.T) {
+	e := newCatalogEnv(t)
+	body := `{"artifact":"https://sunstone.example/nobody-declares-this","state":"published",` +
+		`"published_by":"ed","approved_by":"jo"}`
+
+	rr := e.deliverSigned(t, "/hooks/cms", "X-CMS-Delivery", "c-unrouted", body)
+	if rr.Code != http.StatusOK || ackStatus(t, rr) != "unrouted" {
+		t.Fatalf("status = %d, ack = %q, want 200 unrouted", rr.Code, ackStatus(t, rr))
+	}
+	if got := e.rawQueryInt(t, `SELECT count(*) FROM events WHERE source = 'cms' AND external_id = 'c-unrouted' AND applied_at IS NULL`); got != 1 {
+		t.Errorf("unrouted cms delivery: applied_at IS NULL rows = %d, want 1", got)
 	}
 }
