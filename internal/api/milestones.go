@@ -186,6 +186,7 @@ func milestonesView(project ui.CockpitProject, milestones []model.Milestone,
 				CreatedBy:     d.CreatedBy,
 				CreatedAt:     d.CreatedAt,
 				Artifact:      d.Artifact,
+				Label:         d.Label,
 				ReportedState: d.ReportedState,
 				ReportedAt:    d.ReportedAt,
 			})
