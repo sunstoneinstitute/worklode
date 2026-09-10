@@ -118,6 +118,9 @@ func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSect
 			Triple{S: secSubj, P: DCTTitle, O: Text(sec.Heading)},
 			Triple{S: secSubj, P: DCTIsPartOf, O: IRIRef(subj)},
 		)
+		if sec.LastRevisedIn > 0 {
+			triples = append(triples, Triple{S: secSubj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(d.Slug, sec.LastRevisedIn))})
+		}
 	}
 	return triples
 }

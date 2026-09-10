@@ -10,12 +10,13 @@ import (
 // records nothing, so RunOnce can call its methods unconditionally, as this
 // package's tests that pass nil do.
 type Metrics struct {
-	runs        *prometheus.CounterVec // worklode_graph_projection_runs_total{result}
-	projects    prometheus.Counter     // worklode_graph_projection_projects_total
-	duration    prometheus.Histogram   // worklode_graph_projection_duration_seconds
-	failures    prometheus.Counter     // worklode_graph_projection_project_failures_total
-	quarantined prometheus.Gauge       // worklode_graph_projection_quarantined_projects
-	deleted     prometheus.Counter     // worklode_graph_projection_graphs_deleted_total
+	runs          *prometheus.CounterVec // worklode_graph_projection_runs_total{result}
+	projects      prometheus.Counter     // worklode_graph_projection_projects_total
+	duration      prometheus.Histogram   // worklode_graph_projection_duration_seconds
+	failures      prometheus.Counter     // worklode_graph_projection_project_failures_total
+	quarantined   prometheus.Gauge       // worklode_graph_projection_quarantined_projects
+	deleted       prometheus.Counter     // worklode_graph_projection_graphs_deleted_total
+	versionGraphs prometheus.Counter     // worklode_graph_projection_doc_version_graphs_total
 }
 
 // NewMetrics registers the projector's instruments on reg.
@@ -46,8 +47,12 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 			Name: "worklode_graph_projection_graphs_deleted_total",
 			Help: "Declared graphs removed from graph-server because their document was tombstoned.",
 		}),
+		versionGraphs: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_graph_projection_doc_version_graphs_total",
+			Help: "Immutable document version graphs successfully PUT to graph-server.",
+		}),
 	}
-	reg.MustRegister(m.runs, m.projects, m.duration, m.failures, m.quarantined, m.deleted)
+	reg.MustRegister(m.runs, m.projects, m.duration, m.failures, m.quarantined, m.deleted, m.versionGraphs)
 
 	// Pre-initialise both series so alert expressions see 0, not no-data.
 	m.runs.WithLabelValues("ok")
@@ -83,6 +88,14 @@ func (m *Metrics) recordGraphDeleted() {
 		return
 	}
 	m.deleted.Inc()
+}
+
+// recordDocVersionGraph records one immutable document version graph PUT.
+func (m *Metrics) recordDocVersionGraph() {
+	if m == nil {
+		return
+	}
+	m.versionGraphs.Inc()
 }
 
 // recordProjectFailure records one project that failed to project and was
