@@ -126,3 +126,61 @@ func (s *Store) StalePlanSlug(ctx context.Context, planDoc int64) (string, error
 	}
 	return slug, nil
 }
+
+// StaleCandidate is one accepted spec or plan with the §8.7 clock facts.
+type StaleCandidate struct {
+	DocID        int64
+	Slug         string
+	Version      int
+	Kind         string
+	Project      string
+	UpdatedAt    time.Time
+	ProjectDays  int // projects.doc_staleness_days, 0 when NULL
+	HasExecution bool
+}
+
+// StaleCandidateDocs returns every accepted spec and plan with its §8.7
+// clock facts, ordered by doc id so the sweeper and its tests see a stable
+// scan order. It fetches facts only; the threshold verdict is
+// watcher.StaleAt's, the rule's one owner.
+//
+// A plan counts as executed when any task minted from it ever held a lease —
+// active or expired, since the fact that matters is that execution happened
+// at all, not whether it is still in progress. A spec counts as executed
+// when an accepted plan covers one of its sections; a plan's `covers` edges
+// point at a spec's section (to_anchor set), but the EXISTS below only needs
+// the edge and the covering plan's status, not the anchor.
+//
+// ADRs are excluded here, matching watcher.StaleAt. The LEFT JOIN to
+// projects keeps a doc whose project row is somehow missing in the result
+// with ProjectDays 0, rather than dropping it.
+func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT d.id, d.slug, d.version, d.kind, d.project_id, d.updated_at,
+		        coalesce(proj.doc_staleness_days, 0),
+		        CASE d.kind
+		          WHEN 'plan' THEN EXISTS (
+		            SELECT 1 FROM leases l
+		              JOIN tasks t ON t.id = l.task_id
+		             WHERE t.plan_doc = d.id)
+		          ELSE EXISTS (
+		            SELECT 1 FROM doc_edges de
+		              JOIN docs p ON p.id = de.from_doc
+		             WHERE de.type = 'covers' AND de.to_doc = d.id
+		               AND p.status = 'accepted')
+		        END
+		   FROM docs d
+		   LEFT JOIN projects proj ON proj.id = d.project_id
+		  WHERE d.status = 'accepted' AND d.kind IN ('spec', 'plan')
+		    AND d.deleted_at IS NULL
+		  ORDER BY d.id`)
+	if err != nil {
+		return nil, fmt.Errorf("list stale candidate docs: %w", err)
+	}
+	return collectRows(rows, "list stale candidate docs", func(r rowScanner) (StaleCandidate, error) {
+		var c StaleCandidate
+		err := r.Scan(&c.DocID, &c.Slug, &c.Version, &c.Kind, &c.Project, &c.UpdatedAt,
+			&c.ProjectDays, &c.HasExecution)
+		return c, err
+	})
+}
