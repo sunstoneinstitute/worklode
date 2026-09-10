@@ -201,6 +201,11 @@ func SweepOnce(ctx context.Context, opts Options) error {
 
 		state, fingerprint, ok := check(ctx, address)
 		if !ok {
+			// A 5xx, a timeout, a refused connection: the origin said
+			// nothing about the artifact's state, so there is nothing to
+			// report (029 §3.2). It is still worth a line — an address
+			// that never yields a fact is invisible otherwise.
+			log.Warn("probe inconclusive, reporting nothing", "address", address)
 			continue
 		}
 
