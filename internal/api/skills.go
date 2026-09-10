@@ -143,7 +143,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 		}
 	}
 
-	if s.embedder != nil && !s.cfg.DisableSkillMatching {
+	if s.queryEmbedder != nil && !s.cfg.DisableSkillMatching {
 		rec.Provider = "openai-compatible"
 	}
 	matches, warnings := s.skillMatches(ctx, text, pinnedNames, limit)
@@ -183,9 +183,9 @@ func (s *server) skillMatches(ctx context.Context, text string, exclude map[stri
 
 	var warnings []string
 	var vec []float32
-	if s.embedder != nil {
+	if s.queryEmbedder != nil {
 		ectx, cancel := context.WithTimeout(ctx, recommendTimeout)
-		vecs, err := s.embedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
+		vecs, err := s.queryEmbedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
 		cancel()
 		if err != nil {
 			warnings = append(warnings, "embedding provider unavailable; lexical matches only")

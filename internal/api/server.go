@@ -143,6 +143,14 @@ type Config struct {
 	// the mismatch costs retrieval quality silently rather than erroring.
 	EmbeddingQueryPrefix    string `env:"LODE_EMBEDDING_QUERY_PREFIX"`
 	EmbeddingDocumentPrefix string `env:"LODE_EMBEDDING_DOCUMENT_PREFIX"`
+	// QueryEmbeddingURL overrides EmbeddingURL for the three query-time
+	// embedding calls (search, skill recommend, task-brief skill matching)
+	// only. Unset: queries share the document/indexer provider's endpoint,
+	// today's behavior. Two CPU-bound TEI sidecars serving the same model
+	// let a large indexer batch and an interactive query resolve on
+	// separate queues instead of head-of-line-blocking each other
+	// (deploy/base/embeddings-query.yaml).
+	QueryEmbeddingURL string `env:"LODE_QUERY_EMBEDDING_URL"`
 	// IndexInterval is how often the corpus convergence loop runs
 	// (LODE_INDEX_INTERVAL, default indexer.DefaultInterval). The loop runs
 	// with or without an embedding provider — with none it still writes the
@@ -291,12 +299,16 @@ type server struct {
 	pollMetrics *reconcile.Metrics
 
 	// embedder is nil unless an embedding provider is configured; recommend
-	// then runs pins-only. skillSyncer is nil unless skill sources are
-	// configured; sync then 422s. skillSyncMu serializes concurrent sync
-	// requests against the same source set. skillSyncPending records a
-	// trigger that arrived while a sync was already running, so runSkillSync
-	// re-runs once more instead of silently dropping it (see runSkillSync).
+	// then runs pins-only. queryEmbedder serves the three query-time call
+	// sites (search, skill recommend, task-brief skill matching); it equals
+	// embedder unless LODE_QUERY_EMBEDDING_URL points it at a second
+	// instance. skillSyncer is nil unless skill sources are configured;
+	// sync then 422s. skillSyncMu serializes concurrent sync requests
+	// against the same source set. skillSyncPending records a trigger that
+	// arrived while a sync was already running, so runSkillSync re-runs
+	// once more instead of silently dropping it (see runSkillSync).
 	embedder         embed.Provider
+	queryEmbedder    embed.Provider
 	skillSyncer      *skillsync.Syncer
 	skillSources     []skillsync.Source
 	skillSyncMu      sync.Mutex
@@ -1030,14 +1042,18 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		s.repoReader = &storederive.GitHubReader{Auth: appAuth}
 	}
 
+	if cfg.QueryEmbeddingURL != "" && cfg.EmbeddingURL == "" {
+		return nil, nil, fmt.Errorf("LODE_QUERY_EMBEDDING_URL requires LODE_EMBEDDING_URL")
+	}
 	if cfg.EmbeddingURL != "" {
 		if cfg.EmbeddingModel == "" {
 			return nil, nil, fmt.Errorf("LODE_EMBEDDING_MODEL is required when LODE_EMBEDDING_URL is set")
 		}
+		embedMetrics := embed.NewMetrics(reg)
 		s.embedder = &embed.OpenAI{
 			URL: cfg.EmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey,
 			QueryPrefix: cfg.EmbeddingQueryPrefix, DocumentPrefix: cfg.EmbeddingDocumentPrefix,
-			Metrics: embed.NewMetrics(reg),
+			Metrics: embedMetrics,
 		}
 		// index_chunks.embedding is vector(768) (040 §2.2), so a provider of
 		// any other width cannot store a single row. Refuse the boot rather
@@ -1053,6 +1069,21 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 		// from the wrong embedding space.
 		if err := indexer.InvalidateOnProviderChange(context.Background(), st, s.embedder, s.log); err != nil {
 			return nil, nil, fmt.Errorf("invalidate index vectors: %w", err)
+		}
+
+		s.queryEmbedder = s.embedder
+		if cfg.QueryEmbeddingURL != "" {
+			s.queryEmbedder = &embed.OpenAI{
+				URL: cfg.QueryEmbeddingURL, Model: cfg.EmbeddingModel, Key: cfg.EmbeddingAPIKey,
+				QueryPrefix: cfg.EmbeddingQueryPrefix, DocumentPrefix: cfg.EmbeddingDocumentPrefix,
+				Metrics: embedMetrics,
+			}
+			// Same guard as embedder above: a query provider of the wrong
+			// width would silently produce vectors store.Search's <=> can
+			// never usefully compare.
+			if dim := s.queryEmbedder.Dim(); dim != store.IndexDim {
+				return nil, nil, fmt.Errorf("query embedding provider produces %d-wide vectors, the index stores %d", dim, store.IndexDim)
+			}
 		}
 	}
 	skillSources, err := skillsync.ParseSources(cfg.SkillSources)
