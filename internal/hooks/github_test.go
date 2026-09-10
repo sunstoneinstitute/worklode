@@ -541,6 +541,13 @@ func TestPROpenedTaskNotInProgressSkipsTransition(t *testing.T) {
 const (
 	prHeadSHA  = "abc1230000000000000000000000000000000000"
 	prMergeSHA = "def4560000000000000000000000000000000000"
+	// syncHeadSHA and syncHeadSHA2 are the heads in pull_request_synchronize.json
+	// and pull_request_synchronize_second.json respectively — two more
+	// revisions of the same PR#42, each distinct from prHeadSHA and from
+	// each other so DesignateRevision's boundAlready check has something
+	// real to tell apart.
+	syncHeadSHA  = "abc9990000000000000000000000000000000000"
+	syncHeadSHA2 = "abc7770000000000000000000000000000000000"
 )
 
 // TestPRMergeRecordsFactsAndResolves: a merged PR records its head and merge
@@ -1257,6 +1264,102 @@ func TestChangesRequestedThenReviewRequestedReopens(t *testing.T) {
 	}
 	if n := e.approvalCount(t); n != 1 {
 		t.Errorf("approval rows = %d, want 1 (reopen, not a second row)", n)
+	}
+}
+
+// TestSynchronizeRebindsOpenApproval: 029 §7.1 — a push to the PR branch
+// designates the new head on the still-open review row rather than opening
+// a second one.
+func TestSynchronizeRebindsOpenApproval(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+
+	deliverOK(t, e, "pull_request", "d-sync-1", "pull_request_synchronize.json")
+
+	if n := e.approvalCount(t); n != 1 {
+		t.Fatalf("approval rows after synchronize = %d, want 1 (rebind, not a second row)", n)
+	}
+	state, _, resolvingActor, resolvedAt := e.approvalRow(t, 42)
+	if state != "awaiting" || resolvingActor != nil || resolvedAt != nil {
+		t.Errorf("after synchronize: state=%q resolving_actor=%v resolved_at=%v, want awaiting/NULL/NULL",
+			state, resolvingActor, resolvedAt)
+	}
+	if rev := e.rawQueryString(t,
+		`SELECT subject_revision FROM approvals WHERE entity_id = $1`,
+		store.PREntityID(demoRepo, 42)); rev != syncHeadSHA {
+		t.Errorf("subject_revision = %q, want the new head sha %q", rev, syncHeadSHA)
+	}
+}
+
+// TestSynchronizeAfterApprovedOpensCandidateRow: once a review has decided
+// the PR, a later push cannot quietly keep the stale approval standing in
+// for the new head — it opens a new, visibly unreviewed awaiting row, and
+// leaves the decided row exactly as the reviewer saw it (029 §7.1).
+func TestSynchronizeAfterApprovedOpensCandidateRow(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	e.seedReviewer(t, "bob-actor", "bob")
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_submitted.json") // APPROVED
+
+	deliverOK(t, e, "pull_request", "d-sync-1", "pull_request_synchronize.json")
+
+	if n := e.approvalCount(t); n != 2 {
+		t.Fatalf("approval rows after synchronize = %d, want 2 (decided row kept, candidate row opened)", n)
+	}
+	entityID := store.PREntityID(demoRepo, 42)
+	if rev := e.rawQueryString(t,
+		`SELECT subject_revision FROM approvals WHERE entity_id = $1 AND state = 'approved'`,
+		entityID); rev != prHeadSHA {
+		t.Errorf("approved row subject_revision = %q, want the reviewed head %q", rev, prHeadSHA)
+	}
+	if rev := e.rawQueryString(t,
+		`SELECT subject_revision FROM approvals WHERE entity_id = $1 AND state = 'awaiting'`,
+		entityID); rev != syncHeadSHA {
+		t.Errorf("candidate row subject_revision = %q, want the new head %q", rev, syncHeadSHA)
+	}
+}
+
+// TestSynchronizeUncorrelatedWritesNothing: 029 §7.1 — a synchronize on a PR
+// that names no task has no task to hold up, and failing to correlate must
+// never fail the delivery.
+func TestSynchronizeUncorrelatedWritesNothing(t *testing.T) {
+	e := newEnv(t)
+	deliverOK(t, e, "pull_request", "d-sync-1", "pull_request_synchronize_uncorrelated.json")
+	if n := e.approvalCount(t); n != 0 {
+		t.Errorf("approval rows for an uncorrelated synchronize = %d, want 0", n)
+	}
+}
+
+// TestRedeliveredSynchronizeIsNoop: the same head sha delivered twice must
+// leave the row exactly as the first delivery did — no second rebind, no
+// second row. RevisionNoop is what OnNewRevision returns when boundAlready
+// is true.
+func TestRedeliveredSynchronizeIsNoop(t *testing.T) {
+	e := newEnv(t)
+	taskID := e.seedTask(t)
+	e.claimTask(t, taskID)
+	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
+	deliverOK(t, e, "pull_request", "d-sync-1", "pull_request_synchronize.json")
+
+	entityID := store.PREntityID(demoRepo, 42)
+	wantCount := e.approvalCount(t)
+	wantState, _, _, _ := e.approvalRow(t, 42)
+	wantRev := e.rawQueryString(t, `SELECT subject_revision FROM approvals WHERE entity_id = $1`, entityID)
+
+	deliverOK(t, e, "pull_request", "d-sync-2", "pull_request_synchronize.json")
+
+	if n := e.approvalCount(t); n != wantCount {
+		t.Errorf("approval rows after redelivered synchronize = %d, want %d (unchanged)", n, wantCount)
+	}
+	if state, _, _, _ := e.approvalRow(t, 42); state != wantState {
+		t.Errorf("approval state after redelivered synchronize = %q, want %q (unchanged)", state, wantState)
+	}
+	if rev := e.rawQueryString(t, `SELECT subject_revision FROM approvals WHERE entity_id = $1`, entityID); rev != wantRev {
+		t.Errorf("subject_revision after redelivered synchronize = %q, want %q (unchanged)", rev, wantRev)
 	}
 }
 

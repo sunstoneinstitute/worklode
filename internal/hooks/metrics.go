@@ -46,8 +46,12 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		}, []string{"outcome"}),
 		// approvals counts approval rows the GitHub ingest wrote. action is
 		// one of "opened" (a PR materialized an awaiting row), "resolved" (a
-		// review decided one), or "reopened" (a re-request put one back in
-		// the queue).
+		// review decided one), "reopened" (a re-request put one back in the
+		// queue), "rebound" (a synchronize moved an open row's
+		// subject_revision to the new head), "candidate" (a synchronize
+		// after a decided review filed a new awaiting row for the new head),
+		// or "impact_opened" (a dependency's revision change opened an
+		// impact row on this entity).
 		approvals: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_approvals_ingest_total",
 			Help: "Approval-relevant actions taken by the GitHub webhook ingest, by action.",

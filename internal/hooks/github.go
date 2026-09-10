@@ -445,6 +445,26 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		return a.openApproval(tx, now, repo, gh.Number, gh.Head.SHA, logins)
 	case action == "review_requested":
 		return a.reopenApproval(tx, repo, gh.Number, p.RequestedReviewer.Login)
+	case action == "synchronize":
+		// A push to the PR branch designates the new head as the governed
+		// revision (029 §7.1). An open row rebinds; a decided PR gets a
+		// visibly unreviewed candidate row. Correlation never fails the
+		// delivery — but that guard already ran above (pr.TaskID != nil);
+		// once past it, a DesignateRevision error is a genuine store
+		// failure, not a correlation miss, so it propagates like every
+		// other write in this switch.
+		outcome, err := store.DesignateRevision(tx, now, "pr",
+			store.PREntityID(repo, gh.Number), gh.Head.SHA)
+		if err != nil {
+			return err
+		}
+		switch outcome {
+		case store.RevisionRebind:
+			a.metrics.approvalIngest("rebound")
+		case store.RevisionCandidate:
+			a.metrics.approvalIngest("candidate")
+		}
+		return nil
 	case action == "closed" && gh.Merged:
 		// The lease is deliberately left alone: it says a worktree is
 		// occupied, which a merge does not change (spec 004 §3).
