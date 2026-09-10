@@ -1385,8 +1385,8 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
 // ErrRevisionExists/ErrReferenceExists/ErrActorExists/ErrProjectExists → 409,
-// ErrUnknownBlob → 422, anything else → 500 with a
-// generic body (the detail is logged, not leaked).
+// ErrUnknownBlob → 422, anything else → 500 with a generic body (the detail
+// is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
