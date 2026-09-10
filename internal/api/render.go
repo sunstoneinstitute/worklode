@@ -376,16 +376,18 @@ func deliverablesView(project ui.CockpitProject, items []model.Deliverable, mile
 	var unattached []ui.DeliverableRow
 	for _, d := range items {
 		row := ui.DeliverableRow{
-			ID:            d.ID,
-			Name:          d.Name,
-			Description:   d.Description,
-			URL:           d.URL,
-			CreatedBy:     d.CreatedBy,
-			CreatedAt:     d.CreatedAt,
-			Artifact:      d.Artifact,
-			Label:         d.Label,
-			ReportedState: d.ReportedState,
-			ReportedAt:    d.ReportedAt,
+			ID:                 d.ID,
+			Name:               d.Name,
+			Description:        d.Description,
+			URL:                d.URL,
+			CreatedBy:          d.CreatedBy,
+			CreatedAt:          d.CreatedAt,
+			Artifact:           d.Artifact,
+			Label:              d.Label,
+			ReportedState:      d.ReportedState,
+			ReportedAt:         d.ReportedAt,
+			ReportedProvenance: d.ReportedProvenance,
+			ReportURL:          "/deliverables/" + d.ID + "/report",
 		}
 		if d.Milestone == "" {
 			unattached = append(unattached, row)

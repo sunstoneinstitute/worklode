@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -197,6 +198,66 @@ func (s *server) createDeliverable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+// reportDeliverableState is the write both report surfaces share: one
+// recorded event whose apply files user-reported evidence (029 §3.2), with
+// the source naming the surface the person typed into. It counts the attempt
+// on worklode_deliverable_reports_total itself, so neither caller can forget
+// to, and returns the store's error for the caller to map to its own protocol.
+func (s *server) reportDeliverableState(ctx context.Context, source, id, state, actor, note string) error {
+	err := s.recordEvent(ctx, source, "deliverable.reported", map[string]string{
+		"deliverable": id,
+		"state":       state,
+		"actor":       actor,
+		"note":        note,
+	}, func(tx *sql.Tx, eventID int64) error {
+		return store.ReportDeliverableState(tx, eventID, s.st.Now(), id, state, source, actor, note)
+	})
+	s.observeDeliverableReport(source, deliverableReportOutcome(err))
+	return err
+}
+
+// validReportState reports whether state is one the artifact_evidence CHECK
+// accepts, and the message naming the five when it is not. Checked before the
+// event is recorded so a typo leaves nothing in the log, and shared by both
+// surfaces so neither accepts what the other rejects.
+func validReportState(state string) (bool, string) {
+	if slices.Contains(model.ArtifactStates, state) {
+		return true, ""
+	}
+	return false, "state must be one of " + strings.Join(model.ArtifactStates, ", ")
+}
+
+// reportDeliverable handles POST /api/v1/deliverables/{id}/report: a person
+// filing the state they see (029 §3.2). It writes evidence, never a column on
+// the deliverable, and the evidence is user_reported — so the read projection
+// keeps saying that a person claimed this rather than that anything observed
+// it.
+func (s *server) reportDeliverable(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req model.ReportDeliverableInput
+	if err := readJSON(w, r, &req); err != nil {
+		s.observeDeliverableReport("cli", "invalid")
+		writeBodyErr(w, err)
+		return
+	}
+	if ok, msg := validReportState(req.State); !ok {
+		s.observeDeliverableReport("cli", "invalid")
+		writeErr(w, http.StatusUnprocessableEntity, msg)
+		return
+	}
+	if err := s.reportDeliverableState(r.Context(), "cli", id, req.State,
+		actorIDFrom(r), strings.TrimSpace(req.Note)); err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	d, err := s.st.GetDeliverable(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 // patchDeliverable handles PATCH /api/v1/deliverables/{id}: reparents a

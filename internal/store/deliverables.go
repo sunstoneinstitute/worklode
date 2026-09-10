@@ -12,8 +12,10 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,7 +55,8 @@ const deliverableColumns = `id, project_id, name, description, url, created_by, 
 // The last two are joined, never stored — 029 §3.2 keeps deliverable state a
 // reported fact, so the row itself has nothing to say about it.
 const deliverableSelect = deliverableColumns + `,
-	COALESCE(decl.selector, ''), COALESCE(decl.artifact_uri, ''), COALESCE(ev.state, ''), ev.occurred_at`
+	COALESCE(decl.selector, ''), COALESCE(decl.artifact_uri, ''),
+	COALESCE(ev.state, ''), COALESCE(ev.provenance, ''), ev.occurred_at`
 
 // deliverableFrom pairs the table with the declared address and the latest
 // evidence filed against that same address. The two LATERALs are chained on
@@ -66,6 +69,12 @@ const deliverableSelect = deliverableColumns + `,
 // Latest is by the emitter's own clock with id as the tiebreak: a fact
 // reported late about an earlier moment does not displace a newer one. This is
 // the only reader of artifact_evidence.
+//
+// The evidence correlation coalesces the declaration to the empty string, so a
+// deliverable that declares no address still shows what a person reported
+// about it (029 §3.2): ReportDeliverableState files against the empty address
+// in that case. For a deliverable that does declare one the COALESCE is the
+// identity, so the address it reports on is unchanged.
 const deliverableFrom = `FROM deliverables
 	LEFT JOIN LATERAL (
 	    SELECT ad.selector, ad.artifact_uri FROM artifact_declarations ad
@@ -73,9 +82,9 @@ const deliverableFrom = `FROM deliverables
 	     ORDER BY ad.id LIMIT 1
 	) decl ON true
 	LEFT JOIN LATERAL (
-	    SELECT e.state, e.occurred_at FROM artifact_evidence e
+	    SELECT e.state, e.provenance, e.occurred_at FROM artifact_evidence e
 	     WHERE e.entity_kind = 'deliverable' AND e.entity_id = deliverables.id
-	       AND e.artifact_uri = decl.artifact_uri
+	       AND e.artifact_uri = COALESCE(decl.artifact_uri, '')
 	     ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1
 	) ev ON true`
 
@@ -213,7 +222,7 @@ func scanDeliverable(row rowScanner) (*model.Deliverable, error) {
 	var reportedAt sql.NullTime
 	if err := row.Scan(&d.ID, &d.Project, &d.Name, &d.Description, &d.URL,
 		&createdBy, &d.CreatedAt, &d.UpdatedAt, &milestone,
-		&selector, &key, &d.ReportedState, &reportedAt); err != nil {
+		&selector, &key, &d.ReportedState, &d.ReportedProvenance, &reportedAt); err != nil {
 		return nil, err
 	}
 	d.CreatedBy = createdBy.String
@@ -259,6 +268,53 @@ func (s *Store) GetDeliverable(ctx context.Context, id string) (*model.Deliverab
 		return nil, fmt.Errorf("get deliverable %s: %w", id, err)
 	}
 	return d, nil
+}
+
+// ReportDeliverableState files a user-reported evidence row against the
+// deliverable's first declaration (the projection's rule: lowest declaration
+// id), or against an empty artifact_uri when it declares none — a state change
+// with no address still has a subject, and that is the entity itself
+// (029 §3.2, §3.3). Provenance is user_reported unconditionally: this path
+// records what a person claims, never an observed fact, and the projection
+// carries that distinction to every reader.
+//
+// state must be one of model.ArtifactStates, checked here so a caller's typo
+// is ErrInvalidInput rather than a CHECK violation reaching mapStoreErr's 500.
+// An unknown deliverable is ErrNotFound. Redelivery-safe by way of
+// InsertArtifactEvidence's (entity, artifact, event) conflict key.
+func ReportDeliverableState(tx *sql.Tx, eventID int64, now time.Time,
+	deliverableID, state, source, actorID, note string) error {
+	if !slices.Contains(model.ArtifactStates, state) {
+		return fmt.Errorf("state %q must be one of %s: %w",
+			state, strings.Join(model.ArtifactStates, ", "), ErrInvalidInput)
+	}
+	var artifact string
+	if err := tx.QueryRow(
+		`SELECT COALESCE((
+		     SELECT ad.artifact_uri FROM artifact_declarations ad
+		      WHERE ad.entity_kind = 'deliverable' AND ad.entity_id = d.id
+		      ORDER BY ad.id LIMIT 1), '')
+		   FROM deliverables d WHERE d.id = $1`, deliverableID).Scan(&artifact); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("deliverable %s: %w", deliverableID, ErrNotFound)
+		}
+		return fmt.Errorf("look up deliverable %s: %w", deliverableID, err)
+	}
+	detail, err := json.Marshal(map[string]string{"actor": actorID, "note": note})
+	if err != nil {
+		return fmt.Errorf("encode report detail for %s: %w", deliverableID, err)
+	}
+	_, err = InsertArtifactEvidence(tx, eventID, model.ArtifactEvidence{
+		EntityKind: "deliverable",
+		EntityID:   deliverableID,
+		Artifact:   artifact,
+		Source:     source,
+		State:      state,
+		Provenance: "user_reported",
+		Detail:     detail,
+		OccurredAt: now,
+	})
+	return err
 }
 
 // SetDeliverableMilestone reparents one deliverable ("" detaches) inside

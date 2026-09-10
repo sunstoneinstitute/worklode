@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -474,5 +475,157 @@ func TestSetDeliverableMilestone(t *testing.T) {
 	}
 	if !got.UpdatedAt.Equal(detachAt) {
 		t.Fatalf("updated_at after detach = %v, want %v", got.UpdatedAt, detachAt)
+	}
+}
+
+// reportDeliverableState drives ReportDeliverableState through RecordEvent,
+// the way both surfaces do, and returns its error.
+func reportDeliverableState(s *Store, deliverableID, state, source, actorID, note string) error {
+	_, _, err := s.RecordEvent(context.Background(), source, randomID(), "deliverable.reported", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return ReportDeliverableState(tx, eventID, s.Now(), deliverableID, state, source, actorID, note)
+		})
+	return err
+}
+
+// TestReportDeliverableStateWithoutDeclaration pins 029 §3.2's user report on
+// a deliverable that declares no address: the evidence lands against
+// artifact_uri = ” and the projection surfaces it, because the entity itself
+// is the subject when the state change has no address.
+func TestReportDeliverableStateWithoutDeclaration(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	d, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "Report PDF"})
+	if err != nil {
+		t.Fatalf("create deliverable: %v", err)
+	}
+
+	if err := reportDeliverableState(s, d.ID, "published", "cli", "alice", "uploaded to the site"); err != nil {
+		t.Fatalf("report state: %v", err)
+	}
+
+	got, err := s.GetDeliverable(context.Background(), d.ID)
+	if err != nil {
+		t.Fatalf("get deliverable: %v", err)
+	}
+	if got.ReportedState != "published" || got.ReportedProvenance != "user_reported" {
+		t.Errorf("state %q provenance %q, want published/user_reported", got.ReportedState, got.ReportedProvenance)
+	}
+	if got.ReportedAt == nil {
+		t.Error("ReportedAt is nil, want the report's time")
+	}
+	var uri, source, detail string
+	if err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(
+			`SELECT artifact_uri, source, detail::text FROM artifact_evidence
+			  WHERE entity_kind = 'deliverable' AND entity_id = $1`, d.ID).Scan(&uri, &source, &detail)
+	}); err != nil {
+		t.Fatalf("read evidence: %v", err)
+	}
+	if uri != "" || source != "cli" {
+		t.Errorf("artifact_uri %q source %q, want \"\"/cli", uri, source)
+	}
+	if !strings.Contains(detail, `"actor": "alice"`) || !strings.Contains(detail, `"note": "uploaded to the site"`) {
+		t.Errorf("detail = %s, want the actor and the note", detail)
+	}
+}
+
+// TestReportDeliverableStateAgainstDeclaration pins the declared-address case:
+// the report files against the deliverable's first declaration, which is the
+// same address the projection reads observed evidence from — so a person's
+// report and an emitter's land in the same place and the newest wins.
+func TestReportDeliverableStateAgainstDeclaration(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	d, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "cow", Name: "Datapackage", Artifact: "https://data.example/cow.zip",
+	})
+	if err != nil {
+		t.Fatalf("create deliverable: %v", err)
+	}
+
+	if err := reportDeliverableState(s, d.ID, "failed", "web", "bob", ""); err != nil {
+		t.Fatalf("report state: %v", err)
+	}
+
+	uri := ""
+	if err := s.Tx(context.Background(), func(tx *sql.Tx) error {
+		return tx.QueryRow(
+			`SELECT artifact_uri FROM artifact_evidence
+			  WHERE entity_kind = 'deliverable' AND entity_id = $1`, d.ID).Scan(&uri)
+	}); err != nil {
+		t.Fatalf("read evidence: %v", err)
+	}
+	if uri != "https://data.example/cow.zip" {
+		t.Errorf("artifact_uri = %q, want the declared address", uri)
+	}
+	got, err := s.GetDeliverable(context.Background(), d.ID)
+	if err != nil {
+		t.Fatalf("get deliverable: %v", err)
+	}
+	if got.ReportedState != "failed" || got.ReportedProvenance != "user_reported" {
+		t.Errorf("state %q provenance %q, want failed/user_reported", got.ReportedState, got.ReportedProvenance)
+	}
+}
+
+// TestReportDeliverableStateRejects pins the two refusals: an unknown
+// deliverable is ErrNotFound, a state outside the artifact_evidence CHECK set
+// is ErrInvalidInput — neither reaches the table as a constraint violation.
+func TestReportDeliverableStateRejects(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	d, err := createDeliverable(s, DeliverableInput{ProjectID: "cow", Name: "Report PDF"})
+	if err != nil {
+		t.Fatalf("create deliverable: %v", err)
+	}
+
+	if err := reportDeliverableState(s, "COW-DEL-99", "published", "cli", "alice", ""); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown deliverable: err = %v, want ErrNotFound", err)
+	}
+	if err := reportDeliverableState(s, d.ID, "bogus", "cli", "alice", ""); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("bad state: err = %v, want ErrInvalidInput", err)
+	}
+}
+
+// TestDeclaredDeliverableKeepsObservedProjection pins the LATERAL widening
+// against a regression: broadening the evidence correlation to
+// COALESCE(decl.artifact_uri, ”) must not change what a deliverable with a
+// declared address reports. Evidence filed against another address still does
+// not surface, and evidence against ” does not leak onto it either.
+func TestDeclaredDeliverableKeepsObservedProjection(t *testing.T) {
+	t.Parallel()
+	s := deliverableStore(t)
+	d, err := createDeliverable(s, DeliverableInput{
+		ProjectID: "cow", Name: "Datapackage", Artifact: "https://data.example/cow.zip",
+	})
+	if err != nil {
+		t.Fatalf("create deliverable: %v", err)
+	}
+	now := s.Now()
+	file := func(artifact, state string, at time.Time) {
+		t.Helper()
+		if _, _, err := s.RecordEvent(context.Background(), "prober", randomID(), "prober."+state, nil,
+			func(tx *sql.Tx, eventID int64) error {
+				_, err := InsertArtifactEvidence(tx, eventID, model.ArtifactEvidence{
+					EntityKind: "deliverable", EntityID: d.ID, Artifact: artifact,
+					Source: "prober", State: state, Provenance: "observed", OccurredAt: at,
+				})
+				return err
+			}); err != nil {
+			t.Fatalf("file evidence %s/%s: %v", artifact, state, err)
+		}
+	}
+	file("https://data.example/cow.zip", "published", now)
+	// Two decoys: another address entirely, and the no-declaration bucket the
+	// widened correlation newly matches for deliverables that declare nothing.
+	file("https://data.example/other.zip", "failed", now.Add(time.Hour))
+	file("", "removed", now.Add(2*time.Hour))
+
+	got, err := s.GetDeliverable(context.Background(), d.ID)
+	if err != nil {
+		t.Fatalf("get deliverable: %v", err)
+	}
+	if got.ReportedState != "published" || got.ReportedProvenance != "observed" {
+		t.Errorf("state %q provenance %q, want published/observed", got.ReportedState, got.ReportedProvenance)
 	}
 }

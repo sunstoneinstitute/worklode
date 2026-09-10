@@ -151,10 +151,11 @@ func TestDeliverableChipFollowsReportedState(t *testing.T) {
 	}
 }
 
-// TestDeliverablesPageShowsTheReport renders the page with one reported and
-// one unreported row: the reported one shows its state and the time the
-// emitter reported, the unreported one still says Declared, and the page no
-// longer claims that nothing can report at all.
+// TestDeliverablesPageShowsTheReport renders the page with one observed, one
+// user-reported and one unreported row: the observed one shows its state and
+// the time the emitter reported and nothing about provenance, the
+// user-reported one is labelled as such, the unreported one still says
+// Declared, and every row carries its own Report control (029 §3.2).
 func TestDeliverablesPageShowsTheReport(t *testing.T) {
 	reportedAt := time.Date(2026, 8, 19, 9, 12, 0, 0, time.UTC)
 	var b strings.Builder
@@ -167,7 +168,13 @@ func TestDeliverablesPageShowsTheReport(t *testing.T) {
 				Artifact:      "bigquery://sunstone-prod/cow/casualties",
 				ReportedState: "published", ReportedAt: &reportedAt,
 			},
-			{ID: "P-DEL-2", Name: "Methodology", CreatedAt: reportedAt},
+			{
+				ID: "P-DEL-2", Name: "Field notes", CreatedAt: reportedAt,
+				ReportedState: "published", ReportedAt: &reportedAt,
+				ReportedProvenance: "user_reported",
+				ReportURL:          "/deliverables/P-DEL-2/report",
+			},
+			{ID: "P-DEL-3", Name: "Methodology", CreatedAt: reportedAt},
 		}}},
 	}).Render(context.Background(), &b)
 	if err != nil {
@@ -180,14 +187,21 @@ func TestDeliverablesPageShowsTheReport(t *testing.T) {
 		"bigquery://sunstone-prod/cow/casualties",
 		"reported 2026-08-19 09:12",
 		`class="chip declared"`, "Declared",
-		"poll prober",
+		`<div class="def muted">User-reported</div>`,
+		`action="/deliverables/P-DEL-2/report"`,
+		`<option value="deprecated">`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("page is missing %q", want)
 		}
 	}
-	if strings.Contains(body, "are not built yet") {
-		t.Error("the page still says no emitter can report a deliverable state")
+	if strings.Contains(body, "are not built yet") || strings.Contains(body, "not built yet") {
+		t.Error("the page still says something that can report a deliverable state is unbuilt")
+	}
+	// Exactly one row is labelled: an observed report must not read as a
+	// person's claim, which is the whole point of carrying the provenance.
+	if n := strings.Count(body, `<div class="def muted">User-reported</div>`); n != 1 {
+		t.Errorf("User-reported labels = %d, want 1", n)
 	}
 }
 

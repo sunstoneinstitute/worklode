@@ -38,6 +38,20 @@ func (c *Client) CreateDeliverable(ctx context.Context, project string, in model
 		"/api/v1/projects/"+url.PathEscape(project)+"/deliverables", in, "deliverable")
 }
 
+// ReportDeliverable calls POST /api/v1/deliverables/{id}/report, filing the
+// state the caller says they see as user-reported evidence (029 §3.2).
+func (c *Client) ReportDeliverable(ctx context.Context, id string, in model.ReportDeliverableInput) (model.Deliverable, []byte, error) {
+	return doJSON[model.Deliverable](ctx, c, http.MethodPost,
+		"/api/v1/deliverables/"+url.PathEscape(id)+"/report", in, "deliverable")
+}
+
+// DeliverableReportRender prints the one-line confirmation of a user report.
+// It names the provenance because that is the whole point of the write: the
+// state now on the deliverable is a person's claim, not an observed fact.
+func DeliverableReportRender(w io.Writer, d model.Deliverable) {
+	fmt.Fprintf(w, "reported %s %s (user-reported)\n", d.ID, d.ReportedState)
+}
+
 // DeliverableTable prints deliverables with their reported state, artifact
 // address and milestone attachment, if any.
 func DeliverableTable(w io.Writer, ds []model.Deliverable) {
