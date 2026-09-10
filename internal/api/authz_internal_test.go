@@ -264,7 +264,7 @@ func TestRequireSession(t *testing.T) {
 		t.Run(string(via), func(t *testing.T) {
 			s := &server{log: slog.Default()}
 			reached := false
-			h := s.requireSession(func(http.ResponseWriter, *http.Request) {
+			h := s.requireSession(permApprovalDecide, func(http.ResponseWriter, *http.Request) {
 				reached = true
 			})
 

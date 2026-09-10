@@ -203,7 +203,7 @@ func seedDecidedThenCandidate(t *testing.T, st *store.Store, entityID, decidedRe
 		if err := store.ResolveApproval(tx, decided.ID, "approved", &actor, now); err != nil {
 			return err
 		}
-		_, err = store.DesignateRevision(tx, now, "pr", entityID, candidateRev)
+		_, _, err = store.DesignateRevision(tx, now, "pr", entityID, candidateRev)
 		return err
 	})
 

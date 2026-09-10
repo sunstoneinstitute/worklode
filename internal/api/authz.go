@@ -254,6 +254,14 @@ const (
 	// CI job holding a bearer token may do, while the decision itself stays
 	// a web-session act.
 	permApprovalRequire Permission = "approval.require"
+
+	// permApprovalNote covers the dependent owner's note on an open impact
+	// review (029 §7.1): POST /approvals/{id}/note. Separate from
+	// permApprovalDecide because writing down what an upstream change means
+	// for your own entity is authoring, not deciding — the decision that
+	// follows is still the prior approver's. Like the decide route it is
+	// additionally gated by requireSession.
+	permApprovalNote Permission = "approval.note"
 )
 
 // grants is the policy: which roles hold which permission. It is the whole
@@ -381,6 +389,9 @@ var grants = map[Permission][]Role{
 	// required_role against the decider's groups, checked in the store. This
 	// permission gates reaching the route at all.
 	permApprovalDecide: {RoleUser, RoleAdmin},
+	// Every authenticated actor, for the same reason: whose note an impact
+	// review takes is a per-row fact, not a role.
+	permApprovalNote: {RoleUser, RoleAdmin},
 }
 
 // authMethod records how a subject was identified, so a denial can say
@@ -636,13 +647,17 @@ func (s *server) webGuard(perm Permission, next http.HandlerFunc) http.HandlerFu
 // session's group claims are at most as old as the login that stored them; a
 // bearer token's are as old as the token. authOpen is refused too — an open
 // instance has no identity to attribute a decision to.
-func (s *server) requireSession(next http.HandlerFunc) http.HandlerFunc {
+//
+// perm is the permission the route's routeGuards row already names, passed in
+// so the denial is counted and logged against the route that refused rather
+// than against whichever route happened to be written first.
+func (s *server) requireSession(perm Permission, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sub := subjectFrom(r)
 		if sub.Via != authSession {
 			d := Decision{Reason: "session_required"}
-			s.observeAuthz(permApprovalDecide, d)
-			s.logDenial(r, sub, permApprovalDecide, d)
+			s.observeAuthz(perm, d)
+			s.logDenial(r, sub, perm, d)
 			webErr(w, http.StatusForbidden,
 				"approving requires a signed-in browser session")
 			return

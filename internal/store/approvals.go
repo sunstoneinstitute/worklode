@@ -497,19 +497,32 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 	if !QualifiedForRole(a.RequiredRole, in.Groups) {
 		return nil, ErrNotQualified
 	}
-	author, decider := "", in.ActorID
-	if a.EntityKind == "pr" {
-		if author, err = prAuthorForEntity(tx, a.EntityID); err != nil {
+	if a.ReviewKind == "impact" {
+		// 029 §7.1 puts the impact question to a qualified prior approver:
+		// the person whose own approval is at stake. Self-approval does not
+		// apply — the decider is deciding their own past decision by design.
+		history, err := ListApprovalsForEntity(tx, a.EntityKind, a.EntityID)
+		if err != nil {
 			return nil, err
 		}
-		if decider, err = gitHubLoginForActor(tx, in.ActorID); err != nil {
+		if !PriorApprover(history, in.ActorID) {
+			return nil, ErrNotPriorApprover
+		}
+	} else {
+		author, decider := "", in.ActorID
+		if a.EntityKind == "pr" {
+			if author, err = prAuthorForEntity(tx, a.EntityID); err != nil {
+				return nil, err
+			}
+			if decider, err = gitHubLoginForActor(tx, in.ActorID); err != nil {
+				return nil, err
+			}
+		} else if author, err = authorActorForEntity(tx, a.EntityKind, a.EntityID); err != nil {
 			return nil, err
 		}
-	} else if author, err = authorActorForEntity(tx, a.EntityKind, a.EntityID); err != nil {
-		return nil, err
-	}
-	if IsSelfApproval(author, decider) {
-		return nil, ErrSelfApproval
+		if IsSelfApproval(author, decider) {
+			return nil, ErrSelfApproval
+		}
 	}
 
 	if err := ResolveApproval(tx, a.ID, state, &in.ActorID, in.Now); err != nil {
@@ -518,11 +531,47 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 	if err := clearPatchedOnFullApproval(tx, a, state); err != nil {
 		return nil, err
 	}
+	if a.ReviewKind == "impact" && ImpactDecisionEffect(state) == ImpactReopen {
+		if err := reopenDependentReview(tx, in.Now, a); err != nil {
+			return nil, err
+		}
+	}
 	a.State = state
 	a.ResolvingActor = &in.ActorID
 	resolvedAt := in.Now.UTC()
 	a.ResolvedAt = &resolvedAt
 	return a, nil
+}
+
+// reopenDependentReview is ImpactReopen's side effect (029 §7.1): the prior
+// approver says their decision no longer holds, so the dependent goes back
+// into review at the revision that approval bound.
+//
+// The insert is what the spec asks for, and it lands whenever the approved
+// row sits in a named reviewer lane. On an unlaned row — every PR, which is
+// what governed references are recorded from today — the awaiting row would
+// occupy the approved row's own unique key (entity_kind, entity_id,
+// subject_revision, lane, review_kind), so the insert is absorbed and the
+// approved row itself is reopened instead. Either way the dependent ends with
+// one open review row at that revision, which is the outcome the reopen
+// exists for.
+func reopenDependentReview(tx *sql.Tx, now time.Time, impact *Approval) error {
+	approved, err := approvedReviewFor(tx, impact.EntityKind, impact.EntityID)
+	if err != nil || approved == nil {
+		return err
+	}
+	inserted, err := InsertAwaitingApproval(tx, now, impact.EntityKind, impact.EntityID,
+		approved.SubjectRevision, "", approved.RequiredRole, approved.RequiredActor, nil)
+	if err != nil || inserted {
+		return err
+	}
+	if _, err := tx.Exec(
+		`UPDATE approvals SET state = 'awaiting', resolving_actor = NULL,
+		   resolved_at = NULL
+		 WHERE id = $1`, approved.ID); err != nil {
+		return fmt.Errorf("reopen review %d after an impact decision: %w", approved.ID, err)
+	}
+	return nil
 }
 
 // clearPatchedOnFullApproval is 025 §7.3's other half: the §8.4 patched marks
@@ -1065,10 +1114,12 @@ const designationScope = `lane = '' AND review_kind = 'review'`
 // DesignateRevision applies OnNewRevision (approval_rules.go) inside the
 // caller's event transaction (029 §7.1): rebinds the open review row's
 // subject_revision, or inserts a candidate row copying required_role/
-// required_actor from the newest decided review row. Returns the outcome for
-// the caller's metric.
+// required_actor from the newest decided review row. A designation that moved
+// something (rebind or candidate) then fans the change out to the entities
+// governed by it — see impactFanOut. Returns the outcome and how many impact
+// rows opened, both for the caller's metric.
 func DesignateRevision(tx *sql.Tx, now time.Time,
-	entityKind, entityID, newRevision string) (RevisionOutcome, error) {
+	entityKind, entityID, newRevision string) (RevisionOutcome, int, error) {
 	open, err := scanApproval(tx.QueryRow(
 		`SELECT `+approvalColumns+` FROM approvals
 		 WHERE entity_kind = $1 AND entity_id = $2 AND `+designationScope+`
@@ -1078,7 +1129,7 @@ func DesignateRevision(tx *sql.Tx, now time.Time,
 	if errors.Is(err, sql.ErrNoRows) {
 		open = nil
 	} else if err != nil {
-		return 0, fmt.Errorf("open review for %s %s: %w", entityKind, entityID, err)
+		return 0, 0, fmt.Errorf("open review for %s %s: %w", entityKind, entityID, err)
 	}
 
 	var hasDecided, boundAlready bool
@@ -1089,7 +1140,7 @@ func DesignateRevision(tx *sql.Tx, now time.Time,
 		   EXISTS (SELECT 1 FROM approvals WHERE entity_kind = $1 AND entity_id = $2
 		             AND `+designationScope+` AND subject_revision = $3)`,
 		entityKind, entityID, newRevision).Scan(&hasDecided, &boundAlready); err != nil {
-		return 0, fmt.Errorf("revision history for %s %s: %w", entityKind, entityID, err)
+		return 0, 0, fmt.Errorf("revision history for %s %s: %w", entityKind, entityID, err)
 	}
 
 	outcome := OnNewRevision(open, hasDecided, boundAlready)
@@ -1097,7 +1148,7 @@ func DesignateRevision(tx *sql.Tx, now time.Time,
 	case RevisionRebind:
 		if _, err := tx.Exec(`UPDATE approvals SET subject_revision = $1 WHERE id = $2`,
 			newRevision, open.ID); err != nil {
-			return 0, fmt.Errorf("rebind %s %s to %s: %w", entityKind, entityID, newRevision, err)
+			return 0, 0, fmt.Errorf("rebind %s %s to %s: %w", entityKind, entityID, newRevision, err)
 		}
 	case RevisionCandidate:
 		decided, err := scanApproval(tx.QueryRow(
@@ -1107,14 +1158,120 @@ func DesignateRevision(tx *sql.Tx, now time.Time,
 			 ORDER BY id DESC LIMIT 1`,
 			entityKind, entityID))
 		if err != nil {
-			return 0, fmt.Errorf("newest decided review for %s %s: %w", entityKind, entityID, err)
+			return 0, 0, fmt.Errorf("newest decided review for %s %s: %w", entityKind, entityID, err)
 		}
 		if _, err := InsertAwaitingApproval(tx, now, entityKind, entityID, newRevision, "",
 			decided.RequiredRole, decided.RequiredActor, nil); err != nil {
+			return 0, 0, err
+		}
+	default:
+		return outcome, 0, nil
+	}
+	opened, err := impactFanOut(tx, now, entityKind, entityID, newRevision)
+	if err != nil {
+		return 0, 0, err
+	}
+	return outcome, opened, nil
+}
+
+// approvedReviewFor returns an entity's newest approved review-kind row, or
+// nil when it has none — the row an impact question is asked about, and the
+// row a reopen puts back in review.
+func approvedReviewFor(tx *sql.Tx, entityKind, entityID string) (*Approval, error) {
+	a, err := scanApproval(tx.QueryRow(
+		`SELECT `+approvalColumns+` FROM approvals
+		 WHERE entity_kind = $1 AND entity_id = $2 AND review_kind = 'review'
+		   AND state = 'approved'
+		 ORDER BY id DESC LIMIT 1`,
+		entityKind, entityID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("approved review for %s %s: %w", entityKind, entityID, err)
+	}
+	return a, nil
+}
+
+// impactFanOut opens 029 §7.1's explicit impact review: for every entity
+// governed by (entityKind, entityID) that already approved something, one
+// 'awaiting' impact row asking its prior approver whether that decision still
+// holds at the upstream's new revision. The requirement is copied from the
+// dependent's approved row; required_actor stays NULL, since the question is
+// open to any qualified prior approver. Returns how many rows opened.
+func impactFanOut(tx *sql.Tx, now time.Time,
+	entityKind, entityID, newRevision string) (int, error) {
+	deps, err := DependentsOf(tx, entityKind, entityID)
+	if err != nil {
+		return 0, err
+	}
+	opened := 0
+	for _, d := range deps {
+		approved, err := approvedReviewFor(tx, d.Kind, d.ID)
+		if err != nil {
 			return 0, err
 		}
+		if approved == nil {
+			continue
+		}
+		// The NOT EXISTS is the absorption rule: a dependent's owner owes one
+		// answer at a time, not one per upstream push. ON CONFLICT alone would
+		// only absorb a redelivery of the same head, because subject_revision
+		// varies with the upstream revision (ImpactRevision); it stays for
+		// exactly that redelivery case.
+		res, err := tx.Exec(
+			`INSERT INTO approvals
+			   (entity_kind, entity_id, subject_revision, required_role,
+			    required_actor, lane, state, review_kind, created_at)
+			 SELECT $1, $2, $3, $4, NULL, '', 'awaiting', 'impact', $5
+			  WHERE NOT EXISTS (
+			    SELECT 1 FROM approvals
+			     WHERE entity_kind = $1 AND entity_id = $2 AND review_kind = 'impact'
+			       AND state IN ('awaiting', 'changes_requested'))
+			 ON CONFLICT (entity_kind, entity_id, subject_revision, lane, review_kind)
+			 DO NOTHING`,
+			d.Kind, d.ID, ImpactRevision(approved.SubjectRevision, entityID, newRevision),
+			approved.RequiredRole, now.UTC())
+		if err != nil {
+			return 0, fmt.Errorf("open impact review on %s %s: %w", d.Kind, d.ID, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, fmt.Errorf("open impact review on %s %s: %w", d.Kind, d.ID, err)
+		}
+		opened += int(n)
 	}
-	return outcome, nil
+	return opened, nil
+}
+
+// SetImpactNote records the dependent owner's note on an open impact review
+// (029 §7.1): what the upstream change means for this entity, written before
+// a prior approver decides. ErrApprovalResolved once the row is decided,
+// ErrInvalidInput on an ordinary review row or an empty note.
+func SetImpactNote(tx *sql.Tx, id int64, note string) error {
+	if strings.TrimSpace(note) == "" {
+		return fmt.Errorf("%w: an impact note needs text", ErrInvalidInput)
+	}
+	var state, reviewKind string
+	err := tx.QueryRow(
+		`SELECT state, review_kind FROM approvals WHERE id = $1 FOR UPDATE`,
+		id).Scan(&state, &reviewKind)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("load approval %d: %w", id, err)
+	}
+	if reviewKind != "impact" {
+		return fmt.Errorf("%w: approval %d is not an impact review", ErrInvalidInput, id)
+	}
+	if state != "awaiting" && state != "changes_requested" {
+		return ErrApprovalResolved
+	}
+	if _, err := tx.Exec(`UPDATE approvals SET note = $1 WHERE id = $2`, note, id); err != nil {
+		return fmt.Errorf("set impact note on approval %d: %w", id, err)
+	}
+	return nil
 }
 
 // GovernedRef is one revision-bound reference a designation recorded (029
