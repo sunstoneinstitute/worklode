@@ -140,7 +140,10 @@ func TestFluxWebhookMetrics(t *testing.T) {
 }
 
 // TestApprovalIngestMetrics: every approval write the GitHub ingest makes is
-// counted under one of the three bounded action values.
+// counted under one of the bounded action values. impact_opened is bounded
+// (metrics.go) but has no emitter yet — that lands with WL-559's sibling
+// task — so it is deliberately left out of the want map below rather than
+// asserted at a count nothing in this test can produce.
 func TestApprovalIngestMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
@@ -151,10 +154,16 @@ func TestApprovalIngestMetrics(t *testing.T) {
 	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
 	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_changes_requested.json")
 	deliverOK(t, e, "pull_request", "d-appr-2", "pull_request_review_requested.json")
+	deliverOK(t, e, "pull_request", "d-sync-1", "pull_request_synchronize.json")            // rebind
+	deliverOK(t, e, "pull_request_review", "d-rev-2", "pull_request_review_submitted.json") // resolves the rebound row
+	deliverOK(t, e, "pull_request", "d-sync-2", "pull_request_synchronize_second.json")     // candidate
 
-	for _, action := range []string{"opened", "resolved", "reopened"} {
-		if got := testutil.ToFloat64(m.ApprovalsIngest().WithLabelValues(action)); got != 1 {
-			t.Errorf("approvals_ingest{%s} = %v, want 1", action, got)
+	want := map[string]float64{
+		"opened": 1, "resolved": 2, "reopened": 1, "rebound": 1, "candidate": 1,
+	}
+	for action, wantN := range want {
+		if got := testutil.ToFloat64(m.ApprovalsIngest().WithLabelValues(action)); got != wantN {
+			t.Errorf("approvals_ingest{%s} = %v, want %v", action, got, wantN)
 		}
 	}
 }
