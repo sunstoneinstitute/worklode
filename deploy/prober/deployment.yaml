@@ -1,0 +1,65 @@
+# No ServiceAccount, no RBAC, no kubeconfig here: the prober talks HTTP
+# outward only (lode-watch -mode artifacts against the server's API), unlike
+# the pod informer's in-cluster watch. Read credentials for future non-HTTP
+# checkers mount into this Deployment, never into the server's.
+#
+# LODE_TOKEN comes from the worklode-prober-token Secret, which the operator
+# creates from a minted wl_... token. This manifest references that Secret,
+# never contains the token.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worklode-prober
+  namespace: worklode
+  labels:
+    app: worklode-prober
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worklode-prober
+  template:
+    metadata:
+      labels:
+        app: worklode-prober
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: prober
+          image: ghcr.io/sunstoneinstitute/worklode-watch:latest
+          imagePullPolicy: IfNotPresent
+          args:
+            - "-mode"
+            - "artifacts"
+            - "-server"
+            # Port 80 is the Service port (deploy/base/service.yaml); 8080 is
+            # the container port behind it and is not reachable by name.
+            - "http://worklode.worklode.svc:80"
+            - "-interval"
+            - "15m"
+          env:
+            - name: LODE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: worklode-prober-token
+                  key: token
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "25m"
+            limits:
+              memory: "128Mi"
+              cpu: "250m"
