@@ -19,7 +19,6 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/gitexec"
 	"github.com/sunstoneinstitute/worklode/internal/harness"
 	"github.com/sunstoneinstitute/worklode/internal/model"
-	"github.com/sunstoneinstitute/worklode/internal/ns"
 	"github.com/sunstoneinstitute/worklode/internal/secrets"
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
@@ -271,7 +270,7 @@ func rollbackClaim(ctx context.Context, c *cli.Client, taskID, root, dir string)
 // newNextCmd builds `lode work next`.
 func newNextCmd() *cobra.Command {
 	var scope scopeFlags
-	var kind string
+	var kinds []string
 	var strictFocus bool
 	cmd := &cobra.Command{
 		Use:   "next [id]",
@@ -287,18 +286,20 @@ func newNextCmd() *cobra.Command {
 			if len(args) > 0 {
 				id = args[0]
 			}
-			return runNext(cmd, id, &scope, kind, strictFocus)
+			return runNext(cmd, id, &scope, kinds, strictFocus)
 		},
 	}
 	addScopeFlags(cmd, &scope, "restrict the pick to a project (only without an id)")
-	cmd.Flags().StringVar(&kind, "kind", "", "restrict the pick to a kind: feature, bug, chore, design, review, spike, decision, rally (only without an id)")
-	completeFlagValues(cmd, "kind", ns.TaskKinds)
+	cmd.Flags().StringSliceVar(&kinds, "kind", nil,
+		"restrict the pick to these kinds: "+claimKindEnum+" (comma-separated; only without an id)")
+	completeFlagValues(cmd, "kind", claimableTaskKinds)
 	cmd.Flags().BoolVar(&strictFocus, "strict-focus", false, "restrict the pick to the project's focus concerns only (only without an id)")
 	return cmd
 }
 
-func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kind string, strictFocus bool) error {
-	warnDeprecatedTaskKind(cmd, kind)
+func runNext(cmd *cobra.Command, id string, scope *scopeFlags, kinds []string, strictFocus bool) error {
+	warnDeprecatedTaskKinds(cmd, kinds)
+	kind := strings.Join(kinds, ",")
 	c, cfg, err := newAPIClientWithConfig()
 	if err != nil {
 		return err

@@ -139,11 +139,12 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "worktree is required")
 		return
 	}
-	req.Kind = s.normalizeTaskKind(req.Kind, "claim_next")
-	if req.Kind != "" && !validKinds[req.Kind] {
-		writeErr(w, http.StatusUnprocessableEntity, invalidKindMsg)
+	kinds, bad, ok := s.normalizeTaskKindList(req.Kind, "claim_next")
+	if !ok {
+		writeErr(w, http.StatusUnprocessableEntity, fmt.Sprintf("%s (got %q)", invalidKindMsg, bad))
 		return
 	}
+	req.Kind = kinds
 	actorID := actorIDFrom(r)
 
 	res, err := s.st.ClaimNext(r.Context(), store.ClaimNextOpts{

@@ -52,8 +52,8 @@ var taskKindCommands = []string{
 }
 
 // TestTaskKindCommandsArePinned walks the full cobra tree for every command
-// whose --kind usage enumerates ns.TaskKinds — the same identification
-// TestKindEnumMatchesNS pins for `task add` alone — and asserts the set
+// whose --kind usage enumerates task kinds — every value it names is in
+// ns.TaskKinds — and asserts the set
 // matches taskKindCommands exactly. It cannot see whether
 // warnDeprecatedTaskKind is actually wired into a command's RunE without
 // running the command, so the contract is: taskKindCommands is manually
@@ -65,9 +65,15 @@ func TestTaskKindCommandsArePinned(t *testing.T) {
 	var walk func(c *cobra.Command)
 	walk = func(c *cobra.Command) {
 		if f := lookupFlag(c, "kind"); f != nil {
-			vals := slices.Clone(enumValues(f))
-			sort.Strings(vals)
-			if slices.Equal(vals, ns.TaskKinds) {
+			// Subset, not equality: the two claim surfaces name only the six
+			// kinds a ranked pick can hand out (025 §8.8), while `task add`
+			// and friends name all of ns.TaskKinds. No document, actor or
+			// search kind is a task kind, so a subset test still separates
+			// the two populations.
+			vals := enumValues(f)
+			if len(vals) > 0 && !slices.ContainsFunc(vals, func(v string) bool {
+				return !slices.Contains(ns.TaskKinds, v)
+			}) {
 				got = append(got, c.CommandPath())
 			}
 		}
@@ -107,6 +113,28 @@ func TestTaskAddWarnsOnDeprecatedKind(t *testing.T) {
 	}
 	if strings.Contains(stdout, "deprecated") {
 		t.Errorf("stdout unexpectedly mentions the deprecation warning: %q", stdout)
+	}
+}
+
+// TestClaimNextKindListWarnsPerElement proves the --kind list form reaches
+// the server intact and that the deprecation warning fires for the one
+// element that needs it, not for the list as a whole (025 §8.8).
+func TestClaimNextKindListWarnsPerElement(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+	runLode(t, "task", "add", "--project", "proj", "--title", "A design task", "--kind", "design")
+
+	stdout, stderr, err := runLodeOutErr(t, "task", "claim", "--next", "--dry-run",
+		"--project", "proj", "--kind", "spec,review")
+	if err != nil {
+		t.Fatalf("task claim --next --kind spec,review: %v\nstderr: %s", err, stderr)
+	}
+	const want = `warning: task kind "spec" is deprecated, use "design"` + "\n"
+	if stderr != want {
+		t.Errorf("stderr = %q, want %q (one warning, for the one deprecated element)", stderr, want)
+	}
+	if !strings.Contains(stdout, "would claim PROJ-1") {
+		t.Errorf("stdout = %q, want a dry-run claim of the design task", stdout)
 	}
 }
 

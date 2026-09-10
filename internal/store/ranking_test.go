@@ -421,6 +421,61 @@ func TestClaimNextKindFilterNoMatch(t *testing.T) {
 	}
 }
 
+// TestClaimNextKindFilterList pins 025 §8.8: Kind takes a comma-separated
+// list, so a high-tier loop asking for design,review claims the design task
+// and leaves the higher-ranked feature for the mechanical loop.
+func TestClaimNextKindFilterList(t *testing.T) {
+	t.Parallel()
+	s := openClaimNextStore(t)
+	ctx := t.Context()
+
+	feature := defaultTaskInput()
+	feature.Priority = "critical"
+	feature.Kind = "feature"
+	critFeature := createTask(t, s, claimNextTestNow, feature)
+
+	design := defaultTaskInput()
+	design.Priority = "low"
+	design.Kind = "design"
+	lowDesign := createTask(t, s, claimNextTestNow, design)
+
+	res, err := s.ClaimNext(ctx, ClaimNextOpts{Kind: "design,review", ActorID: "stig", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if !res.Claimed || res.Task == nil || res.Task.ID != lowDesign.ID {
+		t.Fatalf("ClaimNext kind=design,review: got %+v, want claim of %s (not the higher-ranked %s feature)", res, lowDesign.ID, critFeature.ID)
+	}
+	mustState(t, s, lowDesign.ID, "in_progress")
+	mustState(t, s, critFeature.ID, "ready")
+
+	// The complementary list picks the feature the first claim skipped, so
+	// the two loops between them drain the ready set.
+	res, err = s.ClaimNext(ctx, ClaimNextOpts{Kind: "feature,bug,chore", ActorID: "stig", Worktree: "h:/.worktrees/2"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if !res.Claimed || res.Task == nil || res.Task.ID != critFeature.ID {
+		t.Fatalf("ClaimNext kind=feature,bug,chore: got %+v, want claim of %s", res, critFeature.ID)
+	}
+}
+
+// TestClaimNextKindFilterListNoMatch pins the empty-result shape for a list
+// that matches nothing: no claim, no error.
+func TestClaimNextKindFilterListNoMatch(t *testing.T) {
+	t.Parallel()
+	s := openClaimNextStore(t)
+	createTask(t, s, claimNextTestNow, defaultTaskInput()) // kind "feature"
+
+	res, err := s.ClaimNext(t.Context(), ClaimNextOpts{Kind: "design,review", ActorID: "stig", Worktree: "h:/.worktrees/1"})
+	if err != nil {
+		t.Fatalf("ClaimNext: %v", err)
+	}
+	if res.Claimed || res.Task != nil {
+		t.Fatalf("ClaimNext kind=design,review with only a feature ready: got %+v, want Claimed:false Task:nil", res)
+	}
+}
+
 func TestClaimNextSkipsNeedsDecomposition(t *testing.T) {
 	t.Parallel()
 	s := openClaimNextStore(t)

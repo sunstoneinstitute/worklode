@@ -486,7 +486,8 @@ func completionCandidates(t *testing.T, args ...string) []string {
 
 // TestTaskKindFlagCompletesTheLiveKindsOnly is 061 §3 C4 for the flag
 // docs/agent-surfaces.md names as the one agents most often get wrong. The
-// candidates are ns.TaskKinds itself, never a literal beside it, and the
+// candidates are ns.TaskKinds itself (or, on a claim surface, the derived
+// claimableTaskKinds), never a literal beside it, and the
 // retired "spec" spelling — still accepted as an input alias by
 // ns.DeprecatedTaskKinds, so a caller reaching for it is not corrected by an
 // error — must never be offered, on any command carrying the flag.
@@ -495,19 +496,24 @@ func TestTaskKindFlagCompletesTheLiveKindsOnly(t *testing.T) {
 		writeTestJSON(t, w, tasksResponse("WL-1"))
 	})
 
-	for _, args := range [][]string{
-		{"task", "add", "--kind", ""},
-		{"task", "list", "--kind", ""},
-		{"task", "edit", "--kind", ""},
-		{"task", "claim", "--kind", ""},
-		{"work", "next", "--kind", ""},
-		{"work", "listen", "--kind", ""},
-		{"inbox", "promote", "--kind", ""},
-	} {
-		t.Run(strings.Join(args[:len(args)-2], " "), func(t *testing.T) {
+	// The two claim surfaces complete claimableTaskKinds instead: a ranked
+	// pick never hands out a decision or a rally, so offering either would
+	// complete a value that matches nothing (025 §8.8).
+	cases := map[string][]string{
+		"task add":      ns.TaskKinds,
+		"task list":     ns.TaskKinds,
+		"task edit":     ns.TaskKinds,
+		"task claim":    claimableTaskKinds,
+		"work next":     claimableTaskKinds,
+		"work listen":   ns.TaskKinds,
+		"inbox promote": ns.TaskKinds,
+	}
+	for path, want := range cases {
+		args := append(strings.Split(path, " "), "--kind", "")
+		t.Run(path, func(t *testing.T) {
 			got := completionCandidates(t, args...)
-			if !slices.Equal(got, ns.TaskKinds) {
-				t.Fatalf("candidates = %v, want ns.TaskKinds %v", got, ns.TaskKinds)
+			if !slices.Equal(got, want) {
+				t.Fatalf("candidates = %v, want %v", got, want)
 			}
 			for alias := range ns.DeprecatedTaskKinds {
 				if slices.Contains(got, alias) {
