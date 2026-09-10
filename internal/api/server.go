@@ -46,7 +46,7 @@ import (
 
 // Config carries server configuration. The webhook secrets and cluster/env
 // map are consumed by the /hooks/github, /hooks/flux, /hooks/catalog,
-// /hooks/ci and /hooks/pipeline endpoints.
+// /hooks/ci, /hooks/pipeline and /hooks/cms endpoints.
 type Config struct {
 	BootstrapToken        string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
 	GitHubWebhookSecret   string            // LODE_GITHUB_WEBHOOK_SECRET
@@ -54,6 +54,7 @@ type Config struct {
 	CatalogWebhookSecret  string            // LODE_CATALOG_WEBHOOK_SECRET
 	CIWebhookSecret       string            // LODE_CI_WEBHOOK_SECRET
 	PipelineWebhookSecret string            // LODE_PIPELINE_WEBHOOK_SECRET
+	CMSWebhookSecret      string            // LODE_CMS_WEBHOOK_SECRET
 	ClusterEnvMap         map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// InstanceEnv (LODE_INSTANCE_ENV) is which kind of instance this is: "dev"
@@ -737,6 +738,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.public("POST /hooks/catalog", hooks.NewCatalogHandler(s.st, s.cfg.CatalogWebhookSecret, s.log, hookMetrics))
 	r.public("POST /hooks/ci", hooks.NewCIHandler(s.st, s.cfg.CIWebhookSecret, s.log, hookMetrics))
 	r.public("POST /hooks/pipeline", hooks.NewPipelineHandler(s.st, s.cfg.PipelineWebhookSecret, s.log, hookMetrics))
+	r.public("POST /hooks/cms", hooks.NewCMSHandler(s.st, s.cfg.CMSWebhookSecret, s.log, hookMetrics))
 
 	// SSO token exchange + config discovery for the CLI login flow. Registered
 	// outside the /api/v1 bearer-auth middleware, like /healthz and /hooks/*.

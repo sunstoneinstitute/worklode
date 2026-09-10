@@ -946,3 +946,16 @@ Recorded by WL-561 (the impact review lifecycle, 029 §7.1):
   ever closes the row: the impact question the owner already answered keeps
   showing as outstanding. Worth a decision on whether a reopen should resolve
   the impact row rather than leave it open.
+
+Recorded by WL-586 (`/hooks/cms` ingest, 029 §8.3):
+
+- `[P2]` **`ci` and `pipeline` webhook secrets are not wired into any
+  deployment.** `LODE_CATALOG_WEBHOOK_SECRET` reaches a running server through
+  `docker-compose.yml` and both `deploy/overlays/*/externalsecret-worklode-secrets.yaml`,
+  and WL-586 gave `LODE_CMS_WEBHOOK_SECRET` the same treatment. The `ci` and
+  `pipeline` sources have handlers, routes and config fields but appear in
+  none of those files, so a deployed server reads an empty secret for them and
+  `/hooks/ci` and `/hooks/pipeline` answer 503 "webhook secret not configured"
+  for every delivery. Nothing emits to either endpoint yet, which is why it
+  has gone unnoticed. Whoever wires the first real `ci` or `pipeline` emitter
+  has to add the secret in the same change, or the emitter meets a 503.

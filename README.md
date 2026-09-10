@@ -348,6 +348,19 @@ one; without it the SHA-256 of the body is used.
 recorded but no open entity declares that address. Artifact addresses are
 compared exactly (whitespace-trimmed, no case or scheme normalisation).
 
+## CMS setup
+
+`POST /hooks/cms` is the same ingest contract as `/hooks/catalog`, for
+`sunstone-cms`'s publish transitions: `X-Signature` over the exact request
+bytes, keyed by `LODE_CMS_WEBHOOK_SECRET`, `X-CMS-Delivery` as the
+idempotency key. The payload additionally requires `published_by` and
+`approved_by` — who hit publish and who approved, both non-blank after
+trimming. A delivery missing either is a 400 before any event is recorded
+(spec 029 §8.3): the publish fact without the person would rebuild the
+invisible-sign-off problem the whole spec exists to remove. Both fields are
+merged into the filed evidence's `detail` alongside anything the CMS itself
+sent there.
+
 **The contract is provisional.** No data-platform emitter exists yet; it is
 shaped after the Flux hook and will be settled against the first real one.
 
