@@ -223,3 +223,34 @@ func TestSearchProviderFailing(t *testing.T) {
 		t.Fatalf("provider/mode: %q/%q", resp.Provider, resp.Mode)
 	}
 }
+
+// TestSearchUsesQueryEmbedder proves search reads queryEmbedder, not
+// embedder, once LODE_QUERY_EMBEDDING_URL is set: the document provider
+// here always errors, so a passing search can only have gone through the
+// query provider.
+func TestSearchUsesQueryEmbedder(t *testing.T) {
+	t.Parallel()
+	docSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer docSrv.Close()
+	querySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"data":[{"index":0,"embedding":` + store.VecJSONForTests(1, 0) + `}]}`))
+	}))
+	defer querySrv.Close()
+
+	_, h, token := newTestServerWithConfig(t, api.Config{
+		EmbeddingURL: docSrv.URL, EmbeddingModel: "m", QueryEmbeddingURL: querySrv.URL,
+	})
+
+	rr := doReq(t, h, "GET", "/api/v1/search?q=quokka", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("search: %d %s", rr.Code, rr.Body)
+	}
+	var resp model.SearchResponse
+	decodeInto(t, rr, &resp)
+	if resp.Mode != "hybrid" {
+		t.Fatalf("mode = %q, want hybrid (query embedder should have answered)", resp.Mode)
+	}
+}
