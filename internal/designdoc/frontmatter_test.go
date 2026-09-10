@@ -93,9 +93,9 @@ func TestParseFrontmatterWholeFile(t *testing.T) {
 		t.Fatal("Frontmatter is nil")
 	}
 	switch fm.Status {
-	case "draft", "accepted", "superseded":
+	case "draft", "accepted", "stale", "superseded", "withdrawn":
 	default:
-		t.Errorf("Status = %q, want one of draft/accepted/superseded", fm.Status)
+		t.Errorf("Status = %q, want one of draft/accepted/stale/superseded/withdrawn", fm.Status)
 	}
 	// A section-scoped edge map, the shape a bare list would silently drop.
 	if got := fm.Amends["#sec-2"]; len(got) != 1 || got[0] != "002-target-spec.md#sec-1" {
