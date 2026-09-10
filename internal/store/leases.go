@@ -340,18 +340,26 @@ func (s *Store) Release(ctx context.Context, taskID, actorID string) error {
 
 	_, _, err = s.RecordEvent(ctx, "cli", extID, "lease.released", payload,
 		func(tx *sql.Tx, eventID int64) error {
-			l, err := activeLeaseTx(tx, taskID)
-			if err != nil {
-				return err
-			}
-			if l.ActorID != actorID {
-				return fmt.Errorf("no active lease on task %s held by %s: %w", taskID, actorID, ErrNotFound)
-			}
-			now := s.nowFn().UTC().Truncate(time.Second)
-			return closeLease(tx, now, l.ID, taskID, eventID)
+			return releaseLeaseTx(tx, s.nowFn().UTC().Truncate(time.Second), taskID, actorID, eventID)
 		})
 	s.metrics.release(outcome(err))
 	return err
+}
+
+// releaseLeaseTx is Release's transactional body: the holder check, the lease
+// close, and closeLease's back-to-ready transition. It is a function of its
+// own so a caller that releases as one step of a larger transaction —
+// EscalateTask (025 §8.1) — reuses the ownership policy rather than restating
+// it. A non-holder gets ErrNotFound, same as Release.
+func releaseLeaseTx(tx *sql.Tx, now time.Time, taskID, actorID string, eventID int64) error {
+	l, err := activeLeaseTx(tx, taskID)
+	if err != nil {
+		return err
+	}
+	if l.ActorID != actorID {
+		return fmt.Errorf("no active lease on task %s held by %s: %w", taskID, actorID, ErrNotFound)
+	}
+	return closeLease(tx, now, l.ID, taskID, eventID)
 }
 
 // RebindLeaseWorktree moves the active lease on taskID held by actorID to a

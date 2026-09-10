@@ -775,6 +775,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("POST /api/v1/instructions/claim", s.claimInstructions)
 	r.api("POST /api/v1/tasks/{id}/state", s.setTaskState)
 	r.api("POST /api/v1/tasks/{id}/abandon", s.abandonTask)
+	r.api("POST /api/v1/tasks/{id}/escalate", s.escalateTask)
 	r.api("POST /api/v1/tasks/{id}/reopen", s.reopenTask)
 	r.api("GET /api/v1/tasks/{id}/timeline", s.taskTimeline)
 	r.api("DELETE /api/v1/tasks/{id}", s.deleteTask)
