@@ -674,6 +674,19 @@ func (s *server) progressEvents(w http.ResponseWriter, r *http.Request) {
 			s.streamEnd(ctx, "list progress events", err)
 			return
 		}
+		// A GitHub correlation is added to the recorded payload by the
+		// delivery's second transaction. Stop before an event whose apply is
+		// still running, otherwise advancing past it would permanently lose
+		// the task frame. Applied events with no correlation are complete and
+		// may still be consumed.
+		for i, e := range events {
+			touch := progress.Resolve(e.Type, e.Payload)
+			if e.Source == "github" && !e.Applied && touch.Task == "" &&
+				(touch.Kind == "pr" || touch.Kind == "ci") {
+				events = events[:i]
+				break
+			}
+		}
 		var frames []progressFrame
 		if len(events) > 0 {
 			frames, err = s.progressFrames(ctx, project.ID, events)
