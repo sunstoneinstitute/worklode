@@ -269,11 +269,23 @@ func checkFlagValue(cmd *cobra.Command, flag *pflag.Flag, name, value string) st
 		return ""
 	}
 	allowed := enumValues(flag)
-	if len(allowed) == 0 || slices.Contains(allowed, value) {
+	if len(allowed) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%q --kind takes %s, not %q",
-		cmd.CommandPath(), strings.Join(allowed, ", "), value)
+	// A repeatable --kind takes a comma-separated list (025 §8.8), so each
+	// element is checked. A single-valued flag is not split: a comma there is
+	// a doc bug, not a list.
+	written := []string{value}
+	if flag.Value.Type() == "stringSlice" {
+		written = strings.Split(value, ",")
+	}
+	for _, v := range written {
+		if !slices.Contains(allowed, v) {
+			return fmt.Sprintf("%q --kind takes %s, not %q",
+				cmd.CommandPath(), strings.Join(allowed, ", "), v)
+		}
+	}
+	return ""
 }
 
 // usageEnum matches the value list a flag's usage string spells out, as in

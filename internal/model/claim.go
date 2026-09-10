@@ -80,7 +80,9 @@ type ClaimInput struct {
 // ClaimNextInput is the request body for ClaimNext (POST
 // /api/v1/tasks/claim-next). Worktree is required unless DryRun is set;
 // TTLSeconds <= 0 means the server default. Kind narrows the candidate set
-// the same way Project does: empty matches every kind.
+// the same way Project does, and takes a comma-separated list of kinds so a
+// loop can restrict itself to its own tier (025 §8.8): empty matches every
+// kind.
 type ClaimNextInput struct {
 	Project     string `json:"project"`
 	Kind        string `json:"kind"`
