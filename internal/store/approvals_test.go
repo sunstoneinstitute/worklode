@@ -1650,7 +1650,7 @@ func TestDesignateRevisionMintsCandidateAfterDecision(t *testing.T) {
 	ap := mustOpenApproval(t, tx, "pr", "acme/site#7")
 	mustResolve(t, tx, ap.ID, "approved", now)
 
-	out, err := DesignateRevision(tx, now, "pr", "acme/site#7", "bbb222")
+	out, _, err := DesignateRevision(tx, now, "pr", "acme/site#7", "bbb222")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1680,7 +1680,7 @@ func TestDesignateRevisionRebindsOpenRow(t *testing.T) {
 	now := time.Now().UTC()
 	mustInsertAwaiting(t, tx, now, "pr", "acme/site#20", "aaa111", nil, nil)
 
-	out, err := DesignateRevision(tx, now, "pr", "acme/site#20", "bbb222")
+	out, _, err := DesignateRevision(tx, now, "pr", "acme/site#20", "bbb222")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1708,14 +1708,14 @@ func TestDesignateRevisionAlreadyBoundIsNoop(t *testing.T) {
 	ap := mustOpenApproval(t, tx, "pr", "acme/site#21")
 	mustResolve(t, tx, ap.ID, "approved", now)
 
-	first, err := DesignateRevision(tx, now, "pr", "acme/site#21", "bbb222")
+	first, _, err := DesignateRevision(tx, now, "pr", "acme/site#21", "bbb222")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first != RevisionCandidate {
 		t.Fatalf("first outcome = %v, want RevisionCandidate", first)
 	}
-	second, err := DesignateRevision(tx, now, "pr", "acme/site#21", "bbb222")
+	second, _, err := DesignateRevision(tx, now, "pr", "acme/site#21", "bbb222")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1739,7 +1739,7 @@ func TestDesignateRevisionNoHistoryIsNoop(t *testing.T) {
 	tx := mustBegin(t, s)
 	now := time.Now().UTC()
 
-	out, err := DesignateRevision(tx, now, "pr", "acme/site#22", "aaa111")
+	out, _, err := DesignateRevision(tx, now, "pr", "acme/site#22", "aaa111")
 	if err != nil {
 		t.Fatal(err)
 	}

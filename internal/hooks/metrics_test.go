@@ -3,10 +3,12 @@ package hooks_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -140,16 +142,19 @@ func TestFluxWebhookMetrics(t *testing.T) {
 }
 
 // TestApprovalIngestMetrics: every approval write the GitHub ingest makes is
-// counted under one of the bounded action values. impact_opened is bounded
-// (metrics.go) but has no emitter yet — that lands with WL-559's sibling
-// task — so it is deliberately left out of the want map below rather than
-// asserted at a count nothing in this test can produce.
+// counted under one of the bounded action values, impact_opened included —
+// seedApprovedDependent puts one governed dependent behind PR 42, so the
+// first synchronize designates a new head and fans one impact review out to
+// it (029 §7.1). The second synchronize absorbs into that still-open row, so
+// the count stays 1.
 func TestApprovalIngestMetrics(t *testing.T) {
 	reg := prometheus.NewRegistry()
 	m := hooks.NewMetrics(reg)
 	e := newEnvWithMetrics(t, m)
 	taskID := e.seedTask(t)
 	e.claimTask(t, taskID)
+
+	seedApprovedDependent(t, e, "sunstoneinstitute/demo#42")
 
 	deliverOK(t, e, "pull_request", "d-appr-1", "pull_request_opened.json")
 	deliverOK(t, e, "pull_request_review", "d-rev-1", "pull_request_review_changes_requested.json")
@@ -160,10 +165,39 @@ func TestApprovalIngestMetrics(t *testing.T) {
 
 	want := map[string]float64{
 		"opened": 1, "resolved": 2, "reopened": 1, "rebound": 1, "candidate": 1,
+		"impact_opened": 1,
 	}
 	for action, wantN := range want {
 		if got := testutil.ToFloat64(m.ApprovalsIngest().WithLabelValues(action)); got != wantN {
 			t.Errorf("approvals_ingest{%s} = %v, want %v", action, got, wantN)
 		}
+	}
+}
+
+// seedApprovedDependent creates a second pull request that has already been
+// approved and records that it references upstream, which is what makes a
+// designation of upstream raise an impact review on it (029 §7.1).
+func seedApprovedDependent(t *testing.T, e *env, upstream string) {
+	t.Helper()
+	now := time.Now().UTC()
+	_, _, err := e.st.RecordEvent(context.Background(), "cli", "seed-dependent:"+t.Name(),
+		"test.seed", []byte(`{}`), func(tx *sql.Tx, _ int64) error {
+			const dep = "sunstoneinstitute/demo#99"
+			if _, err := store.InsertAwaitingApproval(tx, now, "pr", dep, "dep-sha", "",
+				nil, nil, nil); err != nil {
+				return err
+			}
+			a, err := store.OpenApprovalForLane(tx, "pr", dep, "")
+			if err != nil {
+				return err
+			}
+			if err := store.ResolveApproval(tx, a.ID, "approved", nil, now); err != nil {
+				return err
+			}
+			return store.InsertGovernedRefs(tx, now, nil, "pr", dep, "dep-sha",
+				[]store.GovernedRef{{Kind: "pr", ID: upstream, Revision: "old-sha"}})
+		})
+	if err != nil {
+		t.Fatalf("seed approved dependent: %v", err)
 	}
 }

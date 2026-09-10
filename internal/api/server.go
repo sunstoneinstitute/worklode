@@ -439,6 +439,10 @@ type server struct {
 	// not counted here — worklode_authz_decisions_total already carries it.
 	approvalDecisions *prometheus.CounterVec
 
+	// approvalActs counts the acts on an approval that are not decisions —
+	// today the impact note — by act and outcome; see observeApprovalAct.
+	approvalActs *prometheus.CounterVec
+
 	// approvalRequirements counts approval rows materialized from a review
 	// flow, by origin; see observeApprovalRequirements.
 	approvalRequirements *prometheus.CounterVec
@@ -618,7 +622,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// routes Home, Reviews and Deliveries kept after leaving that list record
 	// theirs the same way.
 	r.web("GET /{$}", s.navWrap("home", s.homePage))
-	r.web("POST /home/reviewed", s.navWrap("brief_review", s.requireSession(s.reviewedThroughNow)))
+	r.web("POST /home/reviewed", s.navWrap("brief_review", s.requireSession(permWebWrite, s.reviewedThroughNow)))
 	r.web("GET /ideas", s.navWrap("ideas", s.globalPlaceholder("ideas", "Ideas",
 		"Low-friction idea capture, looser than and promotable into Intake, arrives with spec 032 §5.")))
 	r.web("GET /intake", s.navWrap("intake", s.globalPlaceholder("intake", "Intake",
@@ -699,7 +703,11 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// attribute a decision to. requireSession is applied here, at
 	// registration, so no other route can reach the handler without it — and
 	// there is deliberately no CLI verb and no /api/v1 route for it.
-	r.web("POST /approvals/{id}/decide", s.navWrap("approval_decide", s.requireSession(s.decideApproval)))
+	r.web("POST /approvals/{id}/decide", s.navWrap("approval_decide", s.requireSession(permApprovalDecide, s.decideApproval)))
+	// The dependent owner's note on an open impact review (029 §7.1), the
+	// other half of that lifecycle: written before a prior approver decides,
+	// and a web-session act for the same reason the decision is.
+	r.web("POST /approvals/{id}/note", s.navWrap("approval_note", s.requireSession(permApprovalNote, s.noteApproval)))
 	r.public("GET /assets/", s.assetHandler())
 	// The blob asset route (spec 021 §4). Neither an API route nor a web
 	// page: a browser <img> on a task page fetches it with a session cookie

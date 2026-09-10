@@ -52,6 +52,11 @@ var (
 	// ErrNotQualified means the decider does not hold the group the approval's
 	// required_role names (029 §7.1).
 	ErrNotQualified = errors.New("not qualified to decide this approval")
+	// ErrNotPriorApprover means the decider never approved the entity an
+	// impact review asks about. 029 §7.1 puts that question to "a qualified
+	// prior approver": only someone whose own approval is at stake may say
+	// whether it still holds.
+	ErrNotPriorApprover = errors.New("only a prior approver may decide an impact review")
 	// ErrSelfApproval means the decider authored the change under review.
 	// 029 §7.1 refuses this by default; the policy-permitted exception is not
 	// implemented.

@@ -88,6 +88,25 @@ templ approvalRow(row ApprovalRow) {
 	</li>
 }
 
+// impactActs renders the two acts an open impact review offers (029 §7.1):
+// the dependent owner writes down what the upstream change means for their
+// entity, and a prior approver then says whether their own approval still
+// holds. The buttons post the ordinary decide values — the question they
+// answer is the impact one, so they are labelled for it rather than for the
+// generic approve/request-changes pair.
+templ impactActs(id int64) {
+	<form method="post" action={ "/approvals/" + strconv.FormatInt(id, 10) + "/note" } class="decide">
+		<label for="impact-note">What does the upstream change mean here?</label>
+		<textarea id="impact-note" name="note" rows="3"></textarea>
+		<button type="submit" class="btn">Save note</button>
+	</form>
+	<form method="post" action={ "/approvals/" + strconv.FormatInt(id, 10) + "/decide" } class="decide">
+		<input type="hidden" name="return" value={ "/approvals/" + strconv.FormatInt(id, 10) }/>
+		<button type="submit" name="decision" value="approve" class="btn primary">Confirm decision holds</button>
+		<button type="submit" name="decision" value="request_changes" class="btn">Reopen</button>
+	</form>
+}
+
 // ApprovalDetail renders GET /approvals/{id} (032 §7), the tracer for the
 // review-graph presentation surface: one approval, the entity it governs,
 // its full decision history, and the review-graph references its own
@@ -148,6 +167,9 @@ templ ApprovalDetail(v ApprovalDetailView) {
 				}
 				if v.ExceptionAuthorizedBy != "" {
 					<p><strong>Self-review exception authorized by:</strong> { v.ExceptionAuthorizedBy }</p>
+				}
+				if v.ImpactOpen {
+					@impactActs(v.ID)
 				}
 			</section>
 

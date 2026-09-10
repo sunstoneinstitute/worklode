@@ -165,6 +165,8 @@ func approvalDetailView(a *store.Approval, title, url string,
 	if a.Note != nil {
 		v.Note = *a.Note
 	}
+	v.ImpactOpen = a.ReviewKind == "impact" &&
+		(a.State == "awaiting" || a.State == "changes_requested")
 	if a.ExceptionAuthorizedBy != nil {
 		v.ExceptionAuthorizedBy = names[*a.ExceptionAuthorizedBy]
 	}

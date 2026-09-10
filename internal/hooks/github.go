@@ -453,7 +453,7 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 		// once past it, a DesignateRevision error is a genuine store
 		// failure, not a correlation miss, so it propagates like every
 		// other write in this switch.
-		outcome, err := store.DesignateRevision(tx, now, "pr",
+		outcome, impacts, err := store.DesignateRevision(tx, now, "pr",
 			store.PREntityID(repo, gh.Number), gh.Head.SHA)
 		if err != nil {
 			return err
@@ -463,6 +463,12 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 			a.metrics.approvalIngest("rebound")
 		case store.RevisionCandidate:
 			a.metrics.approvalIngest("candidate")
+		}
+		// One per impact review the designation opened on a dependent (029
+		// §7.1), so the fan-out is visible separately from the designation
+		// that caused it.
+		for range impacts {
+			a.metrics.approvalIngest("impact_opened")
 		}
 		return nil
 	case action == "closed" && gh.Merged:

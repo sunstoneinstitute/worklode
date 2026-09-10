@@ -103,6 +103,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			strings.Join(approvalDecisionOutcomes, ", ") +
 			"). Labels are bounded: the approval, the decider and the required role are deliberately not among them. The session refusal in front of the route is counted by worklode_authz_decisions_total, not here.",
 	}, []string{"decision", "outcome"})
+	s.approvalActs = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_approval_acts_total",
+		Help: "Acts on an approval that are not decisions (029 §7.1), by act (" +
+			strings.Join(approvalActKinds, ", ") + ") and outcome (" +
+			strings.Join(approvalActOutcomes, ", ") +
+			"). Today that is the dependent owner's note on an open impact review. Labels are bounded: the approval and the actor are deliberately not among them. The decision that follows a note is counted by worklode_approval_decisions_total.",
+	}, []string{"act", "outcome"})
 	s.approvalRequirements = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "worklode_approval_requirements_total",
 		Help: "Approval rows materialized from a project's review flow (029 §7.1), by origin (" +
@@ -313,7 +320,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	s.mdcache = mdrender.NewCache(reg)
 	reg.MustRegister(s.requests, s.durations, s.syncRuns, s.syncDuration, s.syncItems, s.assignments,
 		s.cockpitProjections, s.navigations, s.homeRenders, s.runBoardRenders, s.inboxRenders, s.formSubmissions, s.progressWrites, s.progressFragmentRenders, s.dictations, s.taskTokens, s.authzDecisions,
-		s.approvalDecisions, s.approvalRequirements, s.approvalFlowApplies,
+		s.approvalDecisions, s.approvalActs, s.approvalRequirements, s.approvalFlowApplies,
 		s.crewChanges,
 		s.milestoneChanges,
 		s.referenceWrites,
@@ -425,6 +432,12 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, decision := range approvalDecisionKinds {
 		for _, outcome := range approvalDecisionOutcomes {
 			s.approvalDecisions.WithLabelValues(decision, outcome)
+		}
+	}
+	// Every act/outcome pair, for the same reason.
+	for _, act := range approvalActKinds {
+		for _, outcome := range approvalActOutcomes {
+			s.approvalActs.WithLabelValues(act, outcome)
 		}
 	}
 	// Both origins, so a project with no flow stamped reads as a flat zero
@@ -883,8 +896,44 @@ func (s *server) observeAuthz(perm Permission, d Decision) {
 var (
 	approvalDecisionKinds    = []string{"approve", "request_changes", "reject", decisionInvalid}
 	approvalDecisionOutcomes = []string{"resolved", "refused_self", "refused_role",
-		"no_revision", "conflict", "not_found", "invalid", "error"}
+		"refused_prior", "no_revision", "conflict", "not_found", "invalid", "error"}
 )
+
+// approvalActKinds and approvalActOutcomes are the bounded label values of
+// worklode_approval_acts_total. "note" is the only act today (029 §7.1's
+// impact note); decisionInvalid stands for a submission refused before the
+// act could run.
+var (
+	approvalActKinds    = []string{"note"}
+	approvalActOutcomes = []string{"recorded", "conflict", "not_found",
+		decisionInvalid, "error"}
+)
+
+// observeApprovalAct records one non-decision act on an approval. Nil-safe:
+// tests build a *server directly without initMetrics.
+func (s *server) observeApprovalAct(act, outcome string) {
+	if s.approvalActs == nil {
+		return
+	}
+	s.approvalActs.WithLabelValues(act, outcome).Inc()
+}
+
+// approvalActOutcome classifies a SetImpactNote error for the outcome label,
+// mirroring approvalActErr's status mapping.
+func approvalActOutcome(err error) string {
+	switch {
+	case err == nil:
+		return "recorded"
+	case errors.Is(err, store.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, store.ErrApprovalResolved):
+		return "conflict"
+	case errors.Is(err, store.ErrInvalidInput):
+		return decisionInvalid
+	default:
+		return "error"
+	}
+}
 
 // decisionInvalid is the decision label for a submission that named no valid
 // decision, and the outcome label for refusing it.
@@ -901,10 +950,10 @@ func (s *server) observeApprovalDecision(decision, outcome string) {
 }
 
 // approvalDecisionOutcome classifies a DecideApproval error for the outcome
-// label. It mostly mirrors decideApprovalErr's status mapping, but not for
+// label. It mostly mirrors approvalActErr's status mapping, but not for
 // ErrInvalidInput: that case is unreachable through decideApproval today (the
 // decision string is validated before the store is called), and if it ever
-// did fire, decideApprovalErr's default case would route it to webStoreErr,
+// did fire, approvalActErr's default case would route it to webStoreErr,
 // which reports 500 ("error"), not this function's "invalid".
 func approvalDecisionOutcome(err error) string {
 	switch {
@@ -918,6 +967,8 @@ func approvalDecisionOutcome(err error) string {
 		return "refused_self"
 	case errors.Is(err, store.ErrNotQualified):
 		return "refused_role"
+	case errors.Is(err, store.ErrNotPriorApprover):
+		return "refused_prior"
 	case errors.Is(err, store.ErrNoRevision):
 		return "no_revision"
 	case errors.Is(err, store.ErrInvalidInput):
