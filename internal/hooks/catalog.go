@@ -84,10 +84,12 @@ import (
 // GitHub and Flux handlers.
 const maxCatalogBody = 5 << 20
 
-// catalogStates is the reportable set, mirroring the artifact_evidence state
+// CatalogStates is the reportable set, mirroring the artifact_evidence state
 // CHECK. Anything else is a 400: an unbounded state would reach the database
 // as a constraint violation and the metric label as a cardinality leak.
-var catalogStates = []string{"published", "updated", "deprecated", "removed", "failed"}
+// Exported so the prober's bearer-API ingest (internal/api/probe.go) validates
+// against the same set rather than a second copy of the five strings.
+var CatalogStates = []string{"published", "updated", "deprecated", "removed", "failed"}
 
 // ingestConfig names one signed artifact-evidence source (029 §8.3). All
 // instances share the payload contract at the top of this file, the HMAC
@@ -188,7 +190,7 @@ func (h *ingestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Every exit records exactly one delivery; result stays "error" unless a
 	// branch below sets it, so new early returns default to error, not
 	// silence. The event label is the validated state — bounded by
-	// catalogStates — or "invalid" for a payload that never got that far.
+	// CatalogStates — or "invalid" for a payload that never got that far.
 	result, eventLabel := "error", "invalid"
 	defer func() { h.metrics.event(h.cfg.Source, eventLabel, result) }()
 
@@ -219,8 +221,8 @@ func (h *ingestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "artifact or at least one label is required")
 		return
 	}
-	if !slices.Contains(catalogStates, ev.State) {
-		writeErr(w, http.StatusBadRequest, "state must be one of "+strings.Join(catalogStates, ", "))
+	if !slices.Contains(CatalogStates, ev.State) {
+		writeErr(w, http.StatusBadRequest, "state must be one of "+strings.Join(CatalogStates, ", "))
 		return
 	}
 	if h.cfg.Validate != nil {
@@ -326,7 +328,7 @@ func (a *catalogApplier) applyStored(payload []byte, out *catalogResult) (func(t
 	if ev.Artifact == "" && len(ev.Labels) == 0 {
 		return nil, errors.New("catalog payload has neither an artifact nor a label")
 	}
-	if !slices.Contains(catalogStates, ev.State) {
+	if !slices.Contains(CatalogStates, ev.State) {
 		return nil, fmt.Errorf("catalog payload has unknown state %q", ev.State)
 	}
 	if a.cfg.Validate != nil {
