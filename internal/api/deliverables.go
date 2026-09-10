@@ -58,6 +58,10 @@ func validateDeliverable(projectID, name, description, rawURL, artifact string, 
 		return in, "url is too long"
 	case utf8.RuneCountInString(in.Artifact) > maxDeliverableArtifact:
 		return in, "artifact is too long"
+	case in.Artifact != "" && in.Label:
+		// The store refuses this too (CreateDeliverable), but naming it here
+		// gives the 422 a clean message before an event is recorded.
+		return in, "declare an artifact address or a label, not both"
 	}
 	if in.URL != "" {
 		// An absolute http(s) URL only. The deliverable's URL is rendered as a

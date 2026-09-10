@@ -597,6 +597,12 @@ type DeliverableRow struct {
 	// it renders as text and never as an href.
 	Artifact string
 
+	// Label is the worklode.deliverable=... address minted at build time
+	// when the deliverable was declared by label instead of by artifact
+	// address (029 §3.1) — the two are alternatives, so exactly one of
+	// Artifact and Label is set.
+	Label string
+
 	// ReportedState is the newest reported state of Artifact
 	// (published | updated | deprecated | removed | failed), "" when nothing
 	// has reported; ReportedAt is when that report says it happened.
@@ -1022,6 +1028,10 @@ type NewDeliverableView struct {
 	Description string
 	URL         string
 	Artifact    string
+	// Label is whether the "identify by label" checkbox was checked on the
+	// submit that produced this render, so a rejected submit re-renders the
+	// choice the person made.
+	Label bool
 	// Milestones is the project's milestones as a select menu, "No
 	// milestone" leading and selected by default (spec 029 §2).
 	Milestones []FormOption

@@ -74,6 +74,12 @@ func TestCreateDeliverableByLabel(t *testing.T) {
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("label plus artifact status = %d, want 422; body %s", rr.Code, rr.Body.String())
 	}
+	var errResp model.ErrorResponse
+	decodeInto(t, rr, &errResp)
+	const wantMsg = "declare an artifact address or a label, not both"
+	if errResp.Error != wantMsg {
+		t.Errorf("error = %q, want %q", errResp.Error, wantMsg)
+	}
 }
 
 // TestCreateDeliverableArtifactBounds: the artifact is length-checked and
