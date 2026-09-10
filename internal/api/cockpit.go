@@ -213,7 +213,8 @@ func (s *server) assembleProjectCockpit(ctx context.Context, id string) (*model.
 	}
 	// SecondaryConcerns is ranked by root cause (det-v1, WL-187/WL-280), not
 	// emitted in ListProjectWorkFacts' own order — see cockpit_rank.go.
-	secondary := rankSecondaryConcerns(facts, now)
+	secondary, rootCauseCalls := rankSecondaryConcerns(facts, now)
+	s.observeCockpitRootCauses(rootCauseCalls)
 
 	focus := p.Focus
 	if focus == nil {
