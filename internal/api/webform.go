@@ -533,6 +533,47 @@ func (s *server) noteApproval(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/approvals/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 }
 
+// authorizeException handles POST /approvals/{id}/exception, the
+// policy-permitted self-review exception (029 §7.1): a different authorized
+// actor says this author may review their own work, recorded before the
+// review. Registered behind requireSession like the decide route, and it 303s
+// back to the detail page the exception is read on.
+//
+// store.SelfReviewAllowed is false for every project today, so every call
+// refuses with 403 — see that function for why that is the honest answer and
+// not a stub.
+func (s *server) authorizeException(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if !s.sameOriginForm(r) {
+		s.observeApprovalAct("exception", decisionInvalid)
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return
+	}
+	if !parseWebForm(w, r) {
+		s.observeApprovalAct("exception", decisionInvalid)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		s.observeApprovalAct("exception", "not_found")
+		webErr(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	sub := subjectFrom(r)
+	err = s.recordEvent(ctx, "web", "approval.exception_authorized", map[string]any{
+		"approval_id": id, "actor": sub.ActorID,
+	}, func(tx *sql.Tx, _ int64) error {
+		return store.AuthorizeSelfReviewException(tx, id, sub.ActorID)
+	})
+	s.observeApprovalAct("exception", approvalActOutcome(err))
+	if err != nil {
+		s.approvalActErr(w, err)
+		return
+	}
+	http.Redirect(w, r, "/approvals/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
+}
+
 // approvalActErr turns a refused act on an approval — a decision or an impact
 // note — into the page the person sees. Each refusal names the rule that
 // refused, since every one of them is something they can act on: wait for
@@ -552,6 +593,11 @@ func (s *server) approvalActErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, store.ErrNotPriorApprover):
 		webErr(w, http.StatusForbidden,
 			"only someone who approved this entity can say whether that decision still holds")
+	// The self-review exception's policy refusal (029 §7.1). The store's own
+	// message names which policy said no, which is the part a person can act
+	// on; webStoreErr would turn it into a 500.
+	case errors.Is(err, store.ErrForbidden):
+		webErr(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, store.ErrInvalidInput):
 		webErr(w, http.StatusUnprocessableEntity, err.Error())
 	default:

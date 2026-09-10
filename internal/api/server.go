@@ -709,6 +709,10 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// other half of that lifecycle: written before a prior approver decides,
 	// and a web-session act for the same reason the decision is.
 	r.web("POST /approvals/{id}/note", s.navWrap("approval_note", s.requireSession(permApprovalNote, s.noteApproval)))
+	// Authorizing a self-review exception (029 §7.1), a web-session act for
+	// the same reason the decision is: the act names who permitted it, so it
+	// needs an identity no bearer token or open instance can supply.
+	r.web("POST /approvals/{id}/exception", s.navWrap("approval_exception", s.requireSession(permApprovalDecide, s.authorizeException)))
 	r.public("GET /assets/", s.assetHandler())
 	// The blob asset route (spec 021 §4). Neither an API route nor a web
 	// page: a browser <img> on a task page fetches it with a session cookie

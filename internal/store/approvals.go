@@ -460,12 +460,15 @@ type DecideInput struct {
 // decider did not author the thing under review (ErrSelfApproval). Then it
 // resolves the row.
 //
-// Self-approval is refused by default and unconditionally (029 §7.1); the
-// policy-permitted exception flow is not implemented. An unknown author on
-// either side proves nothing, so it does not refuse — see IsSelfApproval.
-// A 'pr' row compares GitHub logins, since the author GitHub reports is a
-// login; every other kind records its author as an actor id (created_by),
-// so those compare directly.
+// Self-approval is refused by default (029 §7.1). The one exception is
+// SelfReviewExceptionValid: the effective policy permits self-review and a
+// different actor authorized the exception before review. SelfReviewAllowed
+// is false for every project today, so the refusal is unconditional in
+// practice — see its doc comment. An unknown author on either side proves
+// nothing, so it does not refuse — see IsSelfApproval. The author comparison
+// happens in the entity's own namespace (authorAndActorForEntity), while the
+// exception's authorizer is always an actor id, so that check compares
+// against in.ActorID rather than the comparison identity.
 //
 // The row is locked FOR UPDATE, so two concurrent decisions serialize and the
 // second sees the resolved state rather than overwriting it: ResolveApproval
@@ -509,19 +512,18 @@ func DecideApproval(tx *sql.Tx, in DecideInput) (*Approval, error) {
 			return nil, ErrNotPriorApprover
 		}
 	} else {
-		author, decider := "", in.ActorID
-		if a.EntityKind == "pr" {
-			if author, err = prAuthorForEntity(tx, a.EntityID); err != nil {
-				return nil, err
-			}
-			if decider, err = gitHubLoginForActor(tx, in.ActorID); err != nil {
-				return nil, err
-			}
-		} else if author, err = authorActorForEntity(tx, a.EntityKind, a.EntityID); err != nil {
+		author, decider, err := authorAndActorForEntity(tx, a.EntityKind, a.EntityID, in.ActorID)
+		if err != nil {
 			return nil, err
 		}
 		if IsSelfApproval(author, decider) {
-			return nil, ErrSelfApproval
+			allowed, err := SelfReviewAllowed(tx, a.EntityKind, a.EntityID)
+			if err != nil {
+				return nil, err
+			}
+			if !SelfReviewExceptionValid(allowed, a.ExceptionAuthorizedBy, in.ActorID) {
+				return nil, ErrSelfApproval
+			}
 		}
 	}
 
@@ -680,6 +682,133 @@ func gitHubLoginForActor(tx *sql.Tx, actorID string) (string, error) {
 		return "", fmt.Errorf("github login for actor %s: %w", actorID, err)
 	}
 	return login, nil
+}
+
+// authorAndActorForEntity returns the entity's author and actorID rendered in
+// the same namespace, so IsSelfApproval can compare them: a 'pr' row records
+// its author as the GitHub login that opened it, every other kind records an
+// actor id. Either side may come back "" — an unknown author proves nothing,
+// and IsSelfApproval refuses to match on it.
+func authorAndActorForEntity(tx *sql.Tx, kind, entityID, actorID string) (string, string, error) {
+	if kind == "pr" {
+		author, err := prAuthorForEntity(tx, entityID)
+		if err != nil {
+			return "", "", err
+		}
+		login, err := gitHubLoginForActor(tx, actorID)
+		return author, login, err
+	}
+	author, err := authorActorForEntity(tx, kind, entityID)
+	return author, actorID, err
+}
+
+// projectForApproval returns the project owning what an approval governs; ""
+// when nothing correlates (a PR with no task, a kind with no project column).
+// A 'pr' reaches its project through the task its PR is correlated to; every
+// other kind carries project_id on its own row.
+func projectForApproval(tx *sql.Tx, kind, entityID string) (string, error) {
+	var query string
+	switch kind {
+	case "pr":
+		query = `SELECT coalesce(t.project_id, '') FROM pull_requests p
+		           JOIN tasks t ON t.id = p.task_id
+		          WHERE p.repo || '#' || p.number = $1`
+	case "doc":
+		query = `SELECT coalesce(project_id, '') FROM docs WHERE 'doc:' || id = $1`
+	case "deliverable":
+		query = `SELECT coalesce(project_id, '') FROM deliverables WHERE id = $1`
+	case "task":
+		query = `SELECT coalesce(project_id, '') FROM tasks WHERE id = $1`
+	default:
+		return "", nil
+	}
+	var projectID string
+	err := tx.QueryRow(query, entityID).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("project for %s %s: %w", kind, entityID, err)
+	}
+	return projectID, nil
+}
+
+// SelfReviewAllowed reports whether the effective review policy lets an author
+// decide their own work (029 §7.1's "the effective review policy allows it").
+//
+// It returns false for every project today, and that is not a stub oversight:
+// §7.1 requires the allowance, but §7.2 defines a flow as declaring only which
+// entity kinds need which role's sign-off, so no accepted spec says where the
+// allowance lives and model.ApprovalFlow carries no field for it. The
+// resolution is written out anyway — project, then stamped snapshot — so the
+// day a flow field is defined, reading it is the only change here and no
+// caller moves.
+func SelfReviewAllowed(tx *sql.Tx, kind, entityID string) (bool, error) {
+	projectID, err := projectForApproval(tx, kind, entityID)
+	if err != nil || projectID == "" {
+		return false, err
+	}
+	snap, err := ProjectApprovalFlow(tx, projectID)
+	if err != nil || snap == nil {
+		return false, err
+	}
+	// snap.Flow declares no self-review permission; see the doc comment.
+	return false, nil
+}
+
+// AuthorizeSelfReviewException stamps exception_authorized_by on an open
+// approval (029 §7.1): a different authorized actor says this author may
+// review their own work, before the review happens. DecideApproval then reads
+// the column through SelfReviewExceptionValid.
+//
+// Refused when the row is decided (ErrApprovalResolved); an exception is
+// already authorized (ErrInvalidInput); the authorizer authored the thing
+// under review (ErrSelfApproval — authorizing your own exception is the
+// self-approval the rule exists to prevent); or the effective policy does not
+// permit self-review (ErrForbidden). The row-local checks come first because
+// they hold whatever the policy says.
+//
+// SelfReviewAllowed is false for every project today, so this refuses every
+// call. See its doc comment for why that is the honest answer rather than a
+// stub.
+func AuthorizeSelfReviewException(tx *sql.Tx, id int64, actorID string) error {
+	if actorID == "" {
+		return fmt.Errorf("%w: authorizing an exception needs an actor", ErrInvalidInput)
+	}
+	a, err := scanApproval(tx.QueryRow(
+		`SELECT `+approvalColumns+` FROM approvals WHERE id = $1 FOR UPDATE`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("load approval %d: %w", id, err)
+	}
+	if a.State != "awaiting" && a.State != "changes_requested" {
+		return ErrApprovalResolved
+	}
+	if a.ExceptionAuthorizedBy != nil && *a.ExceptionAuthorizedBy != "" {
+		return fmt.Errorf("%w: this approval already carries an authorized self-review exception",
+			ErrInvalidInput)
+	}
+	author, authorizer, err := authorAndActorForEntity(tx, a.EntityKind, a.EntityID, actorID)
+	if err != nil {
+		return err
+	}
+	if IsSelfApproval(author, authorizer) {
+		return ErrSelfApproval
+	}
+	allowed, err := SelfReviewAllowed(tx, a.EntityKind, a.EntityID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return fmt.Errorf("%w: this project's review flow does not permit self-review", ErrForbidden)
+	}
+	if _, err := tx.Exec(
+		`UPDATE approvals SET exception_authorized_by = $2 WHERE id = $1`, id, actorID); err != nil {
+		return fmt.Errorf("authorize self-review exception on approval %d: %w", id, err)
+	}
+	return nil
 }
 
 // ReopenApproval flips changes_requested back to awaiting (029 §7.1's
