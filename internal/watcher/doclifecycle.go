@@ -73,9 +73,12 @@ func Evaluate(in Input) []Action {
 		return evaluateAccepted(in)
 	case TypeDocPatched:
 		return evaluatePatched(in)
+	case TypeDocStale:
+		return evaluateStale(in)
 	default:
-		// Dotted vendor types (push, …) and any wl: curie this subscriber
-		// does not know about both fall through here.
+		// Vendor dotted types (push, …) and any wl: curie this subscriber
+		// does not know about fall through here. doc.patched and doc.stale
+		// are the dotted backbone types the rules above act on.
 		return nil
 	}
 }
