@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -373,5 +374,219 @@ func TestStaleCandidateDocs(t *testing.T) {
 	}
 	if !planC2.HasExecution {
 		t.Errorf("plan.HasExecution = false after a claim, want true")
+	}
+}
+
+// minimalPlanBody is an accepted-shaped plan with no covers and no mintable
+// task fence: the §8.7 sweep tests below only need a plan row past its
+// staleness threshold with no leased task, and a plan's HasExecution check
+// (StaleCandidateDocs) looks at leases, not covers.
+const minimalPlanBody = `---
+status: draft
+---
+
+# A plan with nothing covered
+
+Nothing to cover.
+`
+
+// minimalPlanBodyRevised is minimalPlanBody after one re-planning edit, for
+// TestSweepStaleDocsRevisionRearms.
+const minimalPlanBodyRevised = `---
+status: draft
+---
+
+# A plan with nothing covered
+
+Nothing to cover. Revised.
+`
+
+// docStaleTestNow anchors the §8.7 sweep tests' injected clock.
+var docStaleTestNow = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// openStaleSweepStore is openDocStore with a mutable clock, so a sweep test
+// can create a document "now" and then move the clock forward past its
+// staleness threshold before sweeping — the pattern openLeaseStore uses for
+// the lease sweeper.
+func openStaleSweepStore(t *testing.T) (*Store, *time.Time) {
+	t.Helper()
+	s := openDocStore(t)
+	now := docStaleTestNow
+	s.SetNowFunc(func() time.Time { return now })
+	return s, &now
+}
+
+// TestSweepStaleDocsEmitsOnceThenSkipsUnchanged is 025 §8.7's idle path: an
+// accepted plan with no execution crosses the (inclusive) instance-default
+// threshold and the sweep emits one doc.stale event with cause "clock". Its
+// status stays accepted — only the §8.6 amendment path flips a status, and
+// only on plans. A second sweep at the same version emits nothing more.
+func TestSweepStaleDocsEmitsOnceThenSkipsUnchanged(t *testing.T) {
+	t.Parallel()
+	s, now := openStaleSweepStore(t)
+	ctx := t.Context()
+
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "211-idle",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	*now = now.AddDate(0, 0, defaultDocStalenessDays) // inclusive threshold
+
+	emitted, err := s.sweepStaleDocs(ctx)
+	if err != nil {
+		t.Fatalf("sweepStaleDocs: %v", err)
+	}
+	if emitted != 1 {
+		t.Fatalf("emitted = %d, want 1", emitted)
+	}
+	if got := docStatus(t, s, plan.ID); got != "accepted" {
+		t.Errorf("plan status = %q after a clock-fired stale, want accepted", got)
+	}
+	evs := staleEvents(t, s, StaleExternalID(plan.Slug, 1))
+	if len(evs) != 1 {
+		t.Fatalf("doc.stale events = %d, want 1", len(evs))
+	}
+	if evs[0]["cause"] != "clock" || evs[0]["doc"] != float64(plan.ID) {
+		t.Errorf("payload = %v, want cause clock, doc %d", evs[0], plan.ID)
+	}
+
+	emitted2, err := s.sweepStaleDocs(ctx)
+	if err != nil {
+		t.Fatalf("second sweepStaleDocs: %v", err)
+	}
+	if emitted2 != 0 {
+		t.Errorf("second sweep emitted = %d, want 0", emitted2)
+	}
+	if evs := staleEvents(t, s, StaleExternalID(plan.Slug, 1)); len(evs) != 1 {
+		t.Errorf("doc.stale events after the second sweep = %d, want 1", len(evs))
+	}
+}
+
+// TestSweepStaleDocsProjectOverrideFiresEarlier is 025 §8.7's per-project
+// override: projects.doc_staleness_days shortens the threshold for
+// documents under that project, leaving the instance default in force for
+// every other project's documents.
+func TestSweepStaleDocsProjectOverrideFiresEarlier(t *testing.T) {
+	t.Parallel()
+	s, now := openStaleSweepStore(t)
+	ctx := t.Context()
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO projects (id, name, key, doc_staleness_days) VALUES ('p2','P2','P2',5)`); err != nil {
+		t.Fatal(err)
+	}
+
+	defaultSpec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 210, Slug: "210-default",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	overrideSpec := mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 210, Slug: "210-override",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+
+	*now = now.AddDate(0, 0, 10) // past p2's 5-day override, short of p1's 30-day default
+
+	emitted, err := s.sweepStaleDocs(ctx)
+	if err != nil {
+		t.Fatalf("sweepStaleDocs: %v", err)
+	}
+	if emitted != 1 {
+		t.Fatalf("emitted = %d, want 1 (override spec only)", emitted)
+	}
+	if evs := staleEvents(t, s, StaleExternalID(overrideSpec.Slug, 1)); len(evs) != 1 {
+		t.Errorf("override spec doc.stale events = %d, want 1", len(evs))
+	}
+	if evs := staleEvents(t, s, StaleExternalID(defaultSpec.Slug, 1)); len(evs) != 0 {
+		t.Errorf("default-threshold spec doc.stale events = %d, want 0 (not yet stale)", len(evs))
+	}
+}
+
+// TestSweepStaleDocsRevisionRearms is 025 §8.7's version key: grooming a
+// document at one version leaves it re-armable. A later revision bumps the
+// plan's version and re-arms the clock from the revision's updated_at, not
+// the original.
+func TestSweepStaleDocsRevisionRearms(t *testing.T) {
+	t.Parallel()
+	s, now := openStaleSweepStore(t)
+	ctx := t.Context()
+
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "211-rearm",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	*now = now.AddDate(0, 0, defaultDocStalenessDays)
+	emitted, err := s.sweepStaleDocs(ctx)
+	if err != nil || emitted != 1 {
+		t.Fatalf("first sweep: emitted = %d, err = %v, want 1, nil", emitted, err)
+	}
+
+	if _, err := updateDocBody(t, s, plan.ID, minimalPlanBodyRevised); err != nil {
+		t.Fatalf("revise plan: %v", err)
+	}
+	emitted2, err := s.sweepStaleDocs(ctx)
+	if err != nil {
+		t.Fatalf("sweep right after the revision: %v", err)
+	}
+	if emitted2 != 0 {
+		t.Errorf("sweep right after the revision emitted = %d, want 0 (not stale yet)", emitted2)
+	}
+
+	*now = now.AddDate(0, 0, defaultDocStalenessDays)
+	emitted3, err := s.sweepStaleDocs(ctx)
+	if err != nil {
+		t.Fatalf("second sweep: %v", err)
+	}
+	if emitted3 != 1 {
+		t.Fatalf("second sweep emitted = %d, want 1 (version 2)", emitted3)
+	}
+	if evs := staleEvents(t, s, StaleExternalID(plan.Slug, 2)); len(evs) != 1 {
+		t.Errorf("doc.stale events at version 2 = %d, want 1", len(evs))
+	}
+	if evs := staleEvents(t, s, StaleExternalID(plan.Slug, 1)); len(evs) != 1 {
+		t.Errorf("doc.stale events at version 1 = %d, want 1 (unchanged)", len(evs))
+	}
+}
+
+// TestSweepStaleDocsExecutedPlanNeverFires is 025 §8.7's execution guard: a
+// plan with a claimed task is never a candidate, no matter how long past the
+// threshold the clock moves.
+func TestSweepStaleDocsExecutedPlanNeverFires(t *testing.T) {
+	t.Parallel()
+	s, now := openStaleSweepStore(t)
+	ctx := t.Context()
+
+	mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 210, Slug: "210-a",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Number: 211, Slug: "211-cover",
+		Body: groomPlanBody, CreatedBy: "stig",
+	})
+	_, minted, err := acceptDoc(t, s, plan.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan: %v", err)
+	}
+	if len(minted) != 1 {
+		t.Fatalf("minted = %d tasks, want 1", len(minted))
+	}
+	if _, err := s.Claim(ctx, minted[0].ID, "stig", "wt-never-stale", 0); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	*now = now.AddDate(0, 0, defaultDocStalenessDays*10)
+	emitted, err := s.sweepStaleDocs(ctx)
+	if err != nil {
+		t.Fatalf("sweepStaleDocs: %v", err)
+	}
+	if emitted != 0 {
+		t.Errorf("emitted = %d, want 0 (executed plan)", emitted)
+	}
+	accepted, err := s.GetDoc(ctx, plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if evs := staleEvents(t, s, StaleExternalID(plan.Slug, accepted.Version)); len(evs) != 0 {
+		t.Errorf("doc.stale events = %d, want 0", len(evs))
 	}
 }

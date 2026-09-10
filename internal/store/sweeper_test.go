@@ -124,6 +124,14 @@ func TestNewStoreMetricsPreInitialisesSweeperSeries(t *testing.T) {
 	if got := testutil.CollectAndCount(m.sweeperRuns); got != 2 {
 		t.Fatalf("sweeper_runs series = %d, want 2", got)
 	}
+	for _, outcome := range []string{"ok", "error"} {
+		if got := testutil.ToFloat64(m.docGroomRuns.WithLabelValues(outcome)); got != 0 {
+			t.Fatalf("doc_groom_runs{%s} = %v, want 0", outcome, got)
+		}
+	}
+	if got := testutil.CollectAndCount(m.docGroomRuns); got != 2 {
+		t.Fatalf("doc_groom_runs series = %d, want 2", got)
+	}
 }
 
 // waitFor polls cond until it holds or the test times out.

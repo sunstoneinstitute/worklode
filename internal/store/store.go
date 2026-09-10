@@ -24,6 +24,10 @@ type Store struct {
 	dsn     string
 	nowFn   func() time.Time
 	metrics *storeMetrics
+	// docStalenessDays is the instance default staleness threshold
+	// sweepStaleDocs applies (025 §8.7) when a document's project sets no
+	// override (projects.doc_staleness_days). WithDocStalenessDays changes it.
+	docStalenessDays int
 }
 
 // Open opens a Postgres-backed store for the given postgres:// DSN. Callers
@@ -37,7 +41,7 @@ func Open(dsn string, opts ...Option) (*Store, error) {
 	db.SetMaxOpenConns(16)
 	db.SetMaxIdleConns(4)
 	db.SetConnMaxLifetime(30 * time.Minute)
-	st := &Store{db: db, dsn: dsn, nowFn: func() time.Time { return time.Now().UTC() }}
+	st := &Store{db: db, dsn: dsn, nowFn: func() time.Time { return time.Now().UTC() }, docStalenessDays: defaultDocStalenessDays}
 	for _, o := range opts {
 		o(st)
 	}
