@@ -24,6 +24,14 @@ func WithMetrics(reg prometheus.Registerer) Option {
 	}
 }
 
+// WithDocStalenessDays overrides the instance default doc-staleness
+// threshold (025 §8.7) sweepStaleDocs applies to a document whose project
+// sets no override. Open sets 30 by default; the caller (serverapp.Run)
+// passes this only when LODE_DOC_STALENESS_DAYS is set.
+func WithDocStalenessDays(days int) Option {
+	return func(s *Store) { s.docStalenessDays = days }
+}
+
 // storeMetrics holds the store's domain instruments. All methods are nil-safe
 // so call sites need no guards on stores opened without WithMetrics.
 type storeMetrics struct {
@@ -32,6 +40,8 @@ type storeMetrics struct {
 	releases              *prometheus.CounterVec
 	expiries              prometheus.Counter
 	sweeperRuns           *prometheus.CounterVec
+	docGroomRuns          *prometheus.CounterVec
+	docsStaleEmitted      prometheus.Counter
 	projectWorkReads      *prometheus.CounterVec
 	docOps                *prometheus.CounterVec
 	docTasksMinted        prometheus.Counter
@@ -68,6 +78,14 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_lease_sweeper_runs_total",
 			Help: "Lease sweeper runs by result.",
 		}, []string{"result"}),
+		docGroomRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_doc_groom_runs_total",
+			Help: "Stale-doc sweeper runs (025 §8.7) by outcome.",
+		}, []string{"outcome"}),
+		docsStaleEmitted: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "worklode_docs_stale_emitted_total",
+			Help: "doc.stale events emitted by the §8.7 idle sweeper.",
+		}),
 		projectWorkReads: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_project_work_reads_total",
 			Help: "ListProjectWorkFacts reads by outcome.",
@@ -123,7 +141,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Task escalations by outcome (minted|joined|error) — 025 §8.1's ladder, §15.5's funnel.",
 		}, []string{"outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -133,6 +151,8 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 	// no-data, on a server whose sweeper has not ticked yet.
 	m.sweeperRuns.WithLabelValues("ok")
 	m.sweeperRuns.WithLabelValues("error")
+	m.docGroomRuns.WithLabelValues("ok")
+	m.docGroomRuns.WithLabelValues("error")
 	return m
 }
 
@@ -182,6 +202,24 @@ func (m *storeMetrics) sweeperRun(err error) {
 		return
 	}
 	m.sweeperRuns.WithLabelValues(outcome(err)).Inc()
+}
+
+// docGroomRun records one §8.7 stale-doc sweep tick by outcome. Like
+// sweeperRun, this is plain operational success/failure.
+func (m *storeMetrics) docGroomRun(err error) {
+	if m == nil {
+		return
+	}
+	m.docGroomRuns.WithLabelValues(outcome(err)).Inc()
+}
+
+// emitStaleDocs adds n to worklode_docs_stale_emitted_total, the doc.stale
+// events one sweep tick actually recorded. n <= 0 records nothing.
+func (m *storeMetrics) emitStaleDocs(n int) {
+	if m == nil || n <= 0 {
+		return
+	}
+	m.docsStaleEmitted.Add(float64(n))
 }
 
 // projectWorkRead records one ListProjectWorkFacts call by outcome. Never

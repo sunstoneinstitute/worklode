@@ -58,7 +58,15 @@ func Run(ctx context.Context, opts Options) error {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(collectors.NewGoCollector())
 	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	st, err := store.Open(opts.DSN, store.WithMetrics(reg))
+	storeOpts := []store.Option{store.WithMetrics(reg)}
+	if v := os.Getenv("LODE_DOC_STALENESS_DAYS"); v != "" {
+		days, err := strconv.Atoi(v)
+		if err != nil || days < 1 {
+			return fmt.Errorf("LODE_DOC_STALENESS_DAYS: want an integer >= 1, got %q", v)
+		}
+		storeOpts = append(storeOpts, store.WithDocStalenessDays(days))
+	}
+	st, err := store.Open(opts.DSN, storeOpts...)
 	if err != nil {
 		return err
 	}

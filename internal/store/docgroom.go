@@ -7,7 +7,15 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/staleness"
 )
+
+// defaultDocStalenessDays is the instance default for the §8.7 clock (see
+// Store.docStalenessDays), overridden per project by
+// projects.doc_staleness_days and per instance by LODE_DOC_STALENESS_DAYS
+// (WithDocStalenessDays).
+const defaultDocStalenessDays = 30
 
 // staleEventSource is events.source of every doc.stale event, whichever path
 // wrote it: the §8.6 amendment path below and the §8.7 idle sweeper share the
@@ -142,7 +150,8 @@ type StaleCandidate struct {
 // StaleCandidateDocs returns every accepted spec and plan with its §8.7
 // clock facts, ordered by doc id so the sweeper and its tests see a stable
 // scan order. It fetches facts only; the threshold verdict is
-// watcher.StaleAt's, the rule's one owner.
+// staleness.At's, the rule's one owner (internal/watcher.StaleAt is the same
+// calculation, re-exported for its own callers).
 //
 // A plan counts as executed when any task minted from it ever held a lease —
 // active or expired, since the fact that matters is that execution happened
@@ -151,7 +160,7 @@ type StaleCandidate struct {
 // point at a spec's section (to_anchor set), but the EXISTS below only needs
 // the edge and the covering plan's status, not the anchor.
 //
-// ADRs are excluded here, matching watcher.StaleAt. The LEFT JOIN to
+// ADRs are excluded here, matching staleness.At. The LEFT JOIN to
 // projects keeps a doc whose project row is somehow missing in the result
 // with ProjectDays 0, rather than dropping it.
 func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error) {
@@ -183,4 +192,58 @@ func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error
 			&c.ProjectDays, &c.HasExecution)
 		return c, err
 	})
+}
+
+// sweepStaleDocs emits doc.stale (cause "clock") for every accepted spec or
+// plan past its staleness threshold with no execution (025 §8.7), on the
+// lease sweeper's tick (sweepLeases in sweeper.go). It reads
+// StaleCandidateDocs, applies staleness.At (the same calculation
+// internal/watcher.StaleAt uses — see internal/staleness's doc comment for
+// why the sweeper imports it directly rather than through watcher) with
+// s.docStalenessDays as the instance default, and records one event per
+// crossing.
+//
+// The events log's (source, external_id) key — doc.stale:<slug>:<version> —
+// makes each firing once-per-version: a revision bumps the version and
+// re-arms, an unchanged doc collides on RecordEvent and is skipped, so
+// emitted only counts events actually inserted.
+//
+// A clock-fired document's status is untouched: §8.7 changes how a document
+// is served, not its status. Only the §8.6 amendment path (MarkPlansStale)
+// flips a status, and only on plans — this runs on both specs and plans.
+// Unlike MarkPlansStale, this is not run inside a caller's transaction: each
+// candidate's event is its own RecordEvent call against s.db.
+func (s *Store) sweepStaleDocs(ctx context.Context) (emitted int, err error) {
+	defer func() { s.metrics.emitStaleDocs(emitted) }()
+	cands, err := s.StaleCandidateDocs(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("sweep stale docs: %w", err)
+	}
+	now := s.nowFn().UTC()
+	for _, c := range cands {
+		at := staleness.At(staleness.Input{
+			DocKind:      c.Kind,
+			Status:       "accepted", // StaleCandidateDocs already filters to accepted
+			UpdatedAt:    c.UpdatedAt,
+			ProjectDays:  c.ProjectDays,
+			DefaultDays:  s.docStalenessDays,
+			HasExecution: c.HasExecution,
+		})
+		if at.IsZero() || now.Before(at) {
+			continue
+		}
+		payload, err := EventPayload(map[string]any{"doc": c.DocID, "cause": "clock"})
+		if err != nil {
+			return emitted, fmt.Errorf("sweep stale docs: marshal payload for doc %d: %w", c.DocID, err)
+		}
+		_, inserted, err := s.RecordEvent(ctx, staleEventSource,
+			StaleExternalID(c.Slug, c.Version), "doc.stale", payload, nil)
+		if err != nil {
+			return emitted, fmt.Errorf("sweep stale docs: record doc.stale for doc %d: %w", c.DocID, err)
+		}
+		if inserted {
+			emitted++
+		}
+	}
+	return emitted, nil
 }
