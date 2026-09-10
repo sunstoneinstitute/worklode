@@ -227,6 +227,19 @@ type ApprovalDetailView struct {
 	Note                  string
 	ExceptionAuthorizedBy string
 
+	// ExceptionFlow is the project's stamped flow as "name@rev", the other
+	// fact 032 §7 renders beside a decision made under a self-review
+	// exception; "" when the project carries no flow, and only ever shown
+	// next to ExceptionAuthorizedBy.
+	ExceptionFlow string
+
+	// CanAuthorizeException offers the exception act on an open row whose
+	// policy permits self-review (029 §7.1). No project's policy permits it
+	// today — store.SelfReviewAllowed says why — so the button does not
+	// render, which is the honest state rather than a button that always
+	// refuses.
+	CanAuthorizeException bool
+
 	// ImpactOpen marks an impact review still awaiting an answer (029 §7.1):
 	// the page then offers the dependent owner's note and the prior
 	// approver's decision, both of which the store refuses on any other row.
