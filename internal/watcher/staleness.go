@@ -3,6 +3,8 @@ package watcher
 import (
 	"fmt"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/staleness"
 )
 
 // TypeDocStale is events.type of the sweeper crossing a document into the
@@ -14,37 +16,21 @@ const TypeDocStale = "doc.stale"
 // ruleGroomOnStale is the "rule" metric label for the §8.7 groom mint.
 const ruleGroomOnStale = "groom-on-stale"
 
-// StaleInput is everything the §8.7 clock consults for one document.
-type StaleInput struct {
-	DocKind      string // spec | adr | plan
-	Status       string
-	UpdatedAt    time.Time // any revision or patch re-arms the clock
-	ProjectDays  int       // projects.doc_staleness_days; 0 = no override
-	DefaultDays  int       // instance default (30)
-	HasExecution bool      // plan: a task ever leased; spec: an accepted covering plan
-}
+// StaleInput is everything the §8.7 clock consults for one document. An
+// alias for internal/staleness.Input: the calculation moved to that leaf
+// package so internal/store's sweeper can call it without an import cycle
+// (internal/watcher imports internal/eventbus, which imports
+// internal/store). StaleInput and StaleAt stay here as this package's public
+// name for it, since the doc-lifecycle rules (below) are what most callers
+// reach for.
+type StaleInput = staleness.Input
 
 // StaleAt returns the instant the document crosses the staleness threshold,
-// or the zero time when it never does: not accepted, an ADR (decisions
-// already taken are never groomed), or execution exists. The threshold is
-// inclusive — the document counts as stale at exactly UpdatedAt plus the
-// threshold, not only strictly after it, so a sweeper comparing to "now"
-// should test !now.Before(StaleAt(...)).
+// or the zero time when it never does. See internal/staleness.At — the
+// threshold is inclusive, so a sweeper comparing to "now" should test
+// !now.Before(StaleAt(...)).
 func StaleAt(in StaleInput) time.Time {
-	if in.DocKind == "adr" {
-		return time.Time{}
-	}
-	if in.Status != "accepted" {
-		return time.Time{}
-	}
-	if in.HasExecution {
-		return time.Time{}
-	}
-	days := in.ProjectDays
-	if days == 0 {
-		days = in.DefaultDays
-	}
-	return in.UpdatedAt.AddDate(0, 0, days)
+	return staleness.At(in)
 }
 
 // evaluateStale is §8.7's groom mint: a document the sweeper found past its

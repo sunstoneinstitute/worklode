@@ -32,6 +32,12 @@ func (s *Store) StartLeaseSweeper(ctx context.Context) {
 // ("write tcp ...: i/o timeout", "database is closed") rather than a wrapped
 // context.Canceled — so matching on the error alone would count shutdown as a
 // failed sweep.
+//
+// Each tick also runs the §8.7 stale-doc sweep (sweepStaleDocs, docgroom.go),
+// after the lease sweep, on this same goroutine and ticker rather than a
+// second one — it is a second, independent operation the tick performs, not
+// a continuation of the lease sweep, so a lease-sweep failure does not skip
+// it.
 func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
@@ -45,12 +51,23 @@ func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 				return
 			}
 			s.metrics.sweeperRun(err)
-			if err != nil {
+			switch {
+			case err != nil:
 				slog.Error("expire leases", "err", err)
-				continue
-			}
-			if n > 0 {
+			case n > 0:
 				slog.Info("expired leases", "count", n)
+			}
+
+			emitted, groomErr := s.sweepStaleDocs(ctx)
+			if groomErr != nil && ctx.Err() != nil {
+				return
+			}
+			s.metrics.docGroomRun(groomErr)
+			switch {
+			case groomErr != nil:
+				slog.Error("sweep stale docs", "err", groomErr)
+			case emitted > 0:
+				slog.Info("emitted doc.stale", "count", emitted)
 			}
 		}
 	}
