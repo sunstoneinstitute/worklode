@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,13 @@ func Run(ctx context.Context, opts Options) error {
 			return fmt.Errorf("LODE_WEB_OPEN: %q is not a boolean", v)
 		}
 	}
+	disableSkillMatching := false
+	if v := os.Getenv("LODE_DISABLE_SKILL_MATCHING"); v != "" {
+		disableSkillMatching, err = strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("LODE_DISABLE_SKILL_MATCHING: %q is not a boolean", v)
+		}
+	}
 	instanceEnv, err := api.ParseInstanceEnv(os.Getenv("LODE_INSTANCE_ENV"))
 	if err != nil {
 		return err
@@ -75,9 +83,18 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	handler, adminHandler, err := api.NewServer(st, api.Config{
-		BackgroundCtx: ctx, BootstrapToken: os.Getenv("LODE_BOOTSTRAP_TOKEN"), GitHubWebhookSecret: os.Getenv("LODE_GITHUB_WEBHOOK_SECRET"), FluxWebhookSecret: os.Getenv("LODE_FLUX_WEBHOOK_SECRET"), CatalogWebhookSecret: os.Getenv("LODE_CATALOG_WEBHOOK_SECRET"), CIWebhookSecret: os.Getenv("LODE_CI_WEBHOOK_SECRET"), PipelineWebhookSecret: os.Getenv("LODE_PIPELINE_WEBHOOK_SECRET"), CMSWebhookSecret: os.Getenv("LODE_CMS_WEBHOOK_SECRET"), ClusterEnvMap: clusterEnv, InstanceEnv: instanceEnv, BranchTemplate: os.Getenv("LODE_BRANCH_TEMPLATE"), OIDCIssuer: os.Getenv("LODE_OIDC_ISSUER"), OIDCClientID: os.Getenv("LODE_OIDC_CLIENT_ID"), PublicURL: os.Getenv("LODE_PUBLIC_URL"), SessionSecret: os.Getenv("LODE_SESSION_SECRET"), WebOpen: webOpen, GitHubClientID: os.Getenv("LODE_GITHUB_APP_CLIENT_ID"), GitHubClientSecret: os.Getenv("LODE_GITHUB_APP_CLIENT_SECRET"), TokenEncKey: os.Getenv("LODE_TOKEN_ENC_KEY"), GitHubAppID: os.Getenv("LODE_GITHUB_APP_ID"), GitHubAppPrivateKey: os.Getenv("LODE_GITHUB_APP_PRIVATE_KEY"), SecretsCatalogPath: os.Getenv("LODE_SECRETS_CATALOG_PATH"), ApprovalFlowsDir: os.Getenv("LODE_APPROVAL_FLOWS_DIR"), SkillSources: os.Getenv("LODE_SKILL_SOURCES"), EmbeddingURL: os.Getenv("LODE_EMBEDDING_URL"), EmbeddingModel: os.Getenv("LODE_EMBEDDING_MODEL"), EmbeddingAPIKey: os.Getenv("LODE_EMBEDDING_API_KEY"), EmbeddingQueryPrefix: os.Getenv("LODE_EMBEDDING_QUERY_PREFIX"), EmbeddingDocumentPrefix: os.Getenv("LODE_EMBEDDING_DOCUMENT_PREFIX"), IndexInterval: indexInterval, SpeechToTextAPIKey: os.Getenv("LODE_ELEVENLABS_API_KEY"), SpeechToTextURL: os.Getenv("LODE_ELEVENLABS_URL"), BlobEndpoint: os.Getenv("LODE_BLOB_ENDPOINT"), BlobBucket: os.Getenv("LODE_BLOB_BUCKET"), BlobRegion: os.Getenv("LODE_BLOB_REGION"), BlobAccessKey: os.Getenv("LODE_BLOB_ACCESS_KEY"), BlobSecretKey: os.Getenv("LODE_BLOB_SECRET_KEY"), BlobSpoolDir: os.Getenv("LODE_BLOB_SPOOL_DIR"), Graph: gc, Metrics: reg,
-	})
+	cfg := api.Config{
+		BackgroundCtx:        ctx,
+		ClusterEnvMap:        clusterEnv,
+		InstanceEnv:          instanceEnv,
+		WebOpen:              webOpen,
+		DisableSkillMatching: disableSkillMatching,
+		IndexInterval:        indexInterval,
+		Graph:                gc,
+		Metrics:              reg,
+	}
+	setEnvTaggedFields(&cfg)
+	handler, adminHandler, err := api.NewServer(st, cfg)
 	if err != nil {
 		return err
 	}
@@ -154,6 +171,19 @@ func indexIntervalFromEnv() (time.Duration, error) {
 		return 0, fmt.Errorf("LODE_INDEX_INTERVAL: want a positive Go duration (e.g. 5m), got %q", v)
 	}
 	return d, nil
+}
+
+// setEnvTaggedFields fills every string field of cfg carrying an `env:"NAME"`
+// struct tag from os.Getenv(NAME). Fields needing parsing or defaulting
+// (bools, durations, maps) are set by the caller instead and carry no tag.
+func setEnvTaggedFields(cfg *api.Config) {
+	v := reflect.ValueOf(cfg).Elem()
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		if name := t.Field(i).Tag.Get("env"); name != "" {
+			v.Field(i).SetString(os.Getenv(name))
+		}
+	}
 }
 
 func graphClientFromEnv() (*graphserver.Client, error) {
