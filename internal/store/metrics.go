@@ -94,7 +94,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		}, []string{"outcome"}),
 		docOps: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_operations_total",
-			Help: "Design-document operations by op (create|update|patch|stale|accept|submit|revise|discard|edges|note|delete|undelete|list-versions|get-version) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (025 §7.3), or refused-mechanical|no-reviewers for patch's gate (025 §8.4)).",
+			Help: "Design-document operations by op (create|update|patch|stale|accept|submit|revise|discard|withdraw|edges|note|delete|undelete|list-versions|get-version) and outcome (ok|error, or refused-reviewers for accept's reviewer gate (025 §7.3), or refused-mechanical|no-reviewers for patch's gate (025 §8.4)).",
 		}, []string{"op", "outcome"}),
 		docTasksMinted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_doc_plan_tasks_minted_total",
@@ -262,8 +262,8 @@ func (m *storeMetrics) projectWorkRead(err error) {
 }
 
 // docOp records one document operation by op and outcome. op is the caller's
-// fixed verb — create|update|patch|stale|accept|submit|revise|discard|edges|
-// delete|undelete|list-versions|get-version, the enumeration the Help string above
+// fixed verb — create|update|patch|stale|accept|submit|revise|discard|withdraw|
+// edges|delete|undelete|list-versions|get-version, the enumeration the Help string above
 // is the contract for (022 §8) — never a doc id or project, which are
 // unbounded. Adding a verb means adding it there too.
 func (m *storeMetrics) docOp(op string, err error) {

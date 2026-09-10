@@ -1191,8 +1191,9 @@ func TestDocResolveRefNumberPrefixIsNotANumber(t *testing.T) {
 // TestDocListEdgesBothDirections: the same row is read forward out of the
 // document that declared it and backward into the document it names, where it
 // carries its inverse spelling and points back at the other end (025 §14).
-// Every resolved far end also carries the other document's project, slug, kind
-// and number, so a reader can name it; an unresolved reference carries none.
+// Every resolved far end also carries the other document's project, slug, kind,
+// number and status, so a reader can name it and flag it (025 §8.7); an
+// unresolved reference carries none.
 func TestDocListEdgesBothDirections(t *testing.T) {
 	t.Parallel()
 	s := openDocStore(t)
@@ -1213,6 +1214,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 	// unresolvable reference (to_doc NULL -> 0) sorts ahead of a resolved one.
 	specFar := func(e model.DocEdge) model.DocEdge {
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind, e.ToNumber = spec.ID, "p1", spec.Slug, "spec", 25
+		e.ToStatus = spec.Status
 		return e
 	}
 	wantOut := []model.DocEdge{
@@ -1246,6 +1248,7 @@ func TestDocListEdgesBothDirections(t *testing.T) {
 		// far end names one too.
 		e.ToDoc, e.ToProject, e.ToSlug, e.ToKind = plan.ID, "p1", plan.Slug, "plan"
 		e.ToNumber = plan.Number
+		e.ToStatus = plan.Status
 		return e
 	}
 	wantIn := []model.DocEdge{
@@ -1293,6 +1296,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	want := []model.DocEdge{{
 		Type: "wasDerivedFrom", ToDoc: far.ID,
 		ToProject: "p2", ToSlug: "007-far-spec", ToKind: "spec", ToNumber: 7,
+		ToStatus: far.Status,
 	}}
 	if !reflect.DeepEqual(out, want) {
 		t.Fatalf("edges out of the near plan = %+v, want %+v", out, want)
@@ -1304,7 +1308,7 @@ func TestDocListEdgesResolvesFarProject(t *testing.T) {
 	}
 	wantIn := []model.DocEdge{{
 		Type: "hadDerivation", ToDoc: near.ID, ToNumber: near.Number,
-		ToProject: "p1", ToSlug: "plan-across", ToKind: "plan",
+		ToProject: "p1", ToSlug: "plan-across", ToKind: "plan", ToStatus: near.Status,
 	}}
 	if !reflect.DeepEqual(in, wantIn) {
 		t.Fatalf("edges into the far spec = %+v, want %+v", in, wantIn)

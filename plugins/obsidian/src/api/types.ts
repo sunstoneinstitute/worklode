@@ -129,6 +129,10 @@ export interface DocSection {
  * §14.3 shorthand resolves on a project key), so a link built from to_slug
  * alone would quietly point at the near end's project.
  *
+ * to_status is the far end's document status, resolved in the same read, so
+ * a reference to a stale or withdrawn document can be flagged where it is
+ * named (025 §8.7). Empty on an unresolved to_external edge.
+ *
  * completed_with carries the doc_coverage_completed_with side-table (026
  * §5, §5.3) that only a covers or defers edge ever populates: a partial
  * covers entry's fullCoverageWith closure, in authored order, or a defers
@@ -146,6 +150,7 @@ export interface DocEdge {
   to_slug: string;
   to_kind: string;
   to_number: number;
+  to_status: string;
   completed_with?: string[];
 }
 

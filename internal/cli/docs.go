@@ -24,10 +24,10 @@ func (c *Client) CreateDoc(ctx context.Context, in model.CreateDocInput) (model.
 
 // DocListFilter narrows ListDocs. Zero-valued fields do not filter.
 //
-// NeedsPlanning, NeedsExecution and BareSuperseded are 026 §2's derived
-// selectors, not plain filters: each implies a kind and a status, and the
-// server refuses a Kind or Status that contradicts it, or more than one
-// selector at once.
+// NeedsPlanning, NeedsExecution, BareSuperseded (026 §2) and Unresolved
+// (025 §8.7) are derived selectors, not plain filters: each implies a kind
+// and a status, and the server refuses a Kind or Status that contradicts it,
+// or more than one selector at once.
 type DocListFilter struct {
 	Project        string
 	Kind           string // spec | adr | plan
@@ -36,6 +36,12 @@ type DocListFilter struct {
 	NeedsPlanning  bool
 	NeedsExecution bool
 	BareSuperseded bool
+	// Unresolved selects the accepted specs and plans nothing has executed
+	// (025 §8.7). OlderThanDays narrows it to those untouched for at least
+	// that many days and is meaningless without it — the server refuses the
+	// pair rather than ignoring it.
+	Unresolved    bool
+	OlderThanDays int
 	// Deleted switches the list to tombstoned documents (044 §5): they
 	// replace the live ones rather than joining them, so a list never mixes
 	// the two.
@@ -69,6 +75,12 @@ func (c *Client) ListDocs(ctx context.Context, f DocListFilter) (model.DocListRe
 	}
 	if f.BareSuperseded {
 		q.Set("bare_superseded", "true")
+	}
+	if f.Unresolved {
+		q.Set("unresolved", "true")
+	}
+	if f.OlderThanDays > 0 {
+		q.Set("older_than_days", strconv.Itoa(f.OlderThanDays))
 	}
 	if f.Deleted {
 		q.Set("deleted", "true")
@@ -187,6 +199,15 @@ func (c *Client) SubmitDoc(ctx context.Context, id int64) (model.Doc, []byte, er
 // ADR.
 func (c *Client) AcceptDoc(ctx context.Context, id int64) (model.AcceptDocResponse, []byte, error) {
 	return doJSON[model.AcceptDocResponse](ctx, c, http.MethodPost, docPath(id, "/accept"), nil, "doc accept")
+}
+
+// WithdrawDoc calls POST /api/v1/docs/{id}/withdraw: 025 §8.7's close verb,
+// taking an accepted or stale document out of the corpus with a justification.
+// Which statuses may be withdrawn is the server's rule; a draft or a
+// superseded document comes back as its 422.
+func (c *Client) WithdrawDoc(ctx context.Context, id int64, justification string) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPost, docPath(id, "/withdraw"),
+		model.WithdrawDocInput{Justification: justification})
 }
 
 // ReviseDoc calls POST /api/v1/docs/{id}/revise, opening the one candidate
@@ -328,6 +349,24 @@ func DocTable(w io.Writer, docs []model.Doc) {
 	)
 	for _, d := range docs {
 		tbl.add(DocRef(d), d.Status, d.Title)
+	}
+	tbl.flush(w)
+}
+
+// DocUnresolvedTable prints `lode doc list --unresolved`: DocTable's three
+// columns plus how long the document has sat untouched, which is the fact the
+// view is for — an accepted document nothing has executed (025 §8.7) is only
+// interesting once it is old. AGE is docs.updated_at against now, so the row
+// order (oldest first, the server's) reads down the column.
+func DocUnresolvedTable(w io.Writer, docs []model.Doc) {
+	tbl := newTable(
+		column{header: "REF"},
+		column{header: "STATUS"},
+		titleColumn("TITLE"),
+		column{header: "AGE"},
+	)
+	for _, d := range docs {
+		tbl.add(DocRef(d), d.Status, d.Title, Age(d.UpdatedAt))
 	}
 	tbl.flush(w)
 }
@@ -509,10 +548,64 @@ func DocVersionRender(w io.Writer, v model.DocVersion, current int) {
 	}
 }
 
+// docStaleSuffix is what a reference to a stale document carries wherever one
+// is named: " (stale)", and "" for every other status. 025 §8.7 calls this a
+// rendering rule rather than a workflow — nothing is refused because a
+// referenced document went stale, the reader is just told. One function so
+// the edge lines and the section list cannot spell the flag differently.
+func docStaleSuffix(status string) string {
+	if status == "stale" {
+		return " (stale)"
+	}
+	return ""
+}
+
+// docStatusBanner is the line `lode doc show` leads with when a document is
+// stale or withdrawn (025 §8.7), and "" for a document in good standing. It
+// says what the status costs the reader: stale text is owed a re-plan, and a
+// withdrawn document is not going to be executed at all.
+func docStatusBanner(d model.Doc) string {
+	switch d.Status {
+	case "stale":
+		return fmt.Sprintf("STALE since %s — re-planning owed (025 §8.6)", LocalTime(d.UpdatedAt))
+	case "withdrawn":
+		return fmt.Sprintf("WITHDRAWN since %s — closed without execution (025 §8.7)", LocalTime(d.UpdatedAt))
+	}
+	return ""
+}
+
+// docStaleCoverage maps each section anchor of a spec to the stale plans
+// covering it — 025 §8.7's stale-plan-covered section flag. It reads the
+// inbound `isCoveredBy` edges the detail already carries, whose near anchor is
+// the covered section and whose far end is the plan, so no second notion of
+// "which plan covers this section" is invented here.
+func docStaleCoverage(edgesIn []model.DocEdge) map[string][]string {
+	var out map[string][]string
+	for _, e := range edgesIn {
+		if e.Type != "isCoveredBy" || e.FromAnchor == "" || docStaleSuffix(e.ToStatus) == "" {
+			continue
+		}
+		if out == nil {
+			out = map[string][]string{}
+		}
+		out[e.FromAnchor] = append(out[e.FromAnchor],
+			"covered by "+docEdgeTarget(e))
+	}
+	return out
+}
+
 // DocDetailRender prints one document: its metadata, body, sections, and
 // edges both ways — the `lode doc show` view.
+//
+// A stale or withdrawn document leads with a banner, and a spec's section
+// list gains a COVERED BY column naming each stale plan that covers a section
+// (025 §8.7). Both are rendering rules: nothing about reading the document
+// changes, the reader is told what the text is worth.
 func DocDetailRender(w io.Writer, d model.DocDetail) {
 	fmt.Fprintf(w, "%d  %s\n", d.ID, d.Title)
+	if banner := docStatusBanner(d.Doc); banner != "" {
+		fmt.Fprintf(w, "  %s\n", banner)
+	}
 	fmt.Fprintf(w, "  project:  %s\n", d.Project)
 	fmt.Fprintf(w, "  kind:     %s\n", d.Kind)
 	if d.Number != 0 {
@@ -534,11 +627,23 @@ func DocDetailRender(w io.Writer, d model.DocDetail) {
 		fmt.Fprintf(w, "  open revision: by %s at %s\n", d.Revision.CreatedBy, LocalTime(d.Revision.CreatedAt))
 	}
 	if len(d.Sections) > 0 {
+		// The fourth column appears only when something fills it: a corpus
+		// where every covering plan is current should not read the width of
+		// an empty column as a missing value.
+		stale := docStaleCoverage(d.EdgesIn)
 		fmt.Fprintln(w, "\n  sections:")
 		tw := newTabwriter(w)
-		fmt.Fprintln(tw, "    ANCHOR\tNUMBER\tHEADING")
+		header := "    ANCHOR\tNUMBER\tHEADING"
+		if len(stale) > 0 {
+			header += "\tCOVERED BY"
+		}
+		fmt.Fprintln(tw, header)
 		for _, s := range d.Sections {
-			fmt.Fprintf(tw, "    %s\t%s\t%s\n", s.Anchor, s.Number, s.Heading)
+			fmt.Fprintf(tw, "    %s\t%s\t%s", s.Anchor, s.Number, s.Heading)
+			if len(stale) > 0 {
+				fmt.Fprintf(tw, "\t%s", strings.Join(stale[s.Anchor], ", "))
+			}
+			fmt.Fprintln(tw)
 		}
 		tw.Flush()
 	}
@@ -645,7 +750,9 @@ func InlineDocNotes(body string, notes []model.DocNote, sections []model.DocSect
 
 // docEdgeTarget renders one edge's far end: the document's slug and optional
 // anchor — the id only when a read did not resolve the slug — or the external
-// reference an unresolved edge carries.
+// reference an unresolved edge carries. A far end that has gone stale carries
+// docStaleSuffix, so a `requires` line says its target is owed a re-plan
+// (025 §8.7) without the reader following the reference to find out.
 func docEdgeTarget(e model.DocEdge) string {
 	if e.ToDoc == 0 {
 		return e.ToExternal
@@ -655,9 +762,9 @@ func docEdgeTarget(e model.DocEdge) string {
 		name = strconv.FormatInt(e.ToDoc, 10)
 	}
 	if e.ToAnchor != "" {
-		return name + "#" + e.ToAnchor
+		name += "#" + e.ToAnchor
 	}
-	return name
+	return name + docStaleSuffix(e.ToStatus)
 }
 
 // DocPatchRender confirms one in-place amendment (025 §8.4): what it changed
