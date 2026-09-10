@@ -33,10 +33,13 @@ func TestEvaluate(t *testing.T) {
 				Rule:     "review-on-submit",
 				TaskKind: "review",
 				Title:    "Review: Documents in the backbone",
+			}, {
+				Rule:         "approval-on-submit",
+				MintApproval: true,
 			}},
 		},
 		{
-			name: "submit with open review task suppressed",
+			name: "submit with open review task suppresses only the review",
 			in: watcher.Input{
 				EventID:        43,
 				EventType:      eventbus.TypeDocumentSubmitted,
@@ -48,6 +51,51 @@ func TestEvaluate(t *testing.T) {
 			},
 			want: []watcher.Action{{
 				Rule:       "review-on-submit",
+				Suppressed: true,
+			}, {
+				Rule:         "approval-on-submit",
+				MintApproval: true,
+			}},
+		},
+		{
+			// The two guards are independent: an approval row already bound
+			// to this version stops the approval rule and nothing else.
+			name: "submit with an approval already bound suppresses only the approval",
+			in: watcher.Input{
+				EventID:           53,
+				EventType:         eventbus.TypeDocumentSubmitted,
+				DocIRI:            "wlid:doc/spec-025",
+				DocKind:           "spec",
+				DocTitle:          "Documents in the backbone",
+				Version:           2,
+				OpenApprovalBound: true,
+			},
+			want: []watcher.Action{{
+				Rule:     "review-on-submit",
+				TaskKind: "review",
+				Title:    "Review: Documents in the backbone",
+			}, {
+				Rule:       "approval-on-submit",
+				Suppressed: true,
+			}},
+		},
+		{
+			name: "submit with both guards hit suppresses both",
+			in: watcher.Input{
+				EventID:           54,
+				EventType:         eventbus.TypeDocumentSubmitted,
+				DocIRI:            "wlid:doc/spec-025",
+				DocKind:           "spec",
+				DocTitle:          "Documents in the backbone",
+				Version:           2,
+				OpenReviewTask:    "WL-100",
+				OpenApprovalBound: true,
+			},
+			want: []watcher.Action{{
+				Rule:       "review-on-submit",
+				Suppressed: true,
+			}, {
+				Rule:       "approval-on-submit",
 				Suppressed: true,
 			}},
 		},
@@ -197,9 +245,10 @@ func TestEvaluate(t *testing.T) {
 			for i, wantAction := range tc.want {
 				gotAction := got[i]
 
-				if wantAction.Suppressed {
-					// Suppressed actions carry no mint parameters: compare
-					// whole, so a stray Title/Body/TaskKind fails loudly.
+				if wantAction.TaskKind == "" {
+					// Neither a suppression nor an approval action carries
+					// mint parameters: compare whole, so a stray
+					// Title/Body/TaskKind fails loudly.
 					if !reflect.DeepEqual(gotAction, wantAction) {
 						t.Fatalf("Evaluate()[%d] = %+v, want %+v", i, gotAction, wantAction)
 					}

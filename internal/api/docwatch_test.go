@@ -268,6 +268,65 @@ func TestDocWatchRedeliveryMintsOnce(t *testing.T) {
 	}
 }
 
+// TestDocWatchMaterializesApprovalOnSubmit is 025 §7.3 / 029 §7.3 at its
+// source: submitting a document opens one unlaned awaiting approvals row
+// bound to the submitted version, and the /reviews queue lists it. Both
+// row lands exactly once whether the same event is redelivered or a second,
+// genuinely new submission arrives while it is still open: the
+// OpenApprovalBound guard stops both, with the log's (source, external_id)
+// key and InsertAwaitingApproval's ON CONFLICT behind it.
+func TestDocWatchMaterializesApprovalOnSubmit(t *testing.T) {
+	t.Parallel()
+	f := newDocWatchFixture(t)
+	ev := f.submitted(t, 1)
+
+	f.handle(t, ev)
+	f.handle(t, ev)
+
+	rows, err := f.st.ListAwaitingApprovals(t.Context())
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("awaiting approvals = %d, want exactly 1: %+v", len(rows), rows)
+	}
+	got := rows[0]
+	for _, c := range []struct{ name, got, want string }{
+		{"entity_kind", got.EntityKind, "doc"},
+		{"entity_id", got.EntityID, store.DocEntityID(f.doc.ID)},
+		{"subject_revision", got.SubjectRevision, strconv.Itoa(f.doc.Version)},
+		{"lane", got.Lane, ""},
+		{"title", got.Title, f.doc.Title},
+		{"project", got.Project, f.doc.Project},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
+		}
+	}
+	if got.RequiredActor != nil || got.RequiredRole != nil {
+		t.Errorf("row names a reviewer (%v/%v), want the unassigned row: named reviewers are separate lanes",
+			got.RequiredActor, got.RequiredRole)
+	}
+	f.wantActions(t, "approval-on-submit", "applied", 1)
+	f.wantActions(t, "approval-on-submit", "suppressed", 1)
+
+	// A second submission — a new event, so the log's dedup does not apply —
+	// while the row is still open: the guard suppresses it, and suppresses
+	// only it. The review task's own guard is what stops the review mint.
+	if got := f.handle(t, f.submitted(t, 2)); got != eventbus.OutcomeSuppressed {
+		t.Errorf("outcome of the second submission = %q, want %q", got, eventbus.OutcomeSuppressed)
+	}
+	rows, err = f.st.ListAwaitingApprovals(t.Context())
+	if err != nil {
+		t.Fatalf("list awaiting approvals: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("awaiting approvals after a second submission = %d, want still 1: %+v", len(rows), rows)
+	}
+	f.wantActions(t, "approval-on-submit", "applied", 1)
+	f.wantActions(t, "approval-on-submit", "suppressed", 2)
+}
+
 // TestDocWatchSuppressionCycle walks 025 §15.4's whole cycle for the
 // plan-on-accept rule: mint, suppress-with-a-note while the design task is
 // open, and mint again once it closes — because sections accepted since the
