@@ -2,6 +2,7 @@ package progress
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -185,7 +186,7 @@ func TestResolve(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.typ+"/"+c.whereIt, func(t *testing.T) {
 			t.Parallel()
-			if got := Resolve(c.typ, payload(t, c.fields)); got != c.want {
+			if got := Resolve(c.typ, payload(t, c.fields)); !reflect.DeepEqual(got, c.want) {
 				t.Errorf("Resolve(%q, %s) = %+v, want %+v", c.typ, payload(t, c.fields), got, c.want)
 			}
 		})
@@ -198,10 +199,10 @@ func TestResolve(t *testing.T) {
 func TestResolveMalformedPayload(t *testing.T) {
 	t.Parallel()
 	for _, p := range [][]byte{nil, []byte("null"), []byte(`"a string"`), []byte(`[1,2]`), []byte(`{`)} {
-		if got := Resolve("task.done", p); got != (Touch{Kind: "task"}) {
+		if got := Resolve("task.done", p); !reflect.DeepEqual(got, Touch{Kind: "task"}) {
 			t.Errorf("Resolve(task.done, %q) = %+v, want kind task only", p, got)
 		}
-		if got := Resolve("test.event", p); got != (Touch{}) {
+		if got := Resolve("test.event", p); !reflect.DeepEqual(got, Touch{}) {
 			t.Errorf("Resolve(test.event, %q) = %+v, want zero", p, got)
 		}
 	}

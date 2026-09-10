@@ -833,7 +833,8 @@ func TestResolveDeliveryIgnoresParents(t *testing.T) {
 			if _, err := AppendMainCommit(tx, "o/r", "abc", taskTestNow); err != nil {
 				return err
 			}
-			return ResolveDelivery(tx, taskTestNow, container.ID, "o/r", eventID)
+			_, err := ResolveDelivery(tx, taskTestNow, container.ID, "o/r", eventID)
+			return err
 		})
 	if err != nil {
 		t.Fatalf("ResolveDelivery: %v", err)

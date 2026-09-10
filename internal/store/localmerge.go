@@ -55,6 +55,7 @@ func RecordLocalMerge(tx *sql.Tx, now time.Time, repo, sha string, taskIDs []str
 	ids = slices.Compact(ids)
 
 	out := make([]LocalMergeOutcome, 0, len(ids))
+	var movedIDs []string
 	for _, taskID := range ids {
 		exists, err := taskExists(tx, taskID)
 		if err != nil {
@@ -74,10 +75,21 @@ func RecordLocalMerge(tx *sql.Tx, now time.Time, repo, sha string, taskIDs []str
 		}); err != nil {
 			return nil, err
 		}
-		if err := ResolveDelivery(tx, now, taskID, repo, eventID); err != nil {
+		moved, err := ResolveDelivery(tx, now, taskID, repo, eventID)
+		if err != nil {
 			return nil, fmt.Errorf("resolve delivery for %s: %w", taskID, err)
 		}
+		if moved {
+			movedIDs = append(movedIDs, taskID)
+		}
 		out = append(out, LocalMergeOutcome{TaskID: taskID, Result: result})
+	}
+	// The transitions above record no event of their own, so this event is
+	// the only place the moved set exists (WL-SPEC-66 §5.1).
+	if len(movedIDs) > 0 {
+		if err := MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs}); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

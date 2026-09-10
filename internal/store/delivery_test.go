@@ -466,7 +466,7 @@ func TestResolveDeliveryFullFlow(t *testing.T) {
 	ev := deliveryEventID(t, tx)
 
 	// Not landed: no-op.
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "ready" {
@@ -481,7 +481,7 @@ func TestResolveDeliveryFullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "merged" {
@@ -492,7 +492,7 @@ func TestResolveDeliveryFullFlow(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", mid); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "deployed_dev" {
@@ -503,14 +503,14 @@ func TestResolveDeliveryFullFlow(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
 		t.Fatalf("state = %s, want deployed_prod", st)
 	}
 	// Idempotent re-resolve.
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
@@ -546,7 +546,7 @@ func TestResolveDeliveryOutOfOrderCatchUp(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
@@ -592,7 +592,7 @@ func TestResolveDeliveryReleased(t *testing.T) {
 	if err := SetReleaseFrontier(tx, "acme/app", "v1", mid, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "released" {
@@ -621,7 +621,7 @@ func TestResolveDeliveryNeverAdvancesDraft(t *testing.T) {
 	if _, err := AppendMainCommit(tx, "acme/app", "c1", now); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "draft" {
@@ -652,7 +652,7 @@ func TestResolveDeliveryReleaseIgnoredForServiceRepo(t *testing.T) {
 	if err := SetReleaseFrontier(tx, "acme/app", "v1", mid, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "merged" {
@@ -694,7 +694,7 @@ func TestResolveDeliveryProdIgnoredForReleaseRepo(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "deployed_dev" {
@@ -705,7 +705,7 @@ func TestResolveDeliveryProdIgnoredForReleaseRepo(t *testing.T) {
 	if err := SetReleaseFrontier(tx, "acme/app", "v1", mid, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "released" {
@@ -748,7 +748,7 @@ func TestResolveDeliveryKeepsActiveLease(t *testing.T) {
 	if _, err := AppendMainCommit(tx, "acme/app", "c1", now); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "merged" {
@@ -838,7 +838,7 @@ func TestResolveDeliveryArrivalOrder(t *testing.T) {
 				if err := steps[name](tx); err != nil {
 					t.Fatalf("step %s: %v", name, err)
 				}
-				if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+				if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 					t.Fatalf("resolve after %s: %v", name, err)
 				}
 			}
@@ -867,7 +867,7 @@ func TestResolveDeliveryIgnoresUnknownTask(t *testing.T) {
 	}
 	defer tx.Rollback()
 	ev := deliveryEventID(t, tx)
-	if err := ResolveDelivery(tx, now, "P1-999", "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, "P1-999", "acme/app", ev); err != nil {
 		t.Fatalf("ResolveDelivery: %v", err)
 	}
 }
@@ -987,7 +987,7 @@ func TestClearTaskCommitsVoidsDelivery(t *testing.T) {
 	if err := BumpEnvDeployGH(tx, now, "acme/app", "prod", mid); err != nil {
 		t.Fatal(err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "deployed_prod" {
@@ -1009,10 +1009,73 @@ func TestClearTaskCommitsVoidsDelivery(t *testing.T) {
 	if ids, err := TasksBelowFrontier(tx, "acme/app", mid); err != nil || len(ids) != 0 {
 		t.Fatalf("TasksBelowFrontier after clear = %v, %v; want empty", ids, err)
 	}
-	if err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
+	if _, err := ResolveDelivery(tx, now, taskID, "acme/app", ev); err != nil {
 		t.Fatal(err)
 	}
 	if st := taskStateForTest(t, tx, taskID); st != "ready" {
 		t.Fatalf("state after re-resolve = %s, want ready (reopen voids the prior delivery)", st)
+	}
+}
+
+// TestResolveDeliveryReportsMoved pins the moved flag WL-775 added: it is
+// true exactly when a transition fired, and false on the early returns a
+// caller reaches routinely — an unknown task, work that has not landed, and
+// a re-resolve of a task already at that milestone. The flag is what lets a
+// delivery event's caller name the tasks it moved on the event payload,
+// which is the only record of the set (WL-SPEC-66 §5.1).
+func TestResolveDeliveryReportsMoved(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	taskID := seedDeliveryTask(t, s)
+	now := time.Now()
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	ev := deliveryEventID(t, tx)
+
+	mustResolve := func(id string) bool {
+		t.Helper()
+		moved, err := ResolveDelivery(tx, now, id, "acme/app", ev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return moved
+	}
+
+	if mustResolve("P1-999") {
+		t.Error("unknown task reported moved = true")
+	}
+	if mustResolve(taskID) {
+		t.Error("task with nothing landed reported moved = true")
+	}
+
+	if err := InsertTaskCommit(tx, TaskCommit{
+		TaskID: taskID, Repo: "acme/app", SHA: "c1", Source: "branch_push", SeenAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	mid, err := AppendMainCommit(tx, "acme/app", "c1", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mustResolve(taskID) {
+		t.Error("landing the work reported moved = false, want true")
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "merged" {
+		t.Fatalf("state = %s, want merged", st)
+	}
+	if mustResolve(taskID) {
+		t.Error("re-resolve of an unchanged task reported moved = true")
+	}
+
+	if err := BumpEnvDeployGH(tx, now, "acme/app", "dev", mid); err != nil {
+		t.Fatal(err)
+	}
+	if !mustResolve(taskID) {
+		t.Error("dev deploy reported moved = false, want true")
+	}
+	if st := taskStateForTest(t, tx, taskID); st != "deployed_dev" {
+		t.Fatalf("state = %s, want deployed_dev", st)
 	}
 }

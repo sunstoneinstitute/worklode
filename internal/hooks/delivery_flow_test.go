@@ -2,6 +2,7 @@ package hooks_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
 
@@ -77,6 +78,12 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	if st := e.taskState(t, taskID); st != "merged" {
 		t.Fatalf("task state after merge = %q, want merged", st)
 	}
+	// The transition writes only a state_log row attributed to this delivery,
+	// so the event payload is the only record of which tasks it moved
+	// (WL-775, WL-SPEC-66 §5.1).
+	if got := e.eventPayloadTasks(t, "d-3"); !slices.Equal(got, []string{taskID}) {
+		t.Errorf("push event payload tasks = %v, want [%s]", got, taskID)
+	}
 	head := e.mainCommitID(t, mainMergeSHA)
 
 	// 4. last-deploy/dev push: the deploy-branch sha maps to the main commit
@@ -117,6 +124,9 @@ func TestDeliveryEndToEnd(t *testing.T) {
 	}
 	if st := e.taskState(t, taskID); st != "deployed_prod" {
 		t.Fatalf("task state after prod deploy = %q, want deployed_prod", st)
+	}
+	if got := e.eventPayloadTasks(t, "d-6"); !slices.Equal(got, []string{taskID}) {
+		t.Errorf("prod deployment_status payload tasks = %v, want [%s]", got, taskID)
 	}
 
 	// 7. Flux confirms the same prod revision: flux_seen latches, switching

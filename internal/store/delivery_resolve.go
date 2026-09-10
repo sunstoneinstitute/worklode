@@ -69,7 +69,14 @@ func TasksBelowFrontier(tx *sql.Tx, repo string, frontier int64) ([]string, erro
 // Reopening a task clears its commit attribution (ClearTaskCommits), so a
 // reopened task has no landed commit here and is left alone until new work
 // lands.
-func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) error {
+//
+// moved reports whether the task actually changed state. The transitions
+// here write a state_log row attributed to the incoming event and record no
+// event of their own, so the caller is the only place that can name the
+// tasks a delivery event moved — which it merges onto that event's payload
+// for the Progress page to fan out (WL-SPEC-66 §5.1).
+func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int64) (bool, error) {
+	var moved bool
 	// A task with children has no commit of its own (004 §6.4), and an
 	// unknown task id is a correlation miss that must not fail the delivery
 	// (InsertTaskCommit's contract); both return nil here rather than an
@@ -85,36 +92,36 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 	if err := tx.QueryRow(
 		`SELECT state FROM tasks WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`, taskID).Scan(&state); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("get task %s state: %w", taskID, err)
+		return false, fmt.Errorf("get task %s state: %w", taskID, err)
 	}
 	container, err := hasChildren(tx, taskID)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if container {
-		return nil
+		return false, nil
 	}
 
 	landed, err := LandedMainID(tx, taskID, repo)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if landed == nil {
-		return nil
+		return false, nil
 	}
 
 	switch state {
 	case "ready", "in_progress", "in_review":
 		if err := transitionKnown(tx, now, taskID, state, state, "merged", eventID); err != nil {
-			return err
+			return false, err
 		}
-		state = "merged"
+		state, moved = "merged", true
 	case "merged", "deployed_dev":
 		// Already landed; delivery checks below may advance it further.
 	default:
-		return nil // draft, abandoned, or already at a delivered state
+		return false, nil // draft, abandoned, or already at a delivered state
 	}
 
 	covered := func(frontier *int64) bool {
@@ -124,37 +131,43 @@ func ResolveDelivery(tx *sql.Tx, now time.Time, taskID, repo string, eventID int
 	if state == "merged" {
 		dev, err := ConfirmedFrontier(tx, repo, "dev")
 		if err != nil {
-			return err
+			return moved, err
 		}
 		if covered(dev) {
 			if err := transitionKnown(tx, now, taskID, state, "merged", "deployed_dev", eventID); err != nil {
-				return err
+				return moved, err
 			}
-			state = "deployed_dev"
+			state, moved = "deployed_dev", true
 		}
 	}
 
 	doneState, err := RepoDoneState(tx, repo)
 	if err != nil {
-		return err
+		return moved, err
 	}
 	if doneState == "released" {
 		rel, err := ReleaseFrontier(tx, repo)
 		if err != nil {
-			return err
+			return moved, err
 		}
 		if covered(rel) {
-			return transitionKnown(tx, now, taskID, state, state, "released", eventID)
+			if err := transitionKnown(tx, now, taskID, state, state, "released", eventID); err != nil {
+				return moved, err
+			}
+			moved = true
 		}
-		return nil
+		return moved, nil
 	}
 
 	prod, err := ConfirmedFrontier(tx, repo, "prod")
 	if err != nil {
-		return err
+		return moved, err
 	}
 	if covered(prod) {
-		return transitionKnown(tx, now, taskID, state, state, "deployed_prod", eventID)
+		if err := transitionKnown(tx, now, taskID, state, state, "deployed_prod", eventID); err != nil {
+			return moved, err
+		}
+		moved = true
 	}
-	return nil
+	return moved, nil
 }
