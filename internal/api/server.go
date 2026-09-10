@@ -48,13 +48,13 @@ import (
 // map are consumed by the /hooks/github, /hooks/flux, /hooks/catalog,
 // /hooks/ci, /hooks/pipeline and /hooks/cms endpoints.
 type Config struct {
-	BootstrapToken        string            // LODE_BOOTSTRAP_TOKEN: create the first admin actor if the store is empty
-	GitHubWebhookSecret   string            // LODE_GITHUB_WEBHOOK_SECRET
-	FluxWebhookSecret     string            // LODE_FLUX_WEBHOOK_SECRET
-	CatalogWebhookSecret  string            // LODE_CATALOG_WEBHOOK_SECRET
-	CIWebhookSecret       string            // LODE_CI_WEBHOOK_SECRET
-	PipelineWebhookSecret string            // LODE_PIPELINE_WEBHOOK_SECRET
-	CMSWebhookSecret      string            // LODE_CMS_WEBHOOK_SECRET
+	BootstrapToken        string            `env:"LODE_BOOTSTRAP_TOKEN"` // create the first admin actor if the store is empty
+	GitHubWebhookSecret   string            `env:"LODE_GITHUB_WEBHOOK_SECRET"`
+	FluxWebhookSecret     string            `env:"LODE_FLUX_WEBHOOK_SECRET"`
+	CatalogWebhookSecret  string            `env:"LODE_CATALOG_WEBHOOK_SECRET"`
+	CIWebhookSecret       string            `env:"LODE_CI_WEBHOOK_SECRET"`
+	PipelineWebhookSecret string            `env:"LODE_PIPELINE_WEBHOOK_SECRET"`
+	CMSWebhookSecret      string            `env:"LODE_CMS_WEBHOOK_SECRET"`
 	ClusterEnvMap         map[string]string // LODE_CLUSTER_ENV_MAP: cluster name -> environment
 
 	// InstanceEnv (LODE_INSTANCE_ENV) is which kind of instance this is: "dev"
@@ -68,16 +68,16 @@ type Config struct {
 	// BranchTemplate (LODE_BRANCH_TEMPLATE) renders the task-branch names the
 	// server hands out and correlates pushes by; empty means
 	// store.DefaultBranchTemplate. An invalid template fails NewServer.
-	BranchTemplate string
+	BranchTemplate string `env:"LODE_BRANCH_TEMPLATE"`
 
 	// OIDC/SSO. The feature is off unless OIDCIssuer and OIDCClientID are both
 	// set; unset behaves exactly as before. SessionSecret is required when OIDC
 	// is enabled (Plan 2's web sessions sign cookies with it). PublicURL is the
 	// external base URL used to build the web callback redirect URI.
-	OIDCIssuer    string // LODE_OIDC_ISSUER
-	OIDCClientID  string // LODE_OIDC_CLIENT_ID
-	PublicURL     string // LODE_PUBLIC_URL
-	SessionSecret string // LODE_SESSION_SECRET
+	OIDCIssuer    string `env:"LODE_OIDC_ISSUER"`
+	OIDCClientID  string `env:"LODE_OIDC_CLIENT_ID"`
+	PublicURL     string `env:"LODE_PUBLIC_URL"`
+	SessionSecret string `env:"LODE_SESSION_SECRET"`
 
 	// WebOpen (LODE_WEB_OPEN) permits the web UI to serve anonymous callers on
 	// an instance with *no* login provider configured — the local stack and
@@ -90,9 +90,9 @@ type Config struct {
 	// GitHub App auth. Enabled only when GitHubClientID and GitHubClientSecret
 	// are both set; independent of the OIDC feature. PublicURL and
 	// SessionSecret (above) are shared and required when this is enabled.
-	GitHubClientID     string // LODE_GITHUB_APP_CLIENT_ID
-	GitHubClientSecret string // LODE_GITHUB_APP_CLIENT_SECRET
-	TokenEncKey        string // LODE_TOKEN_ENC_KEY (hex-encoded 32 bytes)
+	GitHubClientID     string `env:"LODE_GITHUB_APP_CLIENT_ID"`
+	GitHubClientSecret string `env:"LODE_GITHUB_APP_CLIENT_SECRET"`
+	TokenEncKey        string `env:"LODE_TOKEN_ENC_KEY"` // hex-encoded 32 bytes
 
 	// GitHub App installation auth, used to discover a newly mapped repo's
 	// delivery profile (see discoverDoneState). Independent of the login flow
@@ -100,8 +100,8 @@ type Config struct {
 	// repo mapping keeps its default done_state. GitHubAppPrivateKey is secret
 	// PEM — like the other secrets here it is only ever consumed, never logged
 	// and never served.
-	GitHubAppID         string // LODE_GITHUB_APP_ID
-	GitHubAppPrivateKey string // LODE_GITHUB_APP_PRIVATE_KEY
+	GitHubAppID         string `env:"LODE_GITHUB_APP_ID"`
+	GitHubAppPrivateKey string `env:"LODE_GITHUB_APP_PRIVATE_KEY"`
 
 	// SecretsCatalogPath (LODE_SECRETS_CATALOG_PATH) points at the org
 	// secrets catalog TOML (a mounted Secret, projected per environment by an
@@ -109,35 +109,40 @@ type Config struct {
 	// environment with no catalog — disables the endpoint (404). It maps
 	// names to op:// refs and holds no values, but vault/item names are
 	// mildly sensitive, so it is only ever served authenticated.
-	SecretsCatalogPath string
+	SecretsCatalogPath string `env:"LODE_SECRETS_CATALOG_PATH"`
 
 	// ApprovalFlowsDir (LODE_APPROVAL_FLOWS_DIR) holds instance approval-flow
 	// overrides as *.json, layered over the shipped defaults by flow name
 	// (029 §7.2). Empty means defaults only. An unreadable or invalid file
 	// there fails the boot: it changes what the server demands of a review,
 	// so a typo must not be read as a weaker requirement.
-	ApprovalFlowsDir string
+	ApprovalFlowsDir string `env:"LODE_APPROVAL_FLOWS_DIR"`
 
 	// SkillSources configures org skill source repos, comma-separated
 	// "owner/repo@ref:glob" entries. LODE_SKILL_SOURCES. Requires the GitHub
 	// App to be configured. Unset: skill sync off.
-	SkillSources string
+	SkillSources string `env:"LODE_SKILL_SOURCES"`
+	// DisableSkillMatching (LODE_DISABLE_SKILL_MATCHING) turns off retrieval
+	// in skillMatches: no embedding call, no search query, pins only. Kill
+	// switch for a slow or misbehaving embedding provider, since every
+	// skillMatches caller — the task brief above all, on the hot path of
+	// starting work — blocks on it.
+	DisableSkillMatching bool
 	// EmbeddingURL is a full OpenAI-compatible embeddings endpoint URL —
 	// in the default deployment a CPU sidecar, not a third-party API
-	// (040 §2.3). LODE_EMBEDDING_URL. Unset: no dense arm, so search runs
-	// lexical-only and recommendations run pins plus lexical matches (§11).
-	EmbeddingURL string
-	// EmbeddingModel names the model sent to EmbeddingURL. LODE_EMBEDDING_MODEL.
-	EmbeddingModel string
-	// EmbeddingAPIKey authenticates against EmbeddingURL. LODE_EMBEDDING_API_KEY.
-	EmbeddingAPIKey string
+	// (040 §2.3). Unset: no dense arm, so search runs lexical-only and
+	// recommendations run pins plus lexical matches (§11).
+	EmbeddingURL string `env:"LODE_EMBEDDING_URL"`
+	// EmbeddingModel names the model sent to EmbeddingURL.
+	EmbeddingModel string `env:"LODE_EMBEDDING_MODEL"`
+	// EmbeddingAPIKey authenticates against EmbeddingURL.
+	EmbeddingAPIKey string `env:"LODE_EMBEDDING_API_KEY"`
 	// EmbeddingQueryPrefix and EmbeddingDocumentPrefix are the model's
-	// asymmetric task instructions (040 §3), prepended per role.
-	// LODE_EMBEDDING_QUERY_PREFIX and LODE_EMBEDDING_DOCUMENT_PREFIX. Both
-	// unset is correct for a symmetric model and wrong for EmbeddingGemma,
-	// where the mismatch costs retrieval quality silently rather than erroring.
-	EmbeddingQueryPrefix    string
-	EmbeddingDocumentPrefix string
+	// asymmetric task instructions (040 §3), prepended per role. Both unset
+	// is correct for a symmetric model and wrong for EmbeddingGemma, where
+	// the mismatch costs retrieval quality silently rather than erroring.
+	EmbeddingQueryPrefix    string `env:"LODE_EMBEDDING_QUERY_PREFIX"`
+	EmbeddingDocumentPrefix string `env:"LODE_EMBEDDING_DOCUMENT_PREFIX"`
 	// IndexInterval is how often the corpus convergence loop runs
 	// (LODE_INDEX_INTERVAL, default indexer.DefaultInterval). The loop runs
 	// with or without an embedding provider — with none it still writes the
@@ -150,20 +155,20 @@ type Config struct {
 	// POST /dictate answers 503, with everything else unchanged.
 	// SpeechToTextURL overrides the ElevenLabs API base for tests and
 	// self-hosted gateways; empty means https://api.elevenlabs.io.
-	SpeechToTextAPIKey string // LODE_ELEVENLABS_API_KEY
-	SpeechToTextURL    string // LODE_ELEVENLABS_URL
+	SpeechToTextAPIKey string `env:"LODE_ELEVENLABS_API_KEY"`
+	SpeechToTextURL    string `env:"LODE_ELEVENLABS_URL"`
 
 	// Blob storage (spec 021). Off unless BlobEndpoint and BlobBucket are
 	// both set: uploads then return 501 and every other surface behaves
 	// exactly as before, so a local docker-compose stack needs no bucket.
 	// Once they are set the access and secret keys are required too, and a
 	// missing one fails the boot rather than 502ing every blob operation.
-	BlobEndpoint  string // LODE_BLOB_ENDPOINT, e.g. https://hel1.your-objectstorage.com
-	BlobBucket    string // LODE_BLOB_BUCKET
-	BlobRegion    string // LODE_BLOB_REGION
-	BlobAccessKey string // LODE_BLOB_ACCESS_KEY
-	BlobSecretKey string // LODE_BLOB_SECRET_KEY
-	BlobSpoolDir  string // LODE_BLOB_SPOOL_DIR; empty means os.TempDir()
+	BlobEndpoint  string `env:"LODE_BLOB_ENDPOINT"` // e.g. https://hel1.your-objectstorage.com
+	BlobBucket    string `env:"LODE_BLOB_BUCKET"`
+	BlobRegion    string `env:"LODE_BLOB_REGION"`
+	BlobAccessKey string `env:"LODE_BLOB_ACCESS_KEY"`
+	BlobSecretKey string `env:"LODE_BLOB_SECRET_KEY"`
+	BlobSpoolDir  string `env:"LODE_BLOB_SPOOL_DIR"` // empty means os.TempDir()
 
 	// BlobStoreForTest injects a blobstore.Store directly, bypassing the
 	// S3 construction above. Tests only; production sets BlobEndpoint.
