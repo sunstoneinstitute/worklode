@@ -490,7 +490,11 @@ func (a *applier) applyPullRequest(tx *sql.Tx, eventID int64, repo, action strin
 				return err
 			}
 		}
-		return store.ResolveDelivery(tx, now, taskID, repo, eventID)
+		// The moved flag is discarded: this event already names its one task
+		// in the payload (MergeEventPayload above), so a frame for it does
+		// not depend on the delivery outcome.
+		_, err := store.ResolveDelivery(tx, now, taskID, repo, eventID)
+		return err
 	}
 	return nil
 }

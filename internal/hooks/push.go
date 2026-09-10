@@ -158,10 +158,21 @@ func applyMainPush(tx *sql.Tx, eventID int64, repo string, now time.Time, p push
 	// ResolveDelivery is per-task and reads only repo-level frontiers it
 	// never writes, so the outcome is order-independent; sorting only keeps
 	// the resulting state_log ordering reproducible.
+	var movedIDs []string
 	for _, taskID := range slices.Sorted(maps.Keys(affected)) {
-		if err := store.ResolveDelivery(tx, now, taskID, repo, eventID); err != nil {
+		moved, err := store.ResolveDelivery(tx, now, taskID, repo, eventID)
+		if err != nil {
 			return err
 		}
+		if moved {
+			movedIDs = append(movedIDs, taskID)
+		}
+	}
+	// A push transitions a set of tasks and the transitions record no event
+	// of their own, so this event is the only record of which tasks moved
+	// (WL-SPEC-66 §5.1).
+	if len(movedIDs) > 0 {
+		return store.MergeEventPayload(tx, eventID, map[string]any{"tasks": movedIDs})
 	}
 	return nil
 }
