@@ -36,6 +36,8 @@ func TestGrammar(t *testing.T) {
 			base + "id/commit/github.com/sunstoneinstitute/worklode/a16c2a7"},
 		{"declared graph", iri.DeclaredGraph("adr-worklode-0007"),
 			base + "graph/declared/adr-worklode-0007"},
+		{"declared version graph (025 §4.3)", iri.DeclaredVersionGraph("adr-worklode-0007", 3),
+			base + "graph/declared/adr-worklode-0007/v3"},
 		{"observed graph (org-global source)", iri.ObservedGraph("deploy"),
 			base + "graph/observed/deploy"},
 		{"observed graph (repo-local source)",

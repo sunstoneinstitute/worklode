@@ -134,6 +134,13 @@ func Commit(host, owner, repo, sha string) string {
 // gating and re-authoring replace exactly one graph).
 func DeclaredGraph(docSlug string) string { return GraphNS + "declared/" + docSlug }
 
+// DeclaredVersionGraph returns the named graph holding one immutable
+// document version (025 §4.3): graph/declared/<slug>/v<n>. Sibling of
+// DeclaredGraph, which stays the document's mutable canonical graph.
+func DeclaredVersionGraph(docSlug string, version int) string {
+	return DeclaredGraph(docSlug) + "/v" + strconv.Itoa(version)
+}
+
 // ObservedGraph returns the org-global named graph of a backbone-derived
 // deriver source — computed server-side over all-repo state by a single
 // writer: pr-affects, deploy, repo-implements (025 §11). Repo-local sources

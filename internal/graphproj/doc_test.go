@@ -53,6 +53,54 @@ func TestDocTriples(t *testing.T) {
 	}
 }
 
+// TestDocVersionTriples covers 025 §4.1's immutable version-snapshot
+// projection: the snapshot node's type/title/version/timestamps, the
+// previousVersion/wasRevisionOf edges to the prior version, the optional
+// dct:issued, and one wl:Section node per parsed section pointing dct:isPartOf
+// at the snapshot rather than the canonical document.
+func TestDocVersionTriples(t *testing.T) {
+	d := model.Doc{Slug: "025-backbone", Kind: "spec", Status: "accepted"}
+	v := model.DocVersion{Version: 3, Title: "Spec 025 — Backbone",
+		Issued: "2026-07-26", CreatedAt: time.Date(2026, 7, 26, 9, 0, 0, 0, time.UTC)}
+	secs := []model.DocSection{{Anchor: "sec-1", Heading: "Why"}}
+	doc := string(Document(DocVersionTriples(d, v, secs)))
+	subj := "<" + iri.DocVersion("025-backbone", 3) + ">"
+	for _, want := range []string{
+		subj + " <" + RDFType + "> <" + iri.Term("Spec") + ">",
+		subj + " <" + DCATVersion + "> \"3\"",
+		subj + " <" + DCATPreviousVersion + "> <" + iri.DocVersion("025-backbone", 2) + ">",
+		subj + " <" + ProvWasRevisionOf + "> <" + iri.DocVersion("025-backbone", 2) + ">",
+		subj + " <" + DCTIssued + "> \"2026-07-26\"^^<" + XSDDate + ">",
+		"<" + iri.Section("025-backbone", "sec-1") + "> <" + DCTIsPartOf + "> " + subj,
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("version projection missing %q\n%s", want, doc)
+		}
+	}
+
+	// First version: no previousVersion/wasRevisionOf. No issued date: no
+	// dct:issued. Nil sections: a node-only graph whose every subject is the
+	// snapshot IRI.
+	v = model.DocVersion{Version: 1, Title: "Spec 025 — Backbone",
+		CreatedAt: time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)}
+	doc = string(Document(DocVersionTriples(d, v, nil)))
+	subj1 := "<" + iri.DocVersion("025-backbone", 1) + ">"
+	if strings.Contains(doc, DCATPreviousVersion) {
+		t.Errorf("previousVersion emitted for version 1:\n%s", doc)
+	}
+	if strings.Contains(doc, ProvWasRevisionOf) {
+		t.Errorf("wasRevisionOf emitted for version 1:\n%s", doc)
+	}
+	if strings.Contains(doc, DCTIssued) {
+		t.Errorf("dct:issued emitted with no Issued date:\n%s", doc)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(doc), "\n") {
+		if line != "" && !strings.HasPrefix(line, subj1+" ") {
+			t.Errorf("foreign subject in version projection: %s", line)
+		}
+	}
+}
+
 // TestSectionTriples covers 025 §3.3's section projection: a wl:Section node
 // per published section, and the derived supersession the document store keeps
 // as a query rather than a column (025 §6.2).
