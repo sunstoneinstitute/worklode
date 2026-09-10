@@ -23,9 +23,10 @@ const TypeDocPatched = "doc.patched"
 
 // Rule labels Evaluate emits — also the "rule" metric label (§15.7).
 const (
-	ruleReviewOnSubmit = "review-on-submit"
-	rulePlanOnAccept   = "plan-on-accept"
-	ruleReviewOnPatch  = "review-on-patch"
+	ruleReviewOnSubmit   = "review-on-submit"
+	rulePlanOnAccept     = "plan-on-accept"
+	ruleReviewOnPatch    = "review-on-patch"
+	ruleApprovalOnSubmit = "approval-on-submit"
 )
 
 // Input is everything the rules of spec 025 §15.4 and §7.3 may consult. The
@@ -44,6 +45,10 @@ type Input struct {
 	// Open task of the relevant kind already referencing the doc; "" = none.
 	OpenReviewTask string
 	OpenDesignTask string
+	// OpenApprovalBound says an open approvals row already binds this
+	// document at Version — approval-on-submit's guard, filled by the
+	// executor the way OpenReviewTask is.
+	OpenApprovalBound bool
 	// Classification and ChangedAnchors describe a doc.patched event: the
 	// caller's §8.4 judgment ("substantive" | "non-substantive") and the
 	// anchors the amendment moved. Empty for every other event type.
@@ -58,10 +63,14 @@ type Input struct {
 
 // Action is one consequence for the executor to perform.
 type Action struct {
-	Rule       string // "review-on-submit" | "plan-on-accept" | "review-on-patch" — the metric label
+	Rule       string // the rule name, which is also the metric label
 	Suppressed bool   // guard hit: perform no mint
 	NoteTask   string // when suppressed on accept: note the absorbed event here (§5)
-	// Mint parameters (Suppressed == false):
+	// MintApproval discriminates the one consequence that is not a task
+	// mint: materialize the document's awaiting approvals row (029 §7.3).
+	// The mint parameters below stay empty on such an action.
+	MintApproval bool
+	// Mint parameters (Suppressed == false && !MintApproval):
 	TaskKind string // "review" | "design"
 	Title    string
 	Body     string
@@ -88,19 +97,29 @@ func Evaluate(in Input) []Action {
 	}
 }
 
+// evaluateSubmitted fires two rules on one submission: the review task
+// somebody works (§15.4), and the approvals row that records the decision the
+// document is owed (029 §7.3). They have separate guards, so one being
+// suppressed says nothing about the other.
+//
+// Neither suppression carries a NoteTask: the event log's own (source,
+// external_id) dedup usually absorbs a same-version resubmit before either
+// guard runs, so there is rarely a second event to note anywhere (§15.4).
 func evaluateSubmitted(in Input) []Action {
-	if in.OpenReviewTask != "" {
-		// No NoteTask: the event log's own (source, external_id) dedup
-		// usually absorbs a same-version resubmit before this guard even
-		// runs, so there is rarely a second event to note anywhere (§15.4).
-		return []Action{{Rule: ruleReviewOnSubmit, Suppressed: true}}
+	review := Action{Rule: ruleReviewOnSubmit, Suppressed: true}
+	if in.OpenReviewTask == "" {
+		review = Action{
+			Rule:     ruleReviewOnSubmit,
+			TaskKind: "review",
+			Title:    "Review: " + in.DocTitle,
+			Body:     reviewBody(in),
+		}
 	}
-	return []Action{{
-		Rule:     ruleReviewOnSubmit,
-		TaskKind: "review",
-		Title:    "Review: " + in.DocTitle,
-		Body:     reviewBody(in),
-	}}
+	approval := Action{Rule: ruleApprovalOnSubmit, MintApproval: true}
+	if in.OpenApprovalBound {
+		approval = Action{Rule: ruleApprovalOnSubmit, Suppressed: true}
+	}
+	return []Action{review, approval}
 }
 
 func evaluateAccepted(in Input) []Action {

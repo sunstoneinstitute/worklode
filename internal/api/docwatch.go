@@ -99,7 +99,10 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 	// every event.
 	switch ev.Type {
 	case eventbus.TypeDocumentSubmitted:
-		in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review")
+		if in.OpenReviewTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "review"); err == nil {
+			in.OpenApprovalBound, err = s.st.OpenApprovalBound(ctx, "doc",
+				store.DocEntityID(doc.ID), strconv.Itoa(doc.Version))
+		}
 	case eventbus.TypeDocumentAccepted:
 		in.OpenDesignTask, err = s.st.OpenTaskForDoc(ctx, doc.ID, "design")
 	case watcher.TypeDocPatched:
@@ -134,7 +137,9 @@ func (s *server) handleDocLifecycle(ctx context.Context, ev store.Event) (eventb
 	return outcome, nil
 }
 
-// performDocAction carries out one rule decision.
+// performDocAction carries out one rule decision. Three shapes reach it, in
+// the order it tests them: a suppression, an approval materialization
+// (Action.MintApproval), and otherwise a task mint.
 //
 // A suppression with no NoteTask records nothing at all: there is no entity
 // whose timeline the absence of a mint belongs on, and the metric already
@@ -165,6 +170,9 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 			return fmt.Errorf("doc-lifecycle: note absorbed event %d on %s: %w", ev.ID, act.NoteTask, err)
 		}
 		return nil
+	}
+	if act.MintApproval {
+		return s.materializeDocApproval(ctx, ev, doc, act)
 	}
 
 	// The payload names the rule and the document; the minted task id is
@@ -205,6 +213,42 @@ func (s *server) performDocAction(ctx context.Context, ev store.Event, doc *mode
 		})
 	if err != nil {
 		return fmt.Errorf("doc-lifecycle: mint %s task for event %d: %w", act.TaskKind, ev.ID, err)
+	}
+	return nil
+}
+
+// materializeDocApproval performs the approval-on-submit rule (025 §7.3,
+// 029 §7.3): one unlaned 'awaiting' approvals row bound to the submitted
+// version, which the /reviews queue lists and AcceptDoc refuses to accept
+// past. Requirement rows for named reviewers are RequestDocApproval's
+// business; they take their own lane on the same (kind, id, version) and do
+// not collide with this one.
+//
+// The event is recorded exactly like a mint — same source, same
+// "doc-lifecycle:<rule>:<event-id>" external id — so redelivery is absorbed
+// at the log before apply runs. InsertAwaitingApproval's ON CONFLICT and the
+// rule's own OpenApprovalBound guard are the other two layers.
+func (s *server) materializeDocApproval(ctx context.Context, ev store.Event, doc *model.Doc, act watcher.Action) error {
+	payload, err := json.Marshal(map[string]any{
+		"rule":               act.Rule,
+		"doc":                store.DocIRI(*doc),
+		"version":            doc.Version,
+		"prov:wasInformedBy": eventIRI(ev.ID),
+	})
+	if err != nil {
+		return fmt.Errorf("doc-lifecycle: marshal approval payload: %w", err)
+	}
+	_, _, err = s.st.RecordEvent(ctx, watcherEventSource,
+		"doc-lifecycle:"+act.Rule+":"+strconv.FormatInt(ev.ID, 10),
+		"approval.awaiting_materialized", payload,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.InsertAwaitingApproval(tx, s.st.Now(), "doc",
+				store.DocEntityID(doc.ID), strconv.Itoa(doc.Version), "", nil, nil, nil)
+			return err
+		})
+	if err != nil {
+		return fmt.Errorf("doc-lifecycle: materialize approval on doc %d for event %d: %w",
+			doc.ID, ev.ID, err)
 	}
 	return nil
 }

@@ -1016,3 +1016,13 @@ Recorded by WL-775 (delivery frames on the Progress page):
   until those families are mapped, a task moved by a release or by reconciliation
   still does not redraw its cell. Adding them is two map entries plus a decision
   about whether a reconcile sweep should pulse the page at all.
+
+Recorded by WL-566 (the document reviewer gate, 029 §7.3):
+
+- `[P3]` **A submitted plan gets an approvals row that never gates it.** The
+  approval-on-submit rule materializes an awaiting row for every submitted
+  document, plans included, but `AcceptDoc` and `CheckDocAcceptable` both skip
+  the reviewer gate when `kind == "plan"`, so the row sits in the `/reviews`
+  queue while acceptance walks past it. The asymmetry predates this task —
+  the gate has always been doc-kind-scoped — and the fix is a decision about
+  whether plans are meant to be gated at all, not a code change.

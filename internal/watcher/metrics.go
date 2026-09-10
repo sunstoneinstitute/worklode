@@ -13,7 +13,8 @@ type Metrics struct {
 // outcomes bounds the "outcome" label of worklode_watcher_actions_total
 // (025 §15.7). rules bounds "rule" to the labels Evaluate emits.
 var (
-	rules    = []string{ruleReviewOnSubmit, rulePlanOnAccept, ruleReviewOnPatch, ruleGroomOnStale}
+	rules = []string{ruleReviewOnSubmit, rulePlanOnAccept, ruleReviewOnPatch,
+		ruleGroomOnStale, ruleApprovalOnSubmit}
 	outcomes = []string{"applied", "suppressed", "error"}
 )
 
