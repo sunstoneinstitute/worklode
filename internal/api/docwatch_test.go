@@ -432,3 +432,110 @@ func TestDocWatchIgnoresNonSubstantivePatch(t *testing.T) {
 	f.wantActions(t, "review-on-patch", "applied", 0)
 	f.wantActions(t, "review-on-patch", "suppressed", 0)
 }
+
+// watchPlanBody is the minimum a plan must be to pass CreateDoc's lint. It
+// declares no tasks: this test drives the subscriber, not the mint pass.
+const watchPlanBody = `---
+status: draft
+covers:
+  - 025-documents-in-the-backbone.md#sec-1
+---
+
+# Cockpit progress page, part 1
+
+Body.
+`
+
+// seedPlan adds an accepted plan to the fixture — the document a doc.stale
+// event is about (§8.6 marks plans, never specs).
+func (f *docWatchFixture) seedPlan(t *testing.T) *model.Doc {
+	t.Helper()
+	var plan *model.Doc
+	_, _, err := f.st.RecordDocEvent(t.Context(), "create", "cli", "seed-plan", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			plan, err = store.CreateDoc(tx, f.st.Now(), store.DocInput{
+				Project: "proj", Kind: "plan", Number: 66, Slug: "066-progress-1",
+				Body: watchPlanBody, Owner: "alice", CreatedBy: "alice", Status: "accepted",
+			}, eventID)
+			return err
+		})
+	if err != nil {
+		t.Fatalf("seed plan: %v", err)
+	}
+	return plan
+}
+
+// stale records the doc.stale event store.MarkPlansStale writes (025 §8.6):
+// a dotted backbone type naming its document by numeric id, with the cause
+// that tells the rule which sentence its body gets.
+func (f *docWatchFixture) stale(t *testing.T, plan *model.Doc, version int) store.Event {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"doc": plan.ID, "cause": "amended", "spec": "025-documents-in-the-backbone",
+		"anchors": []string{"sec-1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, inserted, err := f.st.RecordEvent(t.Context(), "system",
+		store.StaleExternalID(plan.Slug, version), watcher.TypeDocStale, payload, nil)
+	if err != nil {
+		t.Fatalf("record stale event: %v", err)
+	}
+	if !inserted {
+		t.Fatalf("record stale event: version %d already recorded", version)
+	}
+	row, err := f.st.GetEvent(t.Context(), id)
+	if err != nil {
+		t.Fatalf("get event %d: %v", id, err)
+	}
+	return row
+}
+
+// TestDocWatchMintsReplanOnStale: the doc.stale event the patch path records
+// reaches the §8.7 groom rule, which mints one "Re-plan" design task for the
+// plan (025 §8.6). A second stale event while that task is open is
+// suppressed onto it.
+func TestDocWatchMintsReplanOnStale(t *testing.T) {
+	t.Parallel()
+	f := newDocWatchFixture(t)
+	plan := f.seedPlan(t)
+
+	if got := f.handle(t, f.stale(t, plan, 1)); got != eventbus.OutcomeApplied {
+		t.Errorf("outcome = %q, want %q", got, eventbus.OutcomeApplied)
+	}
+	tasks, err := f.st.ListTasks(t.Context(), store.TaskFilter{AboutDoc: plan.ID})
+	if err != nil {
+		t.Fatalf("list tasks about plan %d: %v", plan.ID, err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks about the plan = %d, want 1: %+v", len(tasks), tasks)
+	}
+	if tasks[0].Kind != "design" {
+		t.Errorf("kind = %q, want design", tasks[0].Kind)
+	}
+	if want := "Re-plan: " + plan.Title; tasks[0].Title != want {
+		t.Errorf("title = %q, want %q", tasks[0].Title, want)
+	}
+	// The §8.6 cause, not §8.7's idle clock: the plan is stale because the
+	// spec moved under it.
+	if !strings.Contains(tasks[0].Body, "amended in") {
+		t.Errorf("body = %q, want it to name the amendment as the cause", tasks[0].Body)
+	}
+	f.wantActions(t, "groom-on-stale", "applied", 1)
+
+	// A second, genuinely new event while the design task is open mints
+	// nothing and notes itself on the open task instead.
+	if got := f.handle(t, f.stale(t, plan, 2)); got != eventbus.OutcomeSuppressed {
+		t.Errorf("outcome = %q, want %q", got, eventbus.OutcomeSuppressed)
+	}
+	again, err := f.st.ListTasks(t.Context(), store.TaskFilter{AboutDoc: plan.ID})
+	if err != nil {
+		t.Fatalf("list tasks about plan %d: %v", plan.ID, err)
+	}
+	if len(again) != 1 {
+		t.Fatalf("tasks about the plan = %d after a second stale event, want 1: %+v", len(again), again)
+	}
+	f.wantActions(t, "groom-on-stale", "suppressed", 1)
+}

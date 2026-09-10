@@ -90,9 +90,18 @@ func (s *server) claimTask(w http.ResponseWriter, r *http.Request) {
 		s.mapStoreErr(w, err)
 		return
 	}
+	// 025 §8.6's claim-time flag: the plan this task was minted from may have
+	// gone stale under it. Reported, never refused — deciding what survives
+	// is the re-planning task's job, not this claim's.
+	stalePlan, err := s.st.StalePlanSlug(r.Context(), t.PlanDoc)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, model.ClaimResponse{
-		Lease:  toLeaseJSON(lease),
-		Branch: store.BranchFor(t),
+		Lease:     toLeaseJSON(lease),
+		Branch:    store.BranchFor(t),
+		StalePlan: stalePlan,
 	})
 }
 
@@ -155,12 +164,22 @@ func (s *server) claimNext(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, Reason: "no-ready-task"})
 		return
 	}
+	// Same 025 §8.6 flag claimTask carries, on the pick rather than the
+	// response: a dry run reports it too, since it is a fact about the task
+	// the ranking picked and not about the claim.
+	stalePlan, err := s.st.StalePlanSlug(r.Context(), res.Task.PlanDoc)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
 	if req.DryRun {
 		pick := s.toTaskPickJSON(res.Task, res.FanOut, nil)
+		pick.StalePlan = stalePlan
 		writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: false, DryRun: true, Task: &pick})
 		return
 	}
 	pick := s.toTaskPickJSON(res.Task, res.FanOut, res.Lease)
+	pick.StalePlan = stalePlan
 	writeJSON(w, http.StatusOK, model.ClaimNextResponse{Claimed: true, Task: &pick})
 }
 
