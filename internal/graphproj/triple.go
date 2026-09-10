@@ -11,16 +11,22 @@ import (
 	"strings"
 )
 
-// termKind distinguishes an IRI reference from a literal.
+// RDFReifies links a reifier node to the triple term it reifies. RDF 1.2
+// annotates an asserted edge through that pair; the older RDF 1.1
+// rdf:Statement vocabulary is not used.
+const RDFReifies = "http://www.w3.org/1999/02/22-rdf-syntax-ns#reifies"
+
+// termKind distinguishes an IRI reference from a literal or a triple term.
 type termKind int
 
 const (
 	kindIRI termKind = iota
 	kindLiteral
+	kindTripleTerm
 )
 
-// Term is an RDF term: either an IRI reference or a literal, optionally
-// typed. Build one with IRIRef, Text, or Typed.
+// Term is an RDF term: an IRI reference, a literal (optionally typed), or a
+// triple term. Build one with IRIRef, Text, Typed, or TripleTerm.
 type Term struct {
 	kind     termKind
 	value    string
@@ -42,6 +48,14 @@ func Typed(value, datatypeIRI string) Term {
 	return Term{kind: kindLiteral, value: value, datatype: datatypeIRI}
 }
 
+// TripleTerm builds an RDF 1.2 triple term, <<( s p o )>>. RDF 1.2 allows it
+// in object position only — it removed the RDF-star spelling that put a
+// quoted triple in subject position — so this is a Term constructor and there
+// is no Triple counterpart.
+func TripleTerm(t Triple) Term {
+	return Term{kind: kindTripleTerm, value: "<<( " + t.spo() + " )>>"}
+}
+
 // escapeLiteral escapes a literal's lexical form per N-Triples STRING_LITERAL_QUOTE.
 // Backslash must be replaced first so its escaped form isn't re-escaped by
 // the replacements that follow.
@@ -54,10 +68,14 @@ var escapeLiteral = strings.NewReplacer(
 ).Replace
 
 // String renders the term in N-Triples form: "<iri>" for an IRI reference,
-// `"text"` for a plain literal, `"text"^^<datatype>` for a typed one.
+// `"text"` for a plain literal, `"text"^^<datatype>` for a typed one, and
+// "<<( s p o )>>" for a triple term (rendered at construction).
 func (t Term) String() string {
-	if t.kind == kindIRI {
+	switch t.kind {
+	case kindIRI:
 		return "<" + t.value + ">"
+	case kindTripleTerm:
+		return t.value
 	}
 	lit := `"` + escapeLiteral(t.value) + `"`
 	if t.datatype != "" {
@@ -76,7 +94,13 @@ type Triple struct {
 // String renders the triple as one N-Triples line, without a trailing
 // newline: "<S> <P> O .".
 func (t Triple) String() string {
-	return "<" + t.S + "> <" + t.P + "> " + t.O.String() + " ."
+	return t.spo() + " ."
+}
+
+// spo renders the triple without its terminating dot, the form a triple term
+// wraps.
+func (t Triple) spo() string {
+	return "<" + t.S + "> <" + t.P + "> " + t.O.String()
 }
 
 // Document renders triples as a GSP-PUT-ready N-Triples document: one

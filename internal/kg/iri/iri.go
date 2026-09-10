@@ -9,6 +9,7 @@ package iri
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Namespace roots (006 §10). Untyped constants so callers can build
@@ -74,6 +75,21 @@ func Section(docSlug, anchor string) string {
 // Doc IRI by default; versioned IRIs appear only in pinned claims.
 func DocVersion(slug string, version int) string {
 	return IDNS + "doc/" + slug + "/v" + strconv.Itoa(version)
+}
+
+// Claim returns the IRI of the reifier node for one wl:implements claim
+// (025 §11.5). RDF 1.2 annotates an asserted edge by linking a reifier to the
+// edge's triple term with rdf:reifies, and the reifier here must be an IRI:
+// graphproj.Document replaces a whole named graph and has to render
+// byte-identical output for the same claim set, which a blank node's
+// arbitrary label would break. Keying it on the edge it reifies —
+// id/claim/<component local id>/<section local id> — makes the same claim
+// mint the same IRI on every run and keeps the node readable in the store.
+// Both arguments are id/ IRIs whose local ids are already path-safe.
+func Claim(componentIRI, sectionIRI string) string {
+	return IDNS + "claim/" +
+		strings.TrimPrefix(componentIRI, IDNS) + "/" +
+		strings.TrimPrefix(sectionIRI, IDNS)
 }
 
 // Deliverable returns the instance IRI of a deliverable.
