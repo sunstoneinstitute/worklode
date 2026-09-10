@@ -142,6 +142,9 @@ func (s *Store) CreateProject(ctx context.Context, id, name, key string) error {
 		if isUniqueViolationOn(err, "projects_key_unique") {
 			return ErrKeyTaken
 		}
+		if isUniqueViolationOn(err, "projects_pkey") {
+			return fmt.Errorf("project %s: %w", id, ErrProjectExists)
+		}
 		return fmt.Errorf("insert project %s: %w", id, err)
 	}
 	return nil

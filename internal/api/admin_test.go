@@ -31,6 +31,15 @@ func TestCreateAndListProjects(t *testing.T) {
 		t.Fatalf("create project repos = %v, want empty array", got["repos"])
 	}
 
+	// Re-using an id is a caller mistake, so it reads as a conflict, not as
+	// a server fault.
+	rr = doReq(t, h, "POST", "/api/v1/projects", token, map[string]any{
+		"id": "proj", "name": "Project Again", "key": "PROJ2",
+	})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("duplicate project id status = %d, want 409, body %s", rr.Code, rr.Body.String())
+	}
+
 	rr = doReq(t, h, "POST", "/api/v1/projects/proj/repos", token, map[string]any{"repo": "acme/widgets"})
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("add repo status = %d, body %s", rr.Code, rr.Body.String())
@@ -604,6 +613,15 @@ func TestCreateActorAndTokenLifecycle(t *testing.T) {
 	rr = doReq(t, h, "POST", "/api/v1/actors", token, map[string]any{"id": "x", "kind": "nonsense"})
 	if rr.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("bad kind status = %d, want 422", rr.Code)
+	}
+
+	// Re-using an id is a caller mistake, so it reads as a conflict, not as
+	// a server fault.
+	rr = doReq(t, h, "POST", "/api/v1/actors", token, map[string]any{
+		"id": "bob", "kind": "agent", "display_name": "Bob Again",
+	})
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("duplicate actor status = %d, want 409, body %s", rr.Code, rr.Body.String())
 	}
 
 	rr = doReq(t, h, "POST", "/api/v1/actors/bob/tokens", token, map[string]any{"description": "bob's token"})

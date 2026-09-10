@@ -638,6 +638,29 @@ func assignDocReviewers(t *testing.T, s *Store, docID int64, reviewers []string)
 	}
 }
 
+// TestSetDocReviewersDedupes: `lode doc set reviewers alice alice` names one
+// reviewer twice. The list is a set, so the repeat collapses instead of
+// tripping doc_reviewers_pkey into a 500.
+func TestSetDocReviewersDedupes(t *testing.T) {
+	t.Parallel()
+	s := openTaskStore(t)
+	doc := docForApproval(t, s, "025-dedupe", 26)
+	assignDocReviewers(t, s, doc.ID, []string{"stig", "stig"})
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	got, err := docReviewers(tx, doc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, []string{"stig"}) {
+		t.Errorf("reviewers = %v, want [stig]", got)
+	}
+}
+
 // TestRequestDocApprovalOpensOneLanePerReviewer is 025 §7.3's reviewer set:
 // every assigned reviewer gets an own awaiting row on the same revision, and
 // stays assigned across a later revision — WL-359's durable set, read fresh
