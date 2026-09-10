@@ -57,7 +57,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
   Flags: --project, --repo
 - `lode doc list` — List documents: specs, ADRs, and plans
-  Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --owner, --project, --repo, --status
+  Flags: --bare-superseded, --deleted, --has-notes, --kind, --needs-execution, --needs-planning, --older-than, --owner, --project, --repo, --status, --unresolved
 - `lode doc note` — Leave an anchored, non-blocking note on a document section
   Flags: --body, --body-file
 - `lode doc progress` — How much of each spec in a project exists, and what moves it next
@@ -78,6 +78,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --from, --project, --repo, --to
 - `lode doc undelete` — Restore a deleted document, clearing its tombstone
 - `lode doc versions` — List a document's version history
+- `lode doc withdraw` — Withdraw an accepted or stale document that will not be executed
+  Flags: --justification
 
 ## `lode doctor` — Diagnose this machine's lode setup
 

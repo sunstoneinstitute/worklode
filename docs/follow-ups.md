@@ -894,22 +894,25 @@ Recorded by WL-819 (the doc-lifecycle watcher series, spec 025 §15):
   but it's worth building when one actually occurs, not in anticipation.
 
 Recorded by WL-829 (`lode task escalate`, spec 025 §8.1), extended by WL-830
-(`lode task gap`/`lode task fix`, spec 025 §15.5):
+(`lode task gap`/`lode task fix`, spec 025 §15.5) and WL-833 (`lode doc
+withdraw`, spec 025 §8.7):
 
-- `[P3]` **Spec 061's L3 domain-action list does not name `escalate`, `gap`
-  or `fix`, so its transcription in code no longer matches it.** Spec 025
-  §8.1 specifies `lode task escalate --to plan|spec --reason "..."`
+- `[P3]` **Spec 061's L3 domain-action list does not name `escalate`, `gap`,
+  `fix` or `withdraw`, so its transcription in code no longer matches it.**
+  Spec 025 §8.1 specifies `lode task escalate --to plan|spec --reason "..."`
   verbatim; §15.5 specifies only the events `task.gap_found`, `fix.started`
   and `fix.finished`, and the `lode task gap`/`lode task fix` commands that
-  emit them were named by the plan, not the spec. Shipping each needed its
-  verb in `internal/cmd/namerule_test.go`'s `l3DomainActions` and in
-  `internal/cmd/CLAUDE.md`'s Naming section. Both are transcriptions of spec
-  061 §5, so they now carry three verbs the spec they transcribe does not.
+  emit them were named by the plan, not the spec; §8.7 likewise calls for a
+  close verb that takes an unexecuted document out of the corpus but does not
+  name one, so `lode doc withdraw` is the plan's name for it too. Shipping
+  each needed its verb in `internal/cmd/namerule_test.go`'s `l3DomainActions`
+  and in `internal/cmd/CLAUDE.md`'s Naming section. Both are transcriptions of
+  spec 061 §5, so they now carry four verbs the spec they transcribe does not.
   Spec 061 has been revised three times for exactly this — L3 gained
   `request` (WL-646), then `pack`, then `note` for 025 §8.5 — so the fix is
-  the same ceremony: one `lode doc revise` on 061 adding `escalate`, `gap`
-  and `fix` to L3 together, after which the two transcriptions are true
-  again. Not blocking: nothing disagrees about what the commands do, only
+  the same ceremony: one `lode doc revise` on 061 adding `escalate`, `gap`,
+  `fix` and `withdraw` to L3 together, after which the two transcriptions are
+  true again. Not blocking: nothing disagrees about what the commands do, only
   the allowlist is behind.
 
 Recorded by WL-831 (§8.6 stale marking off the patch seam):

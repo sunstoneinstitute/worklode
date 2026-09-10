@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -589,4 +590,190 @@ func TestSweepStaleDocsExecutedPlanNeverFires(t *testing.T) {
 	if evs := staleEvents(t, s, StaleExternalID(plan.Slug, accepted.Version)); len(evs) != 0 {
 		t.Errorf("doc.stale events = %d, want 0", len(evs))
 	}
+}
+
+// withdrawDoc runs WithdrawDoc through RecordDocEvent, the way the API's
+// handler does, so the metric and the doc.withdrawn event are exercised too.
+func withdrawDoc(t *testing.T, s *Store, id int64, justification string) (*model.Doc, error) {
+	t.Helper()
+	var out *model.Doc
+	payload, err := EventPayload(map[string]any{"doc": id, "justification": justification})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = s.RecordDocEvent(t.Context(), "withdraw", "cli",
+		fmt.Sprintf("doc-withdraw-%d", docEventSeq.Add(1)), "doc.withdrawn", payload,
+		func(tx *sql.Tx, eventID int64) error {
+			var err error
+			out, err = WithdrawDoc(tx, s.Now(), id, eventID)
+			return err
+		})
+	return out, err
+}
+
+// TestWithdrawDocTransitions is 025 §8.7's close verb: accepted and stale go
+// to withdrawn, and the three statuses that are not withdrawable are refused
+// with ErrBadTransition rather than silently accepted. The event is recorded
+// with its justification and the op is counted.
+func TestWithdrawDocTransitions(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	reg := prometheus.NewRegistry()
+	s.metrics = newStoreMetrics(reg)
+
+	accepted := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "820-accepted",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	d, err := withdrawDoc(t, s, accepted.ID, "superseded by a different approach")
+	if err != nil {
+		t.Fatalf("withdraw accepted: %v", err)
+	}
+	if d.Status != "withdrawn" {
+		t.Errorf("returned status = %q, want withdrawn", d.Status)
+	}
+	if got := docStatus(t, s, accepted.ID); got != "withdrawn" {
+		t.Errorf("stored status = %q, want withdrawn", got)
+	}
+
+	stale := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "820-stale",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	setDocStatus(t, s, stale.ID, "stale")
+	if _, err := withdrawDoc(t, s, stale.ID, "not worth re-planning"); err != nil {
+		t.Fatalf("withdraw stale: %v", err)
+	}
+	if got := docStatus(t, s, stale.ID); got != "withdrawn" {
+		t.Errorf("stale doc status = %q, want withdrawn", got)
+	}
+
+	// A draft is deleted, not withdrawn; a superseded document is already
+	// resolved; a withdrawn one already is what the call asks for.
+	for _, status := range []string{"draft", "superseded", "withdrawn"} {
+		doc := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "plan", Slug: "820-" + status,
+			Body: minimalPlanBody, CreatedBy: "stig",
+		})
+		setDocStatus(t, s, doc.ID, status)
+		if _, err := withdrawDoc(t, s, doc.ID, "why not"); !errors.Is(err, ErrBadTransition) {
+			t.Errorf("withdraw a %s doc: err = %v, want ErrBadTransition", status, err)
+		}
+		if got := docStatus(t, s, doc.ID); got != status {
+			t.Errorf("refused %s doc moved to %q, want it left alone", status, got)
+		}
+	}
+
+	// Two withdrawals landed and three were refused.
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("withdraw", "ok")); got != 2 {
+		t.Errorf(`docOps{op=withdraw,outcome=ok} = %v, want 2`, got)
+	}
+	if got := testutil.ToFloat64(s.metrics.docOps.WithLabelValues("withdraw", "error")); got != 3 {
+		t.Errorf(`docOps{op=withdraw,outcome=error} = %v, want 3`, got)
+	}
+
+	var payload map[string]any
+	var raw []byte
+	if err := s.db.QueryRowContext(t.Context(),
+		`SELECT payload FROM events WHERE type = 'doc.withdrawn'
+		  AND payload->>'doc' = $1`, fmt.Sprint(accepted.ID)).Scan(&raw); err != nil {
+		t.Fatalf("read doc.withdrawn event: %v", err)
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["justification"] != "superseded by a different approach" {
+		t.Errorf("payload = %v, want the justification recorded", payload)
+	}
+}
+
+// TestUnresolvedDocsOlderThan is 025 §8.7's unresolved set: accepted specs
+// and plans nothing has executed, filtered by how long they have sat. The
+// --older-than boundary is inclusive, and an executed document is out however
+// old it is — the same "executed" predicate the staleness sweep applies.
+func TestUnresolvedDocsOlderThan(t *testing.T) {
+	t.Parallel()
+	s, now := openStaleSweepStore(t)
+	ctx := t.Context()
+
+	// Three accepted plans nothing has executed, created 31, 30 and 29 days
+	// before the read, plus one whose minted task was claimed.
+	old := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "821-old",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	*now = now.AddDate(0, 0, 1)
+	boundary := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "821-boundary",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	*now = now.AddDate(0, 0, 1)
+	fresh := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "821-fresh",
+		Body: minimalPlanBody, CreatedBy: "stig", Status: "accepted",
+	})
+	executed := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Number: 822, Slug: "822-executed",
+		Body: groomPlanBody, CreatedBy: "stig",
+	})
+	_, minted, err := acceptDoc(t, s, executed.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan: %v", err)
+	}
+	if _, err := s.Claim(ctx, minted[0].ID, "stig", "wt-822", 0); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	*now = now.AddDate(0, 0, 29)
+
+	all, err := s.UnresolvedDocs(ctx, "p1", "", 0)
+	if err != nil {
+		t.Fatalf("UnresolvedDocs: %v", err)
+	}
+	if got := docSlugs(all); !reflect.DeepEqual(got, []string{"821-old", "821-boundary", "821-fresh"}) {
+		t.Errorf("unresolved = %v, want the three unexecuted plans oldest first", got)
+	}
+
+	// 30 days is inclusive: the document updated exactly 30 days ago is in,
+	// the one updated 29 days ago is out.
+	bounded, err := s.UnresolvedDocs(ctx, "p1", "", 30)
+	if err != nil {
+		t.Fatalf("UnresolvedDocs(30d): %v", err)
+	}
+	if got := docSlugs(bounded); !reflect.DeepEqual(got, []string{"821-old", "821-boundary"}) {
+		t.Errorf("unresolved 30d = %v, want %v and %v", got, old.Slug, boundary.Slug)
+	}
+	if got := docSlugs(mustUnresolved(t, s, "p1", "", 31)); !reflect.DeepEqual(got, []string{"821-old"}) {
+		t.Errorf("unresolved 31d = %v, want only %v", got, old.Slug)
+	}
+	if got := docSlugs(mustUnresolved(t, s, "p1", "", 32)); len(got) != 0 {
+		t.Errorf("unresolved 32d = %v, want none", got)
+	}
+	if got := docSlugs(mustUnresolved(t, s, "p1", "spec", 0)); len(got) != 0 {
+		t.Errorf("unresolved --kind spec = %v, want none (every unexecuted doc here is a plan)", got)
+	}
+
+	// Withdrawing one takes it out of the set: that is what the verb is for.
+	if _, err := withdrawDoc(t, s, fresh.ID, "not going to happen"); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if got := docSlugs(mustUnresolved(t, s, "p1", "", 0)); !reflect.DeepEqual(got, []string{"821-old", "821-boundary"}) {
+		t.Errorf("unresolved after a withdrawal = %v, want the withdrawn plan gone", got)
+	}
+}
+
+func mustUnresolved(t *testing.T, s *Store, project, kind string, days int) []model.Doc {
+	t.Helper()
+	docs, err := s.UnresolvedDocs(t.Context(), project, kind, days)
+	if err != nil {
+		t.Fatalf("UnresolvedDocs(%q, %d): %v", kind, days, err)
+	}
+	return docs
+}
+
+func docSlugs(docs []model.Doc) []string {
+	out := make([]string, len(docs))
+	for i, d := range docs {
+		out[i] = d.Slug
+	}
+	return out
 }

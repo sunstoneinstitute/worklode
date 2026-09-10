@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/staleness"
 )
 
@@ -135,6 +136,31 @@ func (s *Store) StalePlanSlug(ctx context.Context, planDoc int64) (string, error
 	return slug, nil
 }
 
+// docHasExecution is the one spelling of "this document has been executed"
+// (025 §8.7), as a SQL boolean over a `docs` row aliased `d`. A plan counts as
+// executed when any task minted from it ever held a lease — active or expired,
+// since the fact that matters is that execution happened at all, not whether
+// it is still in progress. A spec counts as executed when an accepted plan
+// covers one of its sections; a plan's `covers` edges point at a spec's
+// section (to_anchor set), but the EXISTS only needs the edge and the covering
+// plan's status, not the anchor.
+//
+// StaleCandidateDocs and UnresolvedDocs both interpolate this. They ask the
+// same question — the sweeper to decide what has gone stale, the list to
+// report what is still unresolved — so a second spelling would be two
+// definitions of "executed" that can disagree.
+const docHasExecution = `CASE d.kind
+	          WHEN 'plan' THEN EXISTS (
+	            SELECT 1 FROM leases l
+	              JOIN tasks t ON t.id = l.task_id
+	             WHERE t.plan_doc = d.id)
+	          ELSE EXISTS (
+	            SELECT 1 FROM doc_edges de
+	              JOIN docs p ON p.id = de.from_doc
+	             WHERE de.type = 'covers' AND de.to_doc = d.id
+	               AND p.status = 'accepted')
+	        END`
+
 // StaleCandidate is one accepted spec or plan with the §8.7 clock facts.
 type StaleCandidate struct {
 	DocID        int64
@@ -151,14 +177,8 @@ type StaleCandidate struct {
 // clock facts, ordered by doc id so the sweeper and its tests see a stable
 // scan order. It fetches facts only; the threshold verdict is
 // staleness.At's, the rule's one owner (internal/watcher.StaleAt is the same
-// calculation, re-exported for its own callers).
-//
-// A plan counts as executed when any task minted from it ever held a lease —
-// active or expired, since the fact that matters is that execution happened
-// at all, not whether it is still in progress. A spec counts as executed
-// when an accepted plan covers one of its sections; a plan's `covers` edges
-// point at a spec's section (to_anchor set), but the EXISTS below only needs
-// the edge and the covering plan's status, not the anchor.
+// calculation, re-exported for its own callers). HasExecution is
+// docHasExecution's answer, shared with UnresolvedDocs.
 //
 // ADRs are excluded here, matching staleness.At. The LEFT JOIN to
 // projects keeps a doc whose project row is somehow missing in the result
@@ -167,17 +187,7 @@ func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT d.id, d.slug, d.version, d.kind, d.project_id, d.updated_at,
 		        coalesce(proj.doc_staleness_days, 0),
-		        CASE d.kind
-		          WHEN 'plan' THEN EXISTS (
-		            SELECT 1 FROM leases l
-		              JOIN tasks t ON t.id = l.task_id
-		             WHERE t.plan_doc = d.id)
-		          ELSE EXISTS (
-		            SELECT 1 FROM doc_edges de
-		              JOIN docs p ON p.id = de.from_doc
-		             WHERE de.type = 'covers' AND de.to_doc = d.id
-		               AND p.status = 'accepted')
-		        END
+		        `+docHasExecution+`
 		   FROM docs d
 		   LEFT JOIN projects proj ON proj.id = d.project_id
 		  WHERE d.status = 'accepted' AND d.kind IN ('spec', 'plan')
@@ -192,6 +202,80 @@ func (s *Store) StaleCandidateDocs(ctx context.Context) ([]StaleCandidate, error
 			&c.ProjectDays, &c.HasExecution)
 		return c, err
 	})
+}
+
+// UnresolvedDocs returns the accepted specs and plans nothing has executed
+// (025 §8.7) — what `lode doc list --unresolved` reports, oldest first, so a
+// grooming pass reads down from the most overdue. The "executed" predicate is
+// docHasExecution, the same one the staleness sweeper applies; this differs
+// only in that it reports the documents rather than deciding a threshold.
+//
+// olderThanDays narrows to documents untouched for at least that many days,
+// against docs.updated_at, and 0 means every one of them. The boundary is
+// inclusive: with 30, a document last updated exactly 30 days ago is
+// reported.
+//
+// project and kind narrow the answer; "" answers over every project, and over
+// both kinds. A withdrawn or stale document is not here — the selector is what
+// is still open and unresolved, and a withdrawal is 025 §8.7's way of
+// resolving one.
+func (s *Store) UnresolvedDocs(ctx context.Context, project, kind string, olderThanDays int) ([]model.Doc, error) {
+	var cutoff any
+	if olderThanDays > 0 {
+		cutoff = s.nowFn().UTC().AddDate(0, 0, -olderThanDays)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+docColumnsD+`
+		   FROM docs d
+		  WHERE d.status = 'accepted' AND d.kind IN ('spec', 'plan')
+		    AND d.deleted_at IS NULL
+		    AND ($1 = '' OR d.project_id = $1)
+		    AND ($2 = '' OR d.kind = $2)
+		    AND NOT (`+docHasExecution+`)
+		    AND ($3::timestamptz IS NULL OR d.updated_at <= $3)
+		  ORDER BY d.updated_at, d.id`, project, kind, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("list unresolved docs: %w", err)
+	}
+	return collectRows(rows, "list unresolved docs", byValue(scanDoc))
+}
+
+// WithdrawDoc takes an accepted or stale document out of the corpus (025
+// §8.7): the close verb a grooming pass needs when a document will not be
+// executed and nothing replaces it. It is what makes 100% resolution
+// reachable — every accepted document ends up executed, superseded or
+// withdrawn.
+//
+// Only accepted and stale are withdrawable. A draft is discarded instead
+// (`lode doc delete`, 044 §5): nothing has been agreed, so there is nothing
+// to withdraw from. A superseded document is already resolved, and a
+// withdrawn one already is what the call asks for; both are ErrBadTransition
+// rather than a silent no-op, because a caller withdrawing the wrong document
+// should hear about it.
+//
+// The justification travels on the doc.withdrawn event the caller records
+// this inside, not on the row: withdrawal is a decision about a document, and
+// the log is where decisions with a reason live.
+func WithdrawDoc(tx *sql.Tx, now time.Time, id, eventID int64) (*model.Doc, error) {
+	d, err := lockDoc(tx, id)
+	if err != nil {
+		return nil, err
+	}
+	if d.status != "accepted" && d.status != "stale" {
+		return nil, fmt.Errorf(
+			"doc %d is %s; only an accepted or stale document can be withdrawn (025 §8.7): %w",
+			id, d.status, ErrBadTransition)
+	}
+	if _, err := tx.Exec(
+		`UPDATE docs SET status = 'withdrawn', updated_at = $2 WHERE id = $1`,
+		id, now.UTC().Truncate(time.Second)); err != nil {
+		return nil, fmt.Errorf("withdraw doc %d: %w", id, err)
+	}
+	if err := logDocChange(tx, id, eventID,
+		map[string]string{"field": "status", "old": d.status, "new": "withdrawn"}); err != nil {
+		return nil, err
+	}
+	return getDocTx(tx, id)
 }
 
 // sweepStaleDocs emits doc.stale (cause "clock") for every accepted spec or

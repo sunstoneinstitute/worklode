@@ -599,6 +599,11 @@ func TestDocListSelectorConflicts(t *testing.T) {
 		"bare-superseded with draft":     {[]string{"--bare-superseded", "--status", "draft"}, "superseded"},
 		"bare-superseded with plan kind": {[]string{"--bare-superseded", "--kind", "plan"}, "spec or adr"},
 		"bare-superseded and planning":   {[]string{"--bare-superseded", "--needs-planning"}, "none of the others can be"},
+		"unresolved with draft":          {[]string{"--unresolved", "--status", "draft"}, "accepted"},
+		"unresolved with adr kind":       {[]string{"--unresolved", "--kind", "adr"}, "spec or plan"},
+		"unresolved and planning":        {[]string{"--unresolved", "--needs-planning"}, "none of the others can be"},
+		"older-than without unresolved":  {[]string{"--older-than", "30d"}, "--unresolved only"},
+		"older-than nonsense":            {[]string{"--unresolved", "--older-than", "a month"}, "whole number of days"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cmd := newDocListCmd()
@@ -626,7 +631,7 @@ func TestCheckDocSelectorsAllowsBareSuperseded(t *testing.T) {
 		"both restated":     {"spec", "superseded"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := checkDocSelectors(c.kind, c.status, false, false, true); err != nil {
+			if err := checkDocSelectors(c.kind, c.status, false, false, true, false); err != nil {
 				t.Fatalf("checkDocSelectors(%q, %q, bareSuperseded=true) = %v, want nil", c.kind, c.status, err)
 			}
 		})
@@ -1009,5 +1014,82 @@ func TestDocAddRecordsWorktreeTask(t *testing.T) {
 	}
 	if got := docJSON(t, out).GeneratedByTask; got != "" {
 		t.Errorf("generated_by_task = %q, want empty outside a bound worktree", got)
+	}
+}
+
+// TestDocWithdrawAndUnresolved is 025 §8.7's two verbs end to end: an
+// accepted spec nothing has executed shows in `doc list --unresolved` with
+// its age, `doc withdraw` closes it, and it leaves the set. A draft is
+// refused, since deleting is what a draft gets.
+func TestDocWithdrawAndUnresolved(t *testing.T) {
+	_, c := lifecycleTestServer(t)
+	setupProject(t, c)
+
+	specFile := writeDocFile(t, docTestBody)
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--number", "1", "--slug", "unexecuted", "--file", specFile); err != nil {
+		t.Fatalf("doc add: %v", err)
+	}
+	if _, err := runLode(t, "doc", "accept", "unexecuted"); err != nil {
+		t.Fatalf("doc accept: %v", err)
+	}
+
+	out, err := runLode(t, "doc", "list", "--project", "proj", "--unresolved")
+	if err != nil {
+		t.Fatalf("doc list --unresolved: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "PROJ-SPEC-1") || !strings.Contains(out, "AGE") || !strings.Contains(out, "0d") {
+		t.Errorf("unresolved output = %q, want the spec with an AGE column", out)
+	}
+
+	// Nothing here is a month old, so the day bound empties the answer.
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--unresolved", "--older-than", "30d")
+	if err != nil {
+		t.Fatalf("doc list --unresolved --older-than 30d: %v\noutput: %s", err, out)
+	}
+	if strings.Contains(out, "PROJ-SPEC-1") {
+		t.Errorf("output = %q, want a spec updated today excluded by --older-than 30d", out)
+	}
+
+	if out, err := runLode(t, "doc", "withdraw", "unexecuted",
+		"--justification", "the approach was abandoned"); err != nil {
+		t.Fatalf("doc withdraw: %v\noutput: %s", err, out)
+	} else if !strings.Contains(out, "withdrew doc") {
+		t.Errorf("withdraw output = %q, want it to confirm the withdrawal", out)
+	}
+
+	out, err = runLode(t, "doc", "list", "--project", "proj", "--unresolved")
+	if err != nil {
+		t.Fatalf("doc list --unresolved after withdrawal: %v\noutput: %s", err, out)
+	}
+	if strings.Contains(out, "PROJ-SPEC-1") {
+		t.Errorf("output = %q, want the withdrawn spec out of the unresolved set", out)
+	}
+
+	// A draft is deleted, not withdrawn, and the server says so.
+	if _, err := runLode(t, "doc", "add", "--project", "proj", "--kind", "spec",
+		"--number", "2", "--slug", "still-draft", "--file", specFile); err != nil {
+		t.Fatalf("doc add draft: %v", err)
+	}
+	if out, err := runLode(t, "doc", "withdraw", "still-draft", "--justification", "no"); err == nil {
+		t.Errorf("withdraw a draft succeeded, output = %q; want a refusal", out)
+	} else if !strings.Contains(err.Error(), "accepted or stale") {
+		t.Errorf("err = %v, want it to name the withdrawable statuses", err)
+	}
+}
+
+// TestParseDayDuration: --older-than takes days with or without the suffix,
+// nothing means no bound, and anything else is named rather than read as 0.
+func TestParseDayDuration(t *testing.T) {
+	for in, want := range map[string]int{"": 0, "30d": 30, "30": 30, " 7d ": 7, "0d": 0} {
+		got, err := parseDayDuration(in)
+		if err != nil || got != want {
+			t.Errorf("parseDayDuration(%q) = %d, %v; want %d, nil", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"a month", "30 days", "-5d", "30h", "d"} {
+		if got, err := parseDayDuration(in); err == nil {
+			t.Errorf("parseDayDuration(%q) = %d, nil; want an error", in, got)
+		}
 	}
 }

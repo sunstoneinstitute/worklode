@@ -65,6 +65,21 @@ func LocalTime(t time.Time) string {
 	return t.Local().Format(time.RFC3339)
 }
 
+// Age renders how long ago t was, in whole days: "31d", "0d" for today, "-"
+// for the zero value. A staleness clock counts in days (025 §8.7), so a
+// coarser unit than LocalTime's timestamp is what the column is for. A future
+// t reads "0d" rather than a negative age.
+func Age(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	days := int(time.Since(t).Hours() / 24)
+	if days < 0 {
+		days = 0
+	}
+	return strconv.Itoa(days) + "d"
+}
+
 // HumanTokens abbreviates a token count for a table cell: 1.2k, 11.8M. Token
 // counts run to eight digits in an agentic session, where the exact figure is
 // noise and the magnitude is the point.
