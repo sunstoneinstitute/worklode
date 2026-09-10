@@ -228,6 +228,13 @@ func (s *server) listDocs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs))})
+	case sel.unresolved:
+		docs, err := s.st.UnresolvedDocs(r.Context(), sel.filter.Project, sel.filter.Kind, sel.olderThanDays)
+		if err != nil {
+			s.mapStoreErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, model.DocListResponse{Docs: s.withProjectKeys(r.Context(), withoutDocBodies(docs))})
 	case sel.bareSuperseded:
 		docs, gaps, err := s.st.BareSupersededSections(r.Context(), sel.filter.Project, sel.filter.Kind)
 		if err != nil {
@@ -406,12 +413,18 @@ func (s *server) listDocNotes(w http.ResponseWriter, r *http.Request) {
 }
 
 // docListSelector is GET /api/v1/docs' query string once validated: the four
-// plain filters, plus at most one of the three derived selectors of 026 §2.
+// plain filters, plus at most one of the derived selectors — the three of
+// 026 §2 and 025 §8.7's unresolved.
 type docListSelector struct {
 	filter         store.DocFilter
 	needsPlanning  bool
 	needsExecution bool
 	bareSuperseded bool
+	unresolved     bool
+	// olderThanDays narrows unresolved to documents untouched for at least
+	// that many days; 0 is every one of them. Meaningless without
+	// unresolved, and refused there rather than silently ignored.
+	olderThanDays int
 }
 
 // docDerivedSelector names one derived selector's implied status and
@@ -456,6 +469,19 @@ func docSelectorFrom(r *http.Request) (docListSelector, error) {
 	if sel.bareSuperseded, err = queryBool(q, "bare_superseded"); err != nil {
 		return docListSelector{}, err
 	}
+	if sel.unresolved, err = queryBool(q, "unresolved"); err != nil {
+		return docListSelector{}, err
+	}
+	// A day count, not a duration: the CLI's "30d" is parsed there, so what
+	// crosses the wire is already the number 025 §8.7's clock counts in.
+	if raw := q.Get("older_than_days"); raw != "" {
+		if sel.olderThanDays, err = strconv.Atoi(raw); err != nil || sel.olderThanDays < 0 {
+			return docListSelector{}, fmt.Errorf("older_than_days must be a non-negative integer, got %q", raw)
+		}
+		if !sel.unresolved {
+			return docListSelector{}, errors.New("older_than_days applies to unresolved=true only (025 §8.7)")
+		}
+	}
 	// A switch, not an addition (044 §5): deleted=true lists the tombstoned
 	// documents instead of the live ones. Read here rather than in
 	// docFilterFrom, which the cockpit's read-only /docs page also calls and
@@ -476,6 +502,8 @@ func docSelectorFrom(r *http.Request) (docListSelector, error) {
 			func(k string) bool { return k == "plan" }, "plan"},
 		{sel.bareSuperseded, "bare_superseded", "superseded", "025 §6",
 			func(k string) bool { return k == "spec" || k == "adr" }, "spec or adr"},
+		{sel.unresolved, "unresolved", "accepted", "025 §8.7",
+			func(k string) bool { return k == "spec" || k == "plan" }, "spec or plan"},
 	}
 	var on []string
 	for _, c := range derived {
@@ -933,6 +961,40 @@ func (s *server) transferDocOwner(w http.ResponseWriter, r *http.Request) {
 	err := s.recordDocEvent(w, r, "transfer", "doc.owner_changed", id, req,
 		func(tx *sql.Tx, eventID int64) error {
 			d, err := store.TransferDocOwner(tx, now, id, req.Owner, actorID, eventID)
+			if err != nil {
+				return err
+			}
+			doc = d
+			return nil
+		})
+	if err != nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, s.withProjectKey(r.Context(), *doc))
+}
+
+// withdrawDoc handles POST /api/v1/docs/{id}/withdraw: 025 §8.7's close verb.
+// An accepted or stale document that will not be executed and that nothing
+// replaces leaves the corpus here, with the justification on the event.
+//
+// The store owns which statuses may be withdrawn, so a draft or an
+// already-superseded document arrives back as its 422 rather than being
+// re-checked here.
+func (s *server) withdrawDoc(w http.ResponseWriter, r *http.Request) {
+	id, ok := docID(w, r)
+	if !ok {
+		return
+	}
+	var req model.WithdrawDocInput
+	if err := readJSON(w, r, &req); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	now := s.st.Now()
+	var doc *model.Doc
+	err := s.recordDocEvent(w, r, "withdraw", "doc.withdrawn", id, req,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.WithdrawDoc(tx, now, id, eventID)
 			if err != nil {
 				return err
 			}

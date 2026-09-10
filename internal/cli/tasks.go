@@ -628,6 +628,13 @@ func StalePlanWarning(w io.Writer, slug string) {
 // BlockersRender prints what is holding a task up, shared by `lode task
 // brief`, `lode work next` and `lode work status`. Each section is
 // omitted when empty.
+//
+// A blocking plan's status rides its line, which is where 025 §8.7's
+// brief-exclusion rule lands today: a brief inlines no document body, so the
+// only documents reaching an agent's context through it are these references,
+// and a stale plan is named "(stale)" rather than quietly cited. The doc
+// endpoints that assemble reading lists inherit the same rule from the
+// `status = 'accepted'` filters they already apply.
 func BlockersRender(w io.Writer, blockers []model.BriefBlocker, plans []model.DocRef) {
 	if len(blockers) > 0 {
 		fmt.Fprintln(w, "blocked by:")

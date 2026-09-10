@@ -90,6 +90,7 @@ function fixtureEdge(overrides: Partial<DocEdge> = {}): DocEdge {
     to_slug: "",
     to_kind: "",
     to_number: 0,
+    to_status: "",
     ...overrides,
   };
 }
