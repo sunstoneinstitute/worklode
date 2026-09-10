@@ -101,12 +101,19 @@ shape; changing a config key, env var, or hook name — any of these:
 ### What the drift test does not cover
 
 It resolves command paths and long flags against the cobra tree, and checks
-`--kind` values against the set that command's usage string names — pinned to
+`--kind` values against the set that command's usage string names — tied to
 `ns.TaskKinds` by a test, so the check cannot follow a usage string that has
 itself drifted. `--kind` alone gets the value treatment because it is the flag
 agent docs get wrong: a task kind is not a document kind, and `spec` is a
 retired task-kind spelling the server still accepts as a deprecated alias, but
 agent docs must not use it.
+
+The two claim surfaces — `lode work next` and `lode task claim --next` — take
+a comma-separated list of kinds (025 §8.8), and their usage names only the six
+a ranked pick can hand out, since a decision and a rally are never in the ready
+set. The drift test splits a list value and checks each element, so
+`--kind design,spike,review` in a skill is checked the same way a single kind
+is.
 
 It says nothing about whether the surrounding explanation is still true, whether
 a `--json` field an agent parses still exists, or what a command now does

@@ -649,6 +649,61 @@ func TestClaimNextKindFilter(t *testing.T) {
 	}
 }
 
+// TestClaimNextKindList pins 025 §8.8 at the HTTP boundary: kind takes a
+// comma-separated list, spaces around an element are tolerated, and a
+// deprecated spelling inside the list is still normalised.
+func TestClaimNextKindList(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Critical feature", "priority": "critical", "kind": "feature",
+	})
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Low design", "priority": "low", "kind": "design",
+	})
+
+	// "spec" is the deprecated spelling of "design": the list path normalises
+	// per element, so this reaches the store as "design,review".
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "kind": "spec, review", "worktree": "host:/wt-1",
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("claim-next status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	got := decodeMap(t, rr)
+	task, ok := got["task"].(map[string]any)
+	if !ok {
+		t.Fatalf("task missing: %v", got)
+	}
+	if task["id"] != "WL-2" {
+		t.Fatalf("claimed task id = %v, want WL-2 (the low-priority design, not the higher-ranked feature)", task["id"])
+	}
+}
+
+// TestClaimNextInvalidKindInList pins the 422 naming the offending element
+// rather than the whole list, so a caller can see which spelling is wrong.
+func TestClaimNextInvalidKindInList(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+	createTaskViaAPI(t, h, token, map[string]any{"project": "proj", "title": "A task", "priority": "high", "kind": "feature"})
+
+	rr := doReq(t, h, "POST", "/api/v1/tasks/claim-next", token, map[string]any{
+		"project": "proj", "kind": "design,nonsense,review", "worktree": "host:/wt-1",
+	})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `\"nonsense\"`) {
+		t.Errorf("422 body does not name the bad element: %s", body)
+	}
+	if strings.Contains(body, "design,nonsense") {
+		t.Errorf("422 body quotes the whole list rather than the bad element: %s", body)
+	}
+}
+
 // TestClaimNextInvalidKind covers the 422 guard on an unrecognized kind.
 func TestClaimNextInvalidKind(t *testing.T) {
 	t.Parallel()

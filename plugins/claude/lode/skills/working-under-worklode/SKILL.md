@@ -30,6 +30,40 @@ task genuinely still workable (wrong fit, user redirected you), just stop;
 removing the worktree releases the lease, and an untouched worktree ages out
 to the sweeper. Don't mark done what isn't.
 
+## When the plan or spec does not cover the case
+
+Do not improvise the design, and do not stop for a human. Run the ladder:
+
+1. **Record it.** `lode task gap <docref> --reason "<what it does not cover>"`.
+   That is all it takes if you can proceed anyway.
+2. **Spawn a fixer subagent** at the tier the fix requires: a plan defect goes
+   to the planning tier, a spec defect above it. Bracket it with
+   `lode task fix --phase started --doc <docref> --tier plan|spec` before and
+   `lode task fix --phase finished --outcome <outcome>` after.
+3. **Act on the outcome:**
+
+| Outcome | What it means | You |
+|---|---|---|
+| `resolved` | fixed in place, nothing else pinned that text | continue the task |
+| `substantive` | the fix changed what the document asserts | stop; the amendment needs review |
+| `escalated` | not fixed, or it needs human judgment | run `lode task escalate --to plan\|spec --reason "..."` and stop |
+
+**Uncertain counts as substantive.** Under pressure to keep going you will be
+tempted to call your own fix cosmetic. If you are not sure, it is substantive.
+
+A change is substantive when it removes, reverses or narrows a normative
+statement, moves a default or a threshold, adds work the plan does not
+contain, or contradicts another section. Non-substantive is only this:
+wording that changes no assertion, an added example, a repaired reference,
+or filling a gap the document was silent on.
+
+The fixer amends an accepted document in place with `lode doc edit
+--substantive`, or `lode doc edit --note "<what changed and why>"` when it is
+not. The server refuses a silent patch that touches a referenced section, a
+schema, migration, API surface, CLI flag, event name, enum, ontology term or
+definition of done, and names the rule that fired.
+`lode doc note <ref>#sec-N --body "..."` records a defect nobody is fixing.
+
 ## Before you call it done
 
 Two ways a check lies, both seen in one day (WL-357, WL-358, WL-371, WL-378):
