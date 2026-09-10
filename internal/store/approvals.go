@@ -269,75 +269,131 @@ func (s *Store) DocReviewersAwaiting(ctx context.Context, docID int64) ([]string
 	return collectRows(rows, fmt.Sprintf("reviewers awaiting for doc %d", docID), scanString)
 }
 
-// checkDocReviewerGate is AcceptDoc's mechanical multi-approval gate over the
-// stored reviewer set (025 §7.3): every reviewer WL-359's doc_reviewers
-// names for id must hold an 'approved' approvals row at version, or the
-// accept is refused naming who is still owed a decision. A reviewer with no
-// row at all, an 'awaiting' row, or a 'changes_requested' row all read the
-// same here — not yet approved — so there is no separate "anything still
-// open" check to drift from this one. A row at an older version never
-// blocks: RequestDocApproval opens a fresh set of lanes on every revision,
-// and the version bump superseded whatever came before. An empty reviewer
-// set is a no-op, keeping the owner-only behavior from before this gate
-// existed — nothing already in flight is trapped by it.
+// openDocApprovals counts the open ('awaiting' or 'changes_requested') rows
+// bound to one entity revision, across every lane — "does anyone still owe a
+// decision on exactly this version". Shared by the accept gate below and by
+// OpenApprovalBound, so the doc-lifecycle guard and the gate it feeds cannot
+// disagree about what counts as open.
+const openDocApprovals = `SELECT count(*) FROM approvals
+	 WHERE entity_kind = $1 AND entity_id = $2 AND subject_revision = $3
+	   AND state IN ('awaiting', 'changes_requested')`
+
+// OpenApprovalBound reports whether such a row exists — the guard fact the
+// doc-lifecycle watcher's approval-on-submit rule consults before
+// materializing another one (025 §7.3).
+func (s *Store) OpenApprovalBound(ctx context.Context, entityKind, entityID, revision string) (bool, error) {
+	var n int
+	if err := s.db.QueryRowContext(ctx, openDocApprovals,
+		entityKind, entityID, revision).Scan(&n); err != nil {
+		return false, fmt.Errorf("open approvals on %s %s@%s: %w",
+			entityKind, entityID, revision, err)
+	}
+	return n > 0, nil
+}
+
+// checkDocReviewerGate is AcceptDoc's mechanical approval gate, in two parts,
+// both scoped to the version being accepted.
+//
+// The named half (025 §7.3) is the stored reviewer set: every reviewer
+// WL-359's doc_reviewers names for id must hold an 'approved' approvals row
+// at version, or the accept is refused naming who is still owed a decision. A
+// reviewer with no row at all, an 'awaiting' row, or a 'changes_requested'
+// row all read the same here — not yet approved. An empty reviewer set skips
+// this half.
+//
+// The unnamed half (029 §7.3) then refuses while any open row remains on that
+// version. It is what catches the unlaned row a submission materializes,
+// which names no reviewer and so is invisible to the half above; it also
+// catches a role-scoped lane (029 §7.2) nobody was named for. The two cannot
+// double-report: the named half returns first, and once it passes, every row
+// it covers is approved and no longer counted here.
+//
+// A row at an older version never blocks either half: RequestDocApproval
+// opens a fresh set of lanes on every revision, and the version bump
+// superseded whatever came before. A document with no reviewer set and no row
+// accepts exactly as it did before this gate existed — nothing already in
+// flight is trapped by it.
 func checkDocReviewerGate(tx *sql.Tx, id int64, version int) error {
+	entityID := DocEntityID(id)
+	revision := strconv.Itoa(version)
 	reviewers, err := docReviewers(tx, id)
 	if err != nil {
 		return err
 	}
-	if len(reviewers) == 0 {
-		return nil
-	}
-	entityID := DocEntityID(id)
-	revision := strconv.Itoa(version)
-	states := make(map[string]string, len(reviewers))
-	for _, r := range reviewers {
-		a, err := ApprovalByKey(tx, "doc", entityID, revision, r)
-		if errors.Is(err, ErrNotFound) {
-			continue
+	if len(reviewers) > 0 {
+		states := make(map[string]string, len(reviewers))
+		for _, r := range reviewers {
+			a, err := ApprovalByKey(tx, "doc", entityID, revision, r)
+			if errors.Is(err, ErrNotFound) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			states[r] = a.State
 		}
-		if err != nil {
+		if err := reviewerGateRefusal(id, reviewers, states); err != nil {
 			return err
 		}
-		states[r] = a.State
 	}
-	return reviewerGateRefusal(id, reviewers, states)
+	var open int
+	if err := tx.QueryRow(openDocApprovals, "doc", entityID, revision).Scan(&open); err != nil {
+		return fmt.Errorf("open approvals on doc %d@%s: %w", id, revision, err)
+	}
+	return openApprovalRefusal(id, open)
 }
 
 // checkDocReviewerGateCtx is checkDocReviewerGate for CheckDocAcceptable's
 // pre-flight, which reads outside a transaction — so the two cannot answer
-// differently about whether an accept would be refused.
+// differently about whether an accept would be refused. Both halves live in
+// both, for that reason.
 func (s *Store) checkDocReviewerGateCtx(ctx context.Context, id int64, version int) error {
+	entityID := DocEntityID(id)
+	revision := strconv.Itoa(version)
 	reviewers, err := s.docReviewersCtx(ctx, id)
 	if err != nil {
 		return err
 	}
-	if len(reviewers) == 0 {
-		return nil
-	}
-	entityID := DocEntityID(id)
-	revision := strconv.Itoa(version)
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT lane, state FROM approvals
-		 WHERE entity_kind = 'doc' AND entity_id = $1 AND subject_revision = $2
-		   AND lane = ANY($3)`,
-		entityID, revision, reviewers)
-	if err != nil {
-		return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
-	}
-	states := make(map[string]string, len(reviewers))
-	for rows.Next() {
-		var lane, state string
-		if err := rows.Scan(&lane, &state); err != nil {
-			rows.Close()
+	if len(reviewers) > 0 {
+		rows, err := s.db.QueryContext(ctx,
+			`SELECT lane, state FROM approvals
+			 WHERE entity_kind = 'doc' AND entity_id = $1 AND subject_revision = $2
+			   AND lane = ANY($3)`,
+			entityID, revision, reviewers)
+		if err != nil {
 			return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
 		}
-		states[lane] = state
+		states := make(map[string]string, len(reviewers))
+		for rows.Next() {
+			var lane, state string
+			if err := rows.Scan(&lane, &state); err != nil {
+				rows.Close()
+				return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
+			}
+			states[lane] = state
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
+		}
+		if err := reviewerGateRefusal(id, reviewers, states); err != nil {
+			return err
+		}
 	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("reviewer approvals for doc %d: %w", id, err)
+	var open int
+	if err := s.db.QueryRowContext(ctx, openDocApprovals, "doc", entityID, revision).Scan(&open); err != nil {
+		return fmt.Errorf("open approvals on doc %d@%s: %w", id, revision, err)
 	}
-	return reviewerGateRefusal(id, reviewers, states)
+	return openApprovalRefusal(id, open)
+}
+
+// openApprovalRefusal is the unnamed half's refusal: open says how many rows
+// on the version being accepted still owe a decision. nil at zero.
+func openApprovalRefusal(id int64, open int) error {
+	if open == 0 {
+		return nil
+	}
+	return fmt.Errorf("doc %d has %d open approval(s) on the version being accepted; decide them at /reviews: %w: %w",
+		id, open, ErrMissingApprovals, ErrForbidden)
 }
 
 // reviewerGateRefusal builds checkDocReviewerGate's refusal from each
