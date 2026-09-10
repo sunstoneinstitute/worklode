@@ -277,7 +277,7 @@ func TestRankConcernRootsMemoizesReconvergentDAG(t *testing.T) {
 		}
 	}
 
-	_, calls := rankConcernRoots(facts, fixedNow)
+	ranked, calls := rankConcernRoots(facts, fixedNow)
 	// Linear in len(facts) (33 nodes here) is a few hundred calls at most;
 	// 2^depth (65536) is what an unmemoized walk would take. 1000 is a
 	// generous margin above linear and nowhere near exponential — if this
@@ -288,6 +288,29 @@ func TestRankConcernRootsMemoizesReconvergentDAG(t *testing.T) {
 		t.Fatalf("rootCauses calls = %d for a %d-node DAG, want well under 1000 (memoization regressed toward the exponential 2^%d = %d an unmemoized walk would take)",
 			calls, len(facts), depth, 1<<depth)
 	}
+
+	// A cheap-but-wrong memo (cached under the wrong key, or returning a
+	// stale slice) would still pass the call-count check above, so also
+	// assert the actual roots: every chase in this DAG bottoms out at one of
+	// the two terminal nodes, and nothing else, regardless of how many
+	// distinct paths reconverge on them.
+	wantIDs := []string{level(depth, "A"), level(depth, "B")}
+	if len(ranked) != len(wantIDs) {
+		t.Fatalf("roots = %v, want exactly %v", rootIDs(ranked), wantIDs)
+	}
+	for i, want := range wantIDs {
+		if got := ranked[i].root.ref.id; got != want {
+			t.Fatalf("roots = %v, want %v", rootIDs(ranked), wantIDs)
+		}
+	}
+}
+
+func rootIDs(ranked []rankedRoot) []string {
+	out := make([]string, len(ranked))
+	for i, r := range ranked {
+		out[i] = r.root.ref.id
+	}
+	return out
 }
 
 func urlsOf(cs []model.SecondaryConcern) []string {

@@ -209,15 +209,25 @@ func rankConcernRoots(facts []store.ProjectWorkFact, now time.Time) ([]rankedRoo
 // blockers and returns their deduplicated roots.
 //
 // memo caches a node's fully-resolved result across every top-level call in
-// one rankConcernRoots pass: once a node's root causes are computed, they
-// are the same regardless of which held task's chase reaches it, since the
-// result is a pure function of the node and the graph below it, not of the
-// path taken to reach it (a cycle detected while resolving one node is a
-// real cycle in the graph, true from any starting point). This is what
-// keeps the walk linear in the number of distinct nodes instead of
-// exponential in the number of paths that reconverge on shared blockers —
-// see WL-840. Deliberately not consulted before the visited/cycle check:
-// that check is path-dependent and must run first every time.
+// one rankConcernRoots pass. On an acyclic graph this is path-independent:
+// once a node's root causes are computed, they are the same regardless of
+// which held task's chase reaches it, since the result is a pure function of
+// the node and the graph below it. Under a cycle it is not path-independent
+// in that strict sense — a visited[] hit returns whichever cycle member was
+// on the specific path that reached it, so the cached value for a node
+// inside a cycle can depend on which held task's walk resolved it first. It
+// is still correct to cache and reuse: every such value is a genuine member
+// of the same cycle (a visited[] hit is always a real ancestor on the
+// current path), and which one gets pinned first is deterministic given one
+// request's fixed fact order, so the result stays reproducible even though
+// it is not the unique acyclic answer. Do not hoist this memo across
+// requests or share it with a differently-ordered walk (e.g.
+// concernPositions' own pass) on the strength of "path-independent" — that
+// claim only holds off-cycle. This is what keeps the walk linear in the
+// number of distinct nodes instead of exponential in the number of paths
+// that reconverge on shared blockers — see WL-840. Deliberately not
+// consulted before the visited/cycle check: that check is path-dependent and
+// must run first every time.
 //
 // calls counts every invocation (memo hits and early returns included) for
 // worklode_cockpit_rootcauses_calls (metrics.go) — a direct measure of this
