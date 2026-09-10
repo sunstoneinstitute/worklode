@@ -71,6 +71,7 @@ func newTaskCmd() *cobra.Command {
 		newTaskAttachCmd(),
 		newTaskDetachCmd(),
 		newTaskInstructCmd(),
+		newTaskEscalateCmd(),
 		newReconcileCmd(),
 	)
 	return cmd
@@ -1613,4 +1614,60 @@ func newTaskDetachCmd() *cobra.Command {
 			return c.DetachBlob(cmd.Context(), id, args[1])
 		},
 	}
+}
+
+// newTaskEscalateCmd builds `lode task escalate`: the executor's report that
+// the design it is working from does not cover the case in front of it
+// (025 §8.1). It is worktree-bound like `lode work block`, because the task
+// being escalated is the one the caller is standing in, and it ends the same
+// way: the lease is released and the worktree stops carrying a task.
+func newTaskEscalateCmd() *cobra.Command {
+	var to, reason, doc, section string
+	cmd := &cobra.Command{
+		Use:   "escalate --to plan|spec --reason <why>",
+		Short: "Report that the plan or spec does not cover this case, and hand the fix upward",
+		Long: "Report that the plan or spec does not cover this case, and hand the fix upward.\n\n" +
+			"The current worktree's task goes back to ready with its lease released, and a\n" +
+			"design task against the document is minted and assigned to whoever wrote it.\n" +
+			"That task blocks this one until it closes. A second escalation against the same\n" +
+			"document and section joins the first rather than minting a rival.\n\n" +
+			"Without --doc the target is the task's own plan for --to plan, and the single\n" +
+			"spec that plan covers for --to spec.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, root, err := resolveWorktreeTask(layout, ".", "")
+			if err != nil {
+				return err
+			}
+			res, raw, err := c.EscalateTask(cmd.Context(), taskID, model.EscalateTaskInput{
+				To: to, Reason: reason, Doc: doc, Anchor: section,
+			})
+			if err != nil {
+				return err
+			}
+			purgeTaskSecrets(cmd, taskID)
+			clearTaskBinding(cmd, root)
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.EscalateRender(cmd.OutOrStdout(), taskID, res)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&to, "to", "", "which tier owes the fix: plan or spec (required)")
+	cmd.Flags().StringVar(&reason, "reason", "", "what the document does not cover (required)")
+	cmd.Flags().StringVar(&doc, "doc", "", "document to escalate against, when it is not the task's own plan")
+	cmd.Flags().StringVar(&section, "section", "", "narrow the escalation to one section (sec-N)")
+	cmd.MarkFlagRequired("to")
+	cmd.MarkFlagRequired("reason")
+	return cmd
 }
