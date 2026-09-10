@@ -21,6 +21,7 @@ func toBriefJSON(b *store.Brief) model.Brief {
 		GoverningDesign:    b.GoverningDesign,
 		AffectedComponents: b.AffectedComponents,
 		DefinitionOfDone:   b.DefinitionOfDone,
+		StalePlan:          b.StalePlan,
 		Blobs:              make([]model.TaskBlob, 0, len(b.Blobs)),
 		Skills: model.SkillRecommendation{
 			Pinned:   make([]model.PinnedSkill, 0, len(b.PinnedSkills)),

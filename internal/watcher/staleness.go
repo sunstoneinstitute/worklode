@@ -67,13 +67,16 @@ func evaluateStale(in Input) []Action {
 }
 
 func groomBody(in Input) string {
-	return fmt.Sprintf(`%s has gone stale: no revision or execution since the
-staleness threshold (025 §8.7). The charge is to
+	why := "no revision or execution since the\nstaleness threshold (025 §8.7)"
+	if in.StaleCause == "amended" {
+		why = "a spec section it covers was amended in\nplace (025 §8.6)"
+	}
+	return fmt.Sprintf(`%s has gone stale: %s. The charge is to
 "re-evaluate, adjust, or close" it.
 
 prov:wasInformedBy wlid:event/%d
 
 Closing it is %s; do that once you have decided the document no longer earns
 its place, not before.`,
-		in.DocIRI, in.EventID, "`lode doc withdraw`")
+		in.DocIRI, why, in.EventID, "`lode doc withdraw`")
 }
