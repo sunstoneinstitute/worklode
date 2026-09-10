@@ -233,8 +233,12 @@ func SetDocReviewers(tx *sql.Tx, now time.Time, docID int64, actorID string, rev
 		return fmt.Errorf("clear reviewers for doc %d: %w", docID, err)
 	}
 	for _, r := range reviewers {
+		// A repeated name is the same set, so it is not an error the caller
+		// has to act on -- without DO NOTHING doc_reviewers_pkey fires and
+		// the raw error reaches mapStoreErr's default branch as a 500.
 		if _, err := tx.Exec(
-			`INSERT INTO doc_reviewers (doc_id, actor_id, assigned_at) VALUES ($1, $2, $3)`,
+			`INSERT INTO doc_reviewers (doc_id, actor_id, assigned_at) VALUES ($1, $2, $3)
+			 ON CONFLICT DO NOTHING`,
 			docID, r, now.UTC()); err != nil {
 			return fmt.Errorf("assign reviewer %s to doc %d: %w", r, docID, err)
 		}

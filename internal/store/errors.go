@@ -80,6 +80,13 @@ var (
 	// ErrReferenceExists means the exact entity_edges row (from, to, rel)
 	// already exists (029 §5).
 	ErrReferenceExists = errors.New("reference already exists")
+	// ErrActorExists means actors_pkey rejected the id: the caller picks it,
+	// so a collision is a caller mistake.
+	ErrActorExists = errors.New("actor already exists")
+	// ErrProjectExists means projects_pkey rejected the id. Distinct from
+	// ErrKeyTaken, which is the other caller-chosen column on the same insert
+	// (projects_key_unique).
+	ErrProjectExists = errors.New("project already exists")
 )
 
 // pgViolation reports whether err is a Postgres error with the given

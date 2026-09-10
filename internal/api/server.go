@@ -1384,8 +1384,9 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 // mapStoreErr writes the HTTP response for a store error: ErrNotFound → 404,
 // ErrForbidden → 403, ErrBadTransition/ErrCycle/ErrInvalidInput → 422,
 // ErrLeased/ErrBlocked/ErrRepoTaken/ErrEdgeExists/ErrDocExists/
-// ErrRevisionExists/ErrReferenceExists → 409, ErrUnknownBlob → 422, anything else → 500 with a
-// generic body (the detail is logged, not leaked).
+// ErrRevisionExists/ErrReferenceExists/ErrActorExists/ErrProjectExists → 409,
+// ErrUnknownBlob → 422, anything else → 500 with a generic body (the detail
+// is logged, not leaked).
 func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -1416,7 +1417,9 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrEdgeExists),
 		errors.Is(err, store.ErrDocExists),
 		errors.Is(err, store.ErrRevisionExists),
-		errors.Is(err, store.ErrReferenceExists):
+		errors.Is(err, store.ErrReferenceExists),
+		errors.Is(err, store.ErrActorExists),
+		errors.Is(err, store.ErrProjectExists):
 		writeErr(w, http.StatusConflict, err.Error())
 	default:
 		s.log.Error("internal error", "err", err)

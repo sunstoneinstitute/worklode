@@ -60,6 +60,9 @@ func (s *Store) CreateActor(ctx context.Context, id, kind, displayName string, a
 		id, kind, displayName, admin,
 	)
 	if err != nil {
+		if isUniqueViolationOn(err, "actors_pkey") {
+			return fmt.Errorf("actor %s: %w", id, ErrActorExists)
+		}
 		return fmt.Errorf("insert actor %s: %w", id, err)
 	}
 	return nil
