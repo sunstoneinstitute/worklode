@@ -105,10 +105,11 @@ const maxCatalogBody = 5 << 20
 
 // CatalogStates is the reportable set, mirroring the artifact_evidence state
 // CHECK. Anything else is a 400: an unbounded state would reach the database
-// as a constraint violation and the metric label as a cardinality leak.
-// Exported so the prober's bearer-API ingest (internal/api/probe.go) validates
-// against the same set rather than a second copy of the five strings.
-var CatalogStates = []string{"published", "updated", "deprecated", "removed", "failed"}
+// as a constraint violation and the metric label as a cardinality leak. It is
+// model.ArtifactStates under this package's own name, so the ingest, the
+// prober's bearer API (internal/api/probe.go) and the user report all validate
+// against one list.
+var CatalogStates = model.ArtifactStates
 
 // ingestConfig names one signed artifact-evidence source (029 §8.3). All
 // instances share the payload contract at the top of this file, the HMAC

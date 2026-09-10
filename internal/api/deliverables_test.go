@@ -2,7 +2,9 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -364,5 +366,230 @@ func TestGetDeliverableAPI(t *testing.T) {
 	rr = doReq(t, h, "GET", "/api/v1/deliverables/WL-DEL-999", token, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("get unknown status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// --- user-reported state (029 §3.2) -----------------------------------------
+
+// seedDeliverable creates a deliverable that declares no artifact address, so
+// its reports land against the empty address the projection coalesces to.
+func seedDeliverable(t *testing.T, st *store.Store, projectID, name string) string {
+	t.Helper()
+	var id string
+	if err := st.Tx(context.Background(), func(tx *sql.Tx) error {
+		d, err := store.CreateDeliverable(tx, st.Now(), store.DeliverableInput{
+			ProjectID: projectID, Name: name,
+		})
+		if err != nil {
+			return err
+		}
+		id = d.ID
+		return nil
+	}); err != nil {
+		t.Fatalf("seed deliverable %s: %v", name, err)
+	}
+	return id
+}
+
+// TestUserReportedStateSurfacesWithProvenance is the whole path in one: a
+// person reports a state on a deliverable that declares no address, and the
+// list projection carries both the state and the provenance that says a person
+// claimed it rather than an emitter observing it.
+func TestUserReportedStateSurfacesWithProvenance(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projectID := seedProjectWithKey(t, st, "COW")
+	id := seedDeliverable(t, st, projectID, "Report PDF")
+
+	rr := doReq(t, h, "POST", "/api/v1/deliverables/"+id+"/report", token,
+		model.ReportDeliverableInput{State: "published", Note: "uploaded to the site"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rr.Code, rr.Body)
+	}
+	list := doReq(t, h, "GET", "/api/v1/projects/"+projectID+"/deliverables", token, nil)
+	var resp model.DeliverableListResponse
+	decodeInto(t, list, &resp)
+	if got := resp.Deliverables[0]; got.ReportedState != "published" ||
+		got.ReportedProvenance != "user_reported" {
+		t.Errorf("state %q provenance %q", got.ReportedState, got.ReportedProvenance)
+	}
+	source := queryString(t, st,
+		`SELECT source FROM artifact_evidence WHERE entity_id = $1`, id)
+	if source != "cli" {
+		t.Errorf("evidence source = %q, want cli", source)
+	}
+}
+
+// TestReportDeliverableRejectsBadState pins the 422: an unknown state names
+// the five legal ones and nothing is recorded, not even an event.
+func TestReportDeliverableRejectsBadState(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projectID := seedProjectWithKey(t, st, "COW")
+	id := seedDeliverable(t, st, projectID, "Report PDF")
+
+	rr := doReq(t, h, "POST", "/api/v1/deliverables/"+id+"/report", token,
+		model.ReportDeliverableInput{State: "shipped"})
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	for _, state := range model.ArtifactStates {
+		if !strings.Contains(rr.Body.String(), state) {
+			t.Errorf("the 422 message does not name %q: %s", state, rr.Body.String())
+		}
+	}
+	if n := queryString(t, st,
+		`SELECT COUNT(*)::text FROM events WHERE type = 'deliverable.reported'`); n != "0" {
+		t.Errorf("event rows = %s, want 0", n)
+	}
+}
+
+// TestReportDeliverableUnknownID pins the 404 through mapStoreErr.
+func TestReportDeliverableUnknownID(t *testing.T) {
+	t.Parallel()
+	_, h, token := newTestServer(t)
+
+	rr := doReq(t, h, "POST", "/api/v1/deliverables/COW-DEL-9/report", token,
+		model.ReportDeliverableInput{State: "published"})
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestReportDeliverableFromWebForm pins the cockpit's half: the row's Report
+// form writes the same evidence with event source "web" and 303s back to the
+// project's deliverables page, which is not the route it posted to.
+func TestReportDeliverableFromWebForm(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	projectID := seedProjectWithKey(t, st, "COW")
+	id := seedDeliverable(t, st, projectID, "Report PDF")
+
+	rr := doForm(t, h, "/deliverables/"+id+"/report", url.Values{"state": {"updated"}}, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303; body %s", rr.Code, rr.Body.String())
+	}
+	if got, want := rr.Header().Get("Location"), "/projects/"+projectID+"/deliverables"; got != want {
+		t.Errorf("Location = %q, want %q", got, want)
+	}
+	source := queryString(t, st, `SELECT source FROM events WHERE type = 'deliverable.reported'`)
+	if source != "web" {
+		t.Errorf("event source = %q, want web", source)
+	}
+	provenance := queryString(t, st, `SELECT provenance FROM artifact_evidence WHERE entity_id = $1`, id)
+	if provenance != "user_reported" {
+		t.Errorf("provenance = %q, want user_reported", provenance)
+	}
+}
+
+// TestReportDeliverableFormRejectsCrossOrigin keeps the row form under the
+// same lock every other cockpit write carries.
+func TestReportDeliverableFormRejectsCrossOrigin(t *testing.T) {
+	t.Parallel()
+	st, h, _ := newTestServer(t)
+	projectID := seedProjectWithKey(t, st, "COW")
+	id := seedDeliverable(t, st, projectID, "Report PDF")
+
+	rr := doForm(t, h, "/deliverables/"+id+"/report", url.Values{"state": {"updated"}},
+		map[string]string{"Sec-Fetch-Site": "cross-site"})
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestDeliverablesPageNamesUserReportedOnly pins what the page says about
+// provenance: a person's report is labelled, an emitter's observation is not.
+// The label is what keeps a claim from reading as a verified fact.
+func TestDeliverablesPageNamesUserReportedOnly(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projectID := seedProjectWithKey(t, st, "COW")
+	observed := seedAddressDeliverable(t, st, projectID, "Datapackage", "https://data.example/cow.zip")
+	rr := doReq(t, h, "POST", "/api/v1/artifact-reports", token,
+		artifactReportBody("https://data.example/cow.zip"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("artifact report status = %d; body %s", rr.Code, rr.Body.String())
+	}
+
+	page := doReq(t, h, "GET", "/projects/"+projectID+"/deliverables", "", nil)
+	if page.Code != http.StatusOK {
+		t.Fatalf("page status = %d; body %s", page.Code, page.Body.String())
+	}
+	// The page's footnote explains the word, so the assertion has to be about
+	// the row's own marker and not about the string appearing anywhere.
+	if strings.Contains(page.Body.String(), userReportedMark) {
+		t.Errorf("the page calls an observed row User-reported:\n%s", page.Body.String())
+	}
+	got := deliverableJSON(t, h, token, observed)
+	if got.ReportedProvenance != "observed" {
+		t.Errorf("observed row provenance = %q, want observed", got.ReportedProvenance)
+	}
+
+	reported := seedDeliverable(t, st, projectID, "Report PDF")
+	rr = doReq(t, h, "POST", "/api/v1/deliverables/"+reported+"/report", token,
+		model.ReportDeliverableInput{State: "published"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("report status = %d; body %s", rr.Code, rr.Body.String())
+	}
+	page = doReq(t, h, "GET", "/projects/"+projectID+"/deliverables", "", nil)
+	body := page.Body.String()
+	if !strings.Contains(body, userReportedMark) {
+		t.Errorf("the page does not label the reported row:\n%s", body)
+	}
+	// The row's own affordance: a native select of the five states and a
+	// submit, posting to the deliverable's report route.
+	bodyContains(t, body,
+		`action="/deliverables/`+reported+`/report"`,
+		`<select name="state"`,
+		`value="deprecated"`)
+	// The page's footnote must no longer claim the prober is unbuilt.
+	if strings.Contains(body, "not built yet") {
+		t.Errorf("the deliverables footnote still says the prober is unbuilt:\n%s", body)
+	}
+}
+
+// userReportedMark is the row's provenance label as the page renders it: the
+// exact string a reader sees beside a state a person claimed.
+const userReportedMark = `<div class="def muted">User-reported</div>`
+
+// deliverableJSON reads one deliverable through the JSON API.
+func deliverableJSON(t *testing.T, h http.Handler, token, id string) model.Deliverable {
+	t.Helper()
+	rr := doReq(t, h, "GET", "/api/v1/deliverables/"+id, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get deliverable %s: status %d; body %s", id, rr.Code, rr.Body.String())
+	}
+	var d model.Deliverable
+	decodeInto(t, rr, &d)
+	return d
+}
+
+// TestReportDeliverableMetric pins worklode_deliverable_reports_total: the
+// surface that reported and how it went.
+func TestReportDeliverableMetric(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	projectID := seedProjectWithKey(t, st, "COW")
+	id := seedDeliverable(t, st, projectID, "Report PDF")
+
+	if rr := doReq(t, h, "POST", "/api/v1/deliverables/"+id+"/report", token,
+		model.ReportDeliverableInput{State: "published"}); rr.Code != http.StatusOK {
+		t.Fatalf("report status = %d; body %s", rr.Code, rr.Body.String())
+	}
+	if rr := doReq(t, h, "POST", "/api/v1/deliverables/"+id+"/report", token,
+		model.ReportDeliverableInput{State: "shipped"}); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad-state status = %d, want 422", rr.Code)
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil)
+	body := metrics.Body.String()
+	for _, want := range []string{
+		`worklode_deliverable_reports_total{outcome="reported",source="cli"} 1`,
+		`worklode_deliverable_reports_total{outcome="invalid",source="cli"} 1`,
+		`worklode_deliverable_reports_total{outcome="reported",source="web"} 0`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics body missing %q", want)
+		}
 	}
 }

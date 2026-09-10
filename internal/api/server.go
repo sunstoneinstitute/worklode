@@ -601,6 +601,11 @@ type server struct {
 	// result (ok, duplicate, unrouted, invalid, error); see probe.go and
 	// observeProbeReport.
 	probeReports *prometheus.CounterVec
+
+	// deliverableReports counts user-reported deliverable state (029 §3.2),
+	// by source (cli, web) and outcome (reported, invalid, not_found, error);
+	// see deliverables.go and observeDeliverableReport.
+	deliverableReports *prometheus.CounterVec
 }
 
 // validatePublicURL ensures PublicURL is an absolute http(s) URL with a host,
@@ -683,6 +688,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
+	r.web("POST /deliverables/{id}/report", s.navWrap("deliverables", s.reportDeliverableFromForm))
 	r.web("GET /projects/{id}/tasks/new", s.navWrap("task_new", s.newTaskPage))
 	r.web("POST /projects/{id}/tasks", s.navWrap("task_new", s.createTaskFromForm))
 	r.web("GET /projects/{id}/deleted", s.navWrap("deleted", s.deletedPage))
@@ -893,6 +899,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
 	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
 	r.api("PATCH /api/v1/deliverables/{id}", s.patchDeliverable)
+	r.api("POST /api/v1/deliverables/{id}/report", s.reportDeliverable)
 	r.api("GET /api/v1/deliverables/{id}", s.getDeliverable)
 	r.api("GET /api/v1/projects/{id}/milestones", s.listProjectMilestones)
 	r.api("POST /api/v1/projects/{id}/milestones", s.createMilestone)

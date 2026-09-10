@@ -409,6 +409,47 @@ func (s *server) createDeliverableFromForm(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/projects/"+project.ID+"/deliverables", http.StatusSeeOther)
 }
 
+// reportDeliverableFromForm handles POST /deliverables/{id}/report: the
+// Report control on a deliverable row (029 §3.2). Deliverable ids are globally
+// unique, so the route needs no project segment; the redirect back to the
+// project's deliverables page reads the project off the deliverable instead.
+//
+// It is not beginFormPost's shape — that one resolves a project from the path
+// this route does not carry — so the two shared gates are applied here: same
+// origin, and a readable form body.
+func (s *server) reportDeliverableFromForm(w http.ResponseWriter, r *http.Request) {
+	if !s.sameOriginForm(r) {
+		s.observeDeliverableReport("web", "invalid")
+		webErr(w, http.StatusForbidden, "cross-origin form submissions are not accepted")
+		return
+	}
+	if !parseWebForm(w, r) {
+		s.observeDeliverableReport("web", "invalid")
+		return
+	}
+	id := r.PathValue("id")
+	d, err := s.st.GetDeliverable(r.Context(), id)
+	if err != nil {
+		s.observeDeliverableReport("web", deliverableReportOutcome(err))
+		s.webStoreErr(w, err)
+		return
+	}
+	// The menu offers only the five, so anything else is a hand-built request
+	// and gets the terse refusal rather than a re-rendered page.
+	state := r.PostFormValue("state")
+	if ok, msg := validReportState(state); !ok {
+		s.observeDeliverableReport("web", "invalid")
+		webErr(w, http.StatusUnprocessableEntity, msg)
+		return
+	}
+	if err := s.reportDeliverableState(r.Context(), "web", id, state,
+		actorIDFrom(r), strings.TrimSpace(r.PostFormValue("note"))); err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	http.Redirect(w, r, "/projects/"+d.Project+"/deliverables", http.StatusSeeOther)
+}
+
 // formMessage turns a JSON-API validation message ("name is required") into
 // the sentence the form shows. The API's wording is terse by convention; a
 // person reading a form is owed a sentence.

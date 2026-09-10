@@ -124,8 +124,12 @@ var routeGuards = map[string]routeGuard{
 	"GET /projects/{id}/deliverables":                 guarded(permWebRead),
 	"GET /projects/{id}/deliverables/new":             guarded(permWebWrite),
 	"POST /projects/{id}/deliverables":                guarded(permWebWrite),
-	"GET /projects/{id}/tasks/new":                    guarded(permWebWrite),
-	"POST /projects/{id}/tasks":                       guarded(permWebWrite),
+	// The Report control on a deliverable row (029 §3.2). No project segment:
+	// deliverable ids are globally unique, and the handler reads the project
+	// off the deliverable for the redirect.
+	"POST /deliverables/{id}/report": guarded(permWebWrite),
+	"GET /projects/{id}/tasks/new":   guarded(permWebWrite),
+	"POST /projects/{id}/tasks":      guarded(permWebWrite),
 	// The cockpit's tombstone review (044 §2) and its two Restore buttons.
 	// Reading the page is an ordinary web read; restoring carries the
 	// permission the JSON API's undelete carries — permTaskWrite for a task,
@@ -372,6 +376,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/deliverables":  guarded(permDeliverableRead),
 	"POST /api/v1/projects/{id}/deliverables": guarded(permDeliverableWrite),
 	"PATCH /api/v1/deliverables/{id}":         guarded(permDeliverableWrite),
+	"POST /api/v1/deliverables/{id}/report":   guarded(permDeliverableWrite),
 	"GET /api/v1/deliverables/{id}":           guarded(permDeliverableRead),
 	"GET /api/v1/projects/{id}/milestones":    guarded(permMilestoneRead),
 	"POST /api/v1/projects/{id}/milestones":   guarded(permMilestoneWrite),

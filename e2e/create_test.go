@@ -212,7 +212,7 @@ func TestCreateFromCockpitPublicSurface(t *testing.T) {
 		t.Fatalf("project holds %d tasks, want exactly the one created through the form", len(list.Tasks))
 	}
 	code, body = getPage(t, srv.URL+"/projects/proj/deliverables")
-	if code != http.StatusOK || strings.Count(body, "WL-DEL-") != 1 {
-		t.Fatalf("project holds %d deliverables, want exactly one:\n%s", strings.Count(body, "WL-DEL-"), body)
+	if code != http.StatusOK || strings.Count(body, `class="dodrow"`) != 1 {
+		t.Fatalf("project holds %d deliverables, want exactly one:\n%s", strings.Count(body, `class="dodrow"`), body)
 	}
 }

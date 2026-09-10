@@ -621,7 +621,21 @@ type DeliverableRow struct {
 	// has reported; ReportedAt is when that report says it happened.
 	ReportedState string
 	ReportedAt    *time.Time
+
+	// ReportedProvenance is where that state came from: "observed" for an
+	// emitter or the prober, "user_reported" for a person. The row says so in
+	// words for a user report, which is what keeps a claim from reading as a
+	// verified fact.
+	ReportedProvenance string
+
+	// ReportURL is where the row's Report control posts (029 §3.2).
+	ReportURL string
 }
+
+// deliverableStates are the states the row's Report menu offers, in
+// model.ArtifactStates' order — the same set the store's CHECK accepts, so the
+// menu cannot offer what the write refuses.
+var deliverableStates = model.ArtifactStates
 
 // deliverableChip maps a deliverable's reported state to its .chip variant.
 // An unreported deliverable keeps the "declared" evidence chip: a declaration

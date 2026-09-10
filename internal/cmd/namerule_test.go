@@ -58,7 +58,7 @@ var l3DomainActions = map[string]bool{
 	"attach": true, "detach": true, "assign": true, "block": true,
 	"parent": true, "duplicate": true, "request": true, "pack": true,
 	"note": true, "escalate": true, "gap": true, "fix": true,
-	"withdraw": true,
+	"withdraw": true, "report": true,
 }
 
 // nounViews is the noun-subcommand table of 061 §5, transcribed by full

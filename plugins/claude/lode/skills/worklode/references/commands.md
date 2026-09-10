@@ -42,6 +42,8 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode deliverable add` — Declare a deliverable on a project
   Flags: --artifact, --description, --milestone, --url
 - `lode deliverable list` — List a project's deliverables
+- `lode deliverable report` — Report a deliverable's state as a person (published, updated, deprecated, removed, failed)
+  Flags: --note
 
 ## `lode doc` — Create and inspect design documents: specs, ADRs, and plans
 
