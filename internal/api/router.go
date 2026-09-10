@@ -213,7 +213,12 @@ var routeGuards = map[string]routeGuard{
 	// which is what it is made of: the executor gives the task back and files
 	// the design work that has to land first.
 	"POST /api/v1/tasks/{id}/escalate": guardedBound(permTaskWrite),
-	"POST /api/v1/tasks/{id}/reopen":   guarded(permTaskWrite),
+	// The ladder's non-escalating rungs (025 §15.5): a gap logged without
+	// stopping, and the fixer's start/finish. Task writes like escalate, but
+	// event-only — no lease, no edge, no task state.
+	"POST /api/v1/tasks/{id}/gap":    guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/fix":    guardedBound(permTaskWrite),
+	"POST /api/v1/tasks/{id}/reopen": guarded(permTaskWrite),
 	// Delete and undelete are task writes like the rest (044 §5). Deliberately
 	// not admin-only: a per-role delete permission would be the first of an
 	// RBAC model this repo does not have (001 §9.2). What stops a careless
