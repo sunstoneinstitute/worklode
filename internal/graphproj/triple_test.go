@@ -19,6 +19,8 @@ func TestTermRendering(t *testing.T) {
 		{"newline escaped", Text("a\nb"), `"a\nb"`},
 		{"typed literal", Typed("2026-07-30T00:00:00Z", "http://www.w3.org/2001/XMLSchema#dateTime"),
 			`"2026-07-30T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>`},
+		{"triple term", TripleTerm(Triple{S: "urn:s", P: "urn:p", O: IRIRef("urn:o")}),
+			"<<( <urn:s> <urn:p> <urn:o> )>>"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
