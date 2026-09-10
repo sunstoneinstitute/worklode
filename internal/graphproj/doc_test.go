@@ -19,7 +19,7 @@ func TestDocTriples(t *testing.T) {
 		Slug: "025-backbone", Title: "Spec 025 — Backbone", Status: "accepted",
 		Version: 3, GeneratedByTask: "AL-9", CreatedAt: at, UpdatedAt: at,
 	}
-	doc := string(Document(DocTriples(d)))
+	doc := string(Document(DocTriples(d, nil)))
 	subj := "<" + iri.Doc("025-backbone") + ">"
 	for _, want := range []string{
 		subj + " <" + RDFType + "> <" + iri.Term("Spec") + ">",
@@ -31,6 +31,10 @@ func TestDocTriples(t *testing.T) {
 		if !strings.Contains(doc, want) {
 			t.Errorf("doc projection missing %q\n%s", want, doc)
 		}
+	}
+	// Nil versions (a draft): no version-pointer edges at all.
+	if strings.Contains(doc, DCATHasVersion) || strings.Contains(doc, DCATHasCurrentVersion) {
+		t.Errorf("version pointers emitted with nil versions:\n%s", doc)
 	}
 
 	// Subject-completeness: every line's subject is the doc's IRI.
@@ -44,12 +48,32 @@ func TestDocTriples(t *testing.T) {
 	// to their classes.
 	d.GeneratedByTask = ""
 	d.Kind = "plan"
-	doc = string(Document(DocTriples(d)))
+	doc = string(Document(DocTriples(d, nil)))
 	if strings.Contains(doc, ProvWasGeneratedBy) {
 		t.Errorf("wasGeneratedBy emitted with no authoring task:\n%s", doc)
 	}
 	if !strings.Contains(doc, "<"+iri.Term("Plan")+">") {
 		t.Errorf("plan kind did not map to wl:Plan:\n%s", doc)
+	}
+
+	// Non-nil versions: one dcat:hasVersion per entry, plus
+	// dcat:hasCurrentVersion naming the doc's current version.
+	d.Kind = "spec"
+	versions := []model.DocVersionSummary{
+		{Version: 1, Title: "v1"},
+		{Version: 2, Title: "v2"},
+		{Version: 3, Title: "v3"},
+	}
+	doc = string(Document(DocTriples(d, versions)))
+	for _, want := range []string{
+		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("025-backbone", 1) + ">",
+		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("025-backbone", 2) + ">",
+		subj + " <" + DCATHasVersion + "> <" + iri.DocVersion("025-backbone", 3) + ">",
+		subj + " <" + DCATHasCurrentVersion + "> <" + iri.DocVersion("025-backbone", 3) + ">",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("doc projection missing %q\n%s", want, doc)
+		}
 	}
 }
 
@@ -107,7 +131,7 @@ func TestDocVersionTriples(t *testing.T) {
 func TestSectionTriples(t *testing.T) {
 	d := model.Doc{Slug: "025-backbone", Kind: "spec", Status: "accepted"}
 	sections := []model.DocSection{
-		{Anchor: "sec-1", Heading: "Scope", Published: true},
+		{Anchor: "sec-1", Heading: "Scope", Published: true, LastRevisedIn: 2},
 		{Anchor: "sec-2", Heading: "Retired", Published: true},
 		{Anchor: "sec-3", Heading: "Gone", Published: true},
 		{Anchor: "sec-4", Heading: "Still drafting", Published: false},
@@ -135,6 +159,9 @@ func TestSectionTriples(t *testing.T) {
 		sec2 + " <" + DCTIsReplacedBy + "> <" + iri.Section("040-successor", "sec-7") + ">",
 		// Superseded with no nameable successor: status, and no dangling edge.
 		sec3 + " <" + iri.Term("status") + "> <" + iri.Concept("superseded") + ">",
+		// sec-1 was last revised in version 2: wl:lastRevisedIn names that
+		// snapshot.
+		sec1 + " <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("025-backbone", 2) + ">",
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("section projection missing %q\n%s", want, doc)
@@ -145,6 +172,14 @@ func TestSectionTriples(t *testing.T) {
 	}
 	if strings.Contains(doc, iri.Section("025-backbone", "sec-4")) {
 		t.Errorf("unpublished section projected, so its anchor could still change:\n%s", doc)
+	}
+	// sec-2 and sec-3 have LastRevisedIn: 0 (unset): no lastRevisedIn triple,
+	// since iri.DocVersion(slug, 0) would point at a snapshot that never
+	// exists.
+	for _, sec := range []string{sec2, sec3} {
+		if strings.Contains(doc, sec+" <"+iri.Term("lastRevisedIn")+">") {
+			t.Errorf("lastRevisedIn emitted for a section with LastRevisedIn 0:\n%s", doc)
+		}
 	}
 
 	// A superseded document supersedes every section it published, without
