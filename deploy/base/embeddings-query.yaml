@@ -1,0 +1,118 @@
+---
+# A second text-embeddings-inference instance running the same baked-in
+# model as embeddings.yaml, dedicated to the three query-time embedding
+# calls (search, skill recommend, task-brief skill matching — internal/api's
+# server.queryEmbedder). TEI serializes inference on one queue per pod, so
+# sharing embeddings.yaml's pod between the indexer's multi-second batches
+# and an interactive query meant a query could wait behind a batch already
+# in flight — observed in hzdev as queue waits up to 27.7s and client-side
+# "context canceled" errors on skill matching. Two pods give query traffic
+# its own queue.
+#
+# In base, not the overlays, for the same reason as embeddings.yaml: dev and
+# prod serve the same corpus with the same model, and nothing here is
+# environment-specific.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worklode-embeddings-query
+  namespace: worklode
+  labels:
+    app: worklode-embeddings-query
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: worklode-embeddings-query
+  template:
+    metadata:
+      labels:
+        app: worklode-embeddings-query
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: embeddings
+          image: ghcr.io/sunstoneinstitute/worklode-embeddings:embeddinggemma-300m-tei1.9.3
+          imagePullPolicy: IfNotPresent
+          args:
+            - --model-id=/model
+            - --port=8080
+            - --max-client-batch-size=256
+            - --auto-truncate
+            - --max-concurrent-requests=2048
+          env:
+            # One compute thread below the 1-CPU limit below, same rule as
+            # embeddings.yaml's OMP_NUM_THREADS/RAYON_NUM_THREADS comment:
+            # sizing the pool to the whole quota throttles the container.
+            # Query batches are a single short text, so one thread is not
+            # the bottleneck the document sidecar's whole-subject batches are.
+            - name: OMP_NUM_THREADS
+              value: "1"
+            - name: RAYON_NUM_THREADS
+              value: "1"
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              # Same memory floor as embeddings.yaml: identical fp32 weights
+              # loaded off local disk, so this is not a smaller model.
+              memory: "1536Mi"
+              # Query traffic is one short text per request, not a whole
+              # chunked subject, so it needs far less sustained CPU than the
+              # document sidecar's 1-core request.
+              cpu: "250m"
+            limits:
+              memory: "3Gi"
+              cpu: "2"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /info
+              port: http
+            periodSeconds: 60
+            timeoutSeconds: 15
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /info
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 4
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: worklode-embeddings-query
+  namespace: worklode
+spec:
+  selector:
+    app: worklode-embeddings-query
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
