@@ -174,7 +174,8 @@ func authored(prAuthor, actorLogin string) bool {
 func concernPositions(facts []store.ProjectWorkFact, membership map[string]bool, now time.Time) map[string]int {
 	out := map[string]int{}
 	rank := 0
-	for _, r := range rankConcernRoots(facts, now) {
+	roots, _ := rankConcernRoots(facts, now)
+	for _, r := range roots {
 		member := false
 		for _, h := range r.root.held {
 			if membership[h.Task.Project] {
