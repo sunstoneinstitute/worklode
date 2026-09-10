@@ -893,19 +893,24 @@ Recorded by WL-819 (the doc-lifecycle watcher series, spec 025 §15):
   skip-and-record path would let the subscriber move past a poison event,
   but it's worth building when one actually occurs, not in anticipation.
 
-Recorded by WL-829 (`lode task escalate`, spec 025 §8.1):
+Recorded by WL-829 (`lode task escalate`, spec 025 §8.1), extended by WL-830
+(`lode task gap`/`lode task fix`, spec 025 §15.5):
 
-- `[P3]` **Spec 061's L3 domain-action list does not name `escalate`, so its
-  transcription in code no longer matches it.** Spec 025 §8.1 specifies
-  `lode task escalate --to plan|spec --reason "..."` verbatim, and shipping it
-  needed the verb in `internal/cmd/namerule_test.go`'s `l3DomainActions` and in
+- `[P3]` **Spec 061's L3 domain-action list does not name `escalate`, `gap`
+  or `fix`, so its transcription in code no longer matches it.** Spec 025
+  §8.1 specifies `lode task escalate --to plan|spec --reason "..."`
+  verbatim; §15.5 specifies only the events `task.gap_found`, `fix.started`
+  and `fix.finished`, and the `lode task gap`/`lode task fix` commands that
+  emit them were named by the plan, not the spec. Shipping each needed its
+  verb in `internal/cmd/namerule_test.go`'s `l3DomainActions` and in
   `internal/cmd/CLAUDE.md`'s Naming section. Both are transcriptions of spec
-  061 §5, so they now carry a verb the spec they transcribe does not. Spec 061
-  has been revised three times for exactly this — L3 gained `request` (WL-646),
-  then `pack`, then `note` for 025 §8.5 — so the fix is the same ceremony: a
-  `lode doc revise` on 061 adding `escalate` to L3, after which the two
-  transcriptions are true again. Not blocking: the code and the spec agree on
-  the command's name and shape, only the allowlist is behind.
+  061 §5, so they now carry three verbs the spec they transcribe does not.
+  Spec 061 has been revised three times for exactly this — L3 gained
+  `request` (WL-646), then `pack`, then `note` for 025 §8.5 — so the fix is
+  the same ceremony: one `lode doc revise` on 061 adding `escalate`, `gap`
+  and `fix` to L3 together, after which the two transcriptions are true
+  again. Not blocking: nothing disagrees about what the commands do, only
+  the allowlist is behind.
 
 Recorded by WL-831 (§8.6 stale marking off the patch seam):
 
