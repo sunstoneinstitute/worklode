@@ -239,3 +239,139 @@ func TestPatchMarksUnexecutedPlansStale(t *testing.T) {
 		t.Errorf("brief.StalePlan = %q after re-acceptance, want none", brief.StalePlan)
 	}
 }
+
+// candidateByID finds one StaleCandidateDocs row by doc id.
+func candidateByID(cs []StaleCandidate, id int64) (StaleCandidate, bool) {
+	for _, c := range cs {
+		if c.DocID == id {
+			return c, true
+		}
+	}
+	return StaleCandidate{}, false
+}
+
+// TestStaleCandidateDocs is 025 §8.7's fact reader: one fixture per row of
+// the truth table (accepted plan with/without a lease, accepted spec
+// with/without an accepted covering plan, an ADR, a draft, a project with
+// doc_staleness_days set), asserted separately. The threshold verdict is
+// watcher.StaleAt's job, not this reader's, so nothing here checks a clock.
+func TestStaleCandidateDocs(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO projects (id, name, key, doc_staleness_days) VALUES ('p2','P2','P2',21)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Accepted spec, the target of the covering plan below.
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 210, Slug: "210-a",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	// Accepted spec with no covering plan at all.
+	specAlone := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 220, Slug: "220-b",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	// Accepted ADR: excluded from the reader regardless of status, matching
+	// watcher.StaleAt.
+	adr := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "adr", Number: 1, Slug: "001-adr",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+	// Draft spec: excluded, only accepted docs are candidates.
+	draft := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 230, Slug: "230-draft",
+		Body: specBody, CreatedBy: "stig",
+	})
+	// Accepted spec under a project with doc_staleness_days set.
+	specP2 := mustCreateDoc(t, s, DocInput{
+		Project: "p2", Kind: "spec", Number: 240, Slug: "240-c",
+		Body: specBody, CreatedBy: "stig", Status: "accepted",
+	})
+
+	// Plan covering spec 210-a#sec-2, taken through the real accept path so
+	// its task gets plan_doc set and can be leased.
+	plan := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Number: 211, Slug: "211-cover",
+		Body: groomPlanBody, CreatedBy: "stig",
+	})
+	_, minted, err := acceptDoc(t, s, plan.ID, "stig")
+	if err != nil {
+		t.Fatalf("accept plan: %v", err)
+	}
+	if len(minted) != 1 {
+		t.Fatalf("minted = %d tasks, want 1", len(minted))
+	}
+
+	cands, err := s.StaleCandidateDocs(ctx)
+	if err != nil {
+		t.Fatalf("StaleCandidateDocs: %v", err)
+	}
+	for i := 1; i < len(cands); i++ {
+		if cands[i-1].DocID >= cands[i].DocID {
+			t.Fatalf("candidates not ordered by doc id: %+v", cands)
+		}
+	}
+
+	if _, ok := candidateByID(cands, adr.ID); ok {
+		t.Errorf("ADR %d present, want excluded", adr.ID)
+	}
+	if _, ok := candidateByID(cands, draft.ID); ok {
+		t.Errorf("draft %d present, want excluded", draft.ID)
+	}
+
+	planC, ok := candidateByID(cands, plan.ID)
+	if !ok {
+		t.Fatalf("plan %d absent, want candidate", plan.ID)
+	}
+	if planC.HasExecution {
+		t.Errorf("plan.HasExecution = true before any claim, want false")
+	}
+	if planC.Kind != "plan" || planC.Slug != "211-cover" || planC.ProjectDays != 0 {
+		t.Errorf("plan candidate = %+v, want kind plan, slug 211-cover, projectDays 0", planC)
+	}
+
+	specC, ok := candidateByID(cands, spec.ID)
+	if !ok {
+		t.Fatalf("spec %d absent, want candidate", spec.ID)
+	}
+	if !specC.HasExecution {
+		t.Errorf("spec.HasExecution = false with an accepted covering plan, want true")
+	}
+
+	specAloneC, ok := candidateByID(cands, specAlone.ID)
+	if !ok {
+		t.Fatalf("spec %d absent, want candidate", specAlone.ID)
+	}
+	if specAloneC.HasExecution {
+		t.Errorf("spec.HasExecution = true with no covering plan, want false")
+	}
+
+	specP2C, ok := candidateByID(cands, specP2.ID)
+	if !ok {
+		t.Fatalf("spec %d absent, want candidate", specP2.ID)
+	}
+	if specP2C.ProjectDays != 21 {
+		t.Errorf("spec under p2: ProjectDays = %d, want 21 (doc_staleness_days)", specP2C.ProjectDays)
+	}
+
+	// Claim the plan's task: execution now happened, so HasExecution flips
+	// even though the lease stays active (any lease row counts, §8.7).
+	if _, err := s.Claim(ctx, minted[0].ID, "stig", "wt-stale-candidate", 0); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	cands2, err := s.StaleCandidateDocs(ctx)
+	if err != nil {
+		t.Fatalf("StaleCandidateDocs after claim: %v", err)
+	}
+	planC2, ok := candidateByID(cands2, plan.ID)
+	if !ok {
+		t.Fatalf("plan %d absent after claim, want candidate", plan.ID)
+	}
+	if !planC2.HasExecution {
+		t.Errorf("plan.HasExecution = false after a claim, want true")
+	}
+}
