@@ -515,6 +515,22 @@ func TestCreateProjectDuplicateKey(t *testing.T) {
 	}
 }
 
+// TestCreateProjectDuplicateID: the id is caller-chosen like the key, so
+// projects_pkey firing must reach the API as ErrProjectExists (409) and not
+// as the raw error the default branch logs as a 500.
+func TestCreateProjectDuplicateID(t *testing.T) {
+	t.Parallel()
+	s := OpenTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateProject(ctx, "a", "A", "WL"); err != nil {
+		t.Fatalf("create a: %v", err)
+	}
+	err := s.CreateProject(ctx, "a", "A Again", "SW")
+	if !errors.Is(err, ErrProjectExists) {
+		t.Fatalf("duplicate id err = %v, want ErrProjectExists", err)
+	}
+}
+
 // TestProjectMetadataRoundTrip covers 029 §1's labels/horizon columns
 // (migration 0074): SetProjectMetadata writes inside a caller-owned tx, and
 // GetProject reads back what was committed.
