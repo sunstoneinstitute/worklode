@@ -10,9 +10,13 @@ import (
 
 // Reused-vocabulary IRIs for the document projection (PROV-O, DCAT 3, DCT).
 const (
-	ProvWasGeneratedBy = "http://www.w3.org/ns/prov#wasGeneratedBy"
-	DCATVersion        = "http://www.w3.org/ns/dcat#version"
-	DCTIsReplacedBy    = "http://purl.org/dc/terms/isReplacedBy"
+	ProvWasGeneratedBy  = "http://www.w3.org/ns/prov#wasGeneratedBy"
+	DCATVersion         = "http://www.w3.org/ns/dcat#version"
+	DCTIsReplacedBy     = "http://purl.org/dc/terms/isReplacedBy"
+	DCATPreviousVersion = "http://www.w3.org/ns/dcat#previousVersion"
+	ProvWasRevisionOf   = "http://www.w3.org/ns/prov#wasRevisionOf"
+	DCTIssued           = "http://purl.org/dc/terms/issued"
+	XSDDate             = "http://www.w3.org/2001/XMLSchema#date"
 )
 
 // docClass maps docs.kind to its ontology class (ns/ontology.ttl): specs and
@@ -57,6 +61,49 @@ func DocTriples(d model.Doc) []Triple {
 	}
 	if d.GeneratedByTask != "" {
 		triples = append(triples, Triple{S: subj, P: ProvWasGeneratedBy, O: IRIRef(iri.Task(d.GeneratedByTask))})
+	}
+	return triples
+}
+
+// DocVersionTriples projects one immutable document version into the
+// snapshot graph of 025 §4.1: the version's own node — iri.DocVersion(d.Slug,
+// v.Version) — plus one wl:Section node per entry in sections, the parsed
+// content of that version's body. Section IRIs are version-free
+// (iri.Section(d.Slug, anchor): the anchor is the identity, and the graph a
+// caller loads them from already carries the version), but each section's
+// dct:isPartOf names the snapshot node, not the canonical document — that is
+// what makes this projection distinct from SectionTriples, which targets the
+// canonical graph.
+//
+// prov:wasAttributedTo from 025 §4.1's example is deliberately not emitted
+// here: doc_versions stores no per-version author (025 §4.5's scope), and the
+// document-level prov:wasGeneratedBy on the canonical node (DocTriples)
+// already carries authorship.
+func DocVersionTriples(d model.Doc, v model.DocVersion, sections []model.DocSection) []Triple {
+	subj := iri.DocVersion(d.Slug, v.Version)
+	triples := []Triple{
+		{S: subj, P: RDFType, O: IRIRef(iri.Term(docClass(d.Kind)))},
+		{S: subj, P: DCTTitle, O: Text(v.Title)},
+		{S: subj, P: DCATVersion, O: Text(strconv.Itoa(v.Version))},
+		{S: subj, P: DCTCreated, O: Typed(v.CreatedAt.UTC().Format(time.RFC3339), XSDDateTime)},
+	}
+	if v.Version > 1 {
+		prev := iri.DocVersion(d.Slug, v.Version-1)
+		triples = append(triples,
+			Triple{S: subj, P: DCATPreviousVersion, O: IRIRef(prev)},
+			Triple{S: subj, P: ProvWasRevisionOf, O: IRIRef(prev)},
+		)
+	}
+	if v.Issued != "" {
+		triples = append(triples, Triple{S: subj, P: DCTIssued, O: Typed(v.Issued, XSDDate)})
+	}
+	for _, sec := range sections {
+		secSubj := iri.Section(d.Slug, sec.Anchor)
+		triples = append(triples,
+			Triple{S: secSubj, P: RDFType, O: IRIRef(iri.Term("Section"))},
+			Triple{S: secSubj, P: DCTTitle, O: Text(sec.Heading)},
+			Triple{S: secSubj, P: DCTIsPartOf, O: IRIRef(subj)},
+		)
 	}
 	return triples
 }
