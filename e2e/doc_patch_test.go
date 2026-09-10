@@ -423,6 +423,20 @@ func TestDocPatch(t *testing.T) {
 	if _, _, err := author.SubmitDoc(ctx, doc.ID); err != nil {
 		t.Fatalf("submit doc: %v", err)
 	}
+	// The submit itself opens one unlaned row on the version (029 §7.3),
+	// asynchronously — wait for the loop rather than racing it, then decide
+	// that row here. The accept in step 2 refuses while any row on the
+	// version is open, and the reviewer lanes below are what this test is
+	// about.
+	pollDocLifecycleCaughtUp(t, ctx, admin, "after submitting the spec")
+	submitRows := docLanes(t, ctx, admin, doc.ID)
+	if len(submitRows) != 1 || submitRows[0].Lane != "" {
+		t.Fatalf("after the submit: open rows = %s, want one unlaned row", describeLanes(submitRows))
+	}
+	if code, body := decideAs(t, srv.URL, sessions[reviewers[0]], submitRows[0].ID, "approve"); code != http.StatusSeeOther {
+		t.Fatalf("%s approving the submit's row %d: status = %d, want 303; body %s",
+			reviewers[0], submitRows[0].ID, code, body)
+	}
 	if _, _, err := author.RequestDocApproval(ctx, doc.ID); err != nil {
 		t.Fatalf("request approval: %v", err)
 	}
