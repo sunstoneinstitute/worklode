@@ -984,3 +984,18 @@ Recorded by WL-562 (the self-review exception, 029 §7.1):
   fails loudly once a flow declares the permission. The fix is a `lode doc
   revise` on 029 §7.2 naming the field, after which reading it is a one-line
   change inside `SelfReviewAllowed` and no caller moves.
+
+Recorded by WL-774 (decomposing spec 001 into plans):
+
+- `[P2]` **A plan cannot declare a human-only task.** `model.Task` carries
+  `HumanOnly` — "a task no unattended worker may pick up" — but
+  `designdoc.planTaskFence` accepts only `kind`, `priority`, `skills` and
+  `blockedBy`, under `KnownFields(true)`, so `human_only: true` in a plan's
+  task fence is a parse error. The workaround is `lode task edit <id>
+  --human-only` after the plan is accepted and its tasks are minted, which
+  leaves a window where an unattended worker can claim work only a person can
+  do. WL-PLAN-143 hits this: two of its four tasks are GitHub org-settings
+  changes needing org-owner rights, and the plan has to ask its accepter to
+  set the flag by hand. The fix is a fifth field on `planTaskFence` threaded
+  into the mint, and a line about it in the `lode:writing-docs` skill, which
+  says nothing about human-only tasks today.
