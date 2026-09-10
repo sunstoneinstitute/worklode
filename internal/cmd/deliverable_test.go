@@ -116,3 +116,35 @@ func TestDeliverableListJSON(t *testing.T) {
 		t.Errorf("output = %q, want the raw server body", out)
 	}
 }
+
+// TestDeliverableReport covers `lode deliverable report <id> <state> --note`:
+// it POSTs the state to the deliverable's report endpoint and the confirmation
+// names the provenance, so the reader knows this is a claim and not a check.
+func TestDeliverableReport(t *testing.T) {
+	var gotMethod, gotPath, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotMethod, gotPath, gotBody = r.Method, r.URL.Path, string(b)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"COW-DEL-1","name":"Report PDF","reported_state":"published","reported_provenance":"user_reported"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	out, err := runLode(t, "deliverable", "report", "COW-DEL-1", "published", "--note", "uploaded to the site")
+	if err != nil {
+		t.Fatalf("deliverable report: %v", err)
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/v1/deliverables/COW-DEL-1/report" {
+		t.Errorf("request = %s %s, want POST /api/v1/deliverables/COW-DEL-1/report", gotMethod, gotPath)
+	}
+	if !strings.Contains(gotBody, `"state":"published"`) ||
+		!strings.Contains(gotBody, `"note":"uploaded to the site"`) {
+		t.Errorf("request body = %q, want the state and note", gotBody)
+	}
+	if want := "reported COW-DEL-1 published (user-reported)\n"; out != want {
+		t.Errorf("output = %q, want %q", out, want)
+	}
+}

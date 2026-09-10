@@ -321,6 +321,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 			", or \"invalid\" for a payload that failed validation) and result (" +
 			strings.Join(probeReportResults, ", ") + ").",
 	}, []string{"state", "result"})
+	s.deliverableReports = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "worklode_deliverable_reports_total",
+		Help: "Deliverable states filed by a person (029 §3.2), by source (" +
+			strings.Join(deliverableReportSources, ", ") + ") and outcome (" +
+			strings.Join(deliverableReportOutcomes, ", ") +
+			"). These are claims, not observations: read them against worklode_probe_reports_total, which counts the states emitters and the prober report. Labels are bounded: the deliverable, the state and the reporter are deliberately not among them.",
+	}, []string{"source", "outcome"})
 
 	// The task-body render cache owns its own instruments (WL-222), so it is
 	// built here rather than in NewServer: this is where the registerer is.
@@ -340,7 +347,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.kindAliasUses, s.deletes,
 		s.overviewReads, s.deriveRuns,
 		s.morningBriefRenders, s.briefReviews,
-		s.githubCalls, s.probeReports)
+		s.githubCalls, s.probeReports, s.deliverableReports)
 
 	// Pre-initialise so alert expressions see 0, not no-data (as serve.go does
 	// for the sweeper). listExpansions is deliberately left out: an absent
@@ -542,6 +549,13 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	for _, state := range append(append([]string{}, hooks.CatalogStates...), "invalid") {
 		for _, result := range probeReportResults {
 			s.probeReports.WithLabelValues(state, result)
+		}
+	}
+	// Both surfaces in full, so a deployment where nobody has reported a
+	// deliverable state by hand reads as a flat zero rather than as no-data.
+	for _, source := range deliverableReportSources {
+		for _, outcome := range deliverableReportOutcomes {
+			s.deliverableReports.WithLabelValues(source, outcome)
 		}
 	}
 }
@@ -1137,6 +1151,41 @@ func (s *server) observeProbeReport(state, result string) {
 		return
 	}
 	s.probeReports.WithLabelValues(state, result).Inc()
+}
+
+// deliverableReportSources and deliverableReportOutcomes bound
+// worklode_deliverable_reports_total's two labels: the two surfaces a person
+// reports from, and what came of the attempt.
+var (
+	deliverableReportSources  = []string{"cli", "web"}
+	deliverableReportOutcomes = []string{"reported", "invalid", "not_found", "error"}
+)
+
+// deliverableReportOutcome classifies a ReportDeliverableState error for the
+// outcome label. A state outside the CHECK set and an unknown deliverable are
+// the caller's input, not a fault.
+func deliverableReportOutcome(err error) string {
+	switch {
+	case err == nil:
+		return "reported"
+	case errors.Is(err, store.ErrNotFound):
+		return "not_found"
+	case errors.Is(err, store.ErrInvalidInput):
+		return "invalid"
+	default:
+		return "error"
+	}
+}
+
+// observeDeliverableReport records one attempted user report of a
+// deliverable's state, called exactly once per attempt from the JSON handler
+// (source "cli") and the cockpit's row form (source "web").
+// Nil-safe: tests build a *server directly without initMetrics.
+func (s *server) observeDeliverableReport(source, outcome string) {
+	if s.deliverableReports == nil {
+		return
+	}
+	s.deliverableReports.WithLabelValues(source, outcome).Inc()
 }
 
 // observeEventSubscriberSeek records one successful admin seek of a

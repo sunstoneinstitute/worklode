@@ -22,3 +22,9 @@ type ArtifactEvidence struct {
 	Detail     json.RawMessage `json:"detail,omitempty"` // free-form emitter payload
 	OccurredAt time.Time       `json:"occurred_at"`
 }
+
+// ArtifactStates is the reportable set, mirroring the artifact_evidence state
+// CHECK (migration 0040). Every surface that accepts a state validates against
+// this one list — the signed catalog ingest, the prober's bearer API, the
+// store's user report — so the CHECK and the code cannot drift apart.
+var ArtifactStates = []string{"published", "updated", "deprecated", "removed", "failed"}

@@ -18,7 +18,38 @@ func newDeliverableCmd() *cobra.Command {
 		Use:   "deliverable",
 		Short: "Deliverables: a project's declared, checkable outputs",
 	}
-	cmd.AddCommand(newDeliverableListCmd(), newDeliverableAddCmd())
+	cmd.AddCommand(newDeliverableListCmd(), newDeliverableAddCmd(), newDeliverableReportCmd())
+	return cmd
+}
+
+// newDeliverableReportCmd files the state a person says they see (029 §3.2).
+// The deliverable stores no state either way: this writes user-reported
+// evidence, which the reads keep distinct from what an emitter observed.
+func newDeliverableReportCmd() *cobra.Command {
+	var note string
+	cmd := &cobra.Command{
+		Use:   "report <deliverable> <state>",
+		Short: "Report a deliverable's state as a person (published, updated, deprecated, removed, failed)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			d, raw, err := c.ReportDeliverable(cmd.Context(), args[0],
+				model.ReportDeliverableInput{State: args[1], Note: note})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.DeliverableReportRender(cmd.OutOrStdout(), d)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&note, "note", "", "what the reporter wants on the record")
 	return cmd
 }
 
