@@ -154,6 +154,7 @@ func TestPublicRoutesAreAnExplicitList(t *testing.T) {
 		"POST /auth/oidc/token",
 		"POST /hooks/catalog",
 		"POST /hooks/ci",
+		"POST /hooks/cms",
 		"POST /hooks/flux",
 		"POST /hooks/github",
 		"POST /hooks/pipeline",
@@ -188,6 +189,7 @@ func TestNoWriteRouteIsPublic(t *testing.T) {
 		"POST /hooks/flux":      true, // HMAC
 		"POST /hooks/catalog":   true, // HMAC
 		"POST /hooks/ci":        true, // HMAC
+		"POST /hooks/cms":       true, // HMAC
 		"POST /hooks/pipeline":  true, // HMAC
 		"POST /auth/oidc/token": true, // verifies a Keycloak ID token
 		"POST /auth/cli/token":  true, // redeems a one-time code
