@@ -141,6 +141,8 @@ func TestStoreMetricsNilSafe(t *testing.T) {
 	m.deliverInstructions(3)
 	m.decision("pose", "ok")
 	m.escalation("minted")
+	m.gap("recorded")
+	m.fix("started", "recorded")
 }
 
 // TestEscalationMetrics drives the three outcomes of EscalateTask —

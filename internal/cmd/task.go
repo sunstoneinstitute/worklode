@@ -72,6 +72,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskDetachCmd(),
 		newTaskInstructCmd(),
 		newTaskEscalateCmd(),
+		newTaskGapCmd(),
+		newTaskFixCmd(),
 		newReconcileCmd(),
 	)
 	return cmd
@@ -1671,5 +1673,92 @@ func newTaskEscalateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&section, "section", "", "narrow the escalation to one section (sec-N)")
 	cmd.MarkFlagRequired("to")
 	cmd.MarkFlagRequired("reason")
+	return cmd
+}
+
+// newTaskGapCmd builds `lode task gap`: log that the plan or spec does not
+// cover this case, without stopping to escalate it (025 §15.5). Unlike
+// `lode task escalate`, the task's lease is untouched — this rung of the
+// ladder does not stop the executor. It is plumbing for the skill flow in
+// Task 9, so it renders nothing beyond a one-line confirmation.
+func newTaskGapCmd() *cobra.Command {
+	var reason string
+	cmd := &cobra.Command{
+		Use:   "gap <docref> --reason <why>",
+		Short: "Log that the plan or spec does not cover this case, without escalating it",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, _, err := resolveWorktreeTask(layout, ".", "")
+			if err != nil {
+				return err
+			}
+			res, raw, err := c.RecordGap(cmd.Context(), taskID, model.GapTaskInput{
+				Doc: args[0], Reason: reason,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.GapRender(cmd.OutOrStdout(), taskID, res)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&reason, "reason", "", "what the document does not cover (required)")
+	cmd.MarkFlagRequired("reason")
+	return cmd
+}
+
+// newTaskFixCmd builds `lode task fix`: log the fixer's start or finish of
+// closing a gap or escalation (025 §15.5). Like `lode task gap`, it leaves
+// the task's lease alone and is plumbing for Task 9's skill flow.
+func newTaskFixCmd() *cobra.Command {
+	var phase, tier, doc, outcome string
+	cmd := &cobra.Command{
+		Use:   "fix --phase started|finished",
+		Short: "Log the start or finish of a design fix",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			layout, err := layoutFrom(".")
+			if err != nil {
+				return err
+			}
+			taskID, _, err := resolveWorktreeTask(layout, ".", "")
+			if err != nil {
+				return err
+			}
+			res, raw, err := c.RecordFix(cmd.Context(), taskID, model.FixTaskInput{
+				Phase: phase, Tier: tier, Doc: doc, Outcome: outcome,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.FixRender(cmd.OutOrStdout(), taskID, phase, res)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&phase, "phase", "", "started or finished (required)")
+	cmd.Flags().StringVar(&tier, "tier", "", "which tier owes the fix: plan or spec (required for --phase started)")
+	cmd.Flags().StringVar(&doc, "doc", "", "document being fixed (required for --phase started)")
+	cmd.Flags().StringVar(&outcome, "outcome", "", "resolved, substantive, or escalated (required for --phase finished)")
+	cmd.MarkFlagRequired("phase")
 	return cmd
 }

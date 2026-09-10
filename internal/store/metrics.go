@@ -54,6 +54,8 @@ type storeMetrics struct {
 	searchArmEmpties      *prometheus.CounterVec
 	rallyReads            *prometheus.CounterVec
 	escalations           *prometheus.CounterVec
+	gaps                  *prometheus.CounterVec
+	fixes                 *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -140,8 +142,16 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_task_escalations_total",
 			Help: "Task escalations by outcome (minted|joined|error) — 025 §8.1's ladder, §15.5's funnel.",
 		}, []string{"outcome"}),
+		gaps: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_task_gaps_total",
+			Help: "task.gap_found calls by outcome (recorded|replayed|error) — 025 §15.5's funnel, the ladder's non-escalating rung.",
+		}, []string{"outcome"}),
+		fixes: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_task_fixes_total",
+			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — 025 §15.5's funnel.",
+		}, []string{"phase", "outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -185,6 +195,25 @@ func (m *storeMetrics) escalation(outcome string) {
 		return
 	}
 	m.escalations.WithLabelValues(outcome).Inc()
+}
+
+// gap records one RecordGap call by outcome: recorded (new event), replayed
+// (matched an existing external id, nothing written), or error (invalid
+// input) — 025 §15.5's non-escalating rung.
+func (m *storeMetrics) gap(outcome string) {
+	if m == nil {
+		return
+	}
+	m.gaps.WithLabelValues(outcome).Inc()
+}
+
+// fix records one RecordFixStarted or RecordFixFinished call by phase and
+// outcome, the same three-way split as gap.
+func (m *storeMetrics) fix(phase, outcome string) {
+	if m == nil {
+		return
+	}
+	m.fixes.WithLabelValues(phase, outcome).Inc()
 }
 
 func (m *storeMetrics) expire(n int) {
