@@ -322,7 +322,7 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		if err != nil {
 			return fmt.Errorf("list edges of doc %s: %w", d.Slug, err)
 		}
-		triples := append(graphproj.DocTriples(d), graphproj.SectionTriples(d, sections, in)...)
+		triples := append(graphproj.DocTriples(d, nil), graphproj.SectionTriples(d, sections, in)...)
 		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), graphproj.Document(triples)); err != nil {
 			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
 		}
