@@ -339,12 +339,17 @@ wl:pinnedVersion a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:range wl:DesignDoc ;
     rdfs:comment """The document version a wl:implements claim was validated against — the
         manifest's pinned: value (025 §11.2), carried as an RDF-1.2 annotation on the asserted
-        edge's triple term: << <component> wl:implements <section> >> wl:pinnedVersion
-        <id/doc/<slug>/v<n>> (006 §3, WL-275). The range is the versioned snapshot, which carries
-        the document's own class (025 §4.1) — the same shape wl:lastRevisedIn points at, so the
-        stale-claim query compares the two through dcat:version. No rdfs:domain: the subject is a
-        triple term, which RDF 1.1 tooling cannot state; this declaration itself is plain 1.1, and
-        only emitted claim data uses the 1.2 syntax.""" .
+        edge (006 §3, WL-275). RDF 1.2 annotates an edge through a reifier linked to the edge's
+        triple term by rdf:reifies, so a claim emits three N-Triples lines: the edge itself,
+        <id/claim/…> rdf:reifies <<( <component> wl:implements <section> )>>, and
+        <id/claim/…> wl:pinnedVersion <id/doc/<slug>/v<n>>. The reifier is an IRI keyed on the
+        edge, not a blank node, because the projection replaces a whole named graph and must
+        render byte-identical output every run. SPARQL reads it back through the annotation
+        pattern: <<?c wl:implements ?s>> wl:pinnedVersion ?v. The range is the versioned snapshot,
+        which carries the document's own class (025 §4.1) — the same shape wl:lastRevisedIn points
+        at, so the stale-claim query compares the two through dcat:version. No rdfs:domain: the
+        subject is a reifier of a triple term, which RDF 1.1 tooling cannot state; this
+        declaration itself is plain 1.1, and only emitted claim data uses the 1.2 syntax.""" .
 
 wl:produces a owl:ObjectProperty ;
     wl:layer wlc:execution ;
@@ -690,6 +695,8 @@ wl:layer a owl:AnnotationProperty ;
 #   owl:versionInfo                    artifact version string
 #   skos:Concept / ConceptScheme / inScheme / OrderedCollection / memberList
 #   rdf:subject / predicate / object   names an AcceptedDeviation's edge un-asserted
+#   rdf:reifies                        RDF 1.2 reifier → triple term, carrying
+#                                      wl:pinnedVersion on a wl:implements edge
 #   dcat:hasCurrentVersion / hasVersion / version / previousVersion   (025 §4)
 #
 # Deliberately absent — do not reintroduce:
@@ -697,9 +704,9 @@ wl:layer a owl:AnnotationProperty ;
 #   wl:supersededSection       retired (025 §3): sections are addressable, so
 #                              partial supersession is dct:isReplacedBy between
 #                              them. wl:pinnedVersion's *data* uses an RDF-1.2
-#                              triple term, but its declaration is plain 1.1,
-#                              so there is still no ontology.1-2.ttl companion
-#                              (cf. 006 §0).
+#                              triple term and rdf:reifies, but its declaration
+#                              is plain 1.1, so there is still no
+#                              ontology.1-2.ttl companion (cf. 006 §0).
 #   wl:fullyImplements,        never minted (025 §3): declared coverage is a
 #   wl:partiallyImplements     second source of truth that goes stale.
 #   wl:Release                 never minted (006 §2.1): a release is a wl:Artifact
