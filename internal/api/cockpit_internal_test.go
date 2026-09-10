@@ -306,7 +306,7 @@ func TestRankSecondaryConcernsNamesBlockingPlan(t *testing.T) {
 	if !f.Blocked() {
 		t.Fatalf("Blocked() = false for a task a plan holds, which Claim refuses")
 	}
-	got := rankSecondaryConcerns([]store.ProjectWorkFact{f}, time.Now())
+	got, _ := rankSecondaryConcerns([]store.ProjectWorkFact{f}, time.Now())
 	if len(got) != 1 || got[0].Kind != "blocker" || got[0].Title != "Plan A" || got[0].URL != "/docs/7" {
 		t.Fatalf("concerns = %#v, want one blocker naming Plan A at /docs/7", got)
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestRankSecondaryConcernsRootCauseChain(t *testing.T) {
 		fact("WL-22", "high", "ready", 2*24*time.Hour, ref("WL-66", "ready")),
 		fact("WL-23", "medium", "ready", time.Hour, ref("WL-22", "ready")),
 	}
-	got := rankSecondaryConcerns(facts, fixedNow)
+	got, _ := rankSecondaryConcerns(facts, fixedNow)
 	if len(got) != 1 {
 		t.Fatalf("concerns = %#v, want exactly one root", got)
 	}
@@ -74,7 +75,7 @@ func TestRankSecondaryConcernsOrdersByPriorityThenFanOut(t *testing.T) {
 		fact("WL-248", "low", "ready", -1),
 		fact("WL-192", "low", "ready", time.Hour, ref("WL-248", "ready")),
 	}
-	got := rankSecondaryConcerns(facts, fixedNow)
+	got, _ := rankSecondaryConcerns(facts, fixedNow)
 	wantOrder := []string{"/tasks/WL-66", "/tasks/WL-100", "/tasks/WL-248"}
 	if len(got) != len(wantOrder) {
 		t.Fatalf("concerns = %#v, want %d roots", got, len(wantOrder))
@@ -97,7 +98,7 @@ func TestRankSecondaryConcernsOldestBreaksFanOutTie(t *testing.T) {
 		fact("WL-3", "high", "ready", -1),
 		fact("WL-4", "high", "ready", 5*24*time.Hour, ref("WL-3", "ready")), // held 5 days
 	}
-	got := rankSecondaryConcerns(facts, fixedNow)
+	got, _ := rankSecondaryConcerns(facts, fixedNow)
 	if len(got) != 2 || got[0].URL != "/tasks/WL-3" || got[1].URL != "/tasks/WL-1" {
 		t.Fatalf("concerns = %v, want WL-3 (older) before WL-1", urlsOf(got))
 	}
@@ -117,7 +118,7 @@ func TestRankSecondaryConcernsTotalOrderOnFullTie(t *testing.T) {
 		fact("WL-3", "high", "ready", 24*time.Hour, ref("WL-2", "ready")),
 	}
 	for i := 0; i < 5; i++ {
-		got := rankSecondaryConcerns(facts, fixedNow)
+		got, _ := rankSecondaryConcerns(facts, fixedNow)
 		if len(got) != 2 || got[0].URL != "/tasks/WL-2" || got[1].URL != "/tasks/WL-9" {
 			t.Fatalf("run %d: concerns = %v, want [WL-2, WL-9] (id order) every time", i, urlsOf(got))
 		}
@@ -135,7 +136,10 @@ func TestRankSecondaryConcernsCycleTerminates(t *testing.T) {
 		fact("WL-2", "high", "ready", time.Hour, ref("WL-1", "ready")),
 	}
 	done := make(chan []model.SecondaryConcern, 1)
-	go func() { done <- rankSecondaryConcerns(facts, fixedNow) }()
+	go func() {
+		concerns, _ := rankSecondaryConcerns(facts, fixedNow)
+		done <- concerns
+	}()
 	select {
 	case got := <-done:
 		if len(got) == 0 {
@@ -150,7 +154,7 @@ func TestRankSecondaryConcernsCycleTerminates(t *testing.T) {
 // task returns an empty, non-nil slice (§9's "empty concern sets").
 func TestRankSecondaryConcernsEmpty(t *testing.T) {
 	t.Parallel()
-	got := rankSecondaryConcerns([]store.ProjectWorkFact{
+	got, _ := rankSecondaryConcerns([]store.ProjectWorkFact{
 		fact("WL-1", "high", "ready", -1),
 		fact("WL-2", "high", "in_progress", -1),
 	}, fixedNow)
@@ -172,7 +176,7 @@ func TestRankSecondaryConcernsEvidenceLine(t *testing.T) {
 		fact("WL-49", "medium", "ready", 2*24*time.Hour, ref("WL-22", "ready")),
 		fact("WL-50", "low", "ready", 24*time.Hour, ref("WL-49", "ready")),
 	}
-	got := rankSecondaryConcerns(facts, fixedNow)
+	got, _ := rankSecondaryConcerns(facts, fixedNow)
 	if len(got) != 1 {
 		t.Fatalf("concerns = %#v, want exactly one root", got)
 	}
@@ -202,7 +206,7 @@ func TestRankSecondaryConcernsClaimedRoot(t *testing.T) {
 		root,
 		fact("WL-6", "high", "ready", time.Hour, ref("WL-5", "ready")),
 	}
-	got := rankSecondaryConcerns(facts, fixedNow)
+	got, _ := rankSecondaryConcerns(facts, fixedNow)
 	if len(got) != 1 {
 		t.Fatalf("concerns = %#v, want exactly one root", got)
 	}
@@ -222,7 +226,7 @@ func TestRankSecondaryConcernsCrossProjectBlocker(t *testing.T) {
 	facts := []store.ProjectWorkFact{
 		fact("OTHER-1", "medium", "ready", time.Hour, ref("EXT-9", "in_progress")),
 	}
-	got := rankSecondaryConcerns(facts, fixedNow)
+	got, _ := rankSecondaryConcerns(facts, fixedNow)
 	if len(got) != 1 || got[0].URL != "/tasks/EXT-9" {
 		t.Fatalf("concerns = %v, want one root naming the cross-project blocker EXT-9", urlsOf(got))
 	}
@@ -235,13 +239,54 @@ func TestRankSecondaryConcernsBlockingPlan(t *testing.T) {
 	t.Parallel()
 	f := fact("WL-2", "medium", "ready", time.Hour)
 	f.BlockingPlans = []model.DocRef{{ID: 7, Slug: "plan-a", Title: "Plan A", Status: "draft"}}
-	got := rankSecondaryConcerns([]store.ProjectWorkFact{f}, fixedNow)
+	got, _ := rankSecondaryConcerns([]store.ProjectWorkFact{f}, fixedNow)
 	if len(got) != 1 || got[0].Title != "Plan A" || got[0].URL != "/docs/7" {
 		t.Fatalf("concerns = %#v, want one root naming Plan A at /docs/7", got)
 	}
 	const want = "Plan A plan plan-a (draft) has held 1 task for 1 hour — WL-2 (medium)."
 	if got[0].Evidence.Summary != want {
 		t.Errorf("evidence.summary = %q, want %q", got[0].Evidence.Summary, want)
+	}
+}
+
+// TestRankConcernRootsMemoizesReconvergentDAG proves the fix for WL-840: a
+// "complete bipartite" DAG where every node at level i-1 is blocked by both
+// nodes at level i has no cycle (TestRankSecondaryConcernsCycleTerminates
+// already covers cycles) but reconverges on the same nodes from every path,
+// so an unmemoized walk costs 2^depth rootCauses calls — astronomically more
+// than the (2*depth+1) distinct nodes actually in the graph. This is the
+// shape of edge-agent's real blocker graph that hung GET /projects/edge-agent.
+func TestRankConcernRootsMemoizesReconvergentDAG(t *testing.T) {
+	t.Parallel()
+	const depth = 16
+	level := func(i int, suffix string) string { return fmt.Sprintf("L%d%s", i, suffix) }
+
+	facts := []store.ProjectWorkFact{
+		fact("ROOT", "medium", "ready", time.Hour,
+			ref(level(1, "A"), "ready"), ref(level(1, "B"), "ready")),
+	}
+	for i := 1; i <= depth; i++ {
+		for _, suf := range []string{"A", "B"} {
+			id := level(i, suf)
+			if i == depth {
+				facts = append(facts, fact(id, "medium", "ready", -1)) // terminal, unblocked
+				continue
+			}
+			facts = append(facts, fact(id, "medium", "ready", time.Hour,
+				ref(level(i+1, "A"), "ready"), ref(level(i+1, "B"), "ready")))
+		}
+	}
+
+	_, calls := rankConcernRoots(facts, fixedNow)
+	// Linear in len(facts) (33 nodes here) is a few hundred calls at most;
+	// 2^depth (65536) is what an unmemoized walk would take. 1000 is a
+	// generous margin above linear and nowhere near exponential — if this
+	// ever fails, run it locally and read the actual count before touching
+	// the bound: a regression back to exponential blows through it by
+	// orders of magnitude, not by a little.
+	if calls > 1000 {
+		t.Fatalf("rootCauses calls = %d for a %d-node DAG, want well under 1000 (memoization regressed toward the exponential 2^%d = %d an unmemoized walk would take)",
+			calls, len(facts), depth, 1<<depth)
 	}
 }
 
