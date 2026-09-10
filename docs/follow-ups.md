@@ -906,3 +906,16 @@ Recorded by WL-829 (`lode task escalate`, spec 025 §8.1):
   `lode doc revise` on 061 adding `escalate` to L3, after which the two
   transcriptions are true again. Not blocking: the code and the spec agree on
   the command's name and shape, only the allowlist is behind.
+
+Recorded by WL-831 (§8.6 stale marking off the patch seam):
+
+- `[P4]` **Re-accepting an unedited stale plan cannot clear the mark.**
+  025 §8.6 says the mark is "cleared by re-acceptance", and re-acceptance is
+  what `acceptPlanDoc` does out of `stale`. But the acceptance event's
+  external id is `<doc IRI>:<version>` (`eventbus.DocumentAccepted`), and a
+  plan that goes stale keeps the version it was accepted at, so a re-accept
+  with no body edit collides at the log and never runs. A re-planner who
+  concludes the plan survives unchanged therefore gets a 422 —
+  `CheckDocAcceptable` names the case and says to edit the plan so the
+  version moves. The honest fix is a status-aware accept key or an explicit
+  clear verb; a one-character edit works today and the case is rare.

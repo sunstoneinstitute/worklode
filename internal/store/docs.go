@@ -390,10 +390,13 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		// A plan is accepted from draft and re-accepted while accepted
 		// (025 §9.2): it stays freely mutable, and re-acceptance is how a
 		// declaration added after the first accept reaches the task set.
+		// Stale is accepted from too: §8.6's mark is "cleared by
+		// re-acceptance", which is what re-planning the amended text ends in.
 		// Superseded is still refused — there is nothing left to execute.
-		if d.status != "draft" && d.status != "accepted" {
+		// Only a plan can be stale, so no other kind reaches this branch.
+		if d.status != "draft" && d.status != "accepted" && d.status != "stale" {
 			return nil, nil, fmt.Errorf(
-				"doc %d is %s: a plan is accepted from draft or re-accepted while accepted (025 §9.2): %w",
+				"doc %d is %s: a plan is accepted from draft, re-accepted while accepted, or re-accepted out of stale (025 §8.6, §9.2): %w",
 				id, d.status, ErrInvalidInput)
 		}
 		return acceptPlanDoc(tx, now, id, d, actorID, eventID)
@@ -518,6 +521,14 @@ func (s *Store) CheckDocAcceptable(ctx context.Context, id int64, actorID string
 	}
 	if kind == "plan" && status == "accepted" {
 		return true, nil
+	}
+	// A stale plan re-accepted at a version already accepted: the event
+	// collapsed, so AcceptDoc never ran and the §8.6 mark is still there.
+	// Saying "not draft" would send the caller looking for the wrong problem.
+	if kind == "plan" && status == "stale" {
+		return false, fmt.Errorf(
+			"doc %d is stale and was already accepted at version %d: edit the plan, so re-accepting it clears the mark (025 §8.6): %w",
+			id, version, ErrInvalidInput)
 	}
 	if status != "draft" {
 		return false, fmt.Errorf("doc %d is %s, not draft: %w", id, status, ErrInvalidInput)
