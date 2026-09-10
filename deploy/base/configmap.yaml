@@ -23,6 +23,11 @@ data:
   # this is configuration, not new provider code. No LODE_EMBEDDING_API_KEY:
   # the Service is cluster-local and unauthenticated.
   LODE_EMBEDDING_URL: "http://worklode-embeddings.worklode.svc.cluster.local/v1/embeddings"
+  # The dedicated query-path sidecar (embeddings-query.yaml): search, skill
+  # recommend, and task-brief skill matching resolve here instead of behind
+  # the indexer's batches. Empty means queries share LODE_EMBEDDING_URL,
+  # today's behavior.
+  LODE_QUERY_EMBEDDING_URL: "http://worklode-embeddings-query.worklode.svc.cluster.local/v1/embeddings"
   # The name text-embeddings-inference serves under, which is whatever
   # --model-id says: the weights are baked in at /model, so the repo id is not
   # a name it answers to. Sending the repo id makes TEI warn "has not been
