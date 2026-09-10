@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -163,5 +164,132 @@ func TestDependsOnPath(t *testing.T) {
 		if r["n"] != "1" {
 			t.Errorf("%s binds %s wl:inProject values, want 1", r["task"], r["n"])
 		}
+	}
+}
+
+// buildStaleFixture projects a document with the given versions and
+// sections (anchor -> version that last revised it) the way a real
+// projection run would: DocTriples/SectionTriples into the document's
+// DeclaredGraph, DocVersionTriples for each version into its own
+// DeclaredVersionGraph (025 §4.1). d.Version is the last entry of versions,
+// so DocTriples emits dcat:hasCurrentVersion at it. Returns the run-unique
+// doc slug the caller builds query IRIs from.
+func buildStaleFixture(t *testing.T, base, prefix string, versions []int, revisedIn map[string]int) string {
+	t.Helper()
+	ts := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	slug := uniqueID(prefix)
+	d := model.Doc{
+		Slug:      slug,
+		Kind:      "spec",
+		Title:     "Staleness fixture",
+		Status:    "accepted",
+		Version:   versions[len(versions)-1],
+		CreatedAt: ts,
+		UpdatedAt: ts,
+	}
+
+	var summaries []model.DocVersionSummary
+	for _, v := range versions {
+		summaries = append(summaries, model.DocVersionSummary{Version: v, Title: d.Title, CreatedAt: ts})
+	}
+
+	anchors := make([]string, 0, len(revisedIn))
+	for a := range revisedIn {
+		anchors = append(anchors, a)
+	}
+	sort.Strings(anchors)
+	var sections []model.DocSection
+	for i, a := range anchors {
+		sections = append(sections, model.DocSection{
+			Anchor: a, Heading: a, Position: i, LastRevisedIn: revisedIn[a], Published: true,
+		})
+	}
+
+	declared := append(DocTriples(d, summaries), SectionTriples(d, sections, nil)...)
+	graphtest.PutGraph(t, base, iri.DeclaredGraph(slug), Document(declared))
+	for _, v := range versions {
+		dv := model.DocVersion{Version: v, Title: d.Title, CreatedAt: ts}
+		graphtest.PutGraph(t, base, iri.DeclaredVersionGraph(slug, v), Document(DocVersionTriples(d, dv, nil)))
+	}
+	return slug
+}
+
+// stalenessQuery is 025 §4.4's query shape verbatim: a claim pinned at pin
+// is stale for any section whose wl:lastRevisedIn snapshot's dcat:version
+// exceeds pin, compared as xsd:integer rather than as strings or IRIs. ?g
+// and ?vg are unbound — the query does not know in advance which graph
+// holds a section's declaration or which holds its snapshot's version, the
+// way a real reader over the graph union would not either.
+// ownSections keeps the rows naming slug's own sections. The staleness query
+// leaves ?g unbound on purpose, so it also answers for whatever else the
+// endpoint holds — another run of this package against the same Oxigraph, for
+// one. The run-unique slug is what makes an exact-set assertion safe anyway.
+func ownSections(rows []map[string]string, slug string) []string {
+	var got []string
+	for _, r := range rows {
+		if strings.Contains(r["sec"], slug) {
+			got = append(got, r["sec"])
+		}
+	}
+	return got
+}
+
+func stalenessQuery(pin int) string {
+	return fmt.Sprintf(`PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT ?sec WHERE {
+  GRAPH ?g  { ?sec <%s> ?snap }
+  GRAPH ?vg { ?snap <%s> ?n }
+  FILTER (xsd:integer(?n) > %d)
+}`, iri.Term("lastRevisedIn"), DCATVersion, pin)
+}
+
+// TestOxigraphStalenessQuery proves 025 §4.4's staleness query: a claim
+// pinned at v1 is stale against any section last revised after v1. sec-a
+// (revised in v1) is current at that pin; sec-b (revised in v2) is stale.
+func TestOxigraphStalenessQuery(t *testing.T) {
+	base := graphtest.Endpoint(t)
+	slug := buildStaleFixture(t, base, "stale", []int{1, 2}, map[string]int{"sec-a": 1, "sec-b": 2})
+
+	got := ownSections(graphtest.Select(t, base, stalenessQuery(1)), slug)
+	want := []string{iri.Section(slug, "sec-b")}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("sections stale at pin v1 = %v, want %v", got, want)
+	}
+}
+
+// TestOxigraphStalenessQueryNumericComparison proves 025 §4.1's footgun: v3
+// and v10 sort backwards both as strings ("10" < "3") and as their
+// DocVersion IRIs (".../v10" < ".../v3"), so a claim pinned at v9 only
+// resolves correctly if dcat:version is compared as a number. sec-old
+// (revised in v3) is current at that pin under numeric comparison; sec-new
+// (revised in v10) is stale. A string or IRI comparison would call v3 the
+// newer one and get this backwards.
+func TestOxigraphStalenessQueryNumericComparison(t *testing.T) {
+	base := graphtest.Endpoint(t)
+	slug := buildStaleFixture(t, base, "footgun", []int{3, 10}, map[string]int{"sec-old": 3, "sec-new": 10})
+
+	got := ownSections(graphtest.Select(t, base, stalenessQuery(9)), slug)
+	want := []string{iri.Section(slug, "sec-new")}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("sections stale at pin v9 = %v, want %v (numeric, not string/IRI, comparison of dcat:version)", got, want)
+	}
+}
+
+// TestOxigraphCurrentVersionRoundTrip proves dcat:hasCurrentVersion on the
+// canonical document node joins to its target snapshot's own dcat:version
+// literal (025 §4.1) — the join a pinned-claim reader leans on to resolve
+// "current" to a version number.
+func TestOxigraphCurrentVersionRoundTrip(t *testing.T) {
+	base := graphtest.Endpoint(t)
+	slug := buildStaleFixture(t, base, "current", []int{1, 2}, map[string]int{"sec-a": 1, "sec-b": 2})
+
+	q := fmt.Sprintf(`SELECT ?n WHERE {
+  GRAPH <%s> { <%s> <%s> ?snap }
+  GRAPH ?vg { ?snap <%s> ?n }
+}`, iri.DeclaredGraph(slug), iri.Doc(slug), DCATHasCurrentVersion, DCATVersion)
+
+	rows := graphtest.Select(t, base, q)
+	if len(rows) != 1 || rows[0]["n"] != "2" {
+		t.Errorf("dcat:hasCurrentVersion round trip = %v, want [{n:2}]", rows)
 	}
 }
