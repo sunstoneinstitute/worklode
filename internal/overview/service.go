@@ -215,6 +215,40 @@ func (s *Service) Roll(ctx context.Context, projectID string) (*model.Overview, 
 			return nil, err
 		}
 		o.Gaps = len(g)
+		if err := s.rollCoverage(ctx, o); err != nil {
+			return nil, err
+		}
 	}
 	return o, nil
+}
+
+// rollCoverage adds the 025 §11.5 reads to the roll-up. Coverage is per
+// document in the query and summed here: the roll-up is one screen, so it
+// carries the corpus ratio and leaves the per-document rows to Coverage's
+// callers.
+func (s *Service) rollCoverage(ctx context.Context, o *model.Overview) error {
+	un, err := Unimplemented(ctx, s.Graph)
+	if err != nil {
+		return err
+	}
+	o.Unimplemented = len(un)
+	cov, err := Coverage(ctx, s.Graph)
+	if err != nil {
+		return err
+	}
+	for _, c := range cov {
+		o.SectionsCovered += c.Implemented
+		o.SectionsTotal += c.Total
+	}
+	stale, err := StaleClaims(ctx, s.Graph)
+	if err != nil {
+		return err
+	}
+	o.StaleClaims = len(stale)
+	orphaned, err := OrphanedClaims(ctx, s.Graph)
+	if err != nil {
+		return err
+	}
+	o.OrphanedClaims = len(orphaned)
+	return nil
 }

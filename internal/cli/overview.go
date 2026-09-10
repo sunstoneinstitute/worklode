@@ -65,11 +65,14 @@ func (c *Client) RunDerive(ctx context.Context) (model.DeriveResponse, []byte, e
 
 // OverviewRender prints `lode overview`: the roll-up counts as a label/value
 // block, then any cycles found, then the note that says the counts are
-// missing rather than zero when no graph is configured.
+// missing rather than zero when no graph is configured. Coverage is the
+// corpus-wide ratio, not one line per document — the roll-up is one screen.
 func OverviewRender(w io.Writer, o model.Overview) {
 	tw := newTabwriter(w)
 	fmt.Fprintf(tw, "violations\t%d\nstale intent\t%d\ngaps\t%d\nready frontier\t%d\n",
 		o.Violations, o.StaleIntent, o.Gaps, o.FrontierSize)
+	fmt.Fprintf(tw, "unimplemented sections\t%d\nsection coverage\t%d/%d\nstale claims\t%d\norphaned claims\t%d\n",
+		o.Unimplemented, o.SectionsCovered, o.SectionsTotal, o.StaleClaims, o.OrphanedClaims)
 	if o.CriticalHead != nil {
 		fmt.Fprintf(tw, "critical head\t%s\n", o.CriticalHead.ID)
 	}
@@ -77,7 +80,7 @@ func OverviewRender(w io.Writer, o model.Overview) {
 		fmt.Fprintf(tw, "CYCLE\t%s\n", strings.Join(cyc, " -> "))
 	}
 	if !o.GraphEnabled {
-		fmt.Fprintf(tw, "note\tgraph not configured; drift/gap counts unavailable\n")
+		fmt.Fprintf(tw, "note\tgraph not configured; drift, gap and coverage counts unavailable\n")
 	}
 	tw.Flush()
 }

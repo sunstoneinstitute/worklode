@@ -33,6 +33,21 @@ type GapList struct {
 	Gaps []Gap `json:"gaps"`
 }
 
+// Claim is one wl:implements edge (025 §11.5): a component's claim that its
+// code satisfies a section.
+type Claim struct {
+	Component string `json:"component"`
+	Section   string `json:"section"`
+}
+
+// DocCoverage is one document's implementation coverage: how many of its
+// non-superseded sections some component claims.
+type DocCoverage struct {
+	Doc         string `json:"doc"`
+	Implemented int    `json:"implemented"`
+	Total       int    `json:"total"`
+}
+
 // FrontierTask is one row of the frontier mirror, annotated with the
 // overview-only critical-path measures (never consumed by claim --next).
 type FrontierTask struct {
@@ -69,15 +84,25 @@ type Drift struct {
 	Acknowledged []Deviation `json:"acknowledged,omitempty"`
 }
 
-// Overview is the one-screen roll-up.
+// Overview is the one-screen roll-up. The 025 §11.5 coverage reads land here
+// as totals: the per-document rows are DocCoverage, and summing them keeps the
+// roll-up one screen whatever the corpus size.
 type Overview struct {
-	Violations   int           `json:"violations"`
-	StaleIntent  int           `json:"stale_intent"`
-	Gaps         int           `json:"gaps"`
-	FrontierSize int           `json:"frontier_size"`
-	Cycles       [][]string    `json:"cycles,omitempty"`
-	CriticalHead *FrontierTask `json:"critical_head,omitempty"`
-	GraphEnabled bool          `json:"graph_enabled"`
+	Violations  int `json:"violations"`
+	StaleIntent int `json:"stale_intent"`
+	Gaps        int `json:"gaps"`
+	// Unimplemented counts accepted sections no component claims;
+	// SectionsCovered/SectionsTotal are the corpus-wide coverage ratio over
+	// non-superseded sections.
+	Unimplemented   int           `json:"unimplemented"`
+	SectionsCovered int           `json:"sections_covered"`
+	SectionsTotal   int           `json:"sections_total"`
+	StaleClaims     int           `json:"stale_claims"`
+	OrphanedClaims  int           `json:"orphaned_claims"`
+	FrontierSize    int           `json:"frontier_size"`
+	Cycles          [][]string    `json:"cycles,omitempty"`
+	CriticalHead    *FrontierTask `json:"critical_head,omitempty"`
+	GraphEnabled    bool          `json:"graph_enabled"`
 }
 
 // DeriveResult reports one deriver run (spec 007). internal/derive aliases
