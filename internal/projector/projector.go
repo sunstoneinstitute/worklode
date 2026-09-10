@@ -31,6 +31,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/graphproj"
 	"github.com/sunstoneinstitute/worklode/internal/graphserver"
 	"github.com/sunstoneinstitute/worklode/internal/kg/iri"
@@ -298,6 +299,11 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		return fmt.Errorf("put graph for project %s: %w", id, err)
 	}
 
+	// ponytail: every pass re-fetches and re-parses every version of every
+	// dirty project's documents. Idempotent (byte-identical) and fine at the
+	// current corpus size; if version counts grow, skip PUTting a version
+	// graph the server already has — version graphs are immutable, so an
+	// existence probe is sufficient.
 	// The project's documents render into their own declared graphs
 	// (WL-289): one graph per document, replaced whole, in the same attempt
 	// — a failure quarantines the project as a unit, documents included.
@@ -322,7 +328,72 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		if err != nil {
 			return fmt.Errorf("list edges of doc %s: %w", d.Slug, err)
 		}
-		triples := append(graphproj.DocTriples(d, nil), graphproj.SectionTriples(d, sections, in)...)
+		var versions []model.DocVersionSummary
+		if d.Status != "draft" {
+			versions, err = p.st.ListDocVersions(ctx, d.ID)
+			if err != nil {
+				return fmt.Errorf("list versions of doc %s: %w", d.Slug, err)
+			}
+			versionBodies := make(map[int]model.DocVersion, len(versions))
+			versionSectionsByVersion := make(map[int][]model.DocSection, len(versions))
+			versionDocuments := make(map[int]*designdoc.Document, len(versions))
+			for _, summary := range versions {
+				version, err := p.st.GetDocVersion(ctx, d.ID, summary.Version)
+				if err != nil {
+					return fmt.Errorf("get version %d of doc %s: %w", summary.Version, d.Slug, err)
+				}
+				versionBodies[summary.Version] = version
+				var parsedDocument *designdoc.Document
+				versionSectionsByVersion[summary.Version], parsedDocument = parseVersionSections(d.Kind, version.Body)
+				versionDocuments[summary.Version] = parsedDocument
+			}
+			// The store returns newest first, while revision provenance is a
+			// forward fact: an unchanged section inherits the version in which
+			// it was last changed. Walk the immutable bodies oldest first.
+			versionRevisions := make(map[int]map[string]int, len(versions))
+			var priorRevisions map[string]int
+			var priorDocument *designdoc.Document
+			ordered := slices.Clone(versions)
+			slices.SortFunc(ordered, func(a, b model.DocVersionSummary) int { return a.Version - b.Version })
+			for _, summary := range ordered {
+				parsed := versionSectionsByVersion[summary.Version]
+				document := versionDocuments[summary.Version]
+				changed := make(map[string]bool)
+				if document != nil && priorDocument != nil {
+					diff := designdoc.CompareSections(priorDocument, document, designdoc.DepthLimit)
+					for _, anchor := range diff.Added {
+						changed[anchor] = true
+					}
+					for _, anchor := range diff.Changed {
+						changed[anchor] = true
+					}
+				}
+				revisions := make(map[string]int, len(parsed))
+				for _, section := range parsed {
+					anchor := section.Anchor
+					last := priorRevisions[anchor]
+					if priorDocument == nil || changed[anchor] {
+						last = summary.Version
+					}
+					revisions[anchor] = last
+				}
+				versionRevisions[summary.Version] = revisions
+				priorDocument, priorRevisions = document, revisions
+			}
+			for _, summary := range versions {
+				version := versionBodies[summary.Version]
+				parsedSections := versionSectionsByVersion[summary.Version]
+				for i := range parsedSections {
+					parsedSections[i].LastRevisedIn = versionRevisions[summary.Version][parsedSections[i].Anchor]
+				}
+				graph := graphproj.Document(graphproj.DocVersionTriples(d, version, parsedSections))
+				if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredVersionGraph(d.Slug, summary.Version), graph); err != nil {
+					return fmt.Errorf("put version graph for doc %s v%d: %w", d.Slug, summary.Version, err)
+				}
+				p.m.recordDocVersionGraph()
+			}
+		}
+		triples := append(graphproj.DocTriples(d, versions), graphproj.SectionTriples(d, sections, in)...)
 		if _, err := p.gc.PutGraph(ctx, Branch, iri.DeclaredGraph(d.Slug), graphproj.Document(triples)); err != nil {
 			return fmt.Errorf("put declared graph for doc %s: %w", d.Slug, err)
 		}
@@ -339,17 +410,61 @@ func (p *Projector) projectOne(ctx context.Context, id string) error {
 		return fmt.Errorf("list deleted docs for project %s: %w", id, err)
 	}
 	for _, d := range tombstoned {
-		switch err := p.gc.DeleteGraph(ctx, Branch, iri.DeclaredGraph(d.Slug)); {
-		case err == nil:
-			p.m.recordGraphDeleted()
-		case errors.Is(err, graphserver.ErrNotFound):
-			// Already absent, which is the state this loop wants.
-		default:
-			return fmt.Errorf("delete declared graph for doc %s: %w", d.Slug, err)
+		versions, err := p.st.ListDocVersions(ctx, d.ID)
+		if err != nil {
+			return fmt.Errorf("list versions of tombstoned doc %s: %w", d.Slug, err)
+		}
+		graphs := []string{iri.DeclaredGraph(d.Slug)}
+		for _, version := range versions {
+			graphs = append(graphs, iri.DeclaredVersionGraph(d.Slug, version.Version))
+		}
+		for _, graph := range graphs {
+			switch err := p.gc.DeleteGraph(ctx, Branch, graph); {
+			case err == nil:
+				p.m.recordGraphDeleted()
+			case errors.Is(err, graphserver.ErrNotFound):
+				// Already absent, which is the state this loop wants.
+			default:
+				return fmt.Errorf("delete graph for doc %s: %w", d.Slug, err)
+			}
 		}
 	}
 	p.m.recordProject()
 	return nil
+}
+
+// versionSections parses the section headings in one immutable document body.
+// Plans deliberately carry no section graph. A malformed historical body does
+// not prevent its version node from being projected; the node-only graph keeps
+// the version reachable while making the narrowing visible in the log.
+func versionSections(kind, body string) []model.DocSection {
+	sections, _ := parseVersionSections(kind, body)
+	return sections
+}
+
+func parseVersionSections(kind, body string) ([]model.DocSection, *designdoc.Document) {
+	if kind == "plan" {
+		return nil, nil
+	}
+	doc, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		slog.Info("could not parse document version sections", "kind", kind, "err", err)
+		return nil, nil
+	}
+	sections := make([]model.DocSection, 0, len(doc.Sections))
+	for _, section := range doc.Sections {
+		if section.Anchor == "" {
+			continue
+		}
+		sections = append(sections, model.DocSection{
+			Anchor:   section.Anchor,
+			Number:   section.Number,
+			Heading:  section.Title,
+			Depth:    section.Level,
+			Position: section.Index,
+		})
+	}
+	return sections, doc
 }
 
 // toModelEdges converts store edges (FromTask/ToTask) into the model.Edge
