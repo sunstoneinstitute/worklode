@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -45,6 +46,116 @@ components:
 	if !strings.Contains(out, "id/repo/github.com/acme/app") ||
 		!strings.Contains(out, "dc/terms/hasPart") {
 		t.Fatalf("dry-run output missing layout triples:\n%s", out)
+	}
+}
+
+// TestDeriveDryRunPrintsImplementsTriples covers the third repo-local source
+// (WL-810, 025 §11.3): a present .worklode/implements.yaml resolves against
+// the components manifest and renders as the repo-implements edge.
+func TestDeriveDryRunPrintsImplementsTriples(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	man := `repo: github.com/acme/app
+components:
+  - iri: https://worklode.io/ns/id/component/github.com/acme/app
+    name: app
+    paths: ["**"]
+`
+	impl := `implements:
+  - section: wlid:section/spec-worklode-025/sec-11.3
+    pinned:  wlid:doc/spec-worklode-025/v3
+    by:      [main.go]
+`
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "components.yaml"), []byte(man), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "implements.yaml"), []byte(impl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "main.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runDeriveLocal(t.Context(), root, "github.com", "acme", "app", true, nil, derive.Options{})
+	if err != nil {
+		t.Fatalf("runDeriveLocal: %v", err)
+	}
+	if !strings.Contains(out, "graph/observed/repo-implements/github.com/acme/app") {
+		t.Fatalf("dry-run output missing the repo-implements graph annotation:\n%s", out)
+	}
+	wantEdge := "<https://worklode.io/ns/id/component/github.com/acme/app> " +
+		"<https://worklode.io/ns/ontology#implements> " +
+		"<https://worklode.io/ns/id/section/spec-worklode-025/sec-11.3> .\n"
+	if !strings.Contains(out, wantEdge) {
+		t.Fatalf("dry-run output missing the implements edge %q:\n%s", wantEdge, out)
+	}
+}
+
+// TestDeriveDryRunNotesAbsentImplementsManifest: most repos claim nothing, so
+// a missing .worklode/implements.yaml is normal, not an error — mirrors the
+// go-imports skip reporting.
+func TestDeriveDryRunNotesAbsentImplementsManifest(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	man := `repo: github.com/acme/app
+components:
+  - iri: https://worklode.io/ns/id/component/github.com/acme/app
+    name: app
+    paths: ["**"]
+`
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "components.yaml"), []byte(man), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runDeriveLocal(t.Context(), root, "github.com", "acme", "app", true, nil, derive.Options{})
+	if err != nil {
+		t.Fatalf("runDeriveLocal: %v", err)
+	}
+	if !strings.Contains(out, "repo-implements skipped:") {
+		t.Fatalf("dry-run output must note the absent implements manifest:\n%s", out)
+	}
+	if strings.Contains(out, "graph/observed/repo-implements/") {
+		t.Fatalf("no repo-implements graph should be printed when the manifest is absent:\n%s", out)
+	}
+}
+
+// TestDeriveImplementsResolutionErrorIsFatal: a claim whose path matches no
+// component is a publication error naming the offender (025 §11.3), not a
+// skip — an unattributable claim silently dropped is worse than a failed
+// derive.
+func TestDeriveImplementsResolutionErrorIsFatal(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	man := `repo: github.com/acme/app
+components:
+  - iri: https://worklode.io/ns/id/component/github.com/acme/app
+    name: app
+    paths: ["src/**"]
+`
+	impl := `implements:
+  - section: wlid:section/spec-worklode-025/sec-11.3
+    pinned:  wlid:doc/spec-worklode-025/v3
+    by:      [outside/main.go]
+`
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "components.yaml"), []byte(man), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".worklode", "implements.yaml"), []byte(impl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runDeriveLocal(t.Context(), root, "github.com", "acme", "app", true, nil, derive.Options{})
+	if err == nil {
+		t.Fatal("runDeriveLocal = nil error; an unmatched implements path must fail the derive")
+	}
+	if !strings.Contains(err.Error(), "outside/main.go") {
+		t.Fatalf("err = %v; want it to name the offending path", err)
 	}
 }
 
@@ -105,11 +216,19 @@ func TestDeriveDryRunNamesAnEmptyDocument(t *testing.T) {
 // goRepoWithEmptyImports writes a minimal Go module whose single whole-repo
 // component drops every import edge as intra-component, so go-imports derives
 // to nothing while repo-layout derives normally — worklode's own shape.
+//
+// go list -deps needs VCS info once the module leaves GOPATH-style isolation;
+// without a git repo underneath it, `go list -deps -json` fails with "error
+// obtaining VCS status", which reads as a real go-imports failure rather than
+// this fixture's shortcut. git init (no commit needed) is enough.
 func goRepoWithEmptyImports(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".worklode"), 0o755); err != nil {
 		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", root, "init").CombinedOutput(); err != nil {
+		t.Fatalf("git init %s: %v\n%s", root, err, out)
 	}
 	files := map[string]string{
 		filepath.Join(".worklode", "components.yaml"): `repo: github.com/acme/app
