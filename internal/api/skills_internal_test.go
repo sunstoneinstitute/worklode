@@ -166,6 +166,39 @@ func TestRecommendationNoPins(t *testing.T) {
 	}
 }
 
+// TestRecommendationSkillMatchingDisabled covers the
+// LODE_DISABLE_SKILL_MATCHING kill switch: the fake embedding server panics
+// if hit, so a pass proves skillMatches never calls the embedder (or the
+// store) rather than just racing it.
+func TestRecommendationSkillMatchingDisabled(t *testing.T) {
+	t.Parallel()
+	st := store.OpenTestStore(t)
+	fakeSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("embedder called despite DisableSkillMatching")
+	}))
+	t.Cleanup(fakeSrv.Close)
+
+	s := &server{
+		st:       st,
+		log:      slog.Default(),
+		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		cfg:      Config{DisableSkillMatching: true},
+	}
+	rec, err := s.recommendation(context.Background(), "write tests first", nil, 5)
+	if err != nil {
+		t.Fatalf("recommendation: %v", err)
+	}
+	if len(rec.Matches) != 0 {
+		t.Fatalf("matches: %+v", rec.Matches)
+	}
+	if rec.Provider != "none" {
+		t.Fatalf("provider = %q, want none", rec.Provider)
+	}
+	if len(rec.Warnings) != 1 || rec.Warnings[0] != "skill matching disabled" {
+		t.Fatalf("warnings: %+v", rec.Warnings)
+	}
+}
+
 // TestNewServerSkillsConfig covers NewServer's skills-config boot validation
 // one field at a time: the reviewer found this path had zero coverage, so
 // deleting the EmbeddingModel requirement or the appAuth requirement left the

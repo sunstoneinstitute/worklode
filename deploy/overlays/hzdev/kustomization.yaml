@@ -32,6 +32,12 @@ patches:
       - op: replace
         path: /data/LODE_SKILL_SOURCES
         value: "sunstoneinstitute/claude-plugins@main:plugins/*/skills/*"
+      # The embedding provider here runs near the 2s recommendTimeout,
+      # making every task-brief request slow. Off until that provider is
+      # fixed or swapped.
+      - op: replace
+        path: /data/LODE_DISABLE_SKILL_MATCHING
+        value: "true"
       - op: add
         path: /data/LODE_OIDC_ISSUER
         value: "https://auth.sunstoneinstitute.ai/realms/sunstone"

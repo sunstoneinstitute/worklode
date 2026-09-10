@@ -143,7 +143,7 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 		}
 	}
 
-	if s.embedder != nil {
+	if s.embedder != nil && !s.cfg.DisableSkillMatching {
 		rec.Provider = "openai-compatible"
 	}
 	matches, warnings := s.skillMatches(ctx, text, pinnedNames, limit)
@@ -172,6 +172,9 @@ func (s *server) recommendation(ctx context.Context, text string, pins []string,
 // error here would stop anyone from starting work.
 func (s *server) skillMatches(ctx context.Context, text string, exclude map[string]bool, limit int) ([]model.SkillMatch, []string) {
 	matches := []model.SkillMatch{}
+	if s.cfg.DisableSkillMatching {
+		return matches, []string{"skill matching disabled"}
+	}
 	if limit <= 0 {
 		limit = defaultSkillLimit
 	} else if limit > maxSkillLimit {

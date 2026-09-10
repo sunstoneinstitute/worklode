@@ -13,6 +13,10 @@ data:
   LODE_INSTANCE_ENV: "prod"
   LODE_BRANCH_TEMPLATE: ""
   LODE_SKILL_SOURCES: ""
+  # Kill switch for a slow or misbehaving embedding provider: skips the
+  # embed call and the search query in skillMatches entirely, pins only.
+  # Overlays set it to "true" when the provider is the bottleneck.
+  LODE_DISABLE_SKILL_MATCHING: "false"
   # The dense arm of corpus search (040 §2.3). The URL is the in-cluster
   # text-embeddings-inference Service in embeddings.yaml, which speaks the same
   # OpenAI-compatible wire protocol internal/embed.OpenAI already speaks — so
