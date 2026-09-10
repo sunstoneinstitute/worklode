@@ -56,6 +56,43 @@ func TestMetricsSuccessfulRunIncrementsOkAndProjects(t *testing.T) {
 	}
 }
 
+func TestMetricsCountsDocumentVersionGraphWrites(t *testing.T) {
+	s, p, _, reg := newMetricsProjector(t)
+	ctx := t.Context()
+	if err := s.EnsureActor(ctx, "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
+	body := "---\nstatus: accepted\n---\n# Version metric\n\n## 1. Scope {#sec-1}\n\nScope.\n"
+	var docID int64
+	if _, _, err := s.RecordDocEvent(ctx, "create", "cli", "metric-version-create", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 9, Slug: "009-version-metric",
+				Body: body, CreatedBy: "author",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			docID = d.ID
+			return nil
+		}); err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "accept", "cli", "metric-version-accept", "doc.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, _, err := store.AcceptDoc(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project doc: %v", err)
+	}
+	if got := counterValue(t, reg, "worklode_graph_projection_doc_version_graphs_total", "", ""); got != 1 {
+		t.Errorf("doc_version_graphs_total = %v, want 1", got)
+	}
+}
+
 func TestMetricsFailingRunIncrementsErrorLeavesProjects(t *testing.T) {
 	s, p, f, reg := newMetricsProjector(t)
 	createTask(t, s, "m2", "alpha", "unlucky")
@@ -137,6 +174,34 @@ func TestNilMetricsRecordsNothing(t *testing.T) {
 
 	if _, err := p.RunOnce(t.Context()); err != nil {
 		t.Fatalf("RunOnce with nil metrics: %v", err)
+	}
+	if err := s.EnsureActor(t.Context(), "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
+	var docID int64
+	body := "---\nstatus: accepted\n---\n# Nil metric version\n\n## 1. Scope {#sec-1}\n\nScope.\n"
+	if _, _, err := s.RecordDocEvent(t.Context(), "create", "cli", "nil-metrics-doc", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 10, Slug: "010-nil-metrics", Body: body, CreatedBy: "author",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			docID = d.ID
+			return nil
+		}); err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(t.Context(), "accept", "cli", "nil-metrics-accept", "doc.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, _, err := store.AcceptDoc(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept doc: %v", err)
+	}
+	if _, err := p.RunOnce(t.Context()); err != nil {
+		t.Fatalf("RunOnce with nil metrics and version graph: %v", err)
 	}
 
 	f.setFail(true)

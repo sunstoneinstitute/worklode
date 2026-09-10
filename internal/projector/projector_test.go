@@ -25,6 +25,7 @@ type fakeGraphServer struct {
 	puts      map[string][]string
 	attempts  map[string]int // graph IRI → PUTs seen, rejected ones included
 	deletes   map[string]int // graph IRI → DELETEs that actually removed a graph
+	order     []string       // accepted PUT graph IRIs, in request order
 }
 
 // setFail is used instead of a bare field write because the test goroutine
@@ -81,6 +82,7 @@ func (f *fakeGraphServer) handler() http.Handler {
 			status = http.StatusCreated
 		}
 		f.puts[g] = append(f.puts[g], string(body))
+		f.order = append(f.order, g)
 		w.WriteHeader(status)
 	})
 }
@@ -134,6 +136,12 @@ func (f *fakeGraphServer) attemptCount(graph string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.attempts[graph]
+}
+
+func (f *fakeGraphServer) putOrder() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.order...)
 }
 
 func newProjector(t *testing.T) (*store.Store, *projector.Projector, *fakeGraphServer) {
@@ -244,6 +252,154 @@ func TestRunOnceProjectsDocuments(t *testing.T) {
 			t.Errorf("declared graph missing %q\n%s", want, declared)
 		}
 	}
+	if strings.Contains(declared, graphproj.DCATHasVersion) || strings.Contains(declared, graphproj.DCATHasCurrentVersion) {
+		t.Errorf("draft document has version pointers:\n%s", declared)
+	}
+	if got := f.last(iri.DeclaredVersionGraph("001-alpha-spec", 1)); got != "" {
+		t.Errorf("draft document has a version graph:\n%s", got)
+	}
+}
+
+func TestRunOnceProjectsVersionGraphs(t *testing.T) {
+	s, p, f := newProjector(t)
+	ctx := t.Context()
+	if err := s.EnsureActor(ctx, "author", "human", "Author"); err != nil {
+		t.Fatalf("ensure actor: %v", err)
+	}
+
+	bodyV1 := "---\nstatus: accepted\nissued: 2026-08-01\n---\n" +
+		"# Versioned spec\n\n" +
+		"## 1. Scope {#sec-1}\n\nOriginal scope.\n\n" +
+		"#### Details\n\nStable details.\n\n" +
+		"## 2. Model {#sec-2}\n\nStable model.\n"
+	bodyV2 := strings.Replace(bodyV1, "## 1. Scope {#sec-1}", "## 1. Renamed scope {#sec-1}", 1)
+	bodyV3 := strings.Replace(bodyV2, "Stable details.", "Revised details.", 1)
+	var docID int64
+	_, _, err := s.RecordDocEvent(ctx, "create", "cli", "version-graphs-create", "doc.created", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			d, err := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
+				Project: "alpha", Kind: "spec", Number: 8, Slug: "008-versioned",
+				Body: bodyV1, CreatedBy: "author",
+			}, eventID)
+			if err != nil {
+				return err
+			}
+			docID = d.ID
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("create doc: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "accept", "cli", "version-graphs-accept", "doc.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, _, err := store.AcceptDoc(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept doc: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project v1: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "version-graphs-revise", "doc.revise", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.ReviseDoc(tx, s.Now(), docID, "author", eventID)
+		}); err != nil {
+		t.Fatalf("open revision: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "version-graphs-revision-update", "doc.revision.update", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpdateRevision(tx, s.Now(), docID, bodyV2, eventID)
+		}); err != nil {
+		t.Fatalf("update revision: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "accept", "cli", "version-graphs-revision-accept", "doc.revision.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.AcceptRevision(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept revision: %v", err)
+	}
+
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project v2: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "version-graphs-revise-2", "doc.revise", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.ReviseDoc(tx, s.Now(), docID, "author", eventID)
+		}); err != nil {
+		t.Fatalf("open second revision: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "version-graphs-revision-update-2", "doc.revision.update", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpdateRevision(tx, s.Now(), docID, bodyV3, eventID)
+		}); err != nil {
+		t.Fatalf("update second revision: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "accept", "cli", "version-graphs-revision-accept-2", "doc.revision.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.AcceptRevision(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept second revision: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project v3: %v", err)
+	}
+	v1 := f.last(iri.DeclaredVersionGraph("008-versioned", 1))
+	v2 := f.last(iri.DeclaredVersionGraph("008-versioned", 2))
+	v3 := f.last(iri.DeclaredVersionGraph("008-versioned", 3))
+	declared := f.last(iri.DeclaredGraph("008-versioned"))
+	if !strings.Contains(v1, "<"+iri.DocVersion("008-versioned", 1)+"> <"+graphproj.DCTTitle+">") {
+		t.Errorf("v1 graph missing snapshot node:\n%s", v1)
+	}
+	if !strings.Contains(v2, "<"+iri.DocVersion("008-versioned", 2)+"> <"+graphproj.DCATPreviousVersion+"> <"+iri.DocVersion("008-versioned", 1)+">") {
+		t.Errorf("v2 graph missing previousVersion:\n%s", v2)
+	}
+	canonical := "<" + iri.Doc("008-versioned") + ">"
+	for _, want := range []string{
+		canonical + " <" + graphproj.DCATHasCurrentVersion + "> <" + iri.DocVersion("008-versioned", 3) + ">",
+		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("008-versioned", 1) + ">",
+		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("008-versioned", 2) + ">",
+		canonical + " <" + graphproj.DCATHasVersion + "> <" + iri.DocVersion("008-versioned", 3) + ">",
+	} {
+		if !strings.Contains(declared, want) {
+			t.Errorf("declared graph missing %q:\n%s", want, declared)
+		}
+	}
+	scopeV1 := "<" + iri.Section("008-versioned", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("008-versioned", 1) + ">"
+	scopeV3 := "<" + iri.Section("008-versioned", "sec-1") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("008-versioned", 3) + ">"
+	model := "<" + iri.Section("008-versioned", "sec-2") + "> <" + iri.Term("lastRevisedIn") + "> <" + iri.DocVersion("008-versioned", 1) + ">"
+	if !strings.Contains(v2, scopeV1) || !strings.Contains(v2, model) {
+		t.Errorf("v2 graph did not preserve immutable revision provenance:\n%s", v2)
+	}
+	if !strings.Contains(v3, scopeV3) || !strings.Contains(v3, model) {
+		t.Errorf("v3 graph has wrong section revision provenance:\n%s", v3)
+	}
+	v2BeforeTouch := v2
+	createTask(t, s, "version-graphs-touch", "alpha", "touch project")
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("re-project touched project: %v", err)
+	}
+	if got := f.last(iri.DeclaredVersionGraph("008-versioned", 2)); got != v2BeforeTouch {
+		t.Errorf("v2 graph changed on idempotent re-projection:\nbefore:\n%s\nafter:\n%s", v2BeforeTouch, got)
+	}
+	order := f.putOrder()
+	version1, version2, version3, canonicalIndex := -1, -1, -1, -1
+	for i, graph := range order {
+		switch graph {
+		case iri.DeclaredVersionGraph("008-versioned", 1):
+			version1 = i
+		case iri.DeclaredVersionGraph("008-versioned", 2):
+			version2 = i
+		case iri.DeclaredVersionGraph("008-versioned", 3):
+			version3 = i
+		case iri.DeclaredGraph("008-versioned"):
+			canonicalIndex = i
+		}
+	}
+	if version1 < 0 || version2 < 0 || version3 < 0 || canonicalIndex < 0 || version1 >= canonicalIndex || version2 >= canonicalIndex || version3 >= canonicalIndex {
+		t.Errorf("PUT order = %v; want all version graphs before declared graph", order)
+	}
 }
 
 // TestRunOnceProjectsSections covers 025 §3.3: once a document is accepted,
@@ -324,7 +480,8 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 		func(tx *sql.Tx, eventID int64) error {
 			d, cerr := store.CreateDoc(tx, time.Now().UTC(), store.DocInput{
 				Project: "alpha", Kind: "spec", Number: 3, Slug: "003-doomed",
-				Body:      "---\nstatus: draft\n---\n# Spec 3 — Doomed\n",
+				Body: "---\nstatus: accepted\n---\n# Spec 3 — Doomed\n\n" +
+					"## 1. Scope {#sec-1}\n\nOriginal scope.\n",
 				CreatedBy: "author",
 			}, eventID)
 			if cerr != nil {
@@ -336,12 +493,49 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create doc: %v", err)
 	}
+	if _, _, err := s.RecordDocEvent(ctx, "accept", "cli", "doc-del1-accept", "doc.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, _, err := store.AcceptDoc(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept doc: %v", err)
+	}
 	if _, err := p.RunOnce(ctx); err != nil {
 		t.Fatalf("project the live doc: %v", err)
 	}
 	graph := iri.DeclaredGraph("003-doomed")
 	if f.last(graph) == "" {
 		t.Fatalf("live document was not projected into %s", graph)
+	}
+	if f.last(iri.DeclaredVersionGraph("003-doomed", 1)) == "" {
+		t.Fatalf("accepted document version was not projected")
+	}
+	bodyV2 := "---\nstatus: accepted\n---\n# Spec 3 — Doomed\n\n" +
+		"## 1. Scope {#sec-1}\n\nRevised scope.\n"
+	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "doc-del1-revise", "doc.revise", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.ReviseDoc(tx, s.Now(), docID, "author", eventID)
+		}); err != nil {
+		t.Fatalf("open revision: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "revise", "cli", "doc-del1-revision-update", "doc.revision.update", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			return store.UpdateRevision(tx, s.Now(), docID, bodyV2, eventID)
+		}); err != nil {
+		t.Fatalf("update revision: %v", err)
+	}
+	if _, _, err := s.RecordDocEvent(ctx, "accept", "cli", "doc-del1-revision-accept", "doc.revision.accept", nil,
+		func(tx *sql.Tx, eventID int64) error {
+			_, err := store.AcceptRevision(tx, s.Now(), docID, "author", eventID)
+			return err
+		}); err != nil {
+		t.Fatalf("accept revision: %v", err)
+	}
+	if _, err := p.RunOnce(ctx); err != nil {
+		t.Fatalf("project v2: %v", err)
+	}
+	if f.last(iri.DeclaredVersionGraph("003-doomed", 2)) == "" {
+		t.Fatalf("revised document version was not projected")
 	}
 
 	_, _, err = s.RecordEvent(ctx, "cli", "doc-del1-delete", "doc.deleted", nil,
@@ -357,6 +551,11 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 	if got := f.deleteCount(graph); got != 1 {
 		t.Fatalf("graph deletions after the delete = %d, want 1", got)
 	}
+	for _, version := range []int{1, 2} {
+		if got := f.deleteCount(iri.DeclaredVersionGraph("003-doomed", version)); got != 1 {
+			t.Fatalf("version %d graph deletions after the delete = %d, want 1", version, got)
+		}
+	}
 	if f.last(graph) != "" {
 		t.Errorf("tombstoned document still has a declared graph:\n%s", f.last(graph))
 	}
@@ -369,6 +568,11 @@ func TestDeletedDocumentGraphIsRemoved(t *testing.T) {
 	}
 	if got := f.deleteCount(graph); got != 1 {
 		t.Errorf("graph deletions after an idempotent rerun = %d, want 1", got)
+	}
+	for _, version := range []int{1, 2} {
+		if got := f.deleteCount(iri.DeclaredVersionGraph("003-doomed", version)); got != 1 {
+			t.Errorf("version %d graph deletions after an idempotent rerun = %d, want 1", version, got)
+		}
 	}
 
 	// Undelete puts the document back in the live list, which writes its
