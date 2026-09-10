@@ -10,13 +10,15 @@ import (
 
 // Reused-vocabulary IRIs for the document projection (PROV-O, DCAT 3, DCT).
 const (
-	ProvWasGeneratedBy  = "http://www.w3.org/ns/prov#wasGeneratedBy"
-	DCATVersion         = "http://www.w3.org/ns/dcat#version"
-	DCTIsReplacedBy     = "http://purl.org/dc/terms/isReplacedBy"
-	DCATPreviousVersion = "http://www.w3.org/ns/dcat#previousVersion"
-	ProvWasRevisionOf   = "http://www.w3.org/ns/prov#wasRevisionOf"
-	DCTIssued           = "http://purl.org/dc/terms/issued"
-	XSDDate             = "http://www.w3.org/2001/XMLSchema#date"
+	ProvWasGeneratedBy    = "http://www.w3.org/ns/prov#wasGeneratedBy"
+	DCATVersion           = "http://www.w3.org/ns/dcat#version"
+	DCTIsReplacedBy       = "http://purl.org/dc/terms/isReplacedBy"
+	DCATPreviousVersion   = "http://www.w3.org/ns/dcat#previousVersion"
+	ProvWasRevisionOf     = "http://www.w3.org/ns/prov#wasRevisionOf"
+	DCTIssued             = "http://purl.org/dc/terms/issued"
+	XSDDate               = "http://www.w3.org/2001/XMLSchema#date"
+	DCATHasVersion        = "http://www.w3.org/ns/dcat#hasVersion"
+	DCATHasCurrentVersion = "http://www.w3.org/ns/dcat#hasCurrentVersion"
 )
 
 // docClass maps docs.kind to its ontology class (ns/ontology.ttl): specs and
@@ -43,13 +45,19 @@ func docClass(kind string) string {
 // timestamps, and — the edge this projection exists to make reachable —
 // prov:wasGeneratedBy naming the authoring task (025 §12).
 //
-// Deliberately not yet projected here: doc_edges and 025 §4's versioned
-// snapshot graphs (dcat:hasVersion and wl:lastRevisedIn). Those belong to the
-// full document projection 025 sketches; carrying dcat:version on the
-// canonical node is the v1 shorthand until the snapshots exist. Sections are
-// separate subjects and have their own projection, SectionTriples.
-// Subject-complete for iri.Doc(d.Slug), like TaskTriples.
-func DocTriples(d model.Doc) []Triple {
+// dcat:version stays a plain literal on the canonical node alongside the
+// pointer edges below: DCAT permits both, 006 §11 documents the literal
+// as-built, and dropping it buys nothing.
+//
+// versions is nil for a draft (Global Constraints — a draft has no accepted
+// snapshot graphs to point at), which keeps a draft's projection
+// byte-identical to before this pointer machinery existed. Non-nil, each
+// entry gets a dcat:hasVersion edge to its snapshot node
+// (iri.DocVersion(d.Slug, v.Version)), plus one dcat:hasCurrentVersion naming
+// d.Version's snapshot (025 §4.1). Sections are separate subjects and have
+// their own projection, SectionTriples. Subject-complete for iri.Doc(d.Slug),
+// like TaskTriples.
+func DocTriples(d model.Doc, versions []model.DocVersionSummary) []Triple {
 	subj := iri.Doc(d.Slug)
 	triples := []Triple{
 		{S: subj, P: RDFType, O: IRIRef(iri.Term(docClass(d.Kind)))},
@@ -61,6 +69,12 @@ func DocTriples(d model.Doc) []Triple {
 	}
 	if d.GeneratedByTask != "" {
 		triples = append(triples, Triple{S: subj, P: ProvWasGeneratedBy, O: IRIRef(iri.Task(d.GeneratedByTask))})
+	}
+	for _, v := range versions {
+		triples = append(triples, Triple{S: subj, P: DCATHasVersion, O: IRIRef(iri.DocVersion(d.Slug, v.Version))})
+	}
+	if len(versions) > 0 {
+		triples = append(triples, Triple{S: subj, P: DCATHasCurrentVersion, O: IRIRef(iri.DocVersion(d.Slug, d.Version))})
 	}
 	return triples
 }
@@ -169,6 +183,12 @@ func SectionTriples(d model.Doc, sections []model.DocSection, in []model.DocEdge
 		)
 		if successor != "" {
 			triples = append(triples, Triple{S: subj, P: DCTIsReplacedBy, O: IRIRef(successor)})
+		}
+		// LastRevisedIn is 0 when unset; iri.DocVersion(d.Slug, 0) would point
+		// at a "v0" snapshot that never exists, so the edge is only emitted
+		// once a real version has revised the section.
+		if sec.LastRevisedIn > 0 {
+			triples = append(triples, Triple{S: subj, P: iri.Term("lastRevisedIn"), O: IRIRef(iri.DocVersion(d.Slug, sec.LastRevisedIn))})
 		}
 	}
 	return triples
