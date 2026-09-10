@@ -270,8 +270,8 @@ func TestDocWatchRedeliveryMintsOnce(t *testing.T) {
 
 // TestDocWatchMaterializesApprovalOnSubmit is 025 §7.3 / 029 §7.3 at its
 // source: submitting a document opens one unlaned awaiting approvals row
-// bound to the submitted version, and the /reviews queue lists it. Both
-// row lands exactly once whether the same event is redelivered or a second,
+// bound to the submitted version, and the /reviews queue lists it. The row
+// lands exactly once whether the same event is redelivered or a second,
 // genuinely new submission arrives while it is still open: the
 // OpenApprovalBound guard stops both, with the log's (source, external_id)
 // key and InsertAwaitingApproval's ON CONFLICT behind it.
