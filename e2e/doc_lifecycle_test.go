@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/cli"
 	"github.com/sunstoneinstitute/worklode/internal/eventbus"
 	"github.com/sunstoneinstitute/worklode/internal/model"
+	"github.com/sunstoneinstitute/worklode/internal/oidc/oidctest"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
 
@@ -176,6 +178,10 @@ func TestDocLifecycleWatcher(t *testing.T) {
 	ctx := context.Background()
 
 	st := store.OpenTestStore(t)
+	// Submitting the spec opens an approvals row the accept below refuses to
+	// pass while it is open (029 §7.3), and deciding it is a session act — so
+	// this stack runs behind the fake issuer rather than open.
+	iss := oidctest.NewIssuer(t)
 
 	// The loop runs until this context is cancelled. It holds a dedicated
 	// pooled connection for its advisory lock, so it must stop before the
@@ -187,6 +193,10 @@ func TestDocLifecycleWatcher(t *testing.T) {
 		BootstrapToken: bootstrapToken,
 		BackgroundCtx:  loopCtx,
 		EventPoll:      50 * time.Millisecond,
+		OIDCIssuer:     iss.URL(),
+		OIDCClientID:   iss.ClientID,
+		PublicURL:      "http://localhost:8080",
+		SessionSecret:  "e2e-session-secret",
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -327,14 +337,29 @@ func TestDocLifecycleWatcher(t *testing.T) {
 			doc.ID, describeTasks(tasks), review.ID)
 	}
 
-	// 4. Close the review, then accept the spec as its owner. With no open
-	// design task referencing the document, the second rule mints one.
+	// 4. Close the review and decide the approval the submit opened, then
+	// accept the spec as its owner. With no open design task referencing the
+	// document, the second rule mints one.
 	abandoned, _, err := owner.AbandonTask(ctx, review.ID)
 	if err != nil {
 		t.Fatalf("abandon review task %s: %v", review.ID, err)
 	}
 	if abandoned.State != "abandoned" {
 		t.Fatalf("review task %s state = %q, want abandoned", review.ID, abandoned.State)
+	}
+	// The row is the submit's, not a reviewer's: this document has no
+	// reviewer set, so it carries no lane. The loop is caught up by step 3,
+	// so it is already there. Somebody other than the author decides it —
+	// the owner's own approval would be 029 §7.1 self-approval.
+	awaiting := docLanes(t, ctx, admin, doc.ID)
+	if len(awaiting) != 1 || awaiting[0].Lane != "" {
+		t.Fatalf("open approvals on doc %d = %s, want one unlaned row from the submit",
+			doc.ID, describeLanes(awaiting))
+	}
+	session := webSession(t, srv.URL, iss, "reviewer")
+	if code, body := decideAs(t, srv.URL, session, awaiting[0].ID, "approve"); code != http.StatusSeeOther {
+		t.Fatalf("approving the submit's row %d: status = %d, want 303; body %s",
+			awaiting[0].ID, code, body)
 	}
 	accept, _, err := owner.AcceptDoc(ctx, doc.ID)
 	if err != nil {
