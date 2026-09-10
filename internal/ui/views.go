@@ -191,8 +191,8 @@ type ApprovalRow struct {
 // --- approval detail (spec 032 §7) ------------------------------------------
 
 // ApprovalDetailView is GET /approvals/{id}: one approval with everything an
-// actor needs to trust or revisit it (032 §7). Read-only for now — Tasks 6
-// and 7 add the decide form's action buttons here once their routes exist.
+// actor needs to trust or revisit it (032 §7). Read-only except on an open
+// impact review, which carries its note and decision acts (029 §7.1).
 //
 // Title/URL are the governed entity's jump-out link, resolved through the
 // same join the Reviews queue uses (EntityTitleURL); both are "" when
@@ -200,9 +200,9 @@ type ApprovalRow struct {
 // rather than a broken link. Revision is the bound subject_revision, stated
 // verbatim regardless of kind (unlike the queue, which hides a PR's own).
 //
-// Note and ExceptionAuthorizedBy are the facts Tasks 6/7 write beside a
-// decision (an impact review's note, a self-review exception's authorizer);
-// both "" until then.
+// Note and ExceptionAuthorizedBy are the facts written beside a decision (an
+// impact review's note, a self-review exception's authorizer); both "" when
+// unset.
 type ApprovalDetailView struct {
 	Page PageProps
 
@@ -226,6 +226,11 @@ type ApprovalDetailView struct {
 
 	Note                  string
 	ExceptionAuthorizedBy string
+
+	// ImpactOpen marks an impact review still awaiting an answer (029 §7.1):
+	// the page then offers the dependent owner's note and the prior
+	// approver's decision, both of which the store refuses on any other row.
+	ImpactOpen bool
 
 	// History is every decision recorded for this entity, newest first
 	// (ListApprovalsForEntity) — this row included, so a stale approval

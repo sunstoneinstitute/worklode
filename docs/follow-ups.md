@@ -919,3 +919,30 @@ Recorded by WL-831 (§8.6 stale marking off the patch seam):
   `CheckDocAcceptable` names the case and says to edit the plan so the
   version moves. The honest fix is a status-aware accept key or an explicit
   clear verb; a one-character edit works today and the case is rare.
+
+Recorded by WL-561 (the impact review lifecycle, 029 §7.1):
+
+- `[P3]` **An impact reopen overwrites the dependent's approval record.**
+  029 §7.1 says `ImpactReopen` puts the dependent back into review "at the
+  revision its approved row bound", and `reopenDependentReview` inserts that
+  awaiting row. On an unlaned dependent the insert cannot land: the approved
+  row already occupies the unique key
+  `(entity_kind, entity_id, subject_revision, lane, review_kind)`, so the
+  insert is absorbed and the approved row itself is flipped back to
+  `awaiting` instead, clearing `resolving_actor`/`resolved_at`. Since
+  governed references are recorded from PRs today, every dependent is
+  unlaned, so that is the only path in practice, not an edge case. The
+  outcome the reopen exists for still holds — one open review row at that
+  revision — and the events log keeps the provenance, but the row no longer
+  shows who approved it and when. Keeping both rows needs the unique key to
+  permit two rows at one revision, which is a schema and spec decision, not
+  a code fix.
+- `[P4]` **A reopened impact row stays open forever.**
+  `request_changes` on an impact review leaves the row in
+  `changes_requested`, which counts as open everywhere else in the package.
+  That is what makes a later upstream designation absorb into it rather than
+  ask the dependent's owner a second question while the first is unsettled,
+  so it is the right behaviour on the fan-out side. The cost is that nothing
+  ever closes the row: the impact question the owner already answered keeps
+  showing as outstanding. Worth a decision on whether a reopen should resolve
+  the impact row rather than leave it open.
