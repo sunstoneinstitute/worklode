@@ -83,7 +83,7 @@ func (s *server) taskBrief(w http.ResponseWriter, r *http.Request) {
 	for _, sk := range b.PinnedSkills {
 		pinnedNames[sk.QualifiedName()] = true
 	}
-	if s.embedder != nil && !s.cfg.DisableSkillMatching {
+	if s.queryEmbedder != nil && !s.cfg.DisableSkillMatching {
 		out.Skills.Provider = "openai-compatible"
 	}
 	matches, warnings := s.skillMatches(r.Context(), b.Task.Title+"\n\n"+b.Body, pinnedNames, 0)

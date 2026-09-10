@@ -66,9 +66,10 @@ func TestRecommendationPins(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 
 	s := &server{
-		st:       st,
-		log:      slog.Default(),
-		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		st:            st,
+		log:           slog.Default(),
+		embedder:      &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		queryEmbedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 
 	pinned := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
@@ -145,9 +146,10 @@ func TestRecommendationNoPins(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 
 	s := &server{
-		st:       st,
-		log:      slog.Default(),
-		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		st:            st,
+		log:           slog.Default(),
+		embedder:      &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		queryEmbedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 	sk := seedSkillDirect(t, st, "tdd", "Red-green-refactor discipline")
 	if err := st.SeedSkillChunksForTests(context.Background(), sk.ID, [][]float32{store.VecForTests(1, 0)}); err != nil {
@@ -179,10 +181,11 @@ func TestRecommendationSkillMatchingDisabled(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 
 	s := &server{
-		st:       st,
-		log:      slog.Default(),
-		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
-		cfg:      Config{DisableSkillMatching: true},
+		st:            st,
+		log:           slog.Default(),
+		embedder:      &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		queryEmbedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		cfg:           Config{DisableSkillMatching: true},
 	}
 	rec, err := s.recommendation(context.Background(), "write tests first", nil, 5)
 	if err != nil {
@@ -216,6 +219,7 @@ func TestNewServerSkillsConfig(t *testing.T) {
 
 		{"embedding url without model", Config{EmbeddingURL: "https://example.com/embed"}, true},
 		{"embedding url with model", Config{EmbeddingURL: "https://example.com/embed", EmbeddingModel: "m"}, false},
+		{"query embedding url without embedding url", Config{QueryEmbeddingURL: "https://example.com/embed"}, true},
 
 		{"skill sources malformed", Config{SkillSources: "not-a-source"}, true},
 		{"skill sources without github app", Config{SkillSources: "acme/skills@main:skills/*"}, true},
@@ -458,7 +462,8 @@ func TestRecommendationPinsSurviveProviderFailure(t *testing.T) {
 			t.Cleanup(fakeSrv.Close)
 			s := &server{
 				st: st, log: slog.Default(),
-				embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+				embedder:      &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+				queryEmbedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 			}
 
 			rec, err := s.recommendation(context.Background(), "write tests first", []string{pinned.Name}, 5)
@@ -501,7 +506,8 @@ func TestSkillMatchesLimitClamped(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 	s := &server{
 		st: st, log: slog.Default(),
-		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		embedder:      &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		queryEmbedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 
 	matches, _ := s.skillMatches(ctx, "anything", nil, maxSkillLimit+30)
@@ -540,7 +546,8 @@ func TestRecommendationPinsSurviveMatchQueryFailure(t *testing.T) {
 	t.Cleanup(fakeSrv.Close)
 	s := &server{
 		st: st, log: slog.Default(),
-		embedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		embedder:      &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
+		queryEmbedder: &embed.OpenAI{URL: fakeSrv.URL, Model: "m"},
 	}
 
 	rec, err := s.recommendation(context.Background(), "write tests first", []string{pinned.Name}, 5)

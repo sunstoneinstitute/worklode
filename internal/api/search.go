@@ -51,7 +51,7 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		mode = model.SearchHybrid
 	}
 	provider := "none"
-	if s.embedder != nil {
+	if s.queryEmbedder != nil {
 		provider = "openai-compatible"
 	}
 
@@ -59,11 +59,11 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	// unrecognized mode is left alone here and rejected by the store's own
 	// validation (422), not silently rewritten.
 	needsVector := mode == model.SearchHybrid || mode == model.SearchDense
-	degraded := s.embedder == nil
+	degraded := s.queryEmbedder == nil
 	var vec []float32
-	if s.embedder != nil && needsVector {
+	if s.queryEmbedder != nil && needsVector {
 		ectx, cancel := context.WithTimeout(r.Context(), recommendTimeout)
-		vecs, err := s.embedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
+		vecs, err := s.queryEmbedder.Embed(ectx, embed.RoleQuery, []string{embed.Truncate(text, embed.ChunkRunes)})
 		cancel()
 		if err != nil {
 			// A failing provider degrades exactly like no provider at all
