@@ -8,26 +8,29 @@ package hooks
 // the GitHub hook's repo → project mapping, the reported address or label
 // itself is the key.
 //
-// One handler shape, several sources (029 §8.3): the data catalog, CI, and
-// the deploy pipeline all emit the same payload over the same signed-webhook
-// scheme and differ only in identity (events.source / evidence.source, the
-// delivery header, and — per source — an extra validation rule). See
-// ingestConfig and NewCatalogHandler/NewCIHandler/NewPipelineHandler below.
+// One handler shape, several sources (029 §8.3): the data catalog, CI, the
+// deploy pipeline and the CMS all emit the same payload over the same
+// signed-webhook scheme and differ only in identity (events.source /
+// evidence.source, the delivery header, and — per source — an extra
+// validation rule). See ingestConfig and
+// NewCatalogHandler/NewCIHandler/NewPipelineHandler/NewCMSHandler below.
 //
-// The contract below is PROVISIONAL: no data-platform emitter exists yet, so
-// it deliberately mirrors the Flux generic-hmac shape and will be settled
-// against the first real emitter.
+// The contract below is PROVISIONAL for catalog/ci/pipeline: no data-platform
+// emitter exists yet, so it deliberately mirrors the Flux generic-hmac shape
+// and will be settled against the first real emitter. cms is not provisional:
+// this is the contract sunstone-cms's post._status webhook is written
+// against (its own change, deferred from this one).
 //
-//	POST /hooks/catalog | /hooks/ci | /hooks/pipeline
+//	POST /hooks/catalog | /hooks/ci | /hooks/pipeline | /hooks/cms
 //
 //	Auth:  X-Signature: sha256=<hex> — HMAC-SHA256 over the exact request
 //	       bytes, key = LODE_CATALOG_WEBHOOK_SECRET / LODE_CI_WEBHOOK_SECRET /
-//	       LODE_PIPELINE_WEBHOOK_SECRET. Identical scheme to /hooks/flux. An
-//	       unset secret answers 503: a misconfigured server must not accept
-//	       unauthenticated webhooks.
-//	Idem:  X-Catalog-Delivery / X-CI-Delivery / X-Pipeline-Delivery: <opaque
-//	       id>, when the emitter has one. Absent, the idempotency key is the
-//	       SHA-256 of the body, as Flux does it.
+//	       LODE_PIPELINE_WEBHOOK_SECRET / LODE_CMS_WEBHOOK_SECRET. Identical
+//	       scheme to /hooks/flux. An unset secret answers 503: a misconfigured
+//	       server must not accept unauthenticated webhooks.
+//	Idem:  X-Catalog-Delivery / X-CI-Delivery / X-Pipeline-Delivery /
+//	       X-CMS-Delivery: <opaque id>, when the emitter has one. Absent, the
+//	       idempotency key is the SHA-256 of the body, as Flux does it.
 //	Body (application/json):
 //	  {
 //	    "event":       "dataset.published",    // optional emitter event name
@@ -38,11 +41,17 @@ package hooks
 //	    "version":     "2026-08-19T09:12:00Z", // optional emitter snapshot id
 //	    "url":         "https://catalog.../datasets/cow.casualties", // optional
 //	    "occurred_at": "2026-08-19T09:12:03Z", // optional RFC3339, default now
-//	    "detail":      { }                     // optional free-form, jsonb
+//	    "detail":      { },                    // optional free-form, jsonb
+//	    "published_by": "ed@sunstone.example", // cms only, REQUIRED
+//	    "approved_by":  "jo@sunstone.example"  // cms only, REQUIRED
 //	  }
 //	  state is one of: published | updated | deprecated | removed | failed.
 //	  At least one of artifact or labels is REQUIRED — a payload naming
-//	  neither is a 400.
+//	  neither is a 400. On the cms source, published_by and approved_by are
+//	  also REQUIRED (non-blank after trimming): the publish fact without the
+//	  person would rebuild the invisible-sign-off problem spec 029 exists to
+//	  remove, so a payload missing either is a 400 before any event is
+//	  recorded (029 §8.3).
 //	Ack:   200 {"status":"ok"|"duplicate"|"unrouted"}
 //
 // artifact is compared after trimming surrounding whitespace and nothing
@@ -54,6 +63,15 @@ package hooks
 // whichever key (the address, or one "k=v" label) matched — the reported
 // concrete address stays in version/url/detail, as the emitter sent them.
 //
+// On the cms source, published_by and approved_by are additionally merged
+// into evidence.detail (alongside whatever detail object the emitter itself
+// sent) so a projection reading evidence sees who without joining back to
+// events. If the emitter's own detail already carries a published_by or
+// approved_by key, ours overwrites it: these two fields are the required
+// provenance this feature exists to carry, so a same-named emitter key must
+// not silently shadow them. The stored event payload keeps the whole
+// delivered body regardless — the event is the provenance record either way.
+//
 // A delivery no declaration matches still lands in events, with no evidence
 // rows and an "unrouted" ack, the way the GitHub hook records an unmapped
 // repo's delivery. Its applied_at stays NULL, which is what puts it in
@@ -63,6 +81,7 @@ package hooks
 // record time, so only genuinely unfiled deliveries stay candidates (WL-256).
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -105,7 +124,22 @@ var (
 	catalogIngest  = ingestConfig{Source: "catalog", DeliveryHeader: "X-Catalog-Delivery"}
 	ciIngest       = ingestConfig{Source: "ci", DeliveryHeader: "X-CI-Delivery"}
 	pipelineIngest = ingestConfig{Source: "pipeline", DeliveryHeader: "X-Pipeline-Delivery"}
+	cmsIngest      = ingestConfig{Source: "cms", DeliveryHeader: "X-CMS-Delivery", Validate: validateCMS}
 )
+
+// validateCMS is cmsIngest's extra check (029 §8.3): who hit publish and who
+// approved must both be named, or the publish fact would rebuild the
+// invisible-sign-off problem the whole spec exists to remove. It trims both
+// fields in place so the trimmed values are what apply() later merges into
+// evidence.detail and what the caller logs.
+func validateCMS(ev *catalogEvent) string {
+	ev.PublishedBy = strings.TrimSpace(ev.PublishedBy)
+	ev.ApprovedBy = strings.TrimSpace(ev.ApprovedBy)
+	if ev.PublishedBy == "" || ev.ApprovedBy == "" {
+		return "published_by and approved_by are required"
+	}
+	return ""
+}
 
 // ingestConfigs indexes the instances above by source, for Replay's
 // stored-delivery dispatch: a stored event names its source but not which
@@ -114,6 +148,7 @@ var ingestConfigs = map[string]ingestConfig{
 	catalogIngest.Source:  catalogIngest,
 	ciIngest.Source:       ciIngest,
 	pipelineIngest.Source: pipelineIngest,
+	cmsIngest.Source:      cmsIngest,
 }
 
 type ingestHandler struct {
@@ -148,19 +183,26 @@ func NewPipelineHandler(st *store.Store, secret string, log *slog.Logger, m *Met
 	return newIngestHandler(pipelineIngest, st, secret, log, m)
 }
 
+// NewCMSHandler returns the POST /hooks/cms handler.
+func NewCMSHandler(st *store.Store, secret string, log *slog.Logger, m *Metrics) http.Handler {
+	return newIngestHandler(cmsIngest, st, secret, log, m)
+}
+
 // catalogEvent is the payload an ingest source posts. Catalog is parsed but
 // not projected onto an evidence column: which instance reported is a
 // property of the delivery, and the stored event payload keeps it.
 type catalogEvent struct {
-	Event      string            `json:"event"`
-	Artifact   string            `json:"artifact"`
-	Labels     map[string]string `json:"labels"`
-	State      string            `json:"state"`
-	Catalog    string            `json:"catalog"`
-	Version    string            `json:"version"`
-	URL        string            `json:"url"`
-	OccurredAt string            `json:"occurred_at"`
-	Detail     json.RawMessage   `json:"detail"`
+	Event       string            `json:"event"`
+	Artifact    string            `json:"artifact"`
+	Labels      map[string]string `json:"labels"`
+	State       string            `json:"state"`
+	Catalog     string            `json:"catalog"`
+	Version     string            `json:"version"`
+	URL         string            `json:"url"`
+	OccurredAt  string            `json:"occurred_at"`
+	Detail      json.RawMessage   `json:"detail"`
+	PublishedBy string            `json:"published_by"` // cms only, required
+	ApprovedBy  string            `json:"approved_by"`  // cms only, required
 }
 
 // routingKey is one selector/key pair an event routes evidence by:
@@ -368,6 +410,19 @@ func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (cata
 		}
 	}
 
+	// cms only: fold published_by/approved_by into the evidence detail
+	// alongside whatever the emitter itself sent (029 §8.3). validateCMS
+	// already required both to be non-blank, so this always has something to
+	// add on this source.
+	detail := ev.Detail
+	if a.cfg.Source == "cms" {
+		merged, err := mergePersonDetail(detail, ev.PublishedBy, ev.ApprovedBy)
+		if err != nil {
+			return catalogResult{}, fmt.Errorf("merge cms person detail: %w", err)
+		}
+		detail = merged
+	}
+
 	for _, rk := range ev.routingKeys() {
 		targets, err := store.OpenDeclarationsForArtifact(tx, rk.selector, rk.key)
 		if err != nil {
@@ -385,7 +440,7 @@ func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (cata
 				Provenance: "observed",
 				Version:    ev.Version,
 				URL:        ev.URL,
-				Detail:     ev.Detail,
+				Detail:     detail,
 				OccurredAt: occurredAt,
 			})
 			if err != nil {
@@ -397,4 +452,30 @@ func (a *catalogApplier) apply(tx *sql.Tx, eventID int64, ev catalogEvent) (cata
 		}
 	}
 	return res, nil
+}
+
+// mergePersonDetail returns detail with published_by/approved_by set,
+// merged alongside any keys the emitter's own detail object already carries.
+// detail absent (nil/"null") starts from an empty object. detail present but
+// not a JSON object is an error: there is nothing sensible to merge into. A
+// collision on either key is resolved in our favor — see the file-top
+// comment for why.
+func mergePersonDetail(detail json.RawMessage, publishedBy, approvedBy string) (json.RawMessage, error) {
+	m := map[string]json.RawMessage{}
+	if len(detail) > 0 && !bytes.Equal(bytes.TrimSpace(detail), []byte("null")) {
+		if err := json.Unmarshal(detail, &m); err != nil {
+			return nil, fmt.Errorf("detail is not a JSON object: %w", err)
+		}
+	}
+	pb, err := json.Marshal(publishedBy)
+	if err != nil {
+		return nil, err
+	}
+	ab, err := json.Marshal(approvedBy)
+	if err != nil {
+		return nil, err
+	}
+	m["published_by"] = pb
+	m["approved_by"] = ab
+	return json.Marshal(m)
 }
