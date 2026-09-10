@@ -197,7 +197,7 @@ func newDocListCmd() *cobra.Command {
 	}
 	addScopeFlags(cmd, &scope, "filter by project id")
 	cmd.Flags().StringVar(&kind, "kind", "", "filter by kind: spec, adr, plan")
-	cmd.Flags().StringVar(&status, "status", "", "filter by status: draft, accepted, superseded")
+	cmd.Flags().StringVar(&status, "status", "", "filter by status: "+strings.Join(ns.DesignDocStatuses, ", "))
 	completeFlagValues(cmd, "kind", docKinds)
 	completeFlagValues(cmd, "status", ns.DesignDocStatuses)
 	cmd.Flags().StringVar(&owner, "owner", "", "filter by owning actor")

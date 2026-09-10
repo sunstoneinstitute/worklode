@@ -17,7 +17,7 @@ var Schemes = map[string][]string{
 	"CoverageLevel":    {"full", "none", "partial"},
 	"DeployTargetKind": {"flux_kustomization", "manual", "pypi_target"},
 	"DeploymentStatus": {"deployed", "failed", "pending", "reconciling"},
-	"DesignDocStatus":  {"accepted", "draft", "superseded"},
+	"DesignDocStatus":  {"accepted", "draft", "stale", "superseded", "withdrawn"},
 	"ModelLayer":       {"execution", "intent", "runtime"},
 	"RuntimeEventKind": {"crashloop", "flux_failure", "flux_recovery", "oom"},
 	"TaskKind":         {"bug", "chore", "decision", "design", "feature", "rally", "review", "spike"},
@@ -29,4 +29,4 @@ var TaskKinds = Schemes["TaskKind"]
 
 // DesignDocStatuses mirrors wlc:DesignDocStatus and the docs.status CHECK
 // constraint, in the lifecycle order of wlc:DesignDocStatusOrder.
-var DesignDocStatuses = []string{"draft", "accepted", "superseded"}
+var DesignDocStatuses = []string{"draft", "accepted", "stale", "superseded", "withdrawn"}
