@@ -43,6 +43,7 @@ type storeMetrics struct {
 	searchSeconds         *prometheus.HistogramVec
 	searchArmEmpties      *prometheus.CounterVec
 	rallyReads            *prometheus.CounterVec
+	escalations           *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -117,8 +118,12 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_rally_reads_total",
 			Help: "Active-rally reads by outcome (ok|none|error).",
 		}, []string{"outcome"}),
+		escalations: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_task_escalations_total",
+			Help: "Task escalations by outcome (minted|joined|error) — 025 §8.1's ladder, §15.5's funnel.",
+		}, []string{"outcome"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -150,6 +155,16 @@ func (m *storeMetrics) release(outcome string) {
 		return
 	}
 	m.releases.WithLabelValues(outcome).Inc()
+}
+
+// escalation records one EscalateTask call by what it did: minted a design
+// task, joined an open one, or failed. Three fixed labels, no document or task
+// id — 025 §15.5 wants the ladder's funnel, not its subjects.
+func (m *storeMetrics) escalation(outcome string) {
+	if m == nil {
+		return
+	}
+	m.escalations.WithLabelValues(outcome).Inc()
 }
 
 func (m *storeMetrics) expire(n int) {
