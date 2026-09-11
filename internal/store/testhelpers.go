@@ -148,7 +148,7 @@ func openTestDB(t *testing.T, dbName string, opts ...Option) *Store {
 // DBForTests exposes the underlying connection pool so tests in other
 // packages can make raw SQL assertions against a store's database.
 func (s *Store) DBForTests() *sql.DB {
-	return s.db
+	return s.db.DB
 }
 
 // VecForTests returns vals right-padded with zeros to IndexDim, so a test can
