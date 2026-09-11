@@ -10,6 +10,17 @@
 # kustomization file list rewritten, both staged) and the commit is stopped so
 # the rename can be reviewed. Re-running the commit then succeeds.
 #
+# A migration the branch adds must also be numbered above every migration
+# already on the base branch, even when its number does not collide with
+# anything: golang-migrate only applies versions greater than the one it has
+# recorded, so a migration merged in after a higher one already landed on
+# main is silently skipped forever (WL-847). That migration yields the same
+# way a collision does. In --no-fix mode this rule needs a resolvable base
+# ref (origin/main or main) to mean anything, so a missing base is itself an
+# error there rather than a silent pass — fix mode stays lenient about a
+# missing base, since it must still work in a repo with no main and the
+# collision logic does not depend on one.
+#
 # Usage: check-migrations.sh [--no-fix]
 #   --no-fix  report collisions instead of renumbering (for CI)
 
@@ -39,6 +50,35 @@ err() {
 
 list_files() { ls -1 "$MIG_DIR" 2>/dev/null || true; }
 strip_suffix() { sed -nE 's/\.(up|down)\.sql$//p'; }
+
+# Renumbers $1 to the next free number above $max (using $1's own digit
+# width), renaming its files and rewriting the kustomization list. Sets
+# NEW_KEY to the chosen key and bumps the shared $max and $renamed globals.
+renumber_to_next() {
+	local key=$1 prefix width new old new_key suffix
+	prefix=${key%%_*}
+	width=${#prefix}
+	max=$((max + 1))
+	new_key=$(printf "%0${width}d_%s" "$max" "${key#*_}")
+	for suffix in up down; do
+		old="$MIG_DIR/$key.$suffix.sql"
+		new="$MIG_DIR/$new_key.$suffix.sql"
+		[ -f "$old" ] || continue
+		mv -- "$old" "$new"
+		git add -- "$new"
+		# Stage the disappearance of the old path only when git knows
+		# it; an uncommitted migration has no index entry to update.
+		if git ls-files --error-unmatch -- "$old" >/dev/null 2>&1; then
+			git add -A -- "$old"
+		fi
+		if [ -f "$KUSTOMIZATION" ]; then
+			sed -i.bak "s|migrations/$key.$suffix.sql|migrations/$new_key.$suffix.sql|" "$KUSTOMIZATION"
+			rm -f "$KUSTOMIZATION.bak"
+		fi
+	done
+	NEW_KEY=$new_key
+	renamed=1
+}
 
 files=$(list_files)
 
@@ -73,12 +113,27 @@ for ref in origin/main main; do
 		break
 	fi
 done
+if [ -z "$base" ] && [ "$fix" -eq 0 ]; then
+	err "no base ref (origin/main or main) found; the below-base migration-number rule could not be checked — CI must fetch main first (e.g. git fetch origin main)"
+fi
 base_keys=""
+base_max=0
 if [ -n "$base" ]; then
 	base_keys=$(git ls-tree -r --name-only "$base" -- "$MIG_DIR" | sed 's|.*/||' | strip_suffix | sort -u)
+	if [ -n "$base_keys" ]; then
+		base_max=$(printf '%s\n' "$base_keys" | while read -r k; do
+			[ -n "$k" ] || continue
+			n=${k%%_*}
+			printf '%d\n' "$((10#$n))"
+		done | sort -n | tail -1)
+		[ -n "$base_max" ] || base_max=0
+	fi
 fi
 
 max=$(printf '%s\n' "$pairs" | cut -f1 | sort -n | tail -1)
+# A renumber must never land at or below the base ref's own highest number,
+# even when nothing on this branch collides with it yet.
+[ "$max" -ge "$base_max" ] || max=$base_max
 dups=$(printf '%s\n' "$pairs" | cut -f1 | sort -n | uniq -d)
 renamed=0
 
@@ -98,30 +153,36 @@ for dup in $dups; do
 	done
 	[ -n "$keep" ] || keep=$(printf '%s\n' "$dup_keys" | head -1)
 
-	prefix=${keep%%_*}
-	width=${#prefix}
 	for key in $(printf '%s\n' "$dup_keys" | grep -Fxv "$keep"); do
-		max=$((max + 1))
-		new_key=$(printf "%0${width}d_%s" "$max" "${key#*_}")
-		for suffix in up down; do
-			old="$MIG_DIR/$key.$suffix.sql"
-			new="$MIG_DIR/$new_key.$suffix.sql"
-			[ -f "$old" ] || continue
-			mv -- "$old" "$new"
-			git add -- "$new"
-			# Stage the disappearance of the old path only when git knows
-			# it; an uncommitted migration has no index entry to update.
-			if git ls-files --error-unmatch -- "$old" >/dev/null 2>&1; then
-				git add -A -- "$old"
-			fi
-			if [ -f "$KUSTOMIZATION" ]; then
-				sed -i.bak "s|migrations/$key.$suffix.sql|migrations/$new_key.$suffix.sql|" "$KUSTOMIZATION"
-				rm -f "$KUSTOMIZATION.bak"
-			fi
-		done
-		echo "migrations: $key yielded $dup to $keep, renumbered to $new_key" >&2
-		renamed=1
+		renumber_to_next "$key"
+		echo "migrations: $key yielded $dup to $keep, renumbered to $NEW_KEY" >&2
 	done
+done
+
+# A migration this branch adds (not already on the base ref) must be
+# numbered strictly above every migration the base ref already has — a
+# number that only collides after the base ref moves further is not caught
+# by the dup check above, and golang-migrate silently skips a migration
+# merged in below the version it has already recorded (WL-847).
+#
+# Recompute from disk first: the dup loop above may have renamed files, and
+# $keys/$pairs still hold their pre-rename names and numbers.
+keys=$(list_files | strip_suffix | sort -u)
+pairs=$(for key in $keys; do
+	num=${key%%_*}
+	printf '%d\t%s\n' "$((10#$num))" "$key"
+done)
+for key in $keys; do
+	printf '%s\n' "$base_keys" | grep -Fxq "$key" && continue
+	num=$(printf '%s\n' "$pairs" | awk -F'\t' -v k="$key" '$2 == k {print $1}')
+	[ "$num" -gt "$base_max" ] && continue
+
+	if [ "$fix" -eq 0 ]; then
+		err "$key is numbered at or below $base (max $base_max); renumber it above $base_max"
+		continue
+	fi
+	renumber_to_next "$key"
+	echo "migrations: $key is numbered at or below $base (max $base_max), renumbered to $NEW_KEY" >&2
 done
 
 if [ "$renamed" -eq 1 ] && [ -f "$KUSTOMIZATION" ]; then
