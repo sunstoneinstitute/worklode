@@ -373,8 +373,9 @@ SELECT t.id, t.title, t.state, t.plan_doc, coalesce(t.assignee, '')
 }
 
 // progressPositions fills every task's Position. A landed task needs no
-// facts — its delivery state outranks any PR or CI row — so leases, PRs and
-// CI runs are only looked up for the open ones, in three bulk reads.
+// facts — its delivery state outranks any PR or CI row — so the open ones
+// alone drive four bulk reads: their leases, their PRs, those PRs' repo
+// branch rules, and the CI runs on those PRs' head SHAs.
 func (s *Store) progressPositions(ctx context.Context, projectID string, tasks []*progressTask) error {
 	open := map[string]*progressTask{}
 	for _, pt := range tasks {
@@ -391,18 +392,13 @@ func (s *Store) progressPositions(ctx context.Context, projectID string, tasks [
 		return nil
 	}
 
-	facts, err := s.ListProjectWorkFacts(ctx, projectID)
+	held, err := s.openLeasesForTasks(ctx, slices.Collect(maps.Keys(open)))
 	if err != nil {
 		return err
 	}
 	leases := map[string]*progress.LeaseFact{}
-	for _, f := range facts {
-		if f.Lease == nil || open[f.Task.ID] == nil {
-			continue
-		}
-		leases[f.Task.ID] = &progress.LeaseFact{
-			Actor: f.Lease.ActorID, Since: f.Lease.AcquiredAt,
-		}
+	for id, l := range held {
+		leases[id] = &progress.LeaseFact{Actor: l.ActorID, Since: l.AcquiredAt}
 	}
 
 	openPRs, err := s.OpenPRsForProject(ctx, projectID)
