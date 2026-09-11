@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -464,5 +465,136 @@ func TestProgressRefs(t *testing.T) {
 	}
 	if other := byTask[taskIDs[1]]; other.Rally != nil {
 		t.Errorf("non-member %s: Rally = %+v, want nil", taskIDs[1], other.Rally)
+	}
+}
+
+// progressLoadPlanBody renders a plan covering the seeded spec's sec-1 with
+// n tasks in it, so a footprint test can seed tens of tasks without writing
+// tens of fixtures.
+func progressLoadPlanBody(name string, n int) string {
+	var b strings.Builder
+	b.WriteString("---\nstatus: draft\ncovers:\n  - spec: 066-progress.md#sec-1\n    coverage: partial\n---\n\n# " +
+		name + "\n\n## Tasks\n\n")
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, "### Task %d — %s task %d\n\n```yaml\nkind: feature\npriority: medium\nblockedBy: []\n```\n\nBody.\n\n",
+			i, name, i)
+	}
+	return b.String()
+}
+
+// tableScans is seq_scan + idx_scan for one table in the test's own
+// database, taken after pg_stat_force_next_flush has pushed this backend's
+// pending counters out. The pool is pinned to one connection for the
+// measurement, so the backend that ran the read is the backend that flushes.
+func tableScans(t *testing.T, s *Store, table string) int64 {
+	t.Helper()
+	var n int64
+	if err := s.db.QueryRowContext(t.Context(), `
+SELECT coalesce(seq_scan, 0) + coalesce(idx_scan, 0)
+  FROM pg_stat_user_tables WHERE relname = $1`, table).Scan(&n); err != nil {
+		t.Fatalf("read scan count for %s: %v", table, err)
+	}
+	return n
+}
+
+// TestProjectProgressQueryFootprint pins the read's query footprint: one
+// progress read of a project with tens of tasks must not scan project_repos,
+// task_edges or docs per task. It reads WL-843's regression directly — the
+// old path called ListProjectWorkFacts, whose taskClosed/planUnfinished
+// subqueries run once per task in the project, and drove these three tables
+// into the hundreds of scans on a real corpus.
+func TestProjectProgressQueryFootprint(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	ctx := t.Context()
+	if err := s.AddRepo(ctx, "p1", "acme/app"); err != nil {
+		t.Fatalf("AddRepo: %v", err)
+	}
+	seedProgressCorpus(t, s)
+
+	// Four more plans of eight tasks each, chained by plan-level 'blocks'
+	// edges so planUnfinished has something to evaluate per task.
+	const plans, perPlan = 4, 8
+	var planIDs []int64
+	var taskIDs []string
+	for i := range plans {
+		name := fmt.Sprintf("load-%d", i)
+		plan := mustCreateDoc(t, s, DocInput{
+			Project: "p1", Kind: "plan", Slug: name,
+			Body: progressLoadPlanBody(name, perPlan), CreatedBy: "stig",
+		})
+		_, minted, err := acceptDoc(t, s, plan.ID, "stig")
+		if err != nil {
+			t.Fatalf("AcceptDoc(%s): %v", name, err)
+		}
+		planIDs = append(planIDs, plan.ID)
+		for _, m := range minted {
+			taskIDs = append(taskIDs, m.ID)
+		}
+	}
+	for i := 1; i < len(planIDs); i++ {
+		if _, err := s.db.ExecContext(ctx,
+			`INSERT INTO doc_edges (from_doc, type, to_doc, declared_by)
+			 VALUES ($1, 'blocks', $2, $2)`, planIDs[i-1], planIDs[i]); err != nil {
+			t.Fatalf("insert plan blocks edge: %v", err)
+		}
+	}
+
+	// Most tasks land with a commit on the repo's default branch, so
+	// taskClosed's task_commits ⋈ main_commits ⋈ project_repos subquery
+	// actually fires for them; the rest stay open, one of them leased and
+	// one of them blocked by a task edge.
+	for i, id := range taskIDs {
+		if i%4 == 0 {
+			continue
+		}
+		walkTo(t, s, id, "merged")
+		landCommit(t, s, id, "acme/app", fmt.Sprintf("sha%04d", i))
+	}
+	if err := addEdge(t, s, taskIDs[4], taskIDs[0], "blocks"); err != nil {
+		t.Fatalf("addEdge: %v", err)
+	}
+	// taskIDs[4] is open and sits in the first plan, so nothing blocks it.
+	if _, err := s.Claim(ctx, taskIDs[4], "stig", "host:/tmp/wt", 0); err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+
+	// Pin the pool so reset, read and flush all land on one backend.
+	s.db.SetMaxOpenConns(1)
+	if _, err := s.db.ExecContext(ctx, `SELECT pg_stat_force_next_flush()`); err != nil {
+		t.Fatalf("pre-flush: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `SELECT pg_stat_reset()`); err != nil {
+		t.Fatalf("pg_stat_reset: %v", err)
+	}
+
+	in, err := s.ProjectProgress(ctx, "p1", nil)
+	if err != nil {
+		t.Fatalf("ProjectProgress: %v", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `SELECT pg_stat_force_next_flush()`); err != nil {
+		t.Fatalf("post-flush: %v", err)
+	}
+
+	// The read still has to answer for every task, or the ceiling below
+	// would pass on an empty result.
+	var tasks int
+	for _, p := range in.Plans {
+		tasks += len(p.Tasks)
+	}
+	if want := plans*perPlan + 2; tasks != want {
+		t.Fatalf("read returned %d tasks, want %d", tasks, want)
+	}
+
+	// A per-task subquery on a 34-task project puts each of these in the
+	// dozens; the ceiling is comfortably under that and comfortably over
+	// what the bulk reads need.
+	const ceiling = 20
+	for _, table := range []string{"project_repos", "task_edges", "docs"} {
+		if got := tableScans(t, s, table); got > ceiling {
+			t.Errorf("%s scans = %d, want <= %d", table, got, ceiling)
+		} else {
+			t.Logf("%s scans = %d", table, got)
+		}
 	}
 }

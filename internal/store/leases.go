@@ -71,6 +71,32 @@ func scanLease(row rowScanner) (*Lease, error) {
 	return &l, nil
 }
 
+// openLeasesForTasks reads the unreleased lease of each id in ids, keyed by
+// task id — the bulk form of ActiveLease, for a reader that already knows
+// which tasks it cares about. Unreleased is the whole filter, the same one
+// ActiveLease applies: a lease past its expires_at that the sweeper has not
+// closed yet still names its holder. leases_active makes the key unique.
+func (s *Store) openLeasesForTasks(ctx context.Context, ids []string) (map[string]*Lease, error) {
+	out := map[string]*Lease{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	what := fmt.Sprintf("open leases for %d tasks", len(ids))
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT `+leaseColumns+` FROM leases WHERE released_at IS NULL AND task_id = ANY($1)`, ids)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	leases, err := collectRows(rows, what, byValue(scanLease))
+	if err != nil {
+		return nil, err
+	}
+	for i := range leases {
+		out[leases[i].TaskID] = &leases[i]
+	}
+	return out, nil
+}
+
 // activeLeaseTx returns the active (unreleased) lease on taskID inside tx,
 // or ErrNotFound if there is none.
 func activeLeaseTx(tx *sql.Tx, taskID string) (*Lease, error) {
