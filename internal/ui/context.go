@@ -31,3 +31,22 @@ func inboxDot(ctx context.Context) bool {
 	has, _ := ctx.Value(inboxDotKey{}).(bool)
 	return has
 }
+
+// adminKey is the context key for the signed-in actor's admin role.
+type adminKey struct{}
+
+// WithAdmin returns ctx carrying whether the signed-in actor holds the admin
+// role. internal/api's renderWeb is the only caller, so the roles are read
+// once per request from the same Subject the route guards used.
+func WithAdmin(ctx context.Context, is bool) context.Context {
+	return context.WithValue(ctx, adminKey{}, is)
+}
+
+// isAdmin reports the flag WithAdmin set on ctx, or false when it was never
+// set — an unauthenticated request, or a test rendering a component directly.
+// "unset" and "false" render identically, so an admin-only card is absent
+// rather than half-rendered when the caller forgot to set it.
+func isAdmin(ctx context.Context) bool {
+	is, _ := ctx.Value(adminKey{}).(bool)
+	return is
+}

@@ -57,3 +57,29 @@ func TestDocSectionsLinkAtTheirAnchors(t *testing.T) {
 		}
 	}
 }
+
+// TestDriftCardIsAdminOnly: the drift board reads as a finished feature to
+// anyone who finds it and is not one yet, so the card linking to it renders
+// only for an admin. The route and `lode graph drift` are deliberately not
+// gated — this pins the card, which is the whole of the gate.
+func TestDriftCardIsAdminOnly(t *testing.T) {
+	render := func(ctx context.Context) string {
+		t.Helper()
+		var b strings.Builder
+		if err := Docs(DocsView{Page: PageProps{Title: "docs"}}).Render(ctx, &b); err != nil {
+			t.Fatalf("render Docs: %v", err)
+		}
+		return b.String()
+	}
+	if got := render(WithAdmin(context.Background(), true)); !strings.Contains(got, `href="/drift"`) {
+		t.Fatalf("admin does not see the drift card:\n%s", got)
+	}
+	for name, ctx := range map[string]context.Context{
+		"non-admin": WithAdmin(context.Background(), false),
+		"unset":     context.Background(),
+	} {
+		if got := render(ctx); strings.Contains(got, `href="/drift"`) {
+			t.Fatalf("%s sees the drift card:\n%s", name, got)
+		}
+	}
+}
