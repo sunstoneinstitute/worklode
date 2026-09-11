@@ -480,11 +480,14 @@ func purgeSecrets(opts Options, taskID string) {
 // --- event handlers ---------------------------------------------------------
 
 func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
+	hint := refLinkHint(dir)
 	root, taskID, ok := leasedWorktree(l, dir)
 	if !ok {
 		if root != "" {
-			offerScan(ctx, opts, root, l)
+			emitSessionContext(opts, joinContext(hint, offerScan(ctx, opts, root, l)))
+			return
 		}
+		emitSessionContext(opts, hint)
 		return
 	}
 	c, identity, ok := clientAndIdentity(opts, root)
@@ -505,7 +508,39 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 	reportSession(ctx, opts, c, taskID, root, p.SessionID)
 
 	skillPaths := ensureSkills(ctx, opts, c, brief, root)
-	emitSessionContext(opts, compactBrief(brief, skillPaths))
+	emitSessionContext(opts, joinContext(hint, compactBrief(brief, skillPaths)))
+}
+
+// joinContext joins the session-context sections that have something to say,
+// blank-line separated.
+func joinContext(sections ...string) string {
+	kept := make([]string, 0, len(sections))
+	for _, s := range sections {
+		if s != "" {
+			kept = append(kept, s)
+		}
+	}
+	return strings.Join(kept, "\n\n")
+}
+
+// refLinkHint asks the agent to print Worklode ids as OSC 8 hyperlinks to the
+// instance, so a reader can click a task or document ref straight through to
+// the cockpit. Empty — so nothing is emitted — unless this terminal is one
+// known to render OSC 8, a server URL is configured, and the checkout has not
+// turned ref_links off. The escape is spelled out rather than shown, because
+// the agent has to reproduce it byte for byte in its own output.
+func refLinkHint(dir string) string {
+	if !cli.TerminalHyperlinks() || !cli.RefLinksFrom(dir) {
+		return ""
+	}
+	server := cli.ServerURLFrom(dir)
+	if server == "" {
+		return ""
+	}
+	return fmt.Sprintf("This terminal renders OSC 8 hyperlinks. In what you print to the "+
+		"terminal — never in files, commit messages or code — write every Worklode task "+
+		"id (WL-7) and document ref (WL-SPEC-4) as a hyperlink to %s/<id>, using the form "+
+		`\x1b]8;;URL\x07TEXT\x1b]8;;\x07`+", e.g. "+`\x1b]8;;%s/WL-7\x07WL-7\x1b]8;;\x07`+".", server, server)
 }
 
 // emitSessionContext writes the brief to stdout in the shape the harness
@@ -529,6 +564,9 @@ func handleSessionStart(ctx context.Context, opts Options, p Payload, dir string
 // looks like JSON but fails its schema, so the envelope must stay exactly
 // these two fields — see ADR 051 §6 before adding a third.
 func emitSessionContext(opts Options, text string) {
+	if text == "" {
+		return
+	}
 	switch opts.Harness {
 	case "amp":
 		fmt.Fprintln(opts.Stdout, text)
@@ -700,20 +738,21 @@ func ensureLease(ctx context.Context, opts Options, c *cli.Client, taskID, ident
 // worktree base directory under the repo root and, for up to five entries that
 // parse as Worklode worktrees, flags any whose lease is expired/absent and
 // whose session marker is stale/absent as adoptable. No claim, no model call.
+// Returns the lines to offer, empty when there is nothing to adopt.
 //
 // One flat ReadDir, not a walk: the layout puts every worktree exactly one
 // level below the base (spec 008 §5.1), so there is nothing deeper to find.
-func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.Layout) {
+func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.Layout) string {
 	base := filepath.Join(repoRoot, filepath.FromSlash(l.Base()))
 	entries, err := os.ReadDir(base)
 	if err != nil {
-		return // no base dir ⇒ nothing to offer
+		return "" // no base dir ⇒ nothing to offer
 	}
 
 	c, err := opts.client()
 	if err != nil {
 		warn(opts, "load config: %v", err)
-		return
+		return ""
 	}
 
 	now := opts.now()
@@ -750,9 +789,7 @@ func offerScan(ctx context.Context, opts Options, repoRoot string, l worktree.La
 		}
 	}
 
-	if len(lines) > 0 {
-		emitAdditionalContext(opts.Stdout, strings.Join(lines, "\n"))
-	}
+	return strings.Join(lines, "\n")
 }
 
 func handleSessionEnd(ctx context.Context, opts Options, p Payload, dir string, l worktree.Layout) {
