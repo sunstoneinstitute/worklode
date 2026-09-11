@@ -56,7 +56,14 @@ jobs:
       - name: go vet
         run: go vet ./...
       - name: migration numbers
-        run: ./scripts/check-migrations.sh --no-fix
+        run: |
+          # check-migrations.sh compares this branch's migration numbers
+          # against main's highest one; the checkout above is depth 1, so
+          # origin/main would not resolve without this (WL-847). Best-effort:
+          # if the fetch fails, the script's own no-base guard errors instead
+          # of silently skipping the check.
+          git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main || true
+          ./scripts/check-migrations.sh --no-fix
       # Only reached on mixed or `can-be-tested` PRs — docs-only PRs skip this
       # workflow, so the pre-commit hook is the primary gate.
       - name: codex marketplace mirrors claude

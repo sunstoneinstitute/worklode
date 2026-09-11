@@ -15,7 +15,11 @@
 # anything: golang-migrate only applies versions greater than the one it has
 # recorded, so a migration merged in after a higher one already landed on
 # main is silently skipped forever (WL-847). That migration yields the same
-# way a collision does.
+# way a collision does. In --no-fix mode this rule needs a resolvable base
+# ref (origin/main or main) to mean anything, so a missing base is itself an
+# error there rather than a silent pass — fix mode stays lenient about a
+# missing base, since it must still work in a repo with no main and the
+# collision logic does not depend on one.
 #
 # Usage: check-migrations.sh [--no-fix]
 #   --no-fix  report collisions instead of renumbering (for CI)
@@ -109,6 +113,9 @@ for ref in origin/main main; do
 		break
 	fi
 done
+if [ -z "$base" ] && [ "$fix" -eq 0 ]; then
+	err "no base ref (origin/main or main) found; the below-base migration-number rule could not be checked — CI must fetch main first (e.g. git fetch origin main)"
+fi
 base_keys=""
 base_max=0
 if [ -n "$base" ]; then

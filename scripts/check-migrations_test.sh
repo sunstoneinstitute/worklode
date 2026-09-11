@@ -52,6 +52,34 @@ add_files() {
 	echo "      - migrations/$key.down.sql" >>"$dir/deploy/base/kustomization.yaml"
 }
 
+# Builds a repo at $1 with no `main` ref and no `origin` remote — a shallow
+# CI checkout that never fetched main looks like this (WL-847).
+new_repo_no_base() {
+	local dir=$1
+	shift
+	mkdir -p "$dir/deploy/base/migrations" "$dir/scripts"
+	(
+		cd "$dir"
+		git init -q -b work
+		git config user.email test@example.com
+		git config user.name test
+		cp "$CHECK" scripts/check-migrations.sh
+		chmod +x scripts/check-migrations.sh
+		{
+			echo "apiVersion: kustomize.config.k8s.io/v1beta1"
+			echo "kind: Kustomization"
+			echo "configMapGenerator:"
+			echo "  - name: migrations"
+			echo "    files:"
+		} >deploy/base/kustomization.yaml
+		for key in "$@"; do
+			add_files "$dir" "$key"
+		done
+		git add -A
+		git commit -q -m work
+	)
+}
+
 # Runs the check in $dir and fails the test if the exit status or stderr
 # don't match what's expected.
 check() {
@@ -94,6 +122,13 @@ new_repo "$d3" 0071_entity_edges
 add_files "$d3" 0080_alpha
 add_files "$d3" 0080_beta
 check "collision between two new keys" "$d3" fail "number 80 is used by"
+
+# Case 4: no origin/main or main ref at all (a depth-1 CI checkout that
+# never fetched main) — the below-base rule can't be checked, so --no-fix
+# must fail and say so rather than silently pass.
+d4="$WORK/case4"
+new_repo_no_base "$d4" 0071_entity_edges
+check "no base ref resolvable" "$d4" fail "no base ref"
 
 if [ "$fails" -ne 0 ]; then
 	echo "$fails case(s) failed"
