@@ -172,3 +172,5 @@ configMapGenerator:
       - migrations/0078_doc_lifecycle_fields.down.sql
       - migrations/0079_state_log_entity_index.up.sql
       - migrations/0079_state_log_entity_index.down.sql
+      - migrations/0080_selector_backfill.up.sql
+      - migrations/0080_selector_backfill.down.sql
