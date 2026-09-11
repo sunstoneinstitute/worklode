@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,13 +33,14 @@ import (
 // It is loaded from ~/.config/worklode/config.toml, a minimal hand-rolled format
 // (there is no TOML dependency in this module): one `key = "value"`
 // assignment per line, blank lines and lines starting with '#' ignored. The
-// recognized keys are "server", "current_project", "project_key", and
-// "worktree_dir", e.g.:
+// recognized keys are "server", "current_project", "project_key",
+// "worktree_dir", and "ref_links", e.g.:
 //
 //	server = "https://wl.example.com"
 //	current_project = "sunstone-web"
 //	project_key = "WL"
 //	worktree_dir = ".worktrees"
+//	ref_links = false
 //
 // A repo-local config file overrides current_project and project_key (and
 // server) per checkout — see findRepoConfig — which is how both are normally
@@ -77,6 +79,12 @@ type Config struct {
 	// every consumer (the lifecycle commands, internal/hookrun's guard) uses
 	// instead of this field.
 	WorktreeDir string
+
+	// RefLinks carries the ref_links key when Config is produced directly by
+	// parseConfig — which is how RefLinksFrom reads it. Like WorktreeDir it is
+	// NOT populated by LoadConfig/loadConfigFrom. Nil means the file said
+	// nothing, which RefLinksFrom reads as the default, true.
+	RefLinks *bool
 }
 
 // tokenStore is the store the client reads/writes tokens through: the OS
@@ -248,14 +256,7 @@ func ServerURLFrom(startDir string) string {
 	if v := os.Getenv("LODE_SERVER"); v != "" {
 		return strings.TrimSuffix(v, "/")
 	}
-	var paths []string
-	if repoPath, ok := findRepoConfig(startDir); ok {
-		paths = append(paths, repoPath)
-	}
-	if userPath, err := configPath(); err == nil {
-		paths = append(paths, userPath)
-	}
-	for _, path := range paths {
+	for _, path := range configSearchPath(startDir) {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
@@ -265,6 +266,37 @@ func ServerURLFrom(startDir string) string {
 		}
 	}
 	return ""
+}
+
+// RefLinksFrom reports whether this checkout wants Worklode references
+// rendered as clickable links — the ref_links key, read with the same cheap,
+// dir-scoped, keychain-free contract ServerURLFrom has. Repo-local config
+// first, then the user config, and true when neither sets it.
+func RefLinksFrom(startDir string) bool {
+	for _, path := range configSearchPath(startDir) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if cfg, err := parseConfig(string(data)); err == nil && cfg.RefLinks != nil {
+			return *cfg.RefLinks
+		}
+	}
+	return true
+}
+
+// configSearchPath is the config files that answer a dir-scoped read, most
+// specific first: the repo-local config found from startDir, then the user
+// config. Either may be missing.
+func configSearchPath(startDir string) []string {
+	var paths []string
+	if repoPath, ok := findRepoConfig(startDir); ok {
+		paths = append(paths, repoPath)
+	}
+	if userPath, err := configPath(); err == nil {
+		paths = append(paths, userPath)
+	}
+	return paths
 }
 
 // LoadConfig reads the config files (a missing file is not an error — its
@@ -368,6 +400,12 @@ func parseConfig(data string) (Config, error) {
 			cfg.ProjectKey = val
 		case "worktree_dir":
 			cfg.WorktreeDir = val
+		case "ref_links":
+			b, err := strconv.ParseBool(val)
+			if err != nil {
+				return Config{}, fmt.Errorf("line %d: ref_links = %q is not a boolean", i+1, val)
+			}
+			cfg.RefLinks = &b
 		case "spec_corpus", "plan_corpus":
 			// Retired with the file corpus: documents live in the backbone
 			// (spec 025), and nothing reads these any more. Still accepted,

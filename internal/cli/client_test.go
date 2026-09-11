@@ -323,6 +323,7 @@ func TestLoadConfigMalformed(t *testing.T) {
 	for name, content := range map[string]string{
 		"missing equals": "not a key value pair\n",
 		"unknown key":    "bogus = \"value\"\n",
+		"bad ref_links":  "ref_links = \"sometimes\"\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			configTestHome(t)
@@ -613,6 +614,26 @@ func TestCurrentProjectPathRecordsSource(t *testing.T) {
 	if cfg.CurrentProject != "from-repo" || cfg.CurrentProjectPath != repoPath {
 		t.Fatalf("repo config: project=%q path=%q; want from-repo, %s",
 			cfg.CurrentProject, cfg.CurrentProjectPath, repoPath)
+	}
+}
+
+// RefLinksFrom reads ref_links the same dir-scoped way, defaulting to on.
+
+func TestRefLinksFrom(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	repo := filepath.Join(home, "git", "proj")
+
+	if !cli.RefLinksFrom(repo) {
+		t.Error("RefLinksFrom with no config = false, want the default true")
+	}
+	writeRepoConfig(t, repo, ".worklode", "ref_links = false\n")
+	if cli.RefLinksFrom(repo) {
+		t.Error("RefLinksFrom with ref_links = false = true")
+	}
+	writeRepoConfig(t, repo, ".worklode", "ref_links = true\n")
+	if !cli.RefLinksFrom(repo) {
+		t.Error("RefLinksFrom with ref_links = true = false")
 	}
 }
 
