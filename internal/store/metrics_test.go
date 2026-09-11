@@ -214,7 +214,7 @@ func TestLeaseMetricsCounters(t *testing.T) {
 	}
 
 	// Active-lease collector sees the one live lease.
-	if got := testutil.ToFloat64(&leaseCollector{db: s.db, now: s.Now}); got != 1 {
+	if got := testutil.ToFloat64(&leaseCollector{db: s.db.DB, now: s.Now}); got != 1 {
 		t.Fatalf("worklode_leases_active = %v, want 1", got)
 	}
 
@@ -395,5 +395,53 @@ func TestProjectWorkReadMetrics(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestSplitSymbol pins the linker-symbol parsing behind the pkg and func
+// labels: the package keeps its repo-relative path, a receiver is dropped,
+// and every closure reports as the function that declared it.
+func TestSplitSymbol(t *testing.T) {
+	t.Parallel()
+	const mod = "github.com/sunstoneinstitute/worklode/"
+	for _, tc := range []struct{ sym, pkg, fn string }{
+		{mod + "internal/store.(*Store).ListProjectWorkFacts", "internal/store", "ListProjectWorkFacts"},
+		{mod + "internal/store.blockedByEdgeOrPlan", "internal/store", "blockedByEdgeOrPlan"},
+		{mod + "internal/store.(*Store).sweepStaleDocs.func1", "internal/store", "sweepStaleDocs"},
+		{mod + "internal/store.(*Store).x.func1.2", "internal/store", "x"},
+		{mod + "internal/skillstore.Upsert", "internal/skillstore", "Upsert"},
+		// A name the compiler would never emit, and a genuine method whose
+		// name merely starts with "func": neither may be mistaken for a
+		// closure tail.
+		{"main", "unknown", "unknown"},
+		{mod + "internal/store.(*Store).funcs", "internal/store", "funcs"},
+	} {
+		pkg, fn := splitSymbol(tc.sym)
+		if pkg != tc.pkg || fn != tc.fn {
+			t.Errorf("splitSymbol(%q) = (%q, %q), want (%q, %q)", tc.sym, pkg, fn, tc.pkg, tc.fn)
+		}
+	}
+}
+
+// TestQueryMetricsLabelCaller drives one query through the metered pool and
+// asserts it is attributed to the store function that issued it. This is what
+// pins queryCallerSkip: a wrong skip lands on meteredDB or on the caller's
+// caller, and the expected series is simply absent.
+func TestQueryMetricsLabelCaller(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := OpenTestStore(t, WithMetrics(reg))
+
+	// A miss returns after exactly one QueryRowContext, so the count is
+	// exact rather than a floor.
+	if _, err := s.GetTask(t.Context(), "WL-404"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetTask on a missing id: err = %v, want ErrNotFound", err)
+	}
+
+	if got := testutil.ToFloat64(s.metrics.queries.WithLabelValues("internal/store", "GetTask")); got != 1 {
+		t.Errorf("worklode_store_queries_total{pkg=internal/store,func=GetTask} = %v, want 1", got)
+	}
+	if got := testutil.ToFloat64(s.metrics.querySeconds.WithLabelValues("internal/store", "GetTask")); got <= 0 {
+		t.Errorf("worklode_store_query_seconds_total{...,func=GetTask} = %v, want > 0", got)
 	}
 }

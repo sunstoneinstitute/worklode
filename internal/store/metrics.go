@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,8 +22,9 @@ type Option func(*Store)
 func WithMetrics(reg prometheus.Registerer) Option {
 	return func(s *Store) {
 		s.metrics = newStoreMetrics(reg)
-		reg.MustRegister(collectors.NewDBStatsCollector(s.db, "worklode"))
-		reg.MustRegister(&leaseCollector{db: s.db, now: s.Now})
+		s.db.m = s.metrics
+		reg.MustRegister(collectors.NewDBStatsCollector(s.db.DB, "worklode"))
+		reg.MustRegister(&leaseCollector{db: s.db.DB, now: s.Now})
 	}
 }
 
@@ -56,6 +60,8 @@ type storeMetrics struct {
 	escalations           *prometheus.CounterVec
 	gaps                  *prometheus.CounterVec
 	fixes                 *prometheus.CounterVec
+	queries               *prometheus.CounterVec
+	querySeconds          *prometheus.CounterVec
 }
 
 func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
@@ -150,8 +156,21 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Name: "worklode_task_fixes_total",
 			Help: "fix.started/fix.finished calls by phase (started|finished) and outcome (recorded|replayed|error) — 025 §15.5's funnel.",
 		}, []string{"phase", "outcome"}),
+		// Query counters rather than a histogram: the question these answer
+		// is which store function the database time is going to, and
+		// rate(seconds_total) by func ranks that directly. Distribution
+		// shape is already served by http_request_duration_seconds at the
+		// edge. Two series per function instead of a histogram's thirteen.
+		queries: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_store_queries_total",
+			Help: "Database queries by the store package and function that issued them. Labels come from the binary's own symbols, so the set is bounded by the code. Queries issued inside a transaction are not counted.",
+		}, []string{"pkg", "func"}),
+		querySeconds: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_store_query_seconds_total",
+			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
+		}, []string{"pkg", "func"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -415,6 +434,140 @@ func outcome(err error) string {
 		return "error"
 	}
 	return "ok"
+}
+
+// meteredDB wraps the connection pool so every query issued outside a
+// transaction is timed and attributed to the store function that issued it.
+// Embedding keeps the rest of the *sql.DB surface — BeginTx, the pool setters,
+// the stats collector — reachable unchanged, so the wrapper costs no call site
+// a rewrite: s.db.QueryContext still resolves, now through here.
+//
+// Queries on a *sql.Tx are not counted. Covering them means threading a
+// wrapper through the helpers typed on *sql.Tx, and they are writes, while
+// this metric exists to rank read paths.
+type meteredDB struct {
+	*sql.DB
+	// m is nil until WithMetrics sets it, and stays nil for the CLI and for
+	// tests, which then pay neither the clock nor the stack walk.
+	m *storeMetrics
+}
+
+func (d *meteredDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	if d.m == nil {
+		return d.DB.QueryContext(ctx, query, args...)
+	}
+	start := time.Now()
+	rows, err := d.DB.QueryContext(ctx, query, args...)
+	d.m.observeQuery(start)
+	return rows, err
+}
+
+func (d *meteredDB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
+	if d.m == nil {
+		return d.DB.QueryRowContext(ctx, query, args...)
+	}
+	start := time.Now()
+	row := d.DB.QueryRowContext(ctx, query, args...)
+	d.m.observeQuery(start)
+	return row
+}
+
+func (d *meteredDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if d.m == nil {
+		return d.DB.ExecContext(ctx, query, args...)
+	}
+	start := time.Now()
+	res, err := d.DB.ExecContext(ctx, query, args...)
+	d.m.observeQuery(start)
+	return res, err
+}
+
+// queryCallerSkip is the runtime.Callers skip that lands on the store function
+// that issued the query: 1 is callerLabels, 2 is observeQuery, 3 is the
+// meteredDB method, 4 is the caller of interest. TestQueryMetricsLabelCaller
+// fails if this drifts.
+const queryCallerSkip = 4
+
+// observeQuery records one query's duration against the function that issued
+// it. A failed query still spent its time, so it is counted like any other.
+func (m *storeMetrics) observeQuery(start time.Time) {
+	if m == nil {
+		return
+	}
+	pkg, fn := callerLabels(queryCallerSkip)
+	m.queries.WithLabelValues(pkg, fn).Inc()
+	m.querySeconds.WithLabelValues(pkg, fn).Add(time.Since(start).Seconds())
+}
+
+// modulePrefix is this module's path with its trailing slash, so a package
+// path can be trimmed to the repo-relative form ("internal/store"). Derived
+// from a package path the compiler already knows rather than a build flag.
+var modulePrefix = strings.TrimSuffix(
+	reflect.TypeOf((*Store)(nil)).Elem().PkgPath(), "internal/store")
+
+// callerLabels names the function skip frames up as a package and a bare
+// function name: a receiver is dropped, so (*Store).ListProjectWorkFacts
+// reports as ListProjectWorkFacts, and a closure reports as the function that
+// declared it. Both values come from the binary's symbol table, so no input
+// can widen the label set.
+func callerLabels(skip int) (pkg, fn string) {
+	var pcs [1]uintptr
+	if runtime.Callers(skip, pcs[:]) == 0 {
+		return "unknown", "unknown"
+	}
+	frame, _ := runtime.CallersFrames(pcs[:]).Next()
+	return splitSymbol(frame.Function)
+}
+
+// splitSymbol cuts a linker symbol into its repo-relative package and its bare
+// function name. The package path holds dots of its own (github.com/...), so
+// the function starts at the first dot after the last slash; a method's
+// receiver and a closure's .funcN tail are both dropped.
+func splitSymbol(name string) (pkg, fn string) {
+	slash := strings.LastIndexByte(name, '/')
+	dot := strings.IndexByte(name[slash+1:], '.')
+	if dot < 0 {
+		return "unknown", "unknown"
+	}
+	cut := slash + 1 + dot
+	pkg, fn = strings.TrimPrefix(name[:cut], modulePrefix), name[cut+1:]
+	if i := strings.Index(fn, ")."); i >= 0 {
+		fn = fn[i+2:]
+	}
+	return pkg, trimClosureSuffix(fn)
+}
+
+// trimClosureSuffix drops the tail the compiler appends to a closure's
+// symbol, so every closure inside a function reports as that function instead
+// of minting a label value per literal. A closure is ".funcN"; one nested
+// inside it adds a bare ".N", so both shapes are dropped. No Go identifier is
+// all digits, and a method merely named "funcs" is not a closure, so neither
+// test can eat a real function name.
+func trimClosureSuffix(fn string) string {
+	for {
+		i := strings.LastIndexByte(fn, '.')
+		if i < 0 {
+			return fn
+		}
+		seg := fn[i+1:]
+		if !allDigits(seg) && !allDigits(strings.TrimPrefix(seg, "func")) {
+			return fn
+		}
+		fn = fn[:i]
+	}
+}
+
+// allDigits reports whether s is one or more decimal digits.
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 var leasesActiveDesc = prometheus.NewDesc(
