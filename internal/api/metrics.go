@@ -684,7 +684,7 @@ func (s *server) observeCrewChange(surface, action, outcome string) {
 // as a flat zero rather than as no-data. task_attach and deliverable_attach
 // belong to the attach mutations that land alongside this counter.
 var (
-	milestoneChangeActions  = []string{"create", "task_attach", "deliverable_attach"}
+	milestoneChangeActions  = []string{"create", "delete", "delete_cascade", "task_attach", "deliverable_attach"}
 	milestoneChangeOutcomes = []string{"ok", "rejected", "error"}
 )
 

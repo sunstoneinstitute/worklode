@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -338,6 +340,177 @@ func TestListMilestoneChildrenEmpty(t *testing.T) {
 		}
 		if len(tasks) != 0 || len(deliverables) != 0 {
 			t.Errorf("children for %s = %+v / %+v, want empty", id, tasks, deliverables)
+		}
+	}
+}
+
+// deleteMilestone drives DeleteMilestone through RecordEvent, the way the API
+// does.
+func deleteMilestone(s *Store, id string, cascade bool) (*model.MilestoneDeletion, error) {
+	var out *model.MilestoneDeletion
+	_, _, err := s.RecordEvent(context.Background(), "cli", randomID(), "milestone.deleted", nil,
+		func(tx *sql.Tx, _ int64) error {
+			var err error
+			out, err = DeleteMilestone(tx, id, cascade)
+			return err
+		})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TestDeleteMilestoneRefusesChildren is the default delete: an empty
+// milestone goes and takes its own references with it, one that still holds
+// work is refused with every child left attached, and the returned record
+// names what went.
+func TestDeleteMilestoneRefusesChildren(t *testing.T) {
+	t.Parallel()
+	s, m1, m2 := progressFixture(t)
+	ctx := t.Context()
+
+	if _, err := deleteMilestone(s, "P1-MILE-99", false); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown milestone: got %v, want ErrNotFound", err)
+	}
+
+	// m1 holds two tasks and two deliverables. ON DELETE SET NULL would
+	// detach all four in silence, so the refusal is the whole guard.
+	_, err := deleteMilestone(s, m1.ID, false)
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("delete with children: got %v, want ErrInvalidInput", err)
+	}
+	if !strings.Contains(err.Error(), "2 task(s) and 2 deliverable(s)") {
+		t.Errorf("refusal = %q, want it to name the counts", err)
+	}
+	before, err := s.GetMilestone(ctx, m1.ID)
+	if err != nil {
+		t.Fatalf("get milestone after refused delete: %v", err)
+	}
+	if len(before.Tasks) != 2 || len(before.Deliverables) != 2 {
+		t.Errorf("after refused delete: %d tasks, %d deliverables; want 2 and 2",
+			len(before.Tasks), len(before.Deliverables))
+	}
+
+	// m2 is empty but carries a reference to one of m1's deliverables. The
+	// reference is the milestone's own, so it goes with it.
+	refTarget := before.Deliverables[0].ID
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO entity_edges (from_kind, from_id, to_kind, to_id, rel, created_at, created_by)
+		 VALUES ('milestone', $1, 'deliverable', $2, 'depends_on', $3, 'ada')`,
+		m2.ID, refTarget, s.Now()); err != nil {
+		t.Fatalf("seed reference: %v", err)
+	}
+	got, err := deleteMilestone(s, m2.ID, false)
+	if err != nil {
+		t.Fatalf("delete empty milestone: %v", err)
+	}
+	if got.Milestone.ID != m2.ID || got.Milestone.Title != "Publication" {
+		t.Errorf("record milestone = %+v, want the deleted row", got.Milestone)
+	}
+	if len(got.References) != 1 || got.References[0] != refTarget {
+		t.Errorf("record references = %v, want [%s]", got.References, refTarget)
+	}
+	if len(got.Tasks) != 0 || len(got.Deleted) != 0 {
+		t.Errorf("record = %v tasks, %v deleted; want an empty milestone to report neither",
+			got.Tasks, got.Deleted)
+	}
+	if _, err := s.GetMilestone(ctx, m2.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("get deleted milestone: got %v, want ErrNotFound", err)
+	}
+	// The reference's target is untouched: dropping an edge is not deleting
+	// what it pointed at.
+	if _, err := s.GetDeliverable(ctx, refTarget); err != nil {
+		t.Errorf("reference target after delete: %v, want it to survive", err)
+	}
+
+	// The project's MILE counter never rewinds.
+	next, err := createMilestone(s, "p1", "Wrap-up", 0)
+	if err != nil {
+		t.Fatalf("create after delete: %v", err)
+	}
+	if next.ID != "P1-MILE-3" {
+		t.Errorf("id after delete = %q, want P1-MILE-3", next.ID)
+	}
+}
+
+// TestDeleteMilestoneCascade: --cascade is the one override. It deletes the
+// attached deliverables along with their reported states, detaches the
+// attached tasks rather than deleting them, and refuses outright when a
+// deliverable carries approvals.
+func TestDeleteMilestoneCascade(t *testing.T) {
+	t.Parallel()
+	s, m1, _ := progressFixture(t)
+	ctx := t.Context()
+
+	before, err := s.GetMilestone(ctx, m1.ID)
+	if err != nil {
+		t.Fatalf("get milestone: %v", err)
+	}
+	// The fixture's first deliverable carries reported evidence; the cascade
+	// has to take that with it rather than leave it naming a missing row.
+	withEvidence := before.Deliverables[0].ID
+
+	// An approval is a governance record (038 §7.1), so the cascade refuses
+	// rather than delete it — and nothing else goes either.
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT INTO approvals (entity_kind, entity_id, subject_revision, state, created_at)
+		 VALUES ('deliverable', $1, 'rev1', 'awaiting', $2)`,
+		withEvidence, s.Now()); err != nil {
+		t.Fatalf("seed approval: %v", err)
+	}
+	if _, err := deleteMilestone(s, m1.ID, true); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("cascade over an approved deliverable: got %v, want ErrInvalidInput", err)
+	}
+	after, err := s.GetMilestone(ctx, m1.ID)
+	if err != nil {
+		t.Fatalf("get milestone after refused cascade: %v", err)
+	}
+	if len(after.Tasks) != 2 || len(after.Deliverables) != 2 {
+		t.Errorf("after refused cascade: %d tasks, %d deliverables; want the whole milestone intact",
+			len(after.Tasks), len(after.Deliverables))
+	}
+
+	if _, err := s.db.ExecContext(ctx,
+		`DELETE FROM approvals WHERE entity_kind = 'deliverable' AND entity_id = $1`,
+		withEvidence); err != nil {
+		t.Fatalf("clear approval: %v", err)
+	}
+	got, err := deleteMilestone(s, m1.ID, true)
+	if err != nil {
+		t.Fatalf("cascade delete: %v", err)
+	}
+	if len(got.Deleted) != 2 {
+		t.Fatalf("record deleted = %v, want both deliverables", got.Deleted)
+	}
+	if !slices.IsSorted(got.Deleted) || !slices.IsSorted(got.Tasks) {
+		t.Errorf("record ids not in id order: %v, %v", got.Tasks, got.Deleted)
+	}
+	for _, id := range got.Deleted {
+		if _, err := s.GetDeliverable(ctx, id); !errors.Is(err, ErrNotFound) {
+			t.Errorf("get cascaded deliverable %s: got %v, want ErrNotFound", id, err)
+		}
+	}
+	var evidence int
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT count(*) FROM artifact_evidence WHERE entity_kind = 'deliverable' AND entity_id = $1`,
+		withEvidence).Scan(&evidence); err != nil {
+		t.Fatalf("count evidence: %v", err)
+	}
+	if evidence != 0 {
+		t.Errorf("evidence left behind: %d, want 0", evidence)
+	}
+
+	// Tasks are work, not an output of the milestone: detached, never deleted.
+	if len(got.Tasks) != 2 {
+		t.Fatalf("record tasks = %v, want the two detached", got.Tasks)
+	}
+	for _, id := range got.Tasks {
+		task, err := s.GetTask(ctx, id)
+		if err != nil {
+			t.Fatalf("task %s after cascade: %v, want it to survive", id, err)
+		}
+		if task.Milestone != "" {
+			t.Errorf("task %s milestone = %q, want detached", id, task.Milestone)
 		}
 	}
 }
