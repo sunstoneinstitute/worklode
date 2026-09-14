@@ -132,6 +132,8 @@ Flags: --server
 - `lode milestone add` — Create a milestone
   Flags: --position, --project, --repo
 - `lode milestone attach` — Attach a deliverable to a milestone in the same project
+- `lode milestone delete` — Delete an empty milestone, or --cascade one that still holds work
+  Flags: --cascade
 - `lode milestone detach` — Detach a deliverable from its milestone
 - `lode milestone list` — List a project's milestones, in position order
   Flags: --project, --repo

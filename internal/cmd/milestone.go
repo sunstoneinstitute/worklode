@@ -18,6 +18,7 @@ func newMilestoneCmd() *cobra.Command {
 	cmd.AddCommand(newMilestoneListCmd())
 	cmd.AddCommand(newMilestoneAttachCmd())
 	cmd.AddCommand(newMilestoneDetachCmd())
+	cmd.AddCommand(newMilestoneDeleteCmd())
 	return cmd
 }
 
@@ -120,6 +121,47 @@ func newMilestoneDetachCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+// newMilestoneDeleteCmd is `lode milestone delete`. Unlike `lode task delete`
+// and `lode doc delete` this is a real delete rather than 044 §2's tombstone:
+// a milestone holds a title, a position, and progress derived from children
+// that survive it, so there is nothing a hidden row would preserve.
+func newMilestoneDeleteCmd() *cobra.Command {
+	var cascade bool
+	cmd := &cobra.Command{
+		Use:   "delete <milestone>",
+		Short: "Delete an empty milestone, or --cascade one that still holds work",
+		Long: "Delete a milestone. The row is removed, not tombstoned: what it held is\n" +
+			"derived from children that outlive it.\n\n" +
+			"A milestone that still holds tasks or deliverables is refused, naming the\n" +
+			"counts. Detach them first, or pass --cascade, which deletes the attached\n" +
+			"deliverables and detaches the attached tasks. Tasks are never deleted with\n" +
+			"a milestone. Its own references to deliverables go with it either way.\n\n" +
+			"The output names every id the delete detached or deleted. A milestone's\n" +
+			"grouping is recorded nowhere else, so re-attaching from that list is the\n" +
+			"only undo, and a deleted deliverable has none at all.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, err := newAPIClient()
+			if err != nil {
+				return err
+			}
+			deleted, raw, err := c.DeleteMilestone(cmd.Context(), args[0], cascade)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			cli.MilestoneDeletionRender(cmd.OutOrStdout(), deleted)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&cascade, "cascade", false,
+		"delete the milestone's deliverables and detach its tasks, instead of refusing")
 	return cmd
 }
 
