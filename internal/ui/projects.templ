@@ -17,9 +17,8 @@ templ Projects(v ProjectsView) {
 							for _, proj := range v.Projects {
 								<div class="wlrow">
 									<div class="tl">
-										<div class="t"><a href={ "/projects/" + proj.ID }>{ proj.Name }</a></div>
+										<div class="t"><span class="chip plain mono">{ proj.Key }</span> <a href={ "/projects/" + proj.ID }>{ proj.Name }</a></div>
 									</div>
-									<div class="rt"><span class="chip plain mono">{ proj.Key }</span></div>
 								</div>
 							}
 						</div>
