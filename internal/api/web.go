@@ -114,6 +114,9 @@ func (s *server) blobOrigin() string {
 //     meta turns off the unnonced <style> htmx would otherwise inject for its
 //     indicator class — which is what let 'unsafe-inline' go (WL-227). Adding
 //     either back breaks the page rather than silently loosening the policy.
+//     mermaid.js writes both into the SVG it draws, and both are refused here;
+//     mermaid-init.js re-applies them through the CSSOM, which style-src does
+//     not police, so a diagram is styled without reopening the directive.
 //   - font-src 'self': app.css's @font-face files under /assets/fonts/.
 //   - img-src/media-src: a rendered task body embeds /blob/{hash}, which
 //     redirects to presigned object storage — see blobOrigin.
