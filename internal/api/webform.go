@@ -181,6 +181,10 @@ func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form stri
 // (spec 021 §8), so a page that skipped the policy would be the one that
 // needs it.
 //
+// It is also where the admin flag every page reads via ui.WithAdmin/isAdmin
+// is set, from the same Subject the route guards used — one read per request,
+// so no page recomputes roles.
+//
 // It is also the one place spec 056 §4's inbox indicator is computed: when
 // the request names an actor, one HasInboxItems call decides the flag every
 // page's top bar reads via ui.WithInboxDot/inboxDot, before rendering. No
@@ -190,7 +194,9 @@ func (s *server) beginFormPost(w http.ResponseWriter, r *http.Request, form stri
 // indicator must never fail a page.
 func (s *server) renderWeb(w http.ResponseWriter, r *http.Request, status int, page string, c templ.Component) {
 	ctx := r.Context()
-	if actorID := subjectFrom(r).ActorID; actorID != "" {
+	sub := subjectFrom(r)
+	ctx = ui.WithAdmin(ctx, sub.HasRole(RoleAdmin))
+	if actorID := sub.ActorID; actorID != "" {
 		has, err := s.st.HasInboxItems(ctx, actorID)
 		if err != nil {
 			s.log.Error("check inbox items", "err", err)
