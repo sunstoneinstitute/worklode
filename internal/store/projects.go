@@ -197,9 +197,9 @@ func (s *Store) GetProject(ctx context.Context, id string) (*Project, error) {
 		fmt.Sprintf("get project %s", id), id)
 }
 
-// ListProjects returns all projects.
+// ListProjects returns all projects, ordered by key.
 func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+projectColumns+` FROM projects`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+projectColumns+` FROM projects ORDER BY key`)
 	if err != nil {
 		return nil, fmt.Errorf("list projects: %w", err)
 	}
