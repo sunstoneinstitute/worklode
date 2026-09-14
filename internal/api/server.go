@@ -440,8 +440,8 @@ type server struct {
 	// a metric.
 	crewChanges *prometheus.CounterVec
 
-	// milestoneChanges counts milestone changes, by action (create,
-	// task_attach, deliverable_attach) and outcome; see milestones.go and
+	// milestoneChanges counts milestone changes, by action (create, delete,
+	// delete_cascade, task_attach, deliverable_attach) and outcome; see milestones.go and
 	// observeMilestoneChange. The project, milestone and actor ids are
 	// deliberately not labels: all three are unbounded.
 	milestoneChanges *prometheus.CounterVec
@@ -904,6 +904,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}/milestones", s.listProjectMilestones)
 	r.api("POST /api/v1/projects/{id}/milestones", s.createMilestone)
 	r.api("GET /api/v1/milestones/{id}", s.getMilestone)
+	r.api("DELETE /api/v1/milestones/{id}", s.deleteMilestone)
 	r.api("POST /api/v1/references", s.createReference)
 	r.api("GET /api/v1/references", s.listReferences)
 	r.api("GET /api/v1/projects/{id}/participants", s.listCrewMembers)

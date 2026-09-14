@@ -238,3 +238,106 @@ func TestMilestoneAttachRejectsTaskID(t *testing.T) {
 		t.Errorf("error = %q, want it to point at `lode task edit --milestone`", err.Error())
 	}
 }
+
+// TestMilestoneDeleteCallsAPI covers `lode milestone delete <milestone>`: it
+// DELETEs the milestone endpoint with no cascade, and the output names every
+// id the delete let go of — the grouping is recorded nowhere else.
+func TestMilestoneDeleteCallsAPI(t *testing.T) {
+	var gotMethod, gotPath, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath, gotQuery = r.Method, r.URL.Path, r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"milestone":{"id":"COW-MILE-2","project":"cow","title":"Internal review",`+
+			`"position":2,"created_at":"2026-09-03T10:00:00Z","updated_at":"2026-09-03T10:00:00Z"},`+
+			`"tasks":null,"deleted":null,"references":["COW-DEL-9"]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	cmd := newMilestoneDeleteCmd()
+	cmd.SetArgs([]string{"COW-MILE-2"})
+	cmd.SetOut(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("milestone delete: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/v1/milestones/COW-MILE-2" {
+		t.Errorf("request = %s %s, want DELETE /api/v1/milestones/COW-MILE-2", gotMethod, gotPath)
+	}
+	if gotQuery != "" {
+		t.Errorf("query = %q, want no cascade", gotQuery)
+	}
+	got := out.String()
+	for _, want := range []string{"COW-MILE-2", "dropped references (1): COW-DEL-9"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output missing %q:\n%s", want, got)
+		}
+	}
+	// An empty list is not a line: the delete let go of nothing else.
+	if strings.Contains(got, "detached tasks") || strings.Contains(got, "deleted deliverables") {
+		t.Errorf("output names an empty list:\n%s", got)
+	}
+}
+
+// TestMilestoneDeleteCascade: --cascade is a query parameter, and the deleted
+// deliverables and detached tasks are reported under their own labels.
+func TestMilestoneDeleteCascade(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"milestone":{"id":"COW-MILE-2","project":"cow","title":"Internal review",`+
+			`"position":2,"created_at":"2026-09-03T10:00:00Z","updated_at":"2026-09-03T10:00:00Z"},`+
+			`"tasks":["WL-7"],"deleted":["COW-DEL-3"],"references":null}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	cmd := newMilestoneDeleteCmd()
+	cmd.SetArgs([]string{"COW-MILE-2", "--cascade"})
+	cmd.SetOut(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("milestone delete --cascade: %v", err)
+	}
+	if gotQuery != "cascade=true" {
+		t.Errorf("query = %q, want cascade=true", gotQuery)
+	}
+	got := out.String()
+	if !strings.Contains(got, "deleted deliverables (1): COW-DEL-3") {
+		t.Errorf("output missing the deleted deliverable:\n%s", got)
+	}
+	if !strings.Contains(got, "detached tasks (1): WL-7") {
+		t.Errorf("output missing the detached task:\n%s", got)
+	}
+}
+
+// TestMilestoneDeleteSurfacesRefusal: a delete refused because the milestone
+// still holds children names the counts and the way out, and the command hands
+// that message through rather than replacing it.
+func TestMilestoneDeleteSurfacesRefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		io.WriteString(w, `{"error":"milestone COW-MILE-2 still holds 2 task(s) and 1 deliverable(s); detach them first, or pass --cascade"}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "wl_test")
+	t.Setenv("HOME", t.TempDir())
+
+	cmd := newMilestoneDeleteCmd()
+	cmd.SetArgs([]string{"COW-MILE-2"})
+	cmd.SetOut(io.Discard)
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("refused delete: want an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "still holds 2 task(s) and 1 deliverable(s)") {
+		t.Errorf("error = %q, want the server's message", err)
+	}
+}

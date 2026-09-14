@@ -102,6 +102,68 @@ func (s *server) createMilestone(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
+// recordMilestoneDelete removes one milestone through RecordEvent under
+// "milestone.deleted", the mirror of recordMilestone. The payload names the
+// row that went and everything the delete let go of — the tasks it detached,
+// the deliverables it deleted under cascade, the references it dropped. After
+// the commit the log is the only record of a grouping that is not derivable
+// from anything else.
+func (s *server) recordMilestoneDelete(ctx context.Context, source, id string, cascade bool, by string) (*model.MilestoneDeletion, error) {
+	var out *model.MilestoneDeletion
+	if err := s.recordEvent(ctx, source, "milestone.deleted", map[string]any{
+		"id": id, "deleted_by": by, "cascade": cascade,
+	}, func(tx *sql.Tx, eventID int64) error {
+		got, err := store.DeleteMilestone(tx, id, cascade)
+		if err != nil {
+			return err
+		}
+		if err := store.MergeEventPayload(tx, eventID, map[string]any{
+			"project":              got.Milestone.Project,
+			"title":                got.Milestone.Title,
+			"position":             strconv.Itoa(got.Milestone.Position),
+			"tasks_detached":       got.Tasks,
+			"deliverables_deleted": got.Deleted,
+			"references_dropped":   got.References,
+		}); err != nil {
+			return err
+		}
+		out = got
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// deleteMilestone handles DELETE /api/v1/milestones/{id}[?cascade=true]. The
+// 200 body is the record of what the delete let go of, because the grouping
+// survives nowhere else. A milestone that still holds children without
+// cascade, and a cascade refused by a deliverable's approvals, both come back
+// as 422 naming what to do about it, and nothing is committed.
+func (s *server) deleteMilestone(w http.ResponseWriter, r *http.Request) {
+	cascade, err := queryBool(r.URL.Query(), "cascade")
+	if err != nil {
+		writeErr(w, http.StatusUnprocessableEntity, err.Error())
+		return
+	}
+	deleted, err := s.recordMilestoneDelete(r.Context(), "cli", r.PathValue("id"), cascade, actorIDFrom(r))
+	s.observeMilestoneChange(milestoneDeleteAction(cascade), err)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, deleted)
+}
+
+// milestoneDeleteAction splits the delete counter by whether the cascade ran,
+// so an operator can see how often a milestone took its deliverables with it.
+func milestoneDeleteAction(cascade bool) string {
+	if cascade {
+		return "delete_cascade"
+	}
+	return "delete"
+}
+
 // milestonesPage handles GET /projects/{id}/milestones, the project-local
 // Milestones destination (spec 029 §2, spec 032 §10): every milestone as a
 // section, in position order, with the children its progress was derived

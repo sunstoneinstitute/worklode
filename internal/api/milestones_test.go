@@ -387,3 +387,191 @@ func TestMilestoneReferencesOnPage(t *testing.T) {
 		t.Errorf("metrics missing the milestone_reference form counter:\n%s", metrics)
 	}
 }
+
+// TestDeleteMilestoneAPI covers DELETE /api/v1/milestones/{id}: a milestone
+// still holding children is 422 and stays whole, an emptied one answers 200
+// with the record of what went, and an unknown id is 404.
+func TestDeleteMilestoneAPI(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	milestoneID, deliverableID := seedMilestoneWithChildren(t, h, token)
+
+	if rr := doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID+"?cascade=maybe", token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("unparseable cascade = %d, want 422", rr.Code)
+	}
+	if rr := doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID, token, nil); rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("delete with children = %d, want 422; body %s", rr.Code, rr.Body.String())
+	}
+	// The refusal is the whole guard: both children must still be attached.
+	rr := doReq(t, h, "GET", "/api/v1/milestones/"+milestoneID, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get after refused delete = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var detail model.MilestoneDetail
+	decodeInto(t, rr, &detail)
+	if len(detail.Tasks) != 1 || len(detail.Deliverables) != 1 {
+		t.Fatalf("after refused delete: %d tasks, %d deliverables; want 1 and 1",
+			len(detail.Tasks), len(detail.Deliverables))
+	}
+
+	for _, d := range []struct {
+		path string
+		body any
+	}{
+		{"/api/v1/tasks/WL-1", map[string]any{"milestone": ""}},
+		{"/api/v1/deliverables/" + deliverableID, model.EditDeliverableInput{Milestone: new(string)}},
+	} {
+		if rr := doReq(t, h, "PATCH", d.path, token, d.body); rr.Code != http.StatusOK {
+			t.Fatalf("detach %s = %d, body %s", d.path, rr.Code, rr.Body.String())
+		}
+	}
+
+	rr = doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID, token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("delete status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var deleted model.MilestoneDeletion
+	decodeInto(t, rr, &deleted)
+	if deleted.Milestone.ID != milestoneID || deleted.Milestone.Title != "Internal review" {
+		t.Fatalf("body milestone = %+v, want the deleted row", deleted.Milestone)
+	}
+	if len(deleted.Tasks) != 0 || len(deleted.Deleted) != 0 {
+		t.Errorf("body = %v tasks, %v deleted; want an emptied milestone to report neither",
+			deleted.Tasks, deleted.Deleted)
+	}
+	if rr := doReq(t, h, "GET", "/api/v1/milestones/"+milestoneID, token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("get after delete = %d, want 404", rr.Code)
+	}
+	if rr := doReq(t, h, "DELETE", "/api/v1/milestones/WL-MILE-9", token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("delete unknown milestone = %d, want 404", rr.Code)
+	}
+
+	events := storeEventsOfType(t, st, "milestone.deleted", 1)
+	if len(events) != 1 {
+		t.Fatalf("milestone.deleted events = %d, want 1", len(events))
+	}
+	if events[0].Source != "cli" {
+		t.Errorf("event source = %q, want cli", events[0].Source)
+	}
+	// The row is gone, so the payload is the only record of what it held.
+	payload := decodeDeletePayload(t, events[0].Payload)
+	if payload.Project != "proj" || payload.ID != milestoneID ||
+		payload.Title != "Internal review" || payload.Position != "1" {
+		t.Fatalf("payload = %+v, want the deleted milestone's fields", payload)
+	}
+	if payload.Cascade || len(payload.Tasks) != 0 || len(payload.Deleted) != 0 {
+		t.Fatalf("payload lists = %+v, want an emptied milestone to report neither", payload)
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	for _, want := range []string{
+		`worklode_milestone_changes_total{action="delete",outcome="ok"} 1`,
+		`worklode_milestone_changes_total{action="delete",outcome="rejected"} 2`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("metrics missing %s:\n%s", want, metrics)
+		}
+	}
+}
+
+// TestDeleteMilestoneCascadeAPI: ?cascade=true overrides the refusal, deleting
+// the attached deliverables and detaching the attached tasks, under its own
+// counter action.
+func TestDeleteMilestoneCascadeAPI(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	createProject(t, st, "proj")
+	milestoneID, deliverableID := seedMilestoneWithChildren(t, h, token)
+
+	rr := doReq(t, h, "DELETE", "/api/v1/milestones/"+milestoneID+"?cascade=true", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("cascade status = %d, want 200; body %s", rr.Code, rr.Body.String())
+	}
+	var deleted model.MilestoneDeletion
+	decodeInto(t, rr, &deleted)
+	if len(deleted.Deleted) != 1 || deleted.Deleted[0] != deliverableID {
+		t.Fatalf("body deleted = %v, want [%s]", deleted.Deleted, deliverableID)
+	}
+	if len(deleted.Tasks) != 1 || deleted.Tasks[0] != "WL-1" {
+		t.Fatalf("body tasks = %v, want [WL-1] detached", deleted.Tasks)
+	}
+
+	if rr := doReq(t, h, "GET", "/api/v1/deliverables/"+deliverableID, token, nil); rr.Code != http.StatusNotFound {
+		t.Errorf("deliverable after cascade = %d, want 404", rr.Code)
+	}
+	// Tasks are work, not an output of the milestone.
+	rr = doReq(t, h, "GET", "/api/v1/tasks/WL-1", token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task after cascade = %d, want 200", rr.Code)
+	}
+	if got := decodeMap(t, rr)["milestone"]; got != nil && got != "" {
+		t.Errorf("task milestone = %v, want detached", got)
+	}
+
+	events := storeEventsOfType(t, st, "milestone.deleted", 1)
+	if len(events) != 1 {
+		t.Fatalf("milestone.deleted events = %d, want 1", len(events))
+	}
+	payload := decodeDeletePayload(t, events[0].Payload)
+	if !payload.Cascade || len(payload.Deleted) != 1 || payload.Deleted[0] != deliverableID ||
+		len(payload.Tasks) != 1 || payload.Tasks[0] != "WL-1" {
+		t.Fatalf("payload = %+v, want cascade with the deleted deliverable and detached task", payload)
+	}
+
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil).Body.String()
+	if !strings.Contains(metrics, `worklode_milestone_changes_total{action="delete_cascade",outcome="ok"} 1`) {
+		t.Errorf("metrics missing the cascade counter:\n%s", metrics)
+	}
+}
+
+// seedMilestoneWithChildren creates one milestone with a task (WL-1) and a
+// deliverable attached, all through the real write paths, and returns the
+// milestone and deliverable ids.
+func seedMilestoneWithChildren(t *testing.T, h http.Handler, token string) (string, string) {
+	t.Helper()
+	rr := doReq(t, h, "POST", "/api/v1/projects/proj/milestones", token,
+		model.CreateMilestoneInput{Title: "Internal review"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create milestone status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	milestoneID := decodeMap(t, rr)["id"].(string)
+
+	createTaskViaAPI(t, h, token, map[string]any{
+		"project": "proj", "title": "Attached task", "priority": "high", "kind": "feature",
+	})
+	if rr := doReq(t, h, "PATCH", "/api/v1/tasks/WL-1", token, map[string]any{"milestone": milestoneID}); rr.Code != http.StatusOK {
+		t.Fatalf("attach task status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr = doReq(t, h, "POST", "/api/v1/projects/proj/deliverables", token,
+		model.CreateDeliverableInput{Name: "Attached deliverable"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create deliverable status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	deliverableID := decodeMap(t, rr)["id"].(string)
+	if rr := doReq(t, h, "PATCH", "/api/v1/deliverables/"+deliverableID, token,
+		model.EditDeliverableInput{Milestone: &milestoneID}); rr.Code != http.StatusOK {
+		t.Fatalf("attach deliverable status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	return milestoneID, deliverableID
+}
+
+// milestoneDeletePayload is the milestone.deleted payload: the deleted row's
+// fields plus the lists naming what the delete let go of.
+type milestoneDeletePayload struct {
+	milestonePayload
+	Cascade    bool     `json:"cascade"`
+	Tasks      []string `json:"tasks_detached"`
+	Deleted    []string `json:"deliverables_deleted"`
+	References []string `json:"references_dropped"`
+}
+
+func decodeDeletePayload(t *testing.T, raw []byte) milestoneDeletePayload {
+	t.Helper()
+	var p milestoneDeletePayload
+	if err := json.Unmarshal(raw, &p); err != nil {
+		t.Fatalf("decode payload %s: %v", raw, err)
+	}
+	return p
+}
