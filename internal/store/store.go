@@ -62,6 +62,13 @@ func (s *Store) Now() time.Time {
 	return s.nowFn()
 }
 
+// Stats reports the connection pool's state at call time (open/in-use/idle
+// connections, and cumulative wait count/duration for a connection). It reads
+// pool bookkeeping only, no round trip to Postgres.
+func (s *Store) Stats() sql.DBStats {
+	return s.db.Stats()
+}
+
 // Migrate applies all pending migrations found as *.up.sql/*.down.sql files
 // in migrationsPath. A database that is already up to date is not an error.
 func (s *Store) Migrate(migrationsPath string) error {

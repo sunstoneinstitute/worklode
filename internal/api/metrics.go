@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
@@ -304,6 +305,7 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 	// owns the per-subscriber lag gauge, has no caller yet.
 	if s.st != nil {
 		reg.MustRegister(&eventHorizonCollector{horizonID: s.st.EventLogHorizonID})
+		reg.MustRegister(&dbStatsCollector{stats: s.st.Stats})
 	}
 	// githubCalls counts the GitHub API calls worklode makes itself: the
 	// branch-rules refresh on its own schedule, and the three §3.6 makes for
@@ -569,6 +571,49 @@ var eventLogHorizonDesc = prometheus.NewDesc(
 	"worklode_event_log_horizon_id",
 	"Highest event id below the commit horizon (pg_snapshot_xmin) at scrape time. A log position, not a count.",
 	nil, nil)
+
+// The pool is capped at 16 connections (store.Open) and shared by every
+// request, including a Progress page follow that holds no connection between
+// polls but still competes for one every second it is open (WL-SPEC-66
+// §5.1). A rising worklode_db_wait_count_total, or wait_duration growing
+// faster than requests can absorb, means ordinary requests are queuing for a
+// connection — the thing an otherwise-trivial request taking seconds looks
+// like from outside.
+var (
+	dbOpenConnsDesc = prometheus.NewDesc(
+		"worklode_db_open_connections", "Connections currently open in the pool (in use plus idle).", nil, nil)
+	dbInUseDesc = prometheus.NewDesc(
+		"worklode_db_in_use_connections", "Connections currently checked out of the pool.", nil, nil)
+	dbIdleDesc = prometheus.NewDesc(
+		"worklode_db_idle_connections", "Connections open but not in use.", nil, nil)
+	dbWaitCountDesc = prometheus.NewDesc(
+		"worklode_db_wait_count_total", "Total connection requests that had to wait because the pool was at its cap.", nil, nil)
+	dbWaitDurationDesc = prometheus.NewDesc(
+		"worklode_db_wait_duration_seconds_total", "Total time spent waiting for a connection because the pool was at its cap.", nil, nil)
+)
+
+// dbStatsCollector exposes the connection pool's own counters (database/sql
+// tracks them; nothing here queries Postgres) at scrape time.
+type dbStatsCollector struct {
+	stats func() sql.DBStats
+}
+
+func (c *dbStatsCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- dbOpenConnsDesc
+	ch <- dbInUseDesc
+	ch <- dbIdleDesc
+	ch <- dbWaitCountDesc
+	ch <- dbWaitDurationDesc
+}
+
+func (c *dbStatsCollector) Collect(ch chan<- prometheus.Metric) {
+	st := c.stats()
+	ch <- prometheus.MustNewConstMetric(dbOpenConnsDesc, prometheus.GaugeValue, float64(st.OpenConnections))
+	ch <- prometheus.MustNewConstMetric(dbInUseDesc, prometheus.GaugeValue, float64(st.InUse))
+	ch <- prometheus.MustNewConstMetric(dbIdleDesc, prometheus.GaugeValue, float64(st.Idle))
+	ch <- prometheus.MustNewConstMetric(dbWaitCountDesc, prometheus.CounterValue, float64(st.WaitCount))
+	ch <- prometheus.MustNewConstMetric(dbWaitDurationDesc, prometheus.CounterValue, st.WaitDuration.Seconds())
+}
 
 // eventHorizonCollector reads the horizon at scrape time, in the same mould as
 // eventbus's lag collector: a bounded timeout, and an invalid metric on
