@@ -24,16 +24,24 @@ package ui
 // expert views live (layout.templ's primaryNav doc comment): the drift board
 // takes no nav destination of its own, so without this card it is reachable
 // only by typing the URL.
+//
+// That card is admin-only. The drift board reads as a finished feature to
+// anyone who finds it, and it is not one yet, so it stays out of the way of
+// everyone who is not looking for it. The gate is the card, not the route:
+// /drift and `lode graph drift` are unchanged, so nothing an operator or a
+// script already does breaks.
 templ Docs(v DocsView) {
 	@Page(v.Page) {
 		@globalShell() {
-			<section class="card">
-				<div class="hd"><h3>Drift &amp; overview</h3></div>
-				<div class="bd">
-					<p><a href="/drift">Drift board</a></p>
-					<p class="muted small">Architectural violations, stale intent and coverage gaps from the knowledge graph, alongside the ready frontier and the critical path from the backbone.</p>
-				</div>
-			</section>
+			if isAdmin(ctx) {
+				<section class="card">
+					<div class="hd"><h3>Drift &amp; overview</h3></div>
+					<div class="bd">
+						<p><a href="/drift">Drift board</a></p>
+						<p class="muted small">Architectural violations, stale intent and coverage gaps from the knowledge graph, alongside the ready frontier and the critical path from the backbone.</p>
+					</div>
+				</section>
+			}
 			<section class="card">
 				<div class="hd"><h3>Documents</h3></div>
 				<div class="bd">
