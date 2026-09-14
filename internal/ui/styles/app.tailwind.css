@@ -598,6 +598,34 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
 .prose code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.9375rem;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 4px}
 .prose pre{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;overflow-x:auto}
 .prose pre code{background:none;border:0;padding:0}
+/* Inline code is coloured, not just boxed: a body that names a flag, a table
+ * and a type in one paragraph reads as one grey wall when the only difference
+ * is the border. --imp is the same hue keywords get in a fenced block below,
+ * so "code" means one colour throughout a document. */
+.prose code{color:var(--imp)}
+.prose pre code{color:var(--ink)}
+
+/* Syntax colouring. internal/mdrender/highlight.go emits these classes with
+ * Chroma; the "hl-" prefix keeps them clear of the layout's own short class
+ * names (.t, .s, .tl). The roles below are drawn from the palette at the top
+ * of this file rather than from a Chroma theme, so light and dark follow the
+ * page with no second set of values, and every one of them clears 4.5:1 on
+ * --surface-2 in both themes. An unmapped token inherits --ink. */
+.prose .hl-c,.prose .hl-ch,.prose .hl-cm,.prose .hl-cp,.prose .hl-cpf,.prose .hl-c1,.prose .hl-cs{color:var(--ink-3);font-style:italic}
+.prose .hl-k,.prose .hl-kc,.prose .hl-kd,.prose .hl-kn,.prose .hl-kp,.prose .hl-kr{color:var(--imp)}
+.prose .hl-kt,.prose .hl-nb,.prose .hl-bp,.prose .hl-nc,.prose .hl-nn,.prose .hl-ne,.prose .hl-no,.prose .hl-na{color:var(--ev-user)}
+.prose .hl-nf,.prose .hl-fm,.prose .hl-nd,.prose .hl-nt{color:var(--link)}
+.prose .hl-s,.prose .hl-sa,.prose .hl-sb,.prose .hl-sc,.prose .hl-dl,.prose .hl-sd,.prose .hl-s2,.prose .hl-se,.prose .hl-sh,.prose .hl-si,.prose .hl-sx,.prose .hl-sr,.prose .hl-s1,.prose .hl-ss{color:var(--ok)}
+.prose .hl-m,.prose .hl-mb,.prose .hl-mf,.prose .hl-mh,.prose .hl-mi,.prose .hl-mo,.prose .hl-il{color:var(--warn)}
+.prose .hl-o,.prose .hl-ow,.prose .hl-p{color:var(--ink-3)}
+.prose .hl-err,.prose .hl-x{color:var(--crit)}
+/* A ```diff fence: the two lines a reader is looking for get the same green
+ * and red the rest of the cockpit uses for added and removed. */
+.prose .hl-gi{color:var(--ok)}
+.prose .hl-gd{color:var(--crit)}
+.prose .hl-gh,.prose .hl-gu,.prose .hl-gp{color:var(--ink-3)}
+.prose .hl-ge{font-style:italic}
+.prose .hl-gs{font-weight:600}
 .prose blockquote{margin-left:0;padding-left:12px;border-left:3px solid var(--line-2);color:var(--ink-2)}
 /* GitHub alert syntax (WL-415/416/417, plan doc 175): a blockquote whose
  * first line is [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION] renders as

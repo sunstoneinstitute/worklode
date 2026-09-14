@@ -114,7 +114,7 @@ var emojiExt = emoji.New(emoji.WithRenderingMethod(emoji.Unicode))
 var mermaidExt = &mermaid.Extender{RenderMode: mermaid.RenderModeClient, NoScript: true}
 
 var md = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt),
+	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt, highlightExt),
 	// Unsafe here means "let raw HTML through to the sanitiser", not "trust
 	// it". The bluemonday policy below is the actual boundary.
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
@@ -130,7 +130,7 @@ var md = goldmark.New(
 // WithAttribute lets an author write any attribute, not just id — the
 // allowlist, not the parser, is what keeps that harmless.
 var mdDoc = goldmark.New(
-	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt),
+	goldmark.WithExtensions(extension.GFM, emojiExt, mermaidExt, calloutExt, highlightExt),
 	goldmark.WithParserOptions(parser.WithAttribute(), withDocRefLinks),
 	goldmark.WithRendererOptions(mdhtml.WithUnsafe()),
 )
@@ -222,6 +222,13 @@ func buildPolicy() *bluemonday.Policy {
 	// scoped to one element and one exact value, not a general reopening of
 	// class/style.
 	p.AllowAttrs("class").Matching(mermaidClass).OnElements("pre")
+
+	// highlight.go's syntax colouring. Every value is one of Chroma's own
+	// token names behind the "hl-" prefix, and both rules are anchored to an
+	// exact set, so this ORs with the mermaid rule above the way two exact
+	// allowlists are meant to: a pre may be class="mermaid" or class="hl-chroma"
+	// and nothing else. It is not a general reopening of class.
+	p.AllowAttrs("class").Matching(highlightClass).OnElements("pre", "code", "span")
 
 	// callout.go's markup (plan doc 175, WL-415/WL-416): the aside and its
 	// title paragraph, and only those two exact class shapes. "aside" is

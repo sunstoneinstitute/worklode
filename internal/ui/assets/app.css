@@ -1866,6 +1866,52 @@ nav.local a .cnt {
   border: 0;
   padding: 0;
 }
+.prose code {
+  color: var(--imp);
+}
+.prose pre code {
+  color: var(--ink);
+}
+.prose .hl-c,.prose .hl-ch,.prose .hl-cm,.prose .hl-cp,.prose .hl-cpf,.prose .hl-c1,.prose .hl-cs {
+  color: var(--ink-3);
+  font-style: italic;
+}
+.prose .hl-k,.prose .hl-kc,.prose .hl-kd,.prose .hl-kn,.prose .hl-kp,.prose .hl-kr {
+  color: var(--imp);
+}
+.prose .hl-kt,.prose .hl-nb,.prose .hl-bp,.prose .hl-nc,.prose .hl-nn,.prose .hl-ne,.prose .hl-no,.prose .hl-na {
+  color: var(--ev-user);
+}
+.prose .hl-nf,.prose .hl-fm,.prose .hl-nd,.prose .hl-nt {
+  color: var(--link);
+}
+.prose .hl-s,.prose .hl-sa,.prose .hl-sb,.prose .hl-sc,.prose .hl-dl,.prose .hl-sd,.prose .hl-s2,.prose .hl-se,.prose .hl-sh,.prose .hl-si,.prose .hl-sx,.prose .hl-sr,.prose .hl-s1,.prose .hl-ss {
+  color: var(--ok);
+}
+.prose .hl-m,.prose .hl-mb,.prose .hl-mf,.prose .hl-mh,.prose .hl-mi,.prose .hl-mo,.prose .hl-il {
+  color: var(--warn);
+}
+.prose .hl-o,.prose .hl-ow,.prose .hl-p {
+  color: var(--ink-3);
+}
+.prose .hl-err,.prose .hl-x {
+  color: var(--crit);
+}
+.prose .hl-gi {
+  color: var(--ok);
+}
+.prose .hl-gd {
+  color: var(--crit);
+}
+.prose .hl-gh,.prose .hl-gu,.prose .hl-gp {
+  color: var(--ink-3);
+}
+.prose .hl-ge {
+  font-style: italic;
+}
+.prose .hl-gs {
+  font-weight: 600;
+}
 .prose blockquote {
   margin-left: 0;
   padding-left: 12px;
