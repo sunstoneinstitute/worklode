@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
@@ -29,6 +30,38 @@ func (c *Client) ListMilestones(ctx context.Context, project string) (model.Mile
 func (c *Client) GetMilestone(ctx context.Context, id string) (model.MilestoneDetail, []byte, error) {
 	return doJSON[model.MilestoneDetail](ctx, c,
 		http.MethodGet, "/api/v1/milestones/"+url.PathEscape(id), nil, "milestone")
+}
+
+// DeleteMilestone calls DELETE /api/v1/milestones/{id}, with ?cascade=true to
+// override the refusal on a milestone that still holds children. The 200 body
+// records what the delete let go of; a refusal — children without cascade, or
+// a deliverable carrying approvals — is a *ClientError naming it, and nothing
+// was deleted.
+func (c *Client) DeleteMilestone(ctx context.Context, id string, cascade bool) (model.MilestoneDeletion, []byte, error) {
+	path := "/api/v1/milestones/" + url.PathEscape(id)
+	if cascade {
+		path += "?cascade=true"
+	}
+	return doJSON[model.MilestoneDeletion](ctx, c, http.MethodDelete, path, nil, "milestone")
+}
+
+// MilestoneDeletionRender prints what a delete let go of. Every list is
+// named, because a milestone's grouping is not recorded anywhere the caller
+// can go back and read, and re-attaching is the only undo.
+func MilestoneDeletionRender(w io.Writer, d model.MilestoneDeletion) {
+	fmt.Fprintf(w, "deleted milestone %s  %s\n", d.Milestone.ID, d.Milestone.Title)
+	for _, l := range []struct {
+		label string
+		ids   []string
+	}{
+		{"detached tasks", d.Tasks},
+		{"deleted deliverables", d.Deleted},
+		{"dropped references", d.References},
+	} {
+		if len(l.ids) > 0 {
+			fmt.Fprintf(w, "  %s (%d): %s\n", l.label, len(l.ids), strings.Join(l.ids, ", "))
+		}
+	}
 }
 
 // MilestoneTable prints milestones in position order. Progress is derived on

@@ -354,3 +354,51 @@ func SetDeliverableMilestone(tx *sql.Tx, now time.Time, id, milestoneID string) 
 	}
 	return nil
 }
+
+// DeleteDeliverable removes one deliverable and the rows that exist only to
+// describe it, inside the given transaction. It is the cascade arm of
+// DeleteMilestone and has no other caller yet; a standalone `lode deliverable
+// delete` would use it unchanged.
+//
+// Two kinds of row hang off a deliverable, and they are not the same kind of
+// fact. Its reported states (artifact_evidence, 029 §3.2) and its references
+// (entity_edges, 029 §5) describe the deliverable and say nothing once it is
+// gone, so they go with it — no surface can remove either on its own. Its
+// approvals (038 §7.1) are a governance record about a revision that was
+// reviewed; deleting one is a decision this function will not take silently,
+// so a deliverable carrying approvals is refused instead, naming them.
+//
+// The event log keeps the deliverable's whole history either way (004 §2);
+// what goes is the row and the projections read off it.
+func DeleteDeliverable(tx *sql.Tx, id string) error {
+	ctx := context.Background()
+
+	var approvals int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT count(*) FROM approvals WHERE entity_kind = 'deliverable' AND entity_id = $1`, id,
+	).Scan(&approvals); err != nil {
+		return fmt.Errorf("count approvals of deliverable %s: %w", id, err)
+	}
+	if approvals > 0 {
+		return fmt.Errorf(
+			"deliverable %s carries %d approval(s), which are a governance record and are not deleted here: %w",
+			id, approvals, ErrInvalidInput)
+	}
+
+	for _, q := range []struct{ what, stmt string }{
+		{"reported states", `DELETE FROM artifact_evidence WHERE entity_kind = 'deliverable' AND entity_id = $1`},
+		{"inbound references", `DELETE FROM entity_edges WHERE to_kind = 'deliverable' AND to_id = $1`},
+		{"outbound references", `DELETE FROM entity_edges WHERE from_kind = 'deliverable' AND from_id = $1`},
+	} {
+		if _, err := tx.ExecContext(ctx, q.stmt, id); err != nil {
+			return fmt.Errorf("delete %s of deliverable %s: %w", q.what, id, err)
+		}
+	}
+
+	res, err := tx.ExecContext(ctx, `DELETE FROM deliverables WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete deliverable %s: %w", id, err)
+	}
+	return requireOneAffected(res, "delete deliverable "+id,
+		fmt.Errorf("deliverable %s: %w", id, ErrNotFound))
+}

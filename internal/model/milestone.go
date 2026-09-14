@@ -39,6 +39,23 @@ type MilestoneDetail struct {
 	Deliverables []Deliverable `json:"deliverables"`
 }
 
+// MilestoneDeletion is DELETE /api/v1/milestones/{id}: the milestone that was
+// removed and everything the removal let go of. The lists are ids, in id
+// order, and they are the only record of the grouping outside the event log —
+// the caller has to be able to put it back.
+type MilestoneDeletion struct {
+	Milestone Milestone `json:"milestone"`
+	// Tasks is the tasks the delete detached. Work is never deleted with a
+	// milestone: --cascade detaches its tasks, and a delete without it is
+	// refused while any remain.
+	Tasks []string `json:"tasks"`
+	// Deleted is the deliverables that went with the milestone under
+	// --cascade. Without it a milestone holding deliverables is refused.
+	Deleted []string `json:"deleted"`
+	// References is the milestone's own outbound references, dropped with it.
+	References []string `json:"references"`
+}
+
 // CreateMilestoneInput is POST /api/v1/projects/{id}/milestones. Position 0
 // means append after the project's last milestone.
 type CreateMilestoneInput struct {

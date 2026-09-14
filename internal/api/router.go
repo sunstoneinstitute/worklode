@@ -381,6 +381,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/milestones":    guarded(permMilestoneRead),
 	"POST /api/v1/projects/{id}/milestones":   guarded(permMilestoneWrite),
 	"GET /api/v1/milestones/{id}":             guarded(permMilestoneRead),
+	"DELETE /api/v1/milestones/{id}":          guarded(permMilestoneWrite),
 	// entity_edges (spec 029 §5): typed references between entities of
 	// different kinds. Any crew member may declare a dependency, matching
 	// deliverable creation.

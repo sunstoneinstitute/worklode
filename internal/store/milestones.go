@@ -9,6 +9,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -336,4 +337,126 @@ func (s *Store) ListMilestoneChildren(ctx context.Context, projectID string) (ma
 		return nil, nil, err
 	}
 	return tasks, deliverables, nil
+}
+
+// DeleteMilestone removes one milestone inside the given transaction, called
+// from a RecordEvent apply callback the way CreateMilestone is. It returns
+// what the delete let go of: the row itself, the tasks it detached, the
+// deliverables it deleted, and the references it dropped.
+//
+// This is a real delete, not 044 §2's tombstone. That spec covers tasks and
+// documents, whose rows carry history a hidden row keeps addressable; a
+// milestone carries a title, a position, and progress derived from children
+// that either survive it or are named in the returned record.
+//
+// A milestone that still holds tasks or deliverables is refused. `milestone_id`
+// is ON DELETE SET NULL, so the delete would otherwise detach them silently,
+// and the grouping is derivable from nothing else — not from project, state or
+// dates — so a silent detach cannot be undone or even seen.
+//
+// cascade is the one override, and it is not symmetric. Deliverables are
+// outputs of the milestone, so they go with it through DeleteDeliverable and
+// its refusals. Tasks are work with a state machine, a lease and blocking
+// edges, so they are only detached: a grouping decision must not destroy work
+// records. The milestone's own outbound references (029 §5) are dropped either
+// way — no surface can remove an entity_edges row, and one hanging off a
+// deleted milestone can never be read again.
+func DeleteMilestone(tx *sql.Tx, id string, cascade bool) (*model.MilestoneDeletion, error) {
+	// No context in the signature, matching CreateMilestone: RecordEvent
+	// opened the transaction against the caller's context already.
+	ctx := context.Background()
+
+	m, err := scanMilestone(tx.QueryRowContext(ctx,
+		`SELECT `+milestoneColumns+` FROM milestones WHERE id = $1 FOR UPDATE`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("milestone %s: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get milestone %s: %w", id, err)
+	}
+	out := &model.MilestoneDeletion{Milestone: *m}
+
+	if !cascade {
+		// Counted on this transaction, behind the row lock above, so an
+		// attach racing the delete either loses the lock or is seen here.
+		// Tombstoned tasks are not counted, for the reason they are in no
+		// other listing (044 §4): a caller cannot detach what it cannot see.
+		var tasks, deliverables int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT (SELECT count(*) FROM tasks
+			          WHERE milestone_id = $1 AND deleted_at IS NULL),
+			        (SELECT count(*) FROM deliverables WHERE milestone_id = $1)`, id,
+		).Scan(&tasks, &deliverables); err != nil {
+			return nil, fmt.Errorf("count children of milestone %s: %w", id, err)
+		}
+		if tasks > 0 || deliverables > 0 {
+			return nil, fmt.Errorf(
+				"milestone %s still holds %d task(s) and %d deliverable(s); detach them first "+
+					"with `lode task edit --milestone none` and `lode milestone detach`, "+
+					"or pass --cascade: %w",
+				id, tasks, deliverables, ErrInvalidInput)
+		}
+	}
+
+	// Written here rather than left to the FK so the ids come back in the
+	// RETURNING clause. Without cascade the guard has established there is
+	// nothing visible left, and this still reports a tombstoned task the
+	// count above skipped rather than letting the FK null it in silence.
+	if out.Tasks, err = detachFromMilestone(ctx, tx, "tasks", id); err != nil {
+		return nil, err
+	}
+	deliverables, err := detachFromMilestone(ctx, tx, "deliverables", id)
+	if err != nil {
+		return nil, err
+	}
+	// Detached first, so each delete works on a row that no longer names the
+	// milestone and the FK has nothing left to null.
+	for _, d := range deliverables {
+		if err := DeleteDeliverable(tx, d); err != nil {
+			return nil, err
+		}
+	}
+	out.Deleted = deliverables
+
+	what := "drop references of milestone " + id
+	rows, err := tx.QueryContext(ctx,
+		`DELETE FROM entity_edges WHERE from_kind = 'milestone' AND from_id = $1
+		 RETURNING to_id`, id)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	if out.References, err = collectRows(rows, what, scanID); err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM milestones WHERE id = $1`, id); err != nil {
+		return nil, fmt.Errorf("delete milestone %s: %w", id, err)
+	}
+	return out, nil
+}
+
+// detachFromMilestone clears milestone_id on every row of table that names the
+// milestone, returning the ids it detached in id order. table is a literal
+// from DeleteMilestone, never caller input.
+func detachFromMilestone(ctx context.Context, tx *sql.Tx, table, milestoneID string) ([]string, error) {
+	what := "detach " + table + " from milestone " + milestoneID
+	rows, err := tx.QueryContext(ctx,
+		`UPDATE `+table+` SET milestone_id = NULL WHERE milestone_id = $1 RETURNING id`,
+		milestoneID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", what, err)
+	}
+	out, err := collectRows(rows, what, scanID)
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// scanID reads a single-column id row, for the RETURNING clauses above.
+func scanID(row rowScanner) (string, error) {
+	var id string
+	err := row.Scan(&id)
+	return id, err
 }
