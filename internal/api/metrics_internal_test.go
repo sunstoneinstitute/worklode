@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
@@ -497,6 +498,63 @@ func TestEventHorizonCollectorSkippedWithoutStore(t *testing.T) {
 	for _, mf := range mfs {
 		if mf.GetName() == "worklode_event_log_horizon_id" {
 			t.Fatal("worklode_event_log_horizon_id registered without a store to query")
+		}
+	}
+}
+
+func TestDBStatsCollector(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(&dbStatsCollector{
+		stats: func() sql.DBStats {
+			return sql.DBStats{
+				OpenConnections: 5,
+				InUse:           3,
+				Idle:            2,
+				WaitCount:       7,
+				WaitDuration:    2500 * time.Millisecond,
+			}
+		},
+	})
+
+	const want = `# HELP worklode_db_idle_connections Connections open but not in use.
+# TYPE worklode_db_idle_connections gauge
+worklode_db_idle_connections 2
+# HELP worklode_db_in_use_connections Connections currently checked out of the pool.
+# TYPE worklode_db_in_use_connections gauge
+worklode_db_in_use_connections 3
+# HELP worklode_db_open_connections Connections currently open in the pool (in use plus idle).
+# TYPE worklode_db_open_connections gauge
+worklode_db_open_connections 5
+# HELP worklode_db_wait_count_total Total connection requests that had to wait because the pool was at its cap.
+# TYPE worklode_db_wait_count_total counter
+worklode_db_wait_count_total 7
+# HELP worklode_db_wait_duration_seconds_total Total time spent waiting for a connection because the pool was at its cap.
+# TYPE worklode_db_wait_duration_seconds_total counter
+worklode_db_wait_duration_seconds_total 2.5
+`
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(want),
+		"worklode_db_open_connections", "worklode_db_in_use_connections", "worklode_db_idle_connections",
+		"worklode_db_wait_count_total", "worklode_db_wait_duration_seconds_total"); err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+}
+
+// Registered alongside eventHorizonCollector, only when the server has a
+// store — see TestEventHorizonCollectorSkippedWithoutStore.
+func TestDBStatsCollectorSkippedWithoutStore(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	s := &server{}
+	s.initMetrics(reg)
+
+	mfs, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() == "worklode_db_open_connections" {
+			t.Fatal("worklode_db_open_connections registered without a store to query")
 		}
 	}
 }
