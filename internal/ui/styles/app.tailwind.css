@@ -87,10 +87,15 @@ html{scroll-padding-top:64px}
  * — so it scrolls inside itself rather than widening the page (WCAG 1.4.10
  * Reflow). .prose pre restates the same thing for the sanitised task body. */
 pre{overflow-x:auto;max-width:100%}
+/* Type sizes are rem, never px, so the browser's own default-font-size
+ * setting still scales the cockpit. A reader who raised that setting did it
+ * for a reason; a px size silently ignores them (browser zoom is a separate
+ * control and works either way). 1rem is that default, normally 16px, so
+ * body's 1.0625rem is 17px unless the reader has asked for something else. */
 body{
   background:var(--bg);color:var(--ink);
   font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  font-size:1.0625rem;line-height:1.5;-webkit-font-smoothing:antialiased;
 }
 h1,h2,h3,h4{font-family:"Source Serif 4",Georgia,serif;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
 a{color:var(--link);text-decoration:none}
@@ -109,7 +114,7 @@ button{font-family:inherit;cursor:pointer}
   position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:20px;
   padding:0 20px;height:56px;background:var(--surface);border-bottom:1px solid var(--line);
 }
-.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:18px;letter-spacing:-.01em;white-space:nowrap;color:var(--ink);flex:0 0 auto}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:1.125rem;letter-spacing:-.01em;white-space:nowrap;color:var(--ink);flex:0 0 auto}
 .brand:hover{text-decoration:none}
 .brand .mark{width:26px;height:22px;display:grid;place-items:center;flex:0 0 auto}
 .brand .mark img{width:100%;height:100%;display:block;object-fit:contain}
@@ -128,7 +133,7 @@ button{font-family:inherit;cursor:pointer}
 nav.global{align-self:stretch;display:flex;align-items:stretch;gap:4px;min-width:0}
 nav.global a{
   position:relative;padding:0 10px;color:var(--ink-2);font-weight:500;white-space:nowrap;
-  font-size:16px;display:flex;align-items:center;gap:7px
+  font-size:1rem;display:flex;align-items:center;gap:7px
 }
 nav.global a:hover{background:var(--surface-2);text-decoration:none}
 nav.global a.active{color:var(--ink);font-weight:600}
@@ -140,7 +145,7 @@ nav.global .navicon svg{width:17px;height:17px;display:block}
  * this for that markup and re-run the WCAG 1.4.3 contrast check against
  * --sunk/--surface when it lands (the --ink-3 pairing was authored below AA
  * once already, see WL-261). */
-nav.global a .cnt{font-size:13px;font-weight:600;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:0 6px;line-height:16px}
+nav.global a .cnt{font-size:0.8125rem;font-weight:600;color:var(--ink-3);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:0 6px;line-height:16px}
 nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:var(--warn-bg)}
 .top-right{display:flex;align-items:center;gap:12px;margin-left:auto}
 
@@ -151,30 +156,30 @@ nav.global a.active .cnt{color:var(--warn);border-color:transparent;background:v
  * red-toned variant of .dot positioned at the icon's corner. */
 .iconbtn .dot{position:absolute;top:6px;right:6px}
 .dot-alert{background:var(--danger)}
-.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#266680,#0E1937);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14.5px;flex:0 0 auto}
+.avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#266680,#0E1937);color:#fff;display:grid;place-items:center;font-weight:700;font-size:0.90625rem;flex:0 0 auto}
 
 /* ---------- shell ---------- */
 .shell{display:grid;grid-template-columns:236px minmax(0,1fr);max-width:1440px;margin:0 auto;min-height:calc(100vh - 56px)}
 .shell[data-global]{grid-template-columns:minmax(0,1fr)}
 .sidebar{border-right:1px solid var(--line);padding:20px 14px;background:var(--surface)}
-.backlink{display:inline-flex;align-items:center;gap:6px;font-size:15px;
+.backlink{display:inline-flex;align-items:center;gap:6px;font-size:0.9375rem;
   font-weight:600;color:var(--ink-2);padding:4px 8px;margin-bottom:6px;
   border-radius:7px}
 .backlink:hover{background:var(--surface-2);text-decoration:none}
 .proj-head{padding:4px 8px 16px;min-width:0}
-.proj-kicker{font-size:12.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:600;display:flex;align-items:center;gap:6px}
+.proj-kicker{font-size:0.78125rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3);font-weight:600;display:flex;align-items:center;gap:6px}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto}
 /* min-width:0 plus overflow-wrap covers the desktop (>=881px) sidebar too: a
  * single unbroken token longer than the 236px sidebar column would otherwise
  * overflow into the canvas (WL-90). The narrow-width media query below
  * repeats overflow-wrap because it also resets font-size/margin there. */
-.proj-name{font-size:23px;line-height:1.2;margin:8px 0 10px;min-width:0;overflow-wrap:anywhere}
-.proj-lead{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink-2)}
-.proj-lead .avatar{width:22px;height:22px;font-size:11px}
+.proj-name{font-size:1.4375rem;line-height:1.2;margin:8px 0 10px;min-width:0;overflow-wrap:anywhere}
+.proj-lead{display:flex;align-items:center;gap:8px;font-size:0.9375rem;color:var(--ink-2)}
+.proj-lead .avatar{width:22px;height:22px;font-size:0.6875rem}
 .proj-lead b{color:var(--ink);font-weight:600}
 .proj-lead .role{color:var(--ink-3)}
 nav.local{display:flex;flex-direction:column;gap:1px;margin-top:8px;border-top:1px solid var(--line);padding-top:12px}
-nav.local a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--ink-2);font-weight:500;font-size:16px}
+nav.local a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--ink-2);font-weight:500;font-size:1rem}
 nav.local a:hover{background:var(--surface-2);text-decoration:none}
 nav.local a.active{background:var(--sunk);color:var(--ink);font-weight:600}
 nav.local a .ic{width:15px;height:15px;flex:0 0 auto;color:var(--ink-3)}
@@ -183,7 +188,7 @@ nav.local a.active .ic{color:var(--ink)}
  * nav (Crew, Work, Deliverables, Reviews, ...) carries the same pending-item
  * counts as the global nav above; keep for that markup and re-run the WCAG
  * 1.4.3 contrast check against --sunk/--surface when it lands. */
-nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink-3)}
+nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(--ink-3)}
 
 /* ---------- main + canvas/rail ---------- */
 .main{padding:22px 26px 60px;min-width:0}
@@ -213,7 +218,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
    * overflow-wrap breaks a long unbroken project name, so neither re-widens
    * the column. The drawer-toggle button reserves right-hand room. */
   .proj-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:0 34px 8px 0;min-width:0}
-  .proj-name{margin:0;font-size:19px;min-width:0;overflow-wrap:anywhere}
+  .proj-name{margin:0;font-size:1.1875rem;min-width:0;overflow-wrap:anywhere}
   /* the head is a baseline row here, so the pill's block margin would misalign it */
   .mode-name{margin-top:0}
 
@@ -229,7 +234,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
   nav.global .navicon{display:none}
   nav.global a.tab-secondary{
     display:none;order:2;flex:0 0 100%;min-height:44px;padding:0 16px;border-top:1px solid var(--line);
-    font-size:17px;font-weight:500;color:var(--ink-2);
+    font-size:1.0625rem;font-weight:500;color:var(--ink-2);
   }
   nav.global a.tab-secondary.active{color:var(--ink);font-weight:600;background:var(--sunk)}
   nav.global a.tab-secondary.active::after{display:none}
@@ -238,7 +243,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
   body[data-open-panel="more"] nav.global a.tab-secondary{display:flex}
   nav.global a.tab-primary,nav.global .tab-more{
     order:1;flex:1 1 0;display:flex;align-items:center;justify-content:center;min-width:0;
-    padding:0 4px;min-height:47px;font-size:14.5px;font-weight:500;color:var(--ink-2);
+    padding:0 4px;min-height:47px;font-size:0.90625rem;font-weight:500;color:var(--ink-2);
     text-align:center;border:0;background:none;font-family:inherit;white-space:nowrap;
   }
   nav.global a.tab-primary.active,nav.global .tab-more.active,nav.global .tab-more[aria-expanded="true"]{color:var(--ink);font-weight:700}
@@ -273,30 +278,30 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 
 /* Operating-mode pill, in the project sidebar under the key. help cursor marks
    the title tooltip that carries the mode basis. */
-.mode-name{font-size:14.5px;font-weight:700;letter-spacing:.02em;padding:5px 10px;border-radius:7px;background:var(--info-bg);color:var(--info);display:inline-flex;align-items:center;gap:7px;margin-top:10px;cursor:help}
+.mode-name{font-size:0.90625rem;font-weight:700;letter-spacing:.02em;padding:5px 10px;border-radius:7px;background:var(--info-bg);color:var(--info);display:inline-flex;align-items:center;gap:7px;margin-top:10px;cursor:help}
 .mode-name.ok{background:var(--ok-bg);color:var(--ok)}
 
 /* stage stepper */
 .stepper{display:flex;align-items:center;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 6px;box-shadow:var(--shadow-sm);overflow-x:auto}
 .step{display:flex;align-items:center;gap:9px;padding:4px 14px;position:relative;white-space:nowrap}
 .step + .step::before{content:"";position:absolute;left:0;top:50%;width:1px;height:22px;background:var(--line);transform:translateY(-50%)}
-.step .pip{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;flex:0 0 auto;border:1.5px solid var(--line-2);color:var(--ink-3);background:var(--surface)}
+.step .pip{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:0.8125rem;font-weight:700;flex:0 0 auto;border:1.5px solid var(--line-2);color:var(--ink-3);background:var(--surface)}
 .step.done .pip{background:var(--ok);border-color:var(--ok);color:#fff}
 .step.current .pip{background:var(--accent);border-color:var(--accent-line);color:var(--accent-ink)}
-.step .stx{font-size:15px;font-weight:600;color:var(--ink-3)}
+.step .stx{font-size:0.9375rem;font-weight:600;color:var(--ink-3)}
 .step.done .stx{color:var(--ink-2)}
 .step.current .stx{color:var(--ink)}
-.step .stx small{display:block;font-weight:500;font-size:12.5px;color:var(--ink-3)}
+.step .stx small{display:block;font-weight:500;font-size:0.78125rem;color:var(--ink-3)}
 
 /* card */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm)}
 .card > .hd{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line)}
-.card > .hd h3{font-size:18px}
-.card > .hd .meta{margin-left:auto;font-size:14.5px;color:var(--ink-3);display:flex;align-items:center;gap:8px}
+.card > .hd h3{font-size:1.125rem}
+.card > .hd .meta{margin-left:auto;font-size:0.90625rem;color:var(--ink-3);display:flex;align-items:center;gap:8px}
 .card > .bd{padding:14px 16px}
 .card.pad{padding:14px 16px}
 .muted{color:var(--ink-3)}
-.small{font-size:15px}
+.small{font-size:0.9375rem}
 
 /* A data table is the one thing WCAG 1.4.10 exempts from reflow — it needs two
  * dimensions to mean anything — so each one scrolls inside its own container
@@ -331,7 +336,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .newlink{min-height:24px;display:inline-flex;align-items:center}
 
 /* evidence chips */
-.chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;padding:2px 8px;border-radius:20px;line-height:1.5;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:0.8125rem;font-weight:600;padding:2px 8px;border-radius:20px;line-height:1.5;white-space:nowrap}
 .chip .cd{width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 auto}
 .chip.declared{color:var(--ev-decl);background:var(--ev-decl-bg)}
 .chip.user{color:var(--ev-user);background:var(--ev-user-bg)}
@@ -345,10 +350,10 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .chip.lead{color:var(--accent-ink);background:var(--accent)}
 
 /* dossier / list rows */
-.dossier .q{font-size:20.5px;font-family:"Source Serif 4",serif;font-weight:600;line-height:1.35;margin:0 0 4px}
+.dossier .q{font-size:1.28125rem;font-family:"Source Serif 4",serif;font-weight:600;line-height:1.35;margin:0 0 4px}
 .field{padding:12px 0;border-top:1px solid var(--line)}
 .field:first-child{border-top:0;padding-top:0}
-.field .fl{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:8px}
+.field .fl{font-size:0.78125rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:8px}
 .field p{margin:0}
 .srclist{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 
@@ -357,8 +362,8 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
  * recommendation, then claims/evidence, then the immutable run record); keep
  * for that markup and re-run the WCAG 1.4.3 contrast check when it lands. */
 .rec{background:var(--ev-rec-bg);border:1px solid color-mix(in srgb,var(--ev-rec) 30%,transparent);border-radius:10px;padding:12px 14px}
-.rec .rh{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ev-rec);font-size:15px;margin-bottom:6px}
-.rec .audit{display:flex;gap:14px;margin-top:10px;font-size:14.5px}
+.rec .rh{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--ev-rec);font-size:0.9375rem;margin-bottom:6px}
+.rec .audit{display:flex;gap:14px;margin-top:10px;font-size:0.90625rem}
 .rec .audit a{display:flex;align-items:center;gap:5px}
 
 /* definition-of-done table */
@@ -368,12 +373,12 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
  * card instead of pushing the page wider (WCAG 1.4.10). */
 .dodrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;padding:12px 0;border-top:1px solid var(--line);align-items:start}
 .dodrow:first-child{border-top:0}
-.dodrow .name{font-weight:600;font-size:16px}
+.dodrow .name{font-weight:600;font-size:1rem}
 /* A deliverable's artifact address renders here, and an address is an
  * identifier with no soft wrap opportunity in it (spec 029 §3.1's
  * bigquery://project.dataset.table), so it needs the same break-anywhere rule
  * the URL line beside it already has (WCAG 1.4.10 Reflow). */
-.dodrow .def{color:var(--ink-3);font-size:14.5px;margin-top:2px;overflow-wrap:anywhere}
+.dodrow .def{color:var(--ink-3);font-size:0.90625rem;margin-top:2px;overflow-wrap:anywhere}
 .dodrow .ev{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;overflow-wrap:anywhere}
 /* The deliverable's URL is a link on a line of its own, not one inside a
  * sentence, so WCAG 2.5.8's inline exception does not cover it: its box has to
@@ -383,10 +388,10 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 /* A per-row action form (the Crew roster's Remove button): .btn is
  * full-width by default, which is right in a form's button row and wrong
  * beside a table row. */
-.rowform .btn{width:auto;padding:6px 10px;font-size:14.5px;font-weight:600}
+.rowform .btn{width:auto;padding:6px 10px;font-size:0.90625rem;font-weight:600}
 /* An open-work list shown when a removal is refused: the items the member
  * still owns, each linked so it can be reassigned or closed. */
-.resp{margin:10px 0 0;padding-left:18px;font-size:15px;color:var(--ink-2)}
+.resp{margin:10px 0 0;padding-left:18px;font-size:0.9375rem;color:var(--ink-2)}
 .resp li{margin-top:4px}
 
 /* worklist */
@@ -396,13 +401,13 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 /* flex:0 0 auto keeps the avatar at its own 26px: as a shrinkable item next to
  * a nowrap chip strip it was squeezed to 1-4px wide at 320px. */
 .wlrow .who{display:flex;align-items:center;gap:8px;min-width:0;flex:0 0 auto}
-.wlrow .who .avatar{width:26px;height:26px;font-size:12px}
+.wlrow .who .avatar{width:26px;height:26px;font-size:0.75rem}
 .wlrow .who.agent .avatar{border-radius:7px;background:linear-gradient(135deg,#F58221,#9A5410)}
 .wlrow .tl{min-width:0}
-.wlrow .tl .t{font-weight:600;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wlrow .tl .s{font-size:14px;color:var(--ink-3)}
+.wlrow .tl .t{font-weight:600;font-size:0.96875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wlrow .tl .s{font-size:0.875rem;color:var(--ink-3)}
 .wlrow .rt{margin-left:auto;display:flex;align-items:center;gap:9px;white-space:nowrap}
-.wlrow .rt .cost{font-variant-numeric:tabular-nums;font-size:14.5px;color:var(--ink-3)}
+.wlrow .rt .cost{font-variant-numeric:tabular-nums;font-size:0.90625rem;color:var(--ink-3)}
 /* Below 880px — the width at which the shell itself drops to one column — a
  * work row stacks rather than compressing: the title wraps to as many lines as
  * it needs and the chip strip takes its own line. Ellipsis truncation left the
@@ -421,10 +426,10 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
   .dodrow .st{justify-self:start;text-align:left}
 }
 
-.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:15.5px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:0.96875rem}
 .kv dt{color:var(--ink-3)}
 .kv dd{margin:0;font-weight:500}
-.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14.5px}
+.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.90625rem}
 
 .launchgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:640px){.launchgrid{grid-template-columns:1fr}.mode.active{grid-template-columns:1fr}}
@@ -433,16 +438,16 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
  * automation authority in boxes shaped like these; keep for that markup and
  * re-run the WCAG 1.4.3 contrast check when it lands. */
 .lct{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 13px}
-.lct .lh{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.lct .lh{font-size:0.78125rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:7px}
 .crewline{display:flex;align-items:center;gap:8px;padding:5px 0}
-.crewline .avatar{width:24px;height:24px;font-size:11px}
+.crewline .avatar{width:24px;height:24px;font-size:0.6875rem}
 .crewline b{font-weight:600}
-.crewline .role{color:var(--ink-3);font-size:14.5px;margin-left:auto}
+.crewline .role{color:var(--ink-3);font-size:0.90625rem;margin-left:auto}
 /* Unreached: no .templ emits .blocker yet. Spec 032 §3 ("Incomplete launch
  * configuration blocks only the capability that depends on it") calls for a
  * banner like this on the Approved launch canvas; keep for that markup and
  * re-run the WCAG 1.4.3 contrast check when it lands. */
-.blocker{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;background:var(--warn-bg);border-radius:8px;font-size:15px;color:var(--ink-2)}
+.blocker{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;background:var(--warn-bg);border-radius:8px;font-size:0.9375rem;color:var(--ink-2)}
 .blocker svg{width:15px;height:15px;color:var(--warn);flex:0 0 auto;margin-top:1px}
 
 /* ---------- right decision rail ---------- */
@@ -454,21 +459,21 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
  * placed earlier in the file loses to the later unconditional declaration. */
 @media(max-width:1080px){.rail{position:static;top:auto}}
 .decision{background:var(--surface);border:1px solid var(--accent-line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-.decision .dh{padding:11px 16px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:14.5px;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
+.decision .dh{padding:11px 16px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:0.90625rem;letter-spacing:.05em;text-transform:uppercase;display:flex;align-items:center;gap:8px}
 .decision .db{padding:15px 16px;display:flex;flex-direction:column;gap:12px}
-.decision h3{font-size:20px;line-height:1.3}
-.who-owns{display:flex;align-items:center;gap:9px;font-size:15px}
-.who-owns .avatar{width:26px;height:26px;font-size:12px}
+.decision h3{font-size:1.25rem;line-height:1.3}
+.who-owns{display:flex;align-items:center;gap:9px;font-size:0.9375rem}
+.who-owns .avatar{width:26px;height:26px;font-size:0.75rem}
 .who-owns b{font-weight:600}
 .rest{border-top:1px solid var(--line);padding-top:11px;display:flex;flex-direction:column;gap:7px}
-.rest .rl{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700}
-.reason{font-size:15px;color:var(--ink-2)}
+.rest .rl{font-size:0.78125rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700}
+.reason{font-size:0.9375rem;color:var(--ink-2)}
 .actions{display:flex;flex-direction:column;gap:8px;margin-top:2px}
-.btn{border:1px solid var(--control-line);background:var(--surface);color:var(--ink);border-radius:9px;padding:9px 12px;font-weight:600;font-size:15.5px;display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
+.btn{border:1px solid var(--control-line);background:var(--surface);color:var(--ink);border-radius:9px;padding:9px 12px;font-weight:600;font-size:0.96875rem;display:flex;align-items:center;justify-content:center;gap:8px;width:100%}
 .btn:hover{background:var(--surface-2)}
 .btn.primary{background:var(--accent);border-color:var(--accent-line);color:var(--accent-ink)}
 .btn.primary:hover{filter:brightness(.97)}
-.btn .sc{font-size:13px;font-weight:500;opacity:.75}
+.btn .sc{font-size:0.8125rem;font-weight:500;opacity:.75}
 .btn.ghost{background:transparent}
 
 /* ---------- home project grid ---------- */
@@ -485,26 +490,26 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .homecard{display:block;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:14px 16px;color:var(--ink)}
 .homecard:hover{text-decoration:none}
 .hc-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.hc-name{font-weight:600;font-size:18px}
+.hc-name{font-weight:600;font-size:1.125rem}
 .hc-signal{margin-top:6px}
 .hc-counts{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap}
 .hc-crew{display:flex;align-items:center;gap:6px;margin-top:10px}
-.hc-crew .avatar{width:24px;height:24px;font-size:11px}
+.hc-crew .avatar{width:24px;height:24px;font-size:0.6875rem}
 .hc-activity{margin-top:10px}
 
 /* ---------- creation forms (new task, declared deliverable) ---------- */
 /* Hand-authored rather than utility-shaped: the controls need consistent
  * sizing across input/select/textarea and a target height that clears WCAG
  * 2.2's minimum, which is a shell rule, not per-page styling. */
-.newlink{font-size:15px;font-weight:600}
+.newlink{font-size:0.9375rem;font-weight:600}
 .form{max-width:640px}
-.form h1{font-size:25px;margin-bottom:4px}
-.formerr{background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:9px 12px;font-size:15px;font-weight:600;margin:12px 0 0}
+.form h1{font-size:1.5625rem;margin-bottom:4px}
+.formerr{background:var(--crit-bg);color:var(--crit);border-radius:8px;padding:9px 12px;font-size:0.9375rem;font-weight:600;margin:12px 0 0}
 .fieldrow{display:flex;flex-direction:column;gap:6px;margin:16px 0 0}
-.fieldrow label{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700}
-.fieldrow .hint{font-size:14.5px;color:var(--ink-3)}
+.fieldrow label{font-size:0.78125rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700}
+.fieldrow .hint{font-size:0.90625rem;color:var(--ink-3)}
 .fieldrow input[type="text"],.fieldrow input[type="url"],.fieldrow select,.fieldrow textarea{
-  font-family:inherit;font-size:16px;color:var(--ink);background:var(--surface);
+  font-family:inherit;font-size:1rem;color:var(--ink);background:var(--surface);
   border:1px solid var(--control-line);border-radius:9px;padding:9px 11px;min-height:40px;width:100%;
 }
 .fieldrow textarea{min-height:96px;resize:vertical;line-height:1.5}
@@ -516,7 +521,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .mdinput{display:flex;flex-direction:column;gap:0;position:relative}
 .mdtabs{display:flex;gap:2px;align-items:center}
 .mdtab{appearance:none;border:1px solid var(--line);border-bottom:none;background:var(--bg);
-  color:var(--ink-3);font:inherit;font-size:14.5px;font-weight:600;padding:5px 12px;
+  color:var(--ink-3);font:inherit;font-size:0.90625rem;font-weight:600;padding:5px 12px;
   border-radius:8px 8px 0 0;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .mdtab.active{background:var(--surface);color:var(--ink-1)}
 .mdtab svg{width:14px;height:14px}
@@ -524,7 +529,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .mdtab.mdmic.recording{color:var(--crit, #c0392b)}
 .mdinput textarea{border-top-left-radius:0}
 .mdpreview{border:1px solid var(--line);border-radius:0 10px 10px 10px;background:var(--surface);
-  padding:10px 12px;min-height:96px;font-size:17px;line-height:1.5;overflow-x:auto}
+  padding:10px 12px;min-height:96px;font-size:1.0625rem;line-height:1.5;overflow-x:auto}
 .mdpreview[hidden]{display:none}
 /* Emoji shortcode completion: anchored under the textarea rather than at the
  * caret — the caret's pixel position in a textarea is not readable without
@@ -534,10 +539,10 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
   box-shadow:0 6px 18px rgb(0 0 0 / 0.14);padding:4px;min-width:200px;max-height:260px;
   overflow-y:auto}
 .mdsuggest[hidden]{display:none}
-.mdsuggest-item{padding:4px 8px;border-radius:6px;font-size:15.5px;white-space:pre;cursor:pointer;
+.mdsuggest-item{padding:4px 8px;border-radius:6px;font-size:0.96875rem;white-space:pre;cursor:pointer;
   color:var(--ink-2)}
 .mdsuggest-item.active{background:var(--bg);color:var(--ink-1)}
-.fieldrow.check label{text-transform:none;letter-spacing:0;font-size:15.5px;font-weight:500;color:var(--ink-2)}
+.fieldrow.check label{text-transform:none;letter-spacing:0;font-size:0.96875rem;font-weight:500;color:var(--ink-2)}
 /* 24px square, and never shrunk by the flex row: WCAG 2.5.8's minimum target
  * size. At 320px the 20px box was flex-shrunk to 14.5px wide. */
 .fieldrow.check input{width:24px;height:24px;min-height:0;flex:0 0 auto;accent-color:var(--link)}
@@ -586,11 +591,11 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .prose > :first-child{margin-top:0}
 .prose > :last-child{margin-bottom:0}
 .prose p,.prose ul,.prose ol,.prose blockquote,.prose pre,.prose table{margin:0 0 12px}
-.prose h1,.prose h2,.prose h3,.prose h4{margin:18px 0 8px;font-size:18.5px}
-.prose h1{font-size:23px}
-.prose h2{font-size:20.5px}
+.prose h1,.prose h2,.prose h3,.prose h4{margin:18px 0 8px;font-size:1.15625rem}
+.prose h1{font-size:1.4375rem}
+.prose h2{font-size:1.28125rem}
 .prose ul,.prose ol{padding-left:20px}
-.prose code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 4px}
+.prose code{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.9375rem;background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 4px}
 .prose pre{background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;overflow-x:auto}
 .prose pre code{background:none;border:0;padding:0}
 .prose blockquote{margin-left:0;padding-left:12px;border-left:3px solid var(--line-2);color:var(--ink-2)}
@@ -630,43 +635,43 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .prose th{background:var(--surface-2);font-weight:600}
 
 .attachments{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
-.attachments li{display:flex;align-items:baseline;gap:9px;font-size:15.5px}
+.attachments li{display:flex;align-items:baseline;gap:9px;font-size:0.96875rem}
 .attachments a{overflow-wrap:anywhere}
-.attachments .meta{color:var(--ink-3);font-size:14.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.attachments .meta{color:var(--ink-3);font-size:0.90625rem;font-variant-numeric:tabular-nums;white-space:nowrap}
 
 .railcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:13px 15px}
-.railcard .rt{font-size:12.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:7px}
-.exrow{display:flex;gap:9px;align-items:flex-start;font-size:15px}
+.railcard .rt{font-size:0.78125rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);font-weight:700;margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.exrow{display:flex;gap:9px;align-items:flex-start;font-size:0.9375rem}
 .exrow svg{width:15px;height:15px;flex:0 0 auto;margin-top:1px}
 .exrow.crit svg{color:var(--crit)}
-.auto-line{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:15px;border-top:1px solid var(--line)}
+.auto-line{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:0.9375rem;border-top:1px solid var(--line)}
 .auto-line:first-of-type{border-top:0}
 .auto-line .k{color:var(--ink-3)}
 .auto-line .v{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
 
-.footnote{max-width:1440px;margin:22px auto 0;padding:0 26px;color:var(--ink-3);font-size:14px;display:flex;gap:8px;align-items:center}
-.footnote .chip{font-size:12px}
+.footnote{max-width:1440px;margin:22px auto 0;padding:0 26px;color:var(--ink-3);font-size:0.875rem;display:flex;gap:8px;align-items:center}
+.footnote .chip{font-size:0.75rem}
 
 @media (prefers-reduced-motion:no-preference){.mode.active{animation:fade .25s ease}@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1}}}
 
 /* ---------- morning brief ---------- */
 .morningbrief{background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);padding:14px 16px;margin-bottom:18px}
-.morningbrief h2{margin:0 0 10px;font-size:18px}
+.morningbrief h2{margin:0 0 10px;font-size:1.125rem}
 .mbgroup{padding:10px 0;border-top:1px solid var(--line)}
 .mbgroup:first-of-type{border-top:0;padding-top:0}
-.mbgroup h3{margin:0 0 6px;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mbgroup h3{margin:0 0 6px;font-size:1rem;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .mbgroup h3 a{color:var(--ink)}
 .mbgroup ul{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:4px}
-.mbgroup li{font-size:15px}
+.mbgroup li{font-size:0.9375rem}
 .mb-needsyou{font-weight:600}
 .mb-needsyou li{font-weight:600}
 .mb-collapsed{margin-top:4px}
-.mb-collapsed summary{cursor:pointer;font-size:15px}
+.mb-collapsed summary{cursor:pointer;font-size:0.9375rem}
 .mb-collapsed p{margin:6px 0 0}
 
 /* timeline "see more": the full text of a summary too long for its cell. */
-.tl-detail summary{cursor:pointer;font-size:14.5px;color:var(--muted)}
-.tl-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0;max-height:60vh;overflow:auto;font-size:14.5px}
+.tl-detail summary{cursor:pointer;font-size:0.90625rem;color:var(--muted)}
+.tl-detail pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0 0;max-height:60vh;overflow:auto;font-size:0.90625rem}
 .morningbrief form{margin-top:12px}
 
 /* ---------- Progress page (WL-SPEC-66 §2) ---------- */
@@ -689,7 +694,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .prog-footer .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .prog-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.prog-count .n{font-size:29px;font-weight:700;font-variant-numeric:tabular-nums}
+.prog-count .n{font-size:1.8125rem;font-weight:700;font-variant-numeric:tabular-nums}
 @media(max-width:720px){.prog-counts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .prog-bar{display:flex;gap:2px;height:14px}
@@ -711,7 +716,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 .prog-bar .seg-100{flex-grow:100}
 
 .prog-legend{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
-.prog-legend li{display:flex;align-items:center;gap:8px;font-size:15px}
+.prog-legend li{display:flex;align-items:center;gap:8px;font-size:0.9375rem}
 .prog-legend .l{font-weight:600}
 .prog-legend .n{font-variant-numeric:tabular-nums;color:var(--ink-3)}
 
@@ -731,7 +736,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
 /* The expanded row (§2.3). Every detail block is rendered; the row's "open"
  * class, which progress.js sets, is the only thing that shows one. */
 .prog-row + .detail{display:none}
-.prog-row.open + .detail{display:block;padding:2px 0 12px;font-size:15px}
+.prog-row.open + .detail{display:block;padding:2px 0 12px;font-size:0.9375rem}
 .detail .plan{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:3px 0}
 .detail .plan .t{font-weight:600}
 .detail .tasks{display:flex;flex-wrap:wrap;gap:2px}
@@ -785,7 +790,7 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
  * width, so neither step moves anything around it. A disabled one stays
  * visible: its reason is in the tooltip. */
 .act{border:1px solid var(--control-line);background:var(--surface);color:var(--ink);
-  border-radius:7px;padding:3px 9px;font-size:14.5px;font-weight:600;position:relative}
+  border-radius:7px;padding:3px 9px;font-size:0.90625rem;font-weight:600;position:relative}
 .act:hover:not(:disabled){background:var(--surface-2)}
 .act:disabled{opacity:.55;cursor:default}
 .act .confirm-box{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:30;
@@ -793,15 +798,15 @@ nav.local a .cnt{margin-left:auto;font-size:13px;font-weight:600;color:var(--ink
   padding:4px 6px;border-radius:8px;border:1px solid var(--line);
   background:var(--surface);box-shadow:var(--shadow)}
 .act .confirm-box button{border:1px solid var(--control-line);background:var(--surface);
-  color:var(--ink);border-radius:6px;padding:2px 8px;font-size:14.5px;font-weight:600}
+  color:var(--ink);border-radius:6px;padding:2px 8px;font-size:0.90625rem;font-weight:600}
 .act .confirm-box .confirm{background:var(--accent);border-color:var(--accent-line);color:var(--accent-ink)}
-.act-err{color:var(--danger);font-size:14.5px}
+.act-err{color:var(--danger);font-size:0.90625rem}
 
 /* One tooltip element, moved and refilled per hover (§2.4). It never takes the
  * pointer unless a click pinned it, so a moving pointer cannot land on a link
  * inside one. */
 #tip{position:fixed;z-index:60;max-width:320px;padding:6px 8px;border-radius:6px;
-  background:var(--ink);color:var(--surface);font-size:14.5px;line-height:1.35;
+  background:var(--ink);color:var(--surface);font-size:0.90625rem;line-height:1.35;
   box-shadow:var(--shadow);pointer-events:none}
 #tip[data-pinned]{pointer-events:auto}
 /* §3.6's merge button, copied into a pinned tooltip. Its own line, so the
