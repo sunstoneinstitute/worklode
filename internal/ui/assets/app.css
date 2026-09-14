@@ -390,7 +390,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: "DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  font-size: 14px;
+  font-size: 1.0625rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -449,7 +449,7 @@ button {
   align-items: center;
   gap: 9px;
   font-weight: 700;
-  font-size: 15px;
+  font-size: 1.125rem;
   letter-spacing: -.01em;
   white-space: nowrap;
   color: var(--ink);
@@ -500,7 +500,7 @@ nav.global a {
   color: var(--ink-2);
   font-weight: 500;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 1rem;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -533,7 +533,7 @@ nav.global .navicon svg {
   display: block;
 }
 nav.global a .cnt {
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--ink-3);
   background: var(--surface);
@@ -588,7 +588,7 @@ nav.global a.active .cnt {
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 12px;
+  font-size: 0.90625rem;
   flex: 0 0 auto;
 }
 .shell {
@@ -610,7 +610,7 @@ nav.global a.active .cnt {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--ink-2);
   padding: 4px 8px;
@@ -626,7 +626,7 @@ nav.global a.active .cnt {
   min-width: 0;
 }
 .proj-kicker {
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   text-transform: uppercase;
   letter-spacing: .1em;
   color: var(--ink-3);
@@ -643,7 +643,7 @@ nav.global a.active .cnt {
   flex: 0 0 auto;
 }
 .proj-name {
-  font-size: 19px;
+  font-size: 1.4375rem;
   line-height: 1.2;
   margin: 8px 0 10px;
   min-width: 0;
@@ -653,13 +653,13 @@ nav.global a.active .cnt {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   color: var(--ink-2);
 }
 .proj-lead .avatar {
   width: 22px;
   height: 22px;
-  font-size: 9px;
+  font-size: 0.6875rem;
 }
 .proj-lead b {
   color: var(--ink);
@@ -684,7 +684,7 @@ nav.local a {
   border-radius: 8px;
   color: var(--ink-2);
   font-weight: 500;
-  font-size: 13.5px;
+  font-size: 1rem;
 }
 nav.local a:hover {
   background: var(--surface-2);
@@ -706,7 +706,7 @@ nav.local a.active .ic {
 }
 nav.local a .cnt {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--ink-3);
 }
@@ -759,7 +759,7 @@ nav.local a .cnt {
   }
   .proj-name {
     margin: 0;
-    font-size: 16px;
+    font-size: 1.1875rem;
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -800,7 +800,7 @@ nav.local a .cnt {
     min-height: 44px;
     padding: 0 16px;
     border-top: 1px solid var(--line);
-    font-size: 14px;
+    font-size: 1.0625rem;
     font-weight: 500;
     color: var(--ink-2);
   }
@@ -832,7 +832,7 @@ nav.local a .cnt {
     min-width: 0;
     padding: 0 4px;
     min-height: 47px;
-    font-size: 12px;
+    font-size: 0.90625rem;
     font-weight: 500;
     color: var(--ink-2);
     text-align: center;
@@ -932,7 +932,7 @@ nav.local a .cnt {
   user-select: all;
 }
 .mode-name {
-  font-size: 12px;
+  font-size: 0.90625rem;
   font-weight: 700;
   letter-spacing: .02em;
   padding: 5px 10px;
@@ -984,7 +984,7 @@ nav.local a .cnt {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 700;
   flex: 0 0 auto;
   border: 1.5px solid var(--line-2);
@@ -1002,7 +1002,7 @@ nav.local a .cnt {
   color: var(--accent-ink);
 }
 .step .stx {
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--ink-3);
 }
@@ -1015,7 +1015,7 @@ nav.local a .cnt {
 .step .stx small {
   display: block;
   font-weight: 500;
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   color: var(--ink-3);
 }
 .card {
@@ -1032,11 +1032,11 @@ nav.local a .cnt {
   border-bottom: 1px solid var(--line);
 }
 .card > .hd h3 {
-  font-size: 15px;
+  font-size: 1.125rem;
 }
 .card > .hd .meta {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 0.90625rem;
   color: var(--ink-3);
   display: flex;
   align-items: center;
@@ -1052,7 +1052,7 @@ nav.local a .cnt {
   color: var(--ink-3);
 }
 .small {
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .tablewrap {
   overflow-x: auto;
@@ -1088,7 +1088,7 @@ nav.local a .cnt {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 20px;
@@ -1143,7 +1143,7 @@ nav.local a .cnt {
   background: var(--accent);
 }
 .dossier .q {
-  font-size: 17px;
+  font-size: 1.28125rem;
   font-family: "Source Serif 4",serif;
   font-weight: 600;
   line-height: 1.35;
@@ -1158,7 +1158,7 @@ nav.local a .cnt {
   padding-top: 0;
 }
 .field .fl {
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--ink-3);
@@ -1192,14 +1192,14 @@ nav.local a .cnt {
   gap: 8px;
   font-weight: 700;
   color: var(--ev-rec);
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   margin-bottom: 6px;
 }
 .rec .audit {
   display: flex;
   gap: 14px;
   margin-top: 10px;
-  font-size: 12px;
+  font-size: 0.90625rem;
 }
 .rec .audit a {
   display: flex;
@@ -1223,11 +1223,11 @@ nav.local a .cnt {
 }
 .dodrow .name {
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: 1rem;
 }
 .dodrow .def {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 0.90625rem;
   margin-top: 2px;
   overflow-wrap: anywhere;
 }
@@ -1250,13 +1250,13 @@ nav.local a .cnt {
 .rowform .btn {
   width: auto;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 0.90625rem;
   font-weight: 600;
 }
 .resp {
   margin: 10px 0 0;
   padding-left: 18px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   color: var(--ink-2);
 }
 .resp li {
@@ -1286,7 +1286,7 @@ nav.local a .cnt {
 .wlrow .who .avatar {
   width: 26px;
   height: 26px;
-  font-size: 10px;
+  font-size: 0.75rem;
 }
 .wlrow .who.agent .avatar {
   border-radius: 7px;
@@ -1297,13 +1297,13 @@ nav.local a .cnt {
 }
 .wlrow .tl .t {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 0.96875rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .wlrow .tl .s {
-  font-size: 11.5px;
+  font-size: 0.875rem;
   color: var(--ink-3);
 }
 .wlrow .rt {
@@ -1315,7 +1315,7 @@ nav.local a .cnt {
 }
 .wlrow .rt .cost {
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
+  font-size: 0.90625rem;
   color: var(--ink-3);
 }
 @media (max-width:880px) {
@@ -1349,7 +1349,7 @@ nav.local a .cnt {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 8px 14px;
-  font-size: 13px;
+  font-size: 0.96875rem;
 }
 .kv dt {
   color: var(--ink-3);
@@ -1360,7 +1360,7 @@ nav.local a .cnt {
 }
 .mono {
   font-family: "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size: 12px;
+  font-size: 0.90625rem;
 }
 .launchgrid {
   display: grid;
@@ -1382,7 +1382,7 @@ nav.local a .cnt {
   padding: 12px 13px;
 }
 .lct .lh {
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--ink-3);
@@ -1401,14 +1401,14 @@ nav.local a .cnt {
 .crewline .avatar {
   width: 24px;
   height: 24px;
-  font-size: 9px;
+  font-size: 0.6875rem;
 }
 .crewline b {
   font-weight: 600;
 }
 .crewline .role {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 0.90625rem;
   margin-left: auto;
 }
 .blocker {
@@ -1418,7 +1418,7 @@ nav.local a .cnt {
   padding: 8px 10px;
   background: var(--warn-bg);
   border-radius: 8px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   color: var(--ink-2);
 }
 .blocker svg {
@@ -1453,7 +1453,7 @@ nav.local a .cnt {
   background: var(--accent);
   color: var(--accent-ink);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 0.90625rem;
   letter-spacing: .05em;
   text-transform: uppercase;
   display: flex;
@@ -1467,19 +1467,19 @@ nav.local a .cnt {
   gap: 12px;
 }
 .decision h3 {
-  font-size: 16.5px;
+  font-size: 1.25rem;
   line-height: 1.3;
 }
 .who-owns {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .who-owns .avatar {
   width: 26px;
   height: 26px;
-  font-size: 10px;
+  font-size: 0.75rem;
 }
 .who-owns b {
   font-weight: 600;
@@ -1492,14 +1492,14 @@ nav.local a .cnt {
   gap: 7px;
 }
 .rest .rl {
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--ink-3);
   font-weight: 700;
 }
 .reason {
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   color: var(--ink-2);
 }
 .actions {
@@ -1515,7 +1515,7 @@ nav.local a .cnt {
   border-radius: 9px;
   padding: 9px 12px;
   font-weight: 600;
-  font-size: 13px;
+  font-size: 0.96875rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1534,7 +1534,7 @@ nav.local a .cnt {
   filter: brightness(.97);
 }
 .btn .sc {
-  font-size: 11px;
+  font-size: 0.8125rem;
   font-weight: 500;
   opacity: .75;
 }
@@ -1571,7 +1571,7 @@ nav.local a .cnt {
 }
 .hc-name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 1.125rem;
 }
 .hc-signal {
   margin-top: 6px;
@@ -1591,20 +1591,20 @@ nav.local a .cnt {
 .hc-crew .avatar {
   width: 24px;
   height: 24px;
-  font-size: 9px;
+  font-size: 0.6875rem;
 }
 .hc-activity {
   margin-top: 10px;
 }
 .newlink {
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 .form {
   max-width: 640px;
 }
 .form h1 {
-  font-size: 21px;
+  font-size: 1.5625rem;
   margin-bottom: 4px;
 }
 .formerr {
@@ -1612,7 +1612,7 @@ nav.local a .cnt {
   color: var(--crit);
   border-radius: 8px;
   padding: 9px 12px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   font-weight: 600;
   margin: 12px 0 0;
 }
@@ -1623,19 +1623,19 @@ nav.local a .cnt {
   margin: 16px 0 0;
 }
 .fieldrow label {
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--ink-3);
   font-weight: 700;
 }
 .fieldrow .hint {
-  font-size: 12px;
+  font-size: 0.90625rem;
   color: var(--ink-3);
 }
 .fieldrow input[type="text"],.fieldrow input[type="url"],.fieldrow select,.fieldrow textarea {
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 1rem;
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--control-line);
@@ -1675,7 +1675,7 @@ nav.local a .cnt {
   background: var(--bg);
   color: var(--ink-3);
   font: inherit;
-  font-size: 12px;
+  font-size: 0.90625rem;
   font-weight: 600;
   padding: 5px 12px;
   border-radius: 8px 8px 0 0;
@@ -1707,7 +1707,7 @@ nav.local a .cnt {
   background: var(--surface);
   padding: 10px 12px;
   min-height: 96px;
-  font-size: 14px;
+  font-size: 1.0625rem;
   line-height: 1.5;
   overflow-x: auto;
 }
@@ -1735,7 +1735,7 @@ nav.local a .cnt {
 .mdsuggest-item {
   padding: 4px 8px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 0.96875rem;
   white-space: pre;
   cursor: pointer;
   color: var(--ink-2);
@@ -1747,7 +1747,7 @@ nav.local a .cnt {
 .fieldrow.check label {
   text-transform: none;
   letter-spacing: 0;
-  font-size: 13px;
+  font-size: 0.96875rem;
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -1835,20 +1835,20 @@ nav.local a .cnt {
 }
 .prose h1,.prose h2,.prose h3,.prose h4 {
   margin: 18px 0 8px;
-  font-size: 15.5px;
+  font-size: 1.15625rem;
 }
 .prose h1 {
-  font-size: 19px;
+  font-size: 1.4375rem;
 }
 .prose h2 {
-  font-size: 17px;
+  font-size: 1.28125rem;
 }
 .prose ul,.prose ol {
   padding-left: 20px;
 }
 .prose code {
   font-family: "JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -1865,6 +1865,52 @@ nav.local a .cnt {
   background: none;
   border: 0;
   padding: 0;
+}
+.prose code {
+  color: var(--imp);
+}
+.prose pre code {
+  color: var(--ink);
+}
+.prose .hl-c,.prose .hl-ch,.prose .hl-cm,.prose .hl-cp,.prose .hl-cpf,.prose .hl-c1,.prose .hl-cs {
+  color: var(--ink-3);
+  font-style: italic;
+}
+.prose .hl-k,.prose .hl-kc,.prose .hl-kd,.prose .hl-kn,.prose .hl-kp,.prose .hl-kr {
+  color: var(--imp);
+}
+.prose .hl-kt,.prose .hl-nb,.prose .hl-bp,.prose .hl-nc,.prose .hl-nn,.prose .hl-ne,.prose .hl-no,.prose .hl-na {
+  color: var(--ev-user);
+}
+.prose .hl-nf,.prose .hl-fm,.prose .hl-nd,.prose .hl-nt {
+  color: var(--link);
+}
+.prose .hl-s,.prose .hl-sa,.prose .hl-sb,.prose .hl-sc,.prose .hl-dl,.prose .hl-sd,.prose .hl-s2,.prose .hl-se,.prose .hl-sh,.prose .hl-si,.prose .hl-sx,.prose .hl-sr,.prose .hl-s1,.prose .hl-ss {
+  color: var(--ok);
+}
+.prose .hl-m,.prose .hl-mb,.prose .hl-mf,.prose .hl-mh,.prose .hl-mi,.prose .hl-mo,.prose .hl-il {
+  color: var(--warn);
+}
+.prose .hl-o,.prose .hl-ow,.prose .hl-p {
+  color: var(--ink-3);
+}
+.prose .hl-err,.prose .hl-x {
+  color: var(--crit);
+}
+.prose .hl-gi {
+  color: var(--ok);
+}
+.prose .hl-gd {
+  color: var(--crit);
+}
+.prose .hl-gh,.prose .hl-gu,.prose .hl-gp {
+  color: var(--ink-3);
+}
+.prose .hl-ge {
+  font-style: italic;
+}
+.prose .hl-gs {
+  font-weight: 600;
 }
 .prose blockquote {
   margin-left: 0;
@@ -1953,14 +1999,14 @@ nav.local a .cnt {
   display: flex;
   align-items: baseline;
   gap: 9px;
-  font-size: 13px;
+  font-size: 0.96875rem;
 }
 .attachments a {
   overflow-wrap: anywhere;
 }
 .attachments .meta {
   color: var(--ink-3);
-  font-size: 12px;
+  font-size: 0.90625rem;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1972,7 +2018,7 @@ nav.local a .cnt {
   padding: 13px 15px;
 }
 .railcard .rt {
-  font-size: 10.5px;
+  font-size: 0.78125rem;
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--ink-3);
@@ -1986,7 +2032,7 @@ nav.local a .cnt {
   display: flex;
   gap: 9px;
   align-items: flex-start;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .exrow svg {
   width: 15px;
@@ -2002,7 +2048,7 @@ nav.local a .cnt {
   align-items: center;
   gap: 8px;
   padding: 5px 0;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
   border-top: 1px solid var(--line);
 }
 .auto-line:first-of-type {
@@ -2021,13 +2067,13 @@ nav.local a .cnt {
   margin: 22px auto 0;
   padding: 0 26px;
   color: var(--ink-3);
-  font-size: 11.5px;
+  font-size: 0.875rem;
   display: flex;
   gap: 8px;
   align-items: center;
 }
 .footnote .chip {
-  font-size: 10px;
+  font-size: 0.75rem;
 }
 @media (prefers-reduced-motion:no-preference) {
   .mode.active {
@@ -2053,7 +2099,7 @@ nav.local a .cnt {
 }
 .morningbrief h2 {
   margin: 0 0 10px;
-  font-size: 15px;
+  font-size: 1.125rem;
 }
 .mbgroup {
   padding: 10px 0;
@@ -2065,7 +2111,7 @@ nav.local a .cnt {
 }
 .mbgroup h3 {
   margin: 0 0 6px;
-  font-size: 13.5px;
+  font-size: 1rem;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2083,7 +2129,7 @@ nav.local a .cnt {
   gap: 4px;
 }
 .mbgroup li {
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .mb-needsyou {
   font-weight: 600;
@@ -2096,14 +2142,14 @@ nav.local a .cnt {
 }
 .mb-collapsed summary {
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .mb-collapsed p {
   margin: 6px 0 0;
 }
 .tl-detail summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.90625rem;
   color: var(--muted);
 }
 .tl-detail pre {
@@ -2112,7 +2158,7 @@ nav.local a .cnt {
   margin: 6px 0 0;
   max-height: 60vh;
   overflow: auto;
-  font-size: 12px;
+  font-size: 0.90625rem;
 }
 .morningbrief form {
   margin-top: 12px;
@@ -2153,7 +2199,7 @@ nav.local a .cnt {
   gap: 12px;
 }
 .prog-count .n {
-  font-size: 24px;
+  font-size: 1.8125rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -2488,7 +2534,7 @@ nav.local a .cnt {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .prog-legend .l {
   font-weight: 600;
@@ -2538,7 +2584,7 @@ nav.local a .cnt {
 .prog-row.open + .detail {
   display: block;
   padding: 2px 0 12px;
-  font-size: 12.5px;
+  font-size: 0.9375rem;
 }
 .detail .plan {
   display: flex;
@@ -2660,7 +2706,7 @@ nav.local a .cnt {
   color: var(--ink);
   border-radius: 7px;
   padding: 3px 9px;
-  font-size: 12px;
+  font-size: 0.90625rem;
   font-weight: 600;
   position: relative;
 }
@@ -2694,7 +2740,7 @@ nav.local a .cnt {
   color: var(--ink);
   border-radius: 6px;
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: 0.90625rem;
   font-weight: 600;
 }
 .act .confirm-box .confirm {
@@ -2704,7 +2750,7 @@ nav.local a .cnt {
 }
 .act-err {
   color: var(--danger);
-  font-size: 12px;
+  font-size: 0.90625rem;
 }
 #tip {
   position: fixed;
@@ -2714,7 +2760,7 @@ nav.local a .cnt {
   border-radius: 6px;
   background: var(--ink);
   color: var(--surface);
-  font-size: 12px;
+  font-size: 0.90625rem;
   line-height: 1.35;
   box-shadow: var(--shadow);
   pointer-events: none;
