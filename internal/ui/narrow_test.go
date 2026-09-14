@@ -469,7 +469,7 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{".prose{overflow-wrap:anywhere", "an unbroken token in a task body must not widen the page (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal", "a work row's title wraps below 880px instead of truncating to nothing (WCAG 1.4.10)"},
 		{".wlrow.tl.t{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere", "a work-row title holding an unbreakable identifier must break rather than widen the page (WCAG 1.4.10)"},
-		{".dodrow.def{color:var(--ink-3);font-size:12px;margin-top:2px;overflow-wrap:anywhere", "a deliverable's artifact address has no soft wrap opportunity in it (WCAG 1.4.10)"},
+		{".dodrow.def{color:var(--ink-3);font-size:0.90625rem;margin-top:2px;overflow-wrap:anywhere", "a deliverable's artifact address has no soft wrap opportunity in it (WCAG 1.4.10)"},
 		{"nav.global{align-self:stretch;display:flex;align-items:stretch", "the global destinations live inside the sticky top bar, filling its height (spec 056 §1)"},
 		{".topbar{height:auto;flex-wrap:wrap;gap:012px", "below 880px the top bar wraps so the destinations keep a row of their own, with no seam between the two"},
 		{"html{scroll-padding-top:112px;}", "the wrapped two-row top bar is 105px tall below 880px, and an in-page jump must clear it (WCAG 2.4.11)"},
@@ -480,7 +480,7 @@ func TestStylesheetKeepsTheNarrowWidthRules(t *testing.T) {
 		{".fieldrow.checkinput{width:24px;height:24px", "the draft checkbox meets the minimum target size (WCAG 2.5.8)"},
 		{".homegrid{display:grid;grid-template-columns:1fr1fr", "Home's two-column grid must stay fixed, never auto-fit/auto-fill (spec 032 §10)"},
 		{"@media(max-width:820px){.homegrid{grid-template-columns:1fr;}}", "Home's grid must collapse to one column below 820px (spec 032 §10)"},
-		{".proj-name{font-size:19px;line-height:1.2;margin:8px010px;min-width:0;overflow-wrap:anywhere", "an unbroken project name must not overrun the 236px sidebar at desktop widths, not just below 880px (WL-90)"},
+		{".proj-name{font-size:1.4375rem;line-height:1.2;margin:8px010px;min-width:0;overflow-wrap:anywhere", "an unbroken project name must not overrun the 236px sidebar at desktop widths, not just below 880px (WL-90)"},
 	} {
 		if !strings.Contains(flat, c.want) {
 			t.Errorf("app.css no longer declares %q: %s", c.want, c.why)
