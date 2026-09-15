@@ -605,3 +605,54 @@ defers:
 		})
 	}
 }
+
+// TestAnnotatePlanTaskHeadings: the id lands at the end of the title, inside
+// the heading and before any anchor, and only on a real task heading.
+func TestAnnotatePlanTaskHeadings(t *testing.T) {
+	body := "# Plan\n\n" +
+		"## Tasks\n\n" +
+		"### Task 1 — Extract the hot paths\n\n" +
+		"### Task 2 — Migrate the bindings {#sec-2}\n\n" +
+		"### Task 3 — Not yet minted\n\n" +
+		"```\n### Task 1 — Extract the hot paths\n```\n" +
+		"Prose naming Task 1 — Extract the hot paths stays prose.\n"
+	ids := map[string]string{
+		"Extract the hot paths": "WL-312",
+		"Migrate the bindings":  "WL-313",
+		"Withdrawn declaration": "WL-999",
+	}
+	want := "# Plan\n\n" +
+		"## Tasks\n\n" +
+		"### Task 1 — Extract the hot paths (WL-312)\n\n" +
+		"### Task 2 — Migrate the bindings (WL-313) {#sec-2}\n\n" +
+		"### Task 3 — Not yet minted\n\n" +
+		"```\n### Task 1 — Extract the hot paths\n```\n" +
+		"Prose naming Task 1 — Extract the hot paths stays prose.\n"
+	if got := AnnotatePlanTaskHeadings(body, ids); got != want {
+		t.Errorf("AnnotatePlanTaskHeadings:\ngot:\n%s\nwant:\n%s", got, want)
+	}
+
+	// An annotated heading still parses as the declaration it names, so the
+	// annotation cannot be mistaken for a title edit if it ever round-trips.
+	if got := AnnotatePlanTaskHeadings(body, nil); got != body {
+		t.Errorf("no ids: body changed")
+	}
+}
+
+// TestAnnotatedHeadingKeepsPlanTasksParse: the annotated body is still a plan
+// PlanTasks accepts — the annotation only appends to the title.
+func TestAnnotatedHeadingKeepsPlanTasksParse(t *testing.T) {
+	body := "# Plan\n\n## Tasks\n\n### Task 1 — Do the thing\n\n```yaml\nkind: chore\n```\n\nBody.\n"
+	annotated := AnnotatePlanTaskHeadings(body, map[string]string{"Do the thing": "WL-7"})
+	d, err := Parse([]byte(annotated))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	tasks, err := PlanTasks(d)
+	if err != nil {
+		t.Fatalf("PlanTasks: %v", err)
+	}
+	if len(tasks) != 1 || tasks[0].Title != "Do the thing (WL-7)" {
+		t.Fatalf("got %+v", tasks)
+	}
+}

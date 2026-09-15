@@ -368,3 +368,51 @@ func IsCoverageOnlyPlan(d *Document) bool {
 // meant to declare tasks and got the spelling wrong, so that IsCoverageOnlyPlan
 // leaves it to PlanTasks' error rather than accepting it as minting nothing.
 var taskishHeadingRE = regexp.MustCompile(`^Tasks?\s+\d`)
+
+// AnnotatePlanTaskHeadings names the minted task in every `### Task N — Title`
+// heading of a plan body: "### Task 1 — Extract the hot paths (WL-312)". ids
+// maps a declaration title — tasks.plan_task_key, the title recorded when the
+// task was minted — to that task's id; a heading with no entry is left alone,
+// which is what a draft plan and a retitled declaration both look like.
+//
+// This rewrites the markdown a page renders, never the stored body. The id is
+// added as bare text because internal/mdrender's autolinker turns a task id in
+// prose into a link to its page.
+//
+// A heading's anchor and spacing survive because the id is spliced in at the
+// end of the title, and what counts as a task heading is decided by the same
+// two expressions PlanTasks parses with, so the two cannot drift.
+func AnnotatePlanTaskHeadings(body string, ids map[string]string) string {
+	if len(ids) == 0 {
+		return body
+	}
+	textIdx := heading.SubexpIndex("text")
+	lines := strings.Split(body, "\n")
+	fenced := false
+	for i, line := range lines {
+		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "```") ||
+			strings.HasPrefix(trimmed, "~~~") {
+			fenced = !fenced
+			continue
+		}
+		if fenced {
+			continue
+		}
+		loc := heading.FindStringSubmatchIndex(strings.TrimRight(line, "\r"))
+		if loc == nil || loc[2*textIdx] < 0 {
+			continue
+		}
+		text := line[loc[2*textIdx]:loc[2*textIdx+1]]
+		m := planTaskHeadingRE.FindStringSubmatch(strings.TrimSpace(text))
+		if m == nil {
+			continue
+		}
+		id, ok := ids[strings.TrimSpace(m[2])]
+		if !ok {
+			continue
+		}
+		end := loc[2*textIdx+1]
+		lines[i] = line[:end] + " (" + id + ")" + line[end:]
+	}
+	return strings.Join(lines, "\n")
+}
