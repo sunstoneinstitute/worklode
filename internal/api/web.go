@@ -765,6 +765,7 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	body, consolidated := s.docPageBody(r, detail)
+	body = s.namePlanTasks(r, detail, body)
 	view := docView(s.mdcache, s.projectKeys(r.Context(), detail.Doc.Project), detail, body, consolidated, r.URL.Path)
 	// A failed read degrades to an empty Versions card rather than failing
 	// the whole page, the same call projectKeyByID makes for its dependency.
@@ -776,6 +777,28 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 	}
 	view.Approvals = s.docPageApprovals(r, detail.Doc.ID)
 	s.renderWeb(w, r, http.StatusOK, "doc page", ui.Doc(view))
+}
+
+// namePlanTasks appends the minted task's id to each of a plan's `### Task N`
+// headings, so a reader of the plan can see which task a declaration became
+// without matching titles by hand. The id renders as a link because the body's
+// autolinker links a bare task id.
+//
+// The source view (?body=source) is left alone: it is shown as the text the
+// backbone stores, and an annotation there would make it something else. A
+// failed read degrades to the unannotated body, like the version history and
+// approvals the page reads next.
+func (s *server) namePlanTasks(r *http.Request, d *model.DocDetail, body string) string {
+	if d.Doc.Kind != "plan" || r.URL.Query().Get("body") == "source" {
+		return body
+	}
+	ids, err := s.st.PlanTaskIDs(r.Context(), d.Doc.ID)
+	if err != nil {
+		s.log.Warn("rendering plan page without its task ids: minted tasks unreadable",
+			"doc", d.Doc.ID, "err", err)
+		return body
+	}
+	return designdoc.AnnotatePlanTaskHeadings(body, ids)
 }
 
 // docPageBody picks the markdown the document page renders: the consolidated

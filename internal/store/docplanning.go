@@ -154,6 +154,36 @@ func plantaskRows(tx *sql.Tx, docID int64) (map[string]string, error) {
 	return minted, nil
 }
 
+// PlanTaskIDs is a plan's live minted tasks as declaration title -> task id,
+// the same plan_task_key match acceptPlanDoc mints against. It is how a reader
+// of the plan — the document page — names the task each `### Task N` heading
+// produced.
+//
+// Soft-deleted tasks are left out, unlike plantaskRows: a withdrawn task is
+// not something to point a reader at, whereas the mint path must still see it
+// to avoid minting the declaration again.
+func (s *Store) PlanTaskIDs(ctx context.Context, docID int64) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT plan_task_key, id FROM tasks
+		  WHERE plan_doc = $1 AND plan_task_key IS NOT NULL AND deleted_at IS NULL`, docID)
+	if err != nil {
+		return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+	}
+	defer rows.Close()
+	minted := map[string]string{}
+	for rows.Next() {
+		var key, taskID string
+		if err := rows.Scan(&key, &taskID); err != nil {
+			return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+		}
+		minted[key] = taskID
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read minted tasks of plan %d: %w", docID, err)
+	}
+	return minted, nil
+}
+
 // checkPlanTasksMinted refuses a plan body edit that would leave a plan whose
 // tasks are already minted without the valid ## Tasks section a re-accept has
 // to read (025 §9.2). Without it an accepted plan's declarations could be
