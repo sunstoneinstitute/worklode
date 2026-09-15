@@ -320,3 +320,44 @@ func TestDocPageShowsReviewState(t *testing.T) {
 		`name="return" value="/docs/WL-SPEC-25"`,
 	)
 }
+
+// TestDocPageNamesMintedTasks: a plan page's `### Task N` headings carry the
+// id of the task that declaration minted, linked to the task's page, so a
+// reader does not have to match titles by hand. The source view stays the
+// stored text.
+func TestDocPageNamesMintedTasks(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	createProject(t, st, "proj")
+
+	plan := createDocViaAPI(t, h, token, model.CreateDocInput{
+		Project: "proj", Kind: "plan", Slug: "mint-plan", Body: docPlanMintBody,
+	})
+	rr := doReq(t, h, "POST", docPath(plan.ID, "/accept"), token, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("accept plan status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	var accepted model.AcceptDocResponse
+	decodeInto(t, rr, &accepted)
+	if len(accepted.Tasks) != 2 {
+		t.Fatalf("tasks = %v, want 2 minted tasks", accepted.Tasks)
+	}
+
+	ref := fmt.Sprintf("/docs/WL-PLAN-%d", plan.Number)
+	page := doReq(t, h, "GET", ref, "", nil)
+	if page.Code != http.StatusOK {
+		t.Fatalf("plan page status = %d, body %s", page.Code, page.Body.String())
+	}
+	body := page.Body.String()
+	for _, task := range accepted.Tasks {
+		bodyContains(t, body, fmt.Sprintf(`(<a href="/tasks/%s" rel="nofollow">%s</a>)`, task.ID, task.ID))
+	}
+
+	src := doReq(t, h, "GET", ref+"?body=source", "", nil)
+	if src.Code != http.StatusOK {
+		t.Fatalf("source view status = %d, body %s", src.Code, src.Body.String())
+	}
+	if strings.Contains(src.Body.String(), accepted.Tasks[0].ID) {
+		t.Errorf("source view names %s; it must show the stored body", accepted.Tasks[0].ID)
+	}
+}
