@@ -28,6 +28,9 @@ type DocPatchInput struct {
 	ActorID     string
 	TaskID      string
 	SessionID   string
+	// IfVersion is the caller's compare-and-swap; see checkDocVersion. Zero
+	// skips the check.
+	IfVersion int
 }
 
 // patchRefusal is a §8.3/§8.4 gate refusing an in-place amendment, carrying
@@ -80,6 +83,9 @@ func PatchRule(err error) string {
 func PatchDoc(tx *sql.Tx, now time.Time, in DocPatchInput, eventID int64) (*model.Doc, *model.DocPatchResult, error) {
 	d, err := lockDoc(tx, in.ID)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := checkDocVersion(in.ID, in.IfVersion, d.version); err != nil {
 		return nil, nil, err
 	}
 	if d.kind == "plan" {

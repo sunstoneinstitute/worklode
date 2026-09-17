@@ -354,8 +354,19 @@ func TestDocLifecycle(t *testing.T) {
 		t.Fatalf("plan number = %d, want 1 (029 §4, first plan in project)", plan.Number)
 	}
 	editedPlanBody := strings.Replace(planSourceBody, "Do the thing.", "Do the other thing.", 1)
-	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID, editedPlanBody); err != nil {
+	// --if-version carried through: the caller names the version it read, and
+	// the edit lands because nothing else has written the plan since.
+	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID,
+		model.UpdateDocBodyInput{Body: editedPlanBody, IfVersion: plan.Version}); err != nil {
 		t.Fatalf("edit plan body while draft: %v", err)
+	}
+	// The same version again is stale now, and the server refuses with 409
+	// instead of overwriting the edit above.
+	if _, _, err := actorA.UpdateDocBody(ctx, plan.ID,
+		model.UpdateDocBodyInput{Body: planSourceBody, IfVersion: plan.Version}); err == nil {
+		t.Fatal("stale --if-version edit: want an error, got nil")
+	} else if status := clientErrStatus(t, err); status != http.StatusConflict {
+		t.Fatalf("stale --if-version edit: status = %d, want 409 (err %v)", status, err)
 	}
 	if _, _, err := actorA.AcceptDoc(ctx, plan.ID); err == nil {
 		t.Fatal("accept taskless plan: want an error, got nil")

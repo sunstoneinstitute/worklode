@@ -78,15 +78,20 @@ func mustCreateDoc(t *testing.T, s *Store, in DocInput) *model.Doc {
 	return d
 }
 
-// updateDocBody runs UpdateDocBody through RecordDocEvent.
-func updateDocBody(t *testing.T, s *Store, id int64, body string) (*model.Doc, error) {
+// updateDocBody runs UpdateDocBody through RecordDocEvent. The optional
+// ifVersion is the compare-and-swap; omitted, the write is unconditional.
+func updateDocBody(t *testing.T, s *Store, id int64, body string, ifVersion ...int) (*model.Doc, error) {
 	t.Helper()
+	want := 0
+	if len(ifVersion) > 0 {
+		want = ifVersion[0]
+	}
 	var out *model.Doc
 	_, _, err := s.RecordDocEvent(t.Context(), "update", "cli",
 		fmt.Sprintf("doc-update-%d", docEventSeq.Add(1)), "doc.update", nil,
 		func(tx *sql.Tx, eventID int64) error {
 			var err error
-			out, err = UpdateDocBody(tx, s.Now(), id, body, eventID)
+			out, err = UpdateDocBody(tx, s.Now(), id, body, want, eventID)
 			return err
 		})
 	return out, err
