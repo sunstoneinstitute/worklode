@@ -49,11 +49,11 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 
 - `lode doc accept` — Accept a document (draft -> accepted, or a plan again to mint what it declares); only the owner may accept it
 - `lode doc add` — Create a document (spec, ADR, or plan) in draft
-  Flags: --file, --kind, --number, --owner, --project, --repo, --slug
+  Flags: --file, --kind, --number, --owner, --project, --repo, --slug, --update-section-anchors
 - `lode doc delete` — Delete a document: hide a row that should not have existed
   Flags: --justification
 - `lode doc edit` — Replace a document's body (a draft or plan in place, an accepted spec or ADR as an amendment)
-  Flags: --file, --if-version, --note, --substantive
+  Flags: --file, --if-version, --note, --substantive, --update-section-anchors
 - `lode doc import` — Import a git corpus of design documents into the backbone
   Flags: --docs, --dry-run, --project, --repo
 - `lode doc lint` — Lint a local file's anchors and task definitions, or the corpus's dangling references
