@@ -71,8 +71,9 @@ func OverviewRender(w io.Writer, o model.Overview) {
 	tw := newTabwriter(w)
 	fmt.Fprintf(tw, "violations\t%d\nstale intent\t%d\ngaps\t%d\nready frontier\t%d\n",
 		o.Violations, o.StaleIntent, o.Gaps, o.FrontierSize)
-	fmt.Fprintf(tw, "unimplemented sections\t%d\nsection coverage\t%d/%d\nstale claims\t%d\norphaned claims\t%d\n",
-		o.Unimplemented, o.SectionsCovered, o.SectionsTotal, o.StaleClaims, o.OrphanedClaims)
+	fmt.Fprintf(tw, "unimplemented sections\t%d\nsection coverage\t%d/%d\nstale claims\t%d\norphaned claims\t%d\ndelivered claims\t%d\n",
+		o.Unimplemented, o.SectionsCovered, o.SectionsTotal, o.StaleClaims, o.OrphanedClaims,
+		o.DeliveredClaims)
 	if o.CriticalHead != nil {
 		fmt.Fprintf(tw, "critical head\t%s\n", o.CriticalHead.ID)
 	}

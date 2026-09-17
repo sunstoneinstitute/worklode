@@ -40,6 +40,15 @@ type Claim struct {
 	Section   string `json:"section"`
 }
 
+// DeliveredClaim is one wl:implements claim shown live: the environment the
+// claiming component's deliverable is deployed to (025 §11.5 row 5). One row
+// per environment, so a claim live in two of them appears twice.
+type DeliveredClaim struct {
+	Component   string `json:"component"`
+	Section     string `json:"section"`
+	Environment string `json:"environment"`
+}
+
 // DocCoverage is one document's implementation coverage: how many of its
 // non-superseded sections some component claims.
 type DocCoverage struct {
@@ -94,11 +103,14 @@ type Overview struct {
 	// Unimplemented counts accepted sections no component claims;
 	// SectionsCovered/SectionsTotal are the corpus-wide coverage ratio over
 	// non-superseded sections.
-	Unimplemented   int           `json:"unimplemented"`
-	SectionsCovered int           `json:"sections_covered"`
-	SectionsTotal   int           `json:"sections_total"`
-	StaleClaims     int           `json:"stale_claims"`
-	OrphanedClaims  int           `json:"orphaned_claims"`
+	Unimplemented   int `json:"unimplemented"`
+	SectionsCovered int `json:"sections_covered"`
+	SectionsTotal   int `json:"sections_total"`
+	StaleClaims     int `json:"stale_claims"`
+	OrphanedClaims  int `json:"orphaned_claims"`
+	// DeliveredClaims counts (claim, environment) pairs a deliverable is
+	// deployed in. Zero until Deliverable nodes are projected (006 §9).
+	DeliveredClaims int           `json:"delivered_claims"`
 	FrontierSize    int           `json:"frontier_size"`
 	Cycles          [][]string    `json:"cycles,omitempty"`
 	CriticalHead    *FrontierTask `json:"critical_head,omitempty"`
