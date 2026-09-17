@@ -768,6 +768,10 @@ func (s *server) docPage(w http.ResponseWriter, r *http.Request) {
 	body, consolidated := s.docPageBody(r, detail)
 	body = s.namePlanTasks(r, detail, body)
 	view := docView(s.mdcache, s.projectKeys(r.Context(), detail.Doc.Project), detail, body, consolidated, r.URL.Path)
+	// ?editor=1 is the WL-855 BlockNote spike (internal/ui's docEditor): the
+	// stored markdown in an editable island instead of the rendered body.
+	// Read-only in the sense that matters — it has nowhere to save to.
+	view.Editor = r.URL.Query().Get("editor") == "1"
 	// A failed read degrades to an empty Versions card rather than failing
 	// the whole page, the same call projectKeyByID makes for its dependency.
 	versions, err := s.st.ListDocVersions(r.Context(), detail.Doc.ID)

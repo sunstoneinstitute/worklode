@@ -173,15 +173,39 @@ templ Doc(v DocView) {
 				// allowlist. The document flavour adds one attribute to that
 				// allowlist, an id on a heading matching the section-anchor
 				// grammar, and nothing else.
-				<div class="bd prose">
-					@templ.Raw(string(v.BodyHTML))
-				</div>
-				if hasMermaid(v.BodyHTML) {
-					@mermaidScripts()
+				if v.Editor {
+					@docEditor(v.Doc.Body)
+				} else {
+					<div class="bd prose">
+						@templ.Raw(string(v.BodyHTML))
+					</div>
+					if hasMermaid(v.BodyHTML) {
+						@mermaidScripts()
+					}
 				}
 			</section>
 		}
 	}
+}
+
+// docEditor is the WL-855 spike: BlockNote mounted as a React island in place
+// of the rendered body, reached with ?editor=1 on a document page. It is a
+// prototype, not a feature — nothing here saves.
+//
+// The island takes its input from markup rather than from an inline script,
+// because the page runs under `script-src 'self'` with no nonce: #doc-source
+// carries the stored markdown, #doc-editor is the element the React root
+// mounts on. BlockNote's stylesheet is a file esbuild extracted from the
+// bundle, linked here rather than on every page, for the reason
+// mermaidScripts gives — a <link> in the body is applied by every browser,
+// and this is the only page that wants it.
+templ docEditor(body string) {
+	<link rel="stylesheet" href={ assetURL("editor.css") }/>
+	<div class="bd">
+		<textarea id="doc-source" hidden readonly>{ body }</textarea>
+		<div id="doc-editor"></div>
+	</div>
+	<script src={ assetURL("editor.js") } defer></script>
 }
 
 // DocVersion renders one version of a document, current or superseded
