@@ -18,6 +18,7 @@ Usage:
     scripts/canon-refs.py scan   CORPUS     # what would change, and what won't
     scripts/canon-refs.py apply  CORPUS     # write the rewrites back
     scripts/canon-refs.py apply  CORPUS --dry-run --diff
+    scripts/canon-refs.py citations CORPUS  # prose citations naming no document
 """
 
 from __future__ import annotations
@@ -342,6 +343,116 @@ def entities(corpus_dir: Path):
         ], t["updated_at"]
 
 
+# ---------------------------------------------------------- prose citations
+
+# The prose spellings of a document reference. None of them appears in
+# frontmatter, so none is an edge `lode doc lint` can see, and a citation of a
+# number the backbone has no document for is invisible until someone reads it
+# (WL-858).
+#
+#   WL-SPEC-4, EA-ADR-3          the shorthand, project and kind explicit
+#   spec 025, ADRs 63 and 64     worded, kind explicit, project from context
+#   025 §7.3                     bare number and section: kind unsaid, so it
+#                                resolves against any kind (the corpus numbers
+#                                specs and ADRs on separate sequences, and
+#                                "036 §6" means the ADR wherever 36 is one)
+CITE_SHORTHAND = re.compile(r"\b(?P<key>[A-Z]{2,6})-(?P<kind>SPEC|ADR|PLAN)-(?P<num>\d{1,3})\b")
+CITE_WORDED = re.compile(
+    r"\b(?P<word>specs?|adrs?|plans?)\s+(?P<nums>\d{1,3}(?:\s*(?:,|and|and\s|/)\s*\d{1,3})*)\b",
+    re.I,
+)
+CITE_SECTION = re.compile(r"(?<![\w.-])(?P<num>\d{3})\s+§")
+
+# WL-ADR-64 §2: the spec numbers the August 2026 fold left without a document.
+# A citation of one of these is not a defect — it reads through to the
+# successor — so the report names them separately from a number that has never
+# been accounted for. 0 was deleted outright and its number reserved for
+# `covers: NO-SPEC`; 35 never had a document at all.
+FOLDED_WL_SPECS = {
+    2: "WL-SPEC-1 (number reused by the Glossary)",
+    3: "WL-SPEC-6", 9: "WL-SPEC-6", 15: "WL-SPEC-6",
+    10: "WL-SPEC-4", 11: "WL-SPEC-4", 18: "WL-SPEC-4",
+    23: "WL-SPEC-1", 31: "WL-SPEC-1",
+    24: "WL-SPEC-8", 30: "WL-SPEC-8",
+    14: "WL-SPEC-25", 27: "WL-SPEC-25", 28: "WL-SPEC-25", 34: "WL-SPEC-25",
+    33: "WL-SPEC-26",
+    0: "deleted, number reserved for NO-SPEC",
+    35: "never existed",
+}
+
+
+def citations(key: str, body: str):
+    """Yield (project_key, kind, number, line) for every prose citation in
+    body, outside fenced code."""
+    for lineno, line, region in segments(body):
+        if region == "fence":
+            continue
+        for m in CITE_SHORTHAND.finditer(line):
+            yield m.group("key"), m.group("kind").lower(), int(m.group("num")), lineno + 1
+        for m in CITE_WORDED.finditer(line):
+            kind = m.group("word").lower().rstrip("s")
+            for num in re.findall(r"\d{1,3}", m.group("nums")):
+                yield key, kind, int(num), lineno + 1
+        for m in CITE_SECTION.finditer(line):
+            yield key, None, int(m.group("num")), lineno + 1
+
+
+def cmd_citations(corpus_dir: Path, show_all: bool) -> None:
+    """Report prose citations that name no live document.
+
+    The counterpart to `lode doc lint`, which sees frontmatter edges only. A
+    number that resolves to nothing is either a folded number (WL-ADR-64 says
+    what it now means) or a citation nobody can follow.
+
+    It lives here rather than as a `lode doc lint` arm because the report is
+    only readable against a known-good list: without WL-ADR-64's table every
+    folded number is a finding, and that table is a draft ADR, not something
+    the server should carry as data. A periodic sweep is also what the signal
+    is worth — 27 findings over the whole corpus, none of them blocking a
+    write. Move it into the server when the table is settled and the check is
+    cheap enough to run per document.
+    """
+    docs = json.loads((corpus_dir / "doclist.json").read_text())["docs"]
+    live = {(d["project_key"], d["kind"], d["number"]) for d in docs}
+    any_kind = {(d["project_key"], d["number"]) for d in docs}
+    projects = {d["project_key"] for d in docs}
+
+    folded: Counter = Counter()
+    unknown: Counter = Counter()
+    where: dict[tuple, set] = defaultdict(set)
+
+    for _, name, key, body, *_ in entities(corpus_dir):
+        for pkey, kind, num, _line in citations(key, body):
+            if pkey not in projects:
+                continue
+            # A number at or above 900 is the corpus's placeholder for a
+            # document that deliberately does not exist — `WL-SPEC-999` in a
+            # resolver's defect table, `--spec 999` in a bug report.
+            if num >= 900:
+                continue
+            if (pkey, num) in any_kind if kind is None else (pkey, kind, num) in live:
+                continue
+            cite = (pkey, kind, num)
+            if pkey == "WL" and kind in (None, "spec") and num in FOLDED_WL_SPECS:
+                folded[num] += 1
+            else:
+                unknown[cite] += 1
+            where[cite].add(name)
+
+    print(f"{sum(unknown.values())} prose citations name no live document, "
+          f"across {len(unknown)} numbers\n")
+    for (pkey, kind, num), n in unknown.most_common(None if show_all else 40):
+        seen = sorted(where[(pkey, kind, num)])
+        cited = f"{pkey}-{kind.upper()}-{num}" if kind else f"{pkey} {num:03d} §"
+        print(f"  {cited:<16}{n:>5}  {', '.join(seen[:3])}"
+              f"{' ...' if len(seen) > 3 else ''}")
+
+    print(f"\n{sum(folded.values())} citations of a folded WL spec number, "
+          "which read through WL-ADR-64 §2:\n")
+    for num, n in folded.most_common():
+        print(f"  {num:03d}{n:>10}  -> {FOLDED_WL_SPECS[num]}")
+
+
 # ------------------------------------------------------------------ report
 
 
@@ -490,9 +601,12 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    for cmd in ("export", "scan", "apply"):
+    for cmd in ("export", "scan", "apply", "citations"):
         s = sub.add_parser(cmd)
         s.add_argument("corpus", type=Path)
+        if cmd == "citations":
+            s.add_argument("--all", action="store_true",
+                           help="list every unresolved citation, not the top 40")
         if cmd == "scan":
             s.add_argument("--all", action="store_true",
                            help="list every unresolved reference, not the top 40")
@@ -508,6 +622,8 @@ def main() -> int:
         cmd_export(a.corpus)
     elif a.cmd == "scan":
         cmd_scan(a.corpus, a.all)
+    elif a.cmd == "citations":
+        cmd_citations(a.corpus, a.all)
     else:
         cmd_apply(a.corpus, a.dry_run, a.diff, a.limit, a.revise_gated)
     return 0
