@@ -1,0 +1,42 @@
+package ui
+
+// graph.templ renders a project's Graph page (GET /projects/{id}/graph,
+// WL-856): a force-directed drawing of the project's tasks and the
+// documents reachable from them, on a canvas that assets/graph.js fills
+// from the JSON at data-src. Everything drawn comes from that fetch; the
+// markup here is the frame — filters, stage, legend, selection, list —
+// and an honest empty state when there is nothing to draw.
+
+templ Graph(v GraphView) {
+	@Page(v.Page) {
+		<link rel="canonical" href={ v.CanonicalURL }/>
+		@projectShell(v.Project, "graph") {
+			if v.Empty {
+				<div class="canvas"><p class="empty">Nothing to draw: this project has no tasks and no documents.</p></div>
+			} else {
+				<div class="graph" id="graph" data-src={ v.DataURL }>
+					<div class="graph-toolbar">
+						<div class="graph-group" id="graph-kind-chips"><span class="graph-lbl">Kind</span></div>
+						<div class="graph-group" id="graph-state-chips"><span class="graph-lbl">Status</span></div>
+						<div class="graph-group" id="graph-edge-chips"><span class="graph-lbl">Links</span></div>
+						<div class="graph-search">
+							<input id="graph-q" type="search" placeholder="Find: WL-7, WL-SPEC-4, a title" aria-label="Find a task or document"/>
+						</div>
+						<div class="graph-stats" id="graph-stats"></div>
+					</div>
+					<div class="graph-stage" id="graph-stage">
+						<canvas id="graph-canvas" role="img" aria-label="Task and document graph"></canvas>
+						<div class="graph-tip" id="graph-tip" hidden></div>
+					</div>
+					<aside class="graph-side" aria-label="Graph details">
+						<section aria-labelledby="graph-legend-h"><h2 id="graph-legend-h">Legend</h2><div class="graph-legend" id="graph-legend"></div></section>
+						<section class="graph-sel" id="graph-sel" aria-labelledby="graph-sel-h"><h2 id="graph-sel-h">Selected</h2><p class="empty">Hover a node to preview it. Click to pin it here with its neighbours.</p></section>
+						<section class="graph-list" aria-labelledby="graph-list-h"><h2 id="graph-list-h">Visible <span class="count" id="graph-list-count"></span></h2><ul id="graph-list"></ul></section>
+					</aside>
+				</div>
+				<script src={ assetURL("d3.min.js") } defer></script>
+				<script src={ assetURL("graph.js") } defer></script>
+			}
+		}
+	}
+}

@@ -1711,3 +1711,18 @@ func progressMergeBody(task string, m model.ProgressMerge) string {
 	}
 	return string(b)
 }
+
+// --- graph (WL-856) ---------------------------------------------------------
+
+// GraphView is a project's Graph page: the shell around a canvas that
+// assets/graph.js fills from DataURL (GET /projects/{id}/graph/data, the
+// same model.ProjectGraph the JSON API serves). Empty is true when the
+// project has neither a task nor a document, in which case the page says so
+// and loads no script.
+type GraphView struct {
+	Page         PageProps
+	CanonicalURL string
+	Project      CockpitProject
+	DataURL      string
+	Empty        bool
+}

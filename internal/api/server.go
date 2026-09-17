@@ -685,6 +685,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.web("POST /projects/{id}/progress/rally/confirm", s.progressRallyConfirm)
 	r.web("POST /projects/{id}/progress/rally/discard", s.progressRallyDiscard)
 	r.web("POST /projects/{id}/progress/merge", s.progressMerge)
+	r.web("GET /projects/{id}/graph", s.navWrap("graph", s.graphPage))
+	// Not navWrapped: the page script fetches it and reads JSON back.
+	r.web("GET /projects/{id}/graph/data", s.graphData)
 	r.web("GET /projects/{id}/deliverables", s.navWrap("deliverables", s.deliverablesPage))
 	r.web("GET /projects/{id}/deliverables/new", s.navWrap("deliverable_new", s.newDeliverablePage))
 	r.web("POST /projects/{id}/deliverables", s.navWrap("deliverable_new", s.createDeliverableFromForm))
@@ -896,6 +899,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/projects/{id}/cockpit", s.projectCockpit)
 	r.api("GET /api/v1/projects/{id}/rally", s.getProjectRally)
 	r.api("GET /api/v1/projects/{id}/progress", s.getProjectProgress)
+	r.api("GET /api/v1/projects/{id}/graph", s.getProjectGraph)
 	r.api("GET /api/v1/projects/{id}/deliverables", s.listProjectDeliverables)
 	r.api("POST /api/v1/projects/{id}/deliverables", s.createDeliverable)
 	r.api("PATCH /api/v1/deliverables/{id}", s.patchDeliverable)
