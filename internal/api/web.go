@@ -108,7 +108,8 @@ func (s *server) blobOrigin() string {
 //     /assets/ching.js and /assets/htmx.min.js, cliauth.templ's
 //     /assets/copy.js, task.templ /
 //     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js, and
-//     progress.templ's /assets/progress.js. No page has an inline script.
+//     progress.templ's /assets/progress.js, and graph.templ's
+//     /assets/d3.min.js and /assets/graph.js. No page has an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
 //     meta turns off the unnonced <style> htmx would otherwise inject for its

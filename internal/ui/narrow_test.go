@@ -329,6 +329,11 @@ func pages(t *testing.T) map[string]string {
 			Name: "Daily casualty reconciliation snapshot", Artifact: token,
 			URL: "https://console.cloud.google.com/bigquery?project=sunstone-prod",
 		}),
+		"graph": Graph(GraphView{
+			Page:    PageProps{Title: "worklode: Worklode backbone: Graph"},
+			Project: CockpitProject{ID: "worklode", Name: longTitle, Key: "WL"},
+			DataURL: "/projects/worklode/graph/data",
+		}),
 		"placeholder": Placeholder(PlaceholderView{
 			Page: PageProps{Title: "Decisions"}, Heading: "Decisions", Project: &proj, ActiveSection: "decisions",
 			Message: "Governed decisions are not stored in the backbone yet, so this page would have nothing honest to show.",

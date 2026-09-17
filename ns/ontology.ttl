@@ -417,6 +417,14 @@ wl:defers a owl:ObjectProperty ;
         node, never off this edge. Frontmatter key `defers`, entries {spec, to}; projected as a
         doc_edges 'defers' row with the owner in the completion side-table.""" .
 
+wl:amends a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:DesignDoc ;
+    rdfs:range wl:DesignDoc ;
+    rdfs:comment """This document amends that one: the frontmatter `amends` edge (025 §6),
+        projected at document level by lode graph triples. The section a row names stays in
+        the backbone's doc_edges; the graph store sees the two documents.""" .
+
 wl:Deferral a owl:Class ;
     wl:layer wlc:execution ;
     rdfs:comment """A qualified wl:defers: which document owns the handed-off Section. Reified
@@ -560,6 +568,20 @@ wl:followUpTo a owl:ObjectProperty, owl:FunctionalProperty ;
         nothing walks it. Functional -- a task has at most one origin, mirroring the
         task_edges_single_origin index. No named inverse: the origin's follow-ups are a
         backwards traversal, not a second stored edge.""" .
+
+wl:plannedIn a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range wl:Plan ;
+    rdfs:comment "The plan whose acceptance minted this task (025 §9.2; backbone tasks.plan_doc)." .
+
+wl:about a owl:ObjectProperty, owl:FunctionalProperty ;
+    wl:layer wlc:execution ;
+    rdfs:domain wl:Task ;
+    rdfs:range foaf:Document ;
+    rdfs:comment """The document a review, planning or escalation task is about (025 §15.4;
+        backbone tasks.about_doc). Document-level: the section, when one is named, stays in
+        the backbone.""" .
 
 wl:inProject a owl:ObjectProperty, owl:FunctionalProperty ;
     wl:layer wlc:execution ;

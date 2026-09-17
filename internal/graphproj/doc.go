@@ -19,6 +19,7 @@ const (
 	XSDDate               = "http://www.w3.org/2001/XMLSchema#date"
 	DCATHasVersion        = "http://www.w3.org/ns/dcat#hasVersion"
 	DCATHasCurrentVersion = "http://www.w3.org/ns/dcat#hasCurrentVersion"
+	DCTRequires           = "http://purl.org/dc/terms/requires"
 )
 
 // docClass maps docs.kind to its ontology class (ns/ontology.ttl): specs and

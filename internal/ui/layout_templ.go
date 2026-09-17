@@ -1029,6 +1029,9 @@ func modePillIcon() templ.Component {
 // §2 amends 056 §2 to add it, and a project with no spec has no Progress page
 // (its route 404s), so linking to it would be a dead entry.
 //
+// Graph sits after Progress (WL-856): it draws the project's tasks and the
+// documents reachable from them, and every project has one.
+//
 // Milestones sits between Crew and Work, ahead of §2's list: a milestone
 // contains both work and deliverables (spec 029 §2), so it reads before both
 // lists. 032 §2 is owed the same amendment Deleted is (docs/follow-ups.md).
@@ -1079,6 +1082,10 @@ func localNav(p CockpitProject, active string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+		}
+		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/graph", "Graph", "graph", active).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
 		}
 		templ_7745c5c3_Err = navLink("/projects/"+p.ID+"/deliverables", "Deliverables", "deliverables", active).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {

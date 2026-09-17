@@ -118,7 +118,12 @@ var routeGuards = map[string]routeGuard{
 	// delivering a task, and it moves that task's state by way of the
 	// webhooks the merge produces. The App's installation token, not the
 	// caller's, does the writing at GitHub (§4.2 rule 9).
-	"POST /projects/{id}/progress/merge":              guarded(permTaskWrite),
+	"POST /projects/{id}/progress/merge": guarded(permTaskWrite),
+	"GET /projects/{id}/graph":           guarded(permWebRead),
+	// The Graph page's data (WL-856): permWebRead like the page itself — it
+	// shows only what the page's own reader could already see, like the
+	// progress fragments above.
+	"GET /projects/{id}/graph/data":                   guarded(permWebRead),
 	"GET /projects/{id}/milestones":                   guarded(permWebRead),
 	"POST /projects/{id}/milestones/{mid}/references": guarded(permWebWrite),
 	"GET /projects/{id}/deliverables":                 guarded(permWebRead),
@@ -373,6 +378,7 @@ var routeGuards = map[string]routeGuard{
 	"GET /api/v1/projects/{id}/cockpit":       guarded(permProjectRead),
 	"GET /api/v1/projects/{id}/rally":         guarded(permProjectRead),
 	"GET /api/v1/projects/{id}/progress":      guardedAny(permProjectRead),
+	"GET /api/v1/projects/{id}/graph":         guardedAny(permProjectRead),
 	"GET /api/v1/projects/{id}/deliverables":  guarded(permDeliverableRead),
 	"POST /api/v1/projects/{id}/deliverables": guarded(permDeliverableWrite),
 	"PATCH /api/v1/deliverables/{id}":         guarded(permDeliverableWrite),
