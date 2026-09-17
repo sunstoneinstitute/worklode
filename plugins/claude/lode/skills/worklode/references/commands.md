@@ -101,7 +101,7 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
   Flags: --acknowledged, --component
 - `lode graph gaps` — Doc gaps and unmatched-path coverage gaps
 - `lode graph quarantines` — Show the projects the projector has quarantined, since when, and why
-- `lode graph triples` — Write the task graph as N-Triples, for loading into an external RDF store
+- `lode graph triples` — Write a project's tasks, the documents they reach, and the edges between them as N-Triples
   Flags: --output, --project, --repo
 
 ## `lode inbox` — Triage GitHub issues into tasks

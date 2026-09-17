@@ -80,7 +80,7 @@ func newGraphTriplesCmd() *cobra.Command {
 	var output string
 	cmd := &cobra.Command{
 		Use:   "triples",
-		Short: "Write the task graph as N-Triples, for loading into an external RDF store",
+		Short: "Write a project's tasks, the documents they reach, and the edges between them as N-Triples",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, cfg, err := newAPIClientWithConfig()

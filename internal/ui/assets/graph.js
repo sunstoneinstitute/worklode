@@ -38,6 +38,8 @@
     defers: ["defers", [6, 3, 1, 3], "deferred by"]
   };
   var KINDS = [["task", "Task", "--g-task"], ["spec", "Spec", "--g-spec"], ["adr", "ADR", "--g-adr"], ["plan", "Plan", "--g-plan"]];
+  var KIND_TOKEN = {};
+  KINDS.forEach(function (k) { KIND_TOKEN[k[0]] = k[2]; });
   var DONE = { merged: 1, deployed_prod: 1, released: 1 };
   var STATES = [["open", "Open"], ["done", "Done"], ["abandoned", "Abandoned"]];
   var STATE_LABEL = {
@@ -297,16 +299,23 @@
   function dot(n) {
     var s = document.createElement("span");
     s.className = "dot" + (n.st === "abandoned" ? " hollow" : n.st === "done" ? " done" : "");
-    s.style.setProperty("--c", C[n.kind] || C.ink2);
+    // The token, not the resolved colour: a list row keeps its colour when the
+    // theme changes without being re-rendered.
+    s.style.setProperty("--c", "var(" + (KIND_TOKEN[n.kind] || "--ink-2") + ")");
     return s;
   }
   function item(n) {
     var li = document.createElement("li");
     li.dataset.id = n.id;
-    li.appendChild(dot(n));
+    // The row's content sits in a button so it is tab-reachable and Enter/Space
+    // fires the same click the delegated handler below already listens for.
+    var b = document.createElement("button");
+    b.type = "button";
+    b.appendChild(dot(n));
     var id = document.createElement("span"); id.className = "id"; id.textContent = n.id;
     var t = document.createElement("span"); t.className = "t"; t.title = n.title; t.textContent = n.title;
-    li.appendChild(id); li.appendChild(t);
+    b.appendChild(id); b.appendChild(t);
+    li.appendChild(b);
     return li;
   }
   function list(ns) {

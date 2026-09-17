@@ -6,15 +6,23 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
+)
+
+// The graph cites tasks and documents, it never renders them, so the two
+// reads select an empty body instead of hauling every body across. Reusing
+// taskColumns/docColumns keeps scanTask/scanDoc as the only scan plumbing.
+var (
+	graphTaskColumns = strings.Replace(taskColumns, "body", "''::text AS body", 1)
+	graphDocColumns  = strings.Replace(docColumns, "body", "''::text AS body", 1)
 )
 
 // ProjectGraph reads one project's work graph (model.ProjectGraph): four
 // bulk queries — live tasks, task edges between them, live docs, doc edges
 // between them — then a walk from the tasks over links and doc edges that
-// keeps the documents it reaches and drops the rest. Bodies are cleared:
-// the graph cites documents and tasks, it never renders them.
+// keeps the documents it reaches and drops the rest.
 //
 // An unknown project is not an error: it reads as an empty graph, and the
 // API layer 404s on the project before calling this.
@@ -94,14 +102,10 @@ func (s *Store) ProjectGraph(ctx context.Context, projectID string) (model.Proje
 		}
 	}
 
-	for _, t := range tasks {
-		t.Body = ""
-		g.Tasks = append(g.Tasks, t)
-	}
+	g.Tasks = append(g.Tasks, tasks...)
 	g.TaskEdges = append(g.TaskEdges, taskEdges...)
 	for _, d := range docs {
 		if keep[d.ID] {
-			d.Body = ""
 			g.Docs = append(g.Docs, d)
 		}
 	}
@@ -116,7 +120,7 @@ func (s *Store) ProjectGraph(ctx context.Context, projectID string) (model.Proje
 
 func (s *Store) graphTasks(ctx context.Context, projectID string) ([]model.Task, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+taskColumns+` FROM tasks WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id`, projectID)
+		`SELECT `+graphTaskColumns+` FROM tasks WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("graph tasks of %s: %w", projectID, err)
 	}
@@ -164,7 +168,7 @@ SELECT e.from_task, e.to_task, e.type
 
 func (s *Store) graphDocs(ctx context.Context, projectID string) ([]model.Doc, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT `+docColumns+` FROM docs WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id`, projectID)
+		`SELECT `+graphDocColumns+` FROM docs WHERE project_id = $1 AND deleted_at IS NULL ORDER BY id`, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("graph docs of %s: %w", projectID, err)
 	}

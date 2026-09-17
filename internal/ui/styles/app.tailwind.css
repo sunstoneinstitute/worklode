@@ -882,7 +882,9 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
 .graph-side h2{ font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3); margin:0 0 .35rem; }
 .graph-side h3{ font-size:.8rem; margin:.5rem 0 .2rem; }
 .graph-side ul{ list-style:none; margin:0; padding:0; }
-.graph-side li{ display:flex; gap:.4rem; align-items:baseline; padding:.15rem 0; cursor:pointer; min-width:0; }
+.graph-side li{ min-width:0; }
+.graph-side li > button{ all:unset; display:flex; gap:.4rem; align-items:baseline; width:100%; padding:.15rem 0; cursor:pointer; min-width:0; }
+.graph-side li > button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:.25rem; }
 .graph-side li .id{ font-variant-numeric:tabular-nums; color:var(--link); white-space:nowrap; }
 .graph-side li .t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .graph-side .dot{ flex:none; width:.55rem; height:.55rem; border-radius:50%; background:var(--c); align-self:center; }

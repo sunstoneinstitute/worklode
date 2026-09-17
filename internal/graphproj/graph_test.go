@@ -12,7 +12,7 @@ func TestProjectGraphTriples(t *testing.T) {
 	g := model.ProjectGraph{
 		Project: "worklode",
 		Tasks: []model.Task{
-			{ID: "WL-1", Project: "worklode", Title: "One", State: "ready", Kind: "feature", Priority: "high", PlanDoc: 20, AboutDoc: 10},
+			{ID: "WL-1", Project: "worklode", Title: "One", State: "ready", Kind: "feature", Priority: "high"},
 			{ID: "WL-2", Project: "worklode", Title: "Two", State: "ready", Kind: "feature", Priority: "low"},
 		},
 		TaskEdges: []model.Edge{{From: "WL-1", To: "WL-2", Type: "blocks"}},
