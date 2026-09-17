@@ -154,5 +154,36 @@ class Rewrite(unittest.TestCase):
         self.assertEqual(new, body)
 
 
+class Citations(unittest.TestCase):
+    """The prose spellings `lode doc lint` cannot see (WL-858)."""
+
+    def cites(self, body, key="WL"):
+        return sorted(c[:3] for c in cr.citations(key, body))
+
+    def test_shorthand_carries_its_own_project_and_kind(self):
+        self.assertEqual(self.cites("See `EA-ADR-3` and WL-SPEC-4.", key="WL"),
+                         [("EA", "adr", 3), ("WL", "spec", 4)])
+
+    def test_worded_citation_takes_the_project_from_context(self):
+        self.assertEqual(self.cites("as spec 025 says", key="DP"),
+                         [("DP", "spec", 25)])
+
+    def test_worded_citation_splits_a_list(self):
+        self.assertEqual(self.cites("defined by specs 004, 005 and 006"),
+                         [("WL", "spec", 4), ("WL", "spec", 5), ("WL", "spec", 6)])
+
+    def test_bare_number_and_section_leaves_the_kind_open(self):
+        # 036 §6 means ADR 036 wherever 36 is an ADR, so the kind is None and
+        # resolution accepts either sequence.
+        self.assertEqual(self.cites("the rule in 036 §6 holds"),
+                         [("WL", None, 36)])
+
+    def test_skips_a_fenced_block(self):
+        self.assertEqual(self.cites("```\nspec 025\n```\n"), [])
+
+    def test_ignores_a_version_or_line_number(self):
+        self.assertEqual(self.cites("bumped to 1.2.3 and line 706"), [])
+
+
 if __name__ == "__main__":
     unittest.main()
