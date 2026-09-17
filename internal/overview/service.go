@@ -250,5 +250,10 @@ func (s *Service) rollCoverage(ctx context.Context, o *model.Overview) error {
 		return err
 	}
 	o.OrphanedClaims = len(orphaned)
+	delivered, err := DeliveredCoverage(ctx, s.Graph)
+	if err != nil {
+		return err
+	}
+	o.DeliveredClaims = len(delivered)
 	return nil
 }

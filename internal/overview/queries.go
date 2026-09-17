@@ -15,6 +15,7 @@ const sparqlPrefixes = `PREFIX wl:   <https://worklode.io/ns/ontology#>
 PREFIX wlc:  <https://worklode.io/ns/concept/>
 PREFIX dct:  <http://purl.org/dc/terms/>
 PREFIX dcat: <http://www.w3.org/ns/dcat#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
 PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
 `
@@ -126,10 +127,6 @@ const unmatchedQuery = sparqlPrefixes + `SELECT DISTINCT ?repo ?path WHERE {
 // be co-located in one named graph, which is how observed/repo-implements
 // writes them.
 //
-// §11.5's fifth row, delivered coverage, is deliberately not here: it joins a
-// claim's component through wl:deliveredBy to a wl:Deployment, and neither
-// Deliverable nor Deployment is projected yet, so the query would answer
-// nothing whatever the graph held. It belongs with that projection.
 
 // unimplementedQuery is §11.5 row 1: an accepted section no component claims.
 // A section carries wl:status only in its document's canonical graph
@@ -176,6 +173,48 @@ const orphanedClaimQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s WHERE {
   GRAPH ?dg { ?doc dcat:hasVersion ?pv . }
   FILTER NOT EXISTS { GRAPH ?sg { ?s dct:isPartOf ?doc } }
 } ORDER BY ?c ?s`
+
+// deliveredCoverageQuery is §11.5 row 5: for each wl:implements claim, the
+// environments the claiming component's deliverable is actually deployed to.
+// It is the join that turns "component A claims section S" into "section S is
+// live in prod", which is what 006 §9 calls the vertical.
+//
+// Two arms, because a deliverable is witnessed two ways (006 §9's witness
+// table) and there is no reasoner (spec 006), so wl:Effect's subclass edge to
+// wl:Deliverable does not fire and each arm names its own type:
+//
+//   - A wl:Deliverable targets an Artifact, and the witness is a Deployment
+//     that prov:used that artifact. The `?a a wl:Artifact` pattern is what
+//     separates this arm from the Effect one: a deliverable declares its
+//     targets as dct:relation, so the target's type is the only thing saying
+//     which kind of target it is.
+//   - A wl:Effect ships nothing, so its dct:relation names the Deployment
+//     directly and reaching wlc:deployed is the whole witness.
+//
+// v1 checks deployment status alone. 006 §9's open question 10 adds the
+// default-branch-commit witness for the Effect arm — that a deployed
+// Kustomization reconciles a commit on the delivering component's branch,
+// rather than any revision at all — and until it is settled an Effect counts
+// as delivered as soon as its Deployment says deployed.
+//
+// Deployment, Artifact and Environment nodes are projected today
+// (internal/storederive/deploy.go); Deliverable and Effect nodes are not
+// (006 §9, WL-PLAN-118). So against a production graph this answers empty,
+// whatever it holds, until that projection lands — the query is right and its
+// left-hand input is missing.
+const deliveredCoverageQuery = sparqlPrefixes + `SELECT DISTINCT ?c ?s ?env WHERE {
+  GRAPH ?ig { ?c wl:implements ?s . }
+  {
+    GRAPH ?dg { ?d a wl:Deliverable ; wl:deliveredBy ?c ; dct:relation ?a . }
+    GRAPH ?ag { ?a a wl:Artifact . }
+    GRAPH ?pg {
+      ?dep prov:used ?a ; wl:toEnvironment ?env ; wl:deploymentStatus wlc:deployed .
+    }
+  } UNION {
+    GRAPH ?dg { ?d a wl:Effect ; wl:deliveredBy ?c ; dct:relation ?dep . }
+    GRAPH ?pg { ?dep wl:toEnvironment ?env ; wl:deploymentStatus wlc:deployed . }
+  }
+} ORDER BY ?c ?s ?env`
 
 // taskRequiresQuery pulls the KG half of the critical-path DAG:
 // wl:dependsOn is the projected task dependency (subPropertyOf
@@ -295,6 +334,23 @@ func OrphanedClaims(ctx context.Context, c *graphserver.Client) ([]model.Claim, 
 		return nil, fmt.Errorf("orphaned claims: %w", err)
 	}
 	return claims(rows), nil
+}
+
+// DeliveredCoverage runs §11.5's delivered-coverage query: one row per
+// (claim, environment) the claim is live in. A claim delivered to two
+// environments is two rows, which is what a caller asking "is this section in
+// prod" needs to see.
+func DeliveredCoverage(ctx context.Context, c *graphserver.Client) ([]model.DeliveredClaim, error) {
+	rows, err := c.Select(ctx, deliveredCoverageQuery)
+	if err != nil {
+		return nil, fmt.Errorf("delivered coverage: %w", err)
+	}
+	out := make([]model.DeliveredClaim, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, model.DeliveredClaim{
+			Component: r["c"], Section: r["s"], Environment: r["env"]})
+	}
+	return out, nil
 }
 
 func claims(rows []map[string]string) []model.Claim {
