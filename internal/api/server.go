@@ -1476,6 +1476,7 @@ func (s *server) mapStoreErr(w http.ResponseWriter, err error) {
 		errors.Is(err, store.ErrEdgeExists),
 		errors.Is(err, store.ErrDocExists),
 		errors.Is(err, store.ErrRevisionExists),
+		errors.Is(err, store.ErrVersionMismatch),
 		errors.Is(err, store.ErrReferenceExists),
 		errors.Is(err, store.ErrActorExists),
 		errors.Is(err, store.ErrProjectExists):

@@ -302,8 +302,16 @@ type WithdrawDocInput struct {
 // UpdateDocBodyInput is the request body for PUT /api/v1/docs/{id}/body and
 // PUT /api/v1/docs/{id}/revision: the whole markdown source, frontmatter
 // included, since the body is the authority for title, issued and edges.
+//
+// IfVersion is an optional compare-and-swap: the version the caller read and
+// means to overwrite. The write is refused when the stored version has moved
+// past it. Zero means the caller did not ask, which is the unconditional
+// overwrite every caller had before. Only the body write reads it — a
+// revision edit names the candidate, not the document's version, and refuses
+// a non-zero IfVersion rather than ignore one.
 type UpdateDocBodyInput struct {
-	Body string `json:"body"`
+	Body      string `json:"body"`
+	IfVersion int    `json:"if_version,omitempty"`
 }
 
 // PatchDocInput is the request body for POST /api/v1/docs/{id}/patch: the
@@ -316,12 +324,15 @@ type UpdateDocBodyInput struct {
 // anchored note. Task and Session are filled by the CLI from the worktree it
 // stands in, the way AddDocNoteInput's are; Task also names the plan whose
 // own tasks do not block the amendment.
+//
+// IfVersion is the same optional compare-and-swap UpdateDocBodyInput carries.
 type PatchDocInput struct {
 	Body        string `json:"body"`
 	Substantive bool   `json:"substantive,omitempty"`
 	Note        string `json:"note,omitempty"`
 	Task        string `json:"task,omitempty"`
 	Session     string `json:"session,omitempty"`
+	IfVersion   int    `json:"if_version,omitempty"`
 }
 
 // DocPatchResult is what an in-place amendment did (025 §8.4).

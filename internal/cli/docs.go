@@ -162,8 +162,11 @@ func (c *Client) DocSectionReferrers(ctx context.Context, id int64, anchor strin
 // UpdateDocBody calls PUT /api/v1/docs/{id}/body: an in-place edit, which the
 // server allows on a draft and on a plan at any status. An accepted spec or
 // ADR is revised instead (see ReviseDoc).
-func (c *Client) UpdateDocBody(ctx context.Context, id int64, body string) (model.Doc, []byte, error) {
-	return c.docWrite(ctx, http.MethodPut, docPath(id, "/body"), model.UpdateDocBodyInput{Body: body})
+//
+// in.IfVersion carries the optional compare-and-swap: non-zero, the server
+// refuses the write with 409 when the stored version has moved past it.
+func (c *Client) UpdateDocBody(ctx context.Context, id int64, in model.UpdateDocBodyInput) (model.Doc, []byte, error) {
+	return c.docWrite(ctx, http.MethodPut, docPath(id, "/body"), in)
 }
 
 // PatchDoc calls POST /api/v1/docs/{id}/patch: 025 §8.4's in-place amendment

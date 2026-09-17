@@ -429,17 +429,16 @@ def write_back(name: str, kind: str, status: str, version, body: str,
                revise_gated: bool = False) -> None:
     """Write one rewritten body back, refusing if the row moved since export.
 
-    Documents carry a version, so the check is exact. Tasks do not; updated_at
-    is the only staleness signal they offer, so that is what is compared.
+    A document carries `lode doc edit --if-version`, which compares inside the
+    write's own transaction: no gap for another writer to land in. A task has
+    no version column and no such option (WL-848 scoped it out), so its
+    staleness check stays a read of updated_at before the write, with the race
+    that implies.
     """
     if kind == "task":
         current = json.loads(lode("task", "show", name, "--json"))
         if current["updated_at"] != version:
             raise RuntimeError(f"changed since export (updated_at {version} -> {current['updated_at']})")
-    else:
-        current = json.loads(lode("doc", "show", name, "--json"))
-        if current["version"] != version:
-            raise RuntimeError(f"changed since export (version {version} -> {current['version']})")
 
     with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
         f.write(body)
@@ -451,7 +450,7 @@ def write_back(name: str, kind: str, status: str, version, body: str,
             # An accepted spec or ADR is amended in place (025 §8.4), which
             # needs a note.
             try:
-                lode("doc", "edit", name, "--file", path,
+                lode("doc", "edit", name, "--file", path, "--if-version", str(version),
                      "--note", "canonicalise legacy number-slug references to KEY-KIND-N")
             except RuntimeError as e:
                 # §8.3 refuses this edit on every accepted spec whose
@@ -470,6 +469,11 @@ def write_back(name: str, kind: str, status: str, version, body: str,
                 # 404s when there is none, so the bare form opens it first. A
                 # candidate left open by an earlier failed run makes the open a
                 # no-op error, which is why it is tolerated rather than raised.
+                #
+                # No --if-version here: a revision edit writes the candidate,
+                # not the document, and the server refuses the flag on that
+                # endpoint rather than pretend to honour it. The refused patch
+                # above already proved the document was at `version`.
                 try:
                     lode("doc", "revise", name)
                 except RuntimeError:
@@ -477,7 +481,7 @@ def write_back(name: str, kind: str, status: str, version, body: str,
                 lode("doc", "revise", name, "--file", path)
                 lode("doc", "revise", name, "--accept")
         else:
-            lode("doc", "edit", name, "--file", path)
+            lode("doc", "edit", name, "--file", path, "--if-version", str(version))
     finally:
         Path(path).unlink(missing_ok=True)
 
