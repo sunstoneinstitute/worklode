@@ -120,7 +120,10 @@ Every numbered heading in a spec or ADR carries a `{#sec-N}` anchor —
 capped at 3 levels (H2/H3/H4); a heading deeper than that is legal content
 but takes no number and no anchor — it belongs to its nearest anchored
 ancestor. `lode doc lint <file>` checks numbering, anchors, and depth
-before you post.
+before you post, and `--update-section-anchors` on `lode doc add` or `lode
+doc edit` fixes what it reports: it renumbers the headings and rewrites their anchors from the
+structure, so inserting a section does not mean editing every number below
+it by hand. It is refused on an accepted document, for the reason below.
 
 **An anchor is frozen once its document is `accepted`.** A revision that
 renumbers a published anchor, or drops one without a replacing supersession,
