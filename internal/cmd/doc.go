@@ -92,10 +92,33 @@ func init() {
 	rootCmd.AddCommand(newDocCmd())
 }
 
+// renumberAnchors is `--update-section-anchors`: rewrite the body's section
+// numbers and {#sec-N} anchors from the heading structure, so an inserted or
+// moved section does not leave the author fixing every number below it by
+// hand. The rewrite is designdoc.Renumber's; this only feeds it the body and
+// hands back what it rendered.
+//
+// It is an opt-in on the write path on purpose. `lode doc lint` is the
+// advisory side — it tells you the anchors disagree — and this is the side
+// that fixes them, only when asked. A write that silently rewrote an author's
+// numbering would be the wrong default for a corpus where a section number is
+// an address other documents pin (025 §3).
+func renumberAnchors(body string) (string, error) {
+	doc, err := designdoc.Parse([]byte(body))
+	if err != nil {
+		return "", err
+	}
+	if err := designdoc.Renumber(doc, designdoc.DepthLimit); err != nil {
+		return "", fmt.Errorf("--update-section-anchors: %w", err)
+	}
+	return string(doc.Bytes()), nil
+}
+
 func newDocAddCmd() *cobra.Command {
 	var scope scopeFlags
 	var kind, slug, owner, file string
 	var number int
+	var updateAnchors bool
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Create a document (spec, ADR, or plan) in draft",
@@ -106,6 +129,13 @@ func newDocAddCmd() *cobra.Command {
 			body, err := readBodyFile(cmd, file)
 			if err != nil {
 				return err
+			}
+			// Always safe here: a document being created has published no
+			// anchor for anyone to have pinned yet.
+			if updateAnchors {
+				if body, err = renumberAnchors(body); err != nil {
+					return err
+				}
 			}
 			c, cfg, err := newAPIClientWithConfig()
 			if err != nil {
@@ -145,6 +175,8 @@ func newDocAddCmd() *cobra.Command {
 		"corpus number (omit to auto-assign the next free one; an explicit value is a rare reservation)")
 	cmd.Flags().StringVar(&owner, "owner", "", "actor id to own the document (default: yourself)")
 	cmd.Flags().StringVar(&file, "file", "", `markdown source file, frontmatter included ("-" for stdin) (required)`)
+	cmd.Flags().BoolVar(&updateAnchors, "update-section-anchors", false,
+		"rewrite the body's section numbers and {#sec-N} anchors to agree with the heading structure")
 	cmd.MarkFlagRequired("kind")
 	cmd.MarkFlagRequired("slug")
 	cmd.MarkFlagRequired("file")
@@ -615,7 +647,7 @@ func newDocSectionsCmd() *cobra.Command {
 // lose the first one's work silently.
 func newDocEditCmd() *cobra.Command {
 	var file, note string
-	var substantive bool
+	var substantive, updateAnchors bool
 	var ifVersion int
 	cmd := &cobra.Command{
 		Use:               "edit <ref>",
@@ -640,6 +672,20 @@ func newDocEditCmd() *cobra.Command {
 			detail, _, err := c.GetDoc(cmd.Context(), id)
 			if err != nil {
 				return err
+			}
+			// 025 §6 freezes a published anchor, so renumbering one is the
+			// one thing this flag must not do. Refusing is the whole of the
+			// support for an accepted document: there is no safe subset to
+			// renumber, and a silent rewrite would break every inbound
+			// reference. Insert with a letter suffix (§2.1a) instead.
+			if updateAnchors {
+				if detail.Status == "accepted" || detail.Status == "superseded" {
+					return fmt.Errorf("--update-section-anchors: %s is %s, and 025 §6 freezes a published anchor; insert a lettered section (2.1a) instead",
+						args[0], detail.Status)
+				}
+				if body, err = renumberAnchors(body); err != nil {
+					return err
+				}
 			}
 			// A draft or a plan carries no accepted text to amend, so
 			// --substantive and --note have nothing to describe here and are
@@ -681,6 +727,8 @@ func newDocEditCmd() *cobra.Command {
 		"amending an accepted spec or ADR: what changed and why, required unless --substantive")
 	cmd.Flags().IntVar(&ifVersion, "if-version", 0,
 		"only write if the document is still at this version, the one `doc show` reported (compare-and-swap)")
+	cmd.Flags().BoolVar(&updateAnchors, "update-section-anchors", false,
+		"rewrite the body's section numbers and {#sec-N} anchors to agree with the heading structure (refused on an accepted document)")
 	cmd.MarkFlagRequired("file")
 	return cmd
 }
