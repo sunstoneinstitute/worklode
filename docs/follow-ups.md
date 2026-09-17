@@ -164,18 +164,6 @@ outright once it is fixed over annotating it as resolved.
   role a person holds in one project cannot be expressed at all. The failure
   direction is safe (unknown permission → deny, open deployment → never admin),
   which is what makes it a scaffold rather than a hazard.
-- `[gated]` **Deliverables landed without the rest of spec 029**: the cockpit can now
-  declare a deliverable (§3.1's name/description/URL) and read the list back,
-  but four pieces of §2/§3 are deliberately absent. Milestones do not exist,
-  so a deliverable hangs off its project rather than a milestone — the
-  nullable `milestone_id` is a column the milestone table will add. §3.2's
-  **poll prober** does not exist: a push emitter can now report state (the
-  signed data-catalog ingest files evidence against the declared address), but
-  an address nothing pushes about is never checked, so "is the project
-  published" is answered only for the deliverables an emitter covers.
-  Identity **by label** (§3.1's `worklode.deliverable=COW/datasets`)
-  is not modelled — only by address. And no CLI verb exists: `lode deliverable
-  list/add` would mirror `POST|GET /api/v1/projects/{id}/deliverables`.
 - `[P3]` **k8s deployment manifests for the watcher**; RBAC for the `worklode-watch` image
   in-cluster. The server's own manifests landed in `deploy/base/`.
 - `[P4]` **Watcher test timing**: `TestBelowRestartThresholdNotReported` uses a 5s
