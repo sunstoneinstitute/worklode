@@ -117,36 +117,13 @@ func TestCatalogEvidenceRoundTrip(t *testing.T) {
 	}
 }
 
-// createDeliverable declares one deliverable over the JSON API and returns its
-// id.
+// createDeliverable declares one deliverable by artifact address and returns
+// its id — this test's shape of deliverable_state_test.go's
+// declareDeliverable.
 func createDeliverable(t *testing.T, baseURL, name, artifact string) string {
 	t.Helper()
-	body := mustJSON(t, map[string]string{"name": name, "artifact": artifact})
-	req, err := http.NewRequest(http.MethodPost,
-		baseURL+"/api/v1/projects/cow/deliverables", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build deliverable request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+bootstrapToken)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("create deliverable %s: %v", name, err)
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("create deliverable %s: status = %d, body %s", name, resp.StatusCode, respBody)
-	}
-	var d map[string]any
-	if err := json.Unmarshal(respBody, &d); err != nil {
-		t.Fatalf("decode deliverable %s: %v (body %s)", name, err, respBody)
-	}
-	id, _ := d["id"].(string)
-	if id == "" {
-		t.Fatalf("create deliverable %s returned no id: %s", name, respBody)
-	}
-	return id
+	d := declareDeliverable(t, baseURL, "cow", model.CreateDeliverableInput{Name: name, Artifact: artifact})
+	return id(t, d)
 }
 
 // deliverableByID lists a project's deliverables and returns the one with this
