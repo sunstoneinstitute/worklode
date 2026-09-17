@@ -523,12 +523,17 @@ func joinContext(sections ...string) string {
 	return strings.Join(kept, "\n\n")
 }
 
-// refLinkHint asks the agent to print Worklode ids as OSC 8 hyperlinks to the
-// instance, so a reader can click a task or document ref straight through to
-// the cockpit. Empty — so nothing is emitted — unless this terminal is one
-// known to render OSC 8, a server URL is configured, and the checkout has not
-// turned ref_links off. The escape is spelled out rather than shown, because
-// the agent has to reproduce it byte for byte in its own output.
+// refLinkHint asks the agent to print Worklode ids as links to the instance,
+// so a reader can click a task or document ref straight through to the
+// cockpit. Empty — so nothing is emitted — unless this terminal is one known
+// to render OSC 8, a server URL is configured, and the checkout has not turned
+// ref_links off.
+//
+// It asks for a markdown link, not the escape sequence. An agent's reply is
+// text handed to the harness's renderer, not a byte stream it controls, so
+// asking it for `\x1b]8;;…` got the four characters and a terminal full of
+// raw escapes (WL-854). The renderer is the only party that can emit the
+// bytes, and it does so from a markdown link.
 func refLinkHint(dir string) string {
 	if !cli.TerminalHyperlinks() || !cli.RefLinksFrom(dir) {
 		return ""
@@ -539,8 +544,8 @@ func refLinkHint(dir string) string {
 	}
 	return fmt.Sprintf("This terminal renders OSC 8 hyperlinks. In what you print to the "+
 		"terminal — never in files, commit messages or code — write every Worklode task "+
-		"id (WL-7) and document ref (WL-SPEC-4) as a hyperlink to %s/<id>, using the form "+
-		`\x1b]8;;URL\x07TEXT\x1b]8;;\x07`+", e.g. "+`\x1b]8;;%s/WL-7\x07WL-7\x1b]8;;\x07`+".", server, server)
+		"id (WL-7) and document ref (WL-SPEC-4) as a markdown link to %s/<id>, "+
+		"e.g. [WL-7](%s/WL-7).", server, server)
 }
 
 // emitSessionContext writes the brief to stdout in the shape the harness
