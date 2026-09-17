@@ -1,0 +1,14 @@
+# pnpm settings for the editor island, and the file that makes web/editor/ its
+# own pnpm root — it shares no dependency tree with plugins/obsidian or the Go
+# build above it.
+#
+# esbuild's build script resolves the platform-specific bundler binary, so it
+# has to be allowed here.
+allowBuilds:
+  esbuild: true
+
+# BlockNote's packages import each other's stylesheets by bare specifier
+# (@blocknote/mantine's CSS does `@import "@blocknote/react/style.css"`), which
+# pnpm's default isolated layout does not resolve from the importing package.
+# Hoisting the tree is the cheap fix for a spike.
+nodeLinker: hoisted
