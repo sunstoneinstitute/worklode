@@ -35,8 +35,14 @@ func TestSessionStartRefLinkHint(t *testing.T) {
 	if !strings.Contains(ctx, server+"/<id>") {
 		t.Fatalf("additionalContext missing the %s/<id> instruction: %q", server, ctx)
 	}
-	if !strings.Contains(ctx, `\x1b]8;;`) {
-		t.Fatalf("additionalContext missing the OSC 8 escape form: %q", ctx)
+	// A markdown link, which the harness's renderer turns into the escape.
+	// Asking the agent for the escape bytes themselves got them printed raw
+	// (WL-854), so the escape must not appear in the hint at all.
+	if !strings.Contains(ctx, "[WL-7]("+server+"/WL-7)") {
+		t.Fatalf("additionalContext missing the markdown link form: %q", ctx)
+	}
+	if strings.Contains(ctx, `\x1b]8;;`) || strings.Contains(ctx, "\x1b]8;;") {
+		t.Fatalf("additionalContext asks the agent to emit escape bytes: %q", ctx)
 	}
 	if !strings.Contains(ctx, taskID) {
 		t.Fatalf("hint displaced the brief; no task id in %q", ctx)
