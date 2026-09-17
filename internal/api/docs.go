@@ -682,7 +682,7 @@ func (s *server) updateDocBody(w http.ResponseWriter, r *http.Request) {
 	var updated *model.Doc
 	err := s.recordDocEvent(w, r, "update", "doc.updated", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			d, err := store.UpdateDocBody(tx, now, id, req.Body, eventID)
+			d, err := store.UpdateDocBody(tx, now, id, req.Body, req.IfVersion, eventID)
 			if err != nil {
 				return err
 			}
@@ -726,6 +726,7 @@ func (s *server) patchDoc(w http.ResponseWriter, r *http.Request) {
 			d, p, err := store.PatchDoc(tx, now, store.DocPatchInput{
 				ID: id, Body: req.Body, Substantive: req.Substantive, Note: req.Note,
 				ActorID: actorID, TaskID: req.Task, SessionID: req.Session,
+				IfVersion: req.IfVersion,
 			}, eventID)
 			if err != nil {
 				return err
@@ -1018,6 +1019,15 @@ func (s *server) updateDocRevision(w http.ResponseWriter, r *http.Request) {
 	var req model.UpdateDocBodyInput
 	if err := readJSON(w, r, &req); err != nil {
 		writeBodyErr(w, err)
+		return
+	}
+	// The candidate is the subject here, not the document, so the document's
+	// version is not what a compare-and-swap would be about. Refused rather
+	// than ignored: a caller that asked for the check must not be told the
+	// write was guarded when it was not.
+	if req.IfVersion != 0 {
+		writeErr(w, http.StatusUnprocessableEntity,
+			"if_version names a document version, and a revision edit writes the open candidate: drop it")
 		return
 	}
 	now := s.st.Now()

@@ -277,7 +277,10 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 // An accepted spec or ADR is ErrInvalidInput: those are revised, never edited
 // in place, so their published anchors pass the 025 §6 diff gate. Plans stay
 // freely mutable at any status (025 §9).
-func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int64) (*model.Doc, error) {
+//
+// ifVersion is the caller's compare-and-swap; see checkDocVersion. Zero skips
+// the check, which is what every caller did before the option existed.
+func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, ifVersion int, eventID int64) (*model.Doc, error) {
 	var kind, status, project string
 	var version int
 	err := tx.QueryRow(
@@ -288,6 +291,9 @@ func UpdateDocBody(tx *sql.Tx, now time.Time, id int64, body string, eventID int
 	}
 	if err != nil {
 		return nil, fmt.Errorf("load doc %d: %w", id, err)
+	}
+	if err := checkDocVersion(id, ifVersion, version); err != nil {
+		return nil, err
 	}
 	if kind != "plan" && status != "draft" {
 		return nil, fmt.Errorf("doc %d is %s: revise it instead of editing the body (025 §7): %w",
@@ -468,6 +474,24 @@ func lockDoc(tx *sql.Tx, id int64) (lockedDoc, error) {
 	}
 	d.owner = owner.String
 	return d, nil
+}
+
+// checkDocVersion is the compare-and-swap behind `lode doc edit --if-version`:
+// expected is the version the caller read and means to overwrite, stored is
+// what the locked row actually holds. They disagree when another writer got
+// there first, and the write is refused rather than applied — the race this
+// closes is two agents reading one document and both writing their own body,
+// where the second silently wins.
+//
+// Zero expected means the caller did not ask. The check is not a lock: it is
+// only sound because both callers hold the row's FOR UPDATE lock when they
+// run it, so no writer can land between the check and the write.
+func checkDocVersion(id int64, expected, stored int) error {
+	if expected == 0 || expected == stored {
+		return nil
+	}
+	return fmt.Errorf("doc %d is at version %d, not the expected %d: %w",
+		id, stored, expected, ErrVersionMismatch)
 }
 
 // checkDocOwner enforces 025 §7's accept gate: acceptance is the owner's
