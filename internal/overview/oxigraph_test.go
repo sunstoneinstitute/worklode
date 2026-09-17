@@ -25,6 +25,7 @@ const (
 		"@prefix wlc:  <https://worklode.io/ns/concept/> .\n" +
 		"@prefix dct:  <http://purl.org/dc/terms/> .\n" +
 		"@prefix dcat: <http://www.w3.org/ns/dcat#> .\n" +
+		"@prefix prov: <http://www.w3.org/ns/prov#> .\n" +
 		"@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n" +
 		"@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .\n"
 )
@@ -341,4 +342,103 @@ func sparqlProxy(t *testing.T, oxigraphBase string) *httptest.Server {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// plantDelivery writes the delivered-coverage fixture beside plantCoverage's
+// claim: the deliverables comp delivers, in a declared graph, and the runtime
+// nodes witnessing them, in an observed one. Both arms of 006 §9's witness
+// table are planted, each with a deployed case and a not-deployed one.
+//
+// Deliverable and Effect nodes have no projector yet (006 §9, WL-PLAN-118),
+// so they are planted by hand here exactly as plantCoverage plants claims.
+func plantDelivery(t *testing.T, slug, compIRI string) {
+	t.Helper()
+	base := graphtest.Endpoint(t)
+	shipped := iri.Artifact("oci", "wl811/"+slug, "1.0.0")
+	unshipped := iri.Artifact("oci", "wl811/"+slug+"-side", "1.0.0")
+	depDev := iri.Deployment("dev", "kustomization", slug)
+	depProd := iri.Deployment("prod", "kustomization", slug)
+	depSandbox := iri.Deployment("sandbox", "kustomization", slug+"-side")
+	effectStage := iri.Deployment("stage", "kustomization", slug+"-effect")
+	effectLab := iri.Deployment("lab", "kustomization", slug+"-effect")
+
+	graphtest.PutGraph(t, base, iri.DeclaredGraph(slug+"-delivery"), []byte(fmt.Sprintf(ttlPrefixes+`
+<%s> a wl:Deliverable ; wl:deliveredBy <%s> ; dct:relation <%s> .
+<%s> a wl:Deliverable ; wl:deliveredBy <%s> ; dct:relation <%s> .
+<%s> a wl:Effect ; wl:deliveredBy <%s> ; dct:relation <%s> .
+<%s> a wl:Effect ; wl:deliveredBy <%s> ; dct:relation <%s> .
+`,
+		iri.Deliverable(slug+"-shipped"), compIRI, shipped,
+		iri.Deliverable(slug+"-side"), compIRI, unshipped,
+		iri.Deliverable(slug+"-effect"), compIRI, effectStage,
+		iri.Deliverable(slug+"-effect-lab"), compIRI, effectLab)))
+
+	graphtest.PutGraph(t, base, iri.ObservedGraph("deploy/"+slug), []byte(fmt.Sprintf(ttlPrefixes+`
+<%s> a wl:Artifact .
+<%s> a wl:Artifact .
+<%s> a wl:Deployment ; prov:used <%s> ; wl:toEnvironment <%s> ; wl:deploymentStatus wlc:deployed .
+<%s> a wl:Deployment ; prov:used <%s> ; wl:toEnvironment <%s> ; wl:deploymentStatus wlc:deployed .
+<%s> a wl:Deployment ; prov:used <%s> ; wl:toEnvironment <%s> ; wl:deploymentStatus wlc:failed .
+<%s> a wl:Deployment ; wl:toEnvironment <%s> ; wl:deploymentStatus wlc:deployed .
+<%s> a wl:Deployment ; wl:toEnvironment <%s> ; wl:deploymentStatus wlc:failed .
+`,
+		shipped, unshipped,
+		depDev, shipped, iri.Environment("dev"),
+		depProd, shipped, iri.Environment("prod"),
+		depSandbox, unshipped, iri.Environment("sandbox"),
+		effectStage, iri.Environment("stage"),
+		effectLab, iri.Environment("lab"))))
+}
+
+// TestDeliveredCoverage is §11.5 row 5: a claim is delivered where the
+// component's deliverable is deployed, and nowhere else. The fixture covers
+// both arms of 006 §9's witness table (an Artifact a Deployment prov:used,
+// and an Effect whose Deployment is the target itself), each with a deployed
+// and a not-deployed case, and the Artifact arm in two environments.
+func TestDeliveredCoverage(t *testing.T) {
+	slug := uniqueSlug("delivered")
+	_, comp := plantCoverage(t, slug, []int{1},
+		[]fixtureSection{{"sec-1", "accepted", 1}},
+		[]fixtureClaim{{"sec-1", 1}})
+	plantDelivery(t, slug, comp)
+
+	rows, err := overview.DeliveredCoverage(t.Context(), graphClient(t))
+	if err != nil {
+		t.Fatalf("DeliveredCoverage: %v", err)
+	}
+	sec := iri.Section(slug, "sec-1")
+	var got []string
+	for _, r := range rows {
+		if r.Component != comp {
+			continue
+		}
+		if r.Section != sec {
+			t.Errorf("row %+v names a section this component does not claim", r)
+		}
+		got = append(got, r.Environment)
+	}
+	want := []string{iri.Environment("dev"), iri.Environment("prod"), iri.Environment("stage")}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("delivered environments = %v, want %v (sandbox and lab are not deployed)", got, want)
+	}
+}
+
+// TestDeliveredCoverageNeedsTheClaim: the query is a join, so a deliverable
+// deployed by a component that claims nothing contributes no row. Without the
+// wl:implements leg it would report delivery with no intent behind it, which
+// is the thing §11.5 row 5 is for measuring.
+func TestDeliveredCoverageNeedsTheClaim(t *testing.T) {
+	slug := uniqueSlug("unclaimed")
+	comp := iri.Component("github.com/wl811/" + slug)
+	plantDelivery(t, slug, comp)
+
+	rows, err := overview.DeliveredCoverage(t.Context(), graphClient(t))
+	if err != nil {
+		t.Fatalf("DeliveredCoverage: %v", err)
+	}
+	for _, r := range rows {
+		if r.Component == comp {
+			t.Errorf("row %+v: the component claims no section, so it has no delivered coverage", r)
+		}
+	}
 }
