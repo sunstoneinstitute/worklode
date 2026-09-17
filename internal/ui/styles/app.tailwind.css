@@ -892,6 +892,10 @@ nav.local a .cnt{margin-left:auto;font-size:0.8125rem;font-weight:600;color:var(
 .graph-legend svg{ width:34px; height:12px; flex:none; }
 .graph-legend .h{ font-weight:600; margin-top:.4rem; }
 .graph-sel .kv{ display:grid; grid-template-columns:auto 1fr; gap:.15rem .6rem; margin:.4rem 0; }
+.graph-sel .id a{ color:var(--link); font-variant-numeric:tabular-nums; }
+.graph-sel .title{ font-weight:600; margin:.1rem 0 .3rem; }
+.graph-sel .pill{ display:inline-block; padding:0 .45rem; border:1px solid var(--line-2); border-radius:999px; font-size:.75rem; }
+.graph-side .count{ color:var(--ink-3); font-variant-numeric:tabular-nums; font-weight:400; }
 .graph-sel dt{ color:var(--ink-3); } .graph-sel dd{ margin:0; min-width:0; overflow-wrap:anywhere; }
 @media (max-width:1080px){ .graph{ grid-template-columns:1fr; grid-template-rows:auto minmax(360px,60vh) auto; } }
 

@@ -3019,6 +3019,26 @@ nav.local a .cnt {
   gap: .15rem .6rem;
   margin: .4rem 0;
 }
+.graph-sel .id a {
+  color: var(--link);
+  font-variant-numeric: tabular-nums;
+}
+.graph-sel .title {
+  font-weight: 600;
+  margin: .1rem 0 .3rem;
+}
+.graph-sel .pill {
+  display: inline-block;
+  padding: 0 .45rem;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  font-size: .75rem;
+}
+.graph-side .count {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
 .graph-sel dt {
   color: var(--ink-3);
 }
