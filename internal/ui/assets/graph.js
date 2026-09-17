@@ -102,7 +102,7 @@
     (data.docs || []).forEach(function (d) {
       var n = {
         id: d.ref || d.kind.toUpperCase() + "-" + d.id, kind: d.kind, title: d.title, state: d.status,
-        updated: (d.updated_at || "").slice(0, 10), url: "/docs/" + d.id, docID: d.id,
+        updated: (d.updated_at || "").slice(0, 10), url: "/docs/" + d.ref, docID: d.id,
         st: bucket(d.kind, d.status), deg: 0
       };
       docByID.set(d.id, n);
