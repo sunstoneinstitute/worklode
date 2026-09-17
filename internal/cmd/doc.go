@@ -607,9 +607,16 @@ func newDocSectionsCmd() *cobra.Command {
 // spec or ADR goes through 025 §8.4's in-place amendment, which the server
 // gates mechanically (§8.3). Nothing here re-checks those gates — a refusal
 // is the server's message, verbatim — so the CLI cannot drift from the rule.
+//
+// --if-version is the same compare-and-swap on both writes: the version the
+// caller read, which the server compares against the locked row before it
+// overwrites anything. Without it the edit overwrites unconditionally, which
+// is what every caller before it did — two writers racing on one body then
+// lose the first one's work silently.
 func newDocEditCmd() *cobra.Command {
 	var file, note string
 	var substantive bool
+	var ifVersion int
 	cmd := &cobra.Command{
 		Use:               "edit <ref>",
 		ValidArgsFunction: docRefAt(0),
@@ -639,7 +646,8 @@ func newDocEditCmd() *cobra.Command {
 			// ignored: one `lode doc edit --note ...` in a script stays
 			// correct on both sides of the document's acceptance.
 			if detail.Kind == "plan" || detail.Status != "accepted" {
-				d, raw, err := c.UpdateDocBody(cmd.Context(), id, body)
+				d, raw, err := c.UpdateDocBody(cmd.Context(), id,
+					model.UpdateDocBodyInput{Body: body, IfVersion: ifVersion})
 				if err != nil {
 					return err
 				}
@@ -653,6 +661,7 @@ func newDocEditCmd() *cobra.Command {
 			res, raw, err := c.PatchDoc(cmd.Context(), id, model.PatchDocInput{
 				Body: body, Substantive: substantive, Note: note,
 				Task: currentTaskID(), Session: currentSessionID(),
+				IfVersion: ifVersion,
 			})
 			if err != nil {
 				return err
@@ -670,6 +679,8 @@ func newDocEditCmd() *cobra.Command {
 		"amending an accepted spec or ADR: the change is substantive, so its reviewers are asked again (025 §8.4)")
 	cmd.Flags().StringVar(&note, "note", "",
 		"amending an accepted spec or ADR: what changed and why, required unless --substantive")
+	cmd.Flags().IntVar(&ifVersion, "if-version", 0,
+		"only write if the document is still at this version, the one `doc show` reported (compare-and-swap)")
 	cmd.MarkFlagRequired("file")
 	return cmd
 }

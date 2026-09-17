@@ -185,7 +185,8 @@ Stating a status needs the admin-only doc.import permission.`,
 						})
 						continue
 					}
-					if _, _, err := c.UpdateDocBody(cmd.Context(), id, d.body); err != nil {
+					if _, _, err := c.UpdateDocBody(cmd.Context(), id,
+						model.UpdateDocBodyInput{Body: d.body}); err != nil {
 						return fmt.Errorf("update the drifted body of %s: %w", d.path, err)
 					}
 					updated++

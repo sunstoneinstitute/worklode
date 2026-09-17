@@ -449,3 +449,49 @@ func TestClearPatchedOnRevisionLanding(t *testing.T) {
 		t.Errorf("patched anchors after the revision landed = %v, want none", got)
 	}
 }
+
+// TestPatchDocIfVersion: the compare-and-swap guards the amendment path too,
+// and it runs before the §8.3 gates — a caller working from a version that has
+// moved is told so, not told which rule its stale text broke.
+func TestPatchDocIfVersion(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	spec := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "spec", Number: 300, Slug: "300-cas",
+		Body: patchSpecBody, CreatedBy: "stig", Status: "accepted",
+	})
+
+	doc, _, err := patchDoc(t, s, DocPatchInput{
+		ID: spec.ID, Body: reword(patchSpecBody), ActorID: "stig",
+		Note: "reworded the scope", IfVersion: spec.Version,
+	})
+	if err != nil {
+		t.Fatalf("PatchDoc at the read version: %v", err)
+	}
+	if doc.Version != spec.Version+1 {
+		t.Fatalf("version = %d, want %d", doc.Version, spec.Version+1)
+	}
+
+	_, _, err = patchDoc(t, s, DocPatchInput{
+		ID: spec.ID, Body: rewordSec2(patchSpecBody), ActorID: "stig",
+		Note: "reworded the model", IfVersion: spec.Version,
+	})
+	if !errors.Is(err, ErrVersionMismatch) {
+		t.Fatalf("stale patch err = %v, want ErrVersionMismatch", err)
+	}
+	after, err := s.GetDoc(t.Context(), spec.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Version != spec.Version+1 || !strings.Contains(after.Body, "Scope body, restated.") {
+		t.Errorf("refused patch moved the document: version %d", after.Version)
+	}
+
+	// Rebased on the version that landed, the same amendment goes through.
+	if _, _, err := patchDoc(t, s, DocPatchInput{
+		ID: spec.ID, Body: rewordSec2(after.Body), ActorID: "stig",
+		Note: "reworded the model", IfVersion: after.Version,
+	}); err != nil {
+		t.Fatalf("PatchDoc after re-reading the version: %v", err)
+	}
+}

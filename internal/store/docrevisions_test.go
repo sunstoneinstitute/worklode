@@ -730,3 +730,53 @@ func TestDocAcceptRevisionSupersedesReplacedDoc(t *testing.T) {
 		t.Errorf("replaced doc status = %q, want superseded", got.Status)
 	}
 }
+
+// TestUpdateDocBodyIfVersion: the compare-and-swap on a body edit. A plan's
+// edit bumps its version, so the second writer holding the version it read is
+// exactly the race the option closes — it is refused rather than allowed to
+// overwrite the first writer's body.
+func TestUpdateDocBodyIfVersion(t *testing.T) {
+	t.Parallel()
+	s := openDocStore(t)
+	doc := mustCreateDoc(t, s, DocInput{
+		Project: "p1", Kind: "plan", Slug: "cas-plan", Body: planMintBody, CreatedBy: "stig",
+	})
+	// Both writers read version 1. The first lands.
+	first := strings.Replace(planMintBody, "Do the first thing.", "Writer A was here.", 1)
+	updated, err := updateDocBody(t, s, doc.ID, first, doc.Version)
+	if err != nil {
+		t.Fatalf("UpdateDocBody at the read version: %v", err)
+	}
+	if updated.Version != doc.Version+1 {
+		t.Fatalf("version = %d, want %d", updated.Version, doc.Version+1)
+	}
+
+	// The second writer still holds version 1, which has moved.
+	second := strings.Replace(planMintBody, "Do the first thing.", "Writer B was here.", 1)
+	_, err = updateDocBody(t, s, doc.ID, second, doc.Version)
+	if !errors.Is(err, ErrVersionMismatch) {
+		t.Fatalf("stale write err = %v, want ErrVersionMismatch", err)
+	}
+	// The refusal says both versions, so the caller can re-read and retry.
+	if msg := err.Error(); !strings.Contains(msg, "version 2") || !strings.Contains(msg, "expected 1") {
+		t.Errorf("message = %q, want it to name the stored and the expected version", msg)
+	}
+	got, err := s.GetDoc(t.Context(), doc.ID)
+	if err != nil {
+		t.Fatalf("GetDoc: %v", err)
+	}
+	if !strings.Contains(got.Body, "Writer A was here.") {
+		t.Errorf("body was overwritten by the refused write")
+	}
+
+	// Re-read and retry: the same write at the current version lands.
+	if _, err := updateDocBody(t, s, doc.ID, second, got.Version); err != nil {
+		t.Fatalf("UpdateDocBody after re-reading the version: %v", err)
+	}
+
+	// Omitted, the check does not run: the unconditional overwrite every
+	// caller had before the option existed.
+	if _, err := updateDocBody(t, s, doc.ID, planMintBody); err != nil {
+		t.Fatalf("UpdateDocBody with no expected version: %v", err)
+	}
+}
