@@ -5,12 +5,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // --- graph --------------------------------------------------------------
+
+// ProjectGraph calls GET /api/v1/projects/{id}/graph: the project's tasks,
+// the documents reachable from them, and every edge between those.
+func (c *Client) ProjectGraph(ctx context.Context, projectID string) (model.ProjectGraph, []byte, error) {
+	return doJSON[model.ProjectGraph](ctx, c, http.MethodGet, "/api/v1/projects/"+url.PathEscape(projectID)+"/graph", nil, "project graph")
+}
 
 // ProjectionFailures calls GET /api/v1/graph/projection/failures: the
 // projects the knowledge-graph projector has quarantined, oldest failure
