@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -83,6 +84,38 @@ func TestAppendTaskActivity(t *testing.T) {
 			t.Fatalf("attrs.Success round-trip: got %v, want pointer to false", row.Attrs.Success)
 		}
 	})
+
+	t.Run("ids follow the batch order", func(t *testing.T) {
+		s, _ := openLeaseStore(t)
+		task := createTask(t, s, leaseTestNow, defaultTaskInput())
+
+		// One export arrives as one batch, and the task page reads it back
+		// by id. Without an explicit order on the insert, ids may be handed
+		// out in any order within the batch, which would show a tool result
+		// before the decision that produced it.
+		rows := make([]model.TaskActivity, 8)
+		for i := range rows {
+			rows[i] = model.TaskActivity{
+				Task: task.ID, Actor: "stig", Agent: "claude-code", Session: "sess-1",
+				At: leaseTestNow, Event: fmt.Sprintf("e%d", i),
+			}
+		}
+		if _, err := s.AppendTaskActivity(t.Context(), rows); err != nil {
+			t.Fatalf("append: %v", err)
+		}
+
+		got, err := s.TaskActivity(t.Context(), task.ID, 0, len(rows))
+		if err != nil {
+			t.Fatalf("read back: %v", err)
+		}
+		// Newest first, so reading the page backwards is the input order.
+		slices.Reverse(got)
+		for i, a := range got {
+			if a.Event != rows[i].Event {
+				t.Fatalf("row %d in id order is %q, want %q (ids: %v)", i, a.Event, rows[i].Event, events(got))
+			}
+		}
+	})
 }
 
 func TestTaskActivityCursor(t *testing.T) {
@@ -90,9 +123,8 @@ func TestTaskActivityCursor(t *testing.T) {
 	s, _ := openLeaseStore(t)
 	task := createTask(t, s, leaseTestNow, defaultTaskInput())
 
-	// Inserted one at a time (rather than as one batch) so ids are assigned
-	// in insertion order: a single multi-row INSERT does not guarantee its
-	// identity values follow the input array's order.
+	// Inserted one at a time so each row gets its own timestamp as well as
+	// its own id; the batch path's own ordering is pinned above.
 	for i := 0; i < 5; i++ {
 		insertActivity(t, s, task.ID, leaseTestNow.Add(time.Duration(i)*time.Second), fmt.Sprintf("e%d", i), model.ActivityAttrs{})
 	}

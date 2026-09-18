@@ -14,6 +14,10 @@ import (
 // task id does not exist (a stale stamp on an already-deleted or unknown
 // task must not fail the whole batch, spec 071 §2). Returns the number of
 // rows actually inserted. An empty slice issues no query.
+//
+// WITH ORDINALITY plus ORDER BY is what makes the ids follow the batch
+// order. Readers page this table by id, so without it one export could show
+// a tool result ahead of the decision that produced it.
 func (s *Store) AppendTaskActivity(ctx context.Context, rows []model.TaskActivity) (int, error) {
 	if len(rows) == 0 {
 		return 0, nil
@@ -42,8 +46,9 @@ func (s *Store) AppendTaskActivity(ctx context.Context, rows []model.TaskActivit
 		`INSERT INTO task_activity (task_id, actor_id, agent, session_id, at, event, attrs)
 		 SELECT r.task_id, r.actor_id, r.agent, r.session_id, r.at, r.event, r.attrs
 		   FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::timestamptz[], $6::text[], $7::jsonb[])
-		        AS r(task_id, actor_id, agent, session_id, at, event, attrs)
-		  WHERE EXISTS (SELECT 1 FROM tasks WHERE id = r.task_id)`,
+		        WITH ORDINALITY AS r(task_id, actor_id, agent, session_id, at, event, attrs, ord)
+		  WHERE EXISTS (SELECT 1 FROM tasks WHERE id = r.task_id)
+		  ORDER BY r.ord`,
 		taskIDs, actorIDs, agents, sessionIDs, ats, events, attrs,
 	)
 	if err != nil {
