@@ -261,20 +261,23 @@ func EventNames() []string {
 // replaying the original payload on its stdin and propagating its exit code.
 // Without --next it always returns 0.
 //
-// otel-headers is answered here, before the payload is even parsed: it is a
-// credential helper Claude Code runs for its own purposes, not a lifecycle
-// event with a worktree to guard against.
+// otel-headers is answered before any of that, without reading opts.Stdin at
+// all: it is a credential helper Claude Code invokes for its own purposes,
+// carrying no payload, and --next composition is meaningless for it. Reading
+// stdin anyway would risk blocking forever on an inherited or unclosed pipe —
+// every OTel export batch leaving a hung lode-hook process behind.
 func Run(ctx context.Context, opts Options) int {
-	raw, _ := io.ReadAll(opts.Stdin) // tolerate read errors / empty stdin
-
 	if opts.Event == "otel-headers" {
 		handleOTelHeaders(opts)
-	} else {
-		payload := normalizePayload(opts.Harness, raw)
-		dir := resolveDir(payload)
-		l := layoutFor(opts, dir)
-		dispatch(ctx, opts, payload, dir, l)
+		return 0
 	}
+
+	raw, _ := io.ReadAll(opts.Stdin) // tolerate read errors / empty stdin
+
+	payload := normalizePayload(opts.Harness, raw)
+	dir := resolveDir(payload)
+	l := layoutFor(opts, dir)
+	dispatch(ctx, opts, payload, dir, l)
 
 	if len(opts.Next) > 0 {
 		return runNext(opts, raw)
