@@ -19,7 +19,15 @@
   // the page was reached.
   var task = card.getAttribute("data-task");
   if (!task) return;
-  var stream = new EventSource("/tasks/" + encodeURIComponent(task) + "/activity/events");
+
+  // The rendered list is newest first, so its first row is the newest id the
+  // page already has. Following from there covers the gap between the render
+  // and the connect. An empty list sends no cursor: the server then starts at
+  // the newest stored row.
+  var url = "/tasks/" + encodeURIComponent(task) + "/activity/events";
+  var head = list.querySelector("li[data-id]");
+  if (head) url += "?after=" + encodeURIComponent(head.getAttribute("data-id"));
+  var stream = new EventSource(url);
 
   stream.addEventListener("activity", function (e) {
     list.insertAdjacentHTML("afterbegin", e.data);

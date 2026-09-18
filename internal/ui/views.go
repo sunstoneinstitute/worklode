@@ -351,8 +351,8 @@ type TaskView struct {
 // the summary from the allowlisted attributes at the render seam, the same
 // way TimelineRow.Summary is built — internal/ui reads no attribute itself.
 //
-// ID is the row's store id. It is the stream's cursor and the page's dedup
-// key, so it is rendered into the markup as data-id.
+// ID is the row's store id, rendered into the markup as data-id: the page
+// script reads the newest one to tell the stream where to resume.
 type ActivityRow struct {
 	ID      int64
 	At      time.Time

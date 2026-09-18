@@ -45,8 +45,9 @@ func (m *Metrics) Ingest(outcome string) {
 	m.ingest.WithLabelValues(outcome).Inc()
 }
 
-// Records counts n decoded log records. outcome is "stored" or
-// "unattributed" (a record with no task id).
+// Records counts n decoded log records. outcome is "stored",
+// "unattributed" (a record with no task id), or "unknown_task" (a record
+// naming a task the backbone does not have).
 func (m *Metrics) Records(outcome string, n int) {
 	if m == nil || n <= 0 {
 		return

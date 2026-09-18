@@ -83,11 +83,17 @@ func (v anyValue) asBool() (bool, bool) {
 }
 
 // numOrString decodes an OTLP integer field that the OTLP/JSON spec encodes
-// as a string of digits but some exporters send as a bare JSON number.
+// as a string of digits but some exporters send as a bare JSON number. null
+// and "" decode to zero: an exporter that omits a value must not fail the
+// whole batch.
 type numOrString int64
 
 func (n *numOrString) UnmarshalJSON(b []byte) error {
 	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*n = 0
+		return nil
+	}
 	v, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return err
@@ -103,6 +109,10 @@ func DecodeLogs(body []byte) ([]Record, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return nil, err
 	}
+
+	// A record with no timeUnixNano is stamped on arrival: an undated row
+	// would sort as 1970 on the task page.
+	now := time.Now()
 
 	var records []Record
 	for _, rl := range req.ResourceLogs {
@@ -123,13 +133,17 @@ func DecodeLogs(body []byte) ([]Record, error) {
 					event = resEvent
 				}
 
+				at := now
+				if lr.TimeUnixNano != 0 {
+					at = time.Unix(0, int64(lr.TimeUnixNano))
+				}
 				records = append(records, Record{
 					Task:    task,
 					Project: project,
 					Session: session,
 					Service: service,
 					Event:   event,
-					At:      time.Unix(0, int64(lr.TimeUnixNano)),
+					At:      at,
 					Attrs:   decodeAttrs(lr.Attributes),
 				})
 			}

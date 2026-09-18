@@ -1184,3 +1184,27 @@ func TestInstallWithStatusLineIsByteIdenticalAcrossRepeatInstalls(t *testing.T) 
 		t.Fatalf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
 	}
 }
+
+// Sec-5: Worklode stores event metadata only, so the install never turns on
+// Claude Code's content flags -- the OTEL_LOG_ family (OTEL_LOG_USER_PROMPTS,
+// OTEL_LOG_ASSISTANT_RESPONSES, OTEL_LOG_TOOL_DETAILS, OTEL_LOG_TOOL_CONTENT,
+// OTEL_LOG_RAW_API_BODIES), each of which would put prompt, response or tool
+// text on the wire. OTEL_LOGS_EXPORTER is a different key and is written.
+func TestInstallHooksWritesNoOTelContentFlags(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("LODE_SERVER", "https://lode.example.com")
+
+	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	settings := readSettings(t, filepath.Join(root, ".claude", "settings.local.json"))
+	env, _ := settings["env"].(map[string]any)
+	for k := range env {
+		if strings.HasPrefix(k, "OTEL_LOG_") {
+			t.Errorf("install wrote env[%s]; the OTEL_LOG_ content flags must never be set", k)
+		}
+	}
+	if got := env["OTEL_LOGS_EXPORTER"]; got != "otlp" {
+		t.Errorf("OTEL_LOGS_EXPORTER = %v, want otlp", got)
+	}
+}

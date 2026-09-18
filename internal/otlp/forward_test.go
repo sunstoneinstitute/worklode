@@ -151,3 +151,51 @@ func waitForCounter(t *testing.T, c prometheus.Counter, want float64) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+func TestForwarderEnqueue_ByteCapDrops(t *testing.T) {
+	m := NewMetrics(prometheus.NewRegistry())
+	f := NewForwarder("http://upstream.invalid", "tok", m)
+	// Nothing drains the queue: Run is never started.
+
+	chunk := make([]byte, 4<<20)
+	for i := 0; i < maxQueuedBytes/len(chunk); i++ {
+		if !f.Enqueue("application/json", chunk) {
+			t.Fatalf("Enqueue %d: want true, the byte cap is not reached yet", i)
+		}
+	}
+	if f.Enqueue("application/json", chunk) {
+		t.Fatal("Enqueue past the byte cap: want false")
+	}
+	if got := f.queuedBytes.Load(); got != int64(maxQueuedBytes) {
+		t.Fatalf("queued bytes = %d, want %d", got, maxQueuedBytes)
+	}
+
+	waitForCounter(t, m.queueDropped, 1)
+}
+
+func TestForwarderRun_DrainFreesQueuedBytes(t *testing.T) {
+	srv, received := newTestServer(t, http.StatusOK)
+	m := NewMetrics(prometheus.NewRegistry())
+	f := NewForwarder(srv.URL, "tok", m)
+
+	body := make([]byte, 1<<20)
+	if !f.Enqueue("application/json", body) {
+		t.Fatal("Enqueue returned false")
+	}
+	if got := f.queuedBytes.Load(); got != int64(len(body)) {
+		t.Fatalf("queued bytes = %d, want %d", got, len(body))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.Run(ctx)
+	<-received
+
+	deadline := time.Now().Add(2 * time.Second)
+	for f.queuedBytes.Load() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("queued bytes = %d after a drain, want 0", f.queuedBytes.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

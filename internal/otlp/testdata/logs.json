@@ -6,7 +6,8 @@
           {"key": "worklode.task.id", "value": {"stringValue": "WL-900"}},
           {"key": "worklode.project.id", "value": {"stringValue": "worklode"}},
           {"key": "service.name", "value": {"stringValue": "claude-code"}},
-          {"key": "session.id", "value": {"stringValue": "sess-res-1"}}
+          {"key": "session.id", "value": {"stringValue": "sess-res-1"}},
+          {"key": "user.email", "value": {"stringValue": "someone@example.com"}}
         ]
       },
       "scopeLogs": [
@@ -47,6 +48,14 @@
                 {"key": "command_name", "value": {"stringValue": "ls"}}
               ],
               "body": {"stringValue": "a body attribute that must never be stored"}
+            },
+            {
+              "timeUnixNano": null,
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "claude_code.tool_decision"}},
+                {"key": "decision_type", "value": {"stringValue": "accept"}},
+                {"key": "decision_source", "value": {"stringValue": "config"}}
+              ]
             }
           ]
         }

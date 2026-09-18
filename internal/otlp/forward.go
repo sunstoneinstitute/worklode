@@ -5,13 +5,19 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
-// queueSize bounds the in-memory forward queue (spec 071 §3): gateway
-// latency never delays the agent's export, and a full queue drops rather
-// than blocks.
-const queueSize = 256
+// queueSize and maxQueuedBytes bound the in-memory forward queue (spec 071
+// §3): gateway latency never delays the agent's export, and a full queue
+// drops rather than blocks. Both bounds matter — 256 batches of the 4 MiB
+// the ingest route accepts would be a gigabyte of retained payloads, so the
+// byte bound is what keeps the pod inside its memory limit.
+const (
+	queueSize      = 256
+	maxQueuedBytes = 32 << 20
+)
 
 type payload struct {
 	contentType string
@@ -36,6 +42,9 @@ type Forwarder struct {
 
 	metrics *Metrics
 	queue   chan payload
+	// queuedBytes is the size of the payloads currently in queue: added on
+	// Enqueue, subtracted when Run takes one off.
+	queuedBytes atomic.Int64
 }
 
 // NewForwarder builds a Forwarder posting to upstream with token. m may be
@@ -51,15 +60,23 @@ func NewForwarder(upstream, token string, m *Metrics) *Forwarder {
 }
 
 // Enqueue queues body for forwarding, non-blocking. It returns false — and
-// counts queue_dropped — when the queue is full or f is nil.
+// counts queue_dropped — when f is nil, the queue holds queueSize batches,
+// or body would take the queue past maxQueuedBytes.
 func (f *Forwarder) Enqueue(contentType string, body []byte) bool {
 	if f == nil {
+		return false
+	}
+	n := int64(len(body))
+	if f.queuedBytes.Add(n) > maxQueuedBytes {
+		f.queuedBytes.Add(-n)
+		f.metrics.QueueDropped()
 		return false
 	}
 	select {
 	case f.queue <- payload{contentType: contentType, body: body}:
 		return true
 	default:
+		f.queuedBytes.Add(-n)
 		f.metrics.QueueDropped()
 		return false
 	}
@@ -76,6 +93,7 @@ func (f *Forwarder) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case p := <-f.queue:
+			f.queuedBytes.Add(-int64(len(p.body)))
 			f.post(ctx, p)
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -481,5 +482,144 @@ func TestTaskActivityStreamUnknownTaskIs404(t *testing.T) {
 	rr := doReq(t, h, "GET", "/tasks/WL-NOPE/activity/events", "", nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404, body %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestIngestOTLPLogsCountsRowsForAnUnknownTask covers the rows the store's
+// WHERE EXISTS drops: a batch stamped with a task id worklode has never seen
+// still answers 200, stores nothing, and counts what it dropped, so a
+// mis-stamped exporter shows up in the metrics instead of vanishing.
+func TestIngestOTLPLogsCountsRowsForAnUnknownTask(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	seedActivityTask(t, st, h, token, "proj")
+
+	rr := postOTLP(t, h, token, "application/json", otlpLogsBody("WL-NOPE"))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200, body %s", rr.Code, rr.Body.String())
+	}
+	if got := strings.TrimSpace(rr.Body.String()); got != "{}" {
+		t.Errorf("body = %q, want {}", got)
+	}
+
+	rows, err := st.TaskActivity(t.Context(), "WL-NOPE", 0, 10)
+	if err != nil {
+		t.Fatalf("TaskActivity: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("stored %d rows for an unknown task, want 0", len(rows))
+	}
+
+	want := `worklode_otlp_records_total{outcome="unknown_task"} 2`
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil)
+	if !strings.Contains(metrics.Body.String(), want) {
+		t.Errorf("%q not found in /metrics:\n%s", want, metrics.Body.String())
+	}
+}
+
+// idleRecorder records an SSE stream a test drives from another goroutine.
+// Writes are locked so the test can read what has arrived so far, idle closes
+// on the handler's first heartbeat comment, and the stream is cancelled once
+// await appears.
+type idleRecorder struct {
+	*httptest.ResponseRecorder
+	mu     sync.Mutex
+	buf    strings.Builder
+	idle   chan struct{}
+	went   bool
+	cancel context.CancelFunc
+	await  string
+	done   bool
+}
+
+func (w *idleRecorder) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	w.buf.Write(p)
+	body := w.buf.String()
+	if !w.went && strings.Contains(body, ":\n\n") {
+		w.went = true
+		close(w.idle)
+	}
+	fire := !w.done && strings.Contains(body, w.await)
+	w.done = w.done || fire
+	w.mu.Unlock()
+	if fire {
+		w.cancel()
+	}
+	return w.ResponseRecorder.Write(p)
+}
+
+func (w *idleRecorder) body() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// TestTaskActivityStreamWithNoCursorStartsAtTheHead pins the branch the page
+// script uses when the list it rendered is empty: no ?after and no
+// Last-Event-ID means the follow starts at the newest stored row, so nothing
+// already on the page is sent twice, and a row written after the follow
+// opened still arrives.
+func TestTaskActivityStreamWithNoCursorStartsAtTheHead(t *testing.T) {
+	t.Parallel()
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	st, h, token := newTestServer(t)
+	id := seedActivityTask(t, st, h, token, "proj")
+
+	if rr := postOTLP(t, h, token, "application/json", otlpLogsBody(id)); rr.Code != http.StatusOK {
+		t.Fatalf("ingest status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	before, err := st.TaskActivity(t.Context(), id, 0, 10)
+	if err != nil {
+		t.Fatalf("TaskActivity: %v", err)
+	}
+	if len(before) != 2 {
+		t.Fatalf("stored %d rows, want 2", len(before))
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	streamCtx, endStream := context.WithCancel(ctx)
+	defer endStream()
+	rec := &idleRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		idle:             make(chan struct{}),
+		cancel:           endStream,
+		await:            "event: activity",
+	}
+	req := httptest.NewRequest(http.MethodGet, "/tasks/"+id+"/activity/events", nil).WithContext(streamCtx)
+	served := make(chan struct{})
+	go func() {
+		h.ServeHTTP(rec, req)
+		close(served)
+	}()
+
+	select {
+	case <-rec.idle:
+	case <-ctx.Done():
+		t.Fatal("stream never sent a heartbeat")
+	}
+	if body := rec.body(); strings.Contains(body, "event: activity") {
+		t.Fatalf("stream with no cursor replayed rows the page already rendered:\n%s", body)
+	}
+
+	if rr := postOTLP(t, h, token, "application/json", otlpLogsBody(id)); rr.Code != http.StatusOK {
+		t.Fatalf("second ingest status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	select {
+	case <-served:
+	case <-ctx.Done():
+		t.Fatalf("stream never delivered the row written after it opened:\n%s", rec.body())
+	}
+
+	body := rec.body()
+	if !strings.Contains(body, "event: activity") {
+		t.Fatalf("stream sent no activity frame:\n%s", body)
+	}
+	for _, a := range before {
+		if strings.Contains(body, fmt.Sprintf("id: %d\n", a.ID)) {
+			t.Errorf("stream sent row %d, which the page had already rendered:\n%s", a.ID, body)
+		}
 	}
 }

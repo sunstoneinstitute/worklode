@@ -95,6 +95,9 @@ func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	s.otlpMetrics.Records("stored", stored)
 	s.otlpMetrics.Records("unattributed", unattributed)
+	// The store drops a row whose task id it has never seen. Counting the
+	// difference is how a mis-stamped exporter becomes visible.
+	s.otlpMetrics.Records("unknown_task", len(rows)-stored)
 
 	s.otlpForward.Enqueue(contentType, body)
 	s.otlpMetrics.Ingest("ok")
