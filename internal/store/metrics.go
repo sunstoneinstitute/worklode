@@ -45,6 +45,7 @@ type storeMetrics struct {
 	expiries              prometheus.Counter
 	sweeperRuns           *prometheus.CounterVec
 	docGroomRuns          *prometheus.CounterVec
+	activityPurgeRuns     *prometheus.CounterVec
 	docsStaleEmitted      prometheus.Counter
 	projectWorkReads      *prometheus.CounterVec
 	docOps                *prometheus.CounterVec
@@ -89,6 +90,10 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 		docGroomRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "worklode_doc_groom_runs_total",
 			Help: "Stale-doc sweeper runs (025 §8.7) by outcome.",
+		}, []string{"outcome"}),
+		activityPurgeRuns: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "worklode_activity_purge_runs_total",
+			Help: "Task activity purge sweeper runs (071 §2) by outcome.",
 		}, []string{"outcome"}),
 		docsStaleEmitted: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "worklode_docs_stale_emitted_total",
@@ -170,7 +175,7 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 			Help: "Seconds spent in database queries, by the same pkg and func labels as worklode_store_queries_total. rate() of this ranks store functions by the database time they consume.",
 		}, []string{"pkg", "func"}),
 	}
-	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.queries, m.querySeconds)
+	reg.MustRegister(m.claims, m.renewals, m.releases, m.expiries, m.sweeperRuns, m.docGroomRuns, m.activityPurgeRuns, m.docsStaleEmitted, m.projectWorkReads, m.docOps, m.docTasksMinted, m.skillAmbiguous, m.instructions, m.instructionsDelivered, m.decisions, m.searchRequests, m.searchSeconds, m.searchArmEmpties, m.rallyReads, m.escalations, m.gaps, m.fixes, m.queries, m.querySeconds)
 	// Pre-initialise both arms: a lexical arm that has never gone empty and
 	// one nobody has searched with look identical otherwise, and the alert in
 	// 040 §10 is about the first of those becoming the second.
@@ -182,6 +187,8 @@ func newStoreMetrics(reg prometheus.Registerer) *storeMetrics {
 	m.sweeperRuns.WithLabelValues("error")
 	m.docGroomRuns.WithLabelValues("ok")
 	m.docGroomRuns.WithLabelValues("error")
+	m.activityPurgeRuns.WithLabelValues("ok")
+	m.activityPurgeRuns.WithLabelValues("error")
 	return m
 }
 
@@ -259,6 +266,15 @@ func (m *storeMetrics) docGroomRun(err error) {
 		return
 	}
 	m.docGroomRuns.WithLabelValues(outcome(err)).Inc()
+}
+
+// activityPurgeRun records one task-activity purge sweep tick by outcome.
+// Like sweeperRun and docGroomRun, this is plain operational success/failure.
+func (m *storeMetrics) activityPurgeRun(err error) {
+	if m == nil {
+		return
+	}
+	m.activityPurgeRuns.WithLabelValues(outcome(err)).Inc()
 }
 
 // emitStaleDocs adds n to worklode_docs_stale_emitted_total, the doc.stale
