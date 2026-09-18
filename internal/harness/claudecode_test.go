@@ -13,6 +13,22 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/worktree"
 )
 
+// TestMain isolates this package from the machine's real
+// ~/.config/worklode/config.toml. InstallHooks and friends now resolve a
+// server URL through cli.ServerURLFrom for the logs telemetry keys (sec-5),
+// which falls back to that file when a test's repo config sets no server of
+// its own -- without this, a developer's real config would leak into tests
+// that expect no server to resolve.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "harness-test-home")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", dir)
+	os.Unsetenv("LODE_SERVER")
+	os.Exit(m.Run())
+}
+
 // readSettings reads a settings file as generic JSON, failing the test if it
 // is missing or malformed.
 func readSettings(t *testing.T, path string) map[string]any {
@@ -923,7 +939,7 @@ func TestApplyClaudeTelemetryKeepsForeignAttributes(t *testing.T) {
 	settings := map[string]any{"env": map[string]any{
 		"OTEL_RESOURCE_ATTRIBUTES": "team.id=platform,worklode.task.id=WL-OLD",
 	}}
-	applyClaudeTelemetry(settings, "worklode", "WL-654")
+	applyClaudeTelemetry(settings, "worklode", "WL-654", "")
 	env := settings["env"].(map[string]any)
 	if got := env["OTEL_METRICS_EXPORTER"]; got != "otlp" {
 		t.Fatalf("OTEL_METRICS_EXPORTER = %v, want otlp", got)
@@ -931,6 +947,49 @@ func TestApplyClaudeTelemetryKeepsForeignAttributes(t *testing.T) {
 	want := "team.id=platform,worklode.project.id=worklode,worklode.task.id=WL-654"
 	if got := env["OTEL_RESOURCE_ATTRIBUTES"]; got != want {
 		t.Fatalf("resource attributes = %q, want %q", got, want)
+	}
+	for k := range claudeLogsEnv {
+		if _, ok := env[k]; ok {
+			t.Errorf("env[%s] set with no server URL, want none of the logs keys", k)
+		}
+	}
+	if _, ok := env[otelLogsEndpointKey]; ok {
+		t.Errorf("%s set with no server URL, want it absent", otelLogsEndpointKey)
+	}
+	if _, ok := settings["otelHeadersHelper"]; ok {
+		t.Error("otelHeadersHelper set with no server URL, want it absent")
+	}
+}
+
+// A resolved server URL turns on the log exporter: the three logs env keys
+// plus otelHeadersHelper, alongside the metrics keys that are written either
+// way.
+func TestApplyClaudeTelemetryWritesLogsKeysWhenServerResolves(t *testing.T) {
+	settings := map[string]any{}
+	applyClaudeTelemetry(settings, "worklode", "WL-654", "https://lode.example.com")
+	env := settings["env"].(map[string]any)
+	for k, want := range claudeLogsEnv {
+		if got := env[k]; got != want {
+			t.Errorf("env[%s] = %v, want %q", k, got, want)
+		}
+	}
+	wantEndpoint := "https://lode.example.com/otlp/v1/logs"
+	if got := env[otelLogsEndpointKey]; got != wantEndpoint {
+		t.Errorf("%s = %v, want %q", otelLogsEndpointKey, got, wantEndpoint)
+	}
+	if got := settings["otelHeadersHelper"]; got != otelHeadersHelperCommand {
+		t.Errorf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
+	}
+}
+
+// A developer's own otelHeadersHelper is a single-command slot, exactly like
+// statusLine: applyClaudeTelemetry must not steal it just because a server
+// URL resolved.
+func TestApplyClaudeTelemetryKeepsAForeignOTelHeadersHelper(t *testing.T) {
+	settings := map[string]any{"otelHeadersHelper": "my-own-helper"}
+	applyClaudeTelemetry(settings, "worklode", "WL-654", "https://lode.example.com")
+	if got := settings["otelHeadersHelper"]; got != "my-own-helper" {
+		t.Errorf("otelHeadersHelper = %v, want the foreign helper untouched", got)
 	}
 }
 
@@ -979,6 +1038,98 @@ func TestUninstallHooksRemovesClaudeTelemetryKeepsForeignEnv(t *testing.T) {
 	}
 }
 
+// Sec-5: a resolved server URL turns the log exporter on at install time.
+func TestInstallHooksWritesLogsKeysAndHeadersHelperWhenServerResolves(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("LODE_SERVER", "https://lode.example.com")
+
+	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	path := filepath.Join(root, ".claude", "settings.local.json")
+	settings := readSettings(t, path)
+	env := settings["env"].(map[string]any)
+	for k, want := range claudeLogsEnv {
+		if got := env[k]; got != want {
+			t.Errorf("env[%s] = %v, want %q", k, got, want)
+		}
+	}
+	wantEndpoint := "https://lode.example.com/otlp/v1/logs"
+	if got := env[otelLogsEndpointKey]; got != wantEndpoint {
+		t.Errorf("%s = %v, want %q", otelLogsEndpointKey, got, wantEndpoint)
+	}
+	if got := settings["otelHeadersHelper"]; got != otelHeadersHelperCommand {
+		t.Errorf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
+	}
+}
+
+// Sec-5: with no server URL resolved, install writes none of the three logs
+// keys or otelHeadersHelper -- only the pre-existing metrics keys.
+func TestInstallHooksWritesNoLogsKeysWithoutServer(t *testing.T) {
+	root := initGitRepo(t)
+
+	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	path := filepath.Join(root, ".claude", "settings.local.json")
+	settings := readSettings(t, path)
+	env := settings["env"].(map[string]any)
+	if got := env["OTEL_METRICS_EXPORTER"]; got != "otlp" {
+		t.Fatalf("OTEL_METRICS_EXPORTER = %v, want otlp", got)
+	}
+	for k := range claudeLogsEnv {
+		if _, ok := env[k]; ok {
+			t.Errorf("env[%s] set with no server URL, want none of the logs keys", k)
+		}
+	}
+	if _, ok := env[otelLogsEndpointKey]; ok {
+		t.Errorf("%s set with no server URL, want it absent", otelLogsEndpointKey)
+	}
+	if _, ok := settings["otelHeadersHelper"]; ok {
+		t.Error("otelHeadersHelper set with no server URL, want it absent")
+	}
+}
+
+// Uninstall's counterpart to the two tests above: the logs keys and
+// otelHeadersHelper are removed only while they hold Worklode's own values,
+// and a developer's own helper (repointed after install) survives.
+func TestUninstallHooksRemovesLogsKeysKeepsForeignHelper(t *testing.T) {
+	root := initGitRepo(t)
+	t.Setenv("LODE_SERVER", "https://lode.example.com")
+	path := filepath.Join(root, ".claude", "settings.local.json")
+
+	if _, err := (ClaudeCode{}).InstallHooks(root, ScopeLocal); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	settings := readSettings(t, path)
+	settings["otelHeadersHelper"] = "my-own-helper"
+	if err := writeJSONFile(path, settings); err != nil {
+		t.Fatalf("repoint helper: %v", err)
+	}
+
+	hu, err := (ClaudeCode{}).UninstallHooks(root, ScopeLocal)
+	if err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if hu.Action != ActionRemoved {
+		t.Fatalf("action = %q, want %q", hu.Action, ActionRemoved)
+	}
+
+	settings = readSettings(t, path)
+	env, _ := settings["env"].(map[string]any)
+	for k := range claudeLogsEnv {
+		if _, ok := env[k]; ok {
+			t.Errorf("env[%s] survived uninstall, want it removed", k)
+		}
+	}
+	if _, ok := env[otelLogsEndpointKey]; ok {
+		t.Errorf("%s survived uninstall, want it removed", otelLogsEndpointKey)
+	}
+	if got := settings["otelHeadersHelper"]; got != "my-own-helper" {
+		t.Fatalf("otelHeadersHelper = %v, want the repointed foreign helper kept", got)
+	}
+}
+
 // Determinism matters here: a settings file must diff clean across repeat
 // installs, or every re-run of `lode install` looks like a change. Runs
 // through InstallWithStatusLine, the fullest surface (hooks, status line and
@@ -987,6 +1138,7 @@ func TestUninstallHooksRemovesClaudeTelemetryKeepsForeignEnv(t *testing.T) {
 func TestInstallWithStatusLineIsByteIdenticalAcrossRepeatInstalls(t *testing.T) {
 	root := initGitRepo(t)
 	writeCurrentProjectConfig(t, root, "worklode")
+	t.Setenv("LODE_SERVER", "https://lode.example.com")
 	if err := worktree.EnableWorktreeConfigExtension(root); err != nil {
 		t.Fatalf("enable worktree config extension: %v", err)
 	}
@@ -1022,5 +1174,13 @@ func TestInstallWithStatusLineIsByteIdenticalAcrossRepeatInstalls(t *testing.T) 
 	wantAttrs := "worklode.project.id=worklode,worklode.task.id=WL-654"
 	if got := resourceAttributes(settings); got != wantAttrs {
 		t.Fatalf("OTEL_RESOURCE_ATTRIBUTES = %q, want %q", got, wantAttrs)
+	}
+	env := settings["env"].(map[string]any)
+	wantEndpoint := "https://lode.example.com/otlp/v1/logs"
+	if got := env[otelLogsEndpointKey]; got != wantEndpoint {
+		t.Fatalf("%s = %v, want %q", otelLogsEndpointKey, got, wantEndpoint)
+	}
+	if got := settings["otelHeadersHelper"]; got != otelHeadersHelperCommand {
+		t.Fatalf("otelHeadersHelper = %v, want %q", got, otelHeadersHelperCommand)
 	}
 }
