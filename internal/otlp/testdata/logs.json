@@ -1,0 +1,77 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "worklode.task.id", "value": {"stringValue": "WL-900"}},
+          {"key": "worklode.project.id", "value": {"stringValue": "worklode"}},
+          {"key": "service.name", "value": {"stringValue": "claude-code"}},
+          {"key": "session.id", "value": {"stringValue": "sess-res-1"}}
+        ]
+      },
+      "scopeLogs": [
+        {
+          "logRecords": [
+            {
+              "timeUnixNano": "1700000000000000000",
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "claude_code.tool_result"}},
+                {"key": "session.id", "value": {"stringValue": "sess-rec-A"}},
+                {"key": "tool_name", "value": {"stringValue": "Bash"}},
+                {"key": "success", "value": {"boolValue": true}},
+                {"key": "duration_ms", "value": {"intValue": "1234"}}
+              ],
+              "body": {"stringValue": "tool result body text, must never be stored"}
+            },
+            {
+              "timeUnixNano": 1700000001000000000,
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "claude_code.api_error"}},
+                {"key": "status_code", "value": {"intValue": "500"}},
+                {"key": "attempt", "value": {"intValue": 2}}
+              ]
+            },
+            {
+              "timeUnixNano": "1700000002000000000",
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "claude_code.user_prompt"}},
+                {"key": "session.id", "value": {"stringValue": "sess-rec-C"}},
+                {"key": "prompt", "value": {"stringValue": "the actual prompt text, must be dropped"}},
+                {"key": "prompt_length", "value": {"intValue": "42"}}
+              ]
+            },
+            {
+              "timeUnixNano": "1700000003000000000",
+              "attributes": [
+                {"key": "tool_use_id", "value": {"stringValue": "abc123"}},
+                {"key": "command_name", "value": {"stringValue": "ls"}}
+              ],
+              "body": {"stringValue": "a body attribute that must never be stored"}
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "codex"}},
+          {"key": "session.id", "value": {"stringValue": "sess-res-2"}},
+          {"key": "event.name", "value": {"stringValue": "codex.turn_completed"}}
+        ]
+      },
+      "scopeLogs": [
+        {
+          "logRecords": [
+            {
+              "timeUnixNano": "1700000004000000000",
+              "attributes": [
+                {"key": "model", "value": {"stringValue": "gpt-5"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

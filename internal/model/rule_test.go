@@ -257,6 +257,20 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 	return msgs
 }
 
+// mapAllowed lists json-tagged `map[string]any` fields that are a
+// deliberate open scalar bag, not an opaque payload passing through
+// (json.RawMessage would fit that case instead, per the guard's own
+// message). Keys are "Type.Field"; an entry no field matches is reported as
+// stale, the same way `allowed` is checked above.
+var mapAllowed = map[string]string{
+	// internal/otlp.DecodeLogs decodes each entry to a Go scalar (string,
+	// int64, bool, float64) from a fixed attribute allowlist (spec 071 §2);
+	// there is no shared struct shape across `tool_name`, `duration_ms`,
+	// `status_code`, and the rest, and the values are read and rendered, not
+	// carried opaquely.
+	"TaskActivity.Attrs": "internal/model/activity.go — decoded OTLP attribute allowlist",
+}
+
 // TestModelDeclaresNoUntypedMaps closes the loophole the checks above cannot
 // see: a `map[string]any` nested inside a declared type. Moving a shape into
 // internal/model and leaving it a map satisfies every other rule here while
@@ -268,6 +282,7 @@ func checkBodies(fset *token.FileSet, path string, file *ast.File) (msgs []strin
 // whose shape is fully stated; a `map[string]any` is a shape nobody wrote down.
 func TestModelDeclaresNoUntypedMaps(t *testing.T) {
 	fset := token.NewFileSet()
+	seen := map[string]bool{}
 	paths, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("glob: %v", err)
@@ -282,24 +297,40 @@ func TestModelDeclaresNoUntypedMaps(t *testing.T) {
 			t.Fatalf("parse %s: %v", path, err)
 		}
 		parsed++
-		for _, msg := range checkUntypedMaps(fset, path, file) {
+		for _, msg := range checkUntypedMaps(fset, path, file, seen) {
 			t.Error(msg)
 		}
 	}
 	if parsed == 0 {
 		t.Error("no files parsed — the guard checked nothing")
 	}
+	for key, why := range mapAllowed {
+		if !seen[key] {
+			t.Errorf("mapAllowed[%q] (%s) matches no json-tagged declaration — "+
+				"drop the entry", key, why)
+		}
+	}
 }
 
 // checkUntypedMaps reports json-tagged fields whose type is, or contains, a
-// map with an `any` value.
-func checkUntypedMaps(fset *token.FileSet, path string, file *ast.File) (msgs []string) {
+// map with an `any` value, skipping the ones mapAllowed exempts.
+func checkUntypedMaps(fset *token.FileSet, path string, file *ast.File, seen map[string]bool) (msgs []string) {
 	base := filepath.Base(path)
+	named := map[*ast.StructType]string{}
+	ast.Inspect(file, func(n ast.Node) bool {
+		if ts, ok := n.(*ast.TypeSpec); ok {
+			if st, ok := ts.Type.(*ast.StructType); ok {
+				named[st] = ts.Name.Name
+			}
+		}
+		return true
+	})
 	ast.Inspect(file, func(n ast.Node) bool {
 		st, ok := n.(*ast.StructType)
 		if !ok {
 			return true
 		}
+		typeName := named[st] // "" for an anonymous struct
 		for _, f := range st.Fields.List {
 			if f.Tag == nil || !strings.Contains(f.Tag.Value, `json:"`) {
 				continue
@@ -310,6 +341,10 @@ func checkUntypedMaps(fset *token.FileSet, path string, file *ast.File) (msgs []
 			name := "field"
 			if len(f.Names) > 0 {
 				name = f.Names[0].Name
+			}
+			if _, ok := mapAllowed[typeName+"."+name]; ok {
+				seen[typeName+"."+name] = true
+				continue
 			}
 			msgs = append(msgs, fmt.Sprintf(
 				"%s:%d: %s is a map[...]any on the wire (ADR 036 §8) — declare "+
@@ -382,7 +417,7 @@ func TestUntypedMapGuardCatchesTheDodges(t *testing.T) {
 			if err != nil {
 				t.Fatalf("parse case source: %v", err)
 			}
-			got := checkUntypedMaps(fset, "bad.go", file)
+			got := checkUntypedMaps(fset, "bad.go", file, map[string]bool{})
 			if tc.want != (len(got) > 0) {
 				t.Errorf("finding = %v, want a finding: %v", got, tc.want)
 			}
