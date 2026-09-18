@@ -1,13 +1,20 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/otlp"
+	"github.com/sunstoneinstitute/worklode/internal/ui"
 )
 
 // maxOTLPBody caps an OTLP log batch at 4 MiB (spec 071 §1).
@@ -105,4 +112,179 @@ func activityAgent(service string) string {
 	default:
 		return model.NormalizeAgent(service)
 	}
+}
+
+// activityPageSize is the rows the task page loads and the rows one stream
+// poll may carry (spec 071 §4). Both call sites pass this constant, so no
+// request-supplied limit ever reaches the store.
+const activityPageSize = 200
+
+// taskActivityEvents handles GET /tasks/{id}/activity/events: one task's
+// activity log followed live, so the Activity card grows as the agent works
+// instead of going stale until a reload. Same loop as progressEvents —
+// cursor from ?after or Last-Event-ID, a poll, heartbeat comments while idle,
+// and an end when either the client or the server's background context goes
+// away — over task_activity instead of the event log.
+//
+// The data of a frame is the server-rendered row, so the page inserts markup
+// it never built (§4). SSE has no multi-line data field, so the markup is
+// split across data: lines and the browser rejoins them.
+//
+// permWebRead, like the page itself: a frame carries nothing a reader could
+// not already see on the task page.
+func (s *server) taskActivityEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := r.PathValue("id")
+	// The task is read first so an unknown id answers 404 the way every
+	// other task route does, rather than opening an endless empty stream
+	// that would tell a caller nothing but still let them probe for ids.
+	if _, err := s.st.GetTask(ctx, id); err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+
+	cursor := int64(-1) // -1: no cursor given, start at the newest row
+	if v := r.URL.Query().Get("after"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			writeErr(w, http.StatusUnprocessableEntity, "invalid after: must be a non-negative integer activity id")
+			return
+		}
+		cursor = n
+	}
+	if v := r.Header.Get("Last-Event-ID"); v != "" {
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || n < 0 {
+			writeErr(w, http.StatusUnprocessableEntity, "invalid Last-Event-ID: must be a non-negative integer activity id")
+			return
+		}
+		cursor = n
+	}
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+
+	rc := http.NewResponseController(w)
+	if err := rc.Flush(); err != nil {
+		for _, k := range []string{"Content-Type", "Cache-Control", "X-Accel-Buffering"} {
+			h.Del(k)
+		}
+		s.log.Error("activity event stream: response writer cannot flush", "err", err)
+		writeErr(w, http.StatusInternalServerError, "streaming not supported")
+		return
+	}
+
+	s.observeActivityStreamOpen()
+	defer s.observeActivityStreamClose()
+
+	ctx, endStream := context.WithCancel(ctx)
+	defer endStream()
+	defer context.AfterFunc(s.bgCtx, endStream)()
+
+	if cursor < 0 {
+		newest, err := s.st.TaskActivity(ctx, id, 0, 1)
+		if err != nil {
+			s.streamEnd(ctx, "find activity stream head", err)
+			return
+		}
+		cursor = 0
+		if len(newest) > 0 {
+			cursor = newest[0].ID
+		}
+	}
+
+	ticker := time.NewTicker(streamPoll())
+	defer ticker.Stop()
+	lastWrite := time.Now()
+
+	for {
+		rows, err := s.activityAfter(ctx, id, cursor)
+		if err != nil {
+			s.streamEnd(ctx, "list task activity", err)
+			return
+		}
+		switch {
+		case len(rows) > 0:
+			for _, a := range rows {
+				if err := writeActivityFrame(ctx, w, a); err != nil {
+					if errors.Is(err, errEncodeEvent) {
+						s.log.Error("activity event stream: rendering a row failed", "activity", a.ID, "err", err)
+					}
+					return
+				}
+				cursor = a.ID
+			}
+			if err := rc.Flush(); err != nil {
+				return
+			}
+			s.observeActivityStreamFrames(len(rows))
+			lastWrite = time.Now()
+		case time.Since(lastWrite) >= streamHeartbeat():
+			// An SSE comment, same as the other two streams': ignored by
+			// every client, and it keeps an idle but live follow from being
+			// dropped by a proxy.
+			if _, err := w.Write([]byte(":\n\n")); err != nil {
+				return
+			}
+			if err := rc.Flush(); err != nil {
+				return
+			}
+			lastWrite = time.Now()
+		}
+
+		if len(rows) == activityPageSize {
+			continue // behind: drain at query speed rather than one page a tick
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// activityAfter is store.TaskActivity's forward page in the one shape the
+// stream can consume: oldest of the new rows first, so the cursor ends on the
+// highest id sent. A cursor of 0 (an empty table when the follow opened, or
+// ?after=0 asking for a replay) reads as "newest page, newest first" in the
+// store, so that case is reversed here.
+func (s *server) activityAfter(ctx context.Context, taskID string, after int64) ([]model.TaskActivity, error) {
+	rows, err := s.st.TaskActivity(ctx, taskID, after, activityPageSize)
+	if err != nil || after > 0 {
+		return rows, err
+	}
+	slices.Reverse(rows)
+	return rows, nil
+}
+
+// activityFrameLines normalises the three characters SSE reads as a line
+// terminator down to one, so the split below sees every break the browser's
+// parser would. An attribute the exporter chose (an error message, say) can
+// carry any of them, and an unsplit \r would end a data: line mid-value and
+// let the rest be read as a field of its own.
+var activityFrameLines = strings.NewReplacer("\r\n", "\n", "\r", "\n")
+
+// writeActivityFrame writes one SSE message whose data is the rendered row.
+// SSE defines no multi-line data field, so each line of the markup becomes
+// its own data: line — every line, blank ones included, since an unprefixed
+// blank line would end the frame early — and the browser rejoins them with
+// newlines before the page inserts the row as HTML.
+func writeActivityFrame(ctx context.Context, w io.Writer, a model.TaskActivity) error {
+	var buf bytes.Buffer
+	if err := ui.ActivityRowFragment(activityRow(a)).Render(ctx, &buf); err != nil {
+		return fmt.Errorf("%w %d: %w", errEncodeEvent, a.ID, err)
+	}
+	if _, err := fmt.Fprintf(w, "id: %d\nevent: activity\n", a.ID); err != nil {
+		return err
+	}
+	body := strings.TrimRight(activityFrameLines.Replace(buf.String()), "\n")
+	for line := range strings.SplitSeq(body, "\n") {
+		if _, err := fmt.Fprintf(w, "data: %s\n", line); err != nil {
+			return err
+		}
+	}
+	_, err := io.WriteString(w, "\n")
+	return err
 }

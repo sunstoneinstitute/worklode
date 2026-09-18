@@ -270,6 +270,18 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		Name: "worklode_progress_stream_frames_sent_total",
 		Help: "Frames pushed to Progress page followers, summed across all open streams.",
 	})
+	// The task page's Activity follow (spec 071 §4), the same two
+	// instruments again: a follow lasts as long as the page is open, so
+	// http_requests_total says nothing about how many are running or how
+	// much they are pushing.
+	s.activityStreamsActive = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "worklode_activity_streams_active",
+		Help: "Open task Activity follows (GET /tasks/{id}/activity/events, WL-SPEC-71 §4).",
+	})
+	s.activityStreamFramesSent = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "worklode_activity_stream_frames_sent_total",
+		Help: "Activity rows pushed to task page followers, summed across all open streams.",
+	})
 	// Spec 007's two families. http_requests_total cannot answer either
 	// question: a 503 from a graph-less instance and a 500 from a broken
 	// SPARQL endpoint are both "not 200", and one POST /api/v1/derive runs
@@ -343,7 +355,8 @@ func (s *server) initMetrics(reg prometheus.Registerer) {
 		s.repoMappings,
 		s.localMerges,
 		s.eventSubscriberSeeks, s.eventStreamsActive, s.eventStreamEventsSent,
-		s.progressStreamsActive, s.progressStreamFramesSent, s.listExpansions,
+		s.progressStreamsActive, s.progressStreamFramesSent,
+		s.activityStreamsActive, s.activityStreamFramesSent, s.listExpansions,
 		s.blobUploads, s.blobServes, s.posterExtractions, s.taskBlobRefs,
 		s.blobGCRuns, s.blobGCObjects, s.imageMirrors, s.mirrorTokens,
 		s.kindAliasUses, s.deletes,
@@ -1297,6 +1310,29 @@ func (s *server) observeProgressStreamFrames(n int) {
 		return
 	}
 	s.progressStreamFramesSent.Add(float64(n))
+}
+
+// The Activity follow's three observers, the same shape as the Progress
+// follow's above (spec 071 §4).
+func (s *server) observeActivityStreamOpen() {
+	if s.activityStreamsActive == nil {
+		return
+	}
+	s.activityStreamsActive.Inc()
+}
+
+func (s *server) observeActivityStreamClose() {
+	if s.activityStreamsActive == nil {
+		return
+	}
+	s.activityStreamsActive.Dec()
+}
+
+func (s *server) observeActivityStreamFrames(n int) {
+	if s.activityStreamFramesSent == nil {
+		return
+	}
+	s.activityStreamFramesSent.Add(float64(n))
 }
 
 // observeListExpansion records one expanded list request. Nil-safe: tests

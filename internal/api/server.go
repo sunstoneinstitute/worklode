@@ -525,6 +525,12 @@ type server struct {
 	progressStreamsActive    prometheus.Gauge
 	progressStreamFramesSent prometheus.Counter
 
+	// activityStreamsActive and activityStreamFramesSent are the same pair
+	// for the task page's Activity follow (GET /tasks/{id}/activity/events,
+	// spec 071 §4).
+	activityStreamsActive    prometheus.Gauge
+	activityStreamFramesSent prometheus.Counter
+
 	// listExpansions counts list endpoint requests that asked for an
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
 	// observeListExpansion.
@@ -734,6 +740,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 		http.Redirect(w, r, "/docs", http.StatusFound)
 	})
 	r.web("GET /tasks/{id}", s.taskPage)
+	r.web("GET /tasks/{id}/activity/events", s.taskActivityEvents)
 	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
 	// a document is an authoring act performed through the API and the CLI,
 	// where the body — the artifact itself — comes from a file.

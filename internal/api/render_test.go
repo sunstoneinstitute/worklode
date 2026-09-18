@@ -81,3 +81,65 @@ func TestTaskPageRendersDetailsAndMark(t *testing.T) {
 		}
 	}
 }
+
+// TestActivitySummary is the derivation table the Activity card reads (spec
+// 071 §4): one line per event kind, built from the allowlisted attributes
+// alone. The event name is the row's own cell, so no summary repeats it —
+// except for a kind this table does not model, where naming the event is the
+// honest answer.
+func TestActivitySummary(t *testing.T) {
+	t.Parallel()
+	yes, no := true, false
+	cases := []struct {
+		name string
+		row  model.TaskActivity
+		want string
+	}{
+		{"tool result ok", model.TaskActivity{
+			Event: "claude_code.tool_result",
+			Attrs: model.ActivityAttrs{ToolName: "Bash", Success: &yes, DurationMS: 1234},
+		}, "Bash ok 1.2s"},
+		{"tool result failed names the error type", model.TaskActivity{
+			Event: "claude_code.tool_result",
+			Attrs: model.ActivityAttrs{ToolName: "Edit", Success: &no, DurationMS: 340, ErrorType: "string_not_found"},
+		}, "Edit failed 340ms string_not_found"},
+		{"tool result with no success recorded omits it", model.TaskActivity{
+			Event: "claude_code.tool_result",
+			Attrs: model.ActivityAttrs{ToolName: "Read"},
+		}, "Read"},
+		{"tool decision", model.TaskActivity{
+			Event: "claude_code.tool_decision",
+			Attrs: model.ActivityAttrs{ToolName: "Bash", DecisionType: "accept", DecisionSource: "config"},
+		}, "Bash accept config"},
+		{"api request", model.TaskActivity{
+			Event: "claude_code.api_request",
+			Attrs: model.ActivityAttrs{Model: "claude-opus-4", Attempt: 2},
+		}, "claude-opus-4 attempt 2"},
+		{"api request on the first attempt says nothing about it", model.TaskActivity{
+			Event: "claude_code.api_request",
+			Attrs: model.ActivityAttrs{Model: "claude-opus-4", Attempt: 1},
+		}, "claude-opus-4"},
+		{"api error", model.TaskActivity{
+			Event: "claude_code.api_error",
+			Attrs: model.ActivityAttrs{StatusCode: 529, Error: "overloaded", Attempt: 3},
+		}, "529 overloaded attempt 3"},
+		{"user prompt", model.TaskActivity{
+			Event: "claude_code.user_prompt",
+			Attrs: model.ActivityAttrs{PromptLength: 412, CommandName: "lode:work"},
+		}, "412 chars lode:work"},
+		{"assistant response", model.TaskActivity{
+			Event: "claude_code.assistant_response",
+			Attrs: model.ActivityAttrs{Model: "claude-opus-4", ResponseLength: 2048},
+		}, "claude-opus-4 2048 chars"},
+		{"an event this table does not model names itself", model.TaskActivity{
+			Event: "claude_code.something_new",
+		}, "claude_code.something_new"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := activitySummary(c.row); got != c.want {
+				t.Fatalf("activitySummary = %q, want %q", got, c.want)
+			}
+		})
+	}
+}

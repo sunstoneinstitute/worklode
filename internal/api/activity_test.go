@@ -2,9 +2,12 @@ package api_test
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -104,8 +107,8 @@ func TestIngestOTLPLogsStoresAttributedRecords(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("stored %d rows, want 2", len(rows))
 	}
-	// Keyed by event, not by position: the store assigns ids per batch and
-	// does not promise they follow the batch's own order.
+	// Keyed by event so the assertions below read as what they check,
+	// rather than by a position in the batch.
 	byEvent := map[string]model.TaskActivity{}
 	for _, row := range rows {
 		byEvent[row.Event] = row
@@ -285,5 +288,198 @@ func TestIngestOTLPLogsRefusesOversizedBody(t *testing.T) {
 	rr := postOTLP(t, h, token, "application/json", body)
 	if rr.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, body %s; want 413", rr.Code, rr.Body.String())
+	}
+}
+
+// --- the task page's Activity card and its stream (spec 071 §4) -------------
+
+// activityRecorder cancels the request's context once the stream body holds
+// the awaited text. A follow never ends on its own, so a synchronous
+// ServeHTTP needs the response itself to say when the test has what it asked
+// for — the same shape progressEventsRecorder uses, and for the same reason:
+// cancelling on "the first write of any kind" would race the heartbeat the
+// handler correctly sends while it has nothing to say.
+type activityRecorder struct {
+	*httptest.ResponseRecorder
+	cancel context.CancelFunc
+	await  string
+	done   bool
+}
+
+func (w *activityRecorder) Write(p []byte) (int, error) {
+	n, err := w.ResponseRecorder.Write(p)
+	if !w.done && strings.Contains(w.Body.String(), w.await) {
+		w.done = true
+		w.cancel()
+	}
+	return n, err
+}
+
+// openActivityStream follows one task's activity until await appears in the
+// body or ctx is done. lastEventID, when set, resumes through the header a
+// reconnecting EventSource sends; otherwise the follow starts at ?after=0,
+// which replays what the task already has.
+func openActivityStream(t *testing.T, ctx context.Context, h http.Handler, task, lastEventID, await string) *activityRecorder {
+	t.Helper()
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	url := "/tasks/" + task + "/activity/events"
+	if lastEventID == "" {
+		url += "?after=0"
+	}
+	req := httptest.NewRequest(http.MethodGet, url, nil).WithContext(ctx)
+	if lastEventID != "" {
+		req.Header.Set("Last-Event-ID", lastEventID)
+	}
+	rec := &activityRecorder{ResponseRecorder: httptest.NewRecorder(), cancel: cancel, await: await}
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// TestTaskPageShowsActivityCard covers the read side of §4 end to end: a
+// batch ingested through the OTLP route reaches the task page as rows in the
+// Activity card, each carrying the summary internal/api derives from the
+// allowlisted attributes and the event name with its claude_code. prefix
+// stripped.
+func TestTaskPageShowsActivityCard(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	id := seedActivityTask(t, st, h, token, "proj")
+
+	if rr := postOTLP(t, h, token, "application/json", otlpLogsBody(id)); rr.Code != http.StatusOK {
+		t.Fatalf("ingest status = %d, body %s", rr.Code, rr.Body.String())
+	}
+
+	rr := doReq(t, h, "GET", "/tasks/"+id, "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, want := range []string{
+		`id="activity"`,
+		`<ol class="activity">`,
+		`>tool_result<`,
+		`Bash ok 1.2s`,
+		`>api_error<`,
+		`sess-1`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("task page missing %q:\n%s", want, body)
+		}
+	}
+	// The event name is the row's own cell, so the summary never repeats it.
+	if strings.Contains(body, "claude_code.tool_result") {
+		t.Fatalf("task page shows the raw event name; the claude_code. prefix should be stripped:\n%s", body)
+	}
+}
+
+// TestTaskPageOmitsActivityCardWhenThereIsNothing pins the honest empty
+// state: no rows and no session means no card at all, rather than an empty
+// one implying the agent did nothing.
+func TestTaskPageOmitsActivityCardWhenThereIsNothing(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	id := seedActivityTask(t, st, h, token, "proj")
+
+	rr := doReq(t, h, "GET", "/tasks/"+id, "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("task page status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	if body := rr.Body.String(); strings.Contains(body, `id="activity"`) {
+		t.Fatalf("task page rendered an Activity card for a task with no rows and no session:\n%s", body)
+	}
+}
+
+// TestTaskActivityStreamSendsRenderedRows covers the stream: each frame's id
+// is the row id a reconnecting client sends back, and its data is the same
+// <li> the page renders, so the script inserts markup it never built.
+func TestTaskActivityStreamSendsRenderedRows(t *testing.T) {
+	t.Parallel()
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	st, h, admin, token := newTestServerWithAdmin(t)
+	id := seedActivityTask(t, st, h, token, "proj")
+
+	if rr := postOTLP(t, h, token, "application/json", otlpLogsBody(id)); rr.Code != http.StatusOK {
+		t.Fatalf("ingest status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rows, err := st.TaskActivity(t.Context(), id, 0, 10)
+	if err != nil {
+		t.Fatalf("TaskActivity: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("stored %d rows, want 2", len(rows))
+	}
+	newest, oldest := rows[0], rows[1] // newest first
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	rec := openActivityStream(t, ctx, h, id, "", fmt.Sprintf("id: %d", newest.ID))
+	body := rec.Body.String()
+
+	if ct := rec.Header().Get("Content-Type"); ct != "text/event-stream" {
+		t.Fatalf("content type = %q, want text/event-stream", ct)
+	}
+	for _, want := range []string{
+		fmt.Sprintf("id: %d\nevent: activity\n", oldest.ID),
+		fmt.Sprintf("id: %d\nevent: activity\n", newest.ID),
+		fmt.Sprintf(`data: <li data-id="%d"`, oldest.ID),
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("stream body missing %q:\n%s", want, body)
+		}
+	}
+	// Oldest first: the page prepends each frame, so a burst arriving in id
+	// order ends up newest-first on the card.
+	if strings.Index(body, fmt.Sprintf("id: %d", oldest.ID)) > strings.Index(body, fmt.Sprintf("id: %d", newest.ID)) {
+		t.Fatalf("stream sent the newer row first:\n%s", body)
+	}
+
+	want := fmt.Sprintf("worklode_activity_stream_frames_sent_total %d", strings.Count(body, "event: activity"))
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil)
+	if !strings.Contains(metrics.Body.String(), want) {
+		t.Errorf("%q not found in /metrics:\n%s", want, metrics.Body.String())
+	}
+}
+
+// TestTaskActivityStreamResumesFromLastEventID is what makes an EventSource
+// reconnect lossless and duplicate-free: the row the client already has is
+// behind the cursor it sends back, and only what followed it is replayed.
+func TestTaskActivityStreamResumesFromLastEventID(t *testing.T) {
+	t.Parallel()
+	api.SetStreamPollInterval(t, 20*time.Millisecond)
+	api.SetStreamHeartbeatInterval(t, 50*time.Millisecond)
+	st, h, token := newTestServer(t)
+	id := seedActivityTask(t, st, h, token, "proj")
+
+	if rr := postOTLP(t, h, token, "application/json", otlpLogsBody(id)); rr.Code != http.StatusOK {
+		t.Fatalf("ingest status = %d, body %s", rr.Code, rr.Body.String())
+	}
+	rows, err := st.TaskActivity(t.Context(), id, 0, 10)
+	if err != nil {
+		t.Fatalf("TaskActivity: %v", err)
+	}
+	newest, oldest := rows[0], rows[1]
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	rec := openActivityStream(t, ctx, h, id, strconv.FormatInt(oldest.ID, 10), fmt.Sprintf("id: %d", newest.ID))
+	body := rec.Body.String()
+
+	if strings.Contains(body, fmt.Sprintf("id: %d\n", oldest.ID)) {
+		t.Fatalf("stream replayed the row the client already had (id %d):\n%s", oldest.ID, body)
+	}
+}
+
+// TestTaskActivityStreamUnknownTaskIs404 keeps the stream from answering
+// "does this task exist" differently from every other task route.
+func TestTaskActivityStreamUnknownTaskIs404(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	seedActivityTask(t, st, h, token, "proj")
+
+	rr := doReq(t, h, "GET", "/tasks/WL-NOPE/activity/events", "", nil)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404, body %s", rr.Code, rr.Body.String())
 	}
 }

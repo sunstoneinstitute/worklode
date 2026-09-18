@@ -1,5 +1,7 @@
 package ui
 
+import "strconv"
+
 // task.templ renders one task's detail page (GET /tasks/{id}): identity,
 // state/priority/kind, project link, body, attachments, edges, and the full
 // timeline. Restyled from the former internal/api/task.templ into
@@ -51,6 +53,27 @@ templ Task(v TaskView) {
 					<section class="card" aria-labelledby="agent-sessions-heading">
 						<div class="hd"><h3 id="agent-sessions-heading">Agent sessions</h3></div>
 						@agentSessionRows(v.AgentSessions)
+					</section>
+				}
+
+				// The Activity card (spec 071 §4). It is omitted outright when
+				// the task has neither rows nor a session, rather than standing
+				// empty over a task no agent ever worked. A held task with no
+				// rows yet keeps the card: the open session is a fact worth
+				// showing, and the empty list is where the stream prepends.
+				if len(v.Activity) > 0 || len(v.AgentSessions) > 0 {
+					<section class="card" id="activity" aria-labelledby="activity-heading" data-task={ v.Task.ID }>
+						<div class="hd"><h3 id="activity-heading">Activity</h3></div>
+						<div class="bd">
+							<ol class="activity">
+								for _, r := range v.Activity {
+									@activityRow(r)
+								}
+							</ol>
+							if len(v.Activity) == 0 {
+								<p class="activity-empty muted">No activity recorded yet.</p>
+							}
+						</div>
 					</section>
 				}
 
@@ -149,8 +172,33 @@ templ Task(v TaskView) {
 					</div>
 				</section>
 			</div>
+			<script src={ assetURL("activity.js") } defer></script>
 		}
 	}
+}
+
+// activityRow renders one activity row. data-id is the store id: the stream's
+// cursor, and what lets the page tell a row it already has from a new one.
+// The session is abbreviated to what distinguishes it, with the whole id kept
+// as the title.
+templ activityRow(r ActivityRow) {
+	<li data-id={ strconv.FormatInt(r.ID, 10) }>
+		<span class="at mono">{ fmtTime(r.At) }</span>
+		<span class="ev">{ r.Event }</span>
+		if r.Summary != "" {
+			<span class="sum">{ r.Summary }</span>
+		}
+		if r.Session != "" {
+			<span class="sess mono" title={ r.Session }>{ shortSession(r.Session) }</span>
+		}
+	</li>
+}
+
+// ActivityRowFragment is one row rendered on its own: the data of a frame on
+// GET /tasks/{id}/activity/events (§4). The stream sends the same markup the
+// page draws, so an inserted row can never disagree with a reloaded one.
+templ ActivityRowFragment(r ActivityRow) {
+	@activityRow(r)
 }
 
 // taskEdgeIDs renders one labelled edge row as a link per related task id, or
