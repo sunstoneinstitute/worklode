@@ -1,12 +1,15 @@
 // Package otlp decodes OTLP/JSON log export batches and forwards them
-// upstream (spec 071). It imports the standard library only.
+// upstream (spec 071).
 package otlp
 
 import (
 	"encoding/json"
+	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
 // Record is one decoded OTLP log record, attributed from its resource and
@@ -20,19 +23,7 @@ type Record struct {
 	Service string
 	Event   string
 	At      time.Time
-	Attrs   map[string]any
-}
-
-// attrAllowlist is the only attrs keys a Record.Attrs may carry (spec 071
-// §2, 063 §3). Everything else — the body, prompt/response text, tool
-// content, user.* — is dropped.
-var attrAllowlist = map[string]bool{
-	"tool_name": true, "success": true, "duration_ms": true,
-	"error_type": true, "decision_type": true, "decision_source": true,
-	"model": true, "request_id": true, "attempt": true, "status_code": true,
-	"error": true, "prompt_length": true, "response_length": true,
-	"command_name": true, "tool_use_id": true, "tool_input_size_bytes": true,
-	"tool_result_size_bytes": true,
+	Attrs   model.ActivityAttrs
 }
 
 // exportRequest is the minimal ExportLogsServiceRequest shape this package
@@ -67,19 +58,28 @@ type anyValue struct {
 	DoubleValue *float64     `json:"doubleValue"`
 }
 
-func (v anyValue) toAny() any {
-	switch {
-	case v.StringValue != nil:
-		return *v.StringValue
-	case v.IntValue != nil:
-		return int64(*v.IntValue)
-	case v.BoolValue != nil:
-		return *v.BoolValue
-	case v.DoubleValue != nil:
-		return *v.DoubleValue
-	default:
-		return nil
+func (v anyValue) asString() (string, bool) {
+	if v.StringValue != nil {
+		return *v.StringValue, true
 	}
+	return "", false
+}
+
+func (v anyValue) asInt64() (int64, bool) {
+	switch {
+	case v.IntValue != nil:
+		return int64(*v.IntValue), true
+	case v.DoubleValue != nil && *v.DoubleValue == math.Trunc(*v.DoubleValue):
+		return int64(*v.DoubleValue), true
+	}
+	return 0, false
+}
+
+func (v anyValue) asBool() (bool, bool) {
+	if v.BoolValue != nil {
+		return *v.BoolValue, true
+	}
+	return false, false
 }
 
 // numOrString decodes an OTLP integer field that the OTLP/JSON spec encodes
@@ -106,22 +106,19 @@ func DecodeLogs(body []byte) ([]Record, error) {
 
 	var records []Record
 	for _, rl := range req.ResourceLogs {
-		resAttrs := attrMap(rl.Resource.Attributes)
-		task, _ := resAttrs["worklode.task.id"].(string)
-		project, _ := resAttrs["worklode.project.id"].(string)
-		service, _ := resAttrs["service.name"].(string)
-		resSession, _ := resAttrs["session.id"].(string)
-		resEvent, _ := resAttrs["event.name"].(string)
+		task := findString(rl.Resource.Attributes, "worklode.task.id")
+		project := findString(rl.Resource.Attributes, "worklode.project.id")
+		service := findString(rl.Resource.Attributes, "service.name")
+		resSession := findString(rl.Resource.Attributes, "session.id")
+		resEvent := findString(rl.Resource.Attributes, "event.name")
 
 		for _, sl := range rl.ScopeLogs {
 			for _, lr := range sl.LogRecords {
-				recAttrs := attrMap(lr.Attributes)
-
-				session, _ := recAttrs["session.id"].(string)
+				session := findString(lr.Attributes, "session.id")
 				if session == "" {
 					session = resSession
 				}
-				event, _ := recAttrs["event.name"].(string)
+				event := findString(lr.Attributes, "event.name")
 				if event == "" {
 					event = resEvent
 				}
@@ -133,7 +130,7 @@ func DecodeLogs(body []byte) ([]Record, error) {
 					Service: service,
 					Event:   event,
 					At:      time.Unix(0, int64(lr.TimeUnixNano)),
-					Attrs:   allowlisted(recAttrs),
+					Attrs:   decodeAttrs(lr.Attributes),
 				})
 			}
 		}
@@ -141,22 +138,64 @@ func DecodeLogs(body []byte) ([]Record, error) {
 	return records, nil
 }
 
-func attrMap(kvs []keyValue) map[string]any {
-	m := make(map[string]any, len(kvs))
+// findString returns the string value of the first attribute keyed key, or
+// "" if absent or not a stringValue.
+func findString(kvs []keyValue, key string) string {
 	for _, kv := range kvs {
-		if v := kv.Value.toAny(); v != nil {
-			m[kv.Key] = v
+		if kv.Key == key {
+			s, _ := kv.Value.asString()
+			return s
 		}
 	}
-	return m
+	return ""
 }
 
-func allowlisted(attrs map[string]any) map[string]any {
-	out := make(map[string]any, len(attrs))
-	for k, v := range attrs {
-		if attrAllowlist[k] {
-			out[k] = v
+// decodeAttrs fills a model.ActivityAttrs from a log record's attributes.
+// This switch is the allowlist (spec 071 §2, 063 §3): a key it doesn't name
+// — the body, prompt/response text, tool content, user.*, anything else —
+// is dropped.
+func decodeAttrs(kvs []keyValue) model.ActivityAttrs {
+	var a model.ActivityAttrs
+	for _, kv := range kvs {
+		v := kv.Value
+		switch kv.Key {
+		case "tool_name":
+			a.ToolName, _ = v.asString()
+		case "success":
+			if b, ok := v.asBool(); ok {
+				a.Success = &b
+			}
+		case "duration_ms":
+			a.DurationMS, _ = v.asInt64()
+		case "error_type":
+			a.ErrorType, _ = v.asString()
+		case "decision_type":
+			a.DecisionType, _ = v.asString()
+		case "decision_source":
+			a.DecisionSource, _ = v.asString()
+		case "model":
+			a.Model, _ = v.asString()
+		case "request_id":
+			a.RequestID, _ = v.asString()
+		case "attempt":
+			a.Attempt, _ = v.asInt64()
+		case "status_code":
+			a.StatusCode, _ = v.asInt64()
+		case "error":
+			a.Error, _ = v.asString()
+		case "prompt_length":
+			a.PromptLength, _ = v.asInt64()
+		case "response_length":
+			a.ResponseLength, _ = v.asInt64()
+		case "command_name":
+			a.CommandName, _ = v.asString()
+		case "tool_use_id":
+			a.ToolUseID, _ = v.asString()
+		case "tool_input_size_bytes":
+			a.ToolInputSizeBytes, _ = v.asInt64()
+		case "tool_result_size_bytes":
+			a.ToolResultSizeBytes, _ = v.asInt64()
 		}
 	}
-	return out
+	return a
 }

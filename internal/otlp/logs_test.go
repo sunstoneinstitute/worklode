@@ -5,7 +5,11 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/sunstoneinstitute/worklode/internal/model"
 )
+
+func boolPtr(b bool) *bool { return &b }
 
 func TestDecodeLogs(t *testing.T) {
 	body, err := os.ReadFile("testdata/logs.json")
@@ -28,10 +32,10 @@ func TestDecodeLogs(t *testing.T) {
 			Task: "WL-900", Project: "worklode", Session: "sess-rec-A",
 			Service: "claude-code", Event: "claude_code.tool_result",
 			At: at(1700000000000000000),
-			Attrs: map[string]any{
-				"tool_name":   "Bash",
-				"success":     true,
-				"duration_ms": int64(1234),
+			Attrs: model.ActivityAttrs{
+				ToolName:   "Bash",
+				Success:    boolPtr(true),
+				DurationMS: 1234,
 			},
 		},
 		{
@@ -40,9 +44,9 @@ func TestDecodeLogs(t *testing.T) {
 			Task: "WL-900", Project: "worklode", Session: "sess-res-1",
 			Service: "claude-code", Event: "claude_code.api_error",
 			At: at(1700000001000000000),
-			Attrs: map[string]any{
-				"status_code": int64(500),
-				"attempt":     int64(2),
+			Attrs: model.ActivityAttrs{
+				StatusCode: 500,
+				Attempt:    2,
 			},
 		},
 		{
@@ -50,16 +54,16 @@ func TestDecodeLogs(t *testing.T) {
 			Task: "WL-900", Project: "worklode", Session: "sess-rec-C",
 			Service: "claude-code", Event: "claude_code.user_prompt",
 			At:    at(1700000002000000000),
-			Attrs: map[string]any{"prompt_length": int64(42)},
+			Attrs: model.ActivityAttrs{PromptLength: 42},
 		},
 		{
 			// No event.name anywhere and a body — both dropped, no crash.
 			Task: "WL-900", Project: "worklode", Session: "sess-res-1",
 			Service: "claude-code", Event: "",
 			At: at(1700000003000000000),
-			Attrs: map[string]any{
-				"tool_use_id":  "abc123",
-				"command_name": "ls",
+			Attrs: model.ActivityAttrs{
+				ToolUseID:   "abc123",
+				CommandName: "ls",
 			},
 		},
 		{
@@ -67,7 +71,7 @@ func TestDecodeLogs(t *testing.T) {
 			Task: "", Project: "", Session: "sess-res-2",
 			Service: "codex", Event: "codex.turn_completed",
 			At:    at(1700000004000000000),
-			Attrs: map[string]any{"model": "gpt-5"},
+			Attrs: model.ActivityAttrs{Model: "gpt-5"},
 		},
 	}
 
