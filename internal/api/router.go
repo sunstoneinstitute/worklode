@@ -413,6 +413,14 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/actors/{id}/tokens":          guarded(permActorAdmin),
 	"DELETE /api/v1/tokens":                    guarded(permActorAdmin),
 
+	// --- agent telemetry (spec 071) -------------------------------------------
+	// permProjectReport: the permission Edge Agent's usage report already
+	// carries, since this is the same kind of act — an agent reporting its
+	// own telemetry. guardedAny because the path carries no task id; the
+	// handler itself refuses a batch stamped with a task the token is not
+	// bound to.
+	"POST /otlp/v1/logs": guardedAny(permProjectReport),
+
 	// --- inbox ---------------------------------------------------------------
 	"GET /api/v1/inbox":          guarded(permInboxRead),
 	"POST /api/v1/inbox/promote": guarded(permInboxTriage),
