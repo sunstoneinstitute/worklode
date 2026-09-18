@@ -174,3 +174,5 @@ configMapGenerator:
       - migrations/0079_state_log_entity_index.down.sql
       - migrations/0080_selector_backfill.up.sql
       - migrations/0080_selector_backfill.down.sql
+      - migrations/0081_task_activity.up.sql
+      - migrations/0081_task_activity.down.sql
