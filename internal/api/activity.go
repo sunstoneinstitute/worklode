@@ -29,6 +29,17 @@ const maxOTLPBody = 4 << 20
 // The status codes are the exporter's retry contract: 400 on an undecodable
 // body means "do not resend", 500 on a store failure means "resend".
 func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
+	sub := subjectFrom(r)
+	// Per-actor budget, checked before the body is read so a throttled
+	// request costs nothing but the lookup (WL-863). The gateway's own
+	// throttle (§3) protects the gateway, not this table.
+	if !s.otlpLimit.Allow(otlpLimitKey(sub)) {
+		s.otlpMetrics.Ingest("throttled")
+		w.Header().Set("Retry-After", "1")
+		writeErr(w, http.StatusTooManyRequests, "too many OTLP log batches; retry in a second")
+		return
+	}
+
 	contentType := r.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "application/json") {
 		s.otlpMetrics.Ingest("unsupported_media")
@@ -60,7 +71,6 @@ func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sub := subjectFrom(r)
 	rows := make([]model.TaskActivity, 0, len(records))
 	unattributed := 0
 	for _, rec := range records {
@@ -102,6 +112,16 @@ func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
 	s.otlpForward.Enqueue(contentType, body)
 	s.otlpMetrics.Ingest("ok")
 	writeJSON(w, http.StatusOK, struct{}{})
+}
+
+// otlpLimitKey names the bucket a request counts against: the token's actor,
+// the same identity every stored row is attributed to. An open deployment
+// has no actor, so its callers share one bucket.
+func otlpLimitKey(sub Subject) string {
+	if sub.ActorID == "" {
+		return "anon"
+	}
+	return sub.ActorID
 }
 
 // activityAgent maps an OTLP resource service.name onto spec 012's agent
