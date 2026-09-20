@@ -56,3 +56,16 @@ func agentSessionDetail(r AgentSessionRow) string {
 	}
 	return strings.Join(parts, " \u00b7 ")
 }
+
+// hasRunningSession reports whether any of the sessions is still running.
+// The Activity card (spec 071 \u00a74) stays up with no rows yet only for an open
+// session; an ended one is no reason to keep an empty card on screen once
+// its lease outlives it.
+func hasRunningSession(sessions []AgentSessionRow) bool {
+	for _, s := range sessions {
+		if s.Running {
+			return true
+		}
+	}
+	return false
+}
