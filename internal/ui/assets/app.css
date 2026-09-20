@@ -2167,6 +2167,38 @@ nav.local a .cnt {
 .mb-collapsed p {
   margin: 6px 0 0;
 }
+.activity {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.activity li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.90625rem;
+}
+.activity .at {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.activity .ev {
+  font-weight: 600;
+}
+.activity .sum {
+  flex: 1 1 12ch;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.activity .sess {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
 .tl-detail summary {
   cursor: pointer;
   font-size: 0.90625rem;

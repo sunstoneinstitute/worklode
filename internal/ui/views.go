@@ -340,6 +340,25 @@ type TaskView struct {
 	// is what a session is recorded against, so there is nowhere for one to
 	// hang otherwise.
 	AgentSessions []AgentSessionRow
+	// Activity is the task's activity log, newest first, at most the page's
+	// own limit (spec 071 §4). The live stream prepends to the same list.
+	Activity []ActivityRow
+}
+
+// ActivityRow is one row of a task's activity log as a page renders it (spec
+// 071 §4): when it happened, the event without its claude_code. prefix, a
+// one-line summary, and the agent session it came from. internal/api derives
+// the summary from the allowlisted attributes at the render seam, the same
+// way TimelineRow.Summary is built — internal/ui reads no attribute itself.
+//
+// ID is the row's store id, rendered into the markup as data-id: the page
+// script reads the newest one to tell the stream where to resume.
+type ActivityRow struct {
+	ID      int64
+	At      time.Time
+	Event   string
+	Summary string
+	Session string
 }
 
 // AgentSessionRow is one coding-agent session as a page renders it: the
@@ -1069,6 +1088,16 @@ type NewDeliverableView struct {
 }
 
 // --- presentation helpers ---------------------------------------------------
+
+// shortSession abbreviates an agent session id to its last 8 characters, the
+// part that tells two sessions apart. The full id stays on the element as a
+// title, so nothing is lost.
+func shortSession(id string) string {
+	if len(id) <= 8 {
+		return id
+	}
+	return id[len(id)-8:]
+}
 
 // stateChip returns the .chip variant class for a task state.
 func stateChip(state string) string {
