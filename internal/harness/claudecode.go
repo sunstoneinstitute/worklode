@@ -226,8 +226,7 @@ func installClaudeHooks(path string) error {
 // the worktree does not already set: a worktree that has since diverged keeps
 // its own choices, so this converges rather than stomping on re-run. Worklode's
 // own bindings are then applied on top, which is what makes a re-run repair a
-// worktree whose hooks were removed. The status line is not carried over —
-// see the note at the copy.
+// worktree whose hooks were removed.
 //
 // This only ever mirrors a choice the developer already made at root: a repo
 // where `lode install` was never run locally is left alone, so `lode work next`
@@ -253,23 +252,21 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 		return err
 	}
 	// Everything else root sets locally — permissions, enabled plugins, env,
-	// the developer's own hooks — is what an agent in the worktree would
-	// otherwise be missing. Copied only where the worktree is silent, so its
-	// own edits survive.
-	//
-	// statusLine is the one key held back: it is a slot that holds exactly
-	// one command, and applyStatusLine below refuses to take one the user
-	// chose. Copying a foreign status line here would install through the
-	// back door what that rule exists to protect.
+	// the developer's own hooks, their status line and otelHeadersHelper — is
+	// what an agent in the worktree would otherwise be missing. Copied only
+	// where the worktree is silent, so its own edits survive. That includes
+	// both single-command slots: mirroring the command the developer chose at
+	// root is not the theft applyStatusLine and applyOTelHeadersHelper refuse
+	// — those two guard the slot against Worklode's own command, and both
+	// still run below over whatever the copy left.
 	for k, v := range rootSettings {
-		if k == "statusLine" {
-			continue
-		}
 		if _, ok := settings[k]; !ok {
 			settings[k] = v
 		}
 	}
 	applyGroupedHooks(settings, claudeBindings)
+	// Re-applied rather than left as copied, so a root still carrying an
+	// older form of our status line lands here as the current command.
 	if sl, ok := rootSettings["statusLine"]; ok && isLodeStatusLine(sl) {
 		applyStatusLine(settings)
 	}
@@ -521,6 +518,7 @@ func stripClaudeTelemetry(settings map[string]any) (action string) {
 	changed := false
 
 	if env, ok := settings["env"].(map[string]any); ok {
+		before := len(env)
 		for k, want := range claudeTelemetryEnv {
 			if got, ok := env[k].(string); ok && got == want {
 				delete(env, k)
@@ -547,7 +545,10 @@ func stripClaudeTelemetry(settings map[string]any) (action string) {
 				}
 			}
 		}
-		if len(env) == 0 {
+		// Only an env this strip emptied goes away. A settings file that
+		// already carried "env": {} keeps it, since an uninstall writing for
+		// some other reason must not drop a key it did not touch.
+		if len(env) == 0 && before > 0 {
 			delete(settings, "env")
 		} else {
 			settings["env"] = env
