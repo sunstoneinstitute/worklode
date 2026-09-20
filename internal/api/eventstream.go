@@ -66,25 +66,30 @@ func streamHeartbeat() time.Duration {
 	return defaultStreamHeartbeatInterval
 }
 
-// streamEvents handles GET /api/v1/events/stream?type=&after=.
+// beginEventStream is the prologue every SSE route in this package shares:
+// the start cursor, the stream headers, the flush probe, and a context that
+// ends when either the client hangs up or the server shuts down. The three
+// routes differ in what they look up first, where they find their head, and
+// which metric they count, so all of that stays with the caller.
 //
-// The start cursor is the Last-Event-ID request header when the client is
-// reconnecting, else ?after=, else the current head — a bare follow shows
-// what happens next, and `lode event tail --follow` supplies its own backlog
-// cursor so the gap between the one-shot page and the stream is closed by the
-// client that knows where it stopped.
-func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	typ := q.Get("type")
-
+// It answers the client itself on the two ways a prologue fails — a
+// malformed cursor is 422, a writer that cannot flush is 500 — and reports
+// ok=false when it did.
+//
+// name prefixes this stream's server-side log lines. unit names what the
+// cursor counts, which is what the 422 tells the client it wanted. A cursor
+// of -1 means the client supplied none, so the caller starts from its own
+// head. stop is the caller's to defer, so the context lives as long as the
+// handler does.
+func (s *server) beginEventStream(w http.ResponseWriter, r *http.Request, name, unit string) (ctx context.Context, rc *http.ResponseController, cursor int64, stop func(), ok bool) {
 	// Cursor parsing happens before any header, so a malformed one is an
 	// ordinary 422 rather than an error mid-stream.
-	cursor := int64(-1) // -1: no cursor given, start at the head
-	if v := q.Get("after"); v != "" {
+	cursor = -1 // -1: no cursor given, start at the head
+	if v := r.URL.Query().Get("after"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n < 0 {
-			writeErr(w, http.StatusUnprocessableEntity, "invalid after: must be a non-negative integer event id")
-			return
+			writeErr(w, http.StatusUnprocessableEntity, "invalid after: must be a non-negative integer "+unit)
+			return nil, nil, 0, nil, false
 		}
 		cursor = n
 	}
@@ -93,8 +98,8 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	if v := r.Header.Get("Last-Event-ID"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n < 0 {
-			writeErr(w, http.StatusUnprocessableEntity, "invalid Last-Event-ID: must be a non-negative integer event id")
-			return
+			writeErr(w, http.StatusUnprocessableEntity, "invalid Last-Event-ID: must be a non-negative integer "+unit)
+			return nil, nil, 0, nil, false
 		}
 		cursor = n
 	}
@@ -115,26 +120,43 @@ func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	// not a client one, and is reported as a plain JSON 500 — with the
 	// stream headers taken back off, so the error is not mislabelled as an
 	// event stream.
-	rc := http.NewResponseController(w)
+	rc = http.NewResponseController(w)
 	if err := rc.Flush(); err != nil {
 		for _, k := range []string{"Content-Type", "Cache-Control", "X-Accel-Buffering"} {
 			h.Del(k)
 		}
-		s.log.Error("event stream: response writer cannot flush", "err", err)
+		s.log.Error(name+": response writer cannot flush", "err", err)
 		writeErr(w, http.StatusInternalServerError, "streaming not supported")
-		return
+		return nil, nil, 0, nil, false
 	}
-
-	s.observeEventStreamOpen()
-	defer s.observeEventStreamClose()
 
 	// The stream ends on shutdown as well as on client hangup. bgCtx is
 	// cancelled by SIGTERM, so watching it here is what lets shutdown drain
 	// ordinary requests instead of cancelling every in-flight context to get
 	// rid of this one (see shutdownServers in internal/cmd/serve.go).
 	ctx, endStream := context.WithCancel(r.Context())
-	defer endStream()
-	defer context.AfterFunc(s.bgCtx, endStream)()
+	stopBgWatch := context.AfterFunc(s.bgCtx, endStream)
+	return ctx, rc, cursor, func() { stopBgWatch(); endStream() }, true
+}
+
+// streamEvents handles GET /api/v1/events/stream?type=&after=.
+//
+// The start cursor is the Last-Event-ID request header when the client is
+// reconnecting, else ?after=, else the current head — a bare follow shows
+// what happens next, and `lode event tail --follow` supplies its own backlog
+// cursor so the gap between the one-shot page and the stream is closed by the
+// client that knows where it stopped.
+func (s *server) streamEvents(w http.ResponseWriter, r *http.Request) {
+	typ := r.URL.Query().Get("type")
+
+	ctx, rc, cursor, stop, ok := s.beginEventStream(w, r, "event stream", "event id")
+	if !ok {
+		return
+	}
+
+	s.observeEventStreamOpen()
+	defer s.observeEventStreamClose()
+	defer stop()
 
 	if cursor < 0 {
 		var err error
