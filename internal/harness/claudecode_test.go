@@ -26,7 +26,9 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv("HOME", dir)
 	os.Unsetenv("LODE_SERVER")
-	os.Exit(m.Run())
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // readSettings reads a settings file as generic JSON, failing the test if it
