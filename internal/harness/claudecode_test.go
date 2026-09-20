@@ -299,7 +299,12 @@ func TestPropagateClaudeHooksToWorktreeSkipsWhenRootNeverOptedIn(t *testing.T) {
 	}
 }
 
-func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T) {
+// The status line is mirrored like every other local setting, including one
+// the developer chose: a worktree of a repo shows what its root shows.
+// Worklode never claims the slot here — applyStatusLine only runs when root's
+// entry is already ours — so copying the developer's own command is fidelity,
+// not theft. Same rule as the foreign hooks above, and as otelHeadersHelper.
+func TestPropagateClaudeSettingsCarriesForeignStatusLine(t *testing.T) {
 	root := t.TempDir()
 	rootPath := filepath.Join(root, ".claude", "settings.local.json")
 	if err := installClaudeHooks(rootPath); err != nil {
@@ -307,8 +312,9 @@ func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T
 	}
 	rootSettings := readSettings(t, rootPath)
 	rootSettings["statusLine"] = map[string]any{"type": "command", "command": "my-own-statusline"}
+	rootSettings["otelHeadersHelper"] = "my-own-helper"
 	if err := writeJSONFile(rootPath, rootSettings); err != nil {
-		t.Fatalf("seed foreign status line: %v", err)
+		t.Fatalf("seed foreign single-command slots: %v", err)
 	}
 
 	dir := t.TempDir()
@@ -317,9 +323,35 @@ func TestPropagateClaudeHooksToWorktreeLeavesForeignStatusLineAlone(t *testing.T
 	}
 
 	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
-	settings := readSettings(t, dirPath)
-	if _, ok := settings["statusLine"]; ok {
-		t.Fatalf("statusLine in worktree = %v, want none (root's is not ours)", settings["statusLine"])
+	if got := statusLineCommand(t, dirPath); got != "my-own-statusline" {
+		t.Errorf("statusLine in worktree = %q, want root's own", got)
+	}
+	if got := readSettings(t, dirPath)["otelHeadersHelper"]; got != "my-own-helper" {
+		t.Errorf("otelHeadersHelper in worktree = %v, want root's own", got)
+	}
+}
+
+// A worktree that already chose its own status line keeps it, even against a
+// root carrying ours: the copy only fills keys the worktree leaves silent and
+// applyStatusLine refuses a slot it does not own.
+func TestPropagateClaudeSettingsKeepsWorktreeStatusLine(t *testing.T) {
+	root := t.TempDir()
+	rootPath := filepath.Join(root, ".claude", "settings.local.json")
+	seedClaudeSettings(t, rootPath, true)
+
+	dir := t.TempDir()
+	dirPath := filepath.Join(dir, ".claude", "settings.local.json")
+	if err := writeJSONFile(dirPath, map[string]any{
+		"statusLine": map[string]any{"type": "command", "command": "starship prompt"},
+	}); err != nil {
+		t.Fatalf("seed worktree settings: %v", err)
+	}
+
+	if err := (ClaudeCode{}).PropagateToWorktree(root, dir); err != nil {
+		t.Fatalf("propagate: %v", err)
+	}
+	if got := statusLineCommand(t, dirPath); got != "starship prompt" {
+		t.Fatalf("statusLine in worktree = %q, want the worktree's own", got)
 	}
 }
 
@@ -1127,6 +1159,48 @@ func TestUninstallHooksRemovesLogsKeysKeepsForeignHelper(t *testing.T) {
 	}
 	if got := settings["otelHeadersHelper"]; got != "my-own-helper" {
 		t.Fatalf("otelHeadersHelper = %v, want the repointed foreign helper kept", got)
+	}
+}
+
+// A strip that removes nothing from env must leave env exactly as it found
+// it, empty object included: uninstall writes the file whenever any surface
+// changed, and an unrelated write dropping a key it never touched is a silent
+// edit to the developer's file.
+func TestStripClaudeTelemetryKeepsAnEmptyEnvItDidNotEmpty(t *testing.T) {
+	settings := map[string]any{
+		"env":               map[string]any{},
+		"otelHeadersHelper": otelHeadersHelperCommand,
+	}
+
+	if got := stripClaudeTelemetry(settings); got != ActionRemoved {
+		t.Fatalf("action = %q, want %q (the helper was ours)", got, ActionRemoved)
+	}
+	if _, ok := settings["otelHeadersHelper"]; ok {
+		t.Errorf("otelHeadersHelper survived, want it removed")
+	}
+	env, ok := settings["env"].(map[string]any)
+	if !ok {
+		t.Fatalf("env = %v, want the empty object it came in with", settings["env"])
+	}
+	if len(env) != 0 {
+		t.Errorf("env = %v, want it still empty", env)
+	}
+}
+
+// The counterpart: an env this strip did empty is dropped, so an uninstall
+// leaves no bare "env": {} behind that the install did not find there.
+func TestStripClaudeTelemetryDropsAnEnvItEmptied(t *testing.T) {
+	settings := map[string]any{"env": map[string]any{}}
+	env := settings["env"].(map[string]any)
+	for k, v := range claudeTelemetryEnv {
+		env[k] = v
+	}
+
+	if got := stripClaudeTelemetry(settings); got != ActionRemoved {
+		t.Fatalf("action = %q, want %q", got, ActionRemoved)
+	}
+	if _, ok := settings["env"]; ok {
+		t.Fatalf("env = %v, want it dropped once emptied", settings["env"])
 	}
 }
 
