@@ -681,9 +681,19 @@ func TestIngestOTLPLogsThrottlesPerActor(t *testing.T) {
 		t.Fatalf("second actor status = %d, body %s; want 200", rr.Code, rr.Body.String())
 	}
 
-	want := `worklode_otlp_ingest_total{outcome="throttled"} 1`
 	metrics := doReq(t, admin, "GET", "/metrics", "", nil)
-	if !strings.Contains(metrics.Body.String(), want) {
-		t.Errorf("%q not found in /metrics:\n%s", want, metrics.Body.String())
+	body := metrics.Body.String()
+	// Three outcomes landed on the one counter: the drained burst
+	// (bad_request), the throttled request, and the second actor's request
+	// that went through (ok) — reading all three back is what proves the
+	// label, not just the count, is right.
+	if want := `worklode_otlp_ingest_total{outcome="throttled"} 1`; !strings.Contains(body, want) {
+		t.Errorf("%q not found in /metrics:\n%s", want, body)
+	}
+	if want := fmt.Sprintf(`worklode_otlp_ingest_total{outcome="bad_request"} %d`, spent); !strings.Contains(body, want) {
+		t.Errorf("%q not found in /metrics:\n%s", want, body)
+	}
+	if want := `worklode_otlp_ingest_total{outcome="ok"} 1`; !strings.Contains(body, want) {
+		t.Errorf("%q not found in /metrics:\n%s", want, body)
 	}
 }
