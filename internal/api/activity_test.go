@@ -196,7 +196,12 @@ func TestIngestOTLPLogsUnattributedRecordsAreForwardedNotStored(t *testing.T) {
 
 func TestIngestOTLPLogsRefusesForeignTaskOnScopedToken(t *testing.T) {
 	t.Parallel()
-	st, h, token := newTestServer(t)
+	st := newTestStore(t)
+	token := seedActor(t, st, "alice", "human", "Alice", true)
+	h, admin, err := api.NewServer(st, api.Config{WebOpen: true})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
 	mine := seedActivityTask(t, st, h, token, "proj")
 	other := createTaskViaAPI(t, h, token, map[string]any{
 		"project": "proj", "title": "Other", "priority": "high", "kind": "feature",
@@ -213,6 +218,16 @@ func TestIngestOTLPLogsRefusesForeignTaskOnScopedToken(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Fatalf("stored %d rows against the foreign task, want 0", len(rows))
+	}
+
+	// The task-scope refusal must reach the same authz observation points as
+	// requireTaskScope's identical refusal (WL-866), so it shows up in the
+	// authz metrics and denial log a security review reads, not only in
+	// worklode_otlp_ingest_total{outcome="forbidden"}.
+	scrape := doReq(t, admin, "GET", "/metrics", "", nil)
+	want := `worklode_authz_decisions_total{outcome="deny",permission="project.report"} 1`
+	if !strings.Contains(scrape.Body.String(), want) {
+		t.Errorf("metrics body missing %q", want)
 	}
 }
 
