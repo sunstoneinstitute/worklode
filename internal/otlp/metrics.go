@@ -37,6 +37,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 
 // Ingest counts one /otlp/v1/logs request. outcome is one of "ok",
 // "unsupported_media", "too_large", "bad_request", "forbidden",
+// "throttled" (over the caller's per-actor budget, WL-863) or
 // "store_error".
 func (m *Metrics) Ingest(outcome string) {
 	if m == nil {
