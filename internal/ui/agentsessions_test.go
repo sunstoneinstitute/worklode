@@ -84,6 +84,30 @@ func TestEndedSessionRendersAsEnded(t *testing.T) {
 	}
 }
 
+// A lease that outlives its agent's session must not keep the Activity card
+// up on the strength of that ended session (spec 071 §4, WL-862).
+func TestTaskPageOmitsActivityCardForEndedSessionOnly(t *testing.T) {
+	body := renderTask(t, TaskView{
+		Page:          PageProps{Title: "WL-7"},
+		AgentSessions: []AgentSessionRow{{Agent: "codex", ActorID: "stig", Started: "2d ago", LastSeen: "1d ago", Running: false}},
+	})
+	if strings.Contains(body, "id=\"activity\"") {
+		t.Errorf("task page rendered the Activity card for an ended session with no rows:\n%s", body)
+	}
+}
+
+// An open session with no activity rows yet is still a reason to keep the
+// card: that is where the live stream prepends.
+func TestTaskPageKeepsActivityCardForRunningSession(t *testing.T) {
+	body := renderTask(t, TaskView{
+		Page:          PageProps{Title: "WL-7"},
+		AgentSessions: []AgentSessionRow{{Agent: "codex", ActorID: "stig", Started: "2d ago", LastSeen: "1m ago", Running: true}},
+	})
+	if !strings.Contains(body, "id=\"activity\"") {
+		t.Errorf("task page omitted the Activity card for a running session:\n%s", body)
+	}
+}
+
 func TestAgentLabel(t *testing.T) {
 	for in, want := range map[string]string{
 		"claude-code": "Claude Code",
