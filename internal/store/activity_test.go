@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+
 	"github.com/sunstoneinstitute/worklode/internal/model"
 )
 
@@ -28,12 +31,16 @@ func TestAppendTaskActivity(t *testing.T) {
 
 	t.Run("empty slice inserts nothing and issues no query", func(t *testing.T) {
 		s, _ := openLeaseStore(t)
+		s.metrics = newStoreMetrics(prometheus.NewRegistry())
 		n, err := s.AppendTaskActivity(t.Context(), nil)
 		if err != nil {
 			t.Fatalf("append nil: %v", err)
 		}
 		if n != 0 {
 			t.Fatalf("append nil: got %d, want 0", n)
+		}
+		if got := testutil.CollectAndCount(s.metrics.queries); got != 0 {
+			t.Fatalf("queries issued: got %d, want 0", got)
 		}
 	})
 
@@ -134,7 +141,7 @@ func TestTaskActivityCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newest page: %v", err)
 	}
-	if got := events(page); !equalSlices(got, []string{"e4", "e3", "e2"}) {
+	if got := events(page); !slices.Equal(got, []string{"e4", "e3", "e2"}) {
 		t.Fatalf("newest page: got %v, want [e4 e3 e2]", got)
 	}
 
@@ -158,7 +165,7 @@ func TestTaskActivityCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tail page: %v", err)
 	}
-	if got := events(tail); !equalSlices(got, []string{"e2", "e3", "e4"}) {
+	if got := events(tail); !slices.Equal(got, []string{"e2", "e3", "e4"}) {
 		t.Fatalf("tail page: got %v, want [e2 e3 e4]", got)
 	}
 
@@ -167,7 +174,7 @@ func TestTaskActivityCursor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tail limited page: %v", err)
 	}
-	if got := events(tailLimited); !equalSlices(got, []string{"e2"}) {
+	if got := events(tailLimited); !slices.Equal(got, []string{"e2"}) {
 		t.Fatalf("tail limited page: got %v, want [e2]", got)
 	}
 }
@@ -178,18 +185,6 @@ func events(rows []model.TaskActivity) []string {
 		out[i] = r.Event
 	}
 	return out
-}
-
-func equalSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func TestPurgeTaskActivity(t *testing.T) {
@@ -220,7 +215,7 @@ func TestPurgeTaskActivity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read closed task rows: %v", err)
 	}
-	if got := events(closedRows); !equalSlices(got, []string{"fresh-closed"}) {
+	if got := events(closedRows); !slices.Equal(got, []string{"fresh-closed"}) {
 		t.Fatalf("closed task rows after purge: got %v, want [fresh-closed]", got)
 	}
 
@@ -229,7 +224,7 @@ func TestPurgeTaskActivity(t *testing.T) {
 		t.Fatalf("read open task rows: %v", err)
 	}
 	// order is newest-first (descending by id, which matches insertion order here)
-	if got := events(openRows); !equalSlices(got, []string{"fresh-open", "mid-open"}) {
+	if got := events(openRows); !slices.Equal(got, []string{"fresh-open", "mid-open"}) {
 		t.Fatalf("open task rows after purge: got %v, want [fresh-open mid-open]", got)
 	}
 }
