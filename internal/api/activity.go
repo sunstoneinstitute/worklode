@@ -82,6 +82,9 @@ func (s *server) ingestOTLPLogs(w http.ResponseWriter, r *http.Request) {
 		// stamping records it has no claim on.
 		if sub.TaskID != "" && rec.Task != sub.TaskID {
 			s.otlpMetrics.Ingest("forbidden")
+			d := Decision{Reason: "task_scope"}
+			s.observeAuthz(permProjectReport, d)
+			s.logDenial(r, sub, permProjectReport, d)
 			writeErr(w, http.StatusForbidden, "token is scoped to task "+sub.TaskID)
 			return
 		}
