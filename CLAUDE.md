@@ -310,3 +310,9 @@ call, or store operation with meaningful outcomes must add or extend
 conventions in `WL-SPEC-22` (Prometheus metrics): nil-safe metrics
 struct in the owning package's `metrics.go`, `prometheus.Registerer`
 threaded from `serve.go`, bounded label values, `worklode_` prefix.
+
+
+## Learned
+
+- **Doc URLs are `/docs/<REF>`.** In generated HTML and templates link docs as `/docs/<REF>` (e.g. `/docs/WL-SPEC-8#sec-9`), built from `d.ref`. Never the docs table PK (`d.id`, `/docs/<n>`) and never the legacy `/docs/ref/<n>?p=<prefix>` form. The bare-ref root shortcut (`GET /{ref}`, `internal/api/docref.go`) resolves task ids first, then doc refs, so one URL shape covers every ref kind.
+- **Spec drift over plans.** Avoiding spec drift is the most important thing; code that exists in no spec is a major concern (quick fixes are fine, but reconcile them into the spec afterwards). Plans are short-lived — reconciliation happens in the plan, and the starting state differs every time — so back-patching plans has no value. Gate for whether a change must patch the spec: does it change *what* the system does (patch) or only *how* (bugfixes etc., no patch)? Reverse test: if planning the what into how would likely mint a task for the change, no patch is needed; the draft gate is document 11 in `docs/specs2/`. When editing specs, cut stale data shapes that are not superseded — smell test: "if this spec were used to rebuild the codebase from scratch, would this section help or damage the result?"
