@@ -308,6 +308,9 @@ type server struct {
 	// *otlp.Forwarder and *otlp.Metrics method is nil-safe.
 	otlpMetrics *otlp.Metrics
 	otlpForward *otlp.Forwarder
+	// otlpLimit is the ingest route's per-actor budget (WL-863), also set
+	// in registerRoutes.
+	otlpLimit *otlp.Limiter
 
 	// pollMetrics is engine 2's instrument set (internal/reconcile), used by
 	// POST /api/v1/reconcile's poll call. Set in registerRoutes alongside
@@ -819,6 +822,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<server>/otlp/v1/logs. Bearer auth
 	// like the rest of the agent surface.
 	s.otlpMetrics = otlp.NewMetrics(reg)
+	s.otlpLimit = otlp.NewLimiter()
 	if up := strings.TrimSuffix(s.cfg.OTLPUpstream, "/"); up != "" {
 		s.otlpForward = otlp.NewForwarder(up, s.cfg.OTLPUpstreamToken, s.otlpMetrics)
 	}

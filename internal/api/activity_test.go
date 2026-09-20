@@ -623,3 +623,52 @@ func TestTaskActivityStreamWithNoCursorStartsAtTheHead(t *testing.T) {
 		}
 	}
 }
+
+// TestIngestOTLPLogsThrottlesPerActor drives one actor past its budget and
+// checks the four things the limit has to do (WL-863): let the batches under
+// the limit through, answer 429 with a Retry-After past it, count the
+// rejection, and leave a second actor's budget alone.
+func TestIngestOTLPLogsThrottlesPerActor(t *testing.T) {
+	t.Parallel()
+	st, h, admin, token := newTestServerWithAdmin(t)
+	id := seedActivityTask(t, st, h, token, "proj")
+	scoped := mintTaskToken(t, h, token, id, nil)
+
+	// An undecodable body spends a token and stops before the store, so
+	// draining the burst costs nothing but the decode. 400, not 429, is the
+	// evidence that each of these was under the limit.
+	var spent int
+	var throttled *httptest.ResponseRecorder
+	for range 200 {
+		rr := postOTLP(t, h, token, "application/json", []byte("{"))
+		if rr.Code == http.StatusTooManyRequests {
+			throttled = rr
+			break
+		}
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, body %s; want 400 under the limit", rr.Code, rr.Body.String())
+		}
+		spent++
+	}
+	if throttled == nil {
+		t.Fatalf("200 requests passed; the limit never bit")
+	}
+	if spent == 0 {
+		t.Fatalf("the first request was throttled; want a burst first")
+	}
+	if got := throttled.Header().Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After = %q, want %q", got, "1")
+	}
+
+	// The scoped token is a different actor (sandbox), so its bucket is
+	// untouched by the one that just ran dry.
+	if rr := postOTLP(t, h, scoped.Token, "application/json", otlpLogsBody(id)); rr.Code != http.StatusOK {
+		t.Fatalf("second actor status = %d, body %s; want 200", rr.Code, rr.Body.String())
+	}
+
+	want := `worklode_otlp_ingest_total{outcome="throttled"} 1`
+	metrics := doReq(t, admin, "GET", "/metrics", "", nil)
+	if !strings.Contains(metrics.Body.String(), want) {
+		t.Errorf("%q not found in /metrics:\n%s", want, metrics.Body.String())
+	}
+}
