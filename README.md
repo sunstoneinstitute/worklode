@@ -703,6 +703,23 @@ that leaves a worktree ages out instead: its `last_seen_at` stops advancing, and
 the row is closed for good when the lease is released, expires, or the task
 completes.
 
+### Task activity log
+
+Claude Code exports its OTel log signal straight to
+`POST /otlp/v1/logs` (`OTEL_EXPORTER_OTLP_LOGS_PROTOCOL=http/json`), and
+records carrying a `worklode.task.id` resource attribute become that task's
+activity log. Only an allowlisted set of attributes is kept: tool names,
+durations, outcomes and sizes, never prompt, response or tool content. Rows
+are purged two hours after the task closes, seven days otherwise.
+
+| Setting | Meaning |
+|---|---|
+| `LODE_OTLP_UPSTREAM` | base URL of the cluster otel-gateway each batch is relayed to; empty disables forwarding |
+| `LODE_OTLP_UPSTREAM_TOKEN` | bearer token presented to that gateway |
+
+Both unset is the local development default: batches are stored and nothing
+leaves the process.
+
 ### Token cost
 
 Token usage comes from Edge Agent telemetry, which watches the agent's own API

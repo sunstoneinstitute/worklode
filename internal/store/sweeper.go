@@ -33,11 +33,12 @@ func (s *Store) StartLeaseSweeper(ctx context.Context) {
 // context.Canceled — so matching on the error alone would count shutdown as a
 // failed sweep.
 //
-// Each tick also runs the §8.7 stale-doc sweep (sweepStaleDocs, docgroom.go),
-// after the lease sweep, on this same goroutine and ticker rather than a
-// second one — it is a second, independent operation the tick performs, not
-// a continuation of the lease sweep, so a lease-sweep failure does not skip
-// it.
+// Each tick also runs the §8.7 stale-doc sweep (sweepStaleDocs, docgroom.go)
+// and the 071 §2 task-activity purge (PurgeTaskActivity, activity.go), after
+// the lease sweep, on this same goroutine and ticker rather than a second
+// one each — they are independent operations the tick performs, not a
+// continuation of the lease sweep, so a lease-sweep failure does not skip
+// them.
 func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 	ticker := time.NewTicker(every)
 	defer ticker.Stop()
@@ -68,6 +69,18 @@ func (s *Store) sweepLeases(ctx context.Context, every time.Duration) {
 				slog.Error("sweep stale docs", "err", groomErr)
 			case emitted > 0:
 				slog.Info("emitted doc.stale", "count", emitted)
+			}
+
+			purged, purgeErr := s.PurgeTaskActivity(ctx, s.nowFn().UTC())
+			if purgeErr != nil && ctx.Err() != nil {
+				return
+			}
+			s.metrics.activityPurgeRun(purgeErr)
+			switch {
+			case purgeErr != nil:
+				slog.Error("purge task activity", "err", purgeErr)
+			case purged > 0:
+				slog.Info("purged task activity", "count", purged)
 			}
 		}
 	}

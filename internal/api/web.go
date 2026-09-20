@@ -107,8 +107,9 @@ func (s *server) blobOrigin() string {
 //   - script-src 'self': layout.templ's /assets/theme.js, /assets/nav.js,
 //     /assets/ching.js and /assets/htmx.min.js, cliauth.templ's
 //     /assets/copy.js, task.templ /
-//     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js, and
-//     progress.templ's /assets/progress.js, and graph.templ's
+//     docs.templ's /assets/mermaid.min.js and /assets/mermaid-init.js,
+//     task.templ's /assets/activity.js, progress.templ's
+//     /assets/progress.js, and graph.templ's
 //     /assets/d3.min.js and /assets/graph.js. No page has an inline script.
 //   - style-src 'self': /assets/app.css, and nothing else. No page carries a
 //     style attribute or a <style> element, and layout.templ's htmx-config
@@ -687,6 +688,16 @@ func (s *server) taskPage(w http.ResponseWriter, r *http.Request) {
 		s.webStoreErr(w, err)
 		return
 	}
+
+	// The Activity card's first page (spec 071 §4). A fixed limit, the same
+	// one the stream polls with, so nothing a request supplies reaches the
+	// store as a limit.
+	activity, err := s.st.TaskActivity(ctx, id, 0, activityPageSize)
+	if err != nil {
+		s.webStoreErr(w, err)
+		return
+	}
+	view.Activity = activityRows(activity)
 
 	// Leaves can never have children, so skip the query — the component
 	// only reads Progress inside the len(Children) > 0 branch anyway.

@@ -93,7 +93,7 @@ func (ClaudeCode) InstallHooks(repoDir, scope string) (HookInstall, error) {
 	}
 	applyGroupedHooks(settings, claudeBindings)
 	projectID, taskID := resolveClaudeTelemetryIDs(repoDir)
-	applyClaudeTelemetry(settings, projectID, taskID)
+	applyClaudeTelemetry(settings, projectID, taskID, cli.ServerURLFrom(repoDir))
 	if err := writeJSONFile(path, settings); err != nil {
 		return HookInstall{}, err
 	}
@@ -142,7 +142,7 @@ func (ClaudeCode) InstallWithStatusLine(repoDir, scope string) (HookInstall, err
 	applyGroupedHooks(settings, claudeBindings)
 	action := applyStatusLine(settings)
 	projectID, taskID := resolveClaudeTelemetryIDs(repoDir)
-	applyClaudeTelemetry(settings, projectID, taskID)
+	applyClaudeTelemetry(settings, projectID, taskID, cli.ServerURLFrom(repoDir))
 	if err := writeJSONFile(path, settings); err != nil {
 		return HookInstall{}, err
 	}
@@ -274,7 +274,7 @@ func (ClaudeCode) PropagateToWorktree(root, dir string) error {
 		applyStatusLine(settings)
 	}
 	projectID, taskID := resolveClaudeTelemetryIDs(dir)
-	applyClaudeTelemetry(settings, projectID, taskID)
+	applyClaudeTelemetry(settings, projectID, taskID, cli.ServerURLFrom(dir))
 	return writeJSONFile(dirPath, settings)
 }
 
@@ -337,15 +337,41 @@ func isLodeStatusLine(v any) bool {
 }
 
 // claudeTelemetryEnv is the fixed set of environment variables a Claude Code
-// install writes to turn on OTel-based usage telemetry, pointed at the
-// collector lode-server runs. The values never vary by project or scope, so
-// there is nothing here for a caller to configure.
+// install writes to turn on OTel-based usage telemetry: metrics go to the
+// local Edge Agent collector at OTEL_EXPORTER_OTLP_ENDPOINT, not lode-server.
+// Log events go to Worklode instead, over the separate keys claudeLogsEnv and
+// applyClaudeTelemetry's serverURL parameter write. The values never vary by
+// project or scope, so there is nothing here for a caller to configure.
 var claudeTelemetryEnv = map[string]string{
 	"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
 	"OTEL_METRICS_EXPORTER":        "otlp",
 	"OTEL_EXPORTER_OTLP_PROTOCOL":  "grpc",
 	"OTEL_EXPORTER_OTLP_ENDPOINT":  "http://127.0.0.1:4317",
 }
+
+// claudeLogsEnv is the fixed half of the env vars that turn on Claude Code's
+// OTel log exporter and point it at Worklode. The endpoint is the other half
+// -- it varies by server URL, so applyClaudeTelemetry computes and writes it
+// separately, and both apply and strip are written only when a server URL
+// resolves: a logs exporter with no endpoint would spam errors on every
+// export attempt.
+var claudeLogsEnv = map[string]string{
+	"OTEL_LOGS_EXPORTER":               "otlp",
+	"OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": "http/json",
+}
+
+// otelLogsEndpointKey is the env var holding the logs exporter's endpoint;
+// its value is always serverURL + otelLogsPath.
+const otelLogsEndpointKey = "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
+
+const otelLogsPath = "/otlp/v1/logs"
+
+// otelHeadersHelperCommand is the value ClaudeCode.InstallHooks writes into
+// Claude Code's top-level otelHeadersHelper setting -- the credential helper
+// Claude Code runs before every OTLP export to get the bearer token for the
+// log exporter, since the token itself never lands in a settings file. Also
+// how uninstall recognizes its own entry.
+const otelHeadersHelperCommand = "lode-hook otel-headers"
 
 // The two OTEL_RESOURCE_ATTRIBUTES keys Worklode owns. Every other key=value
 // entry in that comma-separated string belongs to someone else and is
@@ -442,7 +468,13 @@ func hasResourceKey(attrs, key string) bool {
 // attribute. It mutates settings in place and never touches the filesystem --
 // the same contract applyGroupedHooks has, so a caller with more than one
 // surface in the file folds this into its own single read-modify-write.
-func applyClaudeTelemetry(settings map[string]any, projectID, taskID string) {
+//
+// When serverURL is non-empty it also turns on the log exporter (claudeLogsEnv
+// plus the computed endpoint) and points otelHeadersHelper at lode-hook.
+// serverURL == "" writes none of that -- an unresolved server means no place
+// to send logs -- and leaves the metrics keys above as the only telemetry
+// this install turns on.
+func applyClaudeTelemetry(settings map[string]any, projectID, taskID, serverURL string) {
 	env := settingsEnv(settings)
 	for k, v := range claudeTelemetryEnv {
 		env[k] = v
@@ -453,46 +485,93 @@ func applyClaudeTelemetry(settings map[string]any, projectID, taskID string) {
 	} else {
 		delete(env, "OTEL_RESOURCE_ATTRIBUTES")
 	}
+	if serverURL != "" {
+		for k, v := range claudeLogsEnv {
+			env[k] = v
+		}
+		env[otelLogsEndpointKey] = serverURL + otelLogsPath
+		applyOTelHeadersHelper(settings)
+	}
 	settings["env"] = env
 }
 
+// applyOTelHeadersHelper points Claude Code's otelHeadersHelper setting at
+// lode-hook, mirroring applyStatusLine's rule for its own single-command
+// slot: claim it only when it is empty or already Worklode's, so a developer's
+// own helper is never overwritten.
+func applyOTelHeadersHelper(settings map[string]any) {
+	if existing, ok := settings["otelHeadersHelper"]; ok && existing != otelHeadersHelperCommand {
+		return
+	}
+	settings["otelHeadersHelper"] = otelHeadersHelperCommand
+}
+
 // stripClaudeTelemetry removes Worklode's telemetry env vars from an
-// already-read settings object, but only the four exact vars and only where
-// they still hold Worklode's own values -- a developer who repointed one
-// elsewhere keeps their own value. It always drops the two worklode.*
-// resource attributes it owns when present, and preserves every other env
-// key and resource attribute. Returns ActionRemoved or ActionNone,
-// stripGroupedHooks' vocabulary, so a caller with more than one surface can
-// OR the results together to decide whether to write.
+// already-read settings object, but only the exact vars and only where they
+// still hold Worklode's own values -- a developer who repointed one elsewhere
+// keeps their own value. The logs endpoint is checked by suffix rather than
+// exact match, since its value carries the server URL: it is Worklode's iff
+// it ends with otelLogsPath. It always drops the two worklode.* resource
+// attributes it owns when present, and the otelHeadersHelper entry when it is
+// still lode-hook's, preserving every other env key, resource attribute and
+// foreign helper. Returns ActionRemoved or ActionNone, stripGroupedHooks'
+// vocabulary, so a caller with more than one surface can OR the results
+// together to decide whether to write.
 func stripClaudeTelemetry(settings map[string]any) (action string) {
-	env, ok := settings["env"].(map[string]any)
-	if !ok {
-		return ActionNone
-	}
 	changed := false
-	for k, want := range claudeTelemetryEnv {
-		if got, ok := env[k].(string); ok && got == want {
-			delete(env, k)
-			changed = true
-		}
-	}
-	if existing, ok := env["OTEL_RESOURCE_ATTRIBUTES"].(string); ok {
-		if hasResourceKey(existing, resourceProjectKey) || hasResourceKey(existing, resourceTaskKey) {
-			changed = true
-			if merged := mergeResourceAttributes(existing, "", ""); merged == "" {
-				delete(env, "OTEL_RESOURCE_ATTRIBUTES")
-			} else {
-				env["OTEL_RESOURCE_ATTRIBUTES"] = merged
+
+	if env, ok := settings["env"].(map[string]any); ok {
+		for k, want := range claudeTelemetryEnv {
+			if got, ok := env[k].(string); ok && got == want {
+				delete(env, k)
+				changed = true
 			}
 		}
+		for k, want := range claudeLogsEnv {
+			if got, ok := env[k].(string); ok && got == want {
+				delete(env, k)
+				changed = true
+			}
+		}
+		if got, ok := env[otelLogsEndpointKey].(string); ok && strings.HasSuffix(got, otelLogsPath) {
+			delete(env, otelLogsEndpointKey)
+			changed = true
+		}
+		if existing, ok := env["OTEL_RESOURCE_ATTRIBUTES"].(string); ok {
+			if hasResourceKey(existing, resourceProjectKey) || hasResourceKey(existing, resourceTaskKey) {
+				changed = true
+				if merged := mergeResourceAttributes(existing, "", ""); merged == "" {
+					delete(env, "OTEL_RESOURCE_ATTRIBUTES")
+				} else {
+					env["OTEL_RESOURCE_ATTRIBUTES"] = merged
+				}
+			}
+		}
+		if len(env) == 0 {
+			delete(settings, "env")
+		} else {
+			settings["env"] = env
+		}
 	}
+
+	if stripOTelHeadersHelper(settings) {
+		changed = true
+	}
+
 	if !changed {
 		return ActionNone
 	}
-	if len(env) == 0 {
-		delete(settings, "env")
-	} else {
-		settings["env"] = env
-	}
 	return ActionRemoved
+}
+
+// stripOTelHeadersHelper removes settings' otelHeadersHelper entry, but only
+// while it still holds otelHeadersHelperCommand -- a developer's own helper
+// is left alone, mirroring stripStatusLine.
+func stripOTelHeadersHelper(settings map[string]any) bool {
+	existing, ok := settings["otelHeadersHelper"]
+	if !ok || existing != otelHeadersHelperCommand {
+		return false
+	}
+	delete(settings, "otelHeadersHelper")
+	return true
 }

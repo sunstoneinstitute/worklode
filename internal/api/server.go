@@ -34,6 +34,7 @@ import (
 	"github.com/sunstoneinstitute/worklode/internal/mdrender"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/oidc"
+	"github.com/sunstoneinstitute/worklode/internal/otlp"
 	"github.com/sunstoneinstitute/worklode/internal/overview"
 	"github.com/sunstoneinstitute/worklode/internal/reconcile"
 	"github.com/sunstoneinstitute/worklode/internal/safefetch"
@@ -117,6 +118,14 @@ type Config struct {
 	// there fails the boot: it changes what the server demands of a review,
 	// so a typo must not be read as a weaker requirement.
 	ApprovalFlowsDir string `env:"LODE_APPROVAL_FLOWS_DIR"`
+
+	// OTLPUpstream is the cluster otel-gateway base URL the ingest route
+	// relays each stored log batch to, and OTLPUpstreamToken the bearer it
+	// presents (spec 071 §3). Both empty disables forwarding, which is the
+	// local development default: batches are still stored, nothing leaves
+	// the process.
+	OTLPUpstream      string `env:"LODE_OTLP_UPSTREAM"`
+	OTLPUpstreamToken string `env:"LODE_OTLP_UPSTREAM_TOKEN"`
 
 	// SkillSources configures org skill source repos, comma-separated
 	// "owner/repo@ref:glob" entries. LODE_SKILL_SOURCES. Requires the GitHub
@@ -292,6 +301,13 @@ type server struct {
 	// *hooks.Metrics method is nil-safe (internal/hooks/metrics.go), so
 	// callers don't need it non-nil.
 	hookMetrics *hooks.Metrics
+
+	// otlpMetrics and otlpForward serve POST /otlp/v1/logs (spec 071 §1,
+	// §3). Both are set in registerRoutes; otlpForward stays nil when no
+	// upstream is configured, which is what turns forwarding off — every
+	// *otlp.Forwarder and *otlp.Metrics method is nil-safe.
+	otlpMetrics *otlp.Metrics
+	otlpForward *otlp.Forwarder
 
 	// pollMetrics is engine 2's instrument set (internal/reconcile), used by
 	// POST /api/v1/reconcile's poll call. Set in registerRoutes alongside
@@ -509,6 +525,12 @@ type server struct {
 	progressStreamsActive    prometheus.Gauge
 	progressStreamFramesSent prometheus.Counter
 
+	// activityStreamsActive and activityStreamFramesSent are the same pair
+	// for the task page's Activity follow (GET /tasks/{id}/activity/events,
+	// spec 071 §4).
+	activityStreamsActive    prometheus.Gauge
+	activityStreamFramesSent prometheus.Counter
+
 	// listExpansions counts list endpoint requests that asked for an
 	// expansion, by endpoint (tasks, docs) and expansion (detail, body); see
 	// observeListExpansion.
@@ -718,6 +740,7 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 		http.Redirect(w, r, "/docs", http.StatusFound)
 	})
 	r.web("GET /tasks/{id}", s.taskPage)
+	r.web("GET /tasks/{id}/activity/events", s.taskActivityEvents)
 	// The document corpus (spec 025 §5) is read-only in the cockpit: writing
 	// a document is an authoring act performed through the API and the CLI,
 	// where the body — the artifact itself — comes from a file.
@@ -790,6 +813,16 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.publicFunc("GET /.well-known/lode-login", s.wellKnownLogin)
 	r.publicFunc("GET /auth/cli/login", s.cliLogin)
 	r.publicFunc("POST /auth/cli/token", s.cliToken)
+
+	// Agent telemetry ingest (spec 071 §1). Not under /api/v1: the path is
+	// the OTLP convention, so a stock exporter reaches it with
+	// OTEL_EXPORTER_OTLP_LOGS_ENDPOINT=<server>/otlp/v1/logs. Bearer auth
+	// like the rest of the agent surface.
+	s.otlpMetrics = otlp.NewMetrics(reg)
+	if up := strings.TrimSuffix(s.cfg.OTLPUpstream, "/"); up != "" {
+		s.otlpForward = otlp.NewForwarder(up, s.cfg.OTLPUpstreamToken, s.otlpMetrics)
+	}
+	r.api("POST /otlp/v1/logs", s.ingestOTLPLogs)
 
 	r.api("POST /api/v1/tasks", s.createTask)
 	r.api("GET /api/v1/tasks", s.listTasks)
@@ -1241,6 +1274,10 @@ func NewServer(st *store.Store, cfg Config) (http.Handler, http.Handler, error) 
 			s.branchRulesKick = make(chan struct{}, 1)
 			go s.branchRulesLoop(cfg.BackgroundCtx)
 		}
+
+		// The OTLP forward loop (071 §3). Gated like the loops above; with
+		// no upstream configured otlpForward is nil and Run returns at once.
+		go s.otlpForward.Run(cfg.BackgroundCtx)
 
 		s.watcherMetrics = watcher.NewMetrics(reg)
 		// First and only registration of the eventbus instruments: this is
