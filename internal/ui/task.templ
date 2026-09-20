@@ -57,11 +57,12 @@ templ Task(v TaskView) {
 				}
 
 				// The Activity card (spec 071 §4). It is omitted outright when
-				// the task has neither rows nor a session, rather than standing
-				// empty over a task no agent ever worked. A held task with no
-				// rows yet keeps the card: the open session is a fact worth
-				// showing, and the empty list is where the stream prepends.
-				if len(v.Activity) > 0 || len(v.AgentSessions) > 0 {
+				// the task has neither rows nor an open session, rather than
+				// standing empty over a task no agent ever worked or whose
+				// lease outlived its session. A held task with no rows yet
+				// keeps the card: the open session is a fact worth showing,
+				// and the empty list is where the stream prepends.
+				if len(v.Activity) > 0 || hasRunningSession(v.AgentSessions) {
 					<section class="card" id="activity" aria-labelledby="activity-heading" data-task={ v.Task.ID }>
 						<div class="hd"><h3 id="activity-heading">Activity</h3></div>
 						<div class="bd">
