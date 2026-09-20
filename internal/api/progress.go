@@ -615,46 +615,14 @@ func (s *server) progressEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	q := r.URL.Query()
-	cursor := int64(-1) // -1: no cursor given, start at the head
-	if v := q.Get("after"); v != "" {
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || n < 0 {
-			writeErr(w, http.StatusUnprocessableEntity, "invalid after: must be a non-negative integer event id")
-			return
-		}
-		cursor = n
-	}
-	if v := r.Header.Get("Last-Event-ID"); v != "" {
-		n, err := strconv.ParseInt(v, 10, 64)
-		if err != nil || n < 0 {
-			writeErr(w, http.StatusUnprocessableEntity, "invalid Last-Event-ID: must be a non-negative integer event id")
-			return
-		}
-		cursor = n
-	}
-
-	h := w.Header()
-	h.Set("Content-Type", "text/event-stream")
-	h.Set("Cache-Control", "no-cache")
-	h.Set("X-Accel-Buffering", "no")
-
-	rc := http.NewResponseController(w)
-	if err := rc.Flush(); err != nil {
-		for _, k := range []string{"Content-Type", "Cache-Control", "X-Accel-Buffering"} {
-			h.Del(k)
-		}
-		s.log.Error("progress event stream: response writer cannot flush", "err", err)
-		writeErr(w, http.StatusInternalServerError, "streaming not supported")
+	ctx, rc, cursor, stop, ok := s.beginEventStream(w, r, "progress event stream", "event id")
+	if !ok {
 		return
 	}
 
 	s.observeProgressStreamOpen()
 	defer s.observeProgressStreamClose()
-
-	ctx, endStream := context.WithCancel(ctx)
-	defer endStream()
-	defer context.AfterFunc(s.bgCtx, endStream)()
+	defer stop()
 
 	if cursor < 0 {
 		var err error
