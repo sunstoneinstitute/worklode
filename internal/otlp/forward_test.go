@@ -83,6 +83,7 @@ func TestForwarderRun_ClientErrorDropped(t *testing.T) {
 	<-received
 
 	waitForCounter(t, m.forward.WithLabelValues("client_error"), 1)
+	assertNoRetry(t, received)
 }
 
 func TestForwarderRun_ServerErrorDropped(t *testing.T) {
@@ -98,6 +99,35 @@ func TestForwarderRun_ServerErrorDropped(t *testing.T) {
 	<-received
 
 	waitForCounter(t, m.forward.WithLabelValues("server_error"), 1)
+	assertNoRetry(t, received)
+}
+
+// TestForwarderRun_NetworkErrorDropped asserts a batch the client never
+// reached (dial failure, not an HTTP response) counts as "network" rather
+// than being silently lost or mislabeled as a client/server error.
+func TestForwarderRun_NetworkErrorDropped(t *testing.T) {
+	m := NewMetrics(prometheus.NewRegistry())
+	f := NewForwarder("http://127.0.0.1:1", "tok", m)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go f.Run(ctx)
+
+	f.Enqueue("application/json", []byte(`{}`))
+
+	waitForCounter(t, m.forward.WithLabelValues("network"), 1)
+}
+
+// assertNoRetry asserts post did not requeue or re-send the batch after a
+// non-2xx response — the forwarder drops on any outcome rather than
+// retrying (spec 071 §3).
+func assertNoRetry(t *testing.T, received chan gotRequest) {
+	t.Helper()
+	select {
+	case <-received:
+		t.Fatal("upstream received a second request; want drop, not retry")
+	case <-time.After(100 * time.Millisecond):
+	}
 }
 
 func TestForwarderEnqueue_FullQueueDrops(t *testing.T) {
