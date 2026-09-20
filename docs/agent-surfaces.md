@@ -59,7 +59,11 @@ last checked against; bump the stamp whenever you touch it.
 `lode install` writes lifecycle bindings with the sibling binaries
 `lode-hook <event>` and `lode-statusline`. The old subcommand spellings were
 removed with the WL-319 shim cleanup; `lode install` still recognises them in
-existing settings files so upgrades replace pre-split bindings.
+existing settings files so upgrades replace pre-split bindings. For Claude
+Code, install also points the OTel log exporter at Worklode (WL-SPEC-71 §5):
+when a server URL resolves, it sets the three `OTEL_*_LOGS_*` env keys and
+Claude Code's top-level `otelHeadersHelper` setting to `lode-hook
+otel-headers`, the credential helper that supplies the bearer token.
 
 `lode install` writes the shared Worklode block to
 `.worklode/agent-instructions.md` and adds a plain-language read instruction

@@ -153,8 +153,11 @@ var routeGuards = map[string]routeGuard{
 	"GET /deliveries":                           guarded(permWebRead),
 	"GET /knowledge":                            guarded(permWebRead),
 	"GET /tasks/{id}":                           guarded(permWebRead),
-	"GET /docs":                                 guarded(permWebRead),
-	"GET /docs/{id}":                            guarded(permWebRead),
+	// The task page's Activity follow (WL-SPEC-71 §4): permWebRead like the
+	// page it belongs to — a frame is the same row the page already renders.
+	"GET /tasks/{id}/activity/events": guarded(permWebRead),
+	"GET /docs":                       guarded(permWebRead),
+	"GET /docs/{id}":                  guarded(permWebRead),
 	// Shaped /docs/versions/{id}/{n} rather than /docs/{id}/versions/{n}: the
 	// latter is ambiguous with "GET /docs/ref/{ref...}" below when {id}
 	// matches the literal "ref" — net/http's ServeMux refuses to register two
@@ -412,6 +415,14 @@ var routeGuards = map[string]routeGuard{
 	"POST /api/v1/tasks/{id}/tokens":           guarded(permTaskToken),
 	"POST /api/v1/actors/{id}/tokens":          guarded(permActorAdmin),
 	"DELETE /api/v1/tokens":                    guarded(permActorAdmin),
+
+	// --- agent telemetry (spec 071) -------------------------------------------
+	// permProjectReport: the permission Edge Agent's usage report already
+	// carries, since this is the same kind of act — an agent reporting its
+	// own telemetry. guardedAny because the path carries no task id; the
+	// handler itself refuses a batch stamped with a task the token is not
+	// bound to.
+	"POST /otlp/v1/logs": guardedAny(permProjectReport),
 
 	// --- inbox ---------------------------------------------------------------
 	"GET /api/v1/inbox":          guarded(permInboxRead),

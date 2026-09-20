@@ -76,6 +76,10 @@ func hookTriggers() map[string]string {
 	for event, entries := range byEvent {
 		triggers[event] = strings.Join(entries, "; ")
 	}
+	// otel-headers is not a hook binding — no adapter's Events() names it —
+	// it is Claude Code's otelHeadersHelper setting, a single command slot
+	// like statusLine rather than an entry in the hooks block.
+	triggers["otel-headers"] = "claude-code otelHeadersHelper"
 	return triggers
 }
 
@@ -84,7 +88,7 @@ func printEvents(w io.Writer) {
 	for _, event := range events {
 		width = max(width, len(event.Name))
 	}
-	fmt.Fprint(w, "Worklode lifecycle hooks — `lode-hook <event>`, payload on stdin:\n\n")
+	fmt.Fprint(w, "Worklode lifecycle hooks — `lode-hook <event>`, most take a payload on stdin:\n\n")
 	for _, event := range events {
 		trigger := triggers[event.Name]
 		if trigger == "" {

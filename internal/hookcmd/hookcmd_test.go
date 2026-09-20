@@ -59,6 +59,28 @@ func TestRunListNamesEveryEvent(t *testing.T) {
 	}
 }
 
+// otel-headers has no entry in any adapter's Events() (harness.ClaudeCode's
+// claudeBindings never names it -- it is Claude Code's otelHeadersHelper
+// setting, not a hooks binding), so it needs its own hookTriggers() entry or
+// `lode-hook --list` would wrongly call it unbound.
+func TestHookTriggersNamesOTelHeadersHelper(t *testing.T) {
+	trigger := hookTriggers()["otel-headers"]
+	if trigger == "" || trigger == unboundTrigger {
+		t.Fatalf("otel-headers trigger = %q, want Claude Code's otelHeadersHelper setting", trigger)
+	}
+	if !strings.Contains(trigger, "otelHeadersHelper") {
+		t.Fatalf("otel-headers trigger = %q, want it to name otelHeadersHelper", trigger)
+	}
+
+	var out bytes.Buffer
+	if code := Run(t.Context(), []string{"--list"}, nil, &out, nil); code != 0 {
+		t.Fatalf("code = %d", code)
+	}
+	if !strings.Contains(out.String(), "otelHeadersHelper") {
+		t.Fatalf("--list output missing otel-headers' otelHeadersHelper trigger: %q", out.String())
+	}
+}
+
 func TestRunHelpDoesNotReadStdin(t *testing.T) {
 	for _, arg := range []string{"-h", "--help"} {
 		var out bytes.Buffer

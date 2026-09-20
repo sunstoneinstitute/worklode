@@ -55,3 +55,7 @@ data:
   LODE_BLOB_ENDPOINT: ""
   LODE_BLOB_BUCKET: ""
   LODE_BLOB_REGION: ""
+  # Where /otlp/v1/logs forwards task activity log events on (WL-SPEC-71 §1,
+  # §3). Empty means forwarding is off. LODE_OTLP_UPSTREAM_TOKEN is a secret,
+  # wired from the per-environment overlay instead of here.
+  LODE_OTLP_UPSTREAM: ""

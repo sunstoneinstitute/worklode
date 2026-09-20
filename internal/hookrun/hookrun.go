@@ -223,7 +223,10 @@ type Event struct {
 
 // events is the accepted <event> set, in lifecycle order, and the source of
 // truth for `lode hook --list` and the command's own help. dispatch below must
-// name exactly these — TestEventsAreDispatched holds the two together.
+// name exactly these — TestEventsAreDispatched holds the two together. The one
+// exception is otel-headers: Run answers it directly, before dispatch, since
+// it is a credential helper rather than a lifecycle notification (see
+// handleOTelHeaders).
 var events = []Event{
 	{"session-start", "Renew the lease, open the agent session, inject the brief."},
 	{"heartbeat", "Report the session as still alive (at most once a minute)."},
@@ -236,6 +239,7 @@ var events = []Event{
 	{"worktree-remove", "Release the task's lease when its worktree is removed."},
 	{"worktree-enter", "Open an agent session against the worktree just entered."},
 	{"worktree-exit", "Close the agent session on the worktree just left."},
+	{"otel-headers", "Print the bearer token header for Claude Code's OTel log exporter."},
 }
 
 // Events returns the accepted hook events in lifecycle order.
@@ -256,11 +260,21 @@ func EventNames() []string {
 // that action did anything — runs the --next downstream command if present,
 // replaying the original payload on its stdin and propagating its exit code.
 // Without --next it always returns 0.
+//
+// otel-headers is answered before any of that, without reading opts.Stdin at
+// all: it is a credential helper Claude Code invokes for its own purposes,
+// carrying no payload, and --next composition is meaningless for it. Reading
+// stdin anyway would risk blocking forever on an inherited or unclosed pipe —
+// every OTel export batch leaving a hung lode-hook process behind.
 func Run(ctx context.Context, opts Options) int {
+	if opts.Event == "otel-headers" {
+		handleOTelHeaders(opts)
+		return 0
+	}
+
 	raw, _ := io.ReadAll(opts.Stdin) // tolerate read errors / empty stdin
 
 	payload := normalizePayload(opts.Harness, raw)
-
 	dir := resolveDir(payload)
 	l := layoutFor(opts, dir)
 	dispatch(ctx, opts, payload, dir, l)

@@ -130,6 +130,12 @@ func pages(t *testing.T) map[string]string {
 				{Agent: "claude-code", AgentVersion: "2.1.231", ActorID: "claude-worker-01", Started: "3h ago", LastSeen: "2m ago", Running: true},
 				{Agent: "codex", AgentVersion: "0.52.0-alpha.20260814", ActorID: "stig@sunstoneinstitute.ai", Started: "2d ago", LastSeen: "1d ago"},
 			},
+			Activity: []ActivityRow{
+				{ID: 4821, At: now, Event: "tool_result", Session: "0f2c1b9e-77a4-4f10-9b3d-5c8e21af6b04",
+					Summary: "Bash failed 12.4s command_timeout ./scripts/narrow-check.sh --browser chromium --widths 320,375,640,768"},
+				{ID: 4820, At: now, Event: "api_error", Session: "0f2c1b9e-77a4-4f10-9b3d-5c8e21af6b04",
+					Summary: "529 overloaded_error: upstream connect error or disconnect/reset before headers attempt 3"},
+			},
 		}),
 		"docs": Docs(DocsView{
 			Page: PageProps{Title: "Knowledge", ActiveGlobal: "knowledge"},

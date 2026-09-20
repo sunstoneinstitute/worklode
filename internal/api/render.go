@@ -270,6 +270,112 @@ func projectAgentSessionRows(sessions []store.ProjectAgentSession, now time.Time
 	return out
 }
 
+// activityRows maps a task's activity log into rendered rows (spec 071 §4).
+// Everything a row shows is derived here: internal/ui takes pre-formatted
+// rows and reads no attribute of its own.
+func activityRows(rows []model.TaskActivity) []ui.ActivityRow {
+	out := make([]ui.ActivityRow, 0, len(rows))
+	for _, a := range rows {
+		out = append(out, activityRow(a))
+	}
+	return out
+}
+
+// activityRow maps one row. The claude_code. prefix is stripped because the
+// card is already a coding agent's log and the prefix would be on every row.
+func activityRow(a model.TaskActivity) ui.ActivityRow {
+	return ui.ActivityRow{
+		ID:      a.ID,
+		At:      a.At,
+		Event:   strings.TrimPrefix(a.Event, "claude_code."),
+		Summary: activitySummary(a),
+		Session: a.Session,
+	}
+}
+
+// activitySummary is the one line a row shows beside its event name, built
+// from the allowlisted attributes alone (spec 071 §4). The event name is the
+// row's own cell, so no summary repeats it — except for a kind this switch
+// does not model, where naming the event is the only honest thing to say. An
+// attribute the exporter did not record contributes nothing rather than a
+// zero: "ok" is a fact, and an absent success is not "failed".
+func activitySummary(a model.TaskActivity) string {
+	at := a.Attrs
+	var parts []string
+	add := func(s string) {
+		if s != "" {
+			parts = append(parts, s)
+		}
+	}
+	switch a.Event {
+	case "claude_code.tool_result":
+		add(at.ToolName)
+		if at.Success != nil {
+			if *at.Success {
+				add("ok")
+			} else {
+				add("failed")
+			}
+		}
+		add(activityDuration(at.DurationMS))
+		if at.Success != nil && !*at.Success {
+			add(at.ErrorType)
+		}
+	case "claude_code.tool_decision":
+		add(at.ToolName)
+		add(at.DecisionType)
+		add(at.DecisionSource)
+	case "claude_code.api_request":
+		add(at.Model)
+		add(activityAttempt(at.Attempt))
+	case "claude_code.api_error":
+		if at.StatusCode > 0 {
+			add(strconv.FormatInt(at.StatusCode, 10))
+		}
+		add(at.Error)
+		add(activityAttempt(at.Attempt))
+	case "claude_code.user_prompt":
+		add(activityChars(at.PromptLength))
+		add(at.CommandName)
+	case "claude_code.assistant_response":
+		add(at.Model)
+		add(activityChars(at.ResponseLength))
+	default:
+		return a.Event
+	}
+	return strings.Join(parts, " ")
+}
+
+// activityDuration writes a tool call's duration at the precision a reader
+// scanning the card can use: whole milliseconds under a second, one decimal
+// of a second above it.
+func activityDuration(ms int64) string {
+	switch {
+	case ms <= 0:
+		return ""
+	case ms < 1000:
+		return strconv.FormatInt(ms, 10) + "ms"
+	default:
+		return strconv.FormatFloat(float64(ms)/1000, 'f', 1, 64) + "s"
+	}
+}
+
+// activityAttempt names a retry. The first attempt is the ordinary case and
+// saying so on every row would bury the retries worth noticing.
+func activityAttempt(n int64) string {
+	if n <= 1 {
+		return ""
+	}
+	return "attempt " + strconv.FormatInt(n, 10)
+}
+
+func activityChars(n int64) string {
+	if n <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(n, 10) + " chars"
+}
+
 // timelineRows maps a task's timeline entries into rendered rows via
 // summarizeEntry (which stays in api: internal/ui takes pre-formatted rows,
 // not the raw entries).
