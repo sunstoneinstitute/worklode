@@ -233,9 +233,8 @@ func CreateDoc(tx *sql.Tx, now time.Time, in DocInput, eventID int64) (*model.Do
 		return nil, err
 	}
 	if acceptedAtCreate {
-		if _, err := tx.Exec(
-			`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
-			return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+		if err := publishDocSections(tx, id); err != nil {
+			return nil, err
 		}
 	}
 	if err := rebuildEdges(tx, now, id, in.Kind, in.Project, parsed.doc.Frontmatter); err != nil {
@@ -431,9 +430,8 @@ func AcceptDoc(tx *sql.Tx, now time.Time, id int64, actorID string, eventID int6
 		`UPDATE docs SET status = 'accepted', updated_at = $2 WHERE id = $1`, id, ts); err != nil {
 		return nil, nil, fmt.Errorf("accept doc %d: %w", id, err)
 	}
-	if _, err := tx.Exec(
-		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
-		return nil, nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+	if err := publishDocSections(tx, id); err != nil {
+		return nil, nil, err
 	}
 	if err := supersedeReplacedDocs(tx, ts, id, eventID); err != nil {
 		return nil, nil, err
@@ -768,6 +766,9 @@ func rebuildSectionsFrom(tx *sql.Tx, docID int64, kind string, doc *designdoc.Do
 	after := map[string]priorSection{}
 	if kind == "plan" {
 		return after, nil
+	}
+	if err := syncClauses(tx, docID, doc); err != nil {
+		return nil, err
 	}
 	if _, err := tx.Exec(`DELETE FROM doc_sections WHERE doc_id = $1`, docID); err != nil {
 		return nil, fmt.Errorf("clear sections of doc %d: %w", docID, err)

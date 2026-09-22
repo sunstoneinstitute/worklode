@@ -1,0 +1,4113 @@
+@base <https://worklode.dev.sunstoneinstitute.ai/> .
+@prefix wl:   <https://worklode.io/ns/ontology#> .
+@prefix wlc:  <https://worklode.io/ns/concept/> .
+@prefix dct:  <http://purl.org/dc/terms/> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# --- 01-system-and-deployment.md
+<clauses/01-0> a wl:Section , wl:Clause ;
+    rdfs:label "System and deployment (intro)" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L3-L3" ;
+    wl:tokenCount 120 ;
+    wl:position 1 ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/01-1> a wl:Section , wl:Clause ;
+    rdfs:label "How to read this set" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L7-L20" ;
+    wl:tokenCount 228 ;
+    wl:position 2 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/01-2-a> a wl:Section , wl:Clause ;
+    rdfs:label "Glossary (a)" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L24-L24" ;
+    wl:tokenCount 75 ;
+    wl:position 3 ;
+    wl:status wlc:draft .
+
+<clauses/01-2-b> a wl:Section , wl:Clause ;
+    rdfs:label "Glossary (b)" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L26-L59" ;
+    wl:tokenCount 949 ;
+    wl:position 4 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/01-2-c> a wl:Section , wl:Clause ;
+    rdfs:label "Glossary (c)" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L61-L61" ;
+    wl:tokenCount 35 ;
+    wl:position 5 ;
+    wl:status wlc:draft .
+
+<clauses/01-3-1> a wl:Section , wl:Clause ;
+    rdfs:label "The six executables" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L67-L78" ;
+    wl:tokenCount 178 ;
+    wl:position 6 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-3-2> a wl:Section , wl:Clause ;
+    rdfs:label "Dependency boundaries" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L82-L88" ;
+    wl:tokenCount 185 ;
+    wl:position 7 ;
+    wl:topic "cli" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Managed bindings" ;
+    wl:status wlc:draft .
+
+<clauses/01-3-4> a wl:Section , wl:Clause ;
+    rdfs:label "Distribution" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L94-L105" ;
+    wl:tokenCount 206 ;
+    wl:position 8 ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Failure behaviour" ;
+    wl:status wlc:draft .
+
+<clauses/01-4-1> a wl:Section , wl:Clause ;
+    rdfs:label "Where each instance runs" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L113-L120" ;
+    wl:tokenCount 202 ;
+    wl:position 9 ;
+    wl:topic "identity-authz" ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/01-4-2> a wl:Section , wl:Clause ;
+    rdfs:label "Instance environment" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L124-L135" ;
+    wl:tokenCount 182 ;
+    wl:position 10 ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/01-4-3> a wl:Section , wl:Clause ;
+    rdfs:label "The prod overlay" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L139-L150" ;
+    wl:tokenCount 178 ;
+    wl:position 11 ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "deployment-ops" ;
+    wl:foldedHeading "Scrape path" ;
+    wl:status wlc:draft .
+
+<clauses/01-5> a wl:Section , wl:Clause ;
+    rdfs:label "Sandboxes and worker environments" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L156-L156" ;
+    wl:tokenCount 96 ;
+    wl:position 12 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-5-1> a wl:Section , wl:Clause ;
+    rdfs:label "The bootstrap is repo-committed" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L160-L168" ;
+    wl:tokenCount 183 ;
+    wl:position 13 ;
+    wl:status wlc:draft .
+
+<clauses/01-5-2> a wl:Section , wl:Clause ;
+    rdfs:label "Worker images" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L172-L182" ;
+    wl:tokenCount 253 ;
+    wl:position 14 ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Content-addressed tags" ;
+    wl:status wlc:draft .
+
+<clauses/01-5-4> a wl:Section , wl:Clause ;
+    rdfs:label "Egress" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L188-L196" ;
+    wl:tokenCount 140 ;
+    wl:position 15 ;
+    wl:status wlc:draft .
+
+<clauses/01-5-5> a wl:Section , wl:Clause ;
+    rdfs:label "The sandbox session" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L200-L208" ;
+    wl:tokenCount 231 ;
+    wl:position 16 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-5-6> a wl:Section , wl:Clause ;
+    rdfs:label "Seams for backbone-initiated dispatch" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L212-L221" ;
+    wl:tokenCount 196 ;
+    wl:position 17 ;
+    wl:topic "cli" ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/01-6> a wl:Section , wl:Clause ;
+    rdfs:label "Metrics conventions" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L225-L256" ;
+    wl:tokenCount 699 ;
+    wl:position 18 ;
+    wl:topic "api" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-7> a wl:Section , wl:Clause ;
+    rdfs:label "Agent usage accounting" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L260-L260" ;
+    wl:tokenCount 46 ;
+    wl:position 19 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/01-7-1> a wl:Section , wl:Clause ;
+    rdfs:label "Collection and normalisation" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L264-L269" ;
+    wl:tokenCount 157 ;
+    wl:position 20 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-7-2> a wl:Section , wl:Clause ;
+    rdfs:label "Attribution" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L273-L273" ;
+    wl:tokenCount 152 ;
+    wl:position 21 ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-7-3> a wl:Section , wl:Clause ;
+    rdfs:label "Installation and cleanup" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L277-L279" ;
+    wl:tokenCount 191 ;
+    wl:position 22 ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Historical import" ;
+    wl:status wlc:draft .
+
+<clauses/01-8> a wl:Section , wl:Clause ;
+    rdfs:label "Project overhead cost" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L285-L285" ;
+    wl:tokenCount 67 ;
+    wl:position 23 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/01-8-1> a wl:Section , wl:Clause ;
+    rdfs:label "Schema" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L289-L306" ;
+    wl:tokenCount 296 ;
+    wl:position 24 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/01-8-2> a wl:Section , wl:Clause ;
+    rdfs:label "Store and API" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L310-L323" ;
+    wl:tokenCount 310 ;
+    wl:position 25 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/01-8-3> a wl:Section , wl:Clause ;
+    rdfs:label "Cost reports" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L327-L339" ;
+    wl:tokenCount 161 ;
+    wl:position 26 ;
+    wl:topic "identity-authz" ;
+    wl:foldedHeading "Cockpit" ;
+    wl:status wlc:draft .
+
+<clauses/01-9> a wl:Section , wl:Clause ;
+    rdfs:label "Verification" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L345-L351" ;
+    wl:tokenCount 293 ;
+    wl:position 27 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/01-oq-1> a wl:OpenQuestion ;
+    rdfs:label "The question direction for the MCP relay: a pending-question row, an answer surface, a wor" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L359-L359" ;
+    wl:tokenCount 32 ;
+    wl:position 28 ;
+    wl:status wlc:draft .
+
+<clauses/01-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Where worker images live and who may pull them. The registry's reachability rides the egre" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L360-L360" ;
+    wl:tokenCount 22 ;
+    wl:position 29 ;
+    wl:status wlc:draft .
+
+<clauses/01-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Whether the sandbox provider guarantees a setup step before the agent session starts. If n" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L361-L361" ;
+    wl:tokenCount 31 ;
+    wl:position 30 ;
+    wl:status wlc:draft .
+
+<clauses/01-oq-4> a wl:OpenQuestion ;
+    rdfs:label "What builds a project's `.worklode/Dockerfile` on first use, and who pays for the wait." ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L362-L362" ;
+    wl:tokenCount 19 ;
+    wl:position 31 ;
+    wl:status wlc:draft .
+
+<clauses/01-oq-5> a wl:OpenQuestion ;
+    rdfs:label "Whether Codex will expose a stable attribution field equivalent to `worklode.task.id`." ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L363-L363" ;
+    wl:tokenCount 15 ;
+    wl:position 32 ;
+    wl:status wlc:draft .
+
+<clauses/01-oq-6> a wl:OpenQuestion ;
+    rdfs:label "A session working in another repository's main checkout still bills to this project's over" ;
+    dct:isPartOf <arrangements/01-system-and-deployment> ;
+    dct:source "docs/specs2/01-system-and-deployment.md" ;
+    wl:sourceLines "docs/specs2/01-system-and-deployment.md#L364-L364" ;
+    wl:tokenCount 35 ;
+    wl:position 33 ;
+    wl:status wlc:draft .
+
+# --- 02-identity-actors-and-secrets.md
+<clauses/02-0> a wl:Section , wl:Clause ;
+    rdfs:label "Identity, actors and secrets (intro)" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L3-L3" ;
+    wl:tokenCount 146 ;
+    wl:position 1 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-1> a wl:Section , wl:Clause ;
+    rdfs:label "Actors" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L7-L19" ;
+    wl:tokenCount 262 ;
+    wl:position 2 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-1-1> a wl:Section , wl:Clause ;
+    rdfs:label "One actor per person" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L23-L23" ;
+    wl:tokenCount 123 ;
+    wl:position 3 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-1-2> a wl:Section , wl:Clause ;
+    rdfs:label "Agent actors" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L27-L46" ;
+    wl:tokenCount 470 ;
+    wl:position 4 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/02-2> a wl:Section , wl:Clause ;
+    rdfs:label "Credentials: `wl_` tokens" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L50-L67" ;
+    wl:tokenCount 323 ;
+    wl:position 5 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-3> a wl:Section , wl:Clause ;
+    rdfs:label "Authorization" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L71-L75" ;
+    wl:tokenCount 208 ;
+    wl:position 6 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/02-4> a wl:Section , wl:Clause ;
+    rdfs:label "Keycloak login" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L79-L79" ;
+    wl:tokenCount 23 ;
+    wl:position 7 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-4-1> a wl:Section , wl:Clause ;
+    rdfs:label "Server configuration" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L83-L93" ;
+    wl:tokenCount 137 ;
+    wl:position 8 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-4-2> a wl:Section , wl:Clause ;
+    rdfs:label "Realm configuration" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L97-L107" ;
+    wl:tokenCount 204 ;
+    wl:position 9 ;
+    wl:topic "identity-authz" ;
+    wl:foldedHeading "Provisioning on login" ;
+    wl:status wlc:draft .
+
+<clauses/02-5> a wl:Section , wl:Clause ;
+    rdfs:label "Web sessions" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L113-L122" ;
+    wl:tokenCount 222 ;
+    wl:position 10 ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-6> a wl:Section , wl:Clause ;
+    rdfs:label "Direct OIDC token exchange" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L126-L126" ;
+    wl:tokenCount 78 ;
+    wl:position 11 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-7> a wl:Section , wl:Clause ;
+    rdfs:label "CLI login" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L130-L136" ;
+    wl:tokenCount 213 ;
+    wl:position 12 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-7-1> a wl:Section , wl:Clause ;
+    rdfs:label "Loopback flow" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L140-L145" ;
+    wl:tokenCount 106 ;
+    wl:position 13 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-7-2> a wl:Section , wl:Clause ;
+    rdfs:label "Manual mode" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L149-L151" ;
+    wl:tokenCount 221 ;
+    wl:position 14 ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:foldedHeading "One-time codes" ;
+    wl:status wlc:draft .
+
+<clauses/02-7-4> a wl:Section , wl:Clause ;
+    rdfs:label "Security properties" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L157-L161" ;
+    wl:tokenCount 107 ;
+    wl:position 15 ;
+    wl:status wlc:draft .
+
+<clauses/02-8> a wl:Section , wl:Clause ;
+    rdfs:label "Client token storage" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L165-L176" ;
+    wl:tokenCount 243 ;
+    wl:position 16 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-9> a wl:Section , wl:Clause ;
+    rdfs:label "GitHub account linking" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L180-L180" ;
+    wl:tokenCount 44 ;
+    wl:position 17 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-9-1> a wl:Section , wl:Clause ;
+    rdfs:label "The GitHub App" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L184-L201" ;
+    wl:tokenCount 253 ;
+    wl:position 18 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-9-2> a wl:Section , wl:Clause ;
+    rdfs:label "Link flow" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L205-L215" ;
+    wl:tokenCount 231 ;
+    wl:position 19 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-9-3> a wl:Section , wl:Clause ;
+    rdfs:label "Stored GitHub tokens" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L219-L230" ;
+    wl:tokenCount 174 ;
+    wl:position 20 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-9-4> a wl:Section , wl:Clause ;
+    rdfs:label "Errors" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L234-L241" ;
+    wl:tokenCount 123 ;
+    wl:position 21 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-10> a wl:Section , wl:Clause ;
+    rdfs:label "Task-declared secrets" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L245-L249" ;
+    wl:tokenCount 228 ;
+    wl:position 22 ;
+    wl:foldedHeading "Names" ;
+    wl:status wlc:draft .
+
+<clauses/02-10-2> a wl:Section , wl:Clause ;
+    rdfs:label "The catalog" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L255-L293" ;
+    wl:tokenCount 715 ;
+    wl:position 23 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Declaration" ;
+    wl:status wlc:draft .
+
+<clauses/02-10-4> a wl:Section , wl:Clause ;
+    rdfs:label "Claim-time ceremony" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L299-L311" ;
+    wl:tokenCount 356 ;
+    wl:position 24 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/02-10-5> a wl:Section , wl:Clause ;
+    rdfs:label "Execution" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L315-L331" ;
+    wl:tokenCount 410 ;
+    wl:position 25 ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/02-10-6> a wl:Section , wl:Clause ;
+    rdfs:label "Purge" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L335-L335" ;
+    wl:tokenCount 149 ;
+    wl:position 26 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/02-10-7> a wl:Section , wl:Clause ;
+    rdfs:label "The `lode-secrets` skill" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L339-L339" ;
+    wl:tokenCount 114 ;
+    wl:position 27 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/02-10-8> a wl:Section , wl:Clause ;
+    rdfs:label "Degradation" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L343-L354" ;
+    wl:tokenCount 273 ;
+    wl:position 28 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/02-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Consent granularity: one yes/no for the non-baseline set, or per name once catalogs grow (" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L363-L363" ;
+    wl:tokenCount 20 ;
+    wl:position 29 ;
+    wl:status wlc:draft .
+
+<clauses/02-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Staleness: whether to force re-materialization after N days for long-lived worktrees (Q17." ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L364-L364" ;
+    wl:tokenCount 16 ;
+    wl:position 30 ;
+    wl:status wlc:draft .
+
+<clauses/02-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Catalog visibility: the full catalog is served to any authenticated actor; whether to narr" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L365-L365" ;
+    wl:tokenCount 26 ;
+    wl:position 31 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/02-oq-4> a wl:OpenQuestion ;
+    rdfs:label "Catalog home: whether to promote the 1Password item to a backbone table plus admin CLI if " ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L366-L366" ;
+    wl:tokenCount 26 ;
+    wl:position 32 ;
+    wl:status wlc:draft .
+
+<clauses/02-oq-5> a wl:OpenQuestion ;
+    rdfs:label "The first feature that writes to GitHub as a user, and the exact repository write permissi" ;
+    dct:isPartOf <arrangements/02-identity-actors-and-secrets> ;
+    dct:source "docs/specs2/02-identity-actors-and-secrets.md" ;
+    wl:sourceLines "docs/specs2/02-identity-actors-and-secrets.md#L367-L367" ;
+    wl:tokenCount 27 ;
+    wl:position 33 ;
+    wl:status wlc:draft .
+
+# --- 03-tasks-and-execution.md
+<clauses/03-0> a wl:Section , wl:Clause ;
+    rdfs:label "Tasks and execution (intro)" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L3-L3" ;
+    wl:tokenCount 154 ;
+    wl:position 1 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-1> a wl:Section , wl:Clause ;
+    rdfs:label "Projects and task keys" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L7-L24" ;
+    wl:tokenCount 430 ;
+    wl:position 2 ;
+    wl:topic "api" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-2-1> a wl:Section , wl:Clause ;
+    rdfs:label "Row" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L30-L48" ;
+    wl:tokenCount 176 ;
+    wl:position 3 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-2-2> a wl:Section , wl:Clause ;
+    rdfs:label "Kinds" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L52-L65" ;
+    wl:tokenCount 315 ;
+    wl:position 4 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "Priority and concern" ;
+    wl:status wlc:draft .
+
+<clauses/03-3-1> a wl:Section , wl:Clause ;
+    rdfs:label "States" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L73-L83" ;
+    wl:tokenCount 149 ;
+    wl:position 5 ;
+    wl:topic "deployment-ops" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-3-2> a wl:Section , wl:Clause ;
+    rdfs:label "Transitions" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L87-L111" ;
+    wl:tokenCount 574 ;
+    wl:position 6 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-3-3> a wl:Section , wl:Clause ;
+    rdfs:label "`done_state` per repo" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L115-L125" ;
+    wl:tokenCount 249 ;
+    wl:position 7 ;
+    wl:status wlc:draft .
+
+<clauses/03-3-4> a wl:Section , wl:Clause ;
+    rdfs:label "Closed" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L129-L129" ;
+    wl:tokenCount 101 ;
+    wl:position 8 ;
+    wl:status wlc:draft .
+
+<clauses/03-4> a wl:Section , wl:Clause ;
+    rdfs:label "Edges" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L133-L170" ;
+    wl:tokenCount 572 ;
+    wl:position 9 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/03-5> a wl:Section , wl:Clause ;
+    rdfs:label "Hierarchy and decomposition" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L174-L193" ;
+    wl:tokenCount 284 ;
+    wl:position 10 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "Decomposition" ;
+    wl:status wlc:draft .
+
+<clauses/03-5-2> a wl:Section , wl:Clause ;
+    rdfs:label "State machine of a task with children" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L199-L213" ;
+    wl:tokenCount 265 ;
+    wl:position 11 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:foldedHeading "Roll-up" ;
+    wl:foldedHeading "Hooked into `Transition`" ;
+    wl:foldedHeading "API and brief" ;
+    wl:status wlc:draft .
+
+<clauses/03-6> a wl:Section , wl:Clause ;
+    rdfs:label "Leases and worktrees" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L223-L249" ;
+    wl:tokenCount 445 ;
+    wl:position 12 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/03-7> a wl:Section , wl:Clause ;
+    rdfs:label "The claim transaction" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L253-L267" ;
+    wl:tokenCount 205 ;
+    wl:position 13 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/03-8-1> a wl:Section , wl:Clause ;
+    rdfs:label "Focus" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L273-L282" ;
+    wl:tokenCount 144 ;
+    wl:position 14 ;
+    wl:topic "data-model" ;
+    wl:foldedHeading "Ready set" ;
+    wl:status wlc:draft .
+
+<clauses/03-8-3> a wl:Section , wl:Clause ;
+    rdfs:label "The rally" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L288-L297" ;
+    wl:tokenCount 214 ;
+    wl:position 15 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/03-8-4> a wl:Section , wl:Clause ;
+    rdfs:label "Ranking" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L301-L315" ;
+    wl:tokenCount 140 ;
+    wl:position 16 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/03-8-5> a wl:Section , wl:Clause ;
+    rdfs:label "`claim --next` and `--strict-focus`" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L319-L332" ;
+    wl:tokenCount 278 ;
+    wl:position 17 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "`needs-decomposition`" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-1> a wl:Section , wl:Clause ;
+    rdfs:label "Tables" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L340-L372" ;
+    wl:tokenCount 244 ;
+    wl:position 18 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-2> a wl:Section , wl:Clause ;
+    rdfs:label "`RecordEvent`" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L376-L380" ;
+    wl:tokenCount 260 ;
+    wl:position 19 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-3> a wl:Section , wl:Clause ;
+    rdfs:label "Total order and the commit horizon" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L384-L392" ;
+    wl:tokenCount 148 ;
+    wl:position 20 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-4> a wl:Section , wl:Clause ;
+    rdfs:label "Subscribers" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L396-L398" ;
+    wl:tokenCount 196 ;
+    wl:position 21 ;
+    wl:topic "api" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-5> a wl:Section , wl:Clause ;
+    rdfs:label "Event types and payloads" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L402-L427" ;
+    wl:tokenCount 397 ;
+    wl:position 22 ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-6> a wl:Section , wl:Clause ;
+    rdfs:label "The `doc-lifecycle` subscriber" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L431-L440" ;
+    wl:tokenCount 267 ;
+    wl:position 23 ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-9-7> a wl:Section , wl:Clause ;
+    rdfs:label "Metrics" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L444-L453" ;
+    wl:tokenCount 97 ;
+    wl:position 24 ;
+    wl:status wlc:draft .
+
+<clauses/03-10> a wl:Section , wl:Clause ;
+    rdfs:label "Webhook-driven delivery" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L457-L457" ;
+    wl:tokenCount 24 ;
+    wl:position 25 ;
+    wl:status wlc:draft .
+
+<clauses/03-10-1> a wl:Section , wl:Clause ;
+    rdfs:label "Fact tables" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L461-L474" ;
+    wl:tokenCount 456 ;
+    wl:position 26 ;
+    wl:topic "data-model" ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/03-10-2> a wl:Section , wl:Clause ;
+    rdfs:label "Handlers" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L478-L494" ;
+    wl:tokenCount 466 ;
+    wl:position 27 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/03-10-3> a wl:Section , wl:Clause ;
+    rdfs:label "Error handling and limits" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L498-L505" ;
+    wl:tokenCount 248 ;
+    wl:position 28 ;
+    wl:status wlc:draft .
+
+<clauses/03-11> a wl:Section , wl:Clause ;
+    rdfs:label "Decisions" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L509-L532" ;
+    wl:tokenCount 405 ;
+    wl:position 29 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/03-12> a wl:Section , wl:Clause ;
+    rdfs:label "Deleting tasks and documents" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L536-L554" ;
+    wl:tokenCount 613 ;
+    wl:position 30 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-13> a wl:Section , wl:Clause ;
+    rdfs:label "Research work" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L558-L558" ;
+    wl:tokenCount 53 ;
+    wl:position 31 ;
+    wl:status wlc:draft .
+
+<clauses/03-13-1> a wl:Section , wl:Clause ;
+    rdfs:label "The investigation is a project" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L562-L564" ;
+    wl:tokenCount 213 ;
+    wl:position 32 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-13-2> a wl:Section , wl:Clause ;
+    rdfs:label "Milestones and deliverables" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L568-L575" ;
+    wl:tokenCount 162 ;
+    wl:position 33 ;
+    wl:status wlc:draft .
+
+<clauses/03-13-3> a wl:Section , wl:Clause ;
+    rdfs:label "Deliverables" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L579-L581" ;
+    wl:tokenCount 266 ;
+    wl:position 34 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/03-13-4> a wl:Section , wl:Clause ;
+    rdfs:label "Identifiers and cross-project references" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L585-L596" ;
+    wl:tokenCount 156 ;
+    wl:position 35 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-13-5> a wl:Section , wl:Clause ;
+    rdfs:label "People" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L600-L606" ;
+    wl:tokenCount 384 ;
+    wl:position 36 ;
+    wl:topic "identity-authz" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-13-6> a wl:Section , wl:Clause ;
+    rdfs:label "Approvals" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L610-L621" ;
+    wl:tokenCount 534 ;
+    wl:position 37 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-13-7> a wl:Section , wl:Clause ;
+    rdfs:label "Intake" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L625-L629" ;
+    wl:tokenCount 271 ;
+    wl:position 38 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/03-13-8> a wl:Section , wl:Clause ;
+    rdfs:label "Events out, events in, crew spaces" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L633-L635" ;
+    wl:tokenCount 211 ;
+    wl:position 39 ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-14> a wl:Section , wl:Clause ;
+    rdfs:label "Postgres and data layer" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L639-L643" ;
+    wl:tokenCount 193 ;
+    wl:position 40 ;
+    wl:topic "data-model" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/03-15> a wl:Section , wl:Clause ;
+    rdfs:label "Permissions" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L647-L647" ;
+    wl:tokenCount 76 ;
+    wl:position 41 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/03-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Whether a manual `lode task set state merged` should stop closing the lease, as delivery t" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L655-L655" ;
+    wl:tokenCount 27 ;
+    wl:position 42 ;
+    wl:status wlc:draft .
+
+<clauses/03-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Whether `concern` becomes required at task creation once the enum stabilises (005 §8.3)." ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L656-L656" ;
+    wl:tokenCount 18 ;
+    wl:position 43 ;
+    wl:status wlc:draft .
+
+<clauses/03-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Whether cross-project `blocking_fan_out` should be weighted when `--project` is omitted (0" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L657-L657" ;
+    wl:tokenCount 16 ;
+    wl:position 44 ;
+    wl:status wlc:draft .
+
+<clauses/03-oq-4> a wl:OpenQuestion ;
+    rdfs:label "Whether a bidirectional Task to GitHub Issue mirror is created eagerly or lazily, and whic" ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L658-L658" ;
+    wl:tokenCount 29 ;
+    wl:position 45 ;
+    wl:status wlc:draft .
+
+<clauses/03-oq-5> a wl:OpenQuestion ;
+    rdfs:label "Whether GitHub is ever replaced as the PR review surface (029 §7.3)." ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L659-L659" ;
+    wl:tokenCount 16 ;
+    wl:position 46 ;
+    wl:status wlc:draft .
+
+<clauses/03-oq-6> a wl:OpenQuestion ;
+    rdfs:label "Per-project access control: every logged-in user sees every project today (029 §9)." ;
+    dct:isPartOf <arrangements/03-tasks-and-execution> ;
+    dct:source "docs/specs2/03-tasks-and-execution.md" ;
+    wl:sourceLines "docs/specs2/03-tasks-and-execution.md#L660-L660" ;
+    wl:tokenCount 16 ;
+    wl:position 47 ;
+    wl:status wlc:draft .
+
+# --- 04-done-verification-workflows.md
+<clauses/04-0> a wl:Section , wl:Clause ;
+    rdfs:label "Done, verification and workflows (intro)" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L3-L3" ;
+    wl:tokenCount 152 ;
+    wl:position 1 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/04-1> a wl:Section , wl:Clause ;
+    rdfs:label "Done declarations" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L7-L16" ;
+    wl:tokenCount 236 ;
+    wl:position 2 ;
+    wl:foldedHeading "Resolution" ;
+    wl:status wlc:draft .
+
+<clauses/04-1-2> a wl:Section , wl:Clause ;
+    rdfs:label "Project defaults" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L22-L29" ;
+    wl:tokenCount 84 ;
+    wl:position 3 ;
+    wl:status wlc:draft .
+
+<clauses/04-1-3> a wl:Section , wl:Clause ;
+    rdfs:label "Storage, API, CLI" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L33-L48" ;
+    wl:tokenCount 196 ;
+    wl:position 4 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/04-2> a wl:Section , wl:Clause ;
+    rdfs:label "The brief" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L52-L55" ;
+    wl:tokenCount 98 ;
+    wl:position 5 ;
+    wl:status wlc:draft .
+
+<clauses/04-3> a wl:Section , wl:Clause ;
+    rdfs:label "The done check" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L59-L69" ;
+    wl:tokenCount 302 ;
+    wl:position 6 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/04-4> a wl:Section , wl:Clause ;
+    rdfs:label "Lease and worktree retention" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L73-L73" ;
+    wl:tokenCount 83 ;
+    wl:position 7 ;
+    wl:status wlc:draft .
+
+<clauses/04-5> a wl:Section , wl:Clause ;
+    rdfs:label "External evidence routing" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L77-L77" ;
+    wl:tokenCount 97 ;
+    wl:position 8 ;
+    wl:status wlc:draft .
+
+<clauses/04-6> a wl:Section , wl:Clause ;
+    rdfs:label "Provenance of a delivery state" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L81-L100" ;
+    wl:tokenCount 343 ;
+    wl:position 9 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/04-7> a wl:Section , wl:Clause ;
+    rdfs:label "Verification tasks for bugs" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L104-L118" ;
+    wl:tokenCount 312 ;
+    wl:position 10 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/04-7-1> a wl:Section , wl:Clause ;
+    rdfs:label "What the verification task states" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L122-L129" ;
+    wl:tokenCount 139 ;
+    wl:position 11 ;
+    wl:status wlc:draft .
+
+<clauses/04-8> a wl:Section , wl:Clause ;
+    rdfs:label "Workflows" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L133-L135" ;
+    wl:tokenCount 149 ;
+    wl:position 12 ;
+    wl:foldedHeading "Vocabulary versus machine" ;
+    wl:status wlc:draft .
+
+<clauses/04-8-2> a wl:Section , wl:Clause ;
+    rdfs:label "The mandatory core" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L141-L153" ;
+    wl:tokenCount 206 ;
+    wl:position 13 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/04-8-3> a wl:Section , wl:Clause ;
+    rdfs:label "Optional states and declared entries" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L157-L184" ;
+    wl:tokenCount 391 ;
+    wl:position 14 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:foldedHeading "The default workflow" ;
+    wl:foldedHeading "The guard" ;
+    wl:foldedHeading "Which workflow governs a task" ;
+    wl:status wlc:draft .
+
+<clauses/04-8-7> a wl:Section , wl:Clause ;
+    rdfs:label "Storage" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L194-L218" ;
+    wl:tokenCount 188 ;
+    wl:position 15 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/04-8-8> a wl:Section , wl:Clause ;
+    rdfs:label "Validation" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L222-L233" ;
+    wl:tokenCount 163 ;
+    wl:position 16 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/04-8-9> a wl:Section , wl:Clause ;
+    rdfs:label "State readers" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L237-L248" ;
+    wl:tokenCount 280 ;
+    wl:position 17 ;
+    wl:topic "ui" ;
+    wl:status wlc:draft .
+
+<clauses/04-8-10> a wl:Section , wl:Clause ;
+    rdfs:label "Changing a workflow" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L252-L263" ;
+    wl:tokenCount 270 ;
+    wl:position 18 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/04-9> a wl:Section , wl:Clause ;
+    rdfs:label "Relation to `done_state`" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L267-L267" ;
+    wl:tokenCount 66 ;
+    wl:position 19 ;
+    wl:status wlc:draft .
+
+<clauses/04-10> a wl:Section , wl:Clause ;
+    rdfs:label "The rule engine" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L271-L273" ;
+    wl:tokenCount 158 ;
+    wl:position 20 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/04-10-1> a wl:Section , wl:Clause ;
+    rdfs:label "Trigger, ordering, cascades" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L277-L281" ;
+    wl:tokenCount 196 ;
+    wl:position 21 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/04-10-2> a wl:Section , wl:Clause ;
+    rdfs:label "Rule shape and validation" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L285-L313" ;
+    wl:tokenCount 378 ;
+    wl:position 22 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/04-10-3> a wl:Section , wl:Clause ;
+    rdfs:label "Evaluation pass" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L317-L328" ;
+    wl:tokenCount 278 ;
+    wl:position 23 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/04-10-4> a wl:Section , wl:Clause ;
+    rdfs:label "LLM-backed rules" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L332-L345" ;
+    wl:tokenCount 352 ;
+    wl:position 24 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/04-10-5> a wl:Section , wl:Clause ;
+    rdfs:label "Execution, client, provenance" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L349-L355" ;
+    wl:tokenCount 213 ;
+    wl:position 25 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/04-11> a wl:Section , wl:Clause ;
+    rdfs:label "Metrics" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L359-L367" ;
+    wl:tokenCount 122 ;
+    wl:position 26 ;
+    wl:status wlc:draft .
+
+<clauses/04-12> a wl:Section , wl:Clause ;
+    rdfs:label "Deferred" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L371-L377" ;
+    wl:tokenCount 136 ;
+    wl:position 27 ;
+    wl:status wlc:draft .
+
+<clauses/04-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Whether workflows and rules should move from the JSON column into spec documents (left ope" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L385-L385" ;
+    wl:tokenCount 23 ;
+    wl:position 28 ;
+    wl:status wlc:draft .
+
+<clauses/04-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Whether `project_repos.done_state` should be replaced by a per-repo workflow selector." ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L386-L386" ;
+    wl:tokenCount 14 ;
+    wl:position 29 ;
+    wl:status wlc:draft .
+
+<clauses/04-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Which service actor id the rule engine uses, and how it is provisioned (see 02-identity-ac" ;
+    dct:isPartOf <arrangements/04-done-verification-workflows> ;
+    dct:source "docs/specs2/04-done-verification-workflows.md" ;
+    wl:sourceLines "docs/specs2/04-done-verification-workflows.md#L387-L387" ;
+    wl:tokenCount 20 ;
+    wl:position 30 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+# --- 05-documents.md
+<clauses/05-0> a wl:Section , wl:Clause ;
+    rdfs:label "Documents (intro)" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L3-L3" ;
+    wl:tokenCount 167 ;
+    wl:position 1 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-1> a wl:Section , wl:Clause ;
+    rdfs:label "Principle: rows are things someone made, groupings are queries" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L7-L15" ;
+    wl:tokenCount 140 ;
+    wl:position 2 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-2> a wl:Section , wl:Clause ;
+    rdfs:label "Document kinds" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L19-L36" ;
+    wl:tokenCount 522 ;
+    wl:position 3 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-3> a wl:Section , wl:Clause ;
+    rdfs:label "The store" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L40-L55" ;
+    wl:tokenCount 357 ;
+    wl:position 4 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-4> a wl:Section , wl:Clause ;
+    rdfs:label "Sections and anchors" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L59-L82" ;
+    wl:tokenCount 364 ;
+    wl:position 5 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-5> a wl:Section , wl:Clause ;
+    rdfs:label "Versioning" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L86-L99" ;
+    wl:tokenCount 245 ;
+    wl:position 6 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-6> a wl:Section , wl:Clause ;
+    rdfs:label "Constraints on accepted documents" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L103-L116" ;
+    wl:tokenCount 340 ;
+    wl:position 7 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-7> a wl:Section , wl:Clause ;
+    rdfs:label "Frontmatter and references" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L120-L144" ;
+    wl:tokenCount 692 ;
+    wl:position 8 ;
+    wl:topic "data-model" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-8> a wl:Section , wl:Clause ;
+    rdfs:label "Edges" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L148-L158" ;
+    wl:tokenCount 219 ;
+    wl:position 9 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-9-a> a wl:Section , wl:Clause ;
+    rdfs:label "Editorial lifecycle (a)" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L162-L194" ;
+    wl:tokenCount 676 ;
+    wl:position 10 ;
+    wl:topic "api" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-9-b> a wl:Section , wl:Clause ;
+    rdfs:label "Editorial lifecycle (b)" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L196-L196" ;
+    wl:tokenCount 137 ;
+    wl:position 11 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/05-10> a wl:Section , wl:Clause ;
+    rdfs:label "In-place amendment and the escalation ladder" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L200-L226" ;
+    wl:tokenCount 791 ;
+    wl:position 12 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-11-1> a wl:Section , wl:Clause ;
+    rdfs:label "The `## Tasks` section" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L232-L260" ;
+    wl:tokenCount 435 ;
+    wl:position 13 ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-11-2> a wl:Section , wl:Clause ;
+    rdfs:label "Acceptance mints the tasks" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L264-L280" ;
+    wl:tokenCount 481 ;
+    wl:position 14 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-11-3> a wl:Section , wl:Clause ;
+    rdfs:label "Spec fan-out is a query" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L284-L294" ;
+    wl:tokenCount 182 ;
+    wl:position 15 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-12> a wl:Section , wl:Clause ;
+    rdfs:label "Task kinds and decisions" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L298-L314" ;
+    wl:tokenCount 354 ;
+    wl:position 16 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-13> a wl:Section , wl:Clause ;
+    rdfs:label "Implementation coverage" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L318-L349" ;
+    wl:tokenCount 449 ;
+    wl:position 17 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-14> a wl:Section , wl:Clause ;
+    rdfs:label "`ns/` is the schema source" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L353-L353" ;
+    wl:tokenCount 100 ;
+    wl:position 18 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-15> a wl:Section , wl:Clause ;
+    rdfs:label "The event log and the `doc-lifecycle` subscriber" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L357-L388" ;
+    wl:tokenCount 754 ;
+    wl:position 19 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-16> a wl:Section , wl:Clause ;
+    rdfs:label "The backbone is the only home" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L392-L400" ;
+    wl:tokenCount 292 ;
+    wl:position 20 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-17> a wl:Section , wl:Clause ;
+    rdfs:label "What an edit invalidated" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L404-L425" ;
+    wl:tokenCount 538 ;
+    wl:position 21 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-18> a wl:Section , wl:Clause ;
+    rdfs:label "Surfaces and permissions" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L429-L465" ;
+    wl:tokenCount 581 ;
+    wl:position 22 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Compare-and-swap on `lode doc edit` shipped as WL-848 but no source spec specifies its pre" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L473-L473" ;
+    wl:tokenCount 32 ;
+    wl:position 23 ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Whether a git mirror of documents (025 §5 `[doc_sync]`, `doc pull`/`doc push`) is still wa" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L474-L474" ;
+    wl:tokenCount 48 ;
+    wl:position 24 ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-3> a wl:OpenQuestion ;
+    rdfs:label "The shorthand type for `minutes` and `note` refs, and their `wl:` classes, are not stated " ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L475-L475" ;
+    wl:tokenCount 23 ;
+    wl:position 25 ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-4> a wl:OpenQuestion ;
+    rdfs:label "Pin repetition in `implements.yaml`: a document-level default pin with per-claim override " ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L476-L476" ;
+    wl:tokenCount 18 ;
+    wl:position 26 ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-5> a wl:OpenQuestion ;
+    rdfs:label "Whether the fixer's judged-substantive verdicts should be spot-audited at a higher tier." ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L477-L477" ;
+    wl:tokenCount 16 ;
+    wl:position 27 ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-6> a wl:OpenQuestion ;
+    rdfs:label "Whether a note may carry proposed replacement text without becoming a draft amendment." ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L478-L478" ;
+    wl:tokenCount 18 ;
+    wl:position 28 ;
+    wl:status wlc:draft .
+
+<clauses/05-oq-7> a wl:OpenQuestion ;
+    rdfs:label "The `doc.stale` grooming rule's guard against a duplicate open grooming task is not stated" ;
+    dct:isPartOf <arrangements/05-documents> ;
+    dct:source "docs/specs2/05-documents.md" ;
+    wl:sourceLines "docs/specs2/05-documents.md#L479-L479" ;
+    wl:tokenCount 19 ;
+    wl:position 29 ;
+    wl:status wlc:draft .
+
+# --- 06-design-queries-intents-decks.md
+<clauses/06-0> a wl:Section , wl:Clause ;
+    rdfs:label "Design queries, intents, decision decks, meetings, and attachments (intro)" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L3-L3" ;
+    wl:tokenCount 132 ;
+    wl:position 1 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-1-1> a wl:Section , wl:Clause ;
+    rdfs:label "Where the answers come from" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L9-L19" ;
+    wl:tokenCount 243 ;
+    wl:position 2 ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-1-2> a wl:Section , wl:Clause ;
+    rdfs:label "`lode doc list`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L23-L34" ;
+    wl:tokenCount 154 ;
+    wl:position 3 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-1-3> a wl:Section , wl:Clause ;
+    rdfs:label "`--needs-planning`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L38-L72" ;
+    wl:tokenCount 603 ;
+    wl:position 4 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "`--needs-execution`" ;
+    wl:foldedHeading "`lode doc sections`" ;
+    wl:status wlc:draft .
+
+<clauses/06-1-6> a wl:Section , wl:Clause ;
+    rdfs:label "`--bare-superseded`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L80-L82" ;
+    wl:tokenCount 143 ;
+    wl:position 5 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-1-7> a wl:Section , wl:Clause ;
+    rdfs:label "`lode doc todo`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L86-L113" ;
+    wl:tokenCount 494 ;
+    wl:position 6 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-2> a wl:Section , wl:Clause ;
+    rdfs:label "Reading a document: `lode show`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L117-L121" ;
+    wl:tokenCount 22 ;
+    wl:position 7 ;
+    wl:status wlc:draft .
+
+<clauses/06-2-1> a wl:Section , wl:Clause ;
+    rdfs:label "Reference forms" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L125-L129" ;
+    wl:tokenCount 262 ;
+    wl:position 8 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-2-2> a wl:Section , wl:Clause ;
+    rdfs:label "Inlining" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L133-L142" ;
+    wl:tokenCount 286 ;
+    wl:position 9 ;
+    wl:status wlc:draft .
+
+<clauses/06-2-3> a wl:Section , wl:Clause ;
+    rdfs:label "A claim takes effect when its author is accepted" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L146-L146" ;
+    wl:tokenCount 109 ;
+    wl:position 10 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-2-4> a wl:Section , wl:Clause ;
+    rdfs:label "Consolidation is a fixpoint" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L150-L160" ;
+    wl:tokenCount 319 ;
+    wl:position 11 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-3-1> a wl:Section , wl:Clause ;
+    rdfs:label "Forms and defects" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L166-L174" ;
+    wl:tokenCount 211 ;
+    wl:position 12 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/06-3-2> a wl:Section , wl:Clause ;
+    rdfs:label "Shorthand tiers" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L178-L188" ;
+    wl:tokenCount 289 ;
+    wl:position 13 ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "`NO-SPEC`" ;
+    wl:status wlc:draft .
+
+<clauses/06-3-4> a wl:Section , wl:Clause ;
+    rdfs:label "Anchor permanence" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L194-L194" ;
+    wl:tokenCount 130 ;
+    wl:position 14 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-4> a wl:Section , wl:Clause ;
+    rdfs:label "Plan coverage" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L198-L198" ;
+    wl:tokenCount 49 ;
+    wl:position 15 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-4-1> a wl:Section , wl:Clause ;
+    rdfs:label "`covers`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L202-L223" ;
+    wl:tokenCount 227 ;
+    wl:position 16 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-4-2> a wl:Section , wl:Clause ;
+    rdfs:label "`defers`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L227-L240" ;
+    wl:tokenCount 254 ;
+    wl:position 17 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "`status` and execution task" ;
+    wl:status wlc:draft .
+
+<clauses/06-4-4> a wl:Section , wl:Clause ;
+    rdfs:label "Decomposition" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L246-L255" ;
+    wl:tokenCount 278 ;
+    wl:position 18 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-4-5> a wl:Section , wl:Clause ;
+    rdfs:label "Frontmatter checks" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L259-L266" ;
+    wl:tokenCount 107 ;
+    wl:position 19 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-4-6> a wl:Section , wl:Clause ;
+    rdfs:label "Ontology terms" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L270-L284" ;
+    wl:tokenCount 367 ;
+    wl:position 20 ;
+    wl:status wlc:draft .
+
+<clauses/06-5> a wl:Section , wl:Clause ;
+    rdfs:label "Intents" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L288-L323" ;
+    wl:tokenCount 702 ;
+    wl:position 21 ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-6> a wl:Section , wl:Clause ;
+    rdfs:label "Decision decks" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L327-L327" ;
+    wl:tokenCount 45 ;
+    wl:position 22 ;
+    wl:status wlc:draft .
+
+<clauses/06-6-1> a wl:Section , wl:Clause ;
+    rdfs:label "`mode`" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L331-L352" ;
+    wl:tokenCount 172 ;
+    wl:position 23 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/06-6-2> a wl:Section , wl:Clause ;
+    rdfs:label "Deck body" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L356-L370" ;
+    wl:tokenCount 314 ;
+    wl:position 24 ;
+    wl:topic "ui" ;
+    wl:status wlc:draft .
+
+<clauses/06-6-3> a wl:Section , wl:Clause ;
+    rdfs:label "Components" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L374-L393" ;
+    wl:tokenCount 295 ;
+    wl:position 25 ;
+    wl:status wlc:draft .
+
+<clauses/06-6-4> a wl:Section , wl:Clause ;
+    rdfs:label "Decision rows" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L397-L407" ;
+    wl:tokenCount 299 ;
+    wl:position 26 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/06-6-5> a wl:Section , wl:Clause ;
+    rdfs:label "Rendering, theme, CSP, print" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L411-L417" ;
+    wl:tokenCount 300 ;
+    wl:position 27 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:status wlc:draft .
+
+<clauses/06-6-6> a wl:Section , wl:Clause ;
+    rdfs:label "Metrics and authoring" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L421-L429" ;
+    wl:tokenCount 126 ;
+    wl:position 28 ;
+    wl:status wlc:draft .
+
+<clauses/06-7-1> a wl:Section , wl:Clause ;
+    rdfs:label "Entities" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L435-L437" ;
+    wl:tokenCount 176 ;
+    wl:position 29 ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/06-7-2> a wl:Section , wl:Clause ;
+    rdfs:label "Drafts and revisions" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L441-L441" ;
+    wl:tokenCount 150 ;
+    wl:position 30 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/06-7-3> a wl:Section , wl:Clause ;
+    rdfs:label "Access" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L445-L445" ;
+    wl:tokenCount 170 ;
+    wl:position 31 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/06-7-4> a wl:Section , wl:Clause ;
+    rdfs:label "Privacy" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L449-L451" ;
+    wl:tokenCount 226 ;
+    wl:position 32 ;
+    wl:topic "background-jobs" ;
+    wl:foldedHeading "Resolving project context" ;
+    wl:status wlc:draft .
+
+<clauses/06-7-6> a wl:Section , wl:Clause ;
+    rdfs:label "Synchronization and resources" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L457-L459" ;
+    wl:tokenCount 271 ;
+    wl:position 33 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/06-7-7> a wl:Section , wl:Clause ;
+    rdfs:label "Surfaces and events" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L463-L469" ;
+    wl:tokenCount 331 ;
+    wl:position 34 ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/06-8> a wl:Section , wl:Clause ;
+    rdfs:label "Images and attachments on tasks" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L473-L473" ;
+    wl:tokenCount 91 ;
+    wl:position 35 ;
+    wl:status wlc:draft .
+
+<clauses/06-8-1> a wl:Section , wl:Clause ;
+    rdfs:label "Storage" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L477-L500" ;
+    wl:tokenCount 253 ;
+    wl:position 36 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-2> a wl:Section , wl:Clause ;
+    rdfs:label "Reference syntax and serving" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L504-L513" ;
+    wl:tokenCount 237 ;
+    wl:position 37 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-3> a wl:Section , wl:Clause ;
+    rdfs:label "Surfaces" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L517-L528" ;
+    wl:tokenCount 228 ;
+    wl:position 38 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-4> a wl:Section , wl:Clause ;
+    rdfs:label "Auth" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L532-L532" ;
+    wl:tokenCount 126 ;
+    wl:position 39 ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-5> a wl:Section , wl:Clause ;
+    rdfs:label "Upload and reference rewriting" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L536-L546" ;
+    wl:tokenCount 374 ;
+    wl:position 40 ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-6> a wl:Section , wl:Clause ;
+    rdfs:label "Serving hardening and rendering" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L550-L556" ;
+    wl:tokenCount 326 ;
+    wl:position 41 ;
+    wl:topic "cli" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-7> a wl:Section , wl:Clause ;
+    rdfs:label "Garbage collection" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L560-L565" ;
+    wl:tokenCount 136 ;
+    wl:position 42 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-8> a wl:Section , wl:Clause ;
+    rdfs:label "Mirroring on import" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L569-L569" ;
+    wl:tokenCount 135 ;
+    wl:position 43 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/06-8-9> a wl:Section , wl:Clause ;
+    rdfs:label "Configuration" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L573-L581" ;
+    wl:tokenCount 100 ;
+    wl:position 44 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-1> a wl:OpenQuestion ;
+    rdfs:label "070 Q13: what makes an intent enforceable rather than descriptive; every boundary today is" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L589-L589" ;
+    wl:tokenCount 22 ;
+    wl:position 45 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-2> a wl:OpenQuestion ;
+    rdfs:label "070 Q14: the ranking function behind `human-attention`." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L590-L590" ;
+    wl:tokenCount 10 ;
+    wl:position 46 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-3> a wl:OpenQuestion ;
+    rdfs:label "070 Q15: whether spec 007's drift detection stays under `org-wide-visibility` or feeds `hu" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L591-L591" ;
+    wl:tokenCount 18 ;
+    wl:position 47 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-4> a wl:OpenQuestion ;
+    rdfs:label "070 Q16: whether one intent per spec survives in lightly worked areas." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L592-L592" ;
+    wl:tokenCount 16 ;
+    wl:position 48 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-5> a wl:OpenQuestion ;
+    rdfs:label "070 Q17: whether a unit of work can be an investigation rather than a ticket." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L593-L593" ;
+    wl:tokenCount 20 ;
+    wl:position 49 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-6> a wl:OpenQuestion ;
+    rdfs:label "070: `journalism` has no boundary; `familiar-surfaces` has no persona tie-break rule." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L594-L594" ;
+    wl:tokenCount 15 ;
+    wl:position 50 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-7> a wl:OpenQuestion ;
+    rdfs:label "021 Q021.1: alt text as an accessibility contract (`--alt` flag or lint), v2." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L595-L595" ;
+    wl:tokenCount 18 ;
+    wl:position 51 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-8> a wl:OpenQuestion ;
+    rdfs:label "021 Q021.3: bucket per environment or prefix per environment." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L596-L596" ;
+    wl:tokenCount 13 ;
+    wl:position 52 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-9> a wl:OpenQuestion ;
+    rdfs:label "021: presigned `response-*` overrides are unverified against a live Ceph RGW bucket (WL-20" ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L597-L597" ;
+    wl:tokenCount 22 ;
+    wl:position 53 ;
+    wl:status wlc:draft .
+
+<clauses/06-oq-10> a wl:OpenQuestion ;
+    rdfs:label "062: bulk-creating a meeting's decision rows from one file." ;
+    dct:isPartOf <arrangements/06-design-queries-intents-decks> ;
+    dct:source "docs/specs2/06-design-queries-intents-decks.md" ;
+    wl:sourceLines "docs/specs2/06-design-queries-intents-decks.md#L598-L598" ;
+    wl:tokenCount 13 ;
+    wl:position 54 ;
+    wl:status wlc:draft .
+
+# --- 07-knowledge-graph-and-search.md
+<clauses/07-0> a wl:Section , wl:Clause ;
+    rdfs:label "Knowledge graph and search (intro)" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L3-L3" ;
+    wl:tokenCount 165 ;
+    wl:position 1 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/07-1> a wl:Section , wl:Clause ;
+    rdfs:label "Ownership split" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L7-L9" ;
+    wl:tokenCount 146 ;
+    wl:position 2 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/07-2> a wl:Section , wl:Clause ;
+    rdfs:label "Vocabulary: reuse and mint" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L13-L58" ;
+    wl:tokenCount 738 ;
+    wl:position 3 ;
+    wl:topic "data-model" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-3> a wl:Section , wl:Clause ;
+    rdfs:label "Classes" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L62-L90" ;
+    wl:tokenCount 474 ;
+    wl:position 4 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-4-a> a wl:Section , wl:Clause ;
+    rdfs:label "Properties (a)" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L94-L142" ;
+    wl:tokenCount 777 ;
+    wl:position 5 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-4-b> a wl:Section , wl:Clause ;
+    rdfs:label "Properties (b)" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L144-L150" ;
+    wl:tokenCount 57 ;
+    wl:position 6 ;
+    wl:status wlc:draft .
+
+<clauses/07-5> a wl:Section , wl:Clause ;
+    rdfs:label "SKOS schemes" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L154-L166" ;
+    wl:tokenCount 234 ;
+    wl:position 7 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-6> a wl:Section , wl:Clause ;
+    rdfs:label "Reasoning tiers" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L170-L193" ;
+    wl:tokenCount 447 ;
+    wl:position 8 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/07-7> a wl:Section , wl:Clause ;
+    rdfs:label "Entity model by layer" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L197-L220" ;
+    wl:tokenCount 221 ;
+    wl:position 9 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-8> a wl:Section , wl:Clause ;
+    rdfs:label "Deliverable and Effect" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L224-L231" ;
+    wl:tokenCount 201 ;
+    wl:position 10 ;
+    wl:status wlc:draft .
+
+<clauses/07-9> a wl:Section , wl:Clause ;
+    rdfs:label "Accepted deviations" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L235-L239" ;
+    wl:tokenCount 154 ;
+    wl:position 11 ;
+    wl:status wlc:draft .
+
+<clauses/07-10-1> a wl:Section , wl:Clause ;
+    rdfs:label "Namespaces" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L245-L253" ;
+    wl:tokenCount 172 ;
+    wl:position 12 ;
+    wl:status wlc:draft .
+
+<clauses/07-10-2> a wl:Section , wl:Clause ;
+    rdfs:label "Instance grammar" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L257-L283" ;
+    wl:tokenCount 479 ;
+    wl:position 13 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Stored strings stay relative" ;
+    wl:status wlc:draft .
+
+<clauses/07-10-4> a wl:Section , wl:Clause ;
+    rdfs:label "One constructor" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L289-L289" ;
+    wl:tokenCount 101 ;
+    wl:position 14 ;
+    wl:topic "ui" ;
+    wl:status wlc:draft .
+
+<clauses/07-11> a wl:Section , wl:Clause ;
+    rdfs:label "Content negotiation" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L293-L303" ;
+    wl:tokenCount 213 ;
+    wl:position 15 ;
+    wl:topic "ui" ;
+    wl:status wlc:draft .
+
+<clauses/07-12> a wl:Section , wl:Clause ;
+    rdfs:label "Projection: backbone to graph" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L307-L342" ;
+    wl:tokenCount 777 ;
+    wl:position 16 ;
+    wl:topic "data-model" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/07-13> a wl:Section , wl:Clause ;
+    rdfs:label "What the data platform hosts" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L346-L360" ;
+    wl:tokenCount 179 ;
+    wl:position 17 ;
+    wl:status wlc:draft .
+
+<clauses/07-14-1> a wl:Section , wl:Clause ;
+    rdfs:label "Subjects" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L366-L372" ;
+    wl:tokenCount 87 ;
+    wl:position 18 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/07-14-2> a wl:Section , wl:Clause ;
+    rdfs:label "Embedding space" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L376-L384" ;
+    wl:tokenCount 191 ;
+    wl:position 19 ;
+    wl:status wlc:draft .
+
+<clauses/07-14-3> a wl:Section , wl:Clause ;
+    rdfs:label "Provider interface" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L388-L398" ;
+    wl:tokenCount 144 ;
+    wl:position 20 ;
+    wl:status wlc:draft .
+
+<clauses/07-14-4> a wl:Section , wl:Clause ;
+    rdfs:label "Chunking" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L402-L411" ;
+    wl:tokenCount 198 ;
+    wl:position 21 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-14-5> a wl:Section , wl:Clause ;
+    rdfs:label "Storage" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L415-L452" ;
+    wl:tokenCount 384 ;
+    wl:position 22 ;
+    wl:topic "data-model" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/07-15> a wl:Section , wl:Clause ;
+    rdfs:label "Hybrid search" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L456-L470" ;
+    wl:tokenCount 448 ;
+    wl:position 23 ;
+    wl:status wlc:draft .
+
+<clauses/07-16> a wl:Section , wl:Clause ;
+    rdfs:label "Freshness and invalidation" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L474-L476" ;
+    wl:tokenCount 266 ;
+    wl:position 24 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/07-17> a wl:Section , wl:Clause ;
+    rdfs:label "Surfaces, permission, metrics, degraded operation" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L480-L501" ;
+    wl:tokenCount 366 ;
+    wl:position 25 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/07-18> a wl:Section , wl:Clause ;
+    rdfs:label "bf16 embedding trial" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L505-L513" ;
+    wl:tokenCount 427 ;
+    wl:position 26 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-1> a wl:OpenQuestion ;
+    rdfs:label "`wl:RuntimeEvent` has no natural key, so no deterministic IRI and no projection." ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L521-L521" ;
+    wl:tokenCount 16 ;
+    wl:position 27 ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Whether `wl:Build` should stay declared with no instances until workflow-run ingest exists" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L522-L522" ;
+    wl:tokenCount 16 ;
+    wl:position 28 ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Whether the Environment closure to `{dev, prod}` survives Cluster and Namespace beneath it" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L523-L523" ;
+    wl:tokenCount 18 ;
+    wl:position 29 ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-4> a wl:OpenQuestion ;
+    rdfs:label "How the per-environment frontier (`env_deploys`, keyed `(repo, environment)`) is modelled " ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L524-L524" ;
+    wl:tokenCount 20 ;
+    wl:position 30 ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-5> a wl:OpenQuestion ;
+    rdfs:label "The artifact ingest gap: only `git_tag` rows exist, so `prov:used` stays empty until image" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L525-L525" ;
+    wl:tokenCount 22 ;
+    wl:position 31 ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-6> a wl:OpenQuestion ;
+    rdfs:label "WL-SPEC-68 review notes, unresolved in the text: where the scheme comes from behind a TLS-" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L526-L526" ;
+    wl:tokenCount 96 ;
+    wl:position 32 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-7> a wl:OpenQuestion ;
+    rdfs:label "Search: arm weights (`w = 1.0` untuned), a `pg_trgm` third arm for misspellings, chunk-lev" ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L527-L527" ;
+    wl:tokenCount 36 ;
+    wl:position 33 ;
+    wl:status wlc:draft .
+
+<clauses/07-oq-8> a wl:OpenQuestion ;
+    rdfs:label "Whether the graph should carry a Commit-side or Deployment-side frontier for Effects." ;
+    dct:isPartOf <arrangements/07-knowledge-graph-and-search> ;
+    dct:source "docs/specs2/07-knowledge-graph-and-search.md" ;
+    wl:sourceLines "docs/specs2/07-knowledge-graph-and-search.md#L528-L528" ;
+    wl:tokenCount 16 ;
+    wl:position 34 ;
+    wl:status wlc:draft .
+
+# --- 08-agent-harness-and-sessions.md
+<clauses/08-0> a wl:Section , wl:Clause ;
+    rdfs:label "Agent harness and sessions (intro)" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L3-L3" ;
+    wl:tokenCount 136 ;
+    wl:position 1 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-1> a wl:Section , wl:Clause ;
+    rdfs:label "Design lens" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L7-L15" ;
+    wl:tokenCount 179 ;
+    wl:position 2 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-2> a wl:Section , wl:Clause ;
+    rdfs:label "Worktree-bound lease lifecycle" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L19-L30" ;
+    wl:tokenCount 312 ;
+    wl:position 3 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-3-1> a wl:Section , wl:Clause ;
+    rdfs:label "Server-rendered branch template" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L36-L47" ;
+    wl:tokenCount 256 ;
+    wl:position 4 ;
+    wl:status wlc:draft .
+
+<clauses/08-3-2> a wl:Section , wl:Clause ;
+    rdfs:label "Reverse parsing: branch to task id" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L51-L53" ;
+    wl:tokenCount 152 ;
+    wl:position 5 ;
+    wl:status wlc:draft .
+
+<clauses/08-3-3> a wl:Section , wl:Clause ;
+    rdfs:label "Base directory" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L57-L65" ;
+    wl:tokenCount 210 ;
+    wl:position 6 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-3-4> a wl:Section , wl:Clause ;
+    rdfs:label "The path guard" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L69-L75" ;
+    wl:tokenCount 271 ;
+    wl:position 7 ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Moving a worktree" ;
+    wl:status wlc:draft .
+
+<clauses/08-4> a wl:Section , wl:Clause ;
+    rdfs:label "Hooks" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L81-L100" ;
+    wl:tokenCount 578 ;
+    wl:position 8 ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-4-1> a wl:Section , wl:Clause ;
+    rdfs:label "Implementation and coexistence" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L104-L108" ;
+    wl:tokenCount 244 ;
+    wl:position 9 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5> a wl:Section , wl:Clause ;
+    rdfs:label "Harness adapters and `lode install`" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L112-L125" ;
+    wl:tokenCount 179 ;
+    wl:position 10 ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5-1> a wl:Section , wl:Clause ;
+    rdfs:label "`lode install`" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L129-L142" ;
+    wl:tokenCount 240 ;
+    wl:position 11 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5-2> a wl:Section , wl:Clause ;
+    rdfs:label "Skill delivery" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L146-L154" ;
+    wl:tokenCount 166 ;
+    wl:position 12 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5-3> a wl:Section , wl:Clause ;
+    rdfs:label "Instruction files" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L158-L160" ;
+    wl:tokenCount 192 ;
+    wl:position 13 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5-4> a wl:Section , wl:Clause ;
+    rdfs:label "Hook delivery per harness" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L164-L174" ;
+    wl:tokenCount 335 ;
+    wl:position 14 ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5-5> a wl:Section , wl:Clause ;
+    rdfs:label "Telemetry" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L178-L180" ;
+    wl:tokenCount 175 ;
+    wl:position 15 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-5-6> a wl:Section , wl:Clause ;
+    rdfs:label "Degradation" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L184-L193" ;
+    wl:tokenCount 174 ;
+    wl:position 16 ;
+    wl:topic "data-model" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-6> a wl:Section , wl:Clause ;
+    rdfs:label "Status line" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L197-L201" ;
+    wl:tokenCount 265 ;
+    wl:position 17 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-7-1> a wl:Section , wl:Clause ;
+    rdfs:label "`lode task brief <id> --json`" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L207-L207" ;
+    wl:tokenCount 102 ;
+    wl:position 18 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/08-7-2> a wl:Section , wl:Clause ;
+    rdfs:label "Slash commands" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L211-L220" ;
+    wl:tokenCount 188 ;
+    wl:position 19 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/08-7-3> a wl:Section , wl:Clause ;
+    rdfs:label "Skills" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L224-L234" ;
+    wl:tokenCount 247 ;
+    wl:position 20 ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "The worker" ;
+    wl:status wlc:draft .
+
+<clauses/08-8> a wl:Section , wl:Clause ;
+    rdfs:label "Agent sessions" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L240-L240" ;
+    wl:tokenCount 48 ;
+    wl:position 21 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/08-8-1> a wl:Section , wl:Clause ;
+    rdfs:label "Schema" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L244-L270" ;
+    wl:tokenCount 279 ;
+    wl:position 22 ;
+    wl:topic "data-model" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-8-2> a wl:Section , wl:Clause ;
+    rdfs:label "Lifecycle" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L274-L277" ;
+    wl:tokenCount 153 ;
+    wl:position 23 ;
+    wl:status wlc:draft .
+
+<clauses/08-8-3> a wl:Section , wl:Clause ;
+    rdfs:label "Store and API" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L281-L295" ;
+    wl:tokenCount 423 ;
+    wl:position 24 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/08-8-4> a wl:Section , wl:Clause ;
+    rdfs:label "Hook wiring" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L299-L317" ;
+    wl:tokenCount 562 ;
+    wl:position 25 ;
+    wl:topic "data-model" ;
+    wl:topic "identity-authz" ;
+    wl:topic "agent-harness" ;
+    wl:foldedHeading "Error handling" ;
+    wl:status wlc:draft .
+
+<clauses/08-9> a wl:Section , wl:Clause ;
+    rdfs:label "Pi agent integration" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L323-L338" ;
+    wl:tokenCount 540 ;
+    wl:position 26 ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-10> a wl:Section , wl:Clause ;
+    rdfs:label "Reconciliation and setup diagnosis" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L342-L350" ;
+    wl:tokenCount 148 ;
+    wl:position 27 ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/08-10-1> a wl:Section , wl:Clause ;
+    rdfs:label "`lode doctor`" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L354-L364" ;
+    wl:tokenCount 124 ;
+    wl:position 28 ;
+    wl:topic "api" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-10-2> a wl:Section , wl:Clause ;
+    rdfs:label "`lode project health [repo]`" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L368-L368" ;
+    wl:tokenCount 107 ;
+    wl:position 29 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/08-10-3> a wl:Section , wl:Clause ;
+    rdfs:label "`lode task reconcile`" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L372-L378" ;
+    wl:tokenCount 382 ;
+    wl:position 30 ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/08-10-4> a wl:Section , wl:Clause ;
+    rdfs:label "API" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L382-L388" ;
+    wl:tokenCount 148 ;
+    wl:position 31 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/08-11> a wl:Section , wl:Clause ;
+    rdfs:label "Inbox import" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L392-L407" ;
+    wl:tokenCount 241 ;
+    wl:position 32 ;
+    wl:topic "data-model" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/08-11-1> a wl:Section , wl:Clause ;
+    rdfs:label "Fetch" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L411-L418" ;
+    wl:tokenCount 171 ;
+    wl:position 33 ;
+    wl:status wlc:draft .
+
+<clauses/08-11-2> a wl:Section , wl:Clause ;
+    rdfs:label "API and CLI" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L422-L436" ;
+    wl:tokenCount 163 ;
+    wl:position 34 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:status wlc:draft .
+
+<clauses/08-11-3> a wl:Section , wl:Clause ;
+    rdfs:label "Staging and linking" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L440-L442" ;
+    wl:tokenCount 110 ;
+    wl:position 35 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/08-11-4> a wl:Section , wl:Clause ;
+    rdfs:label "Event-subscription check" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L446-L448" ;
+    wl:tokenCount 124 ;
+    wl:position 36 ;
+    wl:topic "api" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/08-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Who removes the worktree after `/lode:done`: the plugin or the human's finishing-a-branch " ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L456-L456" ;
+    wl:tokenCount 18 ;
+    wl:position 37 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-oq-2> a wl:OpenQuestion ;
+    rdfs:label "How a hook detects an already-running session in this worktree without a model call; the b" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L457-L457" ;
+    wl:tokenCount 29 ;
+    wl:position 38 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Whether `lode doctor` should verify each adapter's config assumptions against the installe" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L458-L458" ;
+    wl:tokenCount 27 ;
+    wl:position 39 ;
+    wl:status wlc:draft .
+
+<clauses/08-oq-4> a wl:OpenQuestion ;
+    rdfs:label "Whether the skill-usage signal can work at all for unregistered Worklode skills, or needs " ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L459-L459" ;
+    wl:tokenCount 32 ;
+    wl:position 40 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/08-oq-5> a wl:OpenQuestion ;
+    rdfs:label "Whether engine 2's unscoped candidate set is small enough to run without `--since` at real" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L460-L460" ;
+    wl:tokenCount 35 ;
+    wl:position 41 ;
+    wl:status wlc:draft .
+
+<clauses/08-oq-6> a wl:OpenQuestion ;
+    rdfs:label "Whether `worktree.branch` is recoverable from the status-line payload for hook-created wor" ;
+    dct:isPartOf <arrangements/08-agent-harness-and-sessions> ;
+    dct:source "docs/specs2/08-agent-harness-and-sessions.md" ;
+    wl:sourceLines "docs/specs2/08-agent-harness-and-sessions.md#L461-L461" ;
+    wl:tokenCount 20 ;
+    wl:position 42 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+# --- 09-cli-and-skills.md
+<clauses/09-0> a wl:Section , wl:Clause ;
+    rdfs:label "CLI and skills (intro)" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L3-L3" ;
+    wl:tokenCount 128 ;
+    wl:position 1 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-1-a> a wl:Section , wl:Clause ;
+    rdfs:label "The naming law (a)" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L7-L25" ;
+    wl:tokenCount 755 ;
+    wl:position 2 ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-1-b> a wl:Section , wl:Clause ;
+    rdfs:label "The naming law (b)" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L27-L27" ;
+    wl:tokenCount 57 ;
+    wl:position 3 ;
+    wl:status wlc:draft .
+
+<clauses/09-2> a wl:Section , wl:Clause ;
+    rdfs:label "The command tree" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L31-L65" ;
+    wl:tokenCount 572 ;
+    wl:position 4 ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/09-3> a wl:Section , wl:Clause ;
+    rdfs:label "Completions and ordering" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L69-L85" ;
+    wl:tokenCount 327 ;
+    wl:position 5 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/09-4> a wl:Section , wl:Clause ;
+    rdfs:label "Enforcement" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L89-L112" ;
+    wl:tokenCount 465 ;
+    wl:position 6 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-5> a wl:Section , wl:Clause ;
+    rdfs:label "cmd decides, cli renders" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L116-L116" ;
+    wl:tokenCount 156 ;
+    wl:position 7 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-6> a wl:Section , wl:Clause ;
+    rdfs:label "Project scoping" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L120-L120" ;
+    wl:tokenCount 66 ;
+    wl:position 8 ;
+    wl:status wlc:draft .
+
+<clauses/09-6-1> a wl:Section , wl:Clause ;
+    rdfs:label "Resolution chain" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L124-L132" ;
+    wl:tokenCount 167 ;
+    wl:position 9 ;
+    wl:status wlc:draft .
+
+<clauses/09-6-2> a wl:Section , wl:Clause ;
+    rdfs:label "Server side" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L136-L138" ;
+    wl:tokenCount 174 ;
+    wl:position 10 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/09-6-3> a wl:Section , wl:Clause ;
+    rdfs:label "Client cache" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L142-L154" ;
+    wl:tokenCount 347 ;
+    wl:position 11 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:foldedHeading "Bare task numbers" ;
+    wl:status wlc:draft .
+
+<clauses/09-6-5> a wl:Section , wl:Clause ;
+    rdfs:label "`lode show` dispatch" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L160-L169" ;
+    wl:tokenCount 195 ;
+    wl:position 12 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/09-6-6> a wl:Section , wl:Clause ;
+    rdfs:label "Command surface for scoping" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L173-L183" ;
+    wl:tokenCount 184 ;
+    wl:position 13 ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/09-7> a wl:Section , wl:Clause ;
+    rdfs:label "Org-wide agent skills" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L187-L187" ;
+    wl:tokenCount 81 ;
+    wl:position 14 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-7-1> a wl:Section , wl:Clause ;
+    rdfs:label "Registry and git sync" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L191-L205" ;
+    wl:tokenCount 245 ;
+    wl:position 15 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-7-2> a wl:Section , wl:Clause ;
+    rdfs:label "Embeddings and recommendation" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L209-L213" ;
+    wl:tokenCount 227 ;
+    wl:position 16 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-7-3> a wl:Section , wl:Clause ;
+    rdfs:label "Pins, delivery, brief" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L217-L230" ;
+    wl:tokenCount 352 ;
+    wl:position 17 ;
+    wl:topic "api" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-7-4> a wl:Section , wl:Clause ;
+    rdfs:label "Plugin-qualified skill identity" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L234-L238" ;
+    wl:tokenCount 209 ;
+    wl:position 18 ;
+    wl:topic "api" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-8> a wl:Section , wl:Clause ;
+    rdfs:label "Vendored design skills" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L242-L242" ;
+    wl:tokenCount 106 ;
+    wl:position 19 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-8-1> a wl:Section , wl:Clause ;
+    rdfs:label "Layout and provenance" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L246-L250" ;
+    wl:tokenCount 218 ;
+    wl:position 20 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-8-2> a wl:Section , wl:Clause ;
+    rdfs:label "The skill set" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L254-L268" ;
+    wl:tokenCount 292 ;
+    wl:position 21 ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/09-8-3> a wl:Section , wl:Clause ;
+    rdfs:label "`lode install` owns versions and suppression" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L272-L274" ;
+    wl:tokenCount 179 ;
+    wl:position 22 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-8-4> a wl:Section , wl:Clause ;
+    rdfs:label "Grilling over Worklode documents" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L278-L292" ;
+    wl:tokenCount 326 ;
+    wl:position 23 ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/09-8-5> a wl:Section , wl:Clause ;
+    rdfs:label "`lode doc fetch`" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L296-L300" ;
+    wl:tokenCount 261 ;
+    wl:position 24 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Whether `lode show` dispatches `WL-MILE-<n>` and `WL-DEL-<n>` to `milestone show` and `del" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L308-L308" ;
+    wl:tokenCount 24 ;
+    wl:position 25 ;
+    wl:status wlc:draft .
+
+<clauses/09-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Score floor tuning for recommendations, and whether agents call `lode skill recommend --te" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L309-L309" ;
+    wl:tokenCount 19 ;
+    wl:position 26 ;
+    wl:status wlc:draft .
+
+<clauses/09-oq-3> a wl:OpenQuestion ;
+    rdfs:label "`domain-modeling` is kept, unsuppressed and model-invocable alongside the `writing-for-age" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L310-L310" ;
+    wl:tokenCount 23 ;
+    wl:position 27 ;
+    wl:status wlc:draft .
+
+<clauses/09-oq-4> a wl:OpenQuestion ;
+    rdfs:label "Whether the org registry distributes vendored skills, or only the plugin does." ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L311-L311" ;
+    wl:tokenCount 16 ;
+    wl:position 28 ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/09-oq-5> a wl:OpenQuestion ;
+    rdfs:label "An eval harness for skill behaviour; a remix claims to beat both originals and nothing mea" ;
+    dct:isPartOf <arrangements/09-cli-and-skills> ;
+    dct:source "docs/specs2/09-cli-and-skills.md" ;
+    wl:sourceLines "docs/specs2/09-cli-and-skills.md#L312-L312" ;
+    wl:tokenCount 23 ;
+    wl:position 29 ;
+    wl:status wlc:draft .
+
+# --- 10-cockpit.md
+<clauses/10-0> a wl:Section , wl:Clause ;
+    rdfs:label "Cockpit (intro)" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L3-L15" ;
+    wl:tokenCount 178 ;
+    wl:position 1 ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-1> a wl:Section , wl:Clause ;
+    rdfs:label "Facts drive the interface" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L19-L36" ;
+    wl:tokenCount 201 ;
+    wl:position 2 ;
+    wl:topic "deployment-ops" ;
+    wl:status wlc:draft .
+
+<clauses/10-2-1> a wl:Section , wl:Clause ;
+    rdfs:label "Top bar" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L42-L58" ;
+    wl:tokenCount 196 ;
+    wl:position 3 ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-2-2> a wl:Section , wl:Clause ;
+    rdfs:label "Project sidebar" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L62-L71" ;
+    wl:tokenCount 137 ;
+    wl:position 4 ;
+    wl:topic "api" ;
+    wl:status wlc:draft .
+
+<clauses/10-2-3> a wl:Section , wl:Clause ;
+    rdfs:label "Inbox indicator" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L75-L81" ;
+    wl:tokenCount 117 ;
+    wl:position 5 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-3> a wl:Section , wl:Clause ;
+    rdfs:label "Session gating and rendering" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L85-L115" ;
+    wl:tokenCount 378 ;
+    wl:position 6 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-4> a wl:Section , wl:Clause ;
+    rdfs:label "Accessibility and responsive behavior" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L119-L156" ;
+    wl:tokenCount 469 ;
+    wl:position 7 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-5-1> a wl:Section , wl:Clause ;
+    rdfs:label "Lifecycle modes" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L162-L190" ;
+    wl:tokenCount 392 ;
+    wl:position 8 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-5-2> a wl:Section , wl:Clause ;
+    rdfs:label "Stage due dates" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L194-L202" ;
+    wl:tokenCount 144 ;
+    wl:position 9 ;
+    wl:status wlc:draft .
+
+<clauses/10-5-3> a wl:Section , wl:Clause ;
+    rdfs:label "Focus and the next decision" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L206-L218" ;
+    wl:tokenCount 172 ;
+    wl:position 10 ;
+    wl:topic "identity-authz" ;
+    wl:foldedHeading "Definition of done" ;
+    wl:status wlc:draft .
+
+<clauses/10-6> a wl:Section , wl:Clause ;
+    rdfs:label "Panels selected by fact" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L224-L246" ;
+    wl:tokenCount 403 ;
+    wl:position 11 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-7> a wl:Section , wl:Clause ;
+    rdfs:label "Intake and promotion" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L250-L267" ;
+    wl:tokenCount 234 ;
+    wl:position 12 ;
+    wl:status wlc:draft .
+
+<clauses/10-8> a wl:Section , wl:Clause ;
+    rdfs:label "Crew and agents" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L271-L281" ;
+    wl:tokenCount 169 ;
+    wl:position 13 ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-9> a wl:Section , wl:Clause ;
+    rdfs:label "Deliverables and review lanes" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L285-L314" ;
+    wl:tokenCount 390 ;
+    wl:position 14 ;
+    wl:topic "identity-authz" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-10> a wl:Section , wl:Clause ;
+    rdfs:label "Automation and unattended execution" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L318-L349" ;
+    wl:tokenCount 403 ;
+    wl:position 15 ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-11> a wl:Section , wl:Clause ;
+    rdfs:label "Home and the Morning Brief" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L353-L362" ;
+    wl:tokenCount 137 ;
+    wl:position 16 ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/10-12> a wl:Section , wl:Clause ;
+    rdfs:label "The inbox" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L366-L399" ;
+    wl:tokenCount 379 ;
+    wl:position 17 ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-1> a wl:Section , wl:Clause ;
+    rdfs:label "The review is the API" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L405-L436" ;
+    wl:tokenCount 425 ;
+    wl:position 18 ;
+    wl:topic "identity-authz" ;
+    wl:foldedHeading "Anchors" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-3> a wl:Section , wl:Clause ;
+    rdfs:label "Threads and intents" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L442-L461" ;
+    wl:tokenCount 265 ;
+    wl:position 19 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-4> a wl:Section , wl:Clause ;
+    rdfs:label "Guides and the honesty rule" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L465-L488" ;
+    wl:tokenCount 336 ;
+    wl:position 20 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-5> a wl:Section , wl:Clause ;
+    rdfs:label "Schema" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L492-L503" ;
+    wl:tokenCount 280 ;
+    wl:position 21 ;
+    wl:topic "data-model" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-6> a wl:Section , wl:Clause ;
+    rdfs:label "API and `lode` verbs" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L507-L553" ;
+    wl:tokenCount 603 ;
+    wl:position 22 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-7> a wl:Section , wl:Clause ;
+    rdfs:label "Verdicts and gates" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L557-L573" ;
+    wl:tokenCount 202 ;
+    wl:position 23 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-13-8> a wl:Section , wl:Clause ;
+    rdfs:label "Degradation, metrics, events" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L577-L609" ;
+    wl:tokenCount 313 ;
+    wl:position 24 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/10-14-a> a wl:Section , wl:Clause ;
+    rdfs:label "Reading diffs (a)" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L613-L666" ;
+    wl:tokenCount 703 ;
+    wl:position 25 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-14-b> a wl:Section , wl:Clause ;
+    rdfs:label "Reading diffs (b)" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L668-L689" ;
+    wl:tokenCount 276 ;
+    wl:position 26 ;
+    wl:topic "api" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/10-15> a wl:Section , wl:Clause ;
+    rdfs:label "The project Progress page" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L693-L699" ;
+    wl:tokenCount 110 ;
+    wl:position 27 ;
+    wl:topic "api" ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-1> a wl:Section , wl:Clause ;
+    rdfs:label "Derivation" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L703-L746" ;
+    wl:tokenCount 497 ;
+    wl:position 28 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-2> a wl:Section , wl:Clause ;
+    rdfs:label "Layout" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L750-L787" ;
+    wl:tokenCount 501 ;
+    wl:position 29 ;
+    wl:topic "data-model" ;
+    wl:topic "ui" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-3> a wl:Section , wl:Clause ;
+    rdfs:label "Actions" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L791-L835" ;
+    wl:tokenCount 791 ;
+    wl:position 30 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-4> a wl:Section , wl:Clause ;
+    rdfs:label "Write safety" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L839-L864" ;
+    wl:tokenCount 328 ;
+    wl:position 31 ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "identity-authz" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-5> a wl:Section , wl:Clause ;
+    rdfs:label "Live updates" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L868-L897" ;
+    wl:tokenCount 367 ;
+    wl:position 32 ;
+    wl:topic "data-model" ;
+    wl:topic "api" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-6> a wl:Section , wl:Clause ;
+    rdfs:label "Facts the page needs" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L901-L911" ;
+    wl:tokenCount 122 ;
+    wl:position 33 ;
+    wl:topic "background-jobs" ;
+    wl:status wlc:draft .
+
+<clauses/10-15-7> a wl:Section , wl:Clause ;
+    rdfs:label "Assembly and routes" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L915-L938" ;
+    wl:tokenCount 200 ;
+    wl:position 34 ;
+    wl:topic "api" ;
+    wl:topic "ui" ;
+    wl:topic "background-jobs" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-16> a wl:Section , wl:Clause ;
+    rdfs:label "Drift and overview" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L942-L949" ;
+    wl:tokenCount 102 ;
+    wl:position 35 ;
+    wl:status wlc:draft .
+
+<clauses/10-16-1> a wl:Section , wl:Clause ;
+    rdfs:label "Named graphs and derivers" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L953-L983" ;
+    wl:tokenCount 462 ;
+    wl:position 36 ;
+    wl:topic "data-model" ;
+    wl:topic "deployment-ops" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/10-16-2> a wl:Section , wl:Clause ;
+    rdfs:label "Standing queries" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L987-L1002" ;
+    wl:tokenCount 166 ;
+    wl:position 37 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-16-3> a wl:Section , wl:Clause ;
+    rdfs:label "Critical path" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L1006-L1016" ;
+    wl:tokenCount 150 ;
+    wl:position 38 ;
+    wl:status wlc:draft .
+
+<clauses/10-16-4> a wl:Section , wl:Clause ;
+    rdfs:label "Surface" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L1020-L1037" ;
+    wl:tokenCount 240 ;
+    wl:position 39 ;
+    wl:topic "cli" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/10-17> a wl:Section , wl:Clause ;
+    rdfs:label "Non-goals" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L1041-L1047" ;
+    wl:tokenCount 84 ;
+    wl:position 40 ;
+    wl:topic "ui" ;
+    wl:status wlc:draft .
+
+<clauses/10-oq-1> a wl:OpenQuestion ;
+    rdfs:label "059's \"round submitted by the author\" and `review_rounds` rows (reviewer" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L1056-L1056" ;
+    wl:tokenCount 14 ;
+    wl:position 41 ;
+    wl:status wlc:draft .
+
+<clauses/10-oq-2> a wl:OpenQuestion ;
+    rdfs:label "066 §2.4's hover tooltips give WCAG 1.4.13 a subject the 032 §10 audit said" ;
+    dct:isPartOf <arrangements/10-cockpit> ;
+    dct:source "docs/specs2/10-cockpit.md" ;
+    wl:sourceLines "docs/specs2/10-cockpit.md#L1059-L1059" ;
+    wl:tokenCount 19 ;
+    wl:position 42 ;
+    wl:status wlc:draft .
+
+# --- 11-design-authority-gate.md
+<clauses/11-0> a wl:Section , wl:Clause ;
+    rdfs:label "The design authority gate (intro)" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L3-L8" ;
+    wl:tokenCount 89 ;
+    wl:position 1 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/11-1> a wl:Section , wl:Clause ;
+    rdfs:label "The problem the gate solves" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L12-L17" ;
+    wl:tokenCount 97 ;
+    wl:position 2 ;
+    wl:status wlc:draft .
+
+<clauses/11-2> a wl:Section , wl:Clause ;
+    rdfs:label "\"What\" versus \"how\"" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L21-L32" ;
+    wl:tokenCount 169 ;
+    wl:position 3 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/11-2-1> a wl:Section , wl:Clause ;
+    rdfs:label "Changes to the \"what\"" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L36-L44" ;
+    wl:tokenCount 204 ;
+    wl:position 4 ;
+    wl:topic "data-model" ;
+    wl:topic "cli" ;
+    wl:topic "identity-authz" ;
+    wl:topic "background-jobs" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/11-2-2> a wl:Section , wl:Clause ;
+    rdfs:label "Changes to the \"how\"" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L48-L64" ;
+    wl:tokenCount 219 ;
+    wl:position 5 ;
+    wl:topic "data-model" ;
+    wl:topic "design-process" ;
+    wl:foldedHeading "The grey zone" ;
+    wl:status wlc:draft .
+
+<clauses/11-3> a wl:Section , wl:Clause ;
+    rdfs:label "Guarded paths" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L70-L85" ;
+    wl:tokenCount 148 ;
+    wl:position 6 ;
+    wl:topic "cli" ;
+    wl:topic "agent-harness" ;
+    wl:status wlc:draft .
+
+<clauses/11-4> a wl:Section , wl:Clause ;
+    rdfs:label "Declaration" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L89-L110" ;
+    wl:tokenCount 223 ;
+    wl:position 7 ;
+    wl:topic "agent-harness" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/11-5> a wl:Section , wl:Clause ;
+    rdfs:label "What the gate checks" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L114-L137" ;
+    wl:tokenCount 306 ;
+    wl:position 8 ;
+    wl:topic "api" ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/11-6> a wl:Section , wl:Clause ;
+    rdfs:label "Plans are never back-patched" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L141-L155" ;
+    wl:tokenCount 198 ;
+    wl:position 9 ;
+    wl:topic "design-process" ;
+    wl:status wlc:draft .
+
+<clauses/11-7> a wl:Section , wl:Clause ;
+    rdfs:label "What this does not do" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L159-L164" ;
+    wl:tokenCount 100 ;
+    wl:position 10 ;
+    wl:status wlc:draft .
+
+<clauses/11-oq-1> a wl:OpenQuestion ;
+    rdfs:label "Whether `Spec: none config` should exist, or whether config-value changes" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L175-L175" ;
+    wl:tokenCount 14 ;
+    wl:position 11 ;
+    wl:status wlc:draft .
+
+<clauses/11-oq-2> a wl:OpenQuestion ;
+    rdfs:label "Whether the `spec_gate` event should also feed the Progress page's" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L177-L177" ;
+    wl:tokenCount 14 ;
+    wl:position 12 ;
+    wl:status wlc:draft .
+
+<clauses/11-oq-3> a wl:OpenQuestion ;
+    rdfs:label "Which token the CI job uses. A per-repo read-only token is the smallest" ;
+    dct:isPartOf <arrangements/11-design-authority-gate> ;
+    dct:source "docs/specs2/11-design-authority-gate.md" ;
+    wl:sourceLines "docs/specs2/11-design-authority-gate.md#L180-L180" ;
+    wl:tokenCount 18 ;
+    wl:position 13 ;
+    wl:status wlc:draft .
+

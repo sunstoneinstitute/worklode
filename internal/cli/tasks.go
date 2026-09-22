@@ -523,6 +523,13 @@ func TaskDetailRender(w io.Writer, t model.TaskDetail, server string) {
 	if t.Milestone != "" {
 		fmt.Fprintf(w, "  milestone: %s\n", t.Milestone)
 	}
+	for _, g := range t.GovernedBy {
+		if g.Current != g.ClauseVersion {
+			fmt.Fprintf(w, "  governed by: %s  %s (v%d, clause now v%d)\n", g.Clause, g.Heading, g.ClauseVersion, g.Current)
+			continue
+		}
+		fmt.Fprintf(w, "  governed by: %s  %s (v%d)\n", g.Clause, g.Heading, g.ClauseVersion)
+	}
 	if t.NeedsDecomposition {
 		fmt.Fprintf(w, "  needs decomposition: yes\n")
 	}

@@ -1,0 +1,662 @@
+old_ref	old_anchor	old_title	new_file	new_section	disposition	note
+WL-SPEC-1	sec-0	Purpose & scope	02-identity-actors-and-secrets.md	4	merged	
+WL-SPEC-1	sec-1	Motivation	02-identity-actors-and-secrets.md	-	dropped-history	
+WL-SPEC-1	sec-10	Error handling	02-identity-actors-and-secrets.md	9.4	moved	
+WL-SPEC-1	sec-11	Testing	02-identity-actors-and-secrets.md	-	dropped-other	test plan not carried into the consolidated spec
+WL-SPEC-1	sec-12	Non-goals	02-identity-actors-and-secrets.md	-	dropped-other	non-goals list not carried; the follow-up GitHub-write feature survives in Open questions
+WL-SPEC-1	sec-13	Open questions	02-identity-actors-and-secrets.md	Open questions	merged	
+WL-SPEC-1	sec-2	Decisions	02-identity-actors-and-secrets.md	4	merged	
+WL-SPEC-1	sec-2.1	Task-scoped tokens	02-identity-actors-and-secrets.md	2	moved	
+WL-SPEC-1	sec-3	Keycloak is the only login	02-identity-actors-and-secrets.md	1.1	moved	
+WL-SPEC-1	sec-4	Keycloak realm configuration	02-identity-actors-and-secrets.md	4.2	moved	
+WL-SPEC-1	sec-5	Server OIDC configuration and verification	02-identity-actors-and-secrets.md	4.1	moved	
+WL-SPEC-1	sec-6	Web UI sessions	02-identity-actors-and-secrets.md	5	moved	
+WL-SPEC-1	sec-7	Direct OIDC token exchange (dormant)	02-identity-actors-and-secrets.md	6	moved	
+WL-SPEC-1	sec-8	CLI login: server-mediated loopback	02-identity-actors-and-secrets.md	7.1	moved	
+WL-SPEC-1	sec-8.1	Discovery and CLI login endpoints	02-identity-actors-and-secrets.md	7	moved	
+WL-SPEC-1	sec-8.2	The reuse seam: finishLogin	02-identity-actors-and-secrets.md	5	merged	
+WL-SPEC-1	sec-8.3	One-time code store	02-identity-actors-and-secrets.md	7.3	moved	
+WL-SPEC-1	sec-8.4	Client behavior	02-identity-actors-and-secrets.md	-	dropped-history	
+WL-SPEC-1	sec-8.5	Token storage: OS keychain, then a 0600 file	02-identity-actors-and-secrets.md	8	moved	
+WL-SPEC-1	sec-8.6	Security	02-identity-actors-and-secrets.md	7.4	moved	
+WL-SPEC-1	sec-8.7	Manual mode: login without a launchable browser	02-identity-actors-and-secrets.md	7.2	moved	
+WL-SPEC-1	sec-9	GitHub account linking	02-identity-actors-and-secrets.md	9	moved	
+WL-SPEC-1	sec-9.1	The GitHub App and its configuration	02-identity-actors-and-secrets.md	9.1	moved	
+WL-SPEC-1	sec-9.2	Expected GitHub identity from Keycloak	02-identity-actors-and-secrets.md	4.3	merged	
+WL-SPEC-1	sec-9.3	Link flow (web)	02-identity-actors-and-secrets.md	9.2	moved	
+WL-SPEC-1	sec-9.4	lode auth command group	02-identity-actors-and-secrets.md	9.2	moved	
+WL-SPEC-1	sec-9.5	GitHub token storage and refresh	02-identity-actors-and-secrets.md	9.3	moved	
+WL-SPEC-2	sec-0	Purpose & scope	01-system-and-deployment.md	2	merged	
+WL-SPEC-2	sec-1	The execution backbone	01-system-and-deployment.md	2	moved	
+WL-SPEC-2	sec-2	Design documents	01-system-and-deployment.md	2	moved	
+WL-SPEC-2	sec-3	The knowledge graph	01-system-and-deployment.md	2	moved	
+WL-SPEC-2	sec-4	Projects and people	01-system-and-deployment.md	2	moved	
+WL-SPEC-2	sec-5	Groupings are queries, not rows	01-system-and-deployment.md	2	moved	
+WL-SPEC-2	sec-6	Reading a cross-reference	01-system-and-deployment.md	2	moved	
+WL-SPEC-4	sec-0	Purpose & scope	03-tasks-and-execution.md	-	merged	folded into the unnumbered intro paragraph
+WL-SPEC-4	sec-1.1	tasks	03-tasks-and-execution.md	2	moved	
+WL-SPEC-4	sec-1.2	leases, bound to the worktree	03-tasks-and-execution.md	6	moved	
+WL-SPEC-4	sec-1.3	task_edges	03-tasks-and-execution.md	4	moved	
+WL-SPEC-4	sec-1.4	events + state_log	03-tasks-and-execution.md	9	moved	
+WL-SPEC-4	sec-10	Out of scope	-	-	dropped-other	scope-exclusion list
+WL-SPEC-4	sec-11	Dependencies	-	-	dropped-other	spec dependency list
+WL-SPEC-4	sec-12	Open questions	03-tasks-and-execution.md	-	merged	unresolved items kept in the unnumbered Open questions; resolved ones dropped
+WL-SPEC-4	sec-13	Acceptance criteria	-	-	dropped-other	acceptance criteria
+WL-SPEC-4	sec-2	Per-project task keys	03-tasks-and-execution.md	1	moved	2.1 decision table and 2.2 migration reduced to the standing rule; 2.5 branch/parser rules kept
+WL-SPEC-4	sec-3	Lease lifecycle	03-tasks-and-execution.md	6	merged	
+WL-SPEC-4	sec-4	The claim transaction	03-tasks-and-execution.md	7	moved	
+WL-SPEC-4	sec-5.1	State machine	03-tasks-and-execution.md	3	moved	
+WL-SPEC-4	sec-5.2	Fact tables	03-tasks-and-execution.md	10	moved	
+WL-SPEC-4	sec-5.3	Handlers and resolver	03-tasks-and-execution.md	10	moved	
+WL-SPEC-4	sec-5.4	Surface changes	03-tasks-and-execution.md	10	merged	one surface paragraph at end of 10.3
+WL-SPEC-4	sec-5.5	Migration	-	-	dropped-history	
+WL-SPEC-4	sec-5.6	Error handling	03-tasks-and-execution.md	10	moved	
+WL-SPEC-4	sec-5.7	Known limitations	03-tasks-and-execution.md	10	moved	
+WL-SPEC-4	sec-6.1	Decisions (hierarchy)	03-tasks-and-execution.md	5	merged	decision table reduced to standing rules
+WL-SPEC-4	sec-6.10	Decomposition	03-tasks-and-execution.md	5	moved	
+WL-SPEC-4	sec-6.2	Data model — migration 0006_task_hierarchy	03-tasks-and-execution.md	5	merged	migration framing dropped, schema kept
+WL-SPEC-4	sec-6.3	Never claimable	03-tasks-and-execution.md	8	merged	predicate lives in 8.2 ready set and 7 step 5
+WL-SPEC-4	sec-6.4	State machine of a task with children	03-tasks-and-execution.md	5	moved	
+WL-SPEC-4	sec-6.5	Roll-up	03-tasks-and-execution.md	5	moved	
+WL-SPEC-4	sec-6.6	Roll-up hooks into Transition	03-tasks-and-execution.md	5	moved	
+WL-SPEC-4	sec-6.7	API	03-tasks-and-execution.md	5	moved	
+WL-SPEC-4	sec-6.8	CLI	03-tasks-and-execution.md	5	merged	
+WL-SPEC-4	sec-6.9	Brief — exactly one hop up	03-tasks-and-execution.md	5	moved	
+WL-SPEC-4	sec-7	Postgres schema & data layer	03-tasks-and-execution.md	14	moved	
+WL-SPEC-4	sec-8	Claim, lease, and reopen surface	03-tasks-and-execution.md	6	merged	session_id to worktree rename history dropped; surface line kept in 6
+WL-SPEC-4	sec-9	Testing	-	-	dropped-other	test plan, not behaviour
+WL-SPEC-5	sec-0	Purpose & scope	03-tasks-and-execution.md	-	merged	folded into the intro paragraph
+WL-SPEC-5	sec-1	concern and priority	03-tasks-and-execution.md	2	merged	2.3 and 8.1
+WL-SPEC-5	sec-2	project.focus	03-tasks-and-execution.md	8	moved	
+WL-SPEC-5	sec-2a	The rally	03-tasks-and-execution.md	8	moved	
+WL-SPEC-5	sec-3	Ranking	03-tasks-and-execution.md	8	moved	
+WL-SPEC-5	sec-4	claim --next	03-tasks-and-execution.md	8	moved	
+WL-SPEC-5	sec-5	--strict-focus	03-tasks-and-execution.md	8	moved	
+WL-SPEC-5	sec-6	Task sizing and decomposition	03-tasks-and-execution.md	8	moved	
+WL-SPEC-5	sec-7	Dependencies	-	-	dropped-other	spec dependency list
+WL-SPEC-5	sec-8	Open questions	03-tasks-and-execution.md	-	merged	8.3 and 8.4 kept in Open questions
+WL-SPEC-5	sec-9	Acceptance criteria	-	-	dropped-other	acceptance criteria
+WL-SPEC-6	sec-0	Purpose & scope	07-knowledge-graph-and-search.md	1	merged	scope/ownership in 1; rdf-registry shipping paragraph in 2; ADR-000N conformance list dropped
+WL-SPEC-6	sec-1	Reuse vs mint	07-knowledge-graph-and-search.md	2	moved	sec-1.1 runtime survey folded into the same section
+WL-SPEC-6	sec-10	Canonical IRI scheme	07-knowledge-graph-and-search.md	10	merged	natural-key grammar kept in 10.2 under WL-SPEC-68's instance base; the worklode.io/ns/id/ base itself is stale
+WL-SPEC-6	sec-10.1	Runtime IRI grammar	07-knowledge-graph-and-search.md	10	merged	Artifact/Deployment/Environment/Commit rows of the 10.2 table
+WL-SPEC-6	sec-11	Projection: backbone → graph	07-knowledge-graph-and-search.md	12	moved	sec-11.1 runtime projection in the same section
+WL-SPEC-6	sec-12	Accepted deviations — drift suppression	07-knowledge-graph-and-search.md	9	moved	
+WL-SPEC-6	sec-13	What the data-platform must host	07-knowledge-graph-and-search.md	13	moved	13.1-13.4 collapsed into one table plus a not-required line
+WL-SPEC-6	sec-14	Dependencies	07-knowledge-graph-and-search.md	-	dropped-other	cross-reference list; replaced by inline pointers to 03/05/06 files and the rdf-registry paragraph in 2
+WL-SPEC-6	sec-15	Open questions	07-knowledge-graph-and-search.md	Open questions	merged	items 7-11 kept; resolved items 1-6 dropped-history
+WL-SPEC-6	sec-16	Acceptance criteria	07-knowledge-graph-and-search.md	-	dropped-other	acceptance criteria; the new doc carries none
+WL-SPEC-6	sec-2	Classes & subclassing	07-knowledge-graph-and-search.md	3	moved	sec-2.1 runtime classes in the same section
+WL-SPEC-6	sec-3	Properties	07-knowledge-graph-and-search.md	4	moved	sec-3.1 runtime properties in the same section
+WL-SPEC-6	sec-4	Status SKOS scheme	07-knowledge-graph-and-search.md	5	merged	
+WL-SPEC-6	sec-5	Task-kind & model-layer SKOS schemes	07-knowledge-graph-and-search.md	5	merged	
+WL-SPEC-6	sec-6	Runtime SKOS schemes	07-knowledge-graph-and-search.md	5	merged	
+WL-SPEC-6	sec-7	Reasoning architecture (OWL / SHACL / SPARQL)	07-knowledge-graph-and-search.md	6	moved	
+WL-SPEC-6	sec-8	Entity model by layer	07-knowledge-graph-and-search.md	7	moved	
+WL-SPEC-6	sec-9	Deliverable — declared definition-of-done	07-knowledge-graph-and-search.md	8	moved	
+WL-SPEC-7	sec-0	Purpose & scope	10-cockpit.md	16	merged	
+WL-SPEC-7	sec-1	The two-layer model	10-cockpit.md	16	merged	
+WL-SPEC-7	sec-1.1	Representation: named graphs per source	10-cockpit.md	16.1	moved	
+WL-SPEC-7	sec-2	Observed-layer derivers	10-cockpit.md	16.1	moved	
+WL-SPEC-7	sec-3	Standing queries	10-cockpit.md	16.2	moved	
+WL-SPEC-7	sec-4	Critical path v1	10-cockpit.md	16.3	moved	
+WL-SPEC-7	sec-5	Overview / CLI surface	10-cockpit.md	16.4	moved	
+WL-SPEC-7	sec-6	Dependencies	-	-	dropped-history	
+WL-SPEC-7	sec-7	Open questions	-	-	dropped-history	
+WL-SPEC-7	sec-8	Acceptance criteria	-	-	dropped-history	
+WL-SPEC-8	sec-0	Purpose & scope	08-agent-harness-and-sessions.md	intro	merged	
+WL-SPEC-8	sec-1	Design lens & CLI naming (design lens)	08-agent-harness-and-sessions.md	1	moved	
+WL-SPEC-8	sec-1	Design lens & CLI naming (061 naming law amendment)	09-cli-and-skills.md	-	pointer	
+WL-SPEC-8	sec-1	Design lens & CLI naming (053 shipped executables amendment)	01-system-and-deployment.md	-	pointer	
+WL-SPEC-8	sec-10	Hook implementation & coexistence	08-agent-harness-and-sessions.md	4.1	moved	
+WL-SPEC-8	sec-11	lode task brief <id> --json	08-agent-harness-and-sessions.md	7.1	moved	
+WL-SPEC-8	sec-12	Slash commands	08-agent-harness-and-sessions.md	7.2	moved	
+WL-SPEC-8	sec-13	Skills (judgment only)	08-agent-harness-and-sessions.md	7.3	moved	
+WL-SPEC-8	sec-14	The worker subagent	08-agent-harness-and-sessions.md	7.4	moved	
+WL-SPEC-8	sec-15	No MCP in v1	08-agent-harness-and-sessions.md	1	merged	
+WL-SPEC-8	sec-16	The harness landscape (August 2026)	-	-	dropped-history	dated capability survey; only the resulting event map survives in 5.4
+WL-SPEC-8	sec-17.1	The harness adapter	08-agent-harness-and-sessions.md	5	moved	
+WL-SPEC-8	sec-17.2	lode install across harnesses	08-agent-harness-and-sessions.md	5.1	moved	
+WL-SPEC-8	sec-17.3	Skill delivery	08-agent-harness-and-sessions.md	5.2	moved	
+WL-SPEC-8	sec-17.4	Hook delivery	08-agent-harness-and-sessions.md	5.4	moved	
+WL-SPEC-8	sec-17.5	Status line	08-agent-harness-and-sessions.md	6	moved	
+WL-SPEC-8	sec-17.6	Telemetry ingest (v2)	08-agent-harness-and-sessions.md	5.5	moved	
+WL-SPEC-8	sec-17.7	Instruction files	08-agent-harness-and-sessions.md	5.3	moved	
+WL-SPEC-8	sec-18	Degradation	08-agent-harness-and-sessions.md	5.6	moved	
+WL-SPEC-8	sec-19	Dependencies	-	-	dropped-other	cross-spec dependency list replaced by inline links to new files
+WL-SPEC-8	sec-2	Worktree-bound lease lifecycle	08-agent-harness-and-sessions.md	2	moved	
+WL-SPEC-8	sec-20	Open questions	08-agent-harness-and-sessions.md	Open questions	moved	Q008.2 resolved and Q008.4 (issue mirror) dropped as stale
+WL-SPEC-8	sec-21	Acceptance criteria	-	-	dropped-other	acceptance list not carried for harness/plugin
+WL-SPEC-8	sec-22	Sources	-	-	dropped-history	
+WL-SPEC-8	sec-3	Branch names are a server-rendered template	08-agent-harness-and-sessions.md	3.1	moved	
+WL-SPEC-8	sec-4	Reverse parsing: branch to task id	08-agent-harness-and-sessions.md	3.2	moved	
+WL-SPEC-8	sec-5.1	Base directory	08-agent-harness-and-sessions.md	3.3	moved	
+WL-SPEC-8	sec-5.2	The path guard	08-agent-harness-and-sessions.md	3.4	moved	
+WL-SPEC-8	sec-6	Naming configuration surface	08-agent-harness-and-sessions.md	3.3	merged	
+WL-SPEC-8	sec-7	Naming cutover	-	-	dropped-history	
+WL-SPEC-8	sec-8	Naming and guard tests	-	-	dropped-other	test enumeration, not design
+WL-SPEC-8	sec-9	Hooks	08-agent-harness-and-sessions.md	4	moved	
+WL-SPEC-12	sec-0	Problem	08-agent-harness-and-sessions.md	8	merged	
+WL-SPEC-12	sec-1	Schema	08-agent-harness-and-sessions.md	8.1	moved	
+WL-SPEC-12	sec-2	Lifecycle	08-agent-harness-and-sessions.md	8.2	moved	
+WL-SPEC-12	sec-3	Store and API	08-agent-harness-and-sessions.md	8.3	moved	
+WL-SPEC-12	sec-4	Hook wiring	08-agent-harness-and-sessions.md	8.4	moved	
+WL-SPEC-12	sec-5	Error handling	08-agent-harness-and-sessions.md	8.5	moved	
+WL-SPEC-12	sec-6	Testing	-	-	dropped-other	test enumeration
+WL-SPEC-12	sec-7	Out of scope	08-agent-harness-and-sessions.md	8.4	merged	marker-pid finding kept; struck-through cost item is history
+WL-SPEC-13	sec-0	Purpose & scope	08-agent-harness-and-sessions.md	10	merged	
+WL-SPEC-13	sec-1	Command surface	08-agent-harness-and-sessions.md	10	moved	
+WL-SPEC-13	sec-1.1	lode doctor	08-agent-harness-and-sessions.md	10.1	moved	
+WL-SPEC-13	sec-1.2	lode project doctor [repo]	08-agent-harness-and-sessions.md	10.2	moved	renamed lode project health
+WL-SPEC-13	sec-2	lode reconcile	08-agent-harness-and-sessions.md	10.3	moved	
+WL-SPEC-13	sec-3	API	08-agent-harness-and-sessions.md	10.4	moved	
+WL-SPEC-13	sec-4	Dependencies	-	-	dropped-other	cross-spec dependency list replaced by inline links
+WL-SPEC-13	sec-5	Open questions	08-agent-harness-and-sessions.md	Open questions	moved	Q1 and Q3 kept; Q2 retired
+WL-SPEC-13	sec-6	Testing	-	-	dropped-other	test enumeration
+WL-SPEC-13	sec-7	Acceptance criteria	08-agent-harness-and-sessions.md	10.4	merged	
+WL-SPEC-16	sec-0	Purpose & scope	09-cli-and-skills.md	7	moved	
+WL-SPEC-16	sec-1	Registry & git sync	09-cli-and-skills.md	7.1	moved	
+WL-SPEC-16	sec-2	Embeddings & recommendation	09-cli-and-skills.md	7.2	moved	
+WL-SPEC-16	sec-3	Pins	09-cli-and-skills.md	7.3	merged	
+WL-SPEC-16	sec-4	Distribution & local install	09-cli-and-skills.md	7.3	merged	
+WL-SPEC-16	sec-5	Brief integration & activation	09-cli-and-skills.md	7.3	merged	
+WL-SPEC-16	sec-6	Degradation	09-cli-and-skills.md	7.3	merged	
+WL-SPEC-16	sec-7	Dependencies	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-16	sec-8	Open questions	09-cli-and-skills.md	Open questions	merged	
+WL-SPEC-16	sec-9	Acceptance criteria	09-cli-and-skills.md	-	dropped-other	acceptance criteria; specs2 carries none
+WL-SPEC-17	sec-0	Purpose & scope	02-identity-actors-and-secrets.md	10	moved	
+WL-SPEC-17	sec-1	Names & catalog	02-identity-actors-and-secrets.md	10.2	moved	
+WL-SPEC-17	sec-10	Acceptance criteria	02-identity-actors-and-secrets.md	-	dropped-other	acceptance criteria not carried into the consolidated spec
+WL-SPEC-17	sec-2	Declaration	02-identity-actors-and-secrets.md	10.3	moved	
+WL-SPEC-17	sec-3	Claim-time ceremony & materialization	02-identity-actors-and-secrets.md	10.4	moved	
+WL-SPEC-17	sec-4	Execution: lode secrets exec	02-identity-actors-and-secrets.md	10.5	moved	
+WL-SPEC-17	sec-5	The lode-secrets skill	02-identity-actors-and-secrets.md	10.7	moved	
+WL-SPEC-17	sec-6	Degradation	02-identity-actors-and-secrets.md	10.8	moved	
+WL-SPEC-17	sec-7	Later phases (non-normative)	02-identity-actors-and-secrets.md	-	dropped-other	non-normative v1.5/v2 sketches not carried
+WL-SPEC-17	sec-8	Dependencies	02-identity-actors-and-secrets.md	-	dropped-other	cross-spec dependency list replaced by inline links to the new files
+WL-SPEC-17	sec-9	Open questions	02-identity-actors-and-secrets.md	Open questions	moved	
+WL-SPEC-19	sec-0	Why	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-19	sec-1	Decisions	09-cli-and-skills.md	6	merged	
+WL-SPEC-19	sec-2	Resolution chain	09-cli-and-skills.md	6.1	moved	
+WL-SPEC-19	sec-3	Server changes	09-cli-and-skills.md	6.2	moved	
+WL-SPEC-19	sec-4	Client changes	09-cli-and-skills.md	6.3	moved	
+WL-SPEC-19	sec-4.1	Resolution and the cache	09-cli-and-skills.md	6.3	moved	
+WL-SPEC-19	sec-4.2	`lode project resolve [--refresh]`	09-cli-and-skills.md	6.3	moved	
+WL-SPEC-19	sec-4.3	Bare task numbers	09-cli-and-skills.md	6.4	moved	
+WL-SPEC-19	sec-4.4	Typed ids and `lode show`	09-cli-and-skills.md	6.5	moved	
+WL-SPEC-19	sec-4.5	Command surface	09-cli-and-skills.md	6.6	moved	
+WL-SPEC-19	sec-5	Testing	09-cli-and-skills.md	-	dropped-other	test plan; specs2 carries no test plans
+WL-SPEC-19	sec-6	Non-goals	09-cli-and-skills.md	6.6	merged	
+WL-SPEC-20	sec-0	Why	08-agent-harness-and-sessions.md	11	merged	
+WL-SPEC-20	sec-1	How the gap stayed invisible	-	-	dropped-history	
+WL-SPEC-20	sec-2	Decisions	08-agent-harness-and-sessions.md	11	moved	
+WL-SPEC-20	sec-3.1	Fetch	08-agent-harness-and-sessions.md	11.1	moved	
+WL-SPEC-20	sec-3.2	API	08-agent-harness-and-sessions.md	11.2	moved	
+WL-SPEC-20	sec-3.3	Staging what was imported	08-agent-harness-and-sessions.md	11.3	moved	
+WL-SPEC-20	sec-3.4	Link	08-agent-harness-and-sessions.md	11.3	moved	
+WL-SPEC-20	sec-3.5	Event-subscription check	08-agent-harness-and-sessions.md	11.4	moved	
+WL-SPEC-20	sec-4	Testing	-	-	dropped-other	test enumeration
+WL-SPEC-20	sec-5	What this spec does not cover	08-agent-harness-and-sessions.md	11.4	merged	deferral to 05-documents.md and Tarball note kept as one sentence
+WL-SPEC-20	sec-6	Follow-ups this leaves open	08-agent-harness-and-sessions.md	11.4	merged	
+WL-SPEC-21	sec-0	Purpose & scope	06-design-queries-intents-decks.md	8	merged	embedded/attached distinction kept as the intro of 8; motivation and scope lists dropped
+WL-SPEC-21	sec-1	Storage	06-design-queries-intents-decks.md	8.1	moved	
+WL-SPEC-21	sec-10	Brief integration	06-design-queries-intents-decks.md	8.6	merged	
+WL-SPEC-21	sec-11	Lifecycle and garbage collection	06-design-queries-intents-decks.md	8.7	moved	11.1, 11.2 folded in
+WL-SPEC-21	sec-12	Mirroring on import	06-design-queries-intents-decks.md	8.8	moved	
+WL-SPEC-21	sec-13	Configuration	06-design-queries-intents-decks.md	8.9	moved	
+WL-SPEC-21	sec-14	Open questions	06-design-queries-intents-decks.md	Open questions	moved	Q021.1 and Q021.3 carried; resolved Q021.2 and Q021.4 dropped as history
+WL-SPEC-21	sec-15	Acceptance criteria	06-design-queries-intents-decks.md	-	dropped-other	acceptance criteria restate 8.1-8.9
+WL-SPEC-21	sec-15.1	Verification state	06-design-queries-intents-decks.md	Open questions	merged	the unverified presigned response-* overrides (WL-206) line
+WL-SPEC-21	sec-2	Reference syntax and serving	06-design-queries-intents-decks.md	8.2	moved	
+WL-SPEC-21	sec-3	Surfaces	06-design-queries-intents-decks.md	8.3	moved	
+WL-SPEC-21	sec-4	Auth	06-design-queries-intents-decks.md	8.4	moved	
+WL-SPEC-21	sec-5	Upload	06-design-queries-intents-decks.md	8.5	moved	
+WL-SPEC-21	sec-6	Serving hardening	06-design-queries-intents-decks.md	8.6	merged	
+WL-SPEC-21	sec-7	Reference rewriting	06-design-queries-intents-decks.md	8.5	merged	
+WL-SPEC-21	sec-8	Rendering	06-design-queries-intents-decks.md	8.6	merged	8.1 web UI and 8.2 CLI both in 8.6
+WL-SPEC-21	sec-9	Attachments	06-design-queries-intents-decks.md	8.3	merged	attach/detach rows in the 8.3 surfaces table plus the intro of 8
+WL-SPEC-22	sec-0	Purpose & scope	01-system-and-deployment.md	6	merged	
+WL-SPEC-22	sec-1	Registry plumbing	01-system-and-deployment.md	6	moved	
+WL-SPEC-22	sec-2	Process and DB-pool collectors	01-system-and-deployment.md	6	moved	
+WL-SPEC-22	sec-3	Lease and claim metrics (internal/store)	01-system-and-deployment.md	6	moved	
+WL-SPEC-22	sec-4	Background jobs	01-system-and-deployment.md	6	moved	
+WL-SPEC-22	sec-5	Webhooks (internal/hooks)	01-system-and-deployment.md	6	moved	
+WL-SPEC-22	sec-6	Embeddings (internal/embed)	01-system-and-deployment.md	6	moved	
+WL-SPEC-22	sec-7	Testing	01-system-and-deployment.md	9	merged	
+WL-SPEC-22	sec-8	Maintenance instructions	01-system-and-deployment.md	6	merged	rule kept as a bullet, CLAUDE.md instruction dropped
+WL-SPEC-22	sec-9	Scrape path	01-system-and-deployment.md	4.4	moved	
+WL-SPEC-25	sec-0	0. Why	05-documents.md	-	dropped-history	
+WL-SPEC-25	sec-1	1. Principle: rows are things someone made; groupings are queries	05-documents.md	1	moved	
+WL-SPEC-25	sec-10	10. Task kinds	05-documents.md	12	moved	
+WL-SPEC-25	sec-10.1	10.1 A decision's data	05-documents.md	12	moved	
+WL-SPEC-25	sec-11	11. Implementation coverage	05-documents.md	13	moved	
+WL-SPEC-25	sec-11.1	11.1 Three objects, previously conflated	05-documents.md	13	moved	
+WL-SPEC-25	sec-11.2	11.2 `.worklode/implements.yaml`	05-documents.md	13	moved	
+WL-SPEC-25	sec-11.3	11.3 The component is derived, never declared	05-documents.md	13	moved	
+WL-SPEC-25	sec-11.4	11.4 Single-component repositories	05-documents.md	13	moved	
+WL-SPEC-25	sec-11.5	11.5 Deriver: `observed/repo-implements`	05-documents.md	13	moved	
+WL-SPEC-25	sec-11.6	11.6 This replaces spec 013's engine 3	05-documents.md	-	dropped-history	
+WL-SPEC-25	sec-12	12. Authorship	05-documents.md	13	merged	
+WL-SPEC-25	sec-13	13. Project and Milestone	05-documents.md	13	merged	
+WL-SPEC-25	sec-14	14. Document frontmatter	05-documents.md	7	moved	
+WL-SPEC-25	sec-14.1	14.1 References carry the section	05-documents.md	7	moved	
+WL-SPEC-25	sec-14.2	14.2 Amendment references are bidirectional	05-documents.md	7	moved	
+WL-SPEC-25	sec-14.3	14.3 The `<KEY>-<TYPE>-<n>` shorthand	05-documents.md	7	moved	
+WL-SPEC-25	sec-15	15. The event log is totally ordered	05-documents.md	15	moved	
+WL-SPEC-25	sec-15.1	15.1 Subscribers hold offsets	05-documents.md	15	moved	
+WL-SPEC-25	sec-15.2	15.2 Events are RDF-shaped	05-documents.md	15	moved	
+WL-SPEC-25	sec-15.3	15.3 Emitting	05-documents.md	15	moved	
+WL-SPEC-25	sec-15.4	15.4 The `doc-lifecycle` subscriber	05-documents.md	15	moved	
+WL-SPEC-25	sec-15.5	15.5 Events of the escalation ladder	05-documents.md	15	merged	
+WL-SPEC-25	sec-15.6	15.6 Planning cost lands on the planning task	05-documents.md	15	moved	
+WL-SPEC-25	sec-15.7	15.7 Metrics	05-documents.md	15	moved	
+WL-SPEC-25	sec-16	16. Git → backbone sync: the on-ramp	05-documents.md	-	dropped-stale	withdrawn in source; parser survival noted in 16
+WL-SPEC-25	sec-16.1	16.1 What syncs — corpora and config	05-documents.md	-	dropped-stale	
+WL-SPEC-25	sec-16.2	16.2 The sync command	05-documents.md	-	dropped-stale	
+WL-SPEC-25	sec-16.3	16.3 Identity	05-documents.md	-	dropped-stale	
+WL-SPEC-25	sec-16.4	16.4 Reads	05-documents.md	-	dropped-stale	
+WL-SPEC-25	sec-16.5	16.5 Relationship to the query surface and to 029	05-documents.md	-	dropped-stale	
+WL-SPEC-25	sec-17	17. `ns/` is the schema source	05-documents.md	14	moved	
+WL-SPEC-25	sec-18	18. Surfaces	05-documents.md	18	moved	
+WL-SPEC-25	sec-19	19. Implementation	05-documents.md	-	dropped-other	package-to-unit map and plan split; belongs to plans, not the spec
+WL-SPEC-25	sec-2	2. What is, and is not, a design document	05-documents.md	2	moved	
+WL-SPEC-25	sec-2.1	2.1 Resulting class hierarchy	05-documents.md	2	moved	
+WL-SPEC-25	sec-2.2	2.2 Documents are not closeable	05-documents.md	2	moved	
+WL-SPEC-25	sec-20	20. Testing	05-documents.md	-	dropped-other	test list; belongs to plans
+WL-SPEC-25	sec-21	21. Dependencies	05-documents.md	-	dropped-history	
+WL-SPEC-25	sec-22	22. Out of scope	05-documents.md	6	merged	"only ""constraints bind from first acceptance"" kept"
+WL-SPEC-25	sec-23	23. Open questions	05-documents.md	-	merged	resolved items folded into 4/6/13; open items 6, 8, 9 carried to the unnumbered Open questions section
+WL-SPEC-25	sec-24	24. Acceptance criteria	05-documents.md	-	dropped-history	
+WL-SPEC-25	sec-3	3. Sections as first-class nodes	05-documents.md	4	moved	
+WL-SPEC-25	sec-3.1	3.1 Anchors	05-documents.md	4	moved	
+WL-SPEC-25	sec-3.2	3.2 Numbering is identity, so numbering is frozen	05-documents.md	4	moved	
+WL-SPEC-25	sec-3.3	3.3 What one mint buys	05-documents.md	4	moved	
+WL-SPEC-25	sec-4	4. Versioning	05-documents.md	5	moved	
+WL-SPEC-25	sec-4.1	4.1 Canonical plus versioned IRIs	05-documents.md	5	moved	
+WL-SPEC-25	sec-4.2	4.2 Relationship to ADR-0006	05-documents.md	5	merged	
+WL-SPEC-25	sec-4.3	4.3 Publication is one transaction	05-documents.md	5	moved	
+WL-SPEC-25	sec-4.4	4.4 Section-level staleness without section-level versions	05-documents.md	5	moved	
+WL-SPEC-25	sec-4.5	4.5 Store-level version history	05-documents.md	3	merged	
+WL-SPEC-25	sec-5	5. Documents move into the backbone	05-documents.md	3	merged	git-mirror `[doc_sync]`/pull/push paragraph dropped to Open questions; transitional paragraph dropped-history
+WL-SPEC-25	sec-5.1	5.1 The document store	05-documents.md	-	dropped-stale	withdrawn with the on-ramp (025 §16 note)
+WL-SPEC-25	sec-6	6. Constraints on accepted documents	05-documents.md	6	moved	
+WL-SPEC-25	sec-6.1	6.1 Anchor depth	05-documents.md	4	merged	
+WL-SPEC-25	sec-6.2	6.2 Rule 2 is detected, not refused	05-documents.md	6	moved	
+WL-SPEC-25	sec-7	7. Editorial lifecycle	05-documents.md	9	moved	
+WL-SPEC-25	sec-7.1	7.1 `implemented` leaves the status enum	05-documents.md	9	merged	
+WL-SPEC-25	sec-7.2	7.2 Revising an accepted document	05-documents.md	9	moved	
+WL-SPEC-25	sec-7.3	7.3 Reviewers and the accept gate	05-documents.md	9	moved	
+WL-SPEC-25	sec-8	8. The escalation ladder	05-documents.md	10	moved	
+WL-SPEC-25	sec-8.1	8.1 Escalation to a human	05-documents.md	10	moved	
+WL-SPEC-25	sec-8.2	8.2 In-place amendment	05-documents.md	10	moved	
+WL-SPEC-25	sec-8.3	8.3 What counts as substantive	05-documents.md	10	moved	
+WL-SPEC-25	sec-8.4	8.4 Enforcement is server-side	05-documents.md	10	merged	
+WL-SPEC-25	sec-8.5	8.5 Notes	05-documents.md	10	moved	
+WL-SPEC-25	sec-8.6	8.6 Stale plans	05-documents.md	10	moved	
+WL-SPEC-25	sec-8.7	8.7 Grooming	05-documents.md	9	merged	
+WL-SPEC-25	sec-8.8	8.8 Tier routing on claim	05-documents.md	10	moved	
+WL-SPEC-25	sec-9	9. Plans are documents	05-documents.md	11	moved	plan-is-a-document rationale and cardinality test merged into 2
+WL-SPEC-25	sec-9.1	9.1 Task declarations — the `## Tasks` section	05-documents.md	11	moved	
+WL-SPEC-25	sec-9.2	9.2 Acceptance mints the plan's tasks	05-documents.md	11	moved	
+WL-SPEC-25	sec-9.3	9.3 Spec fan-out is a query	05-documents.md	11	moved	
+WL-SPEC-26	sec-0	Why	06-design-queries-intents-decks.md	-	dropped-history	
+WL-SPEC-26	sec-1	Where the answers come from	06-design-queries-intents-decks.md	1.1	moved	
+WL-SPEC-26	sec-10	Testing	06-design-queries-intents-decks.md	-	dropped-other	test plan; lives with the code, not the design
+WL-SPEC-26	sec-11	Out of scope	06-design-queries-intents-decks.md	-	dropped-other	non-goals list referring to 025 sections and backfills already done
+WL-SPEC-26	sec-12	Acceptance criteria	06-design-queries-intents-decks.md	-	dropped-other	acceptance criteria restate the rules already in 1.x-4.x
+WL-SPEC-26	sec-2	lode doc list	06-design-queries-intents-decks.md	1.2	moved	2.1→1.3, 2.2→1.4, 2.3→1.5, 2.4→1.6, 2.5→1.7
+WL-SPEC-26	sec-3	Showing a document: lode show	06-design-queries-intents-decks.md	2	moved	3.1→2.3, 3.2→2.4
+WL-SPEC-26	sec-4	Reference resolution and integrity	06-design-queries-intents-decks.md	3	moved	4.1→3.4, 4.2→3.2, 4.3→3.3
+WL-SPEC-26	sec-5	A plan covers sections; it implements none	06-design-queries-intents-decks.md	4	moved	5.1→4.1/4.2, 5.2→4.3, 5.3→4.2, 5.4→4.4
+WL-SPEC-26	sec-6	Ontology	06-design-queries-intents-decks.md	4.6	moved	6.2→4.6, 6.3→4.6, 6.4→4.6
+WL-SPEC-26	sec-6.1	Two terms this displaces	06-design-queries-intents-decks.md	4.6	merged	only the wl:cutFrom term row survives; rename rationale dropped
+WL-SPEC-26	sec-7	Checks	06-design-queries-intents-decks.md	4.5	moved	
+WL-SPEC-26	sec-7.1	Documents the rename reaches	06-design-queries-intents-decks.md	-	dropped-history	
+WL-SPEC-26	sec-8	Documentation changes	06-design-queries-intents-decks.md	-	dropped-history	
+WL-SPEC-26	sec-9	Implementation	06-design-queries-intents-decks.md	-	dropped-history	
+WL-SPEC-29	sec-0	Why	-	-	dropped-history	rollout motivation
+WL-SPEC-29	sec-1	The investigation is a project	03-tasks-and-execution.md	13	moved	
+WL-SPEC-29	sec-2	Milestones and deliverables	03-tasks-and-execution.md	13	moved	
+WL-SPEC-29	sec-3	Deliverables	03-tasks-and-execution.md	13	moved	
+WL-SPEC-29	sec-4	Identifiers	03-tasks-and-execution.md	13	merged	13.4 with sec-5
+WL-SPEC-29	sec-5	References across projects	03-tasks-and-execution.md	13	merged	13.4 with sec-4
+WL-SPEC-29	sec-6.1	Assignee, participants, contributors	03-tasks-and-execution.md	13	moved	
+WL-SPEC-29	sec-6.2	Identity and roles	02-identity-actors-and-secrets.md	13	pointer	13.5 keeps one line, actor fields owned by 02
+WL-SPEC-29	sec-7	Approvals	03-tasks-and-execution.md	13	moved	
+WL-SPEC-29	sec-8.1	Intake	03-tasks-and-execution.md	13	moved	
+WL-SPEC-29	sec-8.2	Events out	03-tasks-and-execution.md	13	merged	13.8
+WL-SPEC-29	sec-8.3	Events in	03-tasks-and-execution.md	13	merged	13.8
+WL-SPEC-29	sec-8.4	Google Chat crew spaces	03-tasks-and-execution.md	13	merged	13.8
+WL-SPEC-29	sec-9	Out of scope	03-tasks-and-execution.md	-	merged	access-control item kept in Open questions; rest dropped
+WL-SPEC-32	sec-0	Purpose and boundary	10-cockpit.md	-	merged	
+WL-SPEC-32	sec-1	Facts drive the interface	10-cockpit.md	1	moved	
+WL-SPEC-32	sec-10	Accessibility and responsive behavior	10-cockpit.md	4	moved	
+WL-SPEC-32	sec-11	First interactive release	-	-	dropped-history	
+WL-SPEC-32	sec-12	Cockpit rendering and styling toolchain	10-cockpit.md	3	merged	
+WL-SPEC-32	sec-13	Non-goals	10-cockpit.md	17	merged	
+WL-SPEC-32	sec-2	Application and project navigation	10-cockpit.md	2	merged	
+WL-SPEC-32	sec-3	One cockpit with lifecycle modes	10-cockpit.md	5.1	moved	
+WL-SPEC-32	sec-3.1	Stage due dates	10-cockpit.md	5.2	moved	
+WL-SPEC-32	sec-4	Focus and the next decision	10-cockpit.md	5.3	moved	
+WL-SPEC-32	sec-5	Intake and promotion	10-cockpit.md	7	moved	
+WL-SPEC-32	sec-6	People and agent presentation	10-cockpit.md	8	moved	
+WL-SPEC-32	sec-7	Deliverables and review	10-cockpit.md	9	moved	
+WL-SPEC-32	sec-8	Automation and unattended execution	10-cockpit.md	10	moved	
+WL-SPEC-32	sec-9	Home and the Morning Brief	10-cockpit.md	11	moved	
+WL-SPEC-37	sec-0	Purpose & scope	09-cli-and-skills.md	8	moved	
+WL-SPEC-37	sec-1	Why vendoring rather than composition	09-cli-and-skills.md	8	merged	
+WL-SPEC-37	sec-10	Testing	09-cli-and-skills.md	-	dropped-other	test plan; specs2 carries no test plans
+WL-SPEC-37	sec-11	Non-goals	09-cli-and-skills.md	-	dropped-stale	
+WL-SPEC-37	sec-12	Open questions	09-cli-and-skills.md	Open questions	merged	
+WL-SPEC-37	sec-13	Acceptance criteria	09-cli-and-skills.md	-	dropped-other	acceptance criteria; specs2 carries none
+WL-SPEC-37	sec-2	The vendored tree	09-cli-and-skills.md	8.1	moved	
+WL-SPEC-37	sec-3	The skill set	09-cli-and-skills.md	8.2	moved	
+WL-SPEC-37	sec-4	Skill identity is plugin-qualified	09-cli-and-skills.md	7.4	moved	
+WL-SPEC-37	sec-5	`lode install` owns versions and suppression	09-cli-and-skills.md	8.3	moved	
+WL-SPEC-37	sec-6	Grilling over Worklode documents	09-cli-and-skills.md	8.4	moved	
+WL-SPEC-37	sec-7	`lode doc fetch`	09-cli-and-skills.md	8.5	moved	
+WL-SPEC-37	sec-8	Metrics	09-cli-and-skills.md	8.5	merged	
+WL-SPEC-37	sec-9	Degradation	09-cli-and-skills.md	8.5	merged	
+WL-SPEC-38	sec-0	Why	01-system-and-deployment.md	5	merged	
+WL-SPEC-38	sec-1	What changes, and what does not	01-system-and-deployment.md	5	merged	
+WL-SPEC-38	sec-2	The bootstrap is repo-committed	01-system-and-deployment.md	5.1	moved	
+WL-SPEC-38	sec-2.1	Why not a tool manager, yet	01-system-and-deployment.md	5.1	merged	
+WL-SPEC-38	sec-2.2	System packages stay in the image	01-system-and-deployment.md	5.1	merged	
+WL-SPEC-38	sec-3	Worker images	01-system-and-deployment.md	5.2	moved	
+WL-SPEC-38	sec-3.1	The image family	01-system-and-deployment.md	5.2	moved	
+WL-SPEC-38	sec-3.2	Tagging is content-addressed	01-system-and-deployment.md	5.3	moved	
+WL-SPEC-38	sec-3.3	Egress is default-deny, with a named baseline	01-system-and-deployment.md	5.4	moved	
+WL-SPEC-38	sec-4	The sandbox session	01-system-and-deployment.md	5.5	moved	
+WL-SPEC-38	sec-4.1	The entry point is the CLI, not the plugin	01-system-and-deployment.md	5.5	merged	
+WL-SPEC-38	sec-4.2	Hooks must arrive before the session, not during it	01-system-and-deployment.md	5.5	merged	
+WL-SPEC-38	sec-4.3	Identity	01-system-and-deployment.md	5.5	merged	token model itself pointed to 02
+WL-SPEC-38	sec-4.4	Secrets	02-identity-actors-and-secrets.md	5.5	pointer	
+WL-SPEC-38	sec-4.5	A seam for human-in-the-loop questions	01-system-and-deployment.md	5.5	merged	relay row kept, question direction moved to Open questions
+WL-SPEC-38	sec-5	Seams for backbone-initiated dispatch	01-system-and-deployment.md	5.6	moved	
+WL-SPEC-38	sec-5.1	Why not an external agent runtime, yet	01-system-and-deployment.md	5.6	merged	
+WL-SPEC-38	sec-6	Testing	01-system-and-deployment.md	9	merged	
+WL-SPEC-38	sec-7	Out of scope	-	-	dropped-other	non-goals list, no design fact
+WL-SPEC-38	sec-8	Open questions	01-system-and-deployment.md	Open questions	merged	
+WL-SPEC-38	sec-9	Acceptance criteria	01-system-and-deployment.md	9	merged	
+WL-SPEC-39	sec-0	Purpose & scope	-	-	dropped-history	
+WL-SPEC-39	sec-1	The access surface	01-system-and-deployment.md	4.1	merged	condensed to one paragraph of rationale
+WL-SPEC-39	sec-2	Where each instance runs	01-system-and-deployment.md	4.1	moved	
+WL-SPEC-39	sec-3	Instance environment is not deployment environment	01-system-and-deployment.md	4.2	moved	
+WL-SPEC-39	sec-4	The prod overlay	01-system-and-deployment.md	4.3	moved	
+WL-SPEC-39	sec-4.1	Cutover from hzprod	-	-	dropped-history	
+WL-SPEC-39	sec-5	Non-goals	-	-	dropped-other	non-goals list, no design fact
+WL-SPEC-39	sec-6	Relationship to other documents	01-system-and-deployment.md	4.3	merged	session-gate sentence kept, rest dropped
+WL-SPEC-40	sec-0	Why	07-knowledge-graph-and-search.md	-	dropped-history	rationale; the child_of ranking example survives as one line in 15
+WL-SPEC-40	sec-1	What gets indexed	07-knowledge-graph-and-search.md	14	moved	14.1
+WL-SPEC-40	sec-10	Metrics	07-knowledge-graph-and-search.md	17	merged	
+WL-SPEC-40	sec-11	Degraded operation	07-knowledge-graph-and-search.md	17	merged	
+WL-SPEC-40	sec-12	Open questions	07-knowledge-graph-and-search.md	Open questions	merged	items 1-4 kept; item 5 (skill bundle files) dropped
+WL-SPEC-40	sec-13	Acceptance	07-knowledge-graph-and-search.md	-	dropped-other	acceptance criteria; the new doc carries none
+WL-SPEC-40	sec-2	The embedding space	07-knowledge-graph-and-search.md	14	moved	14.2; sec-2.1-2.4 collapsed
+WL-SPEC-40	sec-3	Provider interface	07-knowledge-graph-and-search.md	14	moved	14.3
+WL-SPEC-40	sec-4	Chunking	07-knowledge-graph-and-search.md	14	moved	14.4; sec-4.1-4.4 collapsed
+WL-SPEC-40	sec-5	Storage	07-knowledge-graph-and-search.md	14	moved	14.5; DDL gains embedding_bf16 from WL-SPEC-69
+WL-SPEC-40	sec-6	Retrieval: two arms, fused by rank	07-knowledge-graph-and-search.md	15	moved	sec-6.1-6.5 collapsed into four paragraphs
+WL-SPEC-40	sec-7	Freshness: convergence, not hooks	07-knowledge-graph-and-search.md	16	moved	
+WL-SPEC-40	sec-8	Provider change invalidates the vectors	07-knowledge-graph-and-search.md	16	merged	per-column form from WL-SPEC-69 sec-3.2
+WL-SPEC-40	sec-9	Surfaces	07-knowledge-graph-and-search.md	17	moved	
+WL-SPEC-41	sec-0	Purpose & scope	08-agent-harness-and-sessions.md	9	merged	
+WL-SPEC-41	sec-1	Package boundary and installation	08-agent-harness-and-sessions.md	9	merged	
+WL-SPEC-41	sec-2	Extension adapter	08-agent-harness-and-sessions.md	9	merged	
+WL-SPEC-41	sec-3	Lifecycle mapping	08-agent-harness-and-sessions.md	9	merged	
+WL-SPEC-41	sec-4	Commands, skills, and status	08-agent-harness-and-sessions.md	9	merged	
+WL-SPEC-41	sec-5	Discovery criteria	-	-	dropped-other	build-time discovery list; results become tests or amendments, none recorded
+WL-SPEC-41	sec-6	Testing and acceptance criteria	08-agent-harness-and-sessions.md	9	merged	
+WL-SPEC-41	sec-7	Dependencies and sources	-	-	dropped-history	
+WL-SPEC-42	sec-0	Purpose & scope	02-identity-actors-and-secrets.md	10.2	merged	
+WL-SPEC-42	sec-1	The split model	02-identity-actors-and-secrets.md	10.2	merged	
+WL-SPEC-42	sec-2	Catalog declaration	02-identity-actors-and-secrets.md	10.2	merged	
+WL-SPEC-42	sec-3	Materialization	02-identity-actors-and-secrets.md	10.4	merged	
+WL-SPEC-42	sec-4	Rendering & execution	02-identity-actors-and-secrets.md	10.5	merged	
+WL-SPEC-42	sec-5	Degradation	02-identity-actors-and-secrets.md	10.8	merged	
+WL-SPEC-42	sec-6	Acceptance criteria	02-identity-actors-and-secrets.md	-	dropped-other	acceptance criteria not carried into the consolidated spec
+WL-SPEC-44	sec-0	Purpose & scope	03-tasks-and-execution.md	12	merged	
+WL-SPEC-44	sec-1	Delete is not abandon	03-tasks-and-execution.md	12	moved	
+WL-SPEC-44	sec-2	The tombstone	03-tasks-and-execution.md	12	moved	
+WL-SPEC-44	sec-3	Justification, by instance environment	03-tasks-and-execution.md	12	moved	
+WL-SPEC-44	sec-4	What a tombstone hides	03-tasks-and-execution.md	12	moved	
+WL-SPEC-44	sec-5	Surfaces	03-tasks-and-execution.md	12	moved	
+WL-SPEC-44	sec-6	Metrics	-	-	dropped-other	worklode_deletes_total not carried into the new doc; gap to fill in 12 or 01
+WL-SPEC-45	sec-0	Purpose & scope	04-done-verification-workflows.md	8	merged	definition and boundary kept in intro and 8 lede; legalTransitions-subsumption rationale dropped
+WL-SPEC-45	sec-1	The model	04-done-verification-workflows.md	8.1-8.4	moved	
+WL-SPEC-45	sec-1.1	Vocabulary and machine are different things	04-done-verification-workflows.md	8.1	moved	
+WL-SPEC-45	sec-1.2	The mandatory core	04-done-verification-workflows.md	8.2	moved	
+WL-SPEC-45	sec-1.3	Optional states and declared entries	04-done-verification-workflows.md	8.3	moved	
+WL-SPEC-45	sec-1.4	The default workflow	04-done-verification-workflows.md	8.4	moved	
+WL-SPEC-45	sec-10	Non-goals and deferred	04-done-verification-workflows.md	12	merged	
+WL-SPEC-45	sec-11	Acceptance criteria	04-done-verification-workflows.md	-	dropped-other	acceptance criteria are a test plan, not design
+WL-SPEC-45	sec-2	The guard	04-done-verification-workflows.md	8.5	moved	
+WL-SPEC-45	sec-3	Which workflow governs a task	04-done-verification-workflows.md	8.6	moved	
+WL-SPEC-45	sec-4	Storage	04-done-verification-workflows.md	8.7, 8.8	moved	
+WL-SPEC-45	sec-4.1	Shape	04-done-verification-workflows.md	8.7	moved	
+WL-SPEC-45	sec-4.2	Validation	04-done-verification-workflows.md	8.8	moved	
+WL-SPEC-45	sec-4.3	Migration	04-done-verification-workflows.md	-	dropped-history	
+WL-SPEC-45	sec-5	Every state reader, accounted for	04-done-verification-workflows.md	8.9	moved	5.1-5.5 collapsed to the four-class table plus two paragraphs
+WL-SPEC-45	sec-6	Changing a workflow: review, not a gate	04-done-verification-workflows.md	8.10	moved	6.1-6.3 in 8.10
+WL-SPEC-45	sec-7	Relation to `done_state` and Deliverable	04-done-verification-workflows.md	9	moved	
+WL-SPEC-45	sec-8	Metrics	04-done-verification-workflows.md	11	merged	
+WL-SPEC-45	sec-9	Testing	04-done-verification-workflows.md	-	dropped-other	test plan, not design
+WL-SPEC-46	sec-0	Purpose & scope	04-done-verification-workflows.md	10	merged	
+WL-SPEC-46	sec-1	The model	04-done-verification-workflows.md	10, 10.1	moved	
+WL-SPEC-46	sec-1.1	What rules are for	04-done-verification-workflows.md	10	moved	
+WL-SPEC-46	sec-1.2	The trigger: `wl:TaskTransitioned`	04-done-verification-workflows.md	10.1	moved	
+WL-SPEC-46	sec-1.3	First match wins	04-done-verification-workflows.md	10.1	moved	
+WL-SPEC-46	sec-1.4	No rule cascades	04-done-verification-workflows.md	10.1	moved	
+WL-SPEC-46	sec-2	Rule configuration	04-done-verification-workflows.md	10.2	moved	2.1 shape and 2.2 validation both in 10.2
+WL-SPEC-46	sec-3	Evaluation semantics	04-done-verification-workflows.md	10.3	moved	3.1-3.4 in 10.3
+WL-SPEC-46	sec-4	LLM-backed rules	04-done-verification-workflows.md	10.4	moved	4.1-4.4 in 10.4
+WL-SPEC-46	sec-5	Execution model	04-done-verification-workflows.md	10.5	moved	5.1-5.4 in 10.5
+WL-SPEC-46	sec-6	Metrics	04-done-verification-workflows.md	11	merged	
+WL-SPEC-46	sec-7	Testing	04-done-verification-workflows.md	-	dropped-other	test plan, not design
+WL-SPEC-46	sec-8	Non-goals and deferred	04-done-verification-workflows.md	12	merged	
+WL-SPEC-46	sec-9	Acceptance criteria	04-done-verification-workflows.md	-	dropped-other	acceptance criteria are a test plan, not design
+WL-SPEC-52	sec-0	Problem	01-system-and-deployment.md	8	merged	
+WL-SPEC-52	sec-1	Schema	01-system-and-deployment.md	8.1	moved	
+WL-SPEC-52	sec-2	Store and API	01-system-and-deployment.md	8.2	moved	
+WL-SPEC-52	sec-3	Hook wiring	01-system-and-deployment.md	7.4	dropped-stale	hookrun transcript reporting superseded by OTel (63); only the cwd-to-task/overhead classification rule survives in 7.4
+WL-SPEC-52	sec-4	Wire model and cockpit	01-system-and-deployment.md	8.3	moved	CostOverhead wire model
+WL-SPEC-52	sec-4	Wire model and cockpit	01-system-and-deployment.md	8.4	moved	cockpit card
+WL-SPEC-52	sec-5	Testing	01-system-and-deployment.md	9	merged	
+WL-SPEC-52	sec-6	Out of scope	01-system-and-deployment.md	8.3	merged	currency-conversion and no-per-session-surface lines kept
+WL-SPEC-53	sec-0	Problem	-	-	dropped-history	
+WL-SPEC-53	sec-1	Shipped executables	01-system-and-deployment.md	3.1	moved	
+WL-SPEC-53	sec-2	Dependency boundaries and startup	01-system-and-deployment.md	3.2	moved	
+WL-SPEC-53	sec-3	Compatibility and managed bindings	01-system-and-deployment.md	3.3	moved	shim compatibility window dropped as stale, bindings kept
+WL-SPEC-53	sec-4	Distribution and deployment	01-system-and-deployment.md	3.4	moved	
+WL-SPEC-53	sec-5	Failure behavior	01-system-and-deployment.md	3.5	moved	
+WL-SPEC-53	sec-6	Verification	01-system-and-deployment.md	9	merged	
+WL-SPEC-53	sec-7	Out of scope	-	-	dropped-other	non-goals list, no design fact
+WL-SPEC-54	sec-0	Problem	02-identity-actors-and-secrets.md	1.2	merged	
+WL-SPEC-54	sec-1	What an actor is for	02-identity-actors-and-secrets.md	1	moved	
+WL-SPEC-54	sec-2	Dimensions that are not identities	02-identity-actors-and-secrets.md	1.2	moved	
+WL-SPEC-54	sec-3	The roster	02-identity-actors-and-secrets.md	1.2	moved	
+WL-SPEC-54	sec-4	The dispatching human	02-identity-actors-and-secrets.md	2	moved	
+WL-SPEC-54	sec-5	Launch profiles are configuration	02-identity-actors-and-secrets.md	1.2	merged	
+WL-SPEC-54	sec-6	Non-goals	02-identity-actors-and-secrets.md	1.2	merged	
+WL-SPEC-55	sec-0	0. Why	05-documents.md	-	dropped-history	
+WL-SPEC-55	sec-1	1. What already exists	05-documents.md	16	moved	
+WL-SPEC-55	sec-2	2. The duplicate-slug hazard	05-documents.md	16	merged	
+WL-SPEC-55	sec-3	3. The files are deleted	05-documents.md	16	merged	
+WL-SPEC-55	sec-4	4. Repointing the tools	05-documents.md	16	merged	hook table reduced to one line of owning rules
+WL-SPEC-55	sec-4.1	4.1 Dangling references are reported	05-documents.md	16	moved	
+WL-SPEC-55	sec-5	5. Order of operations	05-documents.md	-	dropped-history	
+WL-SPEC-55	sec-6	6. Out of scope	05-documents.md	-	dropped-history	
+WL-SPEC-55	sec-7	7. Acceptance criteria	05-documents.md	16	merged	only the cockpit-reachability criterion kept
+WL-SPEC-56	sec-0	Purpose	10-cockpit.md	-	merged	
+WL-SPEC-56	sec-1	One navigation row	10-cockpit.md	2.1	moved	
+WL-SPEC-56	sec-2	Every project page carries the project sidebar	10-cockpit.md	2.2	moved	
+WL-SPEC-56	sec-3	The inbox	10-cockpit.md	12	moved	
+WL-SPEC-56	sec-4	The inbox indicator	10-cockpit.md	2.3	moved	
+WL-SPEC-56	sec-5	Non-goals	10-cockpit.md	17	merged	
+WL-SPEC-57	sec-0	Why	04-done-verification-workflows.md	-	dropped-history	
+WL-SPEC-57	sec-1	The three cases the design has to cover	04-done-verification-workflows.md	-	dropped-history	motivating cases; the rule they produce is in 1.2
+WL-SPEC-57	sec-2	The declaration	04-done-verification-workflows.md	1	moved	
+WL-SPEC-57	sec-2.1	Resolution	04-done-verification-workflows.md	1.1	moved	
+WL-SPEC-57	sec-2.2	What a project defaults to	04-done-verification-workflows.md	1.2	moved	
+WL-SPEC-57	sec-3	The brief	04-done-verification-workflows.md	2	moved	
+WL-SPEC-57	sec-4	Does `done` verify, or only assert?	04-done-verification-workflows.md	3	moved	4.1-4.3 are the three table rows of section 3
+WL-SPEC-57	sec-5	Lease and worktree retention	04-done-verification-workflows.md	4	moved	
+WL-SPEC-57	sec-6	What this unlocks: external evidence routing	04-done-verification-workflows.md	5	moved	
+WL-SPEC-57	sec-7	Storage and surface	04-done-verification-workflows.md	1.3, 11	merged	schema/API/CLI in 1.3, metrics in 11; backfill paragraph dropped as migration history
+WL-SPEC-57	sec-8	Out of scope	04-done-verification-workflows.md	12	merged	
+WL-SPEC-57	sec-9	Acceptance criteria	04-done-verification-workflows.md	-	dropped-other	acceptance criteria are a test plan, not design
+WL-SPEC-58	sec-0	Why	04-done-verification-workflows.md	-	dropped-history	
+WL-SPEC-58	sec-1	What this spec decides, and what it declines	04-done-verification-workflows.md	-	dropped-history	roadmap of the spec; substance is in the H3s below
+WL-SPEC-58	sec-1.1	No second state field	04-done-verification-workflows.md	6	merged	the declined `resolution` enum opens section 6
+WL-SPEC-58	sec-1.2	Reopen stays the safety net	04-done-verification-workflows.md	7.1	merged	last paragraph of 7.1
+WL-SPEC-58	sec-2	Provenance of a delivery state	04-done-verification-workflows.md	6	moved	2.1-2.4 all in 6; WL-412/WL-413 defect references dropped
+WL-SPEC-58	sec-3	The verification prompt	04-done-verification-workflows.md	7	moved	3.1-3.3 rationale kept as one paragraph in 7
+WL-SPEC-58	sec-4	What the verification task must state	04-done-verification-workflows.md	7.1	moved	
+WL-SPEC-58	sec-5	Out of scope	04-done-verification-workflows.md	12	merged	
+WL-SPEC-59	sec-0	Why	10-cockpit.md	13	merged	
+WL-SPEC-59	sec-1	The review is the API; the desk is a client	10-cockpit.md	13.1	moved	
+WL-SPEC-59	sec-1.1	What is copied, what is run, what is owned	10-cockpit.md	13.1	moved	
+WL-SPEC-59	sec-1.2	Alternatives	-	-	dropped-history	
+WL-SPEC-59	sec-10	Metrics	10-cockpit.md	13.8	merged	
+WL-SPEC-59	sec-11	Events and `ns/`	10-cockpit.md	13.8	merged	
+WL-SPEC-59	sec-12	Testing	-	-	dropped-other	test strategy, not design; lives in code
+WL-SPEC-59	sec-13	Changes to other specs	-	-	dropped-history	
+WL-SPEC-59	sec-14	Out of scope	10-cockpit.md	17	merged	
+WL-SPEC-59	sec-15	Acceptance criteria	-	-	dropped-history	
+WL-SPEC-59	sec-16	Dependencies	-	-	dropped-history	
+WL-SPEC-59	sec-2	One review over documents and changes	10-cockpit.md	13.1	merged	
+WL-SPEC-59	sec-2.1	Anchors	10-cockpit.md	13.2	moved	
+WL-SPEC-59	sec-3	Threads, and the question that is not a change request	10-cockpit.md	13.3	moved	
+WL-SPEC-59	sec-3.1	Where a question sits on 025's escalation ladder	10-cockpit.md	13.3	merged	
+WL-SPEC-59	sec-4	Guides	10-cockpit.md	13.4	moved	
+WL-SPEC-59	sec-4.1	Composing with reading diffs (meat)	10-cockpit.md	13.4	moved	
+WL-SPEC-59	sec-4.2	The honesty rule	10-cockpit.md	13.4	moved	
+WL-SPEC-59	sec-5	Schema	10-cockpit.md	13.5	moved	
+WL-SPEC-59	sec-6	API and `lode` verbs	10-cockpit.md	13.6	moved	
+WL-SPEC-59	sec-7	Surfaces and clients	10-cockpit.md	13.6	merged	
+WL-SPEC-59	sec-7.1	The interim crit bridge	10-cockpit.md	13.6	merged	
+WL-SPEC-59	sec-7.2	Documents through `lode doc export`	10-cockpit.md	13.6	merged	
+WL-SPEC-59	sec-8	Verdicts and gates	10-cockpit.md	13.7	moved	
+WL-SPEC-59	sec-9	Degradation	10-cockpit.md	13.8	merged	
+WL-SPEC-60	sec-0	Why	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-1	What a reading diff is, and what it is not	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-1.1	The edit plan is not retained; skim spans are recovered	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-10	Events	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-11	Testing	-	-	dropped-other	test strategy, not design; lives in code
+WL-SPEC-60	sec-12	Out of scope	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-13	Acceptance criteria	-	-	dropped-history	
+WL-SPEC-60	sec-14	Dependencies	-	-	dropped-history	
+WL-SPEC-60	sec-2	`internal/reading`	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-3	Getting the diff, and getting the tree	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-4	Production is queued, never inline	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-5	Schema	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-6	Cost	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-7	Surfaces	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-8	Degradation	10-cockpit.md	14	merged	
+WL-SPEC-60	sec-9	Metrics	10-cockpit.md	14	merged	
+WL-SPEC-61	sec-0	Problem	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-61	sec-1	The naming law	09-cli-and-skills.md	1	moved	
+WL-SPEC-61	sec-2	The command map	09-cli-and-skills.md	2	moved	
+WL-SPEC-61	sec-2.1	Collisions and mis-named verbs	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-61	sec-2.2	Verb drift	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-61	sec-2.3	Views gain their noun	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-61	sec-2.4	Nesting removed	09-cli-and-skills.md	-	dropped-history	
+WL-SPEC-61	sec-2.5	The resulting top-level	09-cli-and-skills.md	2	moved	
+WL-SPEC-61	sec-3	Completions from live data	09-cli-and-skills.md	3	merged	
+WL-SPEC-61	sec-4	Ordering	09-cli-and-skills.md	3	merged	
+WL-SPEC-61	sec-5	Enforcement	09-cli-and-skills.md	4	moved	
+WL-SPEC-61	sec-6	Migration	09-cli-and-skills.md	4	merged	
+WL-SPEC-61	sec-7	Out of scope	09-cli-and-skills.md	1	merged	
+WL-SPEC-62	sec-0	Why	06-design-queries-intents-decks.md	6	merged	one-sentence intro of 6
+WL-SPEC-62	sec-1	mode says how a body is rendered	06-design-queries-intents-decks.md	6.1	moved	1.1, 1.2 folded in
+WL-SPEC-62	sec-2	What a deck body looks like	06-design-queries-intents-decks.md	6.2	moved	2.1, 2.2→6.2; 2.3 Components→6.3
+WL-SPEC-62	sec-3	Decision rows	06-design-queries-intents-decks.md	6.4	moved	3.1-3.5 folded in
+WL-SPEC-62	sec-4	Rendering	06-design-queries-intents-decks.md	6.5	moved	4.1-4.3 folded in
+WL-SPEC-62	sec-5	Print and the record	06-design-queries-intents-decks.md	6.5	merged	
+WL-SPEC-62	sec-6	Metrics	06-design-queries-intents-decks.md	6.6	merged	
+WL-SPEC-62	sec-7	Authoring	06-design-queries-intents-decks.md	6.6	merged	
+WL-SPEC-62	sec-8	Acceptance criteria	06-design-queries-intents-decks.md	-	dropped-other	acceptance criteria restate 6.1-6.6
+WL-SPEC-62	sec-9	Non-goals	06-design-queries-intents-decks.md	6.6	merged	kept as one sentence; bulk row creation moved to Open questions
+WL-SPEC-62	§2 (line 106)	What the EU has promised	06-design-queries-intents-decks.md	-	dropped-other	not a section: slide heading inside a fenced example in sec-2
+WL-SPEC-63	sec-0	Why	01-system-and-deployment.md	7	merged	
+WL-SPEC-63	sec-1	Collection and normalization	01-system-and-deployment.md	7.1	moved	
+WL-SPEC-63	sec-2	Attribution	01-system-and-deployment.md	7.2	moved	
+WL-SPEC-63	sec-3	Installation and cleanup	01-system-and-deployment.md	7.3	moved	
+WL-SPEC-63	sec-4	Verification	01-system-and-deployment.md	9	merged	
+WL-SPEC-63	sec-5	Historical data	01-system-and-deployment.md	7.4	moved	
+WL-SPEC-64	sec-0	Why	06-design-queries-intents-decks.md	-	dropped-history	
+WL-SPEC-64	sec-1	Scope and boundaries	06-design-queries-intents-decks.md	7.7	merged	the does-not-add list is the Deferred paragraph in 7.7; the adds list is the section outline
+WL-SPEC-64	sec-10	Surfaces and events	06-design-queries-intents-decks.md	7.7	moved	
+WL-SPEC-64	sec-11	RDF projection	07-knowledge-graph-and-search.md	7.7	pointer	one sentence in 7.7 names the projected shape and points to 07
+WL-SPEC-64	sec-12	Acceptance criteria	06-design-queries-intents-decks.md	-	dropped-other	acceptance criteria restate 7.1-7.7
+WL-SPEC-64	sec-13	Deferred work	06-design-queries-intents-decks.md	7.7	merged	Deferred paragraph
+WL-SPEC-64	sec-2	Meetings and documents	06-design-queries-intents-decks.md	7.1	moved	2.1 identity folded in
+WL-SPEC-64	sec-3	Drafts and revisions	06-design-queries-intents-decks.md	7.2	moved	
+WL-SPEC-64	sec-4	Access and actor status	06-design-queries-intents-decks.md	7.3	moved	
+WL-SPEC-64	sec-5	Privacy contract	06-design-queries-intents-decks.md	7.4	moved	
+WL-SPEC-64	sec-6	Resolving project context	06-design-queries-intents-decks.md	7.5	moved	
+WL-SPEC-64	sec-7	Calendar synchronization	06-design-queries-intents-decks.md	7.6	merged	
+WL-SPEC-64	sec-8	Meeting resources	06-design-queries-intents-decks.md	7.6	merged	
+WL-SPEC-64	sec-9	Cockpit and editor flow	06-design-queries-intents-decks.md	7.7	merged	
+WL-SPEC-65	sec-0	Purpose and boundary	10-cockpit.md	6	merged	
+WL-SPEC-65	sec-1	A panel appears when the project has facts for it	10-cockpit.md	6	moved	
+WL-SPEC-65	sec-2	The panel set	10-cockpit.md	6	moved	
+WL-SPEC-65	sec-3	What this does not change	10-cockpit.md	6	merged	
+WL-SPEC-65	sec-4	Where it is assembled	10-cockpit.md	6	merged	
+WL-SPEC-65	sec-5	Coverage is computed server-side	10-cockpit.md	6	merged	
+WL-SPEC-65	sec-6	Non-goals	10-cockpit.md	17	merged	
+WL-SPEC-66	sec-0	Purpose and boundary	10-cockpit.md	15	merged	
+WL-SPEC-66	sec-1	Progress is derived, never stored	10-cockpit.md	15.1	moved	
+WL-SPEC-66	sec-2	The page	10-cockpit.md	15.2	moved	
+WL-SPEC-66	sec-3	Actions	10-cockpit.md	15.3	moved	
+WL-SPEC-66	sec-4	Write safety	10-cockpit.md	15.4	moved	
+WL-SPEC-66	sec-5	Live updates	10-cockpit.md	15.5	moved	
+WL-SPEC-66	sec-6	Facts this page needs	10-cockpit.md	15.6	moved	
+WL-SPEC-66	sec-7	Where it is assembled	10-cockpit.md	15.7	moved	
+WL-SPEC-66	sec-8	Acceptance criteria	-	-	dropped-history	
+WL-SPEC-66	sec-9	Non-goals	10-cockpit.md	17	merged	
+WL-SPEC-67	sec-0	0. Why	05-documents.md	17	merged	snapshot framing kept, incident dropped
+WL-SPEC-67	sec-1	1. Scope	05-documents.md	17	merged	
+WL-SPEC-67	sec-2	2. Declaration drift	05-documents.md	17	moved	
+WL-SPEC-67	sec-2.1	2.1 The join already exists	05-documents.md	17	moved	
+WL-SPEC-67	sec-2.2	2.2 The four states	05-documents.md	17	moved	
+WL-SPEC-67	sec-2.3	2.3 What counts as drift	05-documents.md	17	moved	
+WL-SPEC-67	sec-2.4	2.4 One false pair, from migration 0043	05-documents.md	-	dropped-history	
+WL-SPEC-67	sec-3	3. Downstream documents	05-documents.md	17	moved	
+WL-SPEC-67	sec-4	4. Open work	05-documents.md	17	moved	
+WL-SPEC-67	sec-5	5. The command	05-documents.md	17	moved	
+WL-SPEC-67	sec-5.1	5.1 Why this name	05-documents.md	-	dropped-history	
+WL-SPEC-67	sec-5.2	5.2 Surfaces	05-documents.md	18	merged	
+WL-SPEC-67	sec-6	6. Stale repo references	05-documents.md	17	moved	
+WL-SPEC-67	sec-7	7. The skill	05-documents.md	17	moved	
+WL-SPEC-67	sec-8	8. Deferred: syncing a drifted body	05-documents.md	-	dropped-other	deferred feature never specified; not carried to Open questions
+WL-SPEC-67	sec-9	9. Acceptance criteria	05-documents.md	-	dropped-history	
+WL-SPEC-68	sec-0	Why	07-knowledge-graph-and-search.md	-	dropped-history	rationale for the rename; review notes carried to Open questions
+WL-SPEC-68	sec-1	The IRI is the URL	07-knowledge-graph-and-search.md	10	merged	10.1
+WL-SPEC-68	sec-10	Acceptance criteria	07-knowledge-graph-and-search.md	-	dropped-other	acceptance criteria; the new doc carries none
+WL-SPEC-68	sec-2	`wlid:` is scoped to the instance	07-knowledge-graph-and-search.md	10	merged	10.1
+WL-SPEC-68	sec-2.1	Where the base comes from	07-knowledge-graph-and-search.md	10	merged	10.1
+WL-SPEC-68	sec-2.2	SHACL splits on the same line	07-knowledge-graph-and-search.md	6	merged	shapes-graph split paragraph at the end of 6
+WL-SPEC-68	sec-3	The grammar	07-knowledge-graph-and-search.md	10	moved	10.2
+WL-SPEC-68	sec-4	Documents, sections and versions	07-knowledge-graph-and-search.md	10	merged	10.2 closing paragraph
+WL-SPEC-68	sec-5	Content negotiation	07-knowledge-graph-and-search.md	11	moved	
+WL-SPEC-68	sec-6	Stored strings stay relative	07-knowledge-graph-and-search.md	10	moved	10.3
+WL-SPEC-68	sec-7	One constructor, enforced	07-knowledge-graph-and-search.md	10	moved	10.4
+WL-SPEC-68	sec-8	Migration	07-knowledge-graph-and-search.md	-	dropped-history	events.payload and implements.yaml migration
+WL-SPEC-68	sec-9	Planning directions	07-knowledge-graph-and-search.md	-	dropped-history	task ordering; the nsgen.py reads-concept.ttl-only fact survives in 2
+WL-SPEC-69	sec-1	Why	07-knowledge-graph-and-search.md	18	merged	opening paragraph; hzdev timing numbers dropped
+WL-SPEC-69	sec-2	Serving component	07-knowledge-graph-and-search.md	18	moved	Serving and Dependabot bullets
+WL-SPEC-69	sec-3	Schema: a second vector column	07-knowledge-graph-and-search.md	18	merged	Schema bullet; column also appears in the 14.5 DDL and 16 invalidation
+WL-SPEC-69	sec-4	Config: which column is active	07-knowledge-graph-and-search.md	18	moved	Config bullet
+WL-SPEC-69	sec-5	Cutover and rollback	07-knowledge-graph-and-search.md	18	moved	Cutover and Decision bullets
+WL-SPEC-69	sec-6	Out of scope	07-knowledge-graph-and-search.md	18	merged	Decision bullet's out-of-scope list
+WL-SPEC-69	sec-7	Testing	07-knowledge-graph-and-search.md	18	moved	Tests bullet
+WL-SPEC-70	sec-0	Why	06-design-queries-intents-decks.md	-	dropped-history	
+WL-SPEC-70	sec-1	What an intent is	06-design-queries-intents-decks.md	5	moved	1.1 folded into the same paragraph
+WL-SPEC-70	sec-2	The ladder	06-design-queries-intents-decks.md	5	merged	
+WL-SPEC-70	sec-3	How a spec declares its intent	06-design-queries-intents-decks.md	5	moved	
+WL-SPEC-70	sec-4	The nine intents	06-design-queries-intents-decks.md	5	moved	4.1 candidate intent kept as one sentence
+WL-SPEC-70	sec-5	What the layer buys	06-design-queries-intents-decks.md	5	moved	
+WL-SPEC-70	sec-6	ADR dispositions	06-design-queries-intents-decks.md	5	dropped-history	one sentence on decisions-as-rationale kept in 5; the per-ADR fold table is migration
+WL-SPEC-70	sec-7	What this spec does not change	06-design-queries-intents-decks.md	5	merged	
+WL-SPEC-70	sec-8	Not settled	06-design-queries-intents-decks.md	Open questions	moved	Q13-Q17 plus the journalism/familiar-surfaces gaps

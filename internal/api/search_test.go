@@ -189,7 +189,7 @@ func TestSearchProviderConfigured(t *testing.T) {
 	}))
 	defer fakeSrv.Close()
 
-	_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 
 	rr := doReq(t, h, "GET", "/api/v1/search?q=quokka", token, nil)
 	if rr.Code != http.StatusOK {
@@ -211,7 +211,7 @@ func TestSearchProviderFailing(t *testing.T) {
 	}))
 	defer fakeSrv.Close()
 
-	_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m"})
+	_, h, token := newTestServerWithConfig(t, api.Config{EmbeddingURL: fakeSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048"})
 
 	rr := doReq(t, h, "GET", "/api/v1/search?q=quokka", token, nil)
 	if rr.Code != http.StatusOK {
@@ -241,7 +241,7 @@ func TestSearchUsesQueryEmbedder(t *testing.T) {
 	defer querySrv.Close()
 
 	_, h, token := newTestServerWithConfig(t, api.Config{
-		EmbeddingURL: docSrv.URL, EmbeddingModel: "m", QueryEmbeddingURL: querySrv.URL,
+		EmbeddingURL: docSrv.URL, EmbeddingModel: "m", EmbeddingContextTokens: "2048", QueryEmbeddingURL: querySrv.URL,
 	})
 
 	rr := doReq(t, h, "GET", "/api/v1/search?q=quokka", token, nil)

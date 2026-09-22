@@ -55,6 +55,10 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 	if err != nil {
 		return nil, nil, err
 	}
+	governing, err := planClauses(tx, id)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve governing clauses of plan %d: %w", id, err)
+	}
 
 	// First pass resolves every definition number to a task id — minting the
 	// ones that have none — and the second wires blockedBy once every number
@@ -84,6 +88,11 @@ func acceptPlanDoc(tx *sql.Tx, now time.Time, id int64, d lockedDoc, actorID str
 		}
 		taskID[def.Number] = task.ID
 		fresh[def.Number] = true
+		for _, clauseID := range governing {
+			if err := Govern(tx, task.ID, clauseID, "plan"); err != nil {
+				return nil, nil, fmt.Errorf("govern task %d of plan %d: %w", def.Number, id, err)
+			}
+		}
 		tasks = append(tasks, *task)
 	}
 	// Only a newly minted task gets its declared blockers wired. An edge into

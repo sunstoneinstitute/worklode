@@ -57,6 +57,18 @@ type Indexer struct {
 	Metrics *Metrics     // nil-safe
 	Log     *slog.Logger // nil = slog.Default()
 	Batch   int          // 0 = defaultBatch
+	// Budget sizes the chunks (07 §14.4). The zero value means
+	// corpusindex.DefaultBudget.
+	Budget corpusindex.Budget
+}
+
+// budget is the configured chunk sizing, or the lexical-only default when the
+// server set none.
+func (ix *Indexer) budget() corpusindex.Budget {
+	if ix.Budget.Runes == 0 {
+		return corpusindex.DefaultBudget
+	}
+	return ix.Budget
 }
 
 func (ix *Indexer) log() *slog.Logger {
@@ -206,20 +218,20 @@ func (ix *Indexer) chunks(ctx context.Context, subj store.ChunkSubject) ([]corpu
 		if err != nil {
 			return nil, err
 		}
-		return corpusindex.ChunkDoc(*doc, sections), nil
+		return corpusindex.ChunkDoc(ix.budget(), *doc, sections), nil
 	case store.SubjectTask:
 		task, err := ix.Store.GetTask(ctx, subj.TaskID)
 		if err != nil {
 			return nil, err
 		}
-		return corpusindex.ChunkTask(*task), nil
+		return corpusindex.ChunkTask(ix.budget(), *task), nil
 	case store.SubjectSkill:
 		skill, err := ix.Store.SkillByID(ctx, subj.SkillID)
 		if err != nil {
 			return nil, err
 		}
 		return corpusindex.ChunkSkill(
-			model.Skill{Name: skill.Name, Description: skill.Description}, skill.SkillMD), nil
+			ix.budget(), model.Skill{Name: skill.Name, Description: skill.Description}, skill.SkillMD), nil
 	default:
 		return nil, fmt.Errorf("index subject: unknown kind %q", subj.Kind)
 	}

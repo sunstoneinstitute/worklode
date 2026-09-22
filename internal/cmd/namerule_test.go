@@ -55,7 +55,7 @@ var l3DomainActions = map[string]bool{
 	"revise": true, "lint": true, "derive": true, "seek": true,
 	"tail": true, "gc": true, "link": true, "dismiss": true,
 	"serve": true, "listen": true, "next": true, "resume": true,
-	"attach": true, "detach": true, "assign": true, "block": true,
+	"attach": true, "detach": true, "assign": true, "block": true, "govern": true,
 	"parent": true, "duplicate": true, "request": true, "pack": true,
 	"note": true, "escalate": true, "gap": true, "fix": true,
 	"withdraw": true, "report": true,
