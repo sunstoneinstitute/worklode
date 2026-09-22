@@ -102,3 +102,43 @@ func TestClausePageUppercaseProjectID(t *testing.T) {
 		t.Errorf("clause page for the uppercase project id MyProj = %d, want 200 with MP-CL-2", rr.Code)
 	}
 }
+
+// TestClausePageShowsOwnerTagsAndEdges covers task 8: the owner chip, tag
+// chips and the Edges card on the clause page, plus the card's honest empty
+// state when a clause has no edges.
+func TestClausePageShowsOwnerTagsAndEdges(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "t", Body: clauseDocV1}) // WL-CL-1..3
+
+	rr := doReq(t, h, http.MethodPost, "/api/v1/clauses/WL-CL-1/edges", token, model.ClauseEdgeInput{Type: "constrains", To: "WL-CL-3"})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("link: %d %s", rr.Code, rr.Body)
+	}
+	rr = doReq(t, h, http.MethodPatch, "/api/v1/clauses/WL-CL-3", token,
+		model.ClauseMetaInput{Owner: strPtr("stig"), Tags: &[]string{"security"}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("set meta: %d %s", rr.Code, rr.Body)
+	}
+
+	rr = doReq(t, h, http.MethodGet, "/projects/"+projID+"/clause/3", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clause page = %d %s", rr.Code, rr.Body)
+	}
+	body := rr.Body.String()
+	for _, want := range []string{"constrains", "WL-CL-1", "owner stig", "security"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("clause page missing %q:\n%s", want, body)
+		}
+	}
+
+	// WL-CL-2 has no edges: the card says so rather than rendering empty.
+	rr = doReq(t, h, http.MethodGet, "/projects/"+projID+"/clause/2", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("clause page = %d %s", rr.Code, rr.Body)
+	}
+	if !strings.Contains(rr.Body.String(), "No edges.") {
+		t.Errorf("clause page missing empty edges state:\n%s", rr.Body.String())
+	}
+}

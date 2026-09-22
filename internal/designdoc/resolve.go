@@ -163,6 +163,55 @@ func ParseClauseRef(base string) (ClauseRef, bool) {
 	return ClauseRef{Key: m[1], Number: n}, true
 }
 
+// clauseRefInText and sectionRefInText are the ref grammars of
+// ParseClauseRef and ParseShorthand loosened to find refs inside prose
+// (S26). A section ref must carry an anchor: a bare document ref names an
+// arrangement, and edges run between clauses.
+var (
+	clauseRefInText  = regexp.MustCompile(`\b[A-Z][A-Z0-9]{1,9}-CL-\d+\b`)
+	sectionRefInText = regexp.MustCompile(`\b([A-Z][A-Z0-9]{1,9}-(?:SPEC|ADR|PLAN)-\d+)#(sec-[0-9A-Za-z._-]+)\b`)
+)
+
+// SectionRef is a document shorthand plus a section anchor found in prose.
+type SectionRef struct {
+	Shorthand Shorthand
+	Anchor    string
+}
+
+// FindClauseRefs returns every distinct clause ref in text, in order of
+// first appearance.
+func FindClauseRefs(text string) []ClauseRef {
+	var out []ClauseRef
+	seen := map[string]bool{}
+	for _, m := range clauseRefInText.FindAllString(text, -1) {
+		if seen[m] {
+			continue
+		}
+		seen[m] = true
+		if r, ok := ParseClauseRef(m); ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// FindSectionRefs returns every distinct anchored document ref in text, in
+// order of first appearance.
+func FindSectionRefs(text string) []SectionRef {
+	var out []SectionRef
+	seen := map[string]bool{}
+	for _, m := range sectionRefInText.FindAllStringSubmatch(text, -1) {
+		if seen[m[0]] {
+			continue
+		}
+		seen[m[0]] = true
+		if sh, ok := ParseShorthand(m[1]); ok {
+			out = append(out, SectionRef{Shorthand: sh, Anchor: m[2]})
+		}
+	}
+	return out
+}
+
 // ErrNoSpec is returned for the NO-SPEC sentinel ref, or its equivalent
 // <KEY>-SPEC-0 (026 §4.3): the ref explicitly means "no governing spec",
 // never a document, so the tier table of §4.2 never runs.

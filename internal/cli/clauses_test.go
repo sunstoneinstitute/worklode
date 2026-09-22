@@ -35,6 +35,41 @@ func TestClauseRenderGovernedTasks(t *testing.T) {
 	}
 }
 
+func TestClauseRenderEdges(t *testing.T) {
+	var b strings.Builder
+	ClauseRender(&b, model.Clause{Ref: "WL-CL-2", Heading: "Sub", Status: "accepted", Version: 1,
+		Edges: []model.ClauseEdge{
+			{Type: "constrains", From: "WL-CL-2", To: "WL-CL-3", ToHeading: "Other", Source: "manual"},
+			{Type: "references", From: "WL-CL-9", FromHeading: "Cites it", To: "WL-CL-2", Source: "derived"},
+		}})
+	out := b.String()
+	for _, want := range []string{
+		"  constrains: WL-CL-3 Other (manual)\n",
+		"  references: WL-CL-9 Cites it (derived, incoming)\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestClauseRenderOwnerAndTags(t *testing.T) {
+	var b strings.Builder
+	ClauseRender(&b, model.Clause{Ref: "WL-CL-2", Heading: "Sub", Status: "accepted", Version: 1,
+		Owner: "stig", Tags: []string{"storage", "search"}})
+	out := b.String()
+	for _, want := range []string{"  owner:    stig\n", "  tags:     storage, search\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("render lacks %q:\n%s", want, out)
+		}
+	}
+	b.Reset()
+	ClauseRender(&b, model.Clause{Ref: "WL-CL-3", Heading: "Sub", Status: "accepted", Version: 1})
+	if out := b.String(); strings.Contains(out, "owner:") || strings.Contains(out, "tags:") {
+		t.Errorf("render should omit unset owner/tags:\n%s", out)
+	}
+}
+
 func TestClauseVersionsTable(t *testing.T) {
 	var b strings.Builder
 	ClauseVersionsTable(&b, []model.ClauseVersion{

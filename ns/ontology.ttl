@@ -399,6 +399,37 @@ wl:coverageLevel a owl:ObjectProperty, owl:FunctionalProperty ;
     rdfs:domain wl:Coverage ;
     rdfs:range skos:Concept .
 
+# --- Clauses (docs/specs2/12-spec-refactoring-design-tree.md S8 to S12, S26; 07 §2) ---
+
+wl:Clause a owl:Class ;
+    wl:layer wlc:intent ;
+    rdfs:subClassOf wl:Section ;
+    rdfs:comment "The lowest heading unit of a spec or ADR: the thing that carries an identity (WL-CL-<n>), a status, versions and edges (S8 to S11)." .
+
+wl:refines a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Clause ;
+    rdfs:range wl:Clause ;
+    rdfs:comment "Subject narrows or details the object (S12)." .
+
+wl:constrains a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Clause ;
+    rdfs:range wl:Clause ;
+    rdfs:comment "Subject must hold whenever the object does; a task implementing the object must also satisfy the subject (S12)." .
+
+wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Clause ;
+    rdfs:range wl:Clause ;
+    rdfs:comment "A recorded tension an architect chose to leave in place (S12)." .
+
+wl:references a owl:ObjectProperty ;
+    wl:layer wlc:intent ;
+    rdfs:domain wl:Clause ;
+    rdfs:range wl:Clause ;
+    rdfs:comment "A textual pointer from the clause to another clause, derived from the clause text on every version and replaced with it (S26)." .
+
 wl:completedWith a owl:ObjectProperty ;
     wl:layer wlc:execution ;
     rdfs:domain wl:Coverage ;

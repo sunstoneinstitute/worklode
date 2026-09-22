@@ -168,7 +168,7 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 					}
 					return err
 				}
-				if err := store.Govern(tx, t.ID, clauseID, "manual"); err != nil {
+				if err := store.Govern(tx, t.ID, clauseID, "manual", false); err != nil {
 					return err
 				}
 			}

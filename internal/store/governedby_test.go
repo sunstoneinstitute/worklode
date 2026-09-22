@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -155,7 +156,7 @@ func TestGovernAndUngovern(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				return Govern(tx, task.ID, id, "manual")
+				return Govern(tx, task.ID, id, "manual", false)
 			})
 		return err
 	}
@@ -200,5 +201,47 @@ func TestGovernAndUngovern(t *testing.T) {
 	}
 	if got := governingNumbers(t, s, task.ID); len(got) != 0 {
 		t.Errorf("governed by %v after ungovern, want none", got)
+	}
+}
+
+// TestGovernPin: a pinned link resolves to the version current at link time
+// after the clause moves on; re-governing without the pin unpins (S10).
+func TestGovernPin(t *testing.T) {
+	s := openDocStore(t)
+	d := mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	if _, _, err := acceptDoc(t, s, d.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	now := s.Now()
+	task := createTask(t, s, now, TaskInput{ProjectID: "p1", Title: "t", Kind: "feature", Priority: "medium", CreatedBy: "stig"})
+	ctx := context.Background()
+	id := clauseID(t, s, "P1", 3)
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return Govern(tx, task.ID, id, "manual", true) }); err != nil {
+		t.Fatal(err)
+	}
+	// Land a revision so the clause is at v2.
+	if err := reviseDoc(t, s, d.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	if err := updateRevision(t, s, d.ID, strings.Replace(clauseDocV1, "C.\n", "C changed.\n", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := acceptRevision(t, s, d.ID, "stig"); err != nil {
+		t.Fatal(err)
+	}
+	g, err := s.GovernedBy(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(g) != 1 || g[0].Pinned != 1 || g[0].Current != 2 || g[0].URL != "/projects/p1/clause/3/1" {
+		t.Errorf("pinned: %+v", g)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error { return Govern(tx, task.ID, id, "manual", false) }); err != nil {
+		t.Fatal(err)
+	}
+	g, _ = s.GovernedBy(ctx, task.ID)
+	if len(g) != 1 || g[0].Pinned != 0 || g[0].URL != "/projects/p1/clause/3" ||
+		g[0].Source != "manual" || g[0].ClauseVersion != 1 {
+		t.Errorf("unpinned: %+v", g)
 	}
 }

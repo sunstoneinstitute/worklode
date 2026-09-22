@@ -76,7 +76,7 @@ Actions from round 3:
 - S29 (Q33, scope): the gate is opt-in per project. `.worklode/config.toml` names the guarded paths (`paths` globstar or `regex`) and the required trailer line; `lode doctor` warns when a gated project does not require pull requests. Written into 11 §3. The trailer's target form (clause ref or section ref) is still Q33.
 - S30 (Q33, target): the trailer names a clause, `Spec: WL-CL-456` or `Spec: WL-CL-456 amended`. Spec and section refs are accepted during a transition, switched by a server-side per-project setting (project-bound, so never `.worklode/config.toml`). Written into 11 §4.
 
-## Recorded from increment 1
+## Recorded from increments 1 and 2
 
 Behaviours the first implementation fixed that the rounds above did not name. Each is a decision now, kept here so a reader of the code finds its reason.
 
@@ -86,6 +86,11 @@ Behaviours the first implementation fixed that the rounds above did not name. Ea
 - S35 (S10 refined): a version is minted only from an accepted version. While a clause's newest version is a draft, every write rewrites that version in place; an autosaving editor may save hundreds of times while the author works, and those states have no reader. Accepting the arranging document locks the version. A later change to a locked clause becomes its next version, a draft until its document is accepted. Since a clause has at most one draft version and it is always the newest, the clause's own status is the newest version's status and every version below it is accepted.
 - S34 (S3 applied to the timeline): `task.governed` and `task.ungoverned` are rows in the event log and nothing else. `lode task timeline` and the cockpit timeline read task state transitions, so a governance change appears in `lode event tail` and on the task's detail, and in neither timeline.
 - S36 (S20 and A3 applied in increment 1b): the canonical URL ships for clauses first. `/projects/<proj>/clause/<n>` and `/<ver>` are served; the document kinds redirect to the existing `/docs/<KEY>-<TYPE>-<n>` page; task kinds and the root-route redirects are the remaining half, recorded in 07 §10.2. A clause edit writes through the arranging document (S13, S14): a draft is rewritten in place, an accepted document's edit lands with its revision (S35), and a clause arranged in zero or several documents refuses the edit until plans are arrangements.
+- S37 (S12, S26 applied): one table holds every clause edge with its type and its source, `manual` or `derived`. A derived edge is always `references` and is rewritten from the clause text on every version; a manual `references` edge survives that rewrite. `conflictsWith` is stored in the direction written and read from both ends. Named clusters are tags for now.
+- S38 (S26 applied): derivation resolves `WL-CL-<n>` refs and anchored document refs to clauses and drops everything else without a record: a whole-document ref, a section with no clause, an unresolvable ref, and the clause itself. Derivation reruns only when the citing clause's own heading or body text changes, so a `references` edge is current as of that text; if the target side later moves, an anchor is reassigned, or a cited clause is withdrawn, the edge keeps pointing where it pointed until the citing clause's own text changes again.
+- S39 (S10 applied): a link is pinned at the version current when it is made or not at all; governing the same clause again sets or clears the pin. A pinned link reports the versioned page URL. Re-governing with a pin records the version current at that later time as the pinned version; `clause_version` keeps the version current when the link was first made and never changes on a later govern.
+- S40 (S15 applied): owner is an actor id stored as text with no constraint. Unlike `docs.owner`, which carries an FK to `actors`, `clauses.owner` names no actor row and accepts any string. Tags are free text. Both are set over `PATCH /api/v1/clauses/{id}`.
+- S41 (S17 checked): the clause code keys nothing on project size. One counter per project, one table per fact, no per-project thresholds.
 
 ## Facts (looked up, not for you to answer)
 

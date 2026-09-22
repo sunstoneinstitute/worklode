@@ -14,6 +14,12 @@ templ Clause(v ClauseView) {
 				<p>
 					<span class={ "chip " + docStatusChip(v.Clause.Status) }>{ v.Clause.Status }</span>
 					<span class="chip plain">version { v.Clause.Version }</span>
+					if v.Clause.Owner != "" {
+						<span class="chip plain">owner { v.Clause.Owner }</span>
+					}
+					for _, tag := range v.Clause.Tags {
+						<span class="chip plain">{ tag }</span>
+					}
 				</p>
 			</section>
 			if !v.Current {
@@ -60,6 +66,29 @@ templ Clause(v ClauseView) {
 									{ " " }{ t.Title }{ " " }
 									<span class={ "chip " + stateChip(t.State) }>{ stateLabel(t.State) }</span>
 									<span class="muted small">{ " " }{ t.Source } · v{ t.ClauseVersion }</span>
+								</li>
+							}
+						</ul>
+					}
+				</div>
+			</section>
+			<section class="card">
+				<div class="hd"><h3>Edges</h3></div>
+				<div class="bd">
+					if len(v.Clause.Edges) == 0 {
+						<p class="muted">No edges.</p>
+					} else {
+						<ul>
+							for _, e := range v.Clause.Edges {
+								<li>
+									if e.From == v.Clause.Ref {
+										<span class="mono">{ e.Type }</span>{ " " }
+										<a href={ templ.SafeURL("/clauses/" + e.To) }>{ e.To }</a>{ " " }{ e.ToHeading }
+									} else {
+										<a href={ templ.SafeURL("/clauses/" + e.From) }>{ e.From }</a>{ " " }{ e.FromHeading }{ " " }
+										<span class="mono">{ e.Type }</span>{ " this" }
+									}
+									<span class="muted small">{ " " }{ e.Source }</span>
 								</li>
 							}
 						</ul>

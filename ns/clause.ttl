@@ -5,9 +5,9 @@
 # arrangement of clauses. It is designed in
 # docs/specs2/12-spec-refactoring-design-tree.md (Q12 to Q20) and has no
 # accepted spec yet, so these terms sit in their own file rather than in
-# ontology.ttl: same namespace, marked vs:term_status "unstable". When the
-# spec is accepted, move the terms into ontology.ttl and drop the status.
-# Instance data that uses them: docs/specs2/ttl/.
+# ontology.ttl: same namespace, marked vs:term_status "unstable". The clause
+# class and its four edge properties moved to ontology.ttl with 07 §2 (clause
+# model increment 2); the arrangement terms below wait for increment 3.
 
 @prefix wl:   <https://worklode.io/ns/ontology#> .
 @prefix wlc:  <https://worklode.io/ns/concept/> .
@@ -18,8 +18,6 @@
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 
 
-wl:Clause a owl:Class ; vs:term_status "unstable" ; rdfs:subClassOf wl:Section ;
-    rdfs:comment "The lowest heading unit of a spec (H3 else H2), 100-800 tokens, the thing that gets an identity, a status and edges (Q12, Q13)." .
 wl:OpenQuestion a owl:Class ; vs:term_status "unstable" ; rdfs:subClassOf wl:Clause ;
     rdfs:comment "A clause of a distinct kind: one bullet of a document's Open questions section, never normative." .
 wl:Arrangement a owl:Class ; vs:term_status "unstable" ; rdfs:subClassOf wl:DesignDoc ;
@@ -30,14 +28,6 @@ wl:clauseList a owl:ObjectProperty, owl:FunctionalProperty ; rdfs:domain wl:Arra
     rdfs:comment "The ordered rdf:List of clauses that is the arrangement's frozen reading order (Q17)." .
 wl:position a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Clause ; rdfs:range xsd:integer ;
     rdfs:comment "1-based position of the clause in its first arrangement; convenience alongside wl:clauseList." .
-wl:refines a owl:ObjectProperty ; vs:term_status "unstable" ; rdfs:domain wl:Clause ; rdfs:range wl:Clause ;
-    rdfs:comment "Subject narrows or details the object; an H3 clause refines its H2 preamble clause (Q16)." .
-wl:constrains a owl:ObjectProperty ; vs:term_status "unstable" ; rdfs:domain wl:Clause ; rdfs:range wl:Clause ;
-    rdfs:comment "Subject must hold whenever the object does; a task implementing the object must also satisfy the subject (Q16)." .
-wl:conflictsWith a owl:ObjectProperty, owl:SymmetricProperty ; rdfs:domain wl:Clause ; rdfs:range wl:Clause ;
-    rdfs:comment "A recorded tension an architect chose to leave in place (Q16)." .
-wl:references a owl:ObjectProperty ; vs:term_status "unstable" ; rdfs:domain wl:Clause ;
-    rdfs:comment "An explicit textual pointer (NN-name.md §M, WL-SPEC-N §M, or a bare §M) from the clause to another clause, arrangement or old section." .
 wl:supersedesSection a owl:ObjectProperty ; vs:term_status "unstable" ; rdfs:domain wl:Clause ; rdfs:range wl:Section ;
     rdfs:comment "The clause carries the content of an old spec section (section-map.tsv disposition moved, merged or pointer)." .
 wl:tokenCount a owl:DatatypeProperty ; vs:term_status "unstable" ; rdfs:domain wl:Clause ; rdfs:range xsd:integer ;
