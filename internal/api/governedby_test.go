@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/sunstoneinstitute/worklode/internal/model"
@@ -50,6 +51,15 @@ func TestGovernedBy(t *testing.T) {
 	if rr := doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "junk"}); rr.Code != http.StatusBadRequest {
 		t.Errorf("malformed clause: %d", rr.Code)
 	}
+	rr = doReq(t, h, http.MethodPost, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-CL-1", "pin": true})
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("govern pin: %d %s", rr.Code, rr.Body.String())
+	}
+	if d := detail(); len(d.GovernedBy) != 2 || d.GovernedBy[0].Clause != "WL-CL-1" ||
+		d.GovernedBy[0].Pinned != 1 || !strings.HasSuffix(d.GovernedBy[0].URL, "/1") {
+		t.Errorf("governed_by after pin = %+v", d.GovernedBy)
+	}
+
 	rr = doReq(t, h, http.MethodDelete, "/api/v1/tasks/"+id+"/governed-by", token, map[string]any{"clause": "WL-CL-3"})
 	if rr.Code != http.StatusNoContent {
 		t.Fatalf("ungovern: %d %s", rr.Code, rr.Body.String())

@@ -266,7 +266,7 @@ func TestClauseVersionsAndGovernedTasks(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		return Govern(tx, task.ID, id, "manual")
+		return Govern(tx, task.ID, id, "manual", false)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -463,4 +463,54 @@ func editClause(t *testing.T, s *Store, key string, number int64, in model.EditC
 			return err
 		})
 	return docID, err
+}
+
+// TestSetClauseMeta sets owner and tags (round-tripping a tag needing
+// text[] quoting), clears the owner alone with an empty string while tags
+// survive untouched, clears the tags alone while the cleared owner survives
+// untouched, and refuses an unknown clause with ErrNotFound (S15).
+func TestSetClauseMeta(t *testing.T) {
+	s := openDocStore(t)
+	mustCreateDoc(t, s, DocInput{Project: "p1", Kind: "spec", Slug: "t", Body: clauseDocV1, CreatedBy: "stig"})
+	ctx := context.Background()
+	id := clauseID(t, s, "P1", 1)
+	owner, tags := "stig", []string{"storage", "search", "a,b", `he "said"`}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return SetClauseMeta(tx, id, model.ClauseMetaInput{Owner: &owner, Tags: &tags})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.GetClause(ctx, "P1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Owner != "stig" || len(c.Tags) != 4 || c.Tags[0] != "storage" ||
+		c.Tags[2] != "a,b" || c.Tags[3] != `he "said"` {
+		t.Errorf("after set: owner %q tags %q", c.Owner, c.Tags)
+	}
+	none := ""
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return SetClauseMeta(tx, id, model.ClauseMetaInput{Owner: &none})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = s.GetClause(ctx, "P1", 1)
+	if c.Owner != "" || len(c.Tags) != 4 {
+		t.Errorf("owner cleared, tags kept: owner %q tags %v", c.Owner, c.Tags)
+	}
+	empty := []string{}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return SetClauseMeta(tx, id, model.ClauseMetaInput{Tags: &empty})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = s.GetClause(ctx, "P1", 1)
+	if len(c.Tags) != 0 || c.Owner != "" {
+		t.Errorf("tags cleared, owner kept: owner %q tags %v", c.Owner, c.Tags)
+	}
+	if err := s.Tx(ctx, func(tx *sql.Tx) error {
+		return SetClauseMeta(tx, 999999, model.ClauseMetaInput{Owner: &owner})
+	}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown clause: %v", err)
+	}
 }
