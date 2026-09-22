@@ -26,6 +26,12 @@ Shortcuts: `lode board` runs `lode task board`; `lode next` runs `lode work next
 - `lode channel serve` — Serve the stdio JSON-RPC channel that delivers steering instructions as MCP notifications
   Flags: --interval
 
+## `lode clause` — Design clauses: edit one, list its versions
+
+- `lode clause edit` — Replace a clause's body (and heading) from a file; the document is regenerated around it
+  Flags: --file, --heading
+- `lode clause versions` — List a clause's versions, newest first
+
 ## `lode decision` — Decisions: the questions a task poses and the answers they wait on
 
 - `lode decision add` — Pose a question on a task
@@ -186,7 +192,7 @@ Flags: --kind, --limit, --mode, --project, --repo
 
 ## `lode show` — Show any entity by id or kind flag: a task, a design doc, a project
 
-Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage
+Flags: --adr, --deliverable, --inline, --kind, --milestone, --pager, --plan, --project, --section, --spec, --task, --usage, --version
 
 ## `lode skill` — Org-wide agent skills: list, recommend, install, sync
 

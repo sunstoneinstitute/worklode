@@ -764,6 +764,15 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	// The reference redirect (WL-301): not navWrapped — it answers a 302,
 	// never a page.
 	r.web("GET /docs/ref/{ref...}", s.docRefRedirect)
+	// The clause page and the S20 canonical URL scheme (task 5): the page
+	// itself, its version sibling, the document-kind redirect, and the
+	// resolving redirect the autolinker targets. Not navWrapped where they
+	// only ever 302 (projectKindRedirect, clauseRefRedirect), like
+	// docRefRedirect above.
+	r.web("GET /projects/{proj}/clause/{n}", s.navWrap("knowledge", s.clausePage))
+	r.web("GET /projects/{proj}/clause/{n}/{ver}", s.navWrap("knowledge", s.clausePage))
+	r.web("GET /projects/{proj}/{kind}/{n}", s.projectKindRedirect)
+	r.web("GET /clauses/{ref}", s.clauseRefRedirect)
 	r.web("GET /{ref}", s.refShortcut)
 	// The drift board (spec 007) is the graph-backed half of Knowledge, so it
 	// marks that destination current rather than taking an eighth nav entry
@@ -894,6 +903,9 @@ func (s *server) registerRoutes(reg prometheus.Registerer) (*http.ServeMux, erro
 	r.api("GET /api/v1/docs/{id}/referrers", s.listDocReferrers)
 	r.api("GET /api/v1/docs/{id}/versions/{n}", s.getDocVersion)
 	r.api("GET /api/v1/clauses/{id}", s.getClause)
+	r.api("PUT /api/v1/clauses/{id}", s.editClause)
+	r.api("GET /api/v1/clauses/{id}/versions", s.listClauseVersions)
+	r.api("GET /api/v1/clauses/{id}/versions/{n}", s.getClauseVersion)
 	r.api("PUT /api/v1/docs/{id}/body", s.updateDocBody)
 	r.api("POST /api/v1/docs/{id}/patch", s.patchDoc)
 	r.api("PUT /api/v1/docs/{id}/edges", s.replaceDocEdges)

@@ -1069,6 +1069,57 @@ func TestShowErrorsSectionWithTask(t *testing.T) {
 	}
 }
 
+// TestShowErrorsVersionWithTask covers --version's target check on the
+// positional path: a clause-only flag applied to a task is refused before
+// any network call, the same way --section is.
+func TestShowErrorsVersionWithTask(t *testing.T) {
+	out, err := runLode(t, "show", "--task", "1", "--version", "2")
+	if err == nil {
+		t.Fatalf("lode show --task 1 --version 2 succeeded\noutput: %s", out)
+	}
+	if err.Error() != "--version applies only to clauses" {
+		t.Fatalf("err = %q; want %q", err.Error(), "--version applies only to clauses")
+	}
+}
+
+// TestShowErrorsVersionWithKindFlag covers --version's check on the
+// kind-flag-routed path: no --kind value or --<kind> flag ever names a
+// clause, so --version there is refused before the kind is even looked at.
+func TestShowErrorsVersionWithKindFlag(t *testing.T) {
+	out, err := runLode(t, "show", "--kind", "task", "1", "--version", "2")
+	if err == nil {
+		t.Fatalf("lode show --kind task 1 --version 2 succeeded\noutput: %s", out)
+	}
+	if err.Error() != "--version applies only to clauses" {
+		t.Fatalf("err = %q; want %q", err.Error(), "--version applies only to clauses")
+	}
+}
+
+// TestShowClauseVersionDispatch covers `lode show WL-CL-2 --version 1`
+// routing to GET /api/v1/clauses/{ref}/versions/{n} instead of the plain
+// clause GET.
+func TestShowClauseVersionDispatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/clauses/WL-CL-2/versions/1" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"ref":"WL-CL-2","heading":"Sub","status":"accepted","version":1}`)
+	}))
+	defer srv.Close()
+	t.Setenv("LODE_SERVER", srv.URL)
+	t.Setenv("LODE_TOKEN", "test-token")
+
+	out, err := runLode(t, "show", "WL-CL-2", "--version", "1")
+	if err != nil {
+		t.Fatalf("lode show WL-CL-2 --version 1: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "WL-CL-2") || !strings.Contains(out, "version:  1") {
+		t.Fatalf("show WL-CL-2 --version 1 output = %q; want the version-1 render", out)
+	}
+}
+
 // TestShowMilestoneFlagEquivalence covers --milestone <ordinal> and --kind
 // milestone <ordinal> building the same full id (<KEY>-MILE-<n>) the
 // positional path classifies directly, the same equivalence

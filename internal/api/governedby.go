@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 
+	"github.com/sunstoneinstitute/worklode/internal/designdoc"
 	"github.com/sunstoneinstitute/worklode/internal/model"
 	"github.com/sunstoneinstitute/worklode/internal/store"
 )
@@ -18,14 +19,14 @@ func (s *server) govern(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	key, number, ok := parseClauseRef(req.Clause)
+	ref, ok := designdoc.ParseClauseRef(req.Clause)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "clause must look like WL-CL-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.governed", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			clauseID, err := store.ClauseIDByRef(tx, key, number)
+			clauseID, err := store.ClauseIDByRef(tx, ref.Key, ref.Number)
 			if err != nil {
 				return err
 			}
@@ -46,14 +47,14 @@ func (s *server) ungovern(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
-	key, number, ok := parseClauseRef(req.Clause)
+	ref, ok := designdoc.ParseClauseRef(req.Clause)
 	if !ok {
 		writeErr(w, http.StatusBadRequest, "clause must look like WL-CL-12")
 		return
 	}
 	err := s.recordTaskEvent(r.Context(), "cli", "task.ungoverned", id, req,
 		func(tx *sql.Tx, eventID int64) error {
-			clauseID, err := store.ClauseIDByRef(tx, key, number)
+			clauseID, err := store.ClauseIDByRef(tx, ref.Key, ref.Number)
 			if err != nil {
 				return err
 			}
