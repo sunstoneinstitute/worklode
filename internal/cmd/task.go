@@ -1345,10 +1345,46 @@ func newTaskClauseCmd(use, short, msg string, call taskEdge) *cobra.Command {
 	return cmd
 }
 
+// newTaskGovernCmd builds `lode task govern <id> --by <clause-ref> [--pin]`.
+// It does not go through newTaskClauseCmd: Govern takes a pin bool that the
+// shared taskEdge signature has no room for.
 func newTaskGovernCmd() *cobra.Command {
-	return newTaskClauseCmd("govern <id>",
-		"Record a design clause that governs a task",
-		"%s is now governed by %s", (*cli.Client).Govern)
+	var by string
+	var pin bool
+	cmd := &cobra.Command{
+		Use:               "govern <id>",
+		Short:             "Record a design clause that governs a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			raw, err := c.Govern(cmd.Context(), id, by, pin)
+			if err != nil {
+				return err
+			}
+			if jsonOut(cmd) {
+				printRaw(cmd, raw)
+				return nil
+			}
+			pinState := "not pinned"
+			if pin {
+				pinState = "pinned"
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "%s is now governed by %s (%s)\n", id, by, pinState)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&by, "by", "", "clause ref, e.g. WL-CL-12 (required)")
+	cmd.MarkFlagRequired("by")
+	cmd.Flags().BoolVar(&pin, "pin", false, "pin the link to the clause version current now, instead of following its newest")
+	return cmd
 }
 
 func newTaskUngovernCmd() *cobra.Command {

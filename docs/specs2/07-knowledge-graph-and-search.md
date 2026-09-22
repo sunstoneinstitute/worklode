@@ -26,6 +26,8 @@ Standards-first. A community term is reused wherever it carries the intended mea
 | Software component | `wl:Component` | mint |
 | Design document | `wl:DesignDoc` with subclasses `wl:Spec` and `wl:ADR`. The `adr` kind is retired for authoring (05-documents.md §2); `wl:ADR` remains for the documents that already exist. | mint |
 | Document section | `wl:Section`, `wl:lastRevisedIn` | mint |
+| Design clause | `wl:Clause`, subclass of `wl:Section`: the lowest heading unit of a spec or ADR, with its own identity, status and versions (12-spec-refactoring-design-tree.md S8 to S11) | mint |
+| Clause to clause | `wl:refines`, `wl:constrains`, `wl:conflictsWith` (symmetric), written by an architect; `wl:references`, derived from the clause text on every version (S12, S26) | mint |
 | Plan | `wl:Plan`, sibling of DesignDoc | mint |
 | Task | `wl:Task` | mint, projected |
 | Deliverable, Effect | `wl:Deliverable`, `wl:Effect` subclass | mint |

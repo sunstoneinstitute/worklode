@@ -114,3 +114,35 @@ func TestClauseEditAndVersionsAPI(t *testing.T) {
 		}
 	}
 }
+
+// TestClauseMetaAPI sets owner and tags through PATCH, checks the recorded
+// clause.updated event names the patched clause (not just the request body,
+// I1 of the Task 5 pattern), refuses an empty body with 422, and answers 404
+// for an unknown clause (S15).
+func TestClauseMetaAPI(t *testing.T) {
+	t.Parallel()
+	st, h, token := newTestServer(t)
+	projID := seedProjectWithKey(t, st, "WL")
+	createDocViaAPI(t, h, token, model.CreateDocInput{Project: projID, Kind: "spec", Slug: "t", Body: clauseDocV1})
+
+	rr := doReq(t, h, http.MethodPatch, "/api/v1/clauses/WL-CL-1", token,
+		model.ClauseMetaInput{Owner: strPtr("stig"), Tags: &[]string{"a", "b"}})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PATCH = %d %s", rr.Code, rr.Body)
+	}
+	var c model.Clause
+	decodeInto(t, rr, &c)
+	if c.Owner != "stig" || len(c.Tags) != 2 || c.Tags[0] != "a" || c.Tags[1] != "b" {
+		t.Errorf("patched clause = %+v", c)
+	}
+
+	events := pollEvents(t, h, token, "?type=clause.updated", 1)
+	checkPayloadProps(t, eventPayload(t, events[0].(map[string]any)), map[string]string{"clause": "WL-CL-1"})
+
+	if rr := doReq(t, h, http.MethodPatch, "/api/v1/clauses/WL-CL-1", token, model.ClauseMetaInput{}); rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("empty body: status = %d, body %s", rr.Code, rr.Body)
+	}
+	if rr := doReq(t, h, http.MethodPatch, "/api/v1/clauses/WL-CL-999", token, model.ClauseMetaInput{Owner: strPtr("stig")}); rr.Code != http.StatusNotFound {
+		t.Errorf("unknown clause: status = %d", rr.Code)
+	}
+}

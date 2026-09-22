@@ -345,3 +345,18 @@ func TestSectionByAnchorEditRerendersHeading(t *testing.T) {
 		t.Errorf("Bytes after edit:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// TestFindRefs: FindClauseRefs and FindSectionRefs dedupe and skip
+// non-matching ref forms (a lowercased clause ref, an unanchored document
+// ref) (S26).
+func TestFindRefs(t *testing.T) {
+	text := "See WL-CL-12 and WL-CL-12 again, then P1-SPEC-4#sec-2.1 and WL-ADR-7 (no anchor) and wl-cl-3."
+	cs := FindClauseRefs(text)
+	if len(cs) != 1 || cs[0].Key != "WL" || cs[0].Number != 12 {
+		t.Errorf("clause refs: %+v", cs)
+	}
+	ss := FindSectionRefs(text)
+	if len(ss) != 1 || ss[0].Shorthand.Key != "P1" || ss[0].Shorthand.Number != 4 || ss[0].Anchor != "sec-2.1" {
+		t.Errorf("section refs: %+v", ss)
+	}
+}
