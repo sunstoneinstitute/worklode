@@ -52,6 +52,8 @@ func newTaskCmd() *cobra.Command {
 		newTaskBlockCmd(),
 		newTaskBlockersCmd(),
 		newTaskUnblockCmd(),
+		newTaskGovernCmd(),
+		newTaskUngovernCmd(),
 		newTaskParentCmd(),
 		newTaskUnparentCmd(),
 		newTaskFollowUpCmd(),
@@ -301,6 +303,7 @@ func newTaskAddCmd() *cobra.Command {
 	var draft, noUpload bool
 	var skills []string
 	var secretNames []string
+	var governedBy []string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Create a task",
@@ -331,7 +334,7 @@ func newTaskAddCmd() *cobra.Command {
 			t, raw, err := c.CreateTask(cmd.Context(), model.CreateTaskInput{
 				Project: sc.Project, Title: title, Body: body, Priority: priority, Kind: kind,
 				Concern: concern, Draft: draft, Skills: skills, Parent: parent, FollowUpTo: followUpTo,
-				Secrets: secretNames,
+				Secrets: secretNames, GovernedBy: governedBy,
 			})
 			if err != nil {
 				return err
@@ -356,6 +359,7 @@ func newTaskAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&parent, "parent", "", "file the new task under this parent")
 	cmd.Flags().StringVar(&followUpTo, "follow-up-to", "",
 		"record that this task was spun out of the work on that task")
+	cmd.Flags().StringArrayVar(&governedBy, "governed-by", nil, "clause that governs the task, e.g. WL-CL-12 (repeatable)")
 	cmd.Flags().StringSliceVar(&secretNames, "secrets", nil,
 		"org-catalog secret names this task needs, comma-separated (see `lode secret catalog`)")
 	cmd.MarkFlagRequired("title")
@@ -1312,6 +1316,45 @@ func newTaskUnblockCmd() *cobra.Command {
 		"Remove a blocking edge from another task",
 		"by", "id of the blocking task (required)",
 		"%s is no longer blocked by %s", (*cli.Client).Unblock)
+}
+
+// newTaskClauseCmd builds a `lode task <verb> <id> --by <clause-ref>`
+// command: the subject resolves as a task id, the clause ref is passed
+// through as written (WL-CL-12) and the server validates it.
+func newTaskClauseCmd(use, short, msg string, call taskEdge) *cobra.Command {
+	var by string
+	cmd := &cobra.Command{
+		Use:               use,
+		Short:             short,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDAt(0),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c, cfg, err := newAPIClientWithConfig()
+			if err != nil {
+				return err
+			}
+			id, err := resolveTaskID(cmd.Context(), args[0], c, cfg)
+			if err != nil {
+				return err
+			}
+			return runTaskEdge(cmd, c, id, by, msg, call)
+		},
+	}
+	cmd.Flags().StringVar(&by, "by", "", "clause ref, e.g. WL-CL-12 (required)")
+	cmd.MarkFlagRequired("by")
+	return cmd
+}
+
+func newTaskGovernCmd() *cobra.Command {
+	return newTaskClauseCmd("govern <id>",
+		"Record a design clause that governs a task",
+		"%s is now governed by %s", (*cli.Client).Govern)
+}
+
+func newTaskUngovernCmd() *cobra.Command {
+	return newTaskClauseCmd("ungovern <id>",
+		"Remove a governing clause from a task",
+		"%s is no longer governed by %s", (*cli.Client).Ungovern)
 }
 
 func newTaskParentCmd() *cobra.Command {

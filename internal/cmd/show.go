@@ -38,6 +38,8 @@ const (
 	targetMilestone
 	// targetDeliverable: a DEL id — dispatch to runDeliverableShow.
 	targetDeliverable
+	// targetClause: a CL id — dispatch to runClauseShow.
+	targetClause
 	// targetUnknownType: a typed id whose <TYPE> segment names no known kind.
 	targetUnknownType
 	// targetUnclassified: matches no known shape at all.
@@ -69,6 +71,8 @@ func classify(arg string) showTarget {
 			return showTarget{Kind: targetMilestone}
 		case "DEL":
 			return showTarget{Kind: targetDeliverable}
+		case "CL":
+			return showTarget{Kind: targetClause}
 		default:
 			return showTarget{Kind: targetUnknownType, Type: typ}
 		}
@@ -353,6 +357,24 @@ func runDeliverableShow(cmd *cobra.Command, id string) error {
 	return nil
 }
 
+// runClauseShow renders one design clause by its ref (WL-CL-12).
+func runClauseShow(cmd *cobra.Command, ref string) error {
+	c, err := newAPIClient()
+	if err != nil {
+		return err
+	}
+	clause, raw, err := c.GetClause(cmd.Context(), ref)
+	if err != nil {
+		return err
+	}
+	if jsonOut(cmd) {
+		printRaw(cmd, raw)
+		return nil
+	}
+	cli.ClauseRender(cmd.OutOrStdout(), clause)
+	return nil
+}
+
 // runDeliverableShowByOrdinal resolves a --deliverable flag's bare ordinal to
 // a full id the same way runMilestoneShowByOrdinal resolves --milestone: a
 // flag can only ever mean this repo's own project, so the id is built from
@@ -390,8 +412,10 @@ func dispatchShowPositional(cmd *cobra.Command, arg, section string, sectionSet,
 		return runMilestoneShow(cmd, arg)
 	case targetDeliverable:
 		return runDeliverableShow(cmd, arg)
+	case targetClause:
+		return runClauseShow(cmd, arg)
 	case targetUnknownType:
-		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL (a task id has no type segment: WL-12)`, t.Type, arg)
+		return fmt.Errorf(`unknown entity type %q in %s; known types: SPEC, ADR, PLAN, MILE, DEL, CL (a task id has no type segment: WL-12)`, t.Type, arg)
 	default:
 		return fmt.Errorf("cannot tell what %s names; pass a task id (12, WL-12) or a document ref (WL-SPEC-25, a slug, a corpus path)", arg)
 	}

@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -113,6 +114,19 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	type clauseKey struct {
+		key    string
+		number int64
+	}
+	governing := make([]clauseKey, 0, len(req.GovernedBy))
+	for _, ref := range req.GovernedBy {
+		key, number, ok := parseClauseRef(ref)
+		if !ok {
+			writeErr(w, http.StatusBadRequest, "governed_by entries must look like WL-CL-12, got "+ref)
+			return
+		}
+		governing = append(governing, clauseKey{key, number})
+	}
 
 	actorID := actorIDFrom(r)
 	now := s.st.Now()
@@ -141,6 +155,21 @@ func (s *server) createTask(w http.ResponseWriter, r *http.Request) {
 			// from inside the same transaction (025 §15.2).
 			if err := store.AttributeEventToTask(tx, eventID, t.ID); err != nil {
 				return err
+			}
+			for _, g := range governing {
+				clauseID, err := store.ClauseIDByRef(tx, g.key, g.number)
+				if err != nil {
+					// A caller-supplied ref, not a missing task: ClauseIDByRef's
+					// bare ErrNotFound would otherwise map to the same 404 as
+					// the task itself being missing (internal/store/AGENTS.md).
+					if errors.Is(err, store.ErrNotFound) {
+						return fmt.Errorf("governed_by names no clause %s-CL-%d: %w", g.key, g.number, store.ErrInvalidInput)
+					}
+					return err
+				}
+				if err := store.Govern(tx, t.ID, clauseID, "manual"); err != nil {
+					return err
+				}
 			}
 			if req.Parent != "" {
 				// Same transaction as the insert: there is no window where
@@ -219,7 +248,13 @@ func (s *server) getTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions}
+	governed, err := s.st.GovernedBy(r.Context(), id)
+	if err != nil {
+		s.mapStoreErr(w, err)
+		return
+	}
+
+	resp := model.TaskDetail{Task: *t, Blocked: blocked[id], Decisions: decisions, GovernedBy: governed}
 	resp.Edges.Out, resp.Edges.In = edgesToJSON(out, in)
 	if lease, err := s.st.ActiveLease(r.Context(), id); err == nil {
 		l := toLeaseJSON(lease)

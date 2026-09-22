@@ -65,6 +65,7 @@ services:
       LODE_SKILL_SOURCES: ${LODE_SKILL_SOURCES:-}
       LODE_EMBEDDING_URL: ${LODE_EMBEDDING_URL:-}
       LODE_EMBEDDING_MODEL: ${LODE_EMBEDDING_MODEL:-}
+      LODE_EMBEDDING_CONTEXT_TOKENS: ${LODE_EMBEDDING_CONTEXT_TOKENS:-}
       LODE_EMBEDDING_API_KEY: ${LODE_EMBEDDING_API_KEY:-}
       # How often the corpus index converges (040 §7); unset means 5m. Search
       # still works with no embedding provider — the loop writes the chunk

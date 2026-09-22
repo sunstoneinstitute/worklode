@@ -246,9 +246,8 @@ func AcceptRevision(tx *sql.Tx, now time.Time, id int64, actorID string, eventID
 	if err := ClearPatchedSections(tx, id, version); err != nil {
 		return nil, err
 	}
-	if _, err := tx.Exec(
-		`UPDATE doc_sections SET published = true WHERE doc_id = $1`, id); err != nil {
-		return nil, fmt.Errorf("publish sections of doc %d: %w", id, err)
+	if err := publishDocSections(tx, id); err != nil {
+		return nil, err
 	}
 	if _, err := tx.Exec(`DELETE FROM doc_revisions WHERE doc_id = $1`, id); err != nil {
 		return nil, fmt.Errorf("consume revision of doc %d: %w", id, err)
